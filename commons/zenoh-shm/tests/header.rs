@@ -70,7 +70,7 @@ fn header_link_failure_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Se
         // Some comments on this behaviour...
         // Even though the allocated_header is dropped, it's SHM segment still exists in GLOBAL_HEADER_STORAGE,
         // so there is no way to detect that header is "deallocated" and the code below succeeds. The invalidation
-        // funcionality is implemented on higher level by means of generation mechanism and protects from both header
+        // functionality is implemented on higher level by means of generation mechanism and protects from both header
         // and watchdog link-to-deallocated issues. This generation mechanism depends on the behaviour below, so
         // everything is fair :)
         let _linked_header = GLOBAL_HEADER_SUBSCRIPTION.link(&descr)?;

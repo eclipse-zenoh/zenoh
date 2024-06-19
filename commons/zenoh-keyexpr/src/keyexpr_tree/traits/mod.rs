@@ -195,7 +195,7 @@ pub trait IKeyExprTreeMut<'a, Weight>: IKeyExprTree<'a, Weight> {
         self.prune_where(|node| node.weight().is_none())
     }
 }
-/// The basic operations of a KeTree when a Token is necessary to acess data.
+/// The basic operations of a KeTree when a Token is necessary to access data.
 pub trait ITokenKeyExprTree<'a, Weight, Token> {
     /// An immutable guard to a node of the tree.
     type Node: IKeyExprTreeNode<Weight>;

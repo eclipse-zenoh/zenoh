@@ -33,7 +33,7 @@ use crate::net::routing::{
         resource::Resource,
         tables::{Tables, TablesLock},
     },
-    hat::{CurrentFutureTrait, HatInterestTrait},
+    hat::{CurrentFutureTrait, HatInterestTrait, SendDeclare},
     RoutingContext,
 };
 
@@ -47,6 +47,7 @@ impl HatInterestTrait for HatCode {
         res: Option<&mut Arc<Resource>>,
         mode: InterestMode,
         mut options: InterestOptions,
+        send_declare: &mut SendDeclare,
     ) {
         if options.aggregate() && face.whatami == WhatAmI::Peer {
             tracing::warn!(
@@ -63,6 +64,7 @@ impl HatInterestTrait for HatCode {
                 res.as_ref().map(|r| (*r).clone()).as_mut(),
                 mode,
                 options.aggregate(),
+                send_declare,
             )
         }
         if options.queryables() {
@@ -73,6 +75,7 @@ impl HatInterestTrait for HatCode {
                 res.as_ref().map(|r| (*r).clone()).as_mut(),
                 mode,
                 options.aggregate(),
+                send_declare,
             )
         }
         if options.tokens() {
@@ -83,6 +86,7 @@ impl HatInterestTrait for HatCode {
                 res.as_ref().map(|r| (*r).clone()).as_mut(),
                 mode,
                 options.aggregate(),
+                send_declare,
             )
         }
         if mode.future() {
@@ -91,13 +95,16 @@ impl HatInterestTrait for HatCode {
                 .insert(id, (res.cloned(), options));
         }
         if mode.current() {
-            face.primitives.send_declare(RoutingContext::new(Declare {
-                interest_id: Some(id),
-                ext_qos: ext::QoSType::DECLARE,
-                ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::DEFAULT,
-                body: DeclareBody::DeclareFinal(DeclareFinal),
-            }));
+            send_declare(
+                &face.primitives,
+                RoutingContext::new(Declare {
+                    interest_id: Some(id),
+                    ext_qos: ext::QoSType::DECLARE,
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                    body: DeclareBody::DeclareFinal(DeclareFinal),
+                }),
+            );
         }
     }
 

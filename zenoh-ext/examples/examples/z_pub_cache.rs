@@ -62,7 +62,7 @@ struct Args {
     /// The number of publications to keep in cache.
     history: usize,
     #[arg(short = 'o', long)]
-    /// Set `complete` option to true. This means that this queryable is ulitmate data source, no need to scan other queryables.
+    /// Set `complete` option to true. This means that this queryable is ultimate data source, no need to scan other queryables.
     complete: bool,
     #[arg(short = 'x', long)]
     /// An optional queryable prefix.

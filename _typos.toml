@@ -1,0 +1,12 @@
+[files]
+extend-exclude = [
+  # Ignore files containing hexa.
+  "io/zenoh-transport/tests/*.rs",
+  "zenoh/tests/open_time.rs",
+  "zenoh/tests/authentication.rs",
+]
+
+
+[default.extend-words]
+mis = "mis" # mismatch
+thr = "thr" # throughput

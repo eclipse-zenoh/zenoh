@@ -194,7 +194,7 @@ impl<'a> Publisher<'a> {
     /// pointer to it (`Arc<Publisher>`). This is equivalent to `Arc::new(Publisher)`.
     ///
     /// This is useful to share ownership of the `Publisher` between several threads
-    /// and tasks. It also alows to create [`MatchingListener`] with static
+    /// and tasks. It also allows to create [`MatchingListener`] with static
     /// lifetime that can be moved to several threads and tasks.
     ///
     /// Note: the given zenoh `Publisher` will be undeclared when the last reference to

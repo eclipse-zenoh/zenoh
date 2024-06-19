@@ -52,7 +52,7 @@ use super::{
         face::FaceState,
         tables::{NodeId, Resource, RoutingExpr, Tables, TablesLock},
     },
-    HatBaseTrait, HatTrait,
+    HatBaseTrait, HatTrait, SendDeclare,
 };
 use crate::net::{
     codec::Zenoh080Routing,
@@ -272,7 +272,7 @@ impl HatTables {
                     let mut tables = zwrite!(tables_ref.tables);
 
                     tracing::trace!("Compute trees");
-                    let new_childs = match net_type {
+                    let new_children = match net_type {
                         WhatAmI::Router => hat_mut!(tables)
                             .routers_net
                             .as_mut()
@@ -282,9 +282,9 @@ impl HatTables {
                     };
 
                     tracing::trace!("Compute routes");
-                    pubsub::pubsub_tree_change(&mut tables, &new_childs, net_type);
-                    queries::queries_tree_change(&mut tables, &new_childs, net_type);
-                    token::token_tree_change(&mut tables, &new_childs, net_type);
+                    pubsub::pubsub_tree_change(&mut tables, &new_children, net_type);
+                    queries::queries_tree_change(&mut tables, &new_children, net_type);
+                    token::token_tree_change(&mut tables, &new_children, net_type);
 
                     tracing::trace!("Computations completed");
                     match net_type {
@@ -372,6 +372,7 @@ impl HatBaseTrait for HatCode {
         _tables: &mut Tables,
         _tables_ref: &Arc<TablesLock>,
         _face: &mut Face,
+        _send_declare: &mut SendDeclare,
     ) -> ZResult<()> {
         // Nothing to do
         Ok(())
@@ -383,6 +384,7 @@ impl HatBaseTrait for HatCode {
         tables_ref: &Arc<TablesLock>,
         face: &mut Face,
         transport: &TransportUnicast,
+        _send_declare: &mut SendDeclare,
     ) -> ZResult<()> {
         let link_id = match face.state.whatami {
             WhatAmI::Router => hat_mut!(tables)
@@ -423,7 +425,12 @@ impl HatBaseTrait for HatCode {
         Ok(())
     }
 
-    fn close_face(&self, tables: &TablesLock, face: &mut Arc<FaceState>) {
+    fn close_face(
+        &self,
+        tables: &TablesLock,
+        face: &mut Arc<FaceState>,
+        send_declare: &mut SendDeclare,
+    ) {
         let mut wtables = zwrite!(tables.tables);
         let mut face_clone = face.clone();
         let face = get_mut_unchecked(face);
@@ -454,7 +461,7 @@ impl HatBaseTrait for HatCode {
         let mut subs_matches = vec![];
         for (_id, mut res) in hat_face.remote_subs.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_client_subscription(&mut wtables, &mut face_clone, &mut res);
+            undeclare_client_subscription(&mut wtables, &mut face_clone, &mut res, send_declare);
 
             if res.context.is_some() {
                 for match_ in &res.context().matches {
@@ -476,7 +483,7 @@ impl HatBaseTrait for HatCode {
         let mut qabls_matches = vec![];
         for (_, mut res) in hat_face.remote_qabls.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_client_queryable(&mut wtables, &mut face_clone, &mut res);
+            undeclare_client_queryable(&mut wtables, &mut face_clone, &mut res, send_declare);
 
             if res.context.is_some() {
                 for match_ in &res.context().matches {
@@ -497,7 +504,7 @@ impl HatBaseTrait for HatCode {
 
         for (_id, mut res) in hat_face.remote_tokens.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_client_token(&mut wtables, &mut face_clone, &mut res);
+            undeclare_client_token(&mut wtables, &mut face_clone, &mut res, send_declare);
         }
         drop(wtables);
 
@@ -536,6 +543,7 @@ impl HatBaseTrait for HatCode {
         tables_ref: &Arc<TablesLock>,
         oam: Oam,
         transport: &TransportUnicast,
+        send_declare: &mut SendDeclare,
     ) -> ZResult<()> {
         if oam.id == OAM_LINKSTATE {
             if let ZExtBody::ZBuf(buf) = oam.body {
@@ -556,9 +564,24 @@ impl HatBaseTrait for HatCode {
                                 .link_states(list.link_states, zid)
                                 .removed_nodes
                             {
-                                pubsub_remove_node(tables, &removed_node.zid, WhatAmI::Router);
-                                queries_remove_node(tables, &removed_node.zid, WhatAmI::Router);
-                                token_remove_node(tables, &removed_node.zid, WhatAmI::Router);
+                                pubsub_remove_node(
+                                    tables,
+                                    &removed_node.zid,
+                                    WhatAmI::Router,
+                                    send_declare,
+                                );
+                                queries_remove_node(
+                                    tables,
+                                    &removed_node.zid,
+                                    WhatAmI::Router,
+                                    send_declare,
+                                );
+                                token_remove_node(
+                                    tables,
+                                    &removed_node.zid,
+                                    WhatAmI::Router,
+                                    send_declare,
+                                );
                             }
 
                             if hat!(tables).full_net(WhatAmI::Peer) {
@@ -580,13 +603,20 @@ impl HatBaseTrait for HatCode {
                                             tables,
                                             &removed_node.zid,
                                             WhatAmI::Peer,
+                                            send_declare,
                                         );
                                         queries_remove_node(
                                             tables,
                                             &removed_node.zid,
                                             WhatAmI::Peer,
+                                            send_declare,
                                         );
-                                        token_remove_node(tables, &removed_node.zid, WhatAmI::Peer);
+                                        token_remove_node(
+                                            tables,
+                                            &removed_node.zid,
+                                            WhatAmI::Peer,
+                                            send_declare,
+                                        );
                                     }
 
                                     hat_mut!(tables).shared_nodes = shared_nodes(
@@ -602,16 +632,19 @@ impl HatBaseTrait for HatCode {
                                             tables,
                                             &updated_node.zid,
                                             &updated_node.links,
+                                            send_declare,
                                         );
                                         queries_linkstate_change(
                                             tables,
                                             &updated_node.zid,
                                             &updated_node.links,
+                                            send_declare,
                                         );
                                         token_linkstate_change(
                                             tables,
                                             &updated_node.zid,
                                             &updated_node.links,
+                                            send_declare,
                                         );
                                     }
                                 }
@@ -659,6 +692,7 @@ impl HatBaseTrait for HatCode {
         tables: &mut Tables,
         tables_ref: &Arc<TablesLock>,
         transport: &TransportUnicast,
+        send_declare: &mut SendDeclare,
     ) -> ZResult<()> {
         match (transport.get_zid(), transport.get_whatami()) {
             (Ok(zid), Ok(whatami)) => {
@@ -670,9 +704,24 @@ impl HatBaseTrait for HatCode {
                             .unwrap()
                             .remove_link(&zid)
                         {
-                            pubsub_remove_node(tables, &removed_node.zid, WhatAmI::Router);
-                            queries_remove_node(tables, &removed_node.zid, WhatAmI::Router);
-                            token_remove_node(tables, &removed_node.zid, WhatAmI::Router);
+                            pubsub_remove_node(
+                                tables,
+                                &removed_node.zid,
+                                WhatAmI::Router,
+                                send_declare,
+                            );
+                            queries_remove_node(
+                                tables,
+                                &removed_node.zid,
+                                WhatAmI::Router,
+                                send_declare,
+                            );
+                            token_remove_node(
+                                tables,
+                                &removed_node.zid,
+                                WhatAmI::Router,
+                                send_declare,
+                            );
                         }
 
                         if hat!(tables).full_net(WhatAmI::Peer) {
@@ -693,9 +742,24 @@ impl HatBaseTrait for HatCode {
                                 .unwrap()
                                 .remove_link(&zid)
                             {
-                                pubsub_remove_node(tables, &removed_node.zid, WhatAmI::Peer);
-                                queries_remove_node(tables, &removed_node.zid, WhatAmI::Peer);
-                                token_remove_node(tables, &removed_node.zid, WhatAmI::Peer);
+                                pubsub_remove_node(
+                                    tables,
+                                    &removed_node.zid,
+                                    WhatAmI::Peer,
+                                    send_declare,
+                                );
+                                queries_remove_node(
+                                    tables,
+                                    &removed_node.zid,
+                                    WhatAmI::Peer,
+                                    send_declare,
+                                );
+                                token_remove_node(
+                                    tables,
+                                    &removed_node.zid,
+                                    WhatAmI::Peer,
+                                    send_declare,
+                                );
                             }
 
                             hat_mut!(tables).shared_nodes = shared_nodes(

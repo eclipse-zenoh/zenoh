@@ -43,22 +43,22 @@ use crate::net::routing::{
         resource::{NodeId, Resource, SessionContext},
         tables::{Route, RoutingExpr, Tables},
     },
-    hat::{CurrentFutureTrait, HatPubSubTrait, Sources},
+    hat::{CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources},
     router::RoutesIndexes,
     RoutingContext,
 };
 
 #[inline]
-fn send_sourced_subscription_to_net_childs(
+fn send_sourced_subscription_to_net_children(
     tables: &Tables,
     net: &Network,
-    childs: &[NodeIndex],
+    children: &[NodeIndex],
     res: &Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
     sub_info: &SubscriberInfo,
     routing_context: NodeId,
 ) {
-    for child in childs {
+    for child in children {
         if net.graph.contains_node(*child) {
             match tables.get_face(&net.graph[*child].zid).cloned() {
                 Some(mut someface) => {
@@ -99,6 +99,7 @@ fn propagate_simple_subscription_to(
     res: &Arc<Resource>,
     sub_info: &SubscriberInfo,
     src_face: &mut Arc<FaceState>,
+    send_declare: &mut SendDeclare,
 ) {
     if (src_face.id != dst_face.id)
         && !face_hat!(dst_face).local_subs.contains_key(res)
@@ -108,20 +109,23 @@ fn propagate_simple_subscription_to(
             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
             face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
             let key_expr = Resource::decl_key(res, dst_face);
-            dst_face.primitives.send_declare(RoutingContext::with_expr(
-                Declare {
-                    interest_id: None,
-                    ext_qos: ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                        id,
-                        wire_expr: key_expr,
-                        ext_info: *sub_info,
-                    }),
-                },
-                res.expr(),
-            ));
+            send_declare(
+                &dst_face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        interest_id: None,
+                        ext_qos: ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                            id,
+                            wire_expr: key_expr,
+                            ext_info: *sub_info,
+                        }),
+                    },
+                    res.expr(),
+                ),
+            );
         } else {
             let matching_interests = face_hat!(dst_face)
                 .remote_interests
@@ -142,20 +146,23 @@ fn propagate_simple_subscription_to(
                     let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
                     face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
                     let key_expr = Resource::decl_key(res, dst_face);
-                    dst_face.primitives.send_declare(RoutingContext::with_expr(
-                        Declare {
-                            interest_id: None,
-                            ext_qos: ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                id,
-                                wire_expr: key_expr,
-                                ext_info: *sub_info,
-                            }),
-                        },
-                        res.expr(),
-                    ));
+                    send_declare(
+                        &dst_face.primitives,
+                        RoutingContext::with_expr(
+                            Declare {
+                                interest_id: None,
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                    id,
+                                    wire_expr: key_expr,
+                                    ext_info: *sub_info,
+                                }),
+                            },
+                            res.expr(),
+                        ),
+                    );
                 }
             }
         }
@@ -167,6 +174,7 @@ fn propagate_simple_subscription(
     res: &Arc<Resource>,
     sub_info: &SubscriberInfo,
     src_face: &mut Arc<FaceState>,
+    send_declare: &mut SendDeclare,
 ) {
     for mut dst_face in tables
         .faces
@@ -174,7 +182,14 @@ fn propagate_simple_subscription(
         .cloned()
         .collect::<Vec<Arc<FaceState>>>()
     {
-        propagate_simple_subscription_to(tables, &mut dst_face, res, sub_info, src_face);
+        propagate_simple_subscription_to(
+            tables,
+            &mut dst_face,
+            res,
+            sub_info,
+            src_face,
+            send_declare,
+        );
     }
 }
 
@@ -189,10 +204,10 @@ fn propagate_sourced_subscription(
     match net.get_idx(source) {
         Some(tree_sid) => {
             if net.trees.len() > tree_sid.index() {
-                send_sourced_subscription_to_net_childs(
+                send_sourced_subscription_to_net_children(
                     tables,
                     net,
-                    &net.trees[tree_sid.index()].childs,
+                    &net.trees[tree_sid.index()].children,
                     res,
                     src_face,
                     sub_info,
@@ -221,6 +236,7 @@ fn register_peer_subscription(
     res: &mut Arc<Resource>,
     sub_info: &SubscriberInfo,
     peer: ZenohIdProto,
+    send_declare: &mut SendDeclare,
 ) {
     if !res_hat!(res).peer_subs.contains(&peer) {
         // Register peer subscription
@@ -234,7 +250,7 @@ fn register_peer_subscription(
     }
 
     // Propagate subscription to clients
-    propagate_simple_subscription(tables, res, sub_info, face);
+    propagate_simple_subscription(tables, res, sub_info, face, send_declare);
 }
 
 fn declare_peer_subscription(
@@ -243,8 +259,9 @@ fn declare_peer_subscription(
     res: &mut Arc<Resource>,
     sub_info: &SubscriberInfo,
     peer: ZenohIdProto,
+    send_declare: &mut SendDeclare,
 ) {
-    register_peer_subscription(tables, face, res, sub_info, peer);
+    register_peer_subscription(tables, face, res, sub_info, peer, send_declare);
 }
 
 fn register_client_subscription(
@@ -281,10 +298,11 @@ fn declare_client_subscription(
     id: SubscriberId,
     res: &mut Arc<Resource>,
     sub_info: &SubscriberInfo,
+    send_declare: &mut SendDeclare,
 ) {
     register_client_subscription(tables, face, id, res, sub_info);
     let zid = tables.zid;
-    register_peer_subscription(tables, face, res, sub_info, zid);
+    register_peer_subscription(tables, face, res, sub_info, zid, send_declare);
 }
 
 #[inline]
@@ -318,15 +336,15 @@ fn remote_client_subs(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
 }
 
 #[inline]
-fn send_forget_sourced_subscription_to_net_childs(
+fn send_forget_sourced_subscription_to_net_children(
     tables: &Tables,
     net: &Network,
-    childs: &[NodeIndex],
+    children: &[NodeIndex],
     res: &Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
     routing_context: Option<NodeId>,
 ) {
-    for child in childs {
+    for child in children {
         if net.graph.contains_node(*child) {
             match tables.get_face(&net.graph[*child].zid).cloned() {
                 Some(mut someface) => {
@@ -359,22 +377,29 @@ fn send_forget_sourced_subscription_to_net_childs(
     }
 }
 
-fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>) {
+fn propagate_forget_simple_subscription(
+    tables: &mut Tables,
+    res: &Arc<Resource>,
+    send_declare: &mut SendDeclare,
+) {
     for mut face in tables.faces.values().cloned() {
         if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(res) {
-            face.primitives.send_declare(RoutingContext::with_expr(
-                Declare {
-                    interest_id: None,
-                    ext_qos: ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                        id,
-                        ext_wire_expr: WireExprType::null(),
-                    }),
-                },
-                res.expr(),
-            ));
+            send_declare(
+                &face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        interest_id: None,
+                        ext_qos: ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                            id,
+                            ext_wire_expr: WireExprType::null(),
+                        }),
+                    },
+                    res.expr(),
+                ),
+            );
         }
         for res in face_hat!(face)
             .local_subs
@@ -389,19 +414,22 @@ fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>
                 })
             }) {
                 if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
-                    face.primitives.send_declare(RoutingContext::with_expr(
-                        Declare {
-                            interest_id: None,
-                            ext_qos: ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                id,
-                                ext_wire_expr: WireExprType::null(),
-                            }),
-                        },
-                        res.expr(),
-                    ));
+                    send_declare(
+                        &face.primitives,
+                        RoutingContext::with_expr(
+                            Declare {
+                                interest_id: None,
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                                    id,
+                                    ext_wire_expr: WireExprType::null(),
+                                }),
+                            },
+                            res.expr(),
+                        ),
+                    );
                 }
             }
         }
@@ -418,10 +446,10 @@ fn propagate_forget_sourced_subscription(
     match net.get_idx(source) {
         Some(tree_sid) => {
             if net.trees.len() > tree_sid.index() {
-                send_forget_sourced_subscription_to_net_childs(
+                send_forget_sourced_subscription_to_net_children(
                     tables,
                     net,
-                    &net.trees[tree_sid.index()].childs,
+                    &net.trees[tree_sid.index()].children,
                     res,
                     src_face,
                     Some(tree_sid.index() as NodeId),
@@ -443,7 +471,12 @@ fn propagate_forget_sourced_subscription(
     }
 }
 
-fn unregister_peer_subscription(tables: &mut Tables, res: &mut Arc<Resource>, peer: &ZenohIdProto) {
+fn unregister_peer_subscription(
+    tables: &mut Tables,
+    res: &mut Arc<Resource>,
+    peer: &ZenohIdProto,
+    send_declare: &mut SendDeclare,
+) {
     res_hat_mut!(res).peer_subs.retain(|sub| sub != peer);
 
     if res_hat!(res).peer_subs.is_empty() {
@@ -451,7 +484,7 @@ fn unregister_peer_subscription(tables: &mut Tables, res: &mut Arc<Resource>, pe
             .peer_subs
             .retain(|sub| !Arc::ptr_eq(sub, res));
 
-        propagate_forget_simple_subscription(tables, res);
+        propagate_forget_simple_subscription(tables, res, send_declare);
     }
 }
 
@@ -460,9 +493,10 @@ fn undeclare_peer_subscription(
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
     peer: &ZenohIdProto,
+    send_declare: &mut SendDeclare,
 ) {
     if res_hat!(res).peer_subs.contains(peer) {
-        unregister_peer_subscription(tables, res, peer);
+        unregister_peer_subscription(tables, res, peer, send_declare);
         propagate_forget_sourced_subscription(tables, res, face, peer);
     }
 }
@@ -472,14 +506,16 @@ fn forget_peer_subscription(
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     peer: &ZenohIdProto,
+    send_declare: &mut SendDeclare,
 ) {
-    undeclare_peer_subscription(tables, Some(face), res, peer);
+    undeclare_peer_subscription(tables, Some(face), res, peer, send_declare);
 }
 
 pub(super) fn undeclare_client_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
+    send_declare: &mut SendDeclare,
 ) {
     if !face_hat_mut!(face).remote_subs.values().any(|s| *s == *res) {
         if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
@@ -489,26 +525,29 @@ pub(super) fn undeclare_client_subscription(
         let mut client_subs = client_subs(res);
         let peer_subs = remote_peer_subs(tables, res);
         if client_subs.is_empty() {
-            undeclare_peer_subscription(tables, None, res, &tables.zid.clone());
+            undeclare_peer_subscription(tables, None, res, &tables.zid.clone(), send_declare);
         }
 
         if client_subs.len() == 1 && !peer_subs {
             let mut face = &mut client_subs[0];
             if face.whatami != WhatAmI::Client {
                 if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
-                    face.primitives.send_declare(RoutingContext::with_expr(
-                        Declare {
-                            interest_id: None,
-                            ext_qos: ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                id,
-                                ext_wire_expr: WireExprType::null(),
-                            }),
-                        },
-                        res.expr(),
-                    ));
+                    send_declare(
+                        &face.primitives,
+                        RoutingContext::with_expr(
+                            Declare {
+                                interest_id: None,
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                                    id,
+                                    ext_wire_expr: WireExprType::null(),
+                                }),
+                            },
+                            res.expr(),
+                        ),
+                    );
                 }
                 for res in face_hat!(face)
                     .local_subs
@@ -523,19 +562,24 @@ pub(super) fn undeclare_client_subscription(
                         })
                     }) {
                         if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
-                            face.primitives.send_declare(RoutingContext::with_expr(
-                                Declare {
-                                    interest_id: None,
-                                    ext_qos: ext::QoSType::DECLARE,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                                    body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                        id,
-                                        ext_wire_expr: WireExprType::null(),
-                                    }),
-                                },
-                                res.expr(),
-                            ));
+                            send_declare(
+                                &face.primitives,
+                                RoutingContext::with_expr(
+                                    Declare {
+                                        interest_id: None,
+                                        ext_qos: ext::QoSType::DECLARE,
+                                        ext_tstamp: None,
+                                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                                        body: DeclareBody::UndeclareSubscriber(
+                                            UndeclareSubscriber {
+                                                id,
+                                                ext_wire_expr: WireExprType::null(),
+                                            },
+                                        ),
+                                    },
+                                    res.expr(),
+                                ),
+                            );
                         }
                     }
                 }
@@ -548,16 +592,21 @@ fn forget_client_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     id: SubscriberId,
+    send_declare: &mut SendDeclare,
 ) -> Option<Arc<Resource>> {
     if let Some(mut res) = face_hat_mut!(face).remote_subs.remove(&id) {
-        undeclare_client_subscription(tables, face, &mut res);
+        undeclare_client_subscription(tables, face, &mut res, send_declare);
         Some(res)
     } else {
         None
     }
 }
 
-pub(super) fn pubsub_remove_node(tables: &mut Tables, node: &ZenohIdProto) {
+pub(super) fn pubsub_remove_node(
+    tables: &mut Tables,
+    node: &ZenohIdProto,
+    send_declare: &mut SendDeclare,
+) {
     for mut res in hat!(tables)
         .peer_subs
         .iter()
@@ -565,14 +614,14 @@ pub(super) fn pubsub_remove_node(tables: &mut Tables, node: &ZenohIdProto) {
         .cloned()
         .collect::<Vec<Arc<Resource>>>()
     {
-        unregister_peer_subscription(tables, &mut res, node);
+        unregister_peer_subscription(tables, &mut res, node, send_declare);
 
         update_matches_data_routes(tables, &mut res);
         Resource::clean(&mut res)
     }
 }
 
-pub(super) fn pubsub_tree_change(tables: &mut Tables, new_childs: &[Vec<NodeIndex>]) {
+pub(super) fn pubsub_tree_change(tables: &mut Tables, new_children: &[Vec<NodeIndex>]) {
     let net = match hat!(tables).peers_net.as_ref() {
         Some(net) => net,
         None => {
@@ -580,9 +629,9 @@ pub(super) fn pubsub_tree_change(tables: &mut Tables, new_childs: &[Vec<NodeInde
             return;
         }
     };
-    // propagate subs to new childs
-    for (tree_sid, tree_childs) in new_childs.iter().enumerate() {
-        if !tree_childs.is_empty() {
+    // propagate subs to new children
+    for (tree_sid, tree_children) in new_children.iter().enumerate() {
+        if !tree_children.is_empty() {
             let tree_idx = NodeIndex::new(tree_sid);
             if net.graph.contains_node(tree_idx) {
                 let tree_id = net.graph[tree_idx].zid;
@@ -596,10 +645,10 @@ pub(super) fn pubsub_tree_change(tables: &mut Tables, new_childs: &[Vec<NodeInde
                             let sub_info = SubscriberInfo {
                                 reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
                             };
-                            send_sourced_subscription_to_net_childs(
+                            send_sourced_subscription_to_net_children(
                                 tables,
                                 net,
-                                tree_childs,
+                                tree_children,
                                 res,
                                 None,
                                 &sub_info,
@@ -623,6 +672,7 @@ pub(super) fn declare_sub_interest(
     res: Option<&mut Arc<Resource>>,
     mode: InterestMode,
     aggregate: bool,
+    send_declare: &mut SendDeclare,
 ) {
     if mode.current() && face.whatami == WhatAmI::Client {
         let interest_id = (!mode.future()).then_some(id);
@@ -644,20 +694,23 @@ pub(super) fn declare_sub_interest(
                         0
                     };
                     let wire_expr = Resource::decl_key(res, face);
-                    face.primitives.send_declare(RoutingContext::with_expr(
-                        Declare {
-                            interest_id,
-                            ext_qos: ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                id,
-                                wire_expr,
-                                ext_info: sub_info,
-                            }),
-                        },
-                        res.expr(),
-                    ));
+                    send_declare(
+                        &face.primitives,
+                        RoutingContext::with_expr(
+                            Declare {
+                                interest_id,
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                    id,
+                                    wire_expr,
+                                    ext_info: sub_info,
+                                }),
+                            },
+                            res.expr(),
+                        ),
+                    );
                 }
             } else {
                 for sub in &hat!(tables).peer_subs {
@@ -673,20 +726,23 @@ pub(super) fn declare_sub_interest(
                             0
                         };
                         let wire_expr = Resource::decl_key(sub, face);
-                        face.primitives.send_declare(RoutingContext::with_expr(
-                            Declare {
-                                interest_id,
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                    id,
-                                    wire_expr,
-                                    ext_info: sub_info,
-                                }),
-                            },
-                            sub.expr(),
-                        ));
+                        send_declare(
+                            &face.primitives,
+                            RoutingContext::with_expr(
+                                Declare {
+                                    interest_id,
+                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                        id,
+                                        wire_expr,
+                                        ext_info: sub_info,
+                                    }),
+                                },
+                                sub.expr(),
+                            ),
+                        );
                     }
                 }
             }
@@ -703,20 +759,23 @@ pub(super) fn declare_sub_interest(
                         0
                     };
                     let wire_expr = Resource::decl_key(sub, face);
-                    face.primitives.send_declare(RoutingContext::with_expr(
-                        Declare {
-                            interest_id,
-                            ext_qos: ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                id,
-                                wire_expr,
-                                ext_info: sub_info,
-                            }),
-                        },
-                        sub.expr(),
-                    ));
+                    send_declare(
+                        &face.primitives,
+                        RoutingContext::with_expr(
+                            Declare {
+                                interest_id,
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                    id,
+                                    wire_expr,
+                                    ext_info: sub_info,
+                                }),
+                            },
+                            sub.expr(),
+                        ),
+                    );
                 }
             }
         }
@@ -732,13 +791,14 @@ impl HatPubSubTrait for HatCode {
         res: &mut Arc<Resource>,
         sub_info: &SubscriberInfo,
         node_id: NodeId,
+        send_declare: &mut SendDeclare,
     ) {
         if face.whatami != WhatAmI::Client {
             if let Some(peer) = get_peer(tables, face, node_id) {
-                declare_peer_subscription(tables, face, res, sub_info, peer)
+                declare_peer_subscription(tables, face, res, sub_info, peer, send_declare)
             }
         } else {
-            declare_client_subscription(tables, face, id, res, sub_info)
+            declare_client_subscription(tables, face, id, res, sub_info, send_declare)
         }
     }
 
@@ -749,11 +809,12 @@ impl HatPubSubTrait for HatCode {
         id: SubscriberId,
         res: Option<Arc<Resource>>,
         node_id: NodeId,
+        send_declare: &mut SendDeclare,
     ) -> Option<Arc<Resource>> {
         if face.whatami != WhatAmI::Client {
             if let Some(mut res) = res {
                 if let Some(peer) = get_peer(tables, face, node_id) {
-                    forget_peer_subscription(tables, face, &mut res, &peer);
+                    forget_peer_subscription(tables, face, &mut res, &peer, send_declare);
                     Some(res)
                 } else {
                     None
@@ -762,7 +823,7 @@ impl HatPubSubTrait for HatCode {
                 None
             }
         } else {
-            forget_client_subscription(tables, face, id)
+            forget_client_subscription(tables, face, id, send_declare)
         }
     }
 

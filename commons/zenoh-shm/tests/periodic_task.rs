@@ -152,21 +152,21 @@ fn periodic_task_optimal_high_load_intensive() {
 
 #[test]
 #[ignore]
-fn periodic_task_exessive_load_lightweight() {
-    let _load = CpuLoad::exessive();
+fn periodic_task_excessive_load_lightweight() {
+    let _load = CpuLoad::excessive();
     check_task(|| {});
 }
 
 #[test]
 #[ignore]
-fn periodic_task_exessive_load_blocking() {
-    let _load = CpuLoad::exessive();
+fn periodic_task_excessive_load_blocking() {
+    let _load = CpuLoad::excessive();
     check_task(blocking_payload(TEST_TASK));
 }
 
 #[test]
 #[ignore]
-fn periodic_task_exessive_load_intensive() {
-    let _load = CpuLoad::exessive();
+fn periodic_task_excessive_load_intensive() {
+    let _load = CpuLoad::excessive();
     check_task(intensive_payload(TEST_TASK));
 }

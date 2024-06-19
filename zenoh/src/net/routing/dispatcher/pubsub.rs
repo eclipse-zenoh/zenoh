@@ -31,8 +31,9 @@ use super::{
 };
 #[zenoh_macros::unstable]
 use crate::key_expr::KeyExpr;
-use crate::net::routing::hat::HatTrait;
+use crate::net::routing::hat::{HatTrait, SendDeclare};
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn declare_subscription(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
@@ -41,6 +42,7 @@ pub(crate) fn declare_subscription(
     expr: &WireExpr,
     sub_info: &SubscriberInfo,
     node_id: NodeId,
+    send_declare: &mut SendDeclare,
 ) {
     let rtables = zread!(tables.tables);
     match rtables
@@ -76,7 +78,15 @@ pub(crate) fn declare_subscription(
                     (res, wtables)
                 };
 
-            hat_code.declare_subscription(&mut wtables, face, id, &mut res, sub_info, node_id);
+            hat_code.declare_subscription(
+                &mut wtables,
+                face,
+                id,
+                &mut res,
+                sub_info,
+                node_id,
+                send_declare,
+            );
 
             disable_matches_data_routes(&mut wtables, &mut res);
             drop(wtables);
@@ -109,6 +119,7 @@ pub(crate) fn undeclare_subscription(
     id: SubscriberId,
     expr: &WireExpr,
     node_id: NodeId,
+    send_declare: &mut SendDeclare,
 ) {
     tracing::debug!("Undeclare subscription {}", face);
     let res = if expr.is_empty() {
@@ -139,7 +150,9 @@ pub(crate) fn undeclare_subscription(
         }
     };
     let mut wtables = zwrite!(tables.tables);
-    if let Some(mut res) = hat_code.undeclare_subscription(&mut wtables, face, id, res, node_id) {
+    if let Some(mut res) =
+        hat_code.undeclare_subscription(&mut wtables, face, id, res, node_id, send_declare)
+    {
         tracing::debug!("{} Undeclare subscriber {} ({})", face, id, res.expr());
         disable_matches_data_routes(&mut wtables, &mut res);
         drop(wtables);
@@ -222,7 +235,7 @@ pub(crate) fn update_data_routes(tables: &Tables, res: &mut Arc<Resource>) {
 pub(crate) fn update_data_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
     update_data_routes(tables, res);
     let res = get_mut_unchecked(res);
-    for child in res.childs.values_mut() {
+    for child in res.children.values_mut() {
         update_data_routes_from(tables, child);
     }
 }

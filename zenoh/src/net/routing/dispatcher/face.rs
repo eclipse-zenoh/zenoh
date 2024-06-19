@@ -215,6 +215,7 @@ impl Primitives for Face {
     fn send_interest(&self, msg: zenoh_protocol::network::Interest) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         if msg.mode != InterestMode::Final {
+            let mut declares = vec![];
             declare_interest(
                 ctrl_lock.as_ref(),
                 &self.tables,
@@ -223,7 +224,12 @@ impl Primitives for Face {
                 msg.wire_expr.as_ref(),
                 msg.mode,
                 msg.options,
+                &mut |p, m| declares.push((p.clone(), m)),
             );
+            drop(ctrl_lock);
+            for (p, m) in declares {
+                p.send_declare(m);
+            }
         } else {
             undeclare_interest(
                 ctrl_lock.as_ref(),
@@ -232,7 +238,6 @@ impl Primitives for Face {
                 msg.id,
             );
         }
-        drop(ctrl_lock);
     }
 
     fn send_declare(&self, msg: zenoh_protocol::network::Declare) {
@@ -245,6 +250,7 @@ impl Primitives for Face {
                 unregister_expr(&self.tables, &mut self.state.clone(), m.id);
             }
             zenoh_protocol::network::DeclareBody::DeclareSubscriber(m) => {
+                let mut declares = vec![];
                 declare_subscription(
                     ctrl_lock.as_ref(),
                     &self.tables,
@@ -253,9 +259,15 @@ impl Primitives for Face {
                     &m.wire_expr,
                     &m.ext_info,
                     msg.ext_nodeid.node_id,
+                    &mut |p, m| declares.push((p.clone(), m)),
                 );
+                drop(ctrl_lock);
+                for (p, m) in declares {
+                    p.send_declare(m);
+                }
             }
             zenoh_protocol::network::DeclareBody::UndeclareSubscriber(m) => {
+                let mut declares = vec![];
                 undeclare_subscription(
                     ctrl_lock.as_ref(),
                     &self.tables,
@@ -263,9 +275,15 @@ impl Primitives for Face {
                     m.id,
                     &m.ext_wire_expr.wire_expr,
                     msg.ext_nodeid.node_id,
+                    &mut |p, m| declares.push((p.clone(), m)),
                 );
+                drop(ctrl_lock);
+                for (p, m) in declares {
+                    p.send_declare(m);
+                }
             }
             zenoh_protocol::network::DeclareBody::DeclareQueryable(m) => {
+                let mut declares = vec![];
                 declare_queryable(
                     ctrl_lock.as_ref(),
                     &self.tables,
@@ -274,9 +292,15 @@ impl Primitives for Face {
                     &m.wire_expr,
                     &m.ext_info,
                     msg.ext_nodeid.node_id,
+                    &mut |p, m| declares.push((p.clone(), m)),
                 );
+                drop(ctrl_lock);
+                for (p, m) in declares {
+                    p.send_declare(m);
+                }
             }
             zenoh_protocol::network::DeclareBody::UndeclareQueryable(m) => {
+                let mut declares = vec![];
                 undeclare_queryable(
                     ctrl_lock.as_ref(),
                     &self.tables,
@@ -284,9 +308,15 @@ impl Primitives for Face {
                     m.id,
                     &m.ext_wire_expr.wire_expr,
                     msg.ext_nodeid.node_id,
+                    &mut |p, m| declares.push((p.clone(), m)),
                 );
+                drop(ctrl_lock);
+                for (p, m) in declares {
+                    p.send_declare(m);
+                }
             }
             zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
+                let mut declares = vec![];
                 declare_token(
                     ctrl_lock.as_ref(),
                     &self.tables,
@@ -295,9 +325,15 @@ impl Primitives for Face {
                     &m.wire_expr,
                     msg.ext_nodeid.node_id,
                     msg.interest_id,
+                    &mut |p, m| declares.push((p.clone(), m)),
                 );
+                drop(ctrl_lock);
+                for (p, m) in declares {
+                    p.send_declare(m);
+                }
             }
             zenoh_protocol::network::DeclareBody::UndeclareToken(m) => {
+                let mut declares = vec![];
                 undeclare_token(
                     ctrl_lock.as_ref(),
                     &self.tables,
@@ -305,7 +341,12 @@ impl Primitives for Face {
                     m.id,
                     &m.ext_wire_expr,
                     msg.ext_nodeid.node_id,
+                    &mut |p, m| declares.push((p.clone(), m)),
                 );
+                drop(ctrl_lock);
+                for (p, m) in declares {
+                    p.send_declare(m);
+                }
             }
             zenoh_protocol::network::DeclareBody::DeclareFinal(_) => {
                 if let Some(id) = msg.interest_id {
@@ -314,7 +355,10 @@ impl Primitives for Face {
                         .entry(id)
                         .and_modify(|interest| interest.finalized = true);
 
-                    declare_final(&mut self.state.clone(), id);
+                    let mut declares = vec![];
+                    declare_final(&mut self.state.clone(), id, &mut |p, m| {
+                        declares.push((p.clone(), m))
+                    });
 
                     // recompute routes
                     // TODO: disable  routes and recompute them in parallel to avoid holding
@@ -323,10 +367,15 @@ impl Primitives for Face {
                     let mut root_res = wtables.root_res.clone();
                     update_data_routes_from(&mut wtables, &mut root_res);
                     update_query_routes_from(&mut wtables, &mut root_res);
+
+                    drop(wtables);
+                    drop(ctrl_lock);
+                    for (p, m) in declares {
+                        p.send_declare(m);
+                    }
                 }
             }
         }
-        drop(ctrl_lock);
     }
 
     #[inline]

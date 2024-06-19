@@ -131,7 +131,7 @@ pub trait ZenohParameters {
     const TIME_RANGE_KEY: &'static str = "_time";
     /// Sets the time range targeted by the selector parameters.
     fn set_time_range<T: Into<Option<TimeRange>>>(&mut self, time_range: T);
-    /// Sets the parameter allowing to receieve replies from queryables not matching
+    /// Sets the parameter allowing to receive replies from queryables not matching
     /// the requested key expression. This may happen in this scenario:
     /// - we are requesting keyexpr `a/b`.
     /// - queryable is declared to handle `a/*` queries and contains data for `a/b` and `a/c`.

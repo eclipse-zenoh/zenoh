@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-/// Module provides a set of utility functions whic allows to manipulate  &str` which follows the format `a=b;c=d|e;f=g`.
+/// Module provides a set of utility functions which allows to manipulate  &str` which follows the format `a=b;c=d|e;f=g`.
 /// and structure `Parameters` which provides `HashMap<&str, &str>`-like view over a string of such format.
 ///
 /// `;` is the separator between the key-value `(&str, &str)` elements.
@@ -215,7 +215,7 @@ pub fn rand(into: &mut String) {
 
 /// A map of key/value (String,String) parameters.
 /// It can be parsed from a String, using `;` or `<newline>` as separator between each parameters
-/// and `=` as separator between a key and its value. Keys and values are trimed.
+/// and `=` as separator between a key and its value. Keys and values are trimmed.
 ///
 /// Example:
 /// ```

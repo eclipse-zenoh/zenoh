@@ -158,7 +158,7 @@ impl Runtime {
                         }
                     }
                 } else {
-                    bail!("No peer specified and multicast scouting desactivated!")
+                    bail!("No peer specified and multicast scouting deactivated!")
                 }
             }
             _ => self.connect_peers(&peers, true).await,
@@ -423,10 +423,10 @@ impl Runtime {
 
     pub(crate) async fn update_peers(&self) -> ZResult<()> {
         let peers = { self.state.config.lock().connect().endpoints().clone() };
-        let tranports = self.manager().get_transports_unicast().await;
+        let transports = self.manager().get_transports_unicast().await;
 
         if self.state.whatami == WhatAmI::Client {
-            for transport in tranports {
+            for transport in transports {
                 let should_close = if let Ok(Some(orch_transport)) = transport.get_callback() {
                     if let Some(orch_transport) = orch_transport
                         .as_any()
@@ -449,7 +449,7 @@ impl Runtime {
             }
         } else {
             for peer in peers {
-                if !tranports.iter().any(|transport| {
+                if !transports.iter().any(|transport| {
                     if let Ok(Some(orch_transport)) = transport.get_callback() {
                         if let Some(orch_transport) = orch_transport
                             .as_any()

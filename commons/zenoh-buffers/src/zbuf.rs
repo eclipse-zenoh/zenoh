@@ -69,7 +69,7 @@ impl ZBuf {
         let mut slices = self.zslices();
         match self.slices.len() {
             0 => ZSlice::empty(),
-            // SAFETY: it's safe to use unwrap_unchecked() beacuse we are explicitly checking the length is 1.
+            // SAFETY: it's safe to use unwrap_unchecked() because we are explicitly checking the length is 1.
             1 => unsafe { slices.next().unwrap_unchecked().clone() },
             _ => slices
                 .fold(Vec::new(), |mut acc, it| {

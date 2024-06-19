@@ -90,7 +90,7 @@
 //!
 //!     async fn put(&mut self, key: Option<OwnedKeyExpr>, value: Value, timestamp: Timestamp) -> ZResult<StorageInsertionResult> {
 //!         // the key will be None if it exactly matched with the strip_prefix
-//!         // create a storge specific special structure to store it
+//!         // create a storage specific special structure to store it
 //!         // Store the data with timestamp
 //!         // @TODO:
 //!         // store (key, value, timestamp)

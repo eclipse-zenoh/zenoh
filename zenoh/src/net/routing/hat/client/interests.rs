@@ -31,7 +31,7 @@ use crate::net::routing::{
         resource::Resource,
         tables::{Tables, TablesLock},
     },
-    hat::{CurrentFutureTrait, HatInterestTrait},
+    hat::{CurrentFutureTrait, HatInterestTrait, SendDeclare},
     RoutingContext,
 };
 
@@ -81,6 +81,7 @@ impl HatInterestTrait for HatCode {
         res: Option<&mut Arc<Resource>>,
         mode: InterestMode,
         options: InterestOptions,
+        send_declare: &mut SendDeclare,
     ) {
         if options.tokens() {
             declare_token_interest(
@@ -90,6 +91,7 @@ impl HatInterestTrait for HatCode {
                 res.as_ref().map(|r| (*r).clone()).as_mut(),
                 mode,
                 options.aggregate(),
+                send_declare,
             )
         }
         face_hat_mut!(face)
@@ -146,26 +148,28 @@ impl HatInterestTrait for HatCode {
                         interest.src_face,
                         interest.src_interest_id
                     );
-                    interest
-                        .src_face
-                        .primitives
-                        .clone()
-                        .send_declare(RoutingContext::new(Declare {
+                    send_declare(
+                        &interest.src_face.primitives,
+                        RoutingContext::new(Declare {
                             interest_id: Some(interest.src_interest_id),
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType::DEFAULT,
                             body: DeclareBody::DeclareFinal(DeclareFinal),
-                        }));
+                        }),
+                    );
                 }
             } else {
-                face.primitives.send_declare(RoutingContext::new(Declare {
-                    interest_id: Some(id),
-                    ext_qos: ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareFinal(DeclareFinal),
-                }));
+                send_declare(
+                    &face.primitives,
+                    RoutingContext::new(Declare {
+                        interest_id: Some(id),
+                        ext_qos: ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::DeclareFinal(DeclareFinal),
+                    }),
+                );
             }
         }
     }

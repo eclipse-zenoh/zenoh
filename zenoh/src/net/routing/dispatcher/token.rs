@@ -27,8 +27,12 @@ use super::{
     face::FaceState,
     tables::{NodeId, TablesLock},
 };
-use crate::net::routing::{hat::HatTrait, router::Resource};
+use crate::net::routing::{
+    hat::{HatTrait, SendDeclare},
+    router::Resource,
+};
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn declare_token(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
@@ -37,6 +41,7 @@ pub(crate) fn declare_token(
     expr: &WireExpr,
     node_id: NodeId,
     interest_id: Option<InterestId>,
+    send_declare: &mut SendDeclare,
 ) {
     let rtables = zread!(tables.tables);
     match rtables
@@ -72,7 +77,15 @@ pub(crate) fn declare_token(
                     (res, wtables)
                 };
 
-            hat_code.declare_token(&mut wtables, face, id, &mut res, node_id, interest_id);
+            hat_code.declare_token(
+                &mut wtables,
+                face,
+                id,
+                &mut res,
+                node_id,
+                interest_id,
+                send_declare,
+            );
             drop(wtables);
         }
         None => tracing::error!(
@@ -91,6 +104,7 @@ pub(crate) fn undeclare_token(
     id: TokenId,
     expr: &ext::WireExprType,
     node_id: NodeId,
+    send_declare: &mut SendDeclare,
 ) {
     let (res, mut wtables) = if expr.wire_expr.is_empty() {
         (None, zwrite!(tables.tables))
@@ -138,7 +152,8 @@ pub(crate) fn undeclare_token(
         }
     };
 
-    if let Some(res) = hat_code.undeclare_token(&mut wtables, face, id, res, node_id) {
+    if let Some(res) = hat_code.undeclare_token(&mut wtables, face, id, res, node_id, send_declare)
+    {
         tracing::debug!("{} Undeclare token {} ({})", face, id, res.expr());
     } else {
         tracing::error!("{} Undeclare unknown token {}", face, id);

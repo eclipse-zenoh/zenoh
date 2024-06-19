@@ -36,7 +36,7 @@ use super::{
     tables::{register_expr_interest, TablesLock},
 };
 use crate::net::routing::{
-    hat::HatTrait,
+    hat::{HatTrait, SendDeclare},
     router::{unregister_expr_interest, Resource},
     RoutingContext,
 };
@@ -48,22 +48,33 @@ pub(crate) struct CurrentInterest {
     pub(crate) src_interest_id: InterestId,
 }
 
-pub(crate) fn declare_final(face: &mut Arc<FaceState>, id: InterestId) {
+pub(crate) fn declare_final(
+    face: &mut Arc<FaceState>,
+    id: InterestId,
+    send_declare: &mut SendDeclare,
+) {
     if let Some(interest) = get_mut_unchecked(face)
         .pending_current_interests
         .remove(&id)
     {
-        finalize_pending_interest(interest);
+        finalize_pending_interest(interest, send_declare);
     }
 }
 
-pub(crate) fn finalize_pending_interests(_tables_ref: &TablesLock, face: &mut Arc<FaceState>) {
+pub(crate) fn finalize_pending_interests(
+    _tables_ref: &TablesLock,
+    face: &mut Arc<FaceState>,
+    send_declare: &mut SendDeclare,
+) {
     for (_, interest) in get_mut_unchecked(face).pending_current_interests.drain() {
-        finalize_pending_interest(interest);
+        finalize_pending_interest(interest, send_declare);
     }
 }
 
-pub(crate) fn finalize_pending_interest(interest: (Arc<CurrentInterest>, CancellationToken)) {
+pub(crate) fn finalize_pending_interest(
+    interest: (Arc<CurrentInterest>, CancellationToken),
+    send_declare: &mut SendDeclare,
+) {
     let (interest, cancellation_token) = interest;
     cancellation_token.cancel();
     if let Some(interest) = Arc::into_inner(interest) {
@@ -72,17 +83,16 @@ pub(crate) fn finalize_pending_interest(interest: (Arc<CurrentInterest>, Cancell
             interest.src_face,
             interest.src_interest_id
         );
-        interest
-            .src_face
-            .primitives
-            .clone()
-            .send_declare(RoutingContext::new(Declare {
+        send_declare(
+            &interest.src_face.primitives,
+            RoutingContext::new(Declare {
                 interest_id: Some(interest.src_interest_id),
                 ext_qos: ext::QoSType::DECLARE,
                 ext_tstamp: None,
                 ext_nodeid: ext::NodeIdType::DEFAULT,
                 body: DeclareBody::DeclareFinal(DeclareFinal),
-            }));
+            }),
+        );
     }
 }
 
@@ -134,12 +144,13 @@ impl Timed for CurrentInterestCleanup {
                     face,
                     Duration::from_millis(INTEREST_TIMEOUT_MS),
                 );
-                finalize_pending_interest(interest);
+                finalize_pending_interest(interest, &mut |p, m| p.send_declare(m));
             }
         }
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn declare_interest(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables_ref: &Arc<TablesLock>,
@@ -148,6 +159,7 @@ pub(crate) fn declare_interest(
     expr: Option<&WireExpr>,
     mode: InterestMode,
     options: InterestOptions,
+    send_declare: &mut SendDeclare,
 ) {
     if options.keyexprs() && mode != InterestMode::Current {
         register_expr_interest(tables_ref, face, id, expr);
@@ -199,6 +211,7 @@ pub(crate) fn declare_interest(
                     Some(&mut res),
                     mode,
                     options,
+                    send_declare,
                 );
             }
             None => tracing::error!(
@@ -210,7 +223,16 @@ pub(crate) fn declare_interest(
         }
     } else {
         let mut wtables = zwrite!(tables_ref.tables);
-        hat_code.declare_interest(&mut wtables, tables_ref, face, id, None, mode, options);
+        hat_code.declare_interest(
+            &mut wtables,
+            tables_ref,
+            face,
+            id,
+            None,
+            mode,
+            options,
+            send_declare,
+        );
     }
 }
 

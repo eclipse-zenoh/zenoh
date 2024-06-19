@@ -344,7 +344,7 @@ impl TransportLinkMulticastUniversal {
                 )
                 .await;
                 if let Err(e) = res {
-                    tracing::debug!("{}", e);
+                    tracing::debug!("TX task failed: {}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
                     zenoh_runtime::ZRuntime::Net.spawn(async move { c_transport.delete().await });
@@ -380,7 +380,7 @@ impl TransportLinkMulticastUniversal {
                 .await;
                 c_signal.trigger();
                 if let Err(e) = res {
-                    tracing::debug!("{}", e);
+                    tracing::debug!("RX task failed: {}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
                     zenoh_runtime::ZRuntime::Net.spawn(async move { c_transport.delete().await });

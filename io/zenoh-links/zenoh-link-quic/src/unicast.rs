@@ -20,6 +20,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use quinn::crypto::rustls::{QuicClientConfig, QuicServerConfig};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio_util::sync::CancellationToken;
 use x509_parser::prelude::*;
@@ -35,7 +36,6 @@ use zenoh_protocol::{
 use zenoh_result::{bail, zerror, ZResult};
 
 use crate::{
-    config::*,
     utils::{get_quic_addr, TlsClientConfig, TlsServerConfig},
     ALPN_QUIC_HTTP, QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX,
 };
@@ -78,7 +78,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
         tracing::trace!("Closing QUIC link: {}", self);
         // Flush the QUIC stream
         let mut guard = zasynclock!(self.send);
-        if let Err(e) = guard.finish().await {
+        if let Err(e) = guard.finish() {
             tracing::trace!("Error closing QUIC stream {}: {}", self, e);
         }
         self.connection.close(quinn::VarInt::from_u32(0), &[0]);
@@ -221,15 +221,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
 
         let addr = get_quic_addr(&epaddr).await?;
 
-        let server_name_verification: bool = epconf
-            .get(TLS_SERVER_NAME_VERIFICATION)
-            .unwrap_or(TLS_SERVER_NAME_VERIFICATION_DEFAULT)
-            .parse()?;
-
-        if !server_name_verification {
-            tracing::warn!("Skipping name verification of servers");
-        }
-
         // Initialize the QUIC connection
         let mut client_crypto = TlsClientConfig::new(&epconf)
             .await
@@ -245,9 +236,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         };
         let mut quic_endpoint = quinn::Endpoint::client(SocketAddr::new(ip_addr, 0))
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
-        quic_endpoint.set_default_client_config(quinn::ClientConfig::new(Arc::new(
-            client_crypto.client_config,
-        )));
+
+        let quic_config: QuicClientConfig = client_crypto
+            .client_config
+            .try_into()
+            .map_err(|e| zerror!("Can not create a new QUIC link bound to {host}: {e}"))?;
+        quic_endpoint.set_default_client_config(quinn::ClientConfig::new(Arc::new(quic_config)));
 
         let src_addr = quic_endpoint
             .local_addr()
@@ -294,8 +288,22 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .map_err(|e| zerror!("Cannot create a new QUIC listener on {addr}: {e}"))?;
         server_crypto.server_config.alpn_protocols =
             ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
-        let mut server_config =
-            quinn::ServerConfig::with_crypto(Arc::new(server_crypto.server_config));
+
+        // Install ring based rustls CryptoProvider.
+        rustls::crypto::ring::default_provider()
+            // This can be called successfully at most once in any process execution.
+            // Call this early in your process to configure which provider is used for the provider.
+            // The configuration should happen before any use of ClientConfig::builder() or ServerConfig::builder().
+            .install_default()
+            // Ignore the error here, because `rustls::crypto::ring::default_provider().install_default()` will inevitably be executed multiple times
+            // when there are multiple quic links, and all but the first execution will fail.
+            .ok();
+
+        let quic_config: QuicServerConfig = server_crypto
+            .server_config
+            .try_into()
+            .map_err(|e| zerror!("Can not create a new QUIC listener on {addr}: {e}"))?;
+        let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(quic_config));
 
         // We do not accept unidireactional streams.
         Arc::get_mut(&mut server_config.transport)
@@ -397,8 +405,16 @@ async fn accept_task(
                             }
                         };
 
-                        // Get Quic auth identifier
+                        // Get the right source address in case an unsepecified IP (i.e. 0.0.0.0 or [::]) is used
+                        let src_addr =  match quic_conn.local_ip()  {
+                            Some(ip) => SocketAddr::new(ip, src_addr.port()),
+                            None => {
+                                tracing::debug!("Can not accept QUIC connection: empty local IP");
+                                continue;
+                            }
+                        };
                         let dst_addr = quic_conn.remote_address();
+                        // Get Quic auth identifier
                         let auth_id = get_cert_common_name(&quic_conn)?;
 
                         tracing::debug!("Accepted QUIC connection on {:?}: {:?}", src_addr, dst_addr);
@@ -438,7 +454,9 @@ async fn accept_task(
 fn get_cert_common_name(conn: &quinn::Connection) -> ZResult<QuicAuthId> {
     let mut auth_id = QuicAuthId { auth_value: None };
     if let Some(pi) = conn.peer_identity() {
-        let serv_certs = pi.downcast::<Vec<rustls::Certificate>>().unwrap();
+        let serv_certs = pi
+            .downcast::<Vec<rustls_pki_types::CertificateDer>>()
+            .unwrap();
         if let Some(item) = serv_certs.iter().next() {
             let (_, cert) = X509Certificate::from_der(item.as_ref()).unwrap();
             let subject_name = cert
