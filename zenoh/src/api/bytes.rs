@@ -14,8 +14,8 @@
 
 //! ZBytes primitives.
 use std::{
-    borrow::Cow, convert::Infallible, fmt::Debug, marker::PhantomData, str::Utf8Error,
-    string::FromUtf8Error, sync::Arc,
+    borrow::Cow, collections::HashMap, convert::Infallible, fmt::Debug, marker::PhantomData,
+    str::Utf8Error, string::FromUtf8Error, sync::Arc,
 };
 
 use uhlc::Timestamp;
@@ -2118,6 +2118,7 @@ macro_rules! impl_tuple {
         ZBytes::new(buffer)
     }};
 }
+
 impl<A, B> Serialize<(A, B)> for ZSerde
 where
     A: Into<ZBytes>,
@@ -2229,6 +2230,103 @@ where
     A: TryFrom<ZBytes>,
     <A as TryFrom<ZBytes>>::Error: Debug,
     B: TryFrom<ZBytes>,
+    <B as TryFrom<ZBytes>>::Error: Debug,
+{
+    type Error = ZBytesTupleReadError<A, B>;
+
+    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&*value)
+    }
+}
+
+// HashMap
+impl<A, B> Serialize<HashMap<A, B>> for ZSerde
+where
+    A: Into<ZBytes>,
+    B: Into<ZBytes>,
+{
+    type Output = ZBytes;
+
+    fn serialize(self, mut t: HashMap<A, B>) -> Self::Output {
+        ZBytes::from_iter(t.drain())
+    }
+}
+
+impl<A, B> Serialize<&HashMap<A, B>> for ZSerde
+where
+    for<'a> &'a A: Into<ZBytes>,
+    for<'b> &'b B: Into<ZBytes>,
+{
+    type Output = ZBytes;
+
+    fn serialize(self, t: &HashMap<A, B>) -> Self::Output {
+        ZBytes::from_iter(t.iter())
+    }
+}
+
+impl<A, B> From<HashMap<A, B>> for ZBytes
+where
+    A: Into<ZBytes>,
+    B: Into<ZBytes>,
+{
+    fn from(value: HashMap<A, B>) -> Self {
+        ZSerde.serialize(value)
+    }
+}
+
+impl<A, B> Deserialize<HashMap<A, B>> for ZSerde
+where
+    A: TryFrom<ZBytes> + Debug + std::cmp::Eq + std::hash::Hash,
+    <A as TryFrom<ZBytes>>::Error: Debug,
+    B: TryFrom<ZBytes> + Debug,
+    <B as TryFrom<ZBytes>>::Error: Debug,
+{
+    type Input<'a> = &'a ZBytes;
+    type Error = ZBytesTupleReadError<A, B>;
+
+    fn deserialize(self, bytes: Self::Input<'_>) -> Result<HashMap<A, B>, Self::Error> {
+        let mut hm = HashMap::new();
+        for res in bytes.iter::<(A, B)>() {
+            let (k, v) = res?;
+            hm.insert(k, v);
+        }
+        Ok(hm)
+    }
+}
+
+impl<A, B> TryFrom<ZBytes> for HashMap<A, B>
+where
+    A: TryFrom<ZBytes> + Debug + std::cmp::Eq + std::hash::Hash,
+    <A as TryFrom<ZBytes>>::Error: Debug,
+    B: TryFrom<ZBytes> + Debug,
+    <B as TryFrom<ZBytes>>::Error: Debug,
+{
+    type Error = ZBytesTupleReadError<A, B>;
+
+    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&value)
+    }
+}
+
+impl<A, B> TryFrom<&ZBytes> for HashMap<A, B>
+where
+    A: TryFrom<ZBytes> + Debug + std::cmp::Eq + std::hash::Hash,
+    <A as TryFrom<ZBytes>>::Error: Debug,
+    B: TryFrom<ZBytes> + Debug,
+    <B as TryFrom<ZBytes>>::Error: Debug,
+{
+    type Error = ZBytesTupleReadError<A, B>;
+
+    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(value)
+    }
+}
+
+impl<A, B> TryFrom<&mut ZBytes> for HashMap<A, B>
+where
+    A: TryFrom<ZBytes> + Debug + std::cmp::Eq + std::hash::Hash,
+    <A as TryFrom<ZBytes>>::Error: Debug,
+    B: TryFrom<ZBytes> + Debug,
     <B as TryFrom<ZBytes>>::Error: Debug,
 {
     type Error = ZBytesTupleReadError<A, B>;
@@ -2477,75 +2575,54 @@ mod tests {
         hm.insert(0, 0);
         hm.insert(1, 1);
         println!("Serialize:\t{:?}", hm);
-        let p = ZBytes::from_iter(hm.clone().drain());
+        let p = ZBytes::from(hm.clone());
         println!("Deserialize:\t{:?}\n", p);
-        let o = HashMap::from_iter(p.iter::<(usize, usize)>().map(Result::unwrap));
+        let o = p.deserialize::<HashMap<usize, usize>>().unwrap();
         assert_eq!(hm, o);
 
         let mut hm: HashMap<usize, Vec<u8>> = HashMap::new();
         hm.insert(0, vec![0u8; 8]);
         hm.insert(1, vec![1u8; 16]);
         println!("Serialize:\t{:?}", hm);
-        let p = ZBytes::from_iter(hm.clone().drain());
+        let p = ZBytes::from(hm.clone());
         println!("Deserialize:\t{:?}\n", p);
-        let o = HashMap::from_iter(p.iter::<(usize, Vec<u8>)>().map(Result::unwrap));
-        assert_eq!(hm, o);
-
-        let mut hm: HashMap<usize, Vec<u8>> = HashMap::new();
-        hm.insert(0, vec![0u8; 8]);
-        hm.insert(1, vec![1u8; 16]);
-        println!("Serialize:\t{:?}", hm);
-        let p = ZBytes::from_iter(hm.clone().drain());
-        println!("Deserialize:\t{:?}\n", p);
-        let o = HashMap::from_iter(p.iter::<(usize, Vec<u8>)>().map(Result::unwrap));
+        let o = p.deserialize::<HashMap<usize, Vec<u8>>>().unwrap();
         assert_eq!(hm, o);
 
         let mut hm: HashMap<usize, ZSlice> = HashMap::new();
         hm.insert(0, ZSlice::from(vec![0u8; 8]));
         hm.insert(1, ZSlice::from(vec![1u8; 16]));
         println!("Serialize:\t{:?}", hm);
-        let p = ZBytes::from_iter(hm.clone().drain());
+        let p = ZBytes::from(hm.clone());
         println!("Deserialize:\t{:?}\n", p);
-        let o = HashMap::from_iter(p.iter::<(usize, ZSlice)>().map(Result::unwrap));
+        let o = p.deserialize::<HashMap<usize, ZSlice>>().unwrap();
         assert_eq!(hm, o);
 
         let mut hm: HashMap<usize, ZBuf> = HashMap::new();
         hm.insert(0, ZBuf::from(vec![0u8; 8]));
         hm.insert(1, ZBuf::from(vec![1u8; 16]));
         println!("Serialize:\t{:?}", hm);
-        let p = ZBytes::from_iter(hm.clone().drain());
+        let p = ZBytes::from(hm.clone());
         println!("Deserialize:\t{:?}\n", p);
-        let o = HashMap::from_iter(p.iter::<(usize, ZBuf)>().map(Result::unwrap));
-        assert_eq!(hm, o);
-
-        let mut hm: HashMap<usize, Vec<u8>> = HashMap::new();
-        hm.insert(0, vec![0u8; 8]);
-        hm.insert(1, vec![1u8; 16]);
-        println!("Serialize:\t{:?}", hm);
-        let p = ZBytes::from_iter(hm.clone().iter().map(|(k, v)| (k, Cow::from(v))));
-        println!("Deserialize:\t{:?}\n", p);
-        let o = HashMap::from_iter(p.iter::<(usize, Vec<u8>)>().map(Result::unwrap));
+        let o = p.deserialize::<HashMap<usize, ZBuf>>().unwrap();
         assert_eq!(hm, o);
 
         let mut hm: HashMap<String, String> = HashMap::new();
         hm.insert(String::from("0"), String::from("a"));
         hm.insert(String::from("1"), String::from("b"));
         println!("Serialize:\t{:?}", hm);
-        let p = ZBytes::from_iter(hm.iter());
+        let p = ZBytes::from(hm.clone());
         println!("Deserialize:\t{:?}\n", p);
-        let o = HashMap::from_iter(p.iter::<(String, String)>().map(Result::unwrap));
+        let o = p.deserialize::<HashMap<String, String>>().unwrap();
         assert_eq!(hm, o);
 
         let mut hm: HashMap<Cow<'static, str>, Cow<'static, str>> = HashMap::new();
         hm.insert(Cow::from("0"), Cow::from("a"));
         hm.insert(Cow::from("1"), Cow::from("b"));
         println!("Serialize:\t{:?}", hm);
-        let p = ZBytes::from_iter(hm.iter());
+        let p = ZBytes::from(hm.clone());
         println!("Deserialize:\t{:?}\n", p);
-        let o = HashMap::from_iter(
-            p.iter::<(Cow<'static, str>, Cow<'static, str>)>()
-                .map(Result::unwrap),
-        );
+        let o = p.deserialize::<HashMap<Cow<str>, Cow<str>>>().unwrap();
         assert_eq!(hm, o);
     }
 }
