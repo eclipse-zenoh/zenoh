@@ -126,6 +126,11 @@ pub trait Deserialize<T> {
 /// let bytes = ZBytes::serialize(start.clone());
 /// let end: (String, String) = bytes.deserialize().unwrap();
 /// assert_eq!(start, end);
+///
+/// let start = (1_u8, 3.14_f32, String::from("abc"));
+/// let bytes = ZBytes::serialize(start.clone());
+/// let end: (u8, f32, String) = bytes.deserialize().unwrap();
+/// assert_eq!(start, end);
 /// ``````
 ///
 /// An iterator of serializable types:
@@ -272,7 +277,7 @@ impl ZBytes {
     ///
     /// // Parse the string of data into serde_json::Value.
     /// let start: Value = serde_json::from_str(data).unwrap();
-    /// // The serialization of a serde_json::Value is faillable (see serde_json::to_string()).
+    /// // The serialization of a serde_json::Value is faillable (see `serde_json::to_string()`).
     /// let bytes = ZBytes::try_serialize(start.clone()).unwrap();
     /// let end: Value = bytes.deserialize().unwrap();
     /// assert_eq!(start, end);
