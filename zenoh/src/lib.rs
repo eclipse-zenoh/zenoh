@@ -138,9 +138,9 @@ pub mod core {
 }
 
 pub mod logging {
-    #[cfg(feature = "internal")]
-    pub use zenoh_util::{init_log_with_callbacks, try_init_logging};
     pub use zenoh_util::{init_logging, init_logging_with_level, InvalidLogLevel, LogLevel};
+    #[cfg(feature = "internal")]
+    pub use zenoh_util::{init_logging_with_callback, try_init_logging};
 }
 
 /// [Key expression](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md) are Zenoh's address space.

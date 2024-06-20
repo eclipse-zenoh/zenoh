@@ -36,17 +36,6 @@ pub enum LogLevel {
     Off,
 }
 
-#[derive(Debug, Clone)]
-pub struct InvalidLogLevel(String);
-
-impl fmt::Display for InvalidLogLevel {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "invalid log level {:?}", self.0)
-    }
-}
-
-impl std::error::Error for InvalidLogLevel {}
-
 impl FromStr for LogLevel {
     type Err = InvalidLogLevel;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -61,6 +50,30 @@ impl FromStr for LogLevel {
         })
     }
 }
+
+impl From<LogLevel> for LevelFilter {
+    fn from(value: LogLevel) -> Self {
+        match value {
+            LogLevel::Trace => LevelFilter::TRACE,
+            LogLevel::Debug => LevelFilter::DEBUG,
+            LogLevel::Info => LevelFilter::INFO,
+            LogLevel::Warn => LevelFilter::WARN,
+            LogLevel::Error => LevelFilter::ERROR,
+            LogLevel::Off => LevelFilter::OFF,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct InvalidLogLevel(String);
+
+impl fmt::Display for InvalidLogLevel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "invalid log level {:?}", self.0)
+    }
+}
+
+impl std::error::Error for InvalidLogLevel {}
 
 /// Initialize zenoh logging using the value of `ZENOH_LOG` environment variable.
 ///
@@ -231,15 +244,7 @@ fn try_init_logging_with_level(
             .expect("invalid RUST_LOG");
         builder.with_env_filter(env_filter).try_init()
     } else {
-        let level_filter = match level {
-            LogLevel::Trace => LevelFilter::TRACE,
-            LogLevel::Debug => LevelFilter::DEBUG,
-            LogLevel::Info => LevelFilter::INFO,
-            LogLevel::Warn => LevelFilter::WARN,
-            LogLevel::Error => LevelFilter::ERROR,
-            LogLevel::Off => LevelFilter::OFF,
-        };
-        builder.with_max_level(level_filter).try_init()
+        builder.with_max_level(level).try_init()
     }
 }
 
@@ -309,22 +314,55 @@ where
     }
 }
 
-struct CallbackFilter<E, L> {
-    enabled: E,
-    max_level_hint: L,
+/// An simpler version of [`tracing_subscriber::layer::Filter`].
+pub trait LogFilter {
+    /// See [`Filter::enabled`].
+    fn enabled<S>(&self, meta: &Metadata, ctx: &Context<S>) -> bool;
+    /// See [`Filter::max_level_hint`].
+    fn max_level_hint(&self) -> Option<LevelFilter>;
 }
 
-impl<S, E, L> Filter<S> for CallbackFilter<E, L>
+impl LogFilter for LogLevel {
+    fn enabled<S>(&self, meta: &Metadata, _: &Context<S>) -> bool {
+        meta.level() < &LevelFilter::from(*self)
+    }
+
+    fn max_level_hint(&self) -> Option<LevelFilter> {
+        Some((*self).into())
+    }
+}
+
+impl LogFilter for LevelFilter {
+    fn enabled<S>(&self, meta: &Metadata, _: &Context<S>) -> bool {
+        meta.level() < self
+    }
+
+    fn max_level_hint(&self) -> Option<LevelFilter> {
+        Some(*self)
+    }
+}
+
+impl LogFilter for EnvFilter {
+    fn enabled<S>(&self, meta: &Metadata, cx: &Context<S>) -> bool {
+        self.enabled(meta, cx.clone())
+    }
+
+    fn max_level_hint(&self) -> Option<LevelFilter> {
+        self.max_level_hint()
+    }
+}
+
+struct LogFilterWrapper<F>(F);
+
+impl<F, S> Filter<S> for LogFilterWrapper<F>
 where
-    S: Subscriber + for<'a> LookupSpan<'a>,
-    E: Fn(&Metadata) -> bool + 'static,
-    L: Fn() -> Option<LevelFilter> + 'static,
+    F: LogFilter,
 {
-    fn enabled(&self, meta: &Metadata<'_>, _: &Context<'_, S>) -> bool {
-        (self.enabled)(meta)
+    fn enabled(&self, meta: &Metadata<'_>, cx: &Context<'_, S>) -> bool {
+        self.0.enabled(meta, cx)
     }
     fn max_level_hint(&self) -> Option<LevelFilter> {
-        (self.max_level_hint)()
+        self.0.max_level_hint()
     }
 }
 
@@ -334,17 +372,18 @@ where
 /// `tracing` implementation and a native logging implementation.
 ///
 /// [`LogEvent`] contains more or less all the data of a `tracing` event.
-/// `max_level_hint` will be called only once, and `enabled` once per callsite (span/event).
-/// [`tracing::callsite::rebuild_interest_cache`] can be called to reset the cache, and have
-/// `max_level_hint`/`enabled` called again.
-pub fn init_log_with_callbacks(
-    enabled: impl Fn(&Metadata) -> bool + Send + Sync + 'static,
-    max_level_hint: impl Fn() -> Option<LevelFilter> + Send + Sync + 'static,
+/// [`LogFilter::max_level_hint`] will be called only once, and [`LogFilter::enabled`] once
+/// per callsite (span/event). [`tracing::callsite::rebuild_interest_cache`] can be called
+/// to reset the cache, and have these methods called again.
+///
+/// To be consistent with zenoh API, bindings should allow to parse `ZENOH_LOG` environment
+/// variable to set the log level (unless it is set directly in code).
+/// Bindings may also handle `RUST_LOG` presence as a bypass of native logging, and use
+/// [`init_logging`] instead of this function in this case.
+pub fn init_logging_with_callback(
+    filter: impl LogFilter + Send + Sync + 'static,
     callback: impl Fn(LogEvent) + Send + Sync + 'static,
 ) {
-    let layer = CallbackLayer(callback).with_filter(CallbackFilter {
-        enabled,
-        max_level_hint,
-    });
+    let layer = CallbackLayer(callback).with_filter(LogFilterWrapper(filter));
     tracing_subscriber::registry().with(layer).init();
 }
