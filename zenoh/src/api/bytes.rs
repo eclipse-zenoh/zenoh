@@ -462,8 +462,14 @@ where
     }
 }
 
-/// The default serializer for ZBytes. It supports primitives types, such as: Vec<u8>, int, uint, float, string, bool.
-/// It also supports common Rust serde values.
+/// The default serializer for [`ZBytes`]. It supports primitives types, such as: `Vec<u8>`, `uX`, `iX`, `fX`, `String`, `bool`.
+/// It also supports common Rust serde values like `serde_json::Value`.
+///
+/// NOTE: Zenoh semantic and protocol take care of sending and receiving bytes without restricting the actual data types.
+/// ZSerde is a default serializer/deserializer provided for convenience to the users to deal with primitives data types via
+/// a simple out-of-the-box encoding. ZSerde is **NOT** by any means the only serializer/deserializer users can use nor a limitation
+/// to the types supported by Zenoh. Users are free and encouraged to use any serializer/deserializer of their choice like *serde*,
+/// *protobuf*, *bincode*, *flatbuffers*, etc.
 #[derive(Clone, Copy, Debug)]
 pub struct ZSerde;
 
