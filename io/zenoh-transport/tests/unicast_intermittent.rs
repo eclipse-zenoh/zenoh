@@ -426,53 +426,47 @@ async fn lowlatency_transport_intermittent(endpoint: &EndPoint) {
 }
 
 #[cfg(feature = "transport_tcp")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 async fn transport_tcp_intermittent() {
-    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 12000).parse().unwrap();
     universal_transport_intermittent(&endpoint).await;
 }
 
 #[cfg(feature = "transport_tcp")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 async fn transport_tcp_intermittent_for_lowlatency_transport() {
-    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 12100).parse().unwrap();
     lowlatency_transport_intermittent(&endpoint).await;
 }
 
 #[cfg(feature = "transport_ws")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 #[ignore]
 async fn transport_ws_intermittent() {
-    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 12010).parse().unwrap();
     universal_transport_intermittent(&endpoint).await;
 }
 
 #[cfg(feature = "transport_ws")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 #[ignore]
 async fn transport_ws_intermittent_for_lowlatency_transport() {
-    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 12110).parse().unwrap();
     lowlatency_transport_intermittent(&endpoint).await;
 }
 
 #[cfg(feature = "transport_unixpipe")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 #[ignore]
 async fn transport_unixpipe_intermittent() {
-    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = "unixpipe/transport_unixpipe_intermittent".parse().unwrap();
     universal_transport_intermittent(&endpoint).await;
 }
 
 #[cfg(feature = "transport_unixpipe")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 #[ignore]
 async fn transport_unixpipe_intermittent_for_lowlatency_transport() {
-    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = "unixpipe/transport_unixpipe_intermittent_for_lowlatency_transport"
         .parse()
         .unwrap();
@@ -480,9 +474,8 @@ async fn transport_unixpipe_intermittent_for_lowlatency_transport() {
 }
 
 #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 async fn transport_vsock_intermittent() {
-    zenoh_util::try_init_log_from_env();
     let endpoint: EndPoint = "vsock/VMADDR_CID_LOCAL:17000".parse().unwrap();
     universal_transport_intermittent(&endpoint).await;
 }

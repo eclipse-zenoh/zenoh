@@ -35,9 +35,8 @@ mod test {
     const VALUE: &str = "zenoh";
     static TESTFILES_PATH: Lazy<PathBuf> = Lazy::new(std::env::temp_dir);
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    #[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
     async fn test_authentication() {
-        zenoh_util::try_init_log_from_env();
         create_new_files(TESTFILES_PATH.to_path_buf())
             .await
             .unwrap();

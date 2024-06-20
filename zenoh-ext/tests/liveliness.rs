@@ -17,7 +17,7 @@ use zenoh::{
     sample::SampleKind,
 };
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 async fn test_liveliness_querying_subscriber_clique() {
     use std::time::Duration;
 
@@ -31,8 +31,6 @@ async fn test_liveliness_querying_subscriber_clique() {
     const LIVELINESS_KEYEXPR_1: &str = "test/liveliness/querying-subscriber/brokered/1";
     const LIVELINESS_KEYEXPR_2: &str = "test/liveliness/querying-subscriber/brokered/2";
     const LIVELINESS_KEYEXPR_ALL: &str = "test/liveliness/querying-subscriber/brokered/*";
-
-    zenoh_util::try_init_log_from_env();
 
     let peer1 = {
         let mut c = config::default();
@@ -87,7 +85,7 @@ async fn test_liveliness_querying_subscriber_clique() {
     assert_eq!(sample.key_expr().as_str(), LIVELINESS_KEYEXPR_1);
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 async fn test_liveliness_querying_subscriber_brokered() {
     use std::time::Duration;
 
@@ -101,8 +99,6 @@ async fn test_liveliness_querying_subscriber_brokered() {
     const LIVELINESS_KEYEXPR_1: &str = "test/liveliness/querying-subscriber/brokered/1";
     const LIVELINESS_KEYEXPR_2: &str = "test/liveliness/querying-subscriber/brokered/2";
     const LIVELINESS_KEYEXPR_ALL: &str = "test/liveliness/querying-subscriber/brokered/*";
-
-    zenoh_util::try_init_log_from_env();
 
     let _router = {
         let mut c = config::default();
@@ -181,7 +177,7 @@ async fn test_liveliness_querying_subscriber_brokered() {
     assert_eq!(sample.key_expr().as_str(), LIVELINESS_KEYEXPR_1);
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 async fn test_liveliness_fetching_subscriber_clique() {
     use std::time::Duration;
 
@@ -195,8 +191,6 @@ async fn test_liveliness_fetching_subscriber_clique() {
     const LIVELINESS_KEYEXPR_1: &str = "test/liveliness/querying-subscriber/brokered/1";
     const LIVELINESS_KEYEXPR_2: &str = "test/liveliness/querying-subscriber/brokered/2";
     const LIVELINESS_KEYEXPR_ALL: &str = "test/liveliness/querying-subscriber/brokered/*";
-
-    zenoh_util::try_init_log_from_env();
 
     let peer1 = {
         let mut c = config::default();
@@ -255,7 +249,7 @@ async fn test_liveliness_fetching_subscriber_clique() {
     assert_eq!(sample.key_expr().as_str(), LIVELINESS_KEYEXPR_1);
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 async fn test_liveliness_fetching_subscriber_brokered() {
     use std::time::Duration;
 
@@ -269,8 +263,6 @@ async fn test_liveliness_fetching_subscriber_brokered() {
     const LIVELINESS_KEYEXPR_1: &str = "test/liveliness/querying-subscriber/brokered/1";
     const LIVELINESS_KEYEXPR_2: &str = "test/liveliness/querying-subscriber/brokered/2";
     const LIVELINESS_KEYEXPR_ALL: &str = "test/liveliness/querying-subscriber/brokered/*";
-
-    zenoh_util::try_init_log_from_env();
 
     let _router = {
         let mut c = config::default();

@@ -225,10 +225,7 @@ impl Plugin for RestPlugin {
         name: &str,
         runtime: &Self::StartArgs,
     ) -> ZResult<zenoh::internal::plugins::RunningPlugin> {
-        // Try to initiate login.
-        // Required in case of dynamic lib, otherwise no logs.
-        // But cannot be done twice in case of static link.
-        zenoh::try_init_log_from_env();
+        let _ = zenoh::logging::try_init_logging();
         tracing::debug!("REST plugin {}", LONG_VERSION.as_str());
 
         let runtime_conf = runtime.config().lock();
@@ -466,10 +463,7 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
 }
 
 pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
-    // Try to initiate login.
-    // Required in case of dynamic lib, otherwise no logs.
-    // But cannot be done twice in case of static link.
-    zenoh::try_init_log_from_env();
+    let _ = zenoh::logging::try_init_logging();
 
     let zid = runtime.zid().to_string();
     let session = zenoh::session::init(runtime).await.unwrap();

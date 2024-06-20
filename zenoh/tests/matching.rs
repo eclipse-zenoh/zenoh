@@ -38,9 +38,8 @@ async fn create_session_pair(locator: &str) -> (Session, Session) {
     (session1, session2)
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 async fn zenoh_matching_status_any() -> ZResult<()> {
-    zenoh_util::init_logging();
     let (session1, session2) = create_session_pair("tcp/127.0.0.1:18001").await;
 
     let publisher1 = ztimeout!(session1
@@ -90,10 +89,8 @@ async fn zenoh_matching_status_any() -> ZResult<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 async fn zenoh_matching_status_remote() -> ZResult<()> {
-    zenoh_util::init_logging();
-
     let session1 = ztimeout!(zenoh::open(config::peer())).unwrap();
     let session2 = ztimeout!(zenoh::open(config::peer())).unwrap();
 
@@ -145,10 +142,8 @@ async fn zenoh_matching_status_remote() -> ZResult<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 async fn zenoh_matching_status_local() -> ZResult<()> {
-    zenoh_util::init_logging();
-
     let session1 = ztimeout!(zenoh::open(zenoh::config::peer())).unwrap();
     let session2 = ztimeout!(zenoh::open(zenoh::config::peer())).unwrap();
 

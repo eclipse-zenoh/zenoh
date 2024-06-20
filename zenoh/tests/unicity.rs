@@ -255,19 +255,16 @@ async fn test_unicity_qryrep(s01: &Session, s02: &Session, s03: &Session) {
     }
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 async fn zenoh_unicity_p2p() {
-    zenoh::init_logging();
-
     let (s01, s02, s03) = open_p2p_sessions().await;
     test_unicity_pubsub(&s01, &s02, &s03).await;
     test_unicity_qryrep(&s01, &s02, &s03).await;
     close_sessions(s01, s02, s03).await;
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 async fn zenoh_unicity_brokered() {
-    zenoh::init_logging();
     let r = open_router_session().await;
 
     let (s01, s02, s03) = open_client_sessions().await;

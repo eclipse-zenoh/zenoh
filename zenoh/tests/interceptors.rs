@@ -180,9 +180,8 @@ fn downsampling_by_keyexpr_impl(flow: InterceptorFlow) {
     downsampling_test(pub_config, sub_config, ke_prefix, ke_of_rates, rate_check);
 }
 
-#[test]
+#[test_log::test]
 fn downsampling_by_keyexpr() {
-    zenoh::init_logging();
     downsampling_by_keyexpr_impl(InterceptorFlow::Ingress);
     downsampling_by_keyexpr_impl(InterceptorFlow::Egress);
 }
@@ -233,18 +232,15 @@ fn downsampling_by_interface_impl(flow: InterceptorFlow) {
 }
 
 #[cfg(unix)]
-#[test]
+#[test_log::test]
 fn downsampling_by_interface() {
-    zenoh::init_logging();
     downsampling_by_interface_impl(InterceptorFlow::Ingress);
     downsampling_by_interface_impl(InterceptorFlow::Egress);
 }
 
-#[test]
+#[test_log::test]
 #[should_panic(expected = "unknown variant `down`")]
 fn downsampling_config_error_wrong_strategy() {
-    zenoh::init_logging();
-
     let mut config = Config::default();
     config
         .insert_json5(

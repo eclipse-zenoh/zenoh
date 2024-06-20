@@ -296,6 +296,7 @@ impl Default for Timer {
     }
 }
 
+#[cfg(test)]
 mod tests {
     #[test]
     fn timer() {

@@ -157,6 +157,7 @@ shellexpand = "3.0.0"
 socket2 = { version = "0.5.1", features = ["all"] }
 stop-token = "0.7.0"
 syn = "2.0"
+test-log = "0.2.16"
 tide = "0.16.0"
 token-cell = { version = "1.4.2", default-features = false }
 tokio = { version = "1.35.1", default-features = false } # Default features are disabled due to some crates' requirements

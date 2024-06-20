@@ -35,7 +35,7 @@ if(typeof(EventSource) !== "undefined") {
 #[async_std::main]
 async fn main() {
     // initiate logging
-    zenoh::try_init_log_from_env();
+    zenoh::init_logging();
 
     let config = parse_args();
     let key = keyexpr::new("demo/sse").unwrap();

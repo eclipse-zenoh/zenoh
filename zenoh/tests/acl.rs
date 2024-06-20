@@ -32,9 +32,8 @@ mod test {
     const KEY_EXPR: &str = "test/demo";
     const VALUE: &str = "zenoh";
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    #[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
     async fn test_acl() {
-        zenoh::init_logging();
         test_pub_sub_deny().await;
         test_pub_sub_allow().await;
         test_pub_sub_deny_then_allow().await;

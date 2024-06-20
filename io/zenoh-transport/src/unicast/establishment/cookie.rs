@@ -192,6 +192,7 @@ impl Cookie {
     }
 }
 
+#[cfg(test)]
 mod tests {
     #[test]
     fn codec_cookie() {

@@ -244,18 +244,16 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
     }
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 async fn zenoh_session_unicast() {
-    zenoh::init_logging();
     let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:17447"]).await;
     test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;
     test_session_qryrep(&peer01, &peer02, Reliability::Reliable).await;
     close_session(peer01, peer02).await;
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 async fn zenoh_session_multicast() {
-    zenoh::init_logging();
     let (peer01, peer02) =
         open_session_multicast("udp/224.0.0.1:17448", "udp/224.0.0.1:17448").await;
     test_session_pubsub(&peer01, &peer02, Reliability::BestEffort).await;

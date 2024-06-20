@@ -68,6 +68,7 @@ impl BlockCipher {
     }
 }
 
+#[cfg(test)]
 mod tests {
     #[test]
     fn cipher() {

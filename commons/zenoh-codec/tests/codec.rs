@@ -386,10 +386,8 @@ fn codec_shm_info() {
 }
 
 // Common
-#[test]
+#[test_log::test]
 fn codec_extension() {
-    zenoh_util::try_init_log_from_env();
-
     macro_rules! run_extension_single {
         ($ext:ty, $buff:expr) => {
             let codec = Zenoh080::new();

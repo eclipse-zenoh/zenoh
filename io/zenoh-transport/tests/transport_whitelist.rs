@@ -116,10 +116,8 @@ async fn run(endpoints: &[EndPoint]) {
 }
 
 #[cfg(feature = "transport_tcp")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 async fn transport_whitelist_tcp() {
-    zenoh_util::try_init_log_from_env();
-
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
         format!("tcp/127.0.0.1:{}", 17000).parse().unwrap(),
@@ -130,11 +128,9 @@ async fn transport_whitelist_tcp() {
 }
 
 #[cfg(feature = "transport_unixpipe")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 #[ignore]
 async fn transport_whitelist_unixpipe() {
-    zenoh_util::try_init_log_from_env();
-
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
         "unixpipe/transport_whitelist_unixpipe".parse().unwrap(),
@@ -145,10 +141,8 @@ async fn transport_whitelist_unixpipe() {
 }
 
 #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 async fn transport_whitelist_vsock() {
-    zenoh_util::try_init_log_from_env();
-
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
         "vsock/VMADDR_CID_LOCAL:17000".parse().unwrap(),
