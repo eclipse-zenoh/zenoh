@@ -35,7 +35,7 @@ test = ["num_cpus"]
 async-trait = { workspace = true }
 bincode = { workspace = true }
 crc = { workspace = true }
-tracing = {workspace = true}
+tracing = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 shared_memory = { workspace = true }
 tokio = { workspace = true }
@@ -52,5 +52,4 @@ lockfree = { workspace = true }
 stabby = { workspace = true }
 
 [dev-dependencies]
-zenoh-shm = { workspace = true, features = ["test"] }
 libc = { workspace = true }

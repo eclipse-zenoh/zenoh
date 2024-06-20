@@ -5950,7 +5950,6 @@ dependencies = [
  "zenoh-core",
  "zenoh-macros",
  "zenoh-result",
- "zenoh-shm",
 ]
 
 [[package]]
