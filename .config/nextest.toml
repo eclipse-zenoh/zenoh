@@ -1,3 +1,6 @@
+[test-groups]
+sequential = { max-threads = 1 }
+
 # By default, retry a few times until pass the test within the specified timeout
 [profile.default]
 retries = 1
@@ -20,3 +23,9 @@ test(=header_link_failure_concurrent)
 """
 threads-required = 'num-cpus'
 slow-timeout = { period = "60s", terminate-after = 6 }
+
+[[profile.default.overrides]]
+filter = """
+test(=downsampling_by_keyexpr)
+"""
+test-group = "sequential"
