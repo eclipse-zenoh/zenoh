@@ -2858,7 +2858,7 @@ mod tests {
 
         // SHM
         #[cfg(feature = "shared-memory")]
-        {
+        fn shm() {
             // create an SHM backend...
             let backend = PosixShmProviderBackend::builder()
                 .with_size(4096)
@@ -2882,6 +2882,8 @@ mod tests {
 
             serialize_deserialize!(&zshm, immutable_shm_buf);
         }
+        #[cfg(feature = "shared-memory")]
+        shm();
 
         // Parameters
         serialize_deserialize!(Parameters, Parameters::from(""));
@@ -2900,79 +2902,84 @@ mod tests {
             (Cow::from("a"), Cow::from("b"))
         );
 
-        // Iterator
-        let v: [usize; 5] = [0, 1, 2, 3, 4];
-        println!("Serialize:\t{:?}", v);
-        let p = ZBytes::from_iter(v.iter());
-        println!("Deserialize:\t{:?}\n", p);
-        for (i, t) in p.iter::<usize>().enumerate() {
-            assert_eq!(i, t.unwrap());
+        fn iterator() {
+            let v: [usize; 5] = [0, 1, 2, 3, 4];
+            println!("Serialize:\t{:?}", v);
+            let p = ZBytes::from_iter(v.iter());
+            println!("Deserialize:\t{:?}\n", p);
+            for (i, t) in p.iter::<usize>().enumerate() {
+                assert_eq!(i, t.unwrap());
+            }
+
+            let mut v = vec![[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]];
+            println!("Serialize:\t{:?}", v);
+            let p = ZBytes::from_iter(v.drain(..));
+            println!("Deserialize:\t{:?}\n", p);
+            let mut iter = p.iter::<[u8; 4]>();
+            assert_eq!(iter.next().unwrap().unwrap(), [0, 1, 2, 3]);
+            assert_eq!(iter.next().unwrap().unwrap(), [4, 5, 6, 7]);
+            assert_eq!(iter.next().unwrap().unwrap(), [8, 9, 10, 11]);
+            assert_eq!(iter.next().unwrap().unwrap(), [12, 13, 14, 15]);
+            assert!(iter.next().is_none());
         }
+        iterator();
 
-        let mut v = vec![[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]];
-        println!("Serialize:\t{:?}", v);
-        let p = ZBytes::from_iter(v.drain(..));
-        println!("Deserialize:\t{:?}\n", p);
-        let mut iter = p.iter::<[u8; 4]>();
-        assert_eq!(iter.next().unwrap().unwrap(), [0, 1, 2, 3]);
-        assert_eq!(iter.next().unwrap().unwrap(), [4, 5, 6, 7]);
-        assert_eq!(iter.next().unwrap().unwrap(), [8, 9, 10, 11]);
-        assert_eq!(iter.next().unwrap().unwrap(), [12, 13, 14, 15]);
-        assert!(iter.next().is_none());
+        fn hashmap() {
+            use std::collections::HashMap;
+            let mut hm: HashMap<usize, usize> = HashMap::new();
+            hm.insert(0, 0);
+            hm.insert(1, 1);
+            println!("Serialize:\t{:?}", hm);
+            let p = ZBytes::from(hm.clone());
+            println!("Deserialize:\t{:?}\n", p);
+            let o = p.deserialize::<HashMap<usize, usize>>().unwrap();
+            assert_eq!(hm, o);
 
-        use std::collections::HashMap;
-        let mut hm: HashMap<usize, usize> = HashMap::new();
-        hm.insert(0, 0);
-        hm.insert(1, 1);
-        println!("Serialize:\t{:?}", hm);
-        let p = ZBytes::from(hm.clone());
-        println!("Deserialize:\t{:?}\n", p);
-        let o = p.deserialize::<HashMap<usize, usize>>().unwrap();
-        assert_eq!(hm, o);
+            let mut hm: HashMap<usize, Vec<u8>> = HashMap::new();
+            hm.insert(0, vec![0u8; 8]);
+            hm.insert(1, vec![1u8; 16]);
+            println!("Serialize:\t{:?}", hm);
+            let p = ZBytes::from(hm.clone());
+            println!("Deserialize:\t{:?}\n", p);
+            let o = p.deserialize::<HashMap<usize, Vec<u8>>>().unwrap();
+            assert_eq!(hm, o);
 
-        let mut hm: HashMap<usize, Vec<u8>> = HashMap::new();
-        hm.insert(0, vec![0u8; 8]);
-        hm.insert(1, vec![1u8; 16]);
-        println!("Serialize:\t{:?}", hm);
-        let p = ZBytes::from(hm.clone());
-        println!("Deserialize:\t{:?}\n", p);
-        let o = p.deserialize::<HashMap<usize, Vec<u8>>>().unwrap();
-        assert_eq!(hm, o);
+            let mut hm: HashMap<usize, ZSlice> = HashMap::new();
+            hm.insert(0, ZSlice::from(vec![0u8; 8]));
+            hm.insert(1, ZSlice::from(vec![1u8; 16]));
+            println!("Serialize:\t{:?}", hm);
+            let p = ZBytes::from(hm.clone());
+            println!("Deserialize:\t{:?}\n", p);
+            let o = p.deserialize::<HashMap<usize, ZSlice>>().unwrap();
+            assert_eq!(hm, o);
 
-        let mut hm: HashMap<usize, ZSlice> = HashMap::new();
-        hm.insert(0, ZSlice::from(vec![0u8; 8]));
-        hm.insert(1, ZSlice::from(vec![1u8; 16]));
-        println!("Serialize:\t{:?}", hm);
-        let p = ZBytes::from(hm.clone());
-        println!("Deserialize:\t{:?}\n", p);
-        let o = p.deserialize::<HashMap<usize, ZSlice>>().unwrap();
-        assert_eq!(hm, o);
+            let mut hm: HashMap<usize, ZBuf> = HashMap::new();
+            hm.insert(0, ZBuf::from(vec![0u8; 8]));
+            hm.insert(1, ZBuf::from(vec![1u8; 16]));
+            println!("Serialize:\t{:?}", hm);
+            let p = ZBytes::from(hm.clone());
+            println!("Deserialize:\t{:?}\n", p);
+            let o = p.deserialize::<HashMap<usize, ZBuf>>().unwrap();
+            assert_eq!(hm, o);
 
-        let mut hm: HashMap<usize, ZBuf> = HashMap::new();
-        hm.insert(0, ZBuf::from(vec![0u8; 8]));
-        hm.insert(1, ZBuf::from(vec![1u8; 16]));
-        println!("Serialize:\t{:?}", hm);
-        let p = ZBytes::from(hm.clone());
-        println!("Deserialize:\t{:?}\n", p);
-        let o = p.deserialize::<HashMap<usize, ZBuf>>().unwrap();
-        assert_eq!(hm, o);
+            let mut hm: HashMap<String, String> = HashMap::new();
+            hm.insert(String::from("0"), String::from("a"));
+            hm.insert(String::from("1"), String::from("b"));
+            println!("Serialize:\t{:?}", hm);
+            let p = ZBytes::from(hm.clone());
+            println!("Deserialize:\t{:?}\n", p);
+            let o = p.deserialize::<HashMap<String, String>>().unwrap();
+            assert_eq!(hm, o);
 
-        let mut hm: HashMap<String, String> = HashMap::new();
-        hm.insert(String::from("0"), String::from("a"));
-        hm.insert(String::from("1"), String::from("b"));
-        println!("Serialize:\t{:?}", hm);
-        let p = ZBytes::from(hm.clone());
-        println!("Deserialize:\t{:?}\n", p);
-        let o = p.deserialize::<HashMap<String, String>>().unwrap();
-        assert_eq!(hm, o);
-
-        let mut hm: HashMap<Cow<'static, str>, Cow<'static, str>> = HashMap::new();
-        hm.insert(Cow::from("0"), Cow::from("a"));
-        hm.insert(Cow::from("1"), Cow::from("b"));
-        println!("Serialize:\t{:?}", hm);
-        let p = ZBytes::from(hm.clone());
-        println!("Deserialize:\t{:?}\n", p);
-        let o = p.deserialize::<HashMap<Cow<str>, Cow<str>>>().unwrap();
-        assert_eq!(hm, o);
+            let mut hm: HashMap<Cow<'static, str>, Cow<'static, str>> = HashMap::new();
+            hm.insert(Cow::from("0"), Cow::from("a"));
+            hm.insert(Cow::from("1"), Cow::from("b"));
+            println!("Serialize:\t{:?}", hm);
+            let p = ZBytes::from(hm.clone());
+            println!("Deserialize:\t{:?}\n", p);
+            let o = p.deserialize::<HashMap<Cow<str>, Cow<str>>>().unwrap();
+            assert_eq!(hm, o);
+        }
+        hashmap();
     }
 }
