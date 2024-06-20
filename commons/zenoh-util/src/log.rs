@@ -371,19 +371,23 @@ where
 /// This function is mainly meant to be used in zenoh bindings, to provide a bridge between Rust
 /// `tracing` implementation and a native logging implementation.
 ///
+/// To be consistent with zenoh API, bindings should allow to parse `ZENOH_LOG` environment
+/// variable to set the log level (unless it is set directly in code).
+/// However, if `RUST_LOG` environment variable is provided, the callback will be skipped, and
+/// [`init_logging`] called instead.
+///
 /// [`LogEvent`] contains more or less all the data of a `tracing` event.
 /// [`LogFilter::max_level_hint`] will be called only once, and [`LogFilter::enabled`] once
 /// per callsite (span/event). [`tracing::callsite::rebuild_interest_cache`] can be called
 /// to reset the cache, and have these methods called again.
-///
-/// To be consistent with zenoh API, bindings should allow to parse `ZENOH_LOG` environment
-/// variable to set the log level (unless it is set directly in code).
-/// Bindings may also handle `RUST_LOG` presence as a bypass of native logging, and use
-/// [`init_logging`] instead of this function in this case.
 pub fn init_logging_with_callback(
     filter: impl LogFilter + Send + Sync + 'static,
     callback: impl Fn(LogEvent) + Send + Sync + 'static,
 ) {
+    if env::var("RUST_LOG").is_ok() {
+        init_logging();
+        return;
+    }
     let layer = CallbackLayer(callback).with_filter(LogFilterWrapper(filter));
     tracing_subscriber::registry().with(layer).init();
 }
