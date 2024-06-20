@@ -332,7 +332,7 @@ impl ZBytes {
 pub struct ZBytesReader<'a>(ZBufReader<'a>);
 
 #[derive(Debug)]
-pub enum ZBytesReadError<T>
+pub enum ZReadOrDeserializeError<T>
 where
     T: TryFrom<ZBytes>,
     <T as TryFrom<ZBytes>>::Error: Debug,
@@ -1612,7 +1612,7 @@ impl From<&mut Value> for ZBytes {
 
 impl Deserialize<Value> for ZSerde {
     type Input<'a> = &'a ZBytes;
-    type Error = ZBytesReadErrorTuple2<ZBytes, Encoding>;
+    type Error = ZReadOrDeserializeErrorTuple2<ZBytes, Encoding>;
 
     fn deserialize(self, v: Self::Input<'_>) -> Result<Value, Self::Error> {
         let (payload, encoding) = v.deserialize::<(ZBytes, Encoding)>()?;
@@ -1621,7 +1621,7 @@ impl Deserialize<Value> for ZSerde {
 }
 
 impl TryFrom<ZBytes> for Value {
-    type Error = ZBytesReadErrorTuple2<ZBytes, Encoding>;
+    type Error = ZReadOrDeserializeErrorTuple2<ZBytes, Encoding>;
 
     fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(&value)
@@ -1629,7 +1629,7 @@ impl TryFrom<ZBytes> for Value {
 }
 
 impl TryFrom<&ZBytes> for Value {
-    type Error = ZBytesReadErrorTuple2<ZBytes, Encoding>;
+    type Error = ZReadOrDeserializeErrorTuple2<ZBytes, Encoding>;
 
     fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(value)
@@ -1637,7 +1637,7 @@ impl TryFrom<&ZBytes> for Value {
 }
 
 impl TryFrom<&mut ZBytes> for Value {
-    type Error = ZBytesReadErrorTuple2<ZBytes, Encoding>;
+    type Error = ZReadOrDeserializeErrorTuple2<ZBytes, Encoding>;
 
     fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(&*value)
@@ -2160,15 +2160,15 @@ where
 }
 
 #[derive(Debug)]
-pub enum ZBytesReadErrorTuple2<A, B>
+pub enum ZReadOrDeserializeErrorTuple2<A, B>
 where
     A: TryFrom<ZBytes>,
     <A as TryFrom<ZBytes>>::Error: Debug,
     B: TryFrom<ZBytes>,
     <B as TryFrom<ZBytes>>::Error: Debug,
 {
-    One(ZBytesReadError<A>),
-    Two(ZBytesReadError<B>),
+    One(ZReadOrDeserializeError<A>),
+    Two(ZReadOrDeserializeError<B>),
 }
 
 impl<A, B> Deserialize<(A, B)> for ZSerde
@@ -2179,7 +2179,7 @@ where
     <B as TryFrom<ZBytes>>::Error: Debug,
 {
     type Input<'a> = &'a ZBytes;
-    type Error = ZBytesReadErrorTuple2<A, B>;
+    type Error = ZReadOrDeserializeErrorTuple2<A, B>;
 
     fn deserialize(self, bytes: Self::Input<'_>) -> Result<(A, B), Self::Error> {
         let codec = Zenoh080::new();
@@ -2187,17 +2187,19 @@ where
 
         let abuf: ZBuf = codec
             .read(&mut reader)
-            .map_err(|e| ZBytesReadErrorTuple2::One(ZBytesReadError::Read(e)))?;
+            .map_err(|e| ZReadOrDeserializeErrorTuple2::One(ZReadOrDeserializeError::Read(e)))?;
         let apld = ZBytes::new(abuf);
-        let a = A::try_from(apld)
-            .map_err(|e| ZBytesReadErrorTuple2::One(ZBytesReadError::Deserialize(e)))?;
+        let a = A::try_from(apld).map_err(|e| {
+            ZReadOrDeserializeErrorTuple2::One(ZReadOrDeserializeError::Deserialize(e))
+        })?;
 
         let bbuf: ZBuf = codec
             .read(&mut reader)
-            .map_err(|e| ZBytesReadErrorTuple2::Two(ZBytesReadError::Read(e)))?;
+            .map_err(|e| ZReadOrDeserializeErrorTuple2::Two(ZReadOrDeserializeError::Read(e)))?;
         let bpld = ZBytes::new(bbuf);
-        let b = B::try_from(bpld)
-            .map_err(|e| ZBytesReadErrorTuple2::Two(ZBytesReadError::Deserialize(e)))?;
+        let b = B::try_from(bpld).map_err(|e| {
+            ZReadOrDeserializeErrorTuple2::Two(ZReadOrDeserializeError::Deserialize(e))
+        })?;
 
         Ok((a, b))
     }
@@ -2210,7 +2212,7 @@ where
     B: TryFrom<ZBytes>,
     <B as TryFrom<ZBytes>>::Error: Debug,
 {
-    type Error = ZBytesReadErrorTuple2<A, B>;
+    type Error = ZReadOrDeserializeErrorTuple2<A, B>;
 
     fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(&value)
@@ -2224,7 +2226,7 @@ where
     B: TryFrom<ZBytes>,
     <B as TryFrom<ZBytes>>::Error: Debug,
 {
-    type Error = ZBytesReadErrorTuple2<A, B>;
+    type Error = ZReadOrDeserializeErrorTuple2<A, B>;
 
     fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(value)
@@ -2238,7 +2240,7 @@ where
     B: TryFrom<ZBytes>,
     <B as TryFrom<ZBytes>>::Error: Debug,
 {
-    type Error = ZBytesReadErrorTuple2<A, B>;
+    type Error = ZReadOrDeserializeErrorTuple2<A, B>;
 
     fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(&*value)
@@ -2308,7 +2310,7 @@ where
 }
 
 #[derive(Debug)]
-pub enum ZBytesReadErrorTuple3<A, B, C>
+pub enum ZReadOrDeserializeErrorTuple3<A, B, C>
 where
     A: TryFrom<ZBytes>,
     <A as TryFrom<ZBytes>>::Error: Debug,
@@ -2317,9 +2319,9 @@ where
     C: TryFrom<ZBytes>,
     <C as TryFrom<ZBytes>>::Error: Debug,
 {
-    One(ZBytesReadError<A>),
-    Two(ZBytesReadError<B>),
-    Three(ZBytesReadError<C>),
+    One(ZReadOrDeserializeError<A>),
+    Two(ZReadOrDeserializeError<B>),
+    Three(ZReadOrDeserializeError<C>),
 }
 
 impl<A, B, C> Deserialize<(A, B, C)> for ZSerde
@@ -2332,7 +2334,7 @@ where
     <C as TryFrom<ZBytes>>::Error: Debug,
 {
     type Input<'a> = &'a ZBytes;
-    type Error = ZBytesReadErrorTuple3<A, B, C>;
+    type Error = ZReadOrDeserializeErrorTuple3<A, B, C>;
 
     fn deserialize(self, bytes: Self::Input<'_>) -> Result<(A, B, C), Self::Error> {
         let codec = Zenoh080::new();
@@ -2340,24 +2342,27 @@ where
 
         let abuf: ZBuf = codec
             .read(&mut reader)
-            .map_err(|e| ZBytesReadErrorTuple3::One(ZBytesReadError::Read(e)))?;
+            .map_err(|e| ZReadOrDeserializeErrorTuple3::One(ZReadOrDeserializeError::Read(e)))?;
         let apld = ZBytes::new(abuf);
-        let a = A::try_from(apld)
-            .map_err(|e| ZBytesReadErrorTuple3::One(ZBytesReadError::Deserialize(e)))?;
+        let a = A::try_from(apld).map_err(|e| {
+            ZReadOrDeserializeErrorTuple3::One(ZReadOrDeserializeError::Deserialize(e))
+        })?;
 
         let bbuf: ZBuf = codec
             .read(&mut reader)
-            .map_err(|e| ZBytesReadErrorTuple3::Two(ZBytesReadError::Read(e)))?;
+            .map_err(|e| ZReadOrDeserializeErrorTuple3::Two(ZReadOrDeserializeError::Read(e)))?;
         let bpld = ZBytes::new(bbuf);
-        let b = B::try_from(bpld)
-            .map_err(|e| ZBytesReadErrorTuple3::Two(ZBytesReadError::Deserialize(e)))?;
+        let b = B::try_from(bpld).map_err(|e| {
+            ZReadOrDeserializeErrorTuple3::Two(ZReadOrDeserializeError::Deserialize(e))
+        })?;
 
         let cbuf: ZBuf = codec
             .read(&mut reader)
-            .map_err(|e| ZBytesReadErrorTuple3::Three(ZBytesReadError::Read(e)))?;
+            .map_err(|e| ZReadOrDeserializeErrorTuple3::Three(ZReadOrDeserializeError::Read(e)))?;
         let cpld = ZBytes::new(cbuf);
-        let c = C::try_from(cpld)
-            .map_err(|e| ZBytesReadErrorTuple3::Three(ZBytesReadError::Deserialize(e)))?;
+        let c = C::try_from(cpld).map_err(|e| {
+            ZReadOrDeserializeErrorTuple3::Three(ZReadOrDeserializeError::Deserialize(e))
+        })?;
 
         Ok((a, b, c))
     }
@@ -2372,7 +2377,7 @@ where
     C: TryFrom<ZBytes>,
     <C as TryFrom<ZBytes>>::Error: Debug,
 {
-    type Error = ZBytesReadErrorTuple3<A, B, C>;
+    type Error = ZReadOrDeserializeErrorTuple3<A, B, C>;
 
     fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(&value)
@@ -2388,7 +2393,7 @@ where
     C: TryFrom<ZBytes>,
     <C as TryFrom<ZBytes>>::Error: Debug,
 {
-    type Error = ZBytesReadErrorTuple3<A, B, C>;
+    type Error = ZReadOrDeserializeErrorTuple3<A, B, C>;
 
     fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(value)
@@ -2404,7 +2409,7 @@ where
     C: TryFrom<ZBytes>,
     <C as TryFrom<ZBytes>>::Error: Debug,
 {
-    type Error = ZBytesReadErrorTuple3<A, B, C>;
+    type Error = ZReadOrDeserializeErrorTuple3<A, B, C>;
 
     fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(&*value)
@@ -2479,7 +2484,7 @@ where
 }
 
 #[derive(Debug)]
-pub enum ZBytesReadErrorTuple4<A, B, C, D>
+pub enum ZReadOrDeserializeErrorTuple4<A, B, C, D>
 where
     A: TryFrom<ZBytes>,
     <A as TryFrom<ZBytes>>::Error: Debug,
@@ -2490,10 +2495,10 @@ where
     D: TryFrom<ZBytes>,
     <D as TryFrom<ZBytes>>::Error: Debug,
 {
-    One(ZBytesReadError<A>),
-    Two(ZBytesReadError<B>),
-    Three(ZBytesReadError<C>),
-    Four(ZBytesReadError<D>),
+    One(ZReadOrDeserializeError<A>),
+    Two(ZReadOrDeserializeError<B>),
+    Three(ZReadOrDeserializeError<C>),
+    Four(ZReadOrDeserializeError<D>),
 }
 
 impl<A, B, C, D> Deserialize<(A, B, C, D)> for ZSerde
@@ -2508,7 +2513,7 @@ where
     <D as TryFrom<ZBytes>>::Error: Debug,
 {
     type Input<'a> = &'a ZBytes;
-    type Error = ZBytesReadErrorTuple4<A, B, C, D>;
+    type Error = ZReadOrDeserializeErrorTuple4<A, B, C, D>;
 
     fn deserialize(self, bytes: Self::Input<'_>) -> Result<(A, B, C, D), Self::Error> {
         let codec = Zenoh080::new();
@@ -2516,31 +2521,35 @@ where
 
         let abuf: ZBuf = codec
             .read(&mut reader)
-            .map_err(|e| ZBytesReadErrorTuple4::One(ZBytesReadError::Read(e)))?;
+            .map_err(|e| ZReadOrDeserializeErrorTuple4::One(ZReadOrDeserializeError::Read(e)))?;
         let apld = ZBytes::new(abuf);
-        let a = A::try_from(apld)
-            .map_err(|e| ZBytesReadErrorTuple4::One(ZBytesReadError::Deserialize(e)))?;
+        let a = A::try_from(apld).map_err(|e| {
+            ZReadOrDeserializeErrorTuple4::One(ZReadOrDeserializeError::Deserialize(e))
+        })?;
 
         let bbuf: ZBuf = codec
             .read(&mut reader)
-            .map_err(|e| ZBytesReadErrorTuple4::Two(ZBytesReadError::Read(e)))?;
+            .map_err(|e| ZReadOrDeserializeErrorTuple4::Two(ZReadOrDeserializeError::Read(e)))?;
         let bpld = ZBytes::new(bbuf);
-        let b = B::try_from(bpld)
-            .map_err(|e| ZBytesReadErrorTuple4::Two(ZBytesReadError::Deserialize(e)))?;
+        let b = B::try_from(bpld).map_err(|e| {
+            ZReadOrDeserializeErrorTuple4::Two(ZReadOrDeserializeError::Deserialize(e))
+        })?;
 
         let cbuf: ZBuf = codec
             .read(&mut reader)
-            .map_err(|e| ZBytesReadErrorTuple4::Three(ZBytesReadError::Read(e)))?;
+            .map_err(|e| ZReadOrDeserializeErrorTuple4::Three(ZReadOrDeserializeError::Read(e)))?;
         let cpld = ZBytes::new(cbuf);
-        let c = C::try_from(cpld)
-            .map_err(|e| ZBytesReadErrorTuple4::Three(ZBytesReadError::Deserialize(e)))?;
+        let c = C::try_from(cpld).map_err(|e| {
+            ZReadOrDeserializeErrorTuple4::Three(ZReadOrDeserializeError::Deserialize(e))
+        })?;
 
         let dbuf: ZBuf = codec
             .read(&mut reader)
-            .map_err(|e| ZBytesReadErrorTuple4::Four(ZBytesReadError::Read(e)))?;
+            .map_err(|e| ZReadOrDeserializeErrorTuple4::Four(ZReadOrDeserializeError::Read(e)))?;
         let dpld = ZBytes::new(dbuf);
-        let d = D::try_from(dpld)
-            .map_err(|e| ZBytesReadErrorTuple4::Four(ZBytesReadError::Deserialize(e)))?;
+        let d = D::try_from(dpld).map_err(|e| {
+            ZReadOrDeserializeErrorTuple4::Four(ZReadOrDeserializeError::Deserialize(e))
+        })?;
 
         Ok((a, b, c, d))
     }
@@ -2557,7 +2566,7 @@ where
     D: TryFrom<ZBytes>,
     <D as TryFrom<ZBytes>>::Error: Debug,
 {
-    type Error = ZBytesReadErrorTuple4<A, B, C, D>;
+    type Error = ZReadOrDeserializeErrorTuple4<A, B, C, D>;
 
     fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(&value)
@@ -2575,7 +2584,7 @@ where
     D: TryFrom<ZBytes>,
     <D as TryFrom<ZBytes>>::Error: Debug,
 {
-    type Error = ZBytesReadErrorTuple4<A, B, C, D>;
+    type Error = ZReadOrDeserializeErrorTuple4<A, B, C, D>;
 
     fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(value)
@@ -2593,7 +2602,7 @@ where
     D: TryFrom<ZBytes>,
     <D as TryFrom<ZBytes>>::Error: Debug,
 {
-    type Error = ZBytesReadErrorTuple4<A, B, C, D>;
+    type Error = ZReadOrDeserializeErrorTuple4<A, B, C, D>;
 
     fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(&*value)
@@ -2643,7 +2652,7 @@ where
     <B as TryFrom<ZBytes>>::Error: Debug,
 {
     type Input<'a> = &'a ZBytes;
-    type Error = ZBytesReadErrorTuple2<A, B>;
+    type Error = ZReadOrDeserializeErrorTuple2<A, B>;
 
     fn deserialize(self, bytes: Self::Input<'_>) -> Result<HashMap<A, B>, Self::Error> {
         let mut hm = HashMap::new();
@@ -2662,7 +2671,7 @@ where
     B: TryFrom<ZBytes> + Debug,
     <B as TryFrom<ZBytes>>::Error: Debug,
 {
-    type Error = ZBytesReadErrorTuple2<A, B>;
+    type Error = ZReadOrDeserializeErrorTuple2<A, B>;
 
     fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(&value)
@@ -2676,7 +2685,7 @@ where
     B: TryFrom<ZBytes> + Debug,
     <B as TryFrom<ZBytes>>::Error: Debug,
 {
-    type Error = ZBytesReadErrorTuple2<A, B>;
+    type Error = ZReadOrDeserializeErrorTuple2<A, B>;
 
     fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(value)
@@ -2690,7 +2699,7 @@ where
     B: TryFrom<ZBytes> + Debug,
     <B as TryFrom<ZBytes>>::Error: Debug,
 {
-    type Error = ZBytesReadErrorTuple2<A, B>;
+    type Error = ZReadOrDeserializeErrorTuple2<A, B>;
 
     fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(&*value)
