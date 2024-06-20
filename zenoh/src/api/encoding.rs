@@ -980,7 +980,7 @@ impl EncodingMapping for serde_pickle::Value {
 
 impl Encoding {
     #[zenoh_macros::internal]
-    pub fn id(&self) -> u16 {
+    pub fn id(&self) -> EncodingId {
         self.0.id
     }
     #[zenoh_macros::internal]
@@ -988,7 +988,7 @@ impl Encoding {
         self.0.schema.as_ref()
     }
     #[zenoh_macros::internal]
-    pub fn new(id: u16, schema: Option<ZSlice>) -> Self {
+    pub fn new(id: EncodingId, schema: Option<ZSlice>) -> Self {
         Encoding(zenoh_protocol::core::Encoding { id, schema })
     }
 }
