@@ -85,13 +85,17 @@ impl Encoding {
     /// Just some bytes.
     ///
     /// Constant alias for string: `"zenoh/bytes"`.
+    ///
+    /// Usually used for types: `Vec<u8>`, `&[u8]`, `[u8; N]`, `Cow<[u8]>`.
     pub const ZENOH_BYTES: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 0,
         schema: None,
     });
-    /// A VLE-encoded signed little-endian integer. Either 8bit, 16bit, 32bit, or 64bit. Binary representation uses two's complement.
+    /// A VLE-encoded signed little-endian integer. Either 8bit, 16bit, 32bit, 64bit, or 128bit. Binary representation uses two's complement.
     ///
     /// Constant alias for string: `"zenoh/int"`.
+    ///
+    /// Usually used for types: `i8`, `i16`, `i32`, `i64`, `i128`.
     pub const ZENOH_INT: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 1,
         schema: None,
@@ -99,6 +103,8 @@ impl Encoding {
     /// A VLE-encoded little-endian unsigned integer. Either 8bit, 16bit, 32bit, or 64bit.
     ///
     /// Constant alias for string: `"zenoh/uint"`.
+    ///
+    /// Usually used for types: `u8`, `u16`, `u32`, `u64`, `u128`.
     pub const ZENOH_UINT: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 2,
         schema: None,
@@ -106,6 +112,8 @@ impl Encoding {
     /// A VLE-encoded float. Either little-endian 32bit or 64bit. Binary representation uses *IEEE 754-2008* *binary32* or *binary64*, respectively.
     ///
     /// Constant alias for string: `"zenoh/float"`.
+    ///
+    /// Usually used for types: `f32`, `f64`.
     pub const ZENOH_FLOAT: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 3,
         schema: None,
@@ -113,6 +121,8 @@ impl Encoding {
     /// A boolean. `0` is `false`, `1` is `true`. Other values are invalid.
     ///
     /// Constant alias for string: `"zenoh/bool"`.
+    ///
+    /// Usually used for types: `bool`.
     pub const ZENOH_BOOL: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 4,
         schema: None,
@@ -120,6 +130,8 @@ impl Encoding {
     /// A UTF-8 string.
     ///
     /// Constant alias for string: `"zenoh/string"`.
+    ///
+    /// Usually used for types: `String`, `&str`, `Cow<str>`.
     pub const ZENOH_STRING: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 5,
         schema: None,
@@ -127,6 +139,8 @@ impl Encoding {
     /// A zenoh error.
     ///
     /// Constant alias for string: `"zenoh/error"`.
+    ///
+    /// Usually used for types: `ReplyError`.
     pub const ZENOH_ERROR: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 6,
         schema: None,
