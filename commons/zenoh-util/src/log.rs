@@ -64,8 +64,8 @@ impl FromStr for LogLevel {
 
 /// Initialize zenoh logging using the value of `ZENOH_LOG` environment variable.
 ///
-/// `ZENOH_LOG` is parsed use [`LogLevel::from_str`], possible values are `"debug"`/`"WARN"`/etc.
-/// If `ZENOH_LOG` is not provided, a default `WARN` level is used.
+/// `ZENOH_LOG` is parsed use [`LogLevel::from_str`], possible values are `"debug"`/`"INFO"`/etc.
+/// If `ZENOH_LOG` is not provided, [`LogLevel::default`], i.e. `warn` is used.
 ///
 /// See [`init_logging_with_level`] if you prefer setting the level directly in your code.
 /// This function is roughly a wrapper around
@@ -87,14 +87,16 @@ impl FromStr for LogLevel {
 /// zenoh logging uses `tracing` crates internally; this function is just a convenient wrapper
 /// around `tracing-subscriber`. If you want to control the formatting, or have a finer grain on
 /// log filtering, we advise using `tracing-subscriber` directly.
+///
 /// However, to make migration and on the fly debugging easier, [`RUST_LOG`][1] environment variable
 /// can still be used, and will override `ZENOH_LOG` configuration.
 ///
 /// # Panics
 ///
 /// This function may panic if the following operations fail:
-/// - parsing `ZENOH_LOG`/`RUST_LOG` (see [Advanced use](#advanced use)) environment variable
+/// - parsing `ZENOH_LOG`/`RUST_LOG` (see [Advanced use](#advanced-use)) environment variable
 /// - register the global tracing subscriber, because another one has already been registered
+///
 /// These errors mostly being the result of unintended use, fast failure is assumed to be more
 /// suitable than unexpected behavior, especially as logging should be initialized at program start.
 ///
@@ -103,19 +105,20 @@ impl FromStr for LogLevel {
 /// This function should **not** be used in tests, as it would panic as soon as there is more
 /// than one test executed in the same unit, because only the first one to execute would be able to
 /// register the global tracing subscriber.
+///
 /// Moreover, `tracing` and Rust logging in general requires special care about testing because of
 /// libtest output capturing; see
 /// [`SubscriberBuilder::with_test_writer`](tracing_subscriber::fmt::SubscriberBuilder::with_test_writer).
+///
 /// That's why we advise you to use a dedicated library like [`test-log`][3]
 /// (with `"tracing"` feature enabled).
 ///
 /// # Memory leak
 ///
-/// [`tracing`] use a global `static` [subscriber](`tracing::subscriber::set_global_default`),
-/// which is not deallocated prior to process exiting.
+/// [`tracing`] use a static subscriber, which is not deallocated prior to process exiting.
 /// Tools such as `valgrind` will then report memory leaks in *still reachable* category.
 ///
-/// However, when `RUST_LOG` is provided (see [Advanced use](#advanced use)),
+/// However, when `RUST_LOG` is provided (see [Advanced use](#advanced-use)),
 /// [`tracing_subscriber::EnvFilter`] is then used, and causes also *still reachable* blocks,
 /// but also *possibly lost* blocks, which are [known false-positives][2].
 /// Those "leaks" can be "suppressed" from `valgrind` report using the following suppression:
@@ -125,7 +128,7 @@ impl FromStr for LogLevel {
 ///    Memcheck:Leak
 ///    ...
 ///    fun:*zenoh*init_logging*
-// }
+/// }
 /// ```
 ///
 /// [1]: https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives
@@ -149,14 +152,16 @@ pub fn init_logging() {
 /// zenoh logging uses `tracing` crates internally; this function is just a convenient wrapper
 /// around `tracing-subscriber`. If you want to control the formatting, or have a finer grain on
 /// log filtering, we advise using `tracing-subscriber` directly.
+///
 /// However, to make migration and on the fly debugging easier, [`RUST_LOG`][1] environment variable
 /// can still be used, and will override the provided level.
 ///
 /// # Panics
 ///
 /// This function may panic if the following operations fail:
-/// - parsing `RUST_LOG` (see [Advanced use](#advanced use)) environment variable
+/// - parsing `RUST_LOG` (see [Advanced use](#advanced-use)) environment variable
 /// - register the global tracing subscriber, because another one has already been registered
+///
 /// These errors mostly being the result of unintended use, fast failure is assumed to be more
 /// suitable than unexpected behavior, especially as logging should be initialized at program start.
 ///
@@ -165,19 +170,20 @@ pub fn init_logging() {
 /// This function should **not** be used in unit tests, as it would panic as soon as there is more
 /// than one test executed in the same unit, because only the first one to execute would be able to
 /// register the global tracing subscriber.
+///
 /// Moreover, `tracing` and Rust logging in general requires special care about testing because of
 /// libtest output capturing; see
 /// [`SubscriberBuilder::with_test_writer`](tracing_subscriber::fmt::SubscriberBuilder::with_test_writer).
+///
 /// That's why we advise you to use a dedicated library like [`test-log`][3]
 /// (with `"tracing"` feature enabled).
 ///
 /// # Memory leak
 ///
-/// [`tracing`] use a global `static` [subscriber](`tracing::subscriber::set_global_default`),
-/// which is not deallocated prior to process exiting.
+/// [`tracing`] use a static subscriber, which is not deallocated prior to process exiting.
 /// Tools such as `valgrind` will then report memory leaks in *still reachable* category.
 ///
-/// However, when `RUST_LOG` is provided (see [Advanced use](#advanced use)),
+/// However, when `RUST_LOG` is provided (see [Advanced use](#advanced-use)),
 /// [`tracing_subscriber::EnvFilter`] is then used, and causes also *still reachable* blocks,
 /// but also *possibly lost* blocks, which are [known false-positives][2].
 /// Those "leaks" can be "suppressed" from `valgrind` report using the following suppression:
@@ -187,7 +193,7 @@ pub fn init_logging() {
 ///    Memcheck:Leak
 ///    ...
 ///    fun:*zenoh*init_logging*
-// }
+/// }
 /// ```
 ///
 /// [1]: https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives
