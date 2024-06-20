@@ -104,11 +104,15 @@ pub trait Deserialize<T> {
 
 /// ZBytes contains the serialized bytes of user data.
 ///
-/// ZBytes provides convenient methods to the user for serialization/deserialization based on the default
-/// Zenoh serializer: [`ZSerde`]. Please not that [`ZSerde`] is provided as convenience but data serialization/deserialization
-/// is not limited to it. Users are free to serialize and deserialize data as they please before sending and after receiving data.
+/// `ZBytes` provides convenient methods to the user for serialization/deserialization based on the default Zenoh serializer [`ZSerde`].
 ///
-/// ZBytes can be used to serialize a single type:
+/// **NOTE:** Zenoh semantic and protocol take care of sending and receiving bytes without restricting the actual data types.
+/// [`ZSerde`] is the default serializer/deserializer provided for convenience to the users to deal with primitives data types via
+/// a simple out-of-the-box encoding. [`ZSerde`] is **NOT** by any means the only serializer/deserializer users can use nor a limitation
+/// to the types supported by Zenoh. Users are free and encouraged to use any serializer/deserializer of their choice like *serde*,
+/// *protobuf*, *bincode*, *flatbuffers*, etc.
+///
+/// `ZBytes` can be used to serialize a single type:
 /// ```rust
 /// use zenoh::bytes::ZBytes;
 ///
@@ -465,9 +469,9 @@ where
 /// The default serializer for [`ZBytes`]. It supports primitives types, such as: `Vec<u8>`, `uX`, `iX`, `fX`, `String`, `bool`.
 /// It also supports common Rust serde values like `serde_json::Value`.
 ///
-/// NOTE: Zenoh semantic and protocol take care of sending and receiving bytes without restricting the actual data types.
-/// ZSerde is a default serializer/deserializer provided for convenience to the users to deal with primitives data types via
-/// a simple out-of-the-box encoding. ZSerde is **NOT** by any means the only serializer/deserializer users can use nor a limitation
+/// **NOTE:** Zenoh semantic and protocol take care of sending and receiving bytes without restricting the actual data types.
+/// [`ZSerde`] is the default serializer/deserializer provided for convenience to the users to deal with primitives data types via
+/// a simple out-of-the-box encoding. [`ZSerde`] is **NOT** by any means the only serializer/deserializer users can use nor a limitation
 /// to the types supported by Zenoh. Users are free and encouraged to use any serializer/deserializer of their choice like *serde*,
 /// *protobuf*, *bincode*, *flatbuffers*, etc.
 #[derive(Clone, Copy, Debug)]
