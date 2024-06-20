@@ -91,31 +91,112 @@ impl Encoding {
         id: 0,
         schema: None,
     });
-    /// A VLE-encoded signed little-endian integer. Either 8bit, 16bit, 32bit, 64bit, or 128bit. Binary representation uses two's complement.
+    /// A VLE-encoded signed little-endian 8bit integer. Binary representation uses two's complement.
     ///
-    /// Constant alias for string: `"zenoh/int"`.
+    /// Constant alias for string: `"zenoh/int8"`.
     ///
-    /// Usually used for types: `i8`, `i16`, `i32`, `i64`, `i128`.
-    pub const ZENOH_INT: Encoding = Self(zenoh_protocol::core::Encoding {
+    /// Usually used for types: `i8`.
+    pub const ZENOH_INT8: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 1,
         schema: None,
     });
-    /// A VLE-encoded little-endian unsigned integer. Either 8bit, 16bit, 32bit, or 64bit.
+    /// A VLE-encoded signed little-endian 16bit integer. Binary representation uses two's complement.
     ///
-    /// Constant alias for string: `"zenoh/uint"`.
+    /// Constant alias for string: `"zenoh/int16"`.
     ///
-    /// Usually used for types: `u8`, `u16`, `u32`, `u64`, `u128`.
-    pub const ZENOH_UINT: Encoding = Self(zenoh_protocol::core::Encoding {
+    /// Usually used for types: `i16`.
+    pub const ZENOH_INT16: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 2,
         schema: None,
     });
-    /// A VLE-encoded float. Either little-endian 32bit or 64bit. Binary representation uses *IEEE 754-2008* *binary32* or *binary64*, respectively.
+    /// A VLE-encoded signed little-endian 32bit integer. Binary representation uses two's complement.
     ///
-    /// Constant alias for string: `"zenoh/float"`.
+    /// Constant alias for string: `"zenoh/int32"`.
     ///
-    /// Usually used for types: `f32`, `f64`.
-    pub const ZENOH_FLOAT: Encoding = Self(zenoh_protocol::core::Encoding {
+    /// Usually used for types: `i32`.
+    pub const ZENOH_INT32: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 3,
+        schema: None,
+    });
+    /// A VLE-encoded signed little-endian 64bit integer. Binary representation uses two's complement.
+    ///
+    /// Constant alias for string: `"zenoh/int64"`.
+    ///
+    /// Usually used for types: `i64`.
+    pub const ZENOH_INT64: Encoding = Self(zenoh_protocol::core::Encoding {
+        id: 4,
+        schema: None,
+    });
+    /// A VLE-encoded signed little-endian 128bit integer. Binary representation uses two's complement.
+    ///
+    /// Constant alias for string: `"zenoh/int128"`.
+    ///
+    /// Usually used for types: `i128`.
+    pub const ZENOH_INT128: Encoding = Self(zenoh_protocol::core::Encoding {
+        id: 5,
+        schema: None,
+    });
+    /// A VLE-encoded unsigned little-endian 8bit integer.
+    ///
+    /// Constant alias for string: `"zenoh/uint8"`.
+    ///
+    /// Usually used for types: `u8`.
+    pub const ZENOH_UINT8: Encoding = Self(zenoh_protocol::core::Encoding {
+        id: 6,
+        schema: None,
+    });
+    /// A VLE-encoded unsigned little-endian 16bit integer.
+    ///
+    /// Constant alias for string: `"zenoh/uint16"`.
+    ///
+    /// Usually used for types: `u16`.
+    pub const ZENOH_UINT16: Encoding = Self(zenoh_protocol::core::Encoding {
+        id: 7,
+        schema: None,
+    });
+    /// A VLE-encoded unsigned little-endian 32bit integer.
+    ///
+    /// Constant alias for string: `"zenoh/uint32"`.
+    ///
+    /// Usually used for types: `u32`.
+    pub const ZENOH_UINT32: Encoding = Self(zenoh_protocol::core::Encoding {
+        id: 8,
+        schema: None,
+    });
+    /// A VLE-encoded unsigned little-endian 64bit integer.
+    ///
+    /// Constant alias for string: `"zenoh/uint64"`.
+    ///
+    /// Usually used for types: `u64`.
+    pub const ZENOH_UINT64: Encoding = Self(zenoh_protocol::core::Encoding {
+        id: 9,
+        schema: None,
+    });
+    /// A VLE-encoded unsigned little-endian 128bit integer.
+    ///
+    /// Constant alias for string: `"zenoh/uint128"`.
+    ///
+    /// Usually used for types: `u128`.
+    pub const ZENOH_UINT128: Encoding = Self(zenoh_protocol::core::Encoding {
+        id: 10,
+        schema: None,
+    });
+    /// A VLE-encoded 32bit float. Binary representation uses *IEEE 754-2008* *binary32* .
+    ///
+    /// Constant alias for string: `"zenoh/float32"`.
+    ///
+    /// Usually used for types: `f32`.
+    pub const ZENOH_FLOAT32: Encoding = Self(zenoh_protocol::core::Encoding {
+        id: 11,
+        schema: None,
+    });
+    /// A VLE-encoded 64bit float. Binary representation uses *IEEE 754-2008* *binary64*.
+    ///
+    /// Constant alias for string: `"zenoh/float64"`.
+    ///
+    /// Usually used for types: `f64`.
+    pub const ZENOH_FLOAT64: Encoding = Self(zenoh_protocol::core::Encoding {
+        id: 12,
         schema: None,
     });
     /// A boolean. `0` is `false`, `1` is `true`. Other values are invalid.
@@ -124,7 +205,7 @@ impl Encoding {
     ///
     /// Usually used for types: `bool`.
     pub const ZENOH_BOOL: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 4,
+        id: 13,
         schema: None,
     });
     /// A UTF-8 string.
@@ -133,7 +214,7 @@ impl Encoding {
     ///
     /// Usually used for types: `String`, `&str`, `Cow<str>`, `char`.
     pub const ZENOH_STRING: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 5,
+        id: 14,
         schema: None,
     });
     /// A zenoh error.
@@ -142,7 +223,7 @@ impl Encoding {
     ///
     /// Usually used for types: `ReplyError`.
     pub const ZENOH_ERROR: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 6,
+        id: 15,
         schema: None,
     });
 
@@ -151,63 +232,63 @@ impl Encoding {
     ///
     /// Constant alias for string: `"application/octet-stream"`.
     pub const APPLICATION_OCTET_STREAM: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 7,
+        id: 16,
         schema: None,
     });
     /// A textual file.
     ///
     /// Constant alias for string: `"text/plain"`.
     pub const TEXT_PLAIN: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 8,
+        id: 17,
         schema: None,
     });
     /// JSON data intended to be consumed by an application.
     ///
     /// Constant alias for string: `"application/json"`.
     pub const APPLICATION_JSON: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 9,
+        id: 18,
         schema: None,
     });
     /// JSON data intended to be human readable.
     ///
     /// Constant alias for string: `"text/json"`.
     pub const TEXT_JSON: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 10,
+        id: 19,
         schema: None,
     });
     /// A Common Data Representation (CDR)-encoded data.
     ///
     /// Constant alias for string: `"application/cdr"`.
     pub const APPLICATION_CDR: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 11,
+        id: 20,
         schema: None,
     });
     /// A Concise Binary Object Representation (CBOR)-encoded data.
     ///
     /// Constant alias for string: `"application/cbor"`.
     pub const APPLICATION_CBOR: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 12,
+        id: 21,
         schema: None,
     });
     /// YAML data intended to be consumed by an application.
     ///
     /// Constant alias for string: `"application/yaml"`.
     pub const APPLICATION_YAML: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 13,
+        id: 22,
         schema: None,
     });
     /// YAML data intended to be human readable.
     ///
     /// Constant alias for string: `"text/yaml"`.
     pub const TEXT_YAML: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 14,
+        id: 23,
         schema: None,
     });
     /// JSON5 encoded data that are human readable.
     ///
     /// Constant alias for string: `"text/json5"`.
     pub const TEXT_JSON5: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 15,
+        id: 24,
         schema: None,
     });
     /// A Python object serialized using [pickle](https://docs.python.org/3/library/pickle.html).
@@ -215,408 +296,426 @@ impl Encoding {
     /// Constant alias for string: `"application/python-serialized-object"`.
     pub const APPLICATION_PYTHON_SERIALIZED_OBJECT: Encoding =
         Self(zenoh_protocol::core::Encoding {
-            id: 16,
+            id: 25,
             schema: None,
         });
     /// An application-specific protobuf-encoded data.
     ///
     /// Constant alias for string: `"application/protobuf"`.
     pub const APPLICATION_PROTOBUF: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 17,
+        id: 26,
         schema: None,
     });
     /// A Java serialized object.
     ///
     /// Constant alias for string: `"application/java-serialized-object"`.
     pub const APPLICATION_JAVA_SERIALIZED_OBJECT: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 18,
+        id: 27,
         schema: None,
     });
     /// An [openmetrics](https://github.com/OpenObservability/OpenMetrics) data, common used by [Prometheus](https://prometheus.io/).
     ///
     /// Constant alias for string: `"application/openmetrics-text"`.
     pub const APPLICATION_OPENMETRICS_TEXT: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 19,
+        id: 28,
         schema: None,
     });
     /// A Portable Network Graphics (PNG) image.
     ///
     /// Constant alias for string: `"image/png"`.
     pub const IMAGE_PNG: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 20,
+        id: 29,
         schema: None,
     });
     /// A Joint Photographic Experts Group (JPEG) image.
     ///
     /// Constant alias for string: `"image/jpeg"`.
     pub const IMAGE_JPEG: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 21,
+        id: 30,
         schema: None,
     });
     /// A Graphics Interchange Format (GIF) image.
     ///
     /// Constant alias for string: `"image/gif"`.
     pub const IMAGE_GIF: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 22,
+        id: 31,
         schema: None,
     });
     /// A BitMap (BMP) image.
     ///
     /// Constant alias for string: `"image/bmp"`.
     pub const IMAGE_BMP: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 23,
+        id: 32,
         schema: None,
     });
     /// A Web Portable (WebP) image.
     ///
     ///  Constant alias for string: `"image/webp"`.
     pub const IMAGE_WEBP: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 24,
+        id: 33,
         schema: None,
     });
     /// An XML file intended to be consumed by an application..
     ///
     /// Constant alias for string: `"application/xml"`.
     pub const APPLICATION_XML: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 25,
+        id: 34,
         schema: None,
     });
     /// An encoded a list of tuples, each consisting of a name and a value.
     ///
     /// Constant alias for string: `"application/x-www-form-urlencoded"`.
     pub const APPLICATION_X_WWW_FORM_URLENCODED: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 26,
+        id: 35,
         schema: None,
     });
     /// An HTML file.
     ///
     /// Constant alias for string: `"text/html"`.
     pub const TEXT_HTML: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 27,
+        id: 36,
         schema: None,
     });
     /// An XML file that is human readable.
     ///
     /// Constant alias for string: `"text/xml"`.
     pub const TEXT_XML: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 28,
+        id: 37,
         schema: None,
     });
     /// A CSS file.
     ///
     /// Constant alias for string: `"text/css"`.
     pub const TEXT_CSS: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 29,
+        id: 38,
         schema: None,
     });
     /// A JavaScript file.
     ///
     /// Constant alias for string: `"text/javascript"`.
     pub const TEXT_JAVASCRIPT: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 30,
+        id: 39,
         schema: None,
     });
     /// A MarkDown file.
     ///
     /// Constant alias for string: `"text/markdown"`.
     pub const TEXT_MARKDOWN: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 31,
+        id: 40,
         schema: None,
     });
     /// A CSV file.
     ///
     /// Constant alias for string: `"text/csv"`.
     pub const TEXT_CSV: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 32,
+        id: 41,
         schema: None,
     });
     /// An application-specific SQL query.
     ///
     /// Constant alias for string: `"application/sql"`.
     pub const APPLICATION_SQL: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 33,
+        id: 42,
         schema: None,
     });
     /// Constrained Application Protocol (CoAP) data intended for CoAP-to-HTTP and HTTP-to-CoAP proxies.
     ///
     /// Constant alias for string: `"application/coap-payload"`.
     pub const APPLICATION_COAP_PAYLOAD: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 34,
+        id: 43,
         schema: None,
     });
     /// Defines a JSON document structure for expressing a sequence of operations to apply to a JSON document.
     ///
     /// Constant alias for string: `"application/json-patch+json"`.
     pub const APPLICATION_JSON_PATCH_JSON: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 35,
+        id: 44,
         schema: None,
     });
     /// A JSON text sequence consists of any number of JSON texts, all encoded in UTF-8.
     ///
     /// Constant alias for string: `"application/json-seq"`.
     pub const APPLICATION_JSON_SEQ: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 36,
+        id: 45,
         schema: None,
     });
     /// A JSONPath defines a string syntax for selecting and extracting JSON values from within a given JSON value.
     ///
     /// Constant alias for string: `"application/jsonpath"`.
     pub const APPLICATION_JSONPATH: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 37,
+        id: 46,
         schema: None,
     });
     /// A JSON Web Token (JWT).
     ///
     /// Constant alias for string: `"application/jwt"`.
     pub const APPLICATION_JWT: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 38,
+        id: 47,
         schema: None,
     });
     /// An application-specific MPEG-4 encoded data, either audio or video.
     ///
     /// Constant alias for string: `"application/mp4"`.
     pub const APPLICATION_MP4: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 39,
+        id: 48,
         schema: None,
     });
     /// A SOAP 1.2 message serialized as XML 1.0.
     ///
     /// Constant alias for string: `"application/soap+xml"`.
     pub const APPLICATION_SOAP_XML: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 40,
+        id: 49,
         schema: None,
     });
     /// A YANG-encoded data commonly used by the Network Configuration Protocol (NETCONF).
     ///
     /// Constant alias for string: `"application/yang"`.
     pub const APPLICATION_YANG: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 41,
+        id: 50,
         schema: None,
     });
     /// A MPEG-4 Advanced Audio Coding (AAC) media.
     ///
     /// Constant alias for string: `"audio/aac"`.
     pub const AUDIO_AAC: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 42,
+        id: 51,
         schema: None,
     });
     /// A Free Lossless Audio Codec (FLAC) media.
     ///
     /// Constant alias for string: `"audio/flac"`.
     pub const AUDIO_FLAC: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 43,
+        id: 52,
         schema: None,
     });
     /// An audio codec defined in MPEG-1, MPEG-2, MPEG-4, or registered at the MP4 registration authority.
     ///
     /// Constant alias for string: `"audio/mp4"`.
     pub const AUDIO_MP4: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 44,
+        id: 53,
         schema: None,
     });
     /// An Ogg-encapsulated audio stream.
     ///
     /// Constant alias for string: `"audio/ogg"`.
     pub const AUDIO_OGG: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 45,
+        id: 54,
         schema: None,
     });
     /// A Vorbis-encoded audio stream.
     ///
     /// Constant alias for string: `"audio/vorbis"`.
     pub const AUDIO_VORBIS: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 46,
+        id: 55,
         schema: None,
     });
     /// A h261-encoded video stream.
     ///
     /// Constant alias for string: `"video/h261"`.
     pub const VIDEO_H261: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 47,
+        id: 56,
         schema: None,
     });
     /// A h263-encoded video stream.
     ///
     /// Constant alias for string: `"video/h263"`.
     pub const VIDEO_H263: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 48,
+        id: 57,
         schema: None,
     });
     /// A h264-encoded video stream.
     ///
     /// Constant alias for string: `"video/h264"`.
     pub const VIDEO_H264: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 49,
+        id: 58,
         schema: None,
     });
     /// A h265-encoded video stream.
     ///
     /// Constant alias for string: `"video/h265"`.
     pub const VIDEO_H265: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 50,
+        id: 59,
         schema: None,
     });
     /// A h266-encoded video stream.
     ///
     /// Constant alias for string: `"video/h266"`.
     pub const VIDEO_H266: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 51,
+        id: 60,
         schema: None,
     });
     /// A video codec defined in MPEG-1, MPEG-2, MPEG-4, or registered at the MP4 registration authority.
     ///
     /// Constant alias for string: `"video/mp4"`.
     pub const VIDEO_MP4: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 52,
+        id: 61,
         schema: None,
     });
     /// An Ogg-encapsulated video stream.
     ///
     /// Constant alias for string: `"video/ogg"`.
     pub const VIDEO_OGG: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 53,
+        id: 62,
         schema: None,
     });
     /// An uncompressed, studio-quality video stream.
     ///
     /// Constant alias for string: `"video/raw"`.
     pub const VIDEO_RAW: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 54,
+        id: 63,
         schema: None,
     });
     /// A VP8-encoded video stream.
     ///
     /// Constant alias for string: `"video/vp8"`.
     pub const VIDEO_VP8: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 55,
+        id: 64,
         schema: None,
     });
     /// A VP9-encoded video stream.
     ///
     /// Constant alias for string: `"video/vp9"`.
     pub const VIDEO_VP9: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 56,
+        id: 65,
         schema: None,
     });
 
     const ID_TO_STR: phf::Map<EncodingId, &'static str> = phf_map! {
         0u16 => "zenoh/bytes",
-        1u16 => "zenoh/int",
-        2u16 => "zenoh/uint",
-        3u16 => "zenoh/float",
-        4u16 => "zenoh/bool",
-        5u16 => "zenoh/string",
-        6u16 => "zenoh/error",
-        7u16 => "application/octet-stream",
-        8u16 => "text/plain",
-        9u16 => "application/json",
-        10u16 => "text/json",
-        11u16 => "application/cdr",
-        12u16 => "application/cbor",
-        13u16 => "application/yaml",
-        14u16 => "text/yaml",
-        15u16 => "text/json5",
-        16u16 => "application/python-serialized-object",
-        17u16 => "application/protobuf",
-        18u16 => "application/java-serialized-object",
-        19u16 => "application/openmetrics-text",
-        20u16 => "image/png",
-        21u16 => "image/jpeg",
-        22u16 => "image/gif",
-        23u16 => "image/bmp",
-        24u16 => "image/webp",
-        25u16 => "application/xml",
-        26u16 => "application/x-www-form-urlencoded",
-        27u16 => "text/html",
-        28u16 => "text/xml",
-        29u16 => "text/css",
-        30u16 => "text/javascript",
-        31u16 => "text/markdown",
-        32u16 => "text/csv",
-        33u16 => "application/sql",
-        34u16 => "application/coap-payload",
-        35u16 => "application/json-patch+json",
-        36u16 => "application/json-seq",
-        37u16 => "application/jsonpath",
-        38u16 => "application/jwt",
-        39u16 => "application/mp4",
-        40u16 => "application/soap+xml",
-        41u16 => "application/yang",
-        42u16 => "audio/aac",
-        43u16 => "audio/flac",
-        44u16 => "audio/mp4",
-        45u16 => "audio/ogg",
-        46u16 => "audio/vorbis",
-        47u16 => "video/h261",
-        48u16 => "video/h263",
-        49u16 => "video/h264",
-        50u16 => "video/h265",
-        51u16 => "video/h266",
-        52u16 => "video/mp4",
-        53u16 => "video/ogg",
-        54u16 => "video/raw",
-        55u16 => "video/vp8",
-        56u16 => "video/vp9",
+        1u16 => "zenoh/int8",
+        2u16 => "zenoh/int16",
+        3u16 => "zenoh/int32",
+        4u16 => "zenoh/int64",
+        5u16 => "zenoh/int128",
+        6u16 => "zenoh/uint8",
+        7u16 => "zenoh/uint16",
+        8u16 => "zenoh/uint32",
+        9u16 => "zenoh/uint64",
+        10u16 => "zenoh/uint128",
+        11u16 => "zenoh/float32",
+        12u16 => "zenoh/float64",
+        13u16 => "zenoh/bool",
+        14u16 => "zenoh/string",
+        15u16 => "zenoh/error",
+        16u16 => "application/octet-stream",
+        17u16 => "text/plain",
+        18u16 => "application/json",
+        19u16 => "text/json",
+        20u16 => "application/cdr",
+        21u16 => "application/cbor",
+        22u16 => "application/yaml",
+        23u16 => "text/yaml",
+        24u16 => "text/json5",
+        25u16 => "application/python-serialized-object",
+        26u16 => "application/protobuf",
+        27u16 => "application/java-serialized-object",
+        28u16 => "application/openmetrics-text",
+        29u16 => "image/png",
+        30u16 => "image/jpeg",
+        31u16 => "image/gif",
+        32u16 => "image/bmp",
+        33u16 => "image/webp",
+        34u16 => "application/xml",
+        35u16 => "application/x-www-form-urlencoded",
+        36u16 => "text/html",
+        37u16 => "text/xml",
+        38u16 => "text/css",
+        39u16 => "text/javascript",
+        40u16 => "text/markdown",
+        41u16 => "text/csv",
+        42u16 => "application/sql",
+        43u16 => "application/coap-payload",
+        44u16 => "application/json-patch+json",
+        45u16 => "application/json-seq",
+        46u16 => "application/jsonpath",
+        47u16 => "application/jwt",
+        48u16 => "application/mp4",
+        49u16 => "application/soap+xml",
+        50u16 => "application/yang",
+        51u16 => "audio/aac",
+        52u16 => "audio/flac",
+        53u16 => "audio/mp4",
+        54u16 => "audio/ogg",
+        55u16 => "audio/vorbis",
+        56u16 => "video/h261",
+        57u16 => "video/h263",
+        58u16 => "video/h264",
+        59u16 => "video/h265",
+        60u16 => "video/h266",
+        61u16 => "video/mp4",
+        62u16 => "video/ogg",
+        63u16 => "video/raw",
+        64u16 => "video/vp8",
+        65u16 => "video/vp9",
     };
 
     const STR_TO_ID: phf::Map<&'static str, EncodingId> = phf_map! {
         "zenoh/bytes" => 0u16,
-        "zenoh/int" => 1u16,
-        "zenoh/uint" => 2u16,
-        "zenoh/float" => 3u16,
-        "zenoh/bool" => 4u16,
-        "zenoh/string" => 5u16,
-        "zenoh/error" => 6u16,
-        "application/octet-stream" => 7u16,
-        "text/plain" => 8u16,
-        "application/json" => 9u16,
-        "text/json" => 10u16,
-        "application/cdr" => 11u16,
-        "application/cbor" => 12u16,
-        "application/yaml" => 13u16,
-        "text/yaml" => 14u16,
-        "text/json5" => 15u16,
-        "application/python-serialized-object" => 16u16,
-        "application/protobuf" => 17u16,
-        "application/java-serialized-object" => 18u16,
-        "application/openmetrics-text" => 19u16,
-        "image/png" => 20u16,
-        "image/jpeg" => 21u16,
-        "image/gif" => 22u16,
-        "image/bmp" => 23u16,
-        "image/webp" => 24u16,
-        "application/xml" => 25u16,
-        "application/x-www-form-urlencoded" => 26u16,
-        "text/html" => 27u16,
-        "text/xml" => 28u16,
-        "text/css" => 29u16,
-        "text/javascript" => 30u16,
-        "text/markdown" => 31u16,
-        "text/csv" => 32u16,
-        "application/sql" => 33u16,
-        "application/coap-payload" => 34u16,
-        "application/json-patch+json" => 35u16,
-        "application/json-seq" => 36u16,
-        "application/jsonpath" => 37u16,
-        "application/jwt" => 38u16,
-        "application/mp4" => 39u16,
-        "application/soap+xml" => 40u16,
-        "application/yang" => 41u16,
-        "audio/aac" => 42u16,
-        "audio/flac" => 43u16,
-        "audio/mp4" => 44u16,
-        "audio/ogg" => 45u16,
-        "audio/vorbis" => 46u16,
-        "video/h261" => 47u16,
-        "video/h263" => 48u16,
-        "video/h264" => 49u16,
-        "video/h265" => 50u16,
-        "video/h266" => 51u16,
-        "video/mp4" => 52u16,
-        "video/ogg" => 53u16,
-        "video/raw" => 54u16,
-        "video/vp8" => 55u16,
-        "video/vp9" => 56u16,
+        "zenoh/int8" => 1u16,
+        "zenoh/int16" => 2u16,
+        "zenoh/int32" => 3u16,
+        "zenoh/int64" => 4u16,
+        "zenoh/int128" => 5u16,
+        "zenoh/uint8" => 6u16,
+        "zenoh/uint16" => 7u16,
+        "zenoh/uint32" => 8u16,
+        "zenoh/uint64" => 9u16,
+        "zenoh/uint128" => 10u16,
+        "zenoh/float32" => 11u16,
+        "zenoh/float64" => 12u16,
+        "zenoh/bool" => 13u16,
+        "zenoh/string" => 14u16,
+        "zenoh/error" => 15u16,
+        "application/octet-stream" => 16u16,
+        "text/plain" => 17u16,
+        "application/json" => 18u16,
+        "text/json" => 19u16,
+        "application/cdr" => 20u16,
+        "application/cbor" => 21u16,
+        "application/yaml" => 22u16,
+        "text/yaml" => 23u16,
+        "text/json5" => 24u16,
+        "application/python-serialized-object" => 25u16,
+        "application/protobuf" => 26u16,
+        "application/java-serialized-object" => 27u16,
+        "application/openmetrics-text" => 28u16,
+        "image/png" => 29u16,
+        "image/jpeg" => 30u16,
+        "image/gif" => 31u16,
+        "image/bmp" => 32u16,
+        "image/webp" => 33u16,
+        "application/xml" => 34u16,
+        "application/x-www-form-urlencoded" => 35u16,
+        "text/html" => 36u16,
+        "text/xml" => 37u16,
+        "text/css" => 38u16,
+        "text/javascript" => 39u16,
+        "text/markdown" => 40u16,
+        "text/csv" => 41u16,
+        "application/sql" => 42u16,
+        "application/coap-payload" => 43u16,
+        "application/json-patch+json" => 44u16,
+        "application/json-seq" => 45u16,
+        "application/jsonpath" => 46u16,
+        "application/jwt" => 47u16,
+        "application/mp4" => 48u16,
+        "application/soap+xml" => 49u16,
+        "application/yang" => 50u16,
+        "audio/aac" => 51u16,
+        "audio/flac" => 52u16,
+        "audio/mp4" => 53u16,
+        "audio/ogg" => 54u16,
+        "audio/vorbis" => 55u16,
+        "video/h261" => 56u16,
+        "video/h263" => 57u16,
+        "video/h264" => 58u16,
+        "video/h265" => 59u16,
+        "video/h266" => 60u16,
+        "video/mp4" => 61u16,
+        "video/ogg" => 62u16,
+        "video/raw" => 63u16,
+        "video/vp8" => 64u16,
+        "video/vp9" => 65u16,
     };
 
     /// The default [`Encoding`] is [`ZENOH_BYTES`](Encoding::ZENOH_BYTES).
@@ -782,53 +881,79 @@ impl EncodingMapping for Cow<'_, str> {
 
 // Zenoh unsigned integers
 impl EncodingMapping for u8 {
-    const ENCODING: Encoding = Encoding::ZENOH_UINT;
+    const ENCODING: Encoding = Encoding::ZENOH_UINT8;
 }
 
 impl EncodingMapping for u16 {
-    const ENCODING: Encoding = Encoding::ZENOH_UINT;
+    const ENCODING: Encoding = Encoding::ZENOH_UINT16;
 }
 
 impl EncodingMapping for u32 {
-    const ENCODING: Encoding = Encoding::ZENOH_UINT;
+    const ENCODING: Encoding = Encoding::ZENOH_UINT32;
 }
 
 impl EncodingMapping for u64 {
-    const ENCODING: Encoding = Encoding::ZENOH_UINT;
+    const ENCODING: Encoding = Encoding::ZENOH_UINT64;
+}
+
+impl EncodingMapping for u128 {
+    const ENCODING: Encoding = Encoding::ZENOH_UINT128;
 }
 
 impl EncodingMapping for usize {
-    const ENCODING: Encoding = Encoding::ZENOH_UINT;
+    #[cfg(target_pointer_width = "8")]
+    const ENCODING: Encoding = Encoding::ZENOH_UINT8;
+    #[cfg(target_pointer_width = "16")]
+    const ENCODING: Encoding = Encoding::ZENOH_UINT16;
+    #[cfg(target_pointer_width = "32")]
+    const ENCODING: Encoding = Encoding::ZENOH_UINT32;
+    #[cfg(target_pointer_width = "64")]
+    const ENCODING: Encoding = Encoding::ZENOH_UINT64;
+    #[cfg(target_pointer_width = "128")]
+    const ENCODING: Encoding = Encoding::ZENOH_UINT128;
 }
 
 // Zenoh signed integers
 impl EncodingMapping for i8 {
-    const ENCODING: Encoding = Encoding::ZENOH_INT;
+    const ENCODING: Encoding = Encoding::ZENOH_INT8;
 }
 
 impl EncodingMapping for i16 {
-    const ENCODING: Encoding = Encoding::ZENOH_INT;
+    const ENCODING: Encoding = Encoding::ZENOH_INT16;
 }
 
 impl EncodingMapping for i32 {
-    const ENCODING: Encoding = Encoding::ZENOH_INT;
+    const ENCODING: Encoding = Encoding::ZENOH_INT32;
 }
 
 impl EncodingMapping for i64 {
-    const ENCODING: Encoding = Encoding::ZENOH_INT;
+    const ENCODING: Encoding = Encoding::ZENOH_INT64;
+}
+
+impl EncodingMapping for i128 {
+    const ENCODING: Encoding = Encoding::ZENOH_INT128;
 }
 
 impl EncodingMapping for isize {
-    const ENCODING: Encoding = Encoding::ZENOH_INT;
+    #[cfg(target_pointer_width = "8")]
+    const ENCODING: Encoding = Encoding::ZENOH_INT8;
+    #[cfg(target_pointer_width = "16")]
+    const ENCODING: Encoding = Encoding::ZENOH_INT16;
+    #[cfg(target_pointer_width = "32")]
+    const ENCODING: Encoding = Encoding::ZENOH_INT32;
+    #[cfg(target_pointer_width = "64")]
+    const ENCODING: Encoding = Encoding::ZENOH_INT64;
+    #[cfg(target_pointer_width = "128")]
+    const ENCODING: Encoding = Encoding::ZENOH_INT128;
 }
 
 // Zenoh floats
 impl EncodingMapping for f32 {
-    const ENCODING: Encoding = Encoding::ZENOH_FLOAT;
+    const ENCODING: Encoding = Encoding::ZENOH_FLOAT32;
 }
 
 impl EncodingMapping for f64 {
-    const ENCODING: Encoding = Encoding::ZENOH_FLOAT;
+    const ENCODING: Encoding = Encoding::ZENOH_FLOAT64;
 }
 
 // Zenoh bool
