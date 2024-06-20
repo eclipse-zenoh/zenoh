@@ -222,7 +222,6 @@ pub fn init_logging_with_level(level: LogLevel) {
 /// dynamic libraries. In fact, dynamic library has its own `tracing` global subscriber which need
 /// to be initialized, but it would lead to a double initialization for a static library, hence
 /// this fallible version.
-/// Returns true if the logging was initialized.
 pub fn try_init_logging() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     let level = env::var("ZENOH_LOG")
         .map(|var| var.parse().expect("invalid ZENOH_LOG"))
