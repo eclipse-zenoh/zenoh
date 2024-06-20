@@ -131,7 +131,7 @@ impl Encoding {
     ///
     /// Constant alias for string: `"zenoh/string"`.
     ///
-    /// Usually used for types: `String`, `&str`, `Cow<str>`.
+    /// Usually used for types: `String`, `&str`, `Cow<str>`, `char`.
     pub const ZENOH_STRING: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 5,
         schema: None,
