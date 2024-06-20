@@ -675,8 +675,7 @@ impl Session {
     /// ```
     pub fn new_timestamp(&self) -> Timestamp {
         let id = self.runtime.zid();
-        // TODO: Should we make this an Result return type ?
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into();
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into(); // UNIX_EPOCH is Returns a Timespec::zero(), Unwrap Should be permissable here
         Timestamp::new(now, id.into())
     }
 }
