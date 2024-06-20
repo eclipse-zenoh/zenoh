@@ -47,7 +47,6 @@ use std::{
     any::Any,
     collections::{HashMap, HashSet},
     sync::Arc,
-    time::Duration,
 };
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, ZenohId};
 use zenoh_protocol::{
@@ -114,15 +113,6 @@ struct HatTables {
     peer_qabls: HashSet<Arc<Resource>>,
     peers_net: Option<Network>,
     peers_trees_task: Option<TerminatableTask>,
-}
-
-impl Drop for HatTables {
-    fn drop(&mut self) {
-        if self.peers_trees_task.is_some() {
-            let task = self.peers_trees_task.take().unwrap();
-            task.terminate(Duration::from_secs(10));
-        }
-    }
 }
 
 impl HatTables {

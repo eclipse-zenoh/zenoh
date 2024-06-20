@@ -52,7 +52,6 @@ use std::{
     collections::{hash_map::DefaultHasher, HashMap, HashSet},
     hash::Hasher,
     sync::Arc,
-    time::Duration,
 };
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, ZenohId};
 use zenoh_protocol::{
@@ -125,19 +124,6 @@ struct HatTables {
     routers_trees_task: Option<TerminatableTask>,
     peers_trees_task: Option<TerminatableTask>,
     router_peers_failover_brokering: bool,
-}
-
-impl Drop for HatTables {
-    fn drop(&mut self) {
-        if self.peers_trees_task.is_some() {
-            let task = self.peers_trees_task.take().unwrap();
-            task.terminate(Duration::from_secs(10));
-        }
-        if self.routers_trees_task.is_some() {
-            let task = self.routers_trees_task.take().unwrap();
-            task.terminate(Duration::from_secs(10));
-        }
-    }
 }
 
 impl HatTables {
