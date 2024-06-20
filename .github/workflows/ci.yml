@@ -73,7 +73,7 @@ jobs:
         run: cargo +stable clippy --all-targets --features unstable -- --deny warnings
 
       - name: Clippy all features
-        if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest' }}
+        if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macos-13' || matrix.os == 'macos-14' }}
         run: cargo +stable clippy --all-targets --all-features -- --deny warnings
 
       - name: Install generic no_std target
@@ -121,7 +121,7 @@ jobs:
         run: cargo nextest run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Run tests with SHM
-        if: ${{ matrix.os == 'macOS-latest' || matrix.os == 'windows-latest' }}
+        if: ${{ matrix.os == 'macos-13' || matrix.os == 'macos-14' || matrix.os == 'windows-latest' }}
         run: cargo nextest run -F shared-memory -F unstable -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Run tests with SHM + unixpipe
