@@ -2808,7 +2808,6 @@ impl<const ID: u8> From<AttachmentType<ID>> for ZBytes {
 mod tests {
     #[test]
     fn serializer() {
-        use crate::bytes::{Deserialize, Serialize, ZSerde};
         use std::borrow::Cow;
 
         use rand::Rng;
@@ -2826,6 +2825,7 @@ mod tests {
         };
 
         use super::ZBytes;
+        use crate::bytes::{Deserialize, Serialize, ZSerde};
 
         const NUM: usize = 1_000;
 
