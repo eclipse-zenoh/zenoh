@@ -370,8 +370,8 @@ where
 /// This function is mainly meant to be used in zenoh bindings, to provide a bridge between Rust
 /// `tracing` implementation and a native logging implementation.
 ///
-/// To be consistent with zenoh API, bindings should allow to parse `ZENOH_LOG` environment
-/// variable to set the log level (unless it is set directly in code).
+/// To be consistent with zenoh API, bindings should parse `ZENOH_LOG` environment variable
+/// to set the log level (unless it is set directly in code).
 /// However, if `RUST_LOG` environment variable is provided, the callback will be skipped, and
 /// [`init_logging`] called instead.
 ///
