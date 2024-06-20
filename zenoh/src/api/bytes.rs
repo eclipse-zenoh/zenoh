@@ -1309,6 +1309,86 @@ impl TryFrom<&mut ZBytes> for bool {
     }
 }
 
+// Zenoh char
+impl Serialize<char> for ZSerde {
+    type Output = ZBytes;
+
+    fn serialize(self, t: char) -> Self::Output {
+        // We can convert char to u32 and encode it as such
+        // See https://doc.rust-lang.org/std/primitive.char.html#method.from_u32
+        ZSerde.serialize(t as u32)
+    }
+}
+
+impl From<char> for ZBytes {
+    fn from(t: char) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl Serialize<&char> for ZSerde {
+    type Output = ZBytes;
+
+    fn serialize(self, t: &char) -> Self::Output {
+        ZSerde.serialize(*t)
+    }
+}
+
+impl From<&char> for ZBytes {
+    fn from(t: &char) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl Serialize<&mut char> for ZSerde {
+    type Output = ZBytes;
+
+    fn serialize(self, t: &mut char) -> Self::Output {
+        ZSerde.serialize(*t)
+    }
+}
+
+impl From<&mut char> for ZBytes {
+    fn from(t: &mut char) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl Deserialize<char> for ZSerde {
+    type Input<'a> = &'a ZBytes;
+    type Error = ZDeserializeError;
+
+    fn deserialize(self, v: Self::Input<'_>) -> Result<char, Self::Error> {
+        let c = v.deserialize::<u32>()?;
+        let c = char::try_from(c).map_err(|_| ZDeserializeError)?;
+        Ok(c)
+    }
+}
+
+impl TryFrom<ZBytes> for char {
+    type Error = ZDeserializeError;
+
+    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&value)
+    }
+}
+
+impl TryFrom<&ZBytes> for char {
+    type Error = ZDeserializeError;
+
+    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(value)
+    }
+}
+
+impl TryFrom<&mut ZBytes> for char {
+    type Error = ZDeserializeError;
+
+    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&*value)
+    }
+}
+
 // - Zenoh advanced types serializer/deserializer
 // Parameters
 impl Serialize<Parameters<'_>> for ZSerde {
@@ -2724,6 +2804,7 @@ impl<const ID: u8> From<AttachmentType<ID>> for ZBytes {
 mod tests {
     #[test]
     fn serializer() {
+        use crate::bytes::{Deserialize, Serialize, ZSerde};
         use std::borrow::Cow;
 
         use rand::Rng;
@@ -2821,6 +2902,26 @@ mod tests {
         // WARN: test function body produces stack overflow, so I split it into subroutines
         #[inline(never)]
         fn basic() {
+            let mut rng = rand::thread_rng();
+
+            // bool
+            serialize_deserialize!(bool, true);
+            serialize_deserialize!(bool, false);
+
+            // char
+            serialize_deserialize!(char, char::MAX);
+            serialize_deserialize!(char, rng.gen::<char>());
+
+            let a = 'a';
+            let bytes = ZSerde.serialize(a);
+            let s: String = ZSerde.deserialize(&bytes).unwrap();
+            assert_eq!(a.to_string(), s);
+
+            let a = String::from("a");
+            let bytes = ZSerde.serialize(&a);
+            let s: char = ZSerde.deserialize(&bytes).unwrap();
+            assert_eq!(a, s.to_string());
+
             // String
             serialize_deserialize!(String, "");
             serialize_deserialize!(String, String::from("abcdef"));

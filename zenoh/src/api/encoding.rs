@@ -23,13 +23,13 @@ use super::bytes::ZBytes;
 
 /// Default encoding values used by Zenoh.
 ///
-/// An encoding has a similar role to Content-type in HTTP: it indicates, when present, how data should be interpreted by the application.
+/// An encoding has a similar role to *Content-type* in HTTP: it indicates, when present, how data should be interpreted by the application.
 ///
 /// Please note the Zenoh protocol does not impose any encoding value nor it operates on it.
 /// It can be seen as some optional metadata that is carried over by Zenoh in such a way the application may perform different operations depending on the encoding value.
 ///
 /// A set of associated constants are provided to cover the most common encodings for user convenience.
-/// This is parcticular useful in helping Zenoh to perform additional network optimizations.
+/// This is parcticular useful in helping Zenoh to perform additional wire-level optimizations.
 ///
 /// # Examples
 ///
@@ -131,7 +131,7 @@ impl Encoding {
     ///
     /// Constant alias for string: `"zenoh/string"`.
     ///
-    /// Usually used for types: `String`, `&str`, `Cow<str>`.
+    /// Usually used for types: `String`, `&str`, `Cow<str>`, `char`.
     pub const ZENOH_STRING: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 5,
         schema: None,
