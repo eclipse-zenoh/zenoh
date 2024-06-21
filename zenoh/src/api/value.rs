@@ -19,8 +19,8 @@ use super::{bytes::ZBytes, encoding::Encoding};
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Value {
-    pub(crate) payload: ZBytes,
-    pub(crate) encoding: Encoding,
+    pub payload: ZBytes,
+    pub encoding: Encoding,
 }
 
 impl Value {
