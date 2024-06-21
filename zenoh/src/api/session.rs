@@ -21,11 +21,11 @@ use std::{
         atomic::{AtomicU16, Ordering},
         Arc, RwLock,
     },
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use tracing::{error, trace, warn};
-use uhlc::HLC;
+use uhlc::{Timestamp, HLC};
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::{unwrap_or_default, wrappers::ZenohId, Config, Notifier};
@@ -656,6 +656,27 @@ impl Session {
     /// ```
     pub fn config(&self) -> &Notifier<Config> {
         self.runtime.config()
+    }
+
+    /// Get a new Timestamp from a Zenoh session [`Session`](Session).
+    ///
+    /// The returned timestamp has the current time, with the Session's runtime ZenohID
+    ///
+    /// # Examples
+    /// ### Read current zenoh configuration
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use zenoh::prelude::*;
+    ///
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let timestamp = session.new_timestamp();
+    /// # }
+    /// ```
+    pub fn new_timestamp(&self) -> Timestamp {
+        let id = self.runtime.zid();
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into(); // UNIX_EPOCH is Returns a Timespec::zero(), Unwrap Should be permissable here
+        Timestamp::new(now, id.into())
     }
 }
 

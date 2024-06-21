@@ -15,6 +15,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use zenoh_protocol::core::{Timestamp, TimestampId};
 
+// TODO: Shall we remove this new_timestamp in favoir of the src/api/session::Session::new_timestamp();
 /// Generates a [`Timestamp`] with [`TimestampId`] and current system time
 /// The [`TimestampId`] can be taken from session id returned by [`SessionInfo::zid()`](crate::api::info::SessionInfo::zid).
 pub fn new_timestamp<T: Into<TimestampId>>(id: T) -> Timestamp {
