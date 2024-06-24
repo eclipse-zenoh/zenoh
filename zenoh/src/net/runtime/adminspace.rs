@@ -622,15 +622,8 @@ fn local_data(context: &AdminContext, query: Query) {
     }
 
     tracing::trace!("AdminSpace router_data: {:?}", json);
-    let payload = match ZBytes::try_from(json) {
-        Ok(p) => p,
-        Err(e) => {
-            tracing::error!("Error serializing AdminSpace reply: {:?}", e);
-            return;
-        }
-    };
     if let Err(e) = query
-        .reply(reply_key, payload)
+        .reply(reply_key, json.to_string())
         .encoding(Encoding::APPLICATION_JSON)
         .wait()
     {
@@ -666,7 +659,7 @@ zenoh_build{{version="{}"}} 1
 
     if let Err(e) = query
         .reply(reply_key, metrics)
-        .encoding(Encoding::APPLICATION_JSON)
+        .encoding(Encoding::TEXT_PLAIN)
         .wait()
     {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
@@ -685,7 +678,7 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
 
     if let Err(e) = query
         .reply(reply_key, tables.hat_code.info(&tables, WhatAmI::Router))
-        .encoding(Encoding::APPLICATION_JSON)
+        .encoding(Encoding::TEXT_PLAIN)
         .wait()
     {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
@@ -704,7 +697,7 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
 
     if let Err(e) = query
         .reply(reply_key, tables.hat_code.info(&tables, WhatAmI::Peer))
-        .encoding(Encoding::APPLICATION_JSON)
+        .encoding(Encoding::TEXT_PLAIN)
         .wait()
     {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
@@ -792,8 +785,6 @@ fn plugins_data(context: &AdminContext, query: Query) {
 
 #[cfg(feature = "plugins")]
 fn plugins_status(context: &AdminContext, query: Query) {
-    use crate::bytes::{Serialize, ZSerde};
-
     let key_expr = query.key_expr();
     let guard = context.runtime.plugins_manager();
     let mut root_key = format!(
@@ -808,8 +799,8 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 if let Ok(key_expr) = KeyExpr::try_from(plugin_path_key.clone()) {
                     if query.key_expr().intersects(&key_expr) {
                         if let Err(e) = query
-                            .reply(key_expr, ZSerde.serialize(plugin.path()))
-                            .encoding(Encoding::APPLICATION_JSON)
+                            .reply(key_expr, plugin.path())
+                            .encoding(Encoding::TEXT_PLAIN)
                             .wait()
                         {
                             tracing::error!("Error sending AdminSpace reply: {:?}", e);
