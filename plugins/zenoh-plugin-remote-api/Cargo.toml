@@ -41,18 +41,15 @@ async-std = { workspace = true, features = ["default", "attributes"] }
 async-tungstenite = { version = "0.25.1", features = ["async-std"] }
 async-trait = "0.1.60"
 base64 = { workspace = true }
-# const_format = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
-# http-types = { workspace = true }
 lazy_static = { workspace = true }
 tracing = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
-
-zenoh = { workspace = true, features = ["unstable"] }
+zenoh = { workspace = true, features = ["unstable", "internal", "plugins"] }
 zenoh-util = { workspace = true }
 zenoh-plugin-trait = { workspace = true }
 zenoh-result = { workspace = true }

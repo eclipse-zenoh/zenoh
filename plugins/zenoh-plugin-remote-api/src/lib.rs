@@ -27,6 +27,7 @@ use async_tungstenite::tungstenite::{self, Message};
 use flume::Sender;
 use futures::prelude::*;
 use futures::{future, pin_mut};
+use zenoh::sample::SampleKind;
 
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
@@ -37,11 +38,17 @@ use tracing::{debug, error};
 use uhlc::Timestamp;
 use uuid::Uuid;
 
-use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
-use zenoh::prelude::r#async::*;
-use zenoh::runtime::Runtime;
+use zenoh::prelude::*;
 use zenoh::subscriber::Subscriber;
 use zenoh::Session;
+use zenoh::{
+    internal::{
+        plugins::{RunningPluginTrait, ZenohPlugin},
+        runtime::Runtime,
+    },
+    key_expr::KeyExpr,
+    sample::Sample,
+};
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 use zenoh_result::ZResult;
 
@@ -62,12 +69,15 @@ impl ZenohPlugin for RemoteApiPlugin {}
 
 impl Plugin for RemoteApiPlugin {
     type StartArgs = Runtime;
-    type Instance = zenoh::plugins::RunningPlugin;
+    type Instance = zenoh::internal::plugins::RunningPlugin;
     const DEFAULT_NAME: &'static str = "remote_api";
     const PLUGIN_VERSION: &'static str = plugin_version!();
     const PLUGIN_LONG_VERSION: &'static str = plugin_long_version!();
 
-    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<zenoh::plugins::RunningPlugin> {
+    fn start(
+        name: &str,
+        _runtime: &Self::StartArgs,
+    ) -> ZResult<zenoh::internal::plugins::RunningPlugin> {
         // Try to initiate login.
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
@@ -89,15 +99,15 @@ struct RunningPlugin(JoinHandle<()>);
 impl PluginControl for RunningPlugin {}
 
 impl RunningPluginTrait for RunningPlugin {
-    fn adminspace_getter<'a>(
-        &'a self,
-        selector: &'a Selector<'a>,
-        plugin_status_key: &str,
-    ) -> ZResult<Vec<zenoh::plugins::Response>> {
-        let mut responses = Vec::new();
-        // TODO :
-        Ok(responses)
-    }
+    // fn adminspace_getter<'a>(
+    //     &'a self,
+    //     selector: &'a Selector<'a>,
+    //     plugin_status_key: &str,
+    // ) -> ZResult<Vec<zenoh::plugins::Response>> {
+    //     let mut responses = Vec::new();
+    //     // TODO :
+    //     Ok(responses)
+    // }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -163,25 +173,19 @@ impl From<SampleKind> for SampleKindWS {
         }
     }
 }
-impl From<Sample> for SampleWS {
-    fn from(s: Sample) -> Self {
-        let z_buf = s.value.payload;
 
-        // TODO allocate with Capacity ?
-        let vec_buf = z_buf
-            .slices()
-            .into_iter()
-            .fold(Vec::new(), |mut acc, item| {
-                acc.extend(item.iter().cloned());
-                acc
-            });
+impl TryFrom<Sample> for SampleWS {
+    type Error = ZError;
 
-        SampleWS {
-            key_expr: s.key_expr,
-            value: vec_buf,
-            kind: s.kind.into(),
-            timestamp: s.timestamp,
-        }
+    fn try_from(s: Sample) -> Result<Self, Self::Error> {
+        let z_bytes: Vec<u8> = s.payload().try_into()?;
+
+        Ok(SampleWS {
+            key_expr: s.key_expr().clone(),
+            value: z_bytes,
+            kind: s.kind().into(),
+            timestamp: s.timestamp().copied(),
+        })
     }
 }
 
@@ -221,7 +225,7 @@ pub async fn run_websocket_server() {
                 Ok(sock_addr) => {
                     let mut write_guard = state_map.write().await;
                     let config = zenoh::config::default();
-                    let session = zenoh::open(config).res().await.unwrap().into_arc();
+                    let session = zenoh::open(config).await.unwrap().into_arc();
 
                     let state = RemoteState {
                         channel_tx: ch_tx.clone(),
@@ -231,7 +235,7 @@ pub async fn run_websocket_server() {
                         subscribers: HashMap::new(),
                     };
 
-                    sock_adress = Arc::new(sock_addr.clone());
+                    sock_adress = Arc::new(sock_addr);
                     if let Some(remote_state) = write_guard.insert(sock_addr, state) {
                         error!(
                             "remote State existed in Map already {:?}",
@@ -279,7 +283,7 @@ pub async fn run_websocket_server() {
             pin_mut!(ch_rx_stream, incoming_ws);
             future::select(ch_rx_stream, incoming_ws).await;
 
-            state_map.write().await.remove((&sock_adress).as_ref());
+            state_map.write().await.remove(sock_adress.as_ref());
             println!("disconnected");
         }
     });
@@ -296,7 +300,7 @@ async fn handle_message(
                 RemoteAPIMsg::Control(ctrl_msg) => {
                     handle_control_message(ctrl_msg, sock_addr, state_map)
                         .await
-                        .and_then(|x| Some(RemoteAPIMsg::Control(x)))
+                        .map(RemoteAPIMsg::Control)
                 }
                 RemoteAPIMsg::Data(data_msg) => handle_data_message(data_msg),
             },
@@ -330,14 +334,14 @@ async fn handle_control_message(
                 None
             }
         }
-        ControlMsg::Session(id) => todo!(),
-        ControlMsg::CloseSession(id) => todo!(),
+        ControlMsg::Session(_id) => todo!(),
+        ControlMsg::CloseSession(_id) => todo!(),
         ControlMsg::CreateKeyExpr(key_expr_str) => {
             let mut state_writer = state_map.write().await;
             if let Some(remote_state) = state_writer.get_mut(&sock_addr) {
                 let key_expr = KeyExpr::new(key_expr_str).unwrap();
                 remote_state.key_expr.insert(key_expr.clone());
-                return Some(ControlMsg::KeyExpr(KeyExprWrapper(key_expr)));
+                Some(ControlMsg::KeyExpr(KeyExprWrapper(key_expr)))
             } else {
                 println!("State Map Does not contain SocketAddr");
                 None
@@ -356,13 +360,19 @@ async fn handle_control_message(
                     .session
                     .declare_subscriber(key_expr)
                     .callback(move |sample| {
-                        let sample_ws = SampleWS::from(sample);
-                        let remote_api_message = RemoteAPIMsg::Data(DataMsg::Sample(sample_ws));
-                        if let Err(e) = ch_tx.send(remote_api_message) {
-                            error!("Forward Sample Channel error: {e}");
+                        match SampleWS::try_from(sample) {
+                            Ok(sample_ws) => {
+                                let remote_api_message =
+                                    RemoteAPIMsg::Data(DataMsg::Sample(sample_ws));
+                                if let Err(e) = ch_tx.send(remote_api_message) {
+                                    error!("Forward Sample Channel error: {e}");
+                                };
+                            }
+                            Err(err) => {
+                                error!("Could not convert Sample into SampleWs {:?}", err)
+                            }
                         };
                     })
-                    .res()
                     .await
                     .unwrap();
 
@@ -384,7 +394,7 @@ async fn handle_control_message(
     }
 }
 
-fn handle_data_message(data_msg: DataMsg) -> Option<RemoteAPIMsg> {
+fn handle_data_message(_data_msg: DataMsg) -> Option<RemoteAPIMsg> {
     None
 }
 
