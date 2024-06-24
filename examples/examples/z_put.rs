@@ -26,6 +26,7 @@ async fn main() {
     let session = zenoh::open(config).await.unwrap();
 
     println!("Putting Data ('{key_expr}': '{payload}')...");
+    // Refer to z_bytes.rs to see how to put different types of message
     session.put(&key_expr, payload).await.unwrap();
 }
 
