@@ -11,10 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::Condition;
 use std::sync::atomic::{AtomicUsize, Ordering};
+
 use tokio::sync::Mutex;
 use zenoh_core::zasynclock;
+
+use crate::Condition;
 
 pub struct Mvar<T> {
     inner: Mutex<Option<T>>,
@@ -96,9 +98,9 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn mvar() -> ZResult<()> {
+        use std::{sync::Arc, time::Duration};
+
         use super::Mvar;
-        use std::sync::Arc;
-        use std::time::Duration;
 
         const TIMEOUT: Duration = Duration::from_secs(60);
 

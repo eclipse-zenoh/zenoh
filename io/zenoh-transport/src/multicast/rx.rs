@@ -11,12 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::transport::{TransportMulticastInner, TransportMulticastPeer};
-use crate::common::{
-    batch::{Decode, RBatch},
-    priority::TransportChannelRx,
-};
 use std::sync::MutexGuard;
+
 use zenoh_core::{zlock, zread};
 use zenoh_protocol::{
     core::{Locator, Priority, Reliability},
@@ -27,6 +23,12 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::{bail, zerror, ZResult};
+
+use super::transport::{TransportMulticastInner, TransportMulticastPeer};
+use crate::common::{
+    batch::{Decode, RBatch},
+    priority::TransportChannelRx,
+};
 
 /*************************************/
 /*            TRANSPORT RX           */
@@ -42,7 +44,7 @@ impl TransportMulticastInner {
         #[cfg(feature = "shared-memory")]
         {
             if self.manager.config.multicast.is_shm {
-                crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.state.multicast.shm.reader)?;
+                crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shmr)?;
             }
         }
 
@@ -63,7 +65,7 @@ impl TransportMulticastInner {
             || join.ext_qos.is_some() != peer.is_qos()
         {
             let e = format!(
-                "Ingoring Join on {} of peer: {}. Inconsistent parameters.",
+                "Ignoring Join on {} of peer: {}. Inconsistent parameters.",
                 peer.locator, peer.zid,
             );
             tracing::debug!("{}", e);
@@ -81,7 +83,7 @@ impl TransportMulticastInner {
     ) -> ZResult<()> {
         if zread!(self.peers).len() >= self.manager.config.multicast.max_sessions {
             tracing::debug!(
-                "Ingoring Join on {} from peer: {}. Max sessions reached: {}.",
+                "Ignoring Join on {} from peer: {}. Max sessions reached: {}.",
                 locator,
                 join.zid,
                 self.manager.config.multicast.max_sessions,
@@ -91,7 +93,7 @@ impl TransportMulticastInner {
 
         if join.version != self.manager.config.version {
             tracing::debug!(
-                "Ingoring Join on {} from peer: {}. Unsupported version: {}. Expected: {}.",
+                "Ignoring Join on {} from peer: {}. Unsupported version: {}. Expected: {}.",
                 locator,
                 join.zid,
                 join.version,
@@ -102,7 +104,7 @@ impl TransportMulticastInner {
 
         if join.resolution != self.manager.config.resolution {
             tracing::debug!(
-                "Ingoring Join on {} from peer: {}. Unsupported SN resolution: {:?}. Expected: {:?}.",
+                "Ignoring Join on {} from peer: {}. Unsupported SN resolution: {:?}. Expected: {:?}.",
                 locator,
                 join.zid,
                 join.resolution,
@@ -113,7 +115,7 @@ impl TransportMulticastInner {
 
         if join.batch_size != batch_size {
             tracing::debug!(
-                "Ingoring Join on {} from peer: {}. Unsupported Batch Size: {:?}. Expected: {:?}.",
+                "Ignoring Join on {} from peer: {}. Unsupported Batch Size: {:?}. Expected: {:?}.",
                 locator,
                 join.zid,
                 join.batch_size,
@@ -124,7 +126,7 @@ impl TransportMulticastInner {
 
         if !self.manager.config.multicast.is_qos && join.ext_qos.is_some() {
             tracing::debug!(
-                "Ingoring Join on {} from peer: {}. QoS is not supported.",
+                "Ignoring Join on {} from peer: {}. QoS is not supported.",
                 locator,
                 join.zid,
             );
@@ -145,7 +147,7 @@ impl TransportMulticastInner {
         let priority = ext_qos.priority();
         let c = if self.is_qos() {
             &peer.priority_rx[priority as usize]
-        } else if priority == Priority::default() {
+        } else if priority == Priority::DEFAULT {
             &peer.priority_rx[0]
         } else {
             bail!(
@@ -181,7 +183,7 @@ impl TransportMulticastInner {
         let priority = ext_qos.priority();
         let c = if self.is_qos() {
             &peer.priority_rx[priority as usize]
-        } else if priority == Priority::default() {
+        } else if priority == Priority::DEFAULT {
             &peer.priority_rx[0]
         } else {
             bail!(

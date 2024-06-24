@@ -20,8 +20,9 @@ use core::hash::SipHasher as DefaultHasher;
 #[cfg(feature = "std")]
 use std::collections::hash_map::DefaultHasher;
 
-use crate::keyexpr_tree::*;
 use keyed_set::{KeyExtractor, KeyedSet};
+
+use crate::keyexpr_tree::*;
 
 #[cfg_attr(not(feature = "std"), allow(deprecated))]
 pub struct KeyedSetProvider<Hash: Hasher + Default + 'static = DefaultHasher>(
@@ -52,7 +53,8 @@ impl<T: HasChunk + AsNode<T> + AsNodeMut<T>> IChildren<T> for KeyedSet<T, ChunkE
         self.get(&chunk)
     }
     fn child_at_mut(&mut self, chunk: &keyexpr) -> Option<&mut T> {
-        self.get_mut_unguarded(&chunk)
+        // Unicity is guaranteed by &mut self
+        unsafe { self.get_mut_unguarded(&chunk) }
     }
     fn remove(&mut self, chunk: &keyexpr) -> Option<T> {
         self.remove(&chunk)

@@ -12,8 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use core::panic;
-use lazy_static::lazy_static;
-use serde::Deserialize;
 use std::{
     borrow::Borrow,
     collections::HashMap,
@@ -26,6 +24,9 @@ use std::{
     },
     time::Duration,
 };
+
+use lazy_static::lazy_static;
+use serde::Deserialize;
 use tokio::runtime::{Handle, Runtime, RuntimeFlavor};
 use zenoh_macros::{GenericRuntimeParam, RegisterParam};
 use zenoh_result::ZResult as Result;
@@ -177,8 +178,11 @@ impl ZRuntimePool {
 
         self.0
             .get(&zrt)
-            .expect("The hashmap should contains {zrt} after initialization")
-            .get_or_init(|| zrt.init().expect("Failed to init {zrt}"))
+            .unwrap_or_else(|| panic!("The hashmap should contains {zrt} after initialization"))
+            .get_or_init(|| {
+                zrt.init()
+                    .unwrap_or_else(|_| panic!("Failed to init {zrt}"))
+            })
             .handle()
     }
 }

@@ -11,24 +11,26 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "shared-memory")]
-use crate::multicast::shm::SharedMemoryMulticast;
-use crate::multicast::{transport::TransportMulticastInner, TransportMulticast};
-use crate::TransportManager;
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{collections::HashMap, sync::Arc, time::Duration};
+
 use tokio::sync::Mutex;
 #[cfg(feature = "transport_compression")]
 use zenoh_config::CompressionMulticastConf;
 #[cfg(feature = "shared-memory")]
-use zenoh_config::SharedMemoryConf;
+use zenoh_config::ShmConf;
 use zenoh_config::{Config, LinkTxConf};
 use zenoh_core::zasynclock;
 use zenoh_link::*;
-use zenoh_protocol::core::ZenohId;
-use zenoh_protocol::{core::endpoint, transport::close};
+use zenoh_protocol::{
+    core::{parameters, ZenohIdProto},
+    transport::close,
+};
 use zenoh_result::{bail, zerror, ZResult};
+
+use crate::{
+    multicast::{transport::TransportMulticastInner, TransportMulticast},
+    TransportManager,
+};
 
 pub struct TransportManagerConfigMulticast {
     pub lease: Duration,
@@ -59,9 +61,6 @@ pub struct TransportManagerStateMulticast {
     pub(crate) protocols: Arc<Mutex<HashMap<String, LinkManagerMulticast>>>,
     // Established transports
     pub(crate) transports: Arc<Mutex<HashMap<Locator, Arc<TransportMulticastInner>>>>,
-    // Shared memory
-    #[cfg(feature = "shared-memory")]
-    pub(super) shm: Arc<SharedMemoryMulticast>,
 }
 
 pub struct TransportManagerParamsMulticast {
@@ -141,8 +140,6 @@ impl TransportManagerBuilderMulticast {
         let state = TransportManagerStateMulticast {
             protocols: Arc::new(Mutex::new(HashMap::new())),
             transports: Arc::new(Mutex::new(HashMap::new())),
-            #[cfg(feature = "shared-memory")]
-            shm: Arc::new(SharedMemoryMulticast::make()?),
         };
 
         let params = TransportManagerParamsMulticast { config, state };
@@ -155,7 +152,7 @@ impl Default for TransportManagerBuilderMulticast {
     fn default() -> TransportManagerBuilderMulticast {
         let link_tx = LinkTxConf::default();
         #[cfg(feature = "shared-memory")]
-        let shm = SharedMemoryConf::default();
+        let shm = ShmConf::default();
         #[cfg(feature = "transport_compression")]
         let compression = CompressionMulticastConf::default();
 
@@ -261,7 +258,7 @@ impl TransportManager {
         if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
             endpoint
                 .config_mut()
-                .extend(endpoint::Parameters::iter(config))?;
+                .extend_from_iter(parameters::iter(config))?;
         }
 
         // Open the link
@@ -269,7 +266,7 @@ impl TransportManager {
         super::establishment::open_link(self, link).await
     }
 
-    pub async fn get_transport_multicast(&self, zid: &ZenohId) -> Option<TransportMulticast> {
+    pub async fn get_transport_multicast(&self, zid: &ZenohIdProto) -> Option<TransportMulticast> {
         for t in zasynclock!(self.state.multicast.transports).values() {
             if t.get_peers().iter().any(|p| p.zid == *zid) {
                 return Some(t.into());

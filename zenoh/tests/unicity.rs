@@ -11,11 +11,23 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
+use std::{
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+
 use tokio::runtime::Handle;
-use zenoh::prelude::r#async::*;
+use zenoh::{
+    config,
+    config::{EndPoint, WhatAmI},
+    key_expr::KeyExpr,
+    prelude::*,
+    publisher::CongestionControl,
+    Session,
+};
 use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -29,14 +41,14 @@ async fn open_p2p_sessions() -> (Session, Session, Session) {
     config.listen.endpoints = vec!["tcp/127.0.0.1:27447".parse().unwrap()];
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][01a] Opening s01 session");
-    let s01 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+    let s01 = ztimeout!(zenoh::open(config)).unwrap();
 
     let mut config = config::peer();
     config.listen.endpoints = vec!["tcp/127.0.0.1:27448".parse().unwrap()];
     config.connect.endpoints = vec!["tcp/127.0.0.1:27447".parse().unwrap()];
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][02a] Opening s02 session");
-    let s02 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+    let s02 = ztimeout!(zenoh::open(config)).unwrap();
 
     let mut config = config::peer();
     config.connect.endpoints = vec![
@@ -45,7 +57,7 @@ async fn open_p2p_sessions() -> (Session, Session, Session) {
     ];
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][03a] Opening s03 session");
-    let s03 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+    let s03 = ztimeout!(zenoh::open(config)).unwrap();
 
     (s01, s02, s03)
 }
@@ -57,38 +69,38 @@ async fn open_router_session() -> Session {
     config.listen.endpoints = vec!["tcp/127.0.0.1:37447".parse().unwrap()];
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][00a] Opening router session");
-    ztimeout!(zenoh::open(config).res_async()).unwrap()
+    ztimeout!(zenoh::open(config)).unwrap()
 }
 
 async fn close_router_session(s: Session) {
     println!("[  ][01d] Closing router session");
-    ztimeout!(s.close().res_async()).unwrap();
+    ztimeout!(s.close()).unwrap();
 }
 
 async fn open_client_sessions() -> (Session, Session, Session) {
     // Open the sessions
     let config = config::client(["tcp/127.0.0.1:37447".parse::<EndPoint>().unwrap()]);
     println!("[  ][01a] Opening s01 session");
-    let s01 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+    let s01 = ztimeout!(zenoh::open(config)).unwrap();
 
     let config = config::client(["tcp/127.0.0.1:37447".parse::<EndPoint>().unwrap()]);
     println!("[  ][02a] Opening s02 session");
-    let s02 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+    let s02 = ztimeout!(zenoh::open(config)).unwrap();
 
     let config = config::client(["tcp/127.0.0.1:37447".parse::<EndPoint>().unwrap()]);
     println!("[  ][03a] Opening s03 session");
-    let s03 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+    let s03 = ztimeout!(zenoh::open(config)).unwrap();
 
     (s01, s02, s03)
 }
 
 async fn close_sessions(s01: Session, s02: Session, s03: Session) {
     println!("[  ][01d] Closing s01 session");
-    ztimeout!(s01.close().res_async()).unwrap();
+    ztimeout!(s01.close()).unwrap();
     println!("[  ][02d] Closing s02 session");
-    ztimeout!(s02.close().res_async()).unwrap();
+    ztimeout!(s02.close()).unwrap();
     println!("[  ][03d] Closing s03 session");
-    ztimeout!(s03.close().res_async()).unwrap();
+    ztimeout!(s03.close()).unwrap();
 }
 
 async fn test_unicity_pubsub(s01: &Session, s02: &Session, s03: &Session) {
@@ -104,25 +116,19 @@ async fn test_unicity_pubsub(s01: &Session, s02: &Session, s03: &Session) {
         // Subscribe to data
         println!("[PS][01b] Subscribing on s01 session");
         let c_msgs1 = msgs1.clone();
-        let sub1 = ztimeout!(s01
-            .declare_subscriber(key_expr)
-            .callback(move |sample| {
-                assert_eq!(sample.value.payload.len(), size);
-                c_msgs1.fetch_add(1, Ordering::Relaxed);
-            })
-            .res_async())
+        let sub1 = ztimeout!(s01.declare_subscriber(key_expr).callback(move |sample| {
+            assert_eq!(sample.payload().len(), size);
+            c_msgs1.fetch_add(1, Ordering::Relaxed);
+        }))
         .unwrap();
 
         // Subscribe to data
         println!("[PS][02b] Subscribing on s02 session");
         let c_msgs2 = msgs2.clone();
-        let sub2 = ztimeout!(s02
-            .declare_subscriber(key_expr)
-            .callback(move |sample| {
-                assert_eq!(sample.value.payload.len(), size);
-                c_msgs2.fetch_add(1, Ordering::Relaxed);
-            })
-            .res_async())
+        let sub2 = ztimeout!(s02.declare_subscriber(key_expr).callback(move |sample| {
+            assert_eq!(sample.payload().len(), size);
+            c_msgs2.fetch_add(1, Ordering::Relaxed);
+        }))
         .unwrap();
 
         // Wait for the declaration to propagate
@@ -133,8 +139,7 @@ async fn test_unicity_pubsub(s01: &Session, s02: &Session, s03: &Session) {
         for _ in 0..msg_count {
             ztimeout!(s03
                 .put(key_expr, vec![0u8; size])
-                .congestion_control(CongestionControl::Block)
-                .res_async())
+                .congestion_control(CongestionControl::Block))
             .unwrap();
         }
 
@@ -162,10 +167,10 @@ async fn test_unicity_pubsub(s01: &Session, s02: &Session, s03: &Session) {
         assert_eq!(cnt2, msg_count);
 
         println!("[PS][02b] Unsubscribing on s02 session");
-        ztimeout!(sub2.undeclare().res_async()).unwrap();
+        ztimeout!(sub2.undeclare()).unwrap();
 
         println!("[PS][01b] Unsubscribing on s01 session");
-        ztimeout!(sub1.undeclare().res_async()).unwrap();
+        ztimeout!(sub1.undeclare()).unwrap();
 
         // Wait for the declaration to propagate
         tokio::time::sleep(SLEEP).await;
@@ -173,7 +178,7 @@ async fn test_unicity_pubsub(s01: &Session, s02: &Session, s03: &Session) {
 }
 
 async fn test_unicity_qryrep(s01: &Session, s02: &Session, s03: &Session) {
-    let key_expr = "test/unicity";
+    let key_expr = KeyExpr::new("test/unicity").unwrap();
     let msg_count = 1;
     let msgs1 = Arc::new(AtomicUsize::new(0));
     let msgs2 = Arc::new(AtomicUsize::new(0));
@@ -184,36 +189,36 @@ async fn test_unicity_qryrep(s01: &Session, s02: &Session, s03: &Session) {
 
         // Queryable to data
         println!("[QR][01c] Queryable on s01 session");
+        let cke = key_expr.clone();
         let c_msgs1 = msgs1.clone();
-        let qbl1 = ztimeout!(s01
-            .declare_queryable(key_expr)
-            .callback(move |sample| {
-                c_msgs1.fetch_add(1, Ordering::Relaxed);
-                let rep = Sample::try_from(key_expr, vec![0u8; size]).unwrap();
-                tokio::task::block_in_place(move || {
+        let qbl1 = ztimeout!(s01.declare_queryable(cke.clone()).callback(move |sample| {
+            c_msgs1.fetch_add(1, Ordering::Relaxed);
+            tokio::task::block_in_place({
+                let cke2 = cke.clone();
+                move || {
                     Handle::current().block_on(async move {
-                        ztimeout!(sample.reply(Ok(rep)).res_async()).unwrap()
+                        ztimeout!(sample.reply(cke2.clone(), vec![0u8; size])).unwrap()
                     });
-                });
-            })
-            .res_async())
+                }
+            });
+        }))
         .unwrap();
 
         // Queryable to data
         println!("[QR][02c] Queryable on s02 session");
+        let cke = key_expr.clone();
         let c_msgs2 = msgs2.clone();
-        let qbl2 = ztimeout!(s02
-            .declare_queryable(key_expr)
-            .callback(move |sample| {
-                c_msgs2.fetch_add(1, Ordering::Relaxed);
-                let rep = Sample::try_from(key_expr, vec![0u8; size]).unwrap();
-                tokio::task::block_in_place(move || {
+        let qbl2 = ztimeout!(s02.declare_queryable(cke.clone()).callback(move |sample| {
+            c_msgs2.fetch_add(1, Ordering::Relaxed);
+            tokio::task::block_in_place({
+                let cke2 = cke.clone();
+                move || {
                     Handle::current().block_on(async move {
-                        ztimeout!(sample.reply(Ok(rep)).res_async()).unwrap()
+                        ztimeout!(sample.reply(cke2.clone(), vec![0u8; size])).unwrap()
                     });
-                });
-            })
-            .res_async())
+                }
+            });
+        }))
         .unwrap();
 
         // Wait for the declaration to propagate
@@ -221,11 +226,12 @@ async fn test_unicity_qryrep(s01: &Session, s02: &Session, s03: &Session) {
 
         // Get data
         println!("[QR][03c] Getting on s03 session. {msg_count} msgs.");
+        let cke = key_expr.clone();
         let mut cnt = 0;
         for _ in 0..msg_count {
-            let rs = ztimeout!(s03.get(key_expr).res_async()).unwrap();
+            let rs = ztimeout!(s03.get(cke.clone())).unwrap();
             while let Ok(s) = ztimeout!(rs.recv_async()) {
-                assert_eq!(s.sample.unwrap().value.payload.len(), size);
+                assert_eq!(s.result().unwrap().payload().len(), size);
                 cnt += 1;
             }
         }
@@ -239,10 +245,10 @@ async fn test_unicity_qryrep(s01: &Session, s02: &Session, s03: &Session) {
         assert_eq!(cnt, msg_count);
 
         println!("[PS][01c] Unqueryable on s01 session");
-        ztimeout!(qbl1.undeclare().res_async()).unwrap();
+        ztimeout!(qbl1.undeclare()).unwrap();
 
         println!("[PS][02c] Unqueryable on s02 session");
-        ztimeout!(qbl2.undeclare().res_async()).unwrap();
+        ztimeout!(qbl2.undeclare()).unwrap();
 
         // Wait for the declaration to propagate
         tokio::time::sleep(SLEEP).await;
@@ -251,7 +257,7 @@ async fn test_unicity_qryrep(s01: &Session, s02: &Session, s03: &Session) {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_unicity_p2p() {
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
 
     let (s01, s02, s03) = open_p2p_sessions().await;
     test_unicity_pubsub(&s01, &s02, &s03).await;
@@ -261,7 +267,7 @@ async fn zenoh_unicity_p2p() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_unicity_brokered() {
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
     let r = open_router_session().await;
 
     let (s01, s02, s03) = open_client_sessions().await;

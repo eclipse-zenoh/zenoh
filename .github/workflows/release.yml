@@ -27,6 +27,10 @@ on:
         type: string
         description: Release number
         required: false
+      branch:
+        type: string
+        description: Release branch
+        required: false
 
 jobs:
   tag:
@@ -42,6 +46,7 @@ jobs:
           repo: ${{ github.repository }}
           live-run: ${{ inputs.live-run || false }}
           version: ${{ inputs.version }}
+          branch: ${{ inputs.branch }}
           github-token: ${{ secrets.BOT_TOKEN_WORKFLOW }}
 
       - uses: eclipse-zenoh/ci/bump-crates@main
@@ -160,7 +165,7 @@ jobs:
     uses: eclipse-zenoh/ci/.github/workflows/release-crates-dockerhub.yml@main
     with:
       no-build: true
-      live-run: true
+      live-run: ${{ inputs.live-run || false }}
       version: ${{ needs.tag.outputs.version }}
       repo: ${{ github.repository }}
       branch: ${{ needs.tag.outputs.branch }}

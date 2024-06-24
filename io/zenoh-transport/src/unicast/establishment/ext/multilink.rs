@@ -11,10 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::unicast::establishment::{
-    ext::auth::pubkey::{self, AuthPubKey, AuthPubKeyFsm, ZPublicKey},
-    AcceptFsm, OpenFsm,
-};
 use async_trait::async_trait;
 use rand::{CryptoRng, Rng};
 use rsa::{BigUint, RsaPrivateKey, RsaPublicKey};
@@ -28,25 +24,34 @@ use zenoh_core::{zerror, Error as ZError, Result as ZResult};
 use zenoh_crypto::PseudoRng;
 use zenoh_protocol::transport::{init, open};
 
+use crate::unicast::establishment::{
+    ext::auth::pubkey::{self, AuthPubKey, AuthPubKeyFsm, ZPublicKey},
+    AcceptFsm, OpenFsm,
+};
+
 const KEY_SIZE: usize = 512;
 
 // Extension Fsm
 pub(crate) struct MultiLink {
-    pubkey: RwLock<AuthPubKey>,
+    pubkey: Option<RwLock<AuthPubKey>>,
 }
 
 impl MultiLink {
-    pub(crate) fn make<R>(rng: &mut R) -> ZResult<Self>
+    pub(crate) fn make<R>(rng: &mut R, is_multilink: bool) -> ZResult<Self>
     where
         R: Rng + CryptoRng,
     {
-        let pri_key = RsaPrivateKey::new(rng, KEY_SIZE)?;
-        let pub_key = RsaPublicKey::from(&pri_key);
-        let mut auth = AuthPubKey::new(pub_key.into(), pri_key.into());
-        auth.disable_lookup();
-        Ok(Self {
-            pubkey: RwLock::new(auth),
-        })
+        if is_multilink {
+            let pri_key = RsaPrivateKey::new(rng, KEY_SIZE)?;
+            let pub_key = RsaPublicKey::from(&pri_key);
+            let mut auth = AuthPubKey::new(pub_key.into(), pri_key.into());
+            auth.disable_lookup();
+            Ok(Self {
+                pubkey: Some(RwLock::new(auth)),
+            })
+        } else {
+            Ok(Self { pubkey: None })
+        }
     }
 
     pub(crate) fn open(&self, is_multilink: bool) -> StateOpen {
@@ -69,13 +74,16 @@ impl MultiLink {
 
     pub(crate) fn fsm<'a>(&'a self, prng: &'a Mutex<PseudoRng>) -> MultiLinkFsm<'a> {
         MultiLinkFsm {
-            fsm: AuthPubKeyFsm::new(&self.pubkey, prng),
+            fsm: self
+                .pubkey
+                .is_some()
+                .then(|| AuthPubKeyFsm::new(self.pubkey.as_ref().unwrap(), prng)),
         }
     }
 }
 
 pub(crate) struct MultiLinkFsm<'a> {
-    fsm: AuthPubKeyFsm<'a>,
+    fsm: Option<AuthPubKeyFsm<'a>>,
 }
 
 /*************************************/
@@ -101,16 +109,12 @@ impl<'a> OpenFsm for &'a MultiLinkFsm<'a> {
         self,
         input: Self::SendInitSynIn,
     ) -> Result<Self::SendInitSynOut, Self::Error> {
-        let pubkey = match input.pubkey.as_ref() {
-            Some(pubkey) => pubkey,
-            None => return Ok(None),
+        let (pubkey, fsm) = match (input.pubkey.as_ref(), self.fsm.as_ref()) {
+            (Some(pubkey), Some(fsm)) => (pubkey, fsm),
+            _ => return Ok(None),
         };
 
-        let r = self
-            .fsm
-            .send_init_syn(&pubkey.0)
-            .await?
-            .map(|x| x.transmute());
+        let r = fsm.send_init_syn(&pubkey.0).await?.map(|x| x.transmute());
         Ok(r)
     }
 
@@ -123,9 +127,9 @@ impl<'a> OpenFsm for &'a MultiLinkFsm<'a> {
         const S: &str = "MultiLink extension - Recv InitAck.";
 
         let (state, mut ext) = input;
-        let mut pubkey = match state.pubkey.take() {
-            Some(pubkey) => pubkey,
-            None => return Ok(()),
+        let (mut pubkey, fsm) = match (state.pubkey.take(), self.fsm.as_ref()) {
+            (Some(pubkey), Some(fsm)) => (pubkey, fsm),
+            _ => return Ok(()),
         };
 
         match ext.take() {
@@ -136,8 +140,7 @@ impl<'a> OpenFsm for &'a MultiLinkFsm<'a> {
                     .read(&mut reader)
                     .map_err(|_| zerror!("{S} Decoding error."))?;
 
-                self.fsm
-                    .recv_init_ack((&mut pubkey.0, Some(ext.transmute())))
+                fsm.recv_init_ack((&mut pubkey.0, Some(ext.transmute())))
                     .await?;
 
                 state.pubkey = Some((pubkey.0, init_ack.bob_pubkey));
@@ -155,16 +158,12 @@ impl<'a> OpenFsm for &'a MultiLinkFsm<'a> {
         self,
         input: Self::SendOpenSynIn,
     ) -> Result<Self::SendOpenSynOut, Self::Error> {
-        let pubkey = match input.pubkey.as_ref() {
-            Some(pubkey) => pubkey,
-            None => return Ok(None),
+        let (pubkey, fsm) = match (input.pubkey.as_ref(), self.fsm.as_ref()) {
+            (Some(pubkey), Some(fsm)) => (pubkey, fsm),
+            _ => return Ok(None),
         };
 
-        let r = self
-            .fsm
-            .send_open_syn(&pubkey.0)
-            .await?
-            .map(|x| x.transmute());
+        let r = fsm.send_open_syn(&pubkey.0).await?.map(|x| x.transmute());
         Ok(r)
     }
 
@@ -175,15 +174,14 @@ impl<'a> OpenFsm for &'a MultiLinkFsm<'a> {
         input: Self::RecvOpenAckIn,
     ) -> Result<Self::RecvOpenAckOut, Self::Error> {
         let (state, mut ext) = input;
-        let pubkey = match state.pubkey.as_mut() {
-            Some(pubkey) => pubkey,
-            None => return Ok(()),
+        let (pubkey, fsm) = match (state.pubkey.as_mut(), self.fsm.as_ref()) {
+            (Some(pubkey), Some(fsm)) => (pubkey, fsm),
+            _ => return Ok(()),
         };
 
         match ext.take() {
             Some(ext) => {
-                self.fsm
-                    .recv_open_ack((&mut pubkey.0, Some(ext.transmute())))
+                fsm.recv_open_ack((&mut pubkey.0, Some(ext.transmute())))
                     .await?;
             }
             None => {
@@ -279,9 +277,9 @@ impl<'a> AcceptFsm for &'a MultiLinkFsm<'a> {
         const S: &str = "MultiLink extension - Recv InitSyn.";
 
         let (state, mut ext) = input;
-        let mut pubkey = match state.pubkey.take() {
-            Some(pubkey) => pubkey,
-            None => return Ok(()),
+        let (mut pubkey, fsm) = match (state.pubkey.take(), self.fsm.as_ref()) {
+            (Some(pubkey), Some(fsm)) => (pubkey, fsm),
+            _ => return Ok(()),
         };
 
         match ext.take() {
@@ -292,8 +290,7 @@ impl<'a> AcceptFsm for &'a MultiLinkFsm<'a> {
                     .read(&mut reader)
                     .map_err(|_| zerror!("{S} Decoding error."))?;
 
-                self.fsm
-                    .recv_init_syn((&mut pubkey.0, Some(ext.transmute())))
+                fsm.recv_init_syn((&mut pubkey.0, Some(ext.transmute())))
                     .await?;
 
                 state.pubkey = Some((pubkey.0, init_syn.alice_pubkey));
@@ -312,16 +309,12 @@ impl<'a> AcceptFsm for &'a MultiLinkFsm<'a> {
         self,
         input: Self::SendInitAckIn,
     ) -> Result<Self::SendInitAckOut, Self::Error> {
-        let pubkey = match input.pubkey.as_ref() {
-            Some(pubkey) => pubkey,
-            None => return Ok(None),
+        let (pubkey, fsm) = match (input.pubkey.as_ref(), self.fsm.as_ref()) {
+            (Some(pubkey), Some(fsm)) => (pubkey, fsm),
+            _ => return Ok(None),
         };
 
-        let r = self
-            .fsm
-            .send_init_ack(&pubkey.0)
-            .await?
-            .map(|x| x.transmute());
+        let r = fsm.send_init_ack(&pubkey.0).await?.map(|x| x.transmute());
         Ok(r)
     }
 
@@ -332,13 +325,12 @@ impl<'a> AcceptFsm for &'a MultiLinkFsm<'a> {
         input: Self::RecvOpenSynIn,
     ) -> Result<Self::RecvOpenSynOut, Self::Error> {
         let (state, ext) = input;
-        let pubkey = match state.pubkey.as_mut() {
-            Some(pubkey) => pubkey,
-            None => return Ok(()),
+        let (pubkey, fsm) = match (state.pubkey.as_mut(), self.fsm.as_ref()) {
+            (Some(pubkey), Some(fsm)) => (pubkey, fsm),
+            _ => return Ok(()),
         };
 
-        self.fsm
-            .recv_open_syn((&mut pubkey.0, ext.map(|x| x.transmute())))
+        fsm.recv_open_syn((&mut pubkey.0, ext.map(|x| x.transmute())))
             .await
     }
 
@@ -348,16 +340,12 @@ impl<'a> AcceptFsm for &'a MultiLinkFsm<'a> {
         self,
         input: Self::SendOpenAckIn,
     ) -> Result<Self::SendOpenAckOut, Self::Error> {
-        let pubkey = match input.pubkey.as_ref() {
-            Some(pubkey) => pubkey,
-            None => return Ok(None),
+        let (pubkey, fsm) = match (input.pubkey.as_ref(), self.fsm.as_ref()) {
+            (Some(pubkey), Some(fsm)) => (pubkey, fsm),
+            _ => return Ok(None),
         };
 
-        let r = self
-            .fsm
-            .send_open_ack(&pubkey.0)
-            .await?
-            .map(|x| x.transmute());
+        let r = fsm.send_open_ack(&pubkey.0).await?.map(|x| x.transmute());
         Ok(r)
     }
 }

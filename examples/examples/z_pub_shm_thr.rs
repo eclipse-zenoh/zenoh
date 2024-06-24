@@ -12,16 +12,19 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::config::Config;
-use zenoh::prelude::r#async::*;
-use zenoh::publication::CongestionControl;
-use zenoh::shm::SharedMemoryManager;
+use zenoh::{
+    bytes::ZBytes,
+    prelude::*,
+    publisher::CongestionControl,
+    shm::{PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID},
+    Config,
+};
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
 async fn main() {
     // initiate logging
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
     let (mut config, sm_size, size) = parse_args();
 
     // A probing procedure for shared memory is performed upon session opening. To enable `z_pub_shm_thr` to operate
@@ -29,22 +32,43 @@ async fn main() {
     // subscriber side. By doing so, the probing procedure will succeed and shared memory will operate as expected.
     config.transport.shared_memory.set_enabled(true).unwrap();
 
-    let z = zenoh::open(config).res().await.unwrap();
-    let id = z.zid();
-    let mut shm = SharedMemoryManager::make(id.to_string(), sm_size).unwrap();
-    let mut buf = shm.alloc(size).unwrap();
-    let bs = unsafe { buf.as_mut_slice() };
-    for b in bs {
+    let z = zenoh::open(config).await.unwrap();
+
+    // create an SHM backend...
+    // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
+    let backend = PosixShmProviderBackend::builder()
+        .with_size(sm_size)
+        .unwrap()
+        .res()
+        .unwrap();
+    // ...and an SHM provider
+    let provider = ShmProviderBuilder::builder()
+        .protocol_id::<POSIX_PROTOCOL_ID>()
+        .backend(backend)
+        .res();
+
+    // Allocate an SHM buffer
+    // NOTE: For allocation API please check z_alloc_shm.rs example
+    // NOTE: For buf's API please check z_bytes_shm.rs example
+    let mut buf = provider.alloc(size).wait().unwrap();
+
+    for b in buf.as_mut() {
         *b = rand::random::<u8>();
     }
 
-    let publisher = z.declare_publisher("test/thr")
-    // Make sure to not drop messages because of congestion control
-    .congestion_control(CongestionControl::Block).res().await.unwrap();
+    let publisher = z
+        .declare_publisher("test/thr")
+        // Make sure to not drop messages because of congestion control
+        .congestion_control(CongestionControl::Block)
+        .await
+        .unwrap();
+
+    // convert ZShmMut into ZBytes as ZShmMut does not support Clone
+    let buf: ZBytes = buf.into();
 
     println!("Press CTRL-C to quit...");
     loop {
-        publisher.put(buf.clone()).res().await.unwrap();
+        publisher.put(buf.clone()).await.unwrap();
     }
 }
 

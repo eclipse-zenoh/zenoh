@@ -11,10 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use clap::Parser;
 use std::time::Instant;
-use zenoh::config::Config;
-use zenoh::prelude::sync::*;
+
+use clap::Parser;
+use zenoh::{prelude::*, Config};
 use zenoh_examples::CommonArgs;
 
 struct Stats {
@@ -51,8 +51,8 @@ impl Stats {
     }
     fn print_round(&self) {
         let elapsed = self.round_start.elapsed().as_secs_f64();
-        let throughtput = (self.round_size as f64) / elapsed;
-        println!("{throughtput} msg/s");
+        let throughput = (self.round_size as f64) / elapsed;
+        println!("{throughput} msg/s");
     }
 }
 impl Drop for Stats {
@@ -62,14 +62,14 @@ impl Drop for Stats {
         };
         let elapsed = global_start.elapsed().as_secs_f64();
         let total = self.round_size * self.finished_rounds + self.round_count;
-        let throughtput = total as f64 / elapsed;
-        println!("Received {total} messages over {elapsed:.2}s: {throughtput}msg/s");
+        let throughput = total as f64 / elapsed;
+        println!("Received {total} messages over {elapsed:.2}s: {throughput}msg/s");
     }
 }
 
 fn main() {
     // initiate logging
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
 
     let (mut config, m, n) = parse_args();
 
@@ -78,7 +78,7 @@ fn main() {
     // subscriber side. By doing so, the probing procedure will succeed and shared memory will operate as expected.
     config.transport.shared_memory.set_enabled(true).unwrap();
 
-    let session = zenoh::open(config).res().unwrap();
+    let session = zenoh::open(config).wait().unwrap();
 
     let key_expr = "test/thr";
 
@@ -91,7 +91,7 @@ fn main() {
                 std::process::exit(0)
             }
         })
-        .res()
+        .wait()
         .unwrap();
 
     println!("Press CTRL-C to quit...");

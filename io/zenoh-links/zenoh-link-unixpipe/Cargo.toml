@@ -32,6 +32,7 @@ async-trait = { workspace = true }
 tracing = {workspace = true}
 rand = { workspace = true, features = ["default"] }
 zenoh-buffers = { workspace = true }
+zenoh-collections = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-config = { workspace = true }
 zenoh-link-commons = { workspace = true }

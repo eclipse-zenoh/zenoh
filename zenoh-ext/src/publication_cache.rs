@@ -11,18 +11,25 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::collections::{HashMap, VecDeque};
-use std::convert::TryInto;
-use std::future::Ready;
-use std::time::Duration;
-use zenoh::prelude::r#async::*;
-use zenoh::queryable::{Query, Queryable};
-use zenoh::subscriber::FlumeSubscriber;
-use zenoh::SessionRef;
-use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
-use zenoh_result::{bail, ZResult};
-use zenoh_task::TerminatableTask;
-use zenoh_util::core::ResolveFuture;
+use std::{
+    collections::{HashMap, VecDeque},
+    convert::TryInto,
+    future::{IntoFuture, Ready},
+    time::Duration,
+};
+
+use zenoh::{
+    core::{Error, Resolvable, Resolve, Result as ZResult},
+    internal::{bail, runtime::ZRuntime, ResolveFuture, TerminatableTask},
+    key_expr::{keyexpr, KeyExpr, OwnedKeyExpr},
+    prelude::Wait,
+    query::Query,
+    queryable::Queryable,
+    sample::{Locality, Sample},
+    selector::ZenohParameters,
+    session::{SessionDeclarations, SessionRef},
+    subscriber::FlumeSubscriber,
+};
 
 /// The builder of PublicationCache, allowing to configure it.
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
@@ -56,7 +63,7 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
     pub fn queryable_prefix<TryIntoKeyExpr>(mut self, queryable_prefix: TryIntoKeyExpr) -> Self
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'c>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'c>>>::Error: Into<zenoh_result::Error>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'c>>>::Error: Into<Error>,
     {
         self.queryable_prefix = Some(queryable_prefix.try_into().map_err(Into::into));
         self
@@ -94,17 +101,18 @@ impl<'a> Resolvable for PublicationCacheBuilder<'a, '_, '_> {
     type To = ZResult<PublicationCache<'a>>;
 }
 
-impl SyncResolve for PublicationCacheBuilder<'_, '_, '_> {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+impl Wait for PublicationCacheBuilder<'_, '_, '_> {
+    fn wait(self) -> <Self as Resolvable>::To {
         PublicationCache::new(self)
     }
 }
 
-impl<'a> AsyncResolve for PublicationCacheBuilder<'a, '_, '_> {
-    type Future = Ready<Self::To>;
+impl<'a> IntoFuture for PublicationCacheBuilder<'a, '_, '_> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
 
-    fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
     }
 }
 
@@ -147,7 +155,7 @@ impl<'a> PublicationCache<'a> {
             .session
             .declare_subscriber(&key_expr)
             .allowed_origin(Locality::SessionLocal)
-            .res_sync()?;
+            .wait()?;
 
         // declare the queryable which returns the cached publications
         let mut queryable = conf.session.declare_queryable(&queryable_key_expr);
@@ -157,11 +165,11 @@ impl<'a> PublicationCache<'a> {
         if let Some(complete) = conf.complete {
             queryable = queryable.complete(complete);
         }
-        let queryable = queryable.res_sync()?;
+        let queryable = queryable.wait()?;
 
         // take local ownership of stuff to be moved into task
-        let sub_recv = local_sub.receiver.clone();
-        let quer_recv = queryable.receiver.clone();
+        let sub_recv = local_sub.handler().clone();
+        let quer_recv = queryable.handler().clone();
         let pub_key_expr = key_expr.into_owned();
         let resources_limit = conf.resources_limit;
         let history = conf.history;
@@ -170,7 +178,7 @@ impl<'a> PublicationCache<'a> {
         let token = TerminatableTask::create_cancellation_token();
         let token2 = token.clone();
         let task = TerminatableTask::spawn(
-            zenoh_runtime::ZRuntime::Application,
+            ZRuntime::Application,
             async move {
                 let mut cache: HashMap<OwnedKeyExpr, VecDeque<Sample>> =
                     HashMap::with_capacity(resources_limit.unwrap_or(32));
@@ -181,9 +189,9 @@ impl<'a> PublicationCache<'a> {
                         sample = sub_recv.recv_async() => {
                             if let Ok(sample) = sample {
                                 let queryable_key_expr: KeyExpr<'_> = if let Some(prefix) = &queryable_prefix {
-                                    prefix.join(&sample.key_expr).unwrap().into()
+                                    prefix.join(&sample.key_expr()).unwrap().into()
                                 } else {
-                                    sample.key_expr.clone()
+                                    sample.key_expr().clone()
                                 };
 
                                 if let Some(queue) = cache.get_mut(queryable_key_expr.as_keyexpr()) {
@@ -202,32 +210,32 @@ impl<'a> PublicationCache<'a> {
                             }
                         },
 
-                        // on query, reply with cach content
+                        // on query, reply with cached content
                         query = quer_recv.recv_async() => {
                             if let Ok(query) = query {
-                                if !query.selector().key_expr.as_str().contains('*') {
-                                    if let Some(queue) = cache.get(query.selector().key_expr.as_keyexpr()) {
+                                if !query.key_expr().as_str().contains('*') {
+                                    if let Some(queue) = cache.get(query.key_expr().as_keyexpr()) {
                                         for sample in queue {
-                                            if let (Ok(Some(time_range)), Some(timestamp)) = (query.selector().time_range(), sample.timestamp) {
+                                            if let (Some(Ok(time_range)), Some(timestamp)) = (query.parameters().time_range(), sample.timestamp()) {
                                                 if !time_range.contains(timestamp.get_time().to_system_time()){
                                                     continue;
                                                 }
                                             }
-                                            if let Err(e) = query.reply(Ok(sample.clone())).res_async().await {
+                                            if let Err(e) = query.reply_sample(sample.clone()).await {
                                                 tracing::warn!("Error replying to query: {}", e);
                                             }
                                         }
                                     }
                                 } else {
                                     for (key_expr, queue) in cache.iter() {
-                                        if query.selector().key_expr.intersects(unsafe{ keyexpr::from_str_unchecked(key_expr) }) {
+                                        if query.key_expr().intersects(unsafe{ keyexpr::from_str_unchecked(key_expr) }) {
                                             for sample in queue {
-                                                if let (Ok(Some(time_range)), Some(timestamp)) = (query.selector().time_range(), sample.timestamp) {
+                                                if let (Some(Ok(time_range)), Some(timestamp)) = (query.parameters().time_range(), sample.timestamp()) {
                                                     if !time_range.contains(timestamp.get_time().to_system_time()){
                                                         continue;
                                                     }
                                                 }
-                                                if let Err(e) = query.reply(Ok(sample.clone())).res_async().await {
+                                                if let Err(e) = query.reply_sample(sample.clone()).await {
                                                     tracing::warn!("Error replying to query: {}", e);
                                                 }
                                             }
@@ -259,8 +267,8 @@ impl<'a> PublicationCache<'a> {
                 local_sub,
                 task,
             } = self;
-            _queryable.undeclare().res_async().await?;
-            local_sub.undeclare().res_async().await?;
+            _queryable.undeclare().await?;
+            local_sub.undeclare().await?;
             task.terminate(Duration::from_secs(10));
             Ok(())
         })

@@ -11,20 +11,22 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
 use core::convert::TryFrom;
+
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
     common::{imsg, ZExtUnknown},
-    core::{whatami::WhatAmIMatcher, ZenohId},
+    core::{whatami::WhatAmIMatcher, ZenohIdProto},
     scouting::{
         id,
         scout::{flag, Scout},
     },
 };
+
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
 
 impl<W> WCodec<&Scout, &mut W> for Zenoh080
 where
@@ -91,7 +93,7 @@ where
         let zid = if imsg::has_flag(flags, flag::I) {
             let length = 1 + ((flags >> 4) as usize);
             let lodec = Zenoh080Length::new(length);
-            let zid: ZenohId = lodec.read(&mut *reader)?;
+            let zid: ZenohIdProto = lodec.read(&mut *reader)?;
             Some(zid)
         } else {
             None

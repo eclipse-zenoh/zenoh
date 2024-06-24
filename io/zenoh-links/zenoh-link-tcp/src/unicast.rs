@@ -11,27 +11,28 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{cell::UnsafeCell, convert::TryInto, fmt, net::SocketAddr, sync::Arc, time::Duration};
+
 use async_trait::async_trait;
-use std::cell::UnsafeCell;
-use std::convert::TryInto;
-use std::fmt;
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::{TcpListener, TcpSocket, TcpStream},
+};
 use tokio_util::sync::CancellationToken;
 use zenoh_link_commons::{
-    get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
+    get_ip_interface_names, LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
 };
-use zenoh_protocol::core::{EndPoint, Locator};
+use zenoh_protocol::{
+    core::{EndPoint, Locator},
+    transport::BatchSize,
+};
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 
 use super::{
     get_tcp_addrs, TCP_ACCEPT_THROTTLE_TIME, TCP_DEFAULT_MTU, TCP_LINGER_TIMEOUT,
     TCP_LOCATOR_PREFIX,
 };
-use tokio::net::{TcpListener, TcpSocket, TcpStream};
 
 pub struct LinkUnicastTcp {
     // The underlying socket as returned from the tokio library
@@ -145,7 +146,7 @@ impl LinkUnicastTrait for LinkUnicastTcp {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> u16 {
+    fn get_mtu(&self) -> BatchSize {
         *TCP_DEFAULT_MTU
     }
 
@@ -162,6 +163,11 @@ impl LinkUnicastTrait for LinkUnicastTcp {
     #[inline(always)]
     fn is_streamed(&self) -> bool {
         true
+    }
+
+    #[inline(always)]
+    fn get_auth_id(&self) -> &LinkAuthId {
+        &LinkAuthId::NONE
     }
 }
 
@@ -409,6 +415,15 @@ async fn accept_task(
             res = accept(&socket) => {
                 match res {
                     Ok((stream, dst_addr)) => {
+                        // Get the right source address in case an unsepecified IP (i.e. 0.0.0.0 or [::]) is used
+                        let src_addr =  match stream.local_addr()  {
+                            Ok(sa) => sa,
+                            Err(e) => {
+                                tracing::debug!("Can not accept TCP connection: {}", e);
+                                continue;
+                            }
+                        };
+
                         tracing::debug!("Accepted TCP connection on {:?}: {:?}", src_addr, dst_addr);
                         // Create the new link object
                         let link = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));

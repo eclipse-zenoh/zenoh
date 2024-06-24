@@ -11,23 +11,22 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::transport::TransportUnicastLowlatency;
-#[cfg(feature = "stats")]
-use crate::stats::TransportStats;
-use crate::unicast::link::TransportLinkUnicast;
-use crate::unicast::link::TransportLinkUnicastRx;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
+
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use zenoh_buffers::{writer::HasWriter, ZSlice};
 use zenoh_codec::*;
 use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_link::LinkUnicast;
-use zenoh_protocol::transport::TransportMessageLowLatency;
-use zenoh_protocol::transport::{KeepAlive, TransportBodyLowLatency};
+use zenoh_protocol::transport::{KeepAlive, TransportBodyLowLatency, TransportMessageLowLatency};
 use zenoh_result::{zerror, ZResult};
 use zenoh_runtime::ZRuntime;
+
+use super::transport::TransportUnicastLowlatency;
+#[cfg(feature = "stats")]
+use crate::stats::TransportStats;
+use crate::unicast::link::{TransportLinkUnicast, TransportLinkUnicastRx};
 
 pub(crate) async fn send_with_link(
     link: &LinkUnicast,
@@ -144,7 +143,7 @@ impl TransportUnicastLowlatency {
         let token = self.token.child_token();
 
         let c_transport = self.clone();
-        let task = async move {
+        let rx_task = async move {
             let guard = zasyncread!(c_transport.link);
             let link_rx = guard.as_ref().unwrap().rx();
             drop(guard);
@@ -165,7 +164,7 @@ impl TransportUnicastLowlatency {
                 zenoh_sync::RecyclingObjectPool::new(n, move || vec![0_u8; mtu].into_boxed_slice())
             };
 
-            let res = loop {
+            loop {
                 // Retrieve one buffer
                 let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
 
@@ -180,7 +179,7 @@ impl TransportUnicastLowlatency {
                         }
 
                         // Deserialize all the messages from the current ZBuf
-                        let zslice = ZSlice::make(Arc::new(buffer), 0, bytes).unwrap();
+                        let zslice = ZSlice::new(Arc::new(buffer), 0, bytes).unwrap();
                         c_transport.read_messages(zslice, &link_rx.link).await?;
                     }
 
@@ -188,25 +187,29 @@ impl TransportUnicastLowlatency {
                         break ZResult::Ok(());
                     }
                 }
-            };
-
-            tracing::debug!(
-                "[{}] Rx task finished with result {:?}",
-                c_transport.manager.config.zid,
-                res
-            );
-            if res.is_err() {
-                tracing::debug!(
-                    "[{}] <on rx exit> finalizing transport with peer: {}",
-                    c_transport.manager.config.zid,
-                    c_transport.config.zid
-                );
-                let _ = c_transport.finalize(0).await;
             }
-            ZResult::Ok(())
         };
 
-        self.tracker.spawn_on(task, &ZRuntime::TX);
+        let c_transport = self.clone();
+        self.tracker.spawn_on(
+            async move {
+                let res = rx_task.await;
+                tracing::debug!(
+                    "[{}] Rx task finished with result {:?}",
+                    c_transport.manager.config.zid,
+                    res
+                );
+                if res.is_err() {
+                    tracing::debug!(
+                        "[{}] <on rx exit> finalizing transport with peer: {}",
+                        c_transport.manager.config.zid,
+                        c_transport.config.zid
+                    );
+                    let _ = c_transport.finalize(0).await;
+                }
+            },
+            &ZRuntime::RX,
+        );
     }
 }
 

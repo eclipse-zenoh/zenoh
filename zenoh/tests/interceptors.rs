@@ -11,14 +11,22 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::collections::HashMap;
-use std::sync::{
-    atomic::{AtomicBool, AtomicUsize, Ordering},
-    Arc,
+#![cfg(unix)]
+
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+        Arc,
+    },
 };
-use zenoh::prelude::sync::*;
-use zenoh::prelude::Config;
-use zenoh_config::{DownsamplingItemConf, DownsamplingRuleConf, InterceptorFlow};
+
+use zenoh::{
+    config::{DownsamplingItemConf, DownsamplingRuleConf, InterceptorFlow},
+    key_expr::KeyExpr,
+    prelude::*,
+    Config,
+};
 
 // Tokio's time granularity on different platforms
 #[cfg(target_os = "windows")]
@@ -77,32 +85,32 @@ fn downsampling_test<F>(
             .collect(),
     );
 
-    let sub_session = zenoh::open(sub_config).res().unwrap();
+    let sub_session = zenoh::open(sub_config).wait().unwrap();
     let _sub = sub_session
         .declare_subscriber(format!("{ke_prefix}/*"))
         .callback({
             let counters = counters.clone();
             move |sample| {
                 counters
-                    .get(&sample.key_expr)
+                    .get(sample.key_expr())
                     .map(|ctr| ctr.fetch_add(1, Ordering::SeqCst));
             }
         })
-        .res()
+        .wait()
         .unwrap();
 
     let is_terminated = Arc::new(AtomicBool::new(false));
     let c_is_terminated = is_terminated.clone();
     let handle = std::thread::spawn(move || {
-        let pub_session = zenoh::open(pub_config).res().unwrap();
+        let pub_session = zenoh::open(pub_config).wait().unwrap();
         let publishers: Vec<_> = ke_of_rates
             .into_iter()
-            .map(|ke| pub_session.declare_publisher(ke).res().unwrap())
+            .map(|ke| pub_session.declare_publisher(ke).wait().unwrap())
             .collect();
         let interval = std::time::Duration::from_millis(MINIMAL_SLEEP_INTERVAL_MS);
         while !c_is_terminated.load(Ordering::SeqCst) {
             publishers.iter().for_each(|publ| {
-                publ.put("message").res().unwrap();
+                publ.put("message").wait().unwrap();
             });
             std::thread::sleep(interval);
         }
@@ -176,7 +184,7 @@ fn downsampling_by_keyexpr_impl(flow: InterceptorFlow) {
 
 #[test]
 fn downsampling_by_keyexpr() {
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
     downsampling_by_keyexpr_impl(InterceptorFlow::Ingress);
     downsampling_by_keyexpr_impl(InterceptorFlow::Egress);
 }
@@ -229,7 +237,7 @@ fn downsampling_by_interface_impl(flow: InterceptorFlow) {
 #[cfg(unix)]
 #[test]
 fn downsampling_by_interface() {
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
     downsampling_by_interface_impl(InterceptorFlow::Ingress);
     downsampling_by_interface_impl(InterceptorFlow::Egress);
 }
@@ -237,9 +245,7 @@ fn downsampling_by_interface() {
 #[test]
 #[should_panic(expected = "unknown variant `down`")]
 fn downsampling_config_error_wrong_strategy() {
-    zenoh_util::try_init_log_from_env();
-
-    use zenoh::prelude::sync::*;
+    zenoh::try_init_log_from_env();
 
     let mut config = Config::default();
     config
@@ -259,5 +265,5 @@ fn downsampling_config_error_wrong_strategy() {
         )
         .unwrap();
 
-    zenoh::open(config).res().unwrap();
+    zenoh::open(config).wait().unwrap();
 }

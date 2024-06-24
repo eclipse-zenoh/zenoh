@@ -20,13 +20,17 @@
 mod multicast;
 mod unicast;
 
+use std::net::SocketAddr;
+
 use async_trait::async_trait;
 pub use multicast::*;
-use std::net::SocketAddr;
 pub use unicast::*;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
-use zenoh_protocol::core::{endpoint::Address, Locator};
+use zenoh_protocol::{
+    core::{endpoint::Address, Locator},
+    transport::BatchSize,
+};
 use zenoh_result::{zerror, ZResult};
 
 // NOTE: In case of using UDP in high-throughput scenarios, it is recommended to set the
@@ -37,31 +41,33 @@ use zenoh_result::{zerror, ZResult};
 //           $ sysctl -w net.core.rmem_max=4194304
 //           $ sysctl -w net.core.rmem_default=4194304
 
-// Maximum MTU (UDP PDU) in bytes.
-// NOTE: The UDP field size sets a theoretical limit of 65,535 bytes (8 byte header + 65,527 bytes of
-//       data) for a UDP datagram. However the actual limit for the data length, which is imposed by
-//       the underlying IPv4 protocol, is 65,507 bytes (65,535 − 8 byte UDP header − 20 byte IP header).
-//       Although in IPv6 it is possible to have UDP datagrams of size greater than 65,535 bytes via
-//       IPv6 Jumbograms, its usage in Zenoh is discouraged unless the consequences are very well
-//       understood.
-const UDP_MAX_MTU: u16 = 65_507;
+/// Maximum MTU (UDP PDU) in bytes.
+///
+/// # Note
+///
+/// The theoretical Maximum Transmission Unit (MTU) of UDP is `u16::MAX`. From that we subtract the
+/// size of a UDP header (8 bytes) and the size of IPv4/IPv6 headers (resp. 20 and 40 bytes).
+///
+/// Although in IPv6 it is possible to have UDP datagrams of size greater than 65,535 bytes via IPv6
+/// Jumbograms, its usage in Zenoh is discouraged unless the consequences are very well understood.
+const UDP_MAX_MTU: BatchSize = u16::MAX - 8 - 40;
 
 pub const UDP_LOCATOR_PREFIX: &str = "udp";
 
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 // Linux default value of a maximum datagram size is set to UDP MAX MTU.
-const UDP_MTU_LIMIT: u16 = UDP_MAX_MTU;
+const UDP_MTU_LIMIT: BatchSize = UDP_MAX_MTU;
 
 #[cfg(target_os = "macos")]
 // Mac OS X default value of a maximum datagram size is set to 9216 bytes.
-const UDP_MTU_LIMIT: u16 = 9_216;
+const UDP_MTU_LIMIT: BatchSize = 9_216;
 
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-const UDP_MTU_LIMIT: u16 = 8_192;
+const UDP_MTU_LIMIT: BatchSize = 8_192;
 
 zconfigurable! {
     // Default MTU (UDP PDU) in bytes.
-    static ref UDP_DEFAULT_MTU: u16 = UDP_MTU_LIMIT;
+    static ref UDP_DEFAULT_MTU: BatchSize = UDP_MTU_LIMIT;
     // Amount of time in microseconds to throttle the accept loop upon an error.
     // Default set to 100 ms.
     static ref UDP_ACCEPT_THROTTLE_TIME: u64 = 100_000;

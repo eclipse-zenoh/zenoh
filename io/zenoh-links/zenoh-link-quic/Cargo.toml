@@ -29,8 +29,9 @@ async-trait = { workspace = true }
 base64 = { workspace = true }
 futures = { workspace = true }
 quinn = { workspace = true }
-rustls-native-certs = { workspace = true }
-rustls-pki-types =  { workspace = true }
+rustls = { workspace = true }
+rustls-pemfile = { workspace = true }
+rustls-pki-types = { workspace = true }
 rustls-webpki = { workspace = true }
 secrecy = { workspace = true }
 tokio = { workspace = true, features = [
@@ -40,9 +41,12 @@ tokio = { workspace = true, features = [
   "sync",
   "time",
 ] }
+tokio-rustls = { workspace = true }
 tokio-util = { workspace = true, features = ["rt"] }
 tracing = { workspace = true }
 webpki-roots = { workspace = true }
+x509-parser = { workspace = true }
+zenoh-collections = { workspace = true }
 zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-link-commons = { workspace = true }
@@ -51,7 +55,3 @@ zenoh-result = { workspace = true }
 zenoh-runtime = { workspace = true }
 zenoh-sync = { workspace = true }
 zenoh-util = { workspace = true }
-# Lock due to quinn not supporting rustls 0.22 yet
-rustls = { version = "0.21", features = ["dangerous_configuration", "quic"] }
-tokio-rustls = "0.24.1"
-rustls-pemfile = { version = "1" }

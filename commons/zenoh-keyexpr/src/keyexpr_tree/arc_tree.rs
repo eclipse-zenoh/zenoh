@@ -20,10 +20,11 @@ use core::fmt::Debug;
 
 use token_cell::prelude::*;
 
-use super::box_tree::PruneResult;
-use super::support::IterOrOption;
-use crate::keyexpr;
-use crate::keyexpr_tree::{support::IWildness, *};
+use super::{box_tree::PruneResult, support::IterOrOption};
+use crate::{
+    keyexpr,
+    keyexpr_tree::{support::IWildness, *},
+};
 
 pub struct KeArcTreeInner<
     Weight,
@@ -88,10 +89,10 @@ impl<
     /// # Type inference papercut
     /// Despite some of `KeArcTree`'s generic parameters having default values, those are only taken into
     /// account by the compiler when a type is named with some parameters omitted, and not when a type is
-    /// infered with the same parameters unconstrained.
+    /// inferred with the same parameters unconstrained.
     ///
     /// The simplest way to resolve this is to eventually assign to tree part of the return value
-    /// to a variable or field whose type is named `KeArcTree<_>` (the `Weight` parameter can generally be infered).
+    /// to a variable or field whose type is named `KeArcTree<_>` (the `Weight` parameter can generally be inferred).
     pub fn new() -> Result<(Self, DefaultToken), <DefaultToken as TokenTrait>::ConstructionError> {
         let token = DefaultToken::new()?;
         Ok((Self::with_token(&token), token))
@@ -147,7 +148,7 @@ where
     // tags{ketree.arc.node}
     fn node(&'a self, token: &'a Token, at: &keyexpr) -> Option<Self::Node> {
         let inner = ketree_borrow(&self.inner, token);
-        let mut chunks = at.chunks();
+        let mut chunks = at.chunks_impl();
         let mut node = inner.children.child_at(chunks.next().unwrap())?;
         for chunk in chunks {
             let as_node: &Arc<
@@ -159,13 +160,16 @@ where
     }
     // tags{ketree.arc.node.mut}
     fn node_mut(&'a self, token: &'a mut Token, at: &keyexpr) -> Option<Self::NodeMut> {
-        self.node(unsafe { core::mem::transmute(&*token) }, at)
-            .map(|(node, _)| (node, token))
+        self.node(
+            unsafe { core::mem::transmute::<&Token, &Token>(&*token) },
+            at,
+        )
+        .map(|(node, _)| (node, token))
     }
     // tags{ketree.arc.node.or_create}
     fn node_or_create(&'a self, token: &'a mut Token, at: &keyexpr) -> Self::NodeMut {
         let inner = ketree_borrow_mut(&self.inner, token);
-        if at.is_wild() {
+        if at.is_wild_impl() {
             inner.wildness.set(true);
         }
         let inner: &mut KeArcTreeInner<Weight, Wildness, Children, Token> =
@@ -181,7 +185,7 @@ where
                 token,
             ))
         };
-        let mut chunks = at.chunks();
+        let mut chunks = at.chunks_impl();
         let mut node = inner
             .children
             .entry(chunks.next().unwrap())
@@ -236,7 +240,9 @@ where
     fn tree_iter_mut(&'a self, token: &'a mut Token) -> Self::TreeIterMut {
         let inner = ketree_borrow(&self.inner, token);
         TokenPacker {
-            iter: TreeIter::new(unsafe { core::mem::transmute(&inner.children) }),
+            iter: TreeIter::new(unsafe {
+                core::mem::transmute::<&Children::Assoc, &Children::Assoc>(&inner.children)
+            }),
             token,
         }
     }
@@ -257,7 +263,7 @@ where
     // tags{ketree.arc.intersecting}
     fn intersecting_nodes(&'a self, token: &'a Token, key: &'a keyexpr) -> Self::Intersection {
         let inner = ketree_borrow(&self.inner, token);
-        if inner.wildness.get() || key.is_wild() {
+        if inner.wildness.get() || key.is_wild_impl() {
             IterOrOption::Iter(TokenPacker {
                 iter: Intersection::new(&inner.children, key),
                 token,
@@ -286,9 +292,14 @@ where
         key: &'a keyexpr,
     ) -> Self::IntersectionMut {
         let inner = ketree_borrow(&self.inner, token);
-        if inner.wildness.get() || key.is_wild() {
+        if inner.wildness.get() || key.is_wild_impl() {
             IterOrOption::Iter(TokenPacker {
-                iter: Intersection::new(unsafe { core::mem::transmute(&inner.children) }, key),
+                iter: Intersection::new(
+                    unsafe {
+                        core::mem::transmute::<&Children::Assoc, &Children::Assoc>(&inner.children)
+                    },
+                    key,
+                ),
                 token,
             })
         } else {
@@ -312,7 +323,7 @@ where
     // tags{ketree.arc.included}
     fn included_nodes(&'a self, token: &'a Token, key: &'a keyexpr) -> Self::Inclusion {
         let inner = ketree_borrow(&self.inner, token);
-        if inner.wildness.get() || key.is_wild() {
+        if inner.wildness.get() || key.is_wild_impl() {
             IterOrOption::Iter(TokenPacker {
                 iter: Inclusion::new(&inner.children, key),
                 token,
@@ -337,10 +348,13 @@ where
     // tags{ketree.arc.included.mut}
     fn included_nodes_mut(&'a self, token: &'a mut Token, key: &'a keyexpr) -> Self::InclusionMut {
         let inner = ketree_borrow(&self.inner, token);
-        if inner.wildness.get() || key.is_wild() {
+        if inner.wildness.get() || key.is_wild_impl() {
             unsafe {
                 IterOrOption::Iter(TokenPacker {
-                    iter: Inclusion::new(core::mem::transmute(&inner.children), key),
+                    iter: Inclusion::new(
+                        core::mem::transmute::<&Children::Assoc, &Children::Assoc>(&inner.children),
+                        key,
+                    ),
                     token,
                 })
             }
@@ -365,7 +379,7 @@ where
     // tags{ketree.arc.including}
     fn nodes_including(&'a self, token: &'a Token, key: &'a keyexpr) -> Self::Includer {
         let inner = ketree_borrow(&self.inner, token);
-        if inner.wildness.get() || key.is_wild() {
+        if inner.wildness.get() || key.is_wild_impl() {
             IterOrOption::Iter(TokenPacker {
                 iter: Includer::new(&inner.children, key),
                 token,
@@ -390,10 +404,13 @@ where
     // tags{ketree.arc.including.mut}
     fn nodes_including_mut(&'a self, token: &'a mut Token, key: &'a keyexpr) -> Self::IncluderMut {
         let inner = ketree_borrow(&self.inner, token);
-        if inner.wildness.get() || key.is_wild() {
+        if inner.wildness.get() || key.is_wild_impl() {
             unsafe {
                 IterOrOption::Iter(TokenPacker {
-                    iter: Includer::new(core::mem::transmute(&inner.children), key),
+                    iter: Includer::new(
+                        core::mem::transmute::<&Children::Assoc, &Children::Assoc>(&inner.children),
+                        key,
+                    ),
                     token,
                 })
             }
@@ -428,6 +445,7 @@ where
 pub(crate) mod sealed {
     use alloc::sync::Arc;
     use core::ops::{Deref, DerefMut};
+
     use token_cell::prelude::{TokenCell, TokenTrait};
 
     pub struct Tokenized<A, B>(pub A, pub(crate) B);
@@ -579,7 +597,7 @@ where
         });
         if predicate(self) && self.children.is_empty() {
             result = PruneResult::Delete
-        } else if self.chunk.is_wild() {
+        } else if self.chunk.is_wild_impl() {
             result = PruneResult::Wild
         }
         result

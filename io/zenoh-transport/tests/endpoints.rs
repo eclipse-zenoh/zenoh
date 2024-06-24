@@ -12,10 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{any::Any, convert::TryFrom, sync::Arc, time::Duration};
+
 use zenoh_core::ztimeout;
 use zenoh_link::{EndPoint, Link};
 use zenoh_protocol::{
-    core::{WhatAmI, ZenohId},
+    core::{WhatAmI, ZenohIdProto},
     network::NetworkMessage,
 };
 use zenoh_result::ZResult;
@@ -73,7 +74,7 @@ async fn run(endpoints: &[EndPoint]) {
     // Create the transport manager
     let sm = TransportManager::builder()
         .whatami(WhatAmI::Peer)
-        .zid(ZenohId::try_from([1]).unwrap())
+        .zid(ZenohIdProto::try_from([1]).unwrap())
         .build(Arc::new(SH))
         .unwrap();
 
@@ -317,13 +318,13 @@ AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
     let mut endpoint: EndPoint = format!("tls/localhost:{}", 7070).parse().unwrap();
     endpoint
         .config_mut()
-        .extend(
+        .extend_from_iter(
             [
                 (TLS_SERVER_CERTIFICATE_RAW, cert),
                 (TLS_SERVER_PRIVATE_KEY_RAW, key),
             ]
             .iter()
-            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+            .copied(),
         )
         .unwrap();
 
@@ -396,13 +397,13 @@ AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
     let mut endpoint: EndPoint = format!("quic/localhost:{}", 7080).parse().unwrap();
     endpoint
         .config_mut()
-        .extend(
+        .extend_from_iter(
             [
                 (TLS_SERVER_CERTIFICATE_RAW, cert),
                 (TLS_SERVER_PRIVATE_KEY_RAW, key),
             ]
             .iter()
-            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+            .copied(),
         )
         .unwrap();
     let endpoints = vec![endpoint];

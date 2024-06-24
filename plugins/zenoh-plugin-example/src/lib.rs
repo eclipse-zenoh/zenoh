@@ -13,20 +13,31 @@
 //
 #![recursion_limit = "256"]
 
-use futures::select;
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::sync::{
-    atomic::{AtomicBool, Ordering::Relaxed},
-    Arc, Mutex,
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    convert::TryFrom,
+    sync::{
+        atomic::{AtomicBool, Ordering::Relaxed},
+        Arc, Mutex,
+    },
 };
+
+use futures::select;
 use tracing::{debug, info};
-use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
-use zenoh::prelude::r#async::*;
-use zenoh::runtime::Runtime;
-use zenoh_core::zlock;
+use zenoh::{
+    internal::{
+        bail,
+        plugins::{RunningPluginTrait, ZenohPlugin},
+        runtime::Runtime,
+        zlock,
+    },
+    key_expr::{keyexpr, KeyExpr},
+    prelude::ZResult,
+    sample::Sample,
+    session::SessionDeclarations,
+};
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
-use zenoh_result::{bail, ZResult};
 
 // The struct implementing the ZenohPlugin and ZenohPlugin traits
 pub struct ExamplePlugin {}
@@ -42,7 +53,7 @@ const DEFAULT_SELECTOR: &str = "demo/example/**";
 impl ZenohPlugin for ExamplePlugin {}
 impl Plugin for ExamplePlugin {
     type StartArgs = Runtime;
-    type Instance = zenoh::plugins::RunningPlugin;
+    type Instance = zenoh::internal::plugins::RunningPlugin;
 
     // A mandatory const to define, in case of the plugin is built as a standalone executable
     const DEFAULT_NAME: &'static str = "example";
@@ -143,7 +154,7 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
     zenoh_util::try_init_log_from_env();
 
     // create a zenoh Session that shares the same Runtime than zenohd
-    let session = zenoh::init(runtime).res().await.unwrap();
+    let session = zenoh::session::init(runtime).await.unwrap();
 
     // the HasMap used as a storage by this example of storage plugin
     let mut stored: HashMap<String, Sample> = HashMap::new();
@@ -152,11 +163,11 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
 
     // This storage plugin subscribes to the selector and will store in HashMap the received samples
     debug!("Create Subscriber on {}", selector);
-    let sub = session.declare_subscriber(&selector).res().await.unwrap();
+    let sub = session.declare_subscriber(&selector).await.unwrap();
 
     // This storage plugin declares a Queryable that will reply to queries with the samples stored in the HashMap
     debug!("Create Queryable on {}", selector);
-    let queryable = session.declare_queryable(&selector).res().await.unwrap();
+    let queryable = session.declare_queryable(&selector).await.unwrap();
 
     // Plugin's event loop, while the flag is true
     while flag.load(Relaxed) {
@@ -164,16 +175,17 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
             // on sample received by the Subscriber
             sample = sub.recv_async() => {
                 let sample = sample.unwrap();
-                info!("Received data ('{}': '{}')", sample.key_expr, sample.value);
-                stored.insert(sample.key_expr.to_string(), sample);
+                let payload = sample.payload().deserialize::<Cow<str>>().unwrap_or_else(|e| Cow::from(e.to_string()));
+                info!("Received data ('{}': '{}')", sample.key_expr(), payload);
+                stored.insert(sample.key_expr().to_string(), sample);
             },
             // on query received by the Queryable
             query = queryable.recv_async() => {
                 let query = query.unwrap();
                 info!("Handling query '{}'", query.selector());
                 for (key_expr, sample) in stored.iter() {
-                    if query.selector().key_expr.intersects(unsafe{keyexpr::from_str_unchecked(key_expr)}) {
-                        query.reply(Ok(sample.clone())).res().await.unwrap();
+                    if query.key_expr().intersects(unsafe{keyexpr::from_str_unchecked(key_expr)}) {
+                        query.reply_sample(sample.clone()).await.unwrap();
                     }
                 }
             }

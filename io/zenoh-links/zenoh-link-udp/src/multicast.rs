@@ -11,17 +11,25 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::{config::*, UDP_DEFAULT_MTU};
-use crate::{get_udp_addrs, socket_addr_to_udp_locator};
+use std::{
+    borrow::Cow,
+    fmt,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    sync::Arc,
+};
+
 use async_trait::async_trait;
 use socket2::{Domain, Protocol, Socket, Type};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
-use std::sync::Arc;
-use std::{borrow::Cow, fmt};
 use tokio::net::UdpSocket;
 use zenoh_link_commons::{LinkManagerMulticastTrait, LinkMulticast, LinkMulticastTrait};
-use zenoh_protocol::core::{Config, EndPoint, Locator};
+use zenoh_protocol::{
+    core::{Config, EndPoint, Locator},
+    transport::BatchSize,
+};
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
+
+use super::{config::*, UDP_DEFAULT_MTU};
+use crate::{get_udp_addrs, socket_addr_to_udp_locator};
 
 pub struct LinkMulticastUdp {
     // The unicast socket address of this link
@@ -119,7 +127,7 @@ impl LinkMulticastTrait for LinkMulticastUdp {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> u16 {
+    fn get_mtu(&self) -> BatchSize {
         *UDP_DEFAULT_MTU
     }
 
@@ -275,7 +283,7 @@ impl LinkManagerMulticastUdp {
                             .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
                     }
                 }
-                IpAddr::V6(src_ip6) => bail!("{}: unexepcted IPv6 source address", src_ip6),
+                IpAddr::V6(src_ip6) => bail!("{}: unexpected IPv6 source address", src_ip6),
             },
             IpAddr::V6(dst_ip6) => {
                 // Join default multicast group

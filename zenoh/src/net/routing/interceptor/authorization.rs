@@ -17,14 +17,16 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
+use std::{collections::HashMap, net::Ipv4Addr};
+
 use ahash::RandomState;
-use std::collections::HashMap;
-use std::net::Ipv4Addr;
 use zenoh_config::{
     AclConfig, AclConfigRules, Action, InterceptorFlow, Permission, PolicyRule, Subject,
 };
-use zenoh_keyexpr::keyexpr;
-use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, KeBoxTree};
+use zenoh_keyexpr::{
+    keyexpr,
+    keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, KeBoxTree},
+};
 use zenoh_result::ZResult;
 use zenoh_util::net::get_interface_names_by_addr;
 type PolicyForSubject = FlowPolicy;
@@ -155,25 +157,21 @@ impl PolicyEnforcer {
                 } else {
                     // check for undefined values in rules and initialize them to defaults
                     for (rule_offset, rule) in rules.iter_mut().enumerate() {
-                        match rule.interfaces {
-                            Some(_) => (),
-                            None => {
-                                tracing::warn!("ACL config interfaces list is empty. Applying rule #{} to all network interfaces", rule_offset);
-                                if let Ok(all_interfaces) =
-                                    get_interface_names_by_addr(Ipv4Addr::UNSPECIFIED.into())
-                                {
-                                    rule.interfaces = Some(all_interfaces);
-                                }
-                            }
+                        if rule.interfaces.is_none() {
+                            tracing::warn!("ACL config interfaces list is empty. Applying rule #{} to all network interfaces", rule_offset);
+                            rule.interfaces =
+                                Some(get_interface_names_by_addr(Ipv4Addr::UNSPECIFIED.into())?);
                         }
-                        match rule.flows {
-                            Some(_) => (),
-                            None => {
-                                tracing::warn!("ACL config flows list is empty. Applying rule #{} to both Ingress and Egress flows", rule_offset);
-                                rule.flows = Some(
-                                    [InterceptorFlow::Ingress, InterceptorFlow::Egress].into(),
-                                );
-                            }
+                        if rule.flows.is_none() {
+                            tracing::warn!("ACL config flows list is empty. Applying rule #{} to both Ingress and Egress flows", rule_offset);
+                            rule.flows =
+                                Some([InterceptorFlow::Ingress, InterceptorFlow::Egress].into());
+                        }
+                        if rule.usernames.is_none() {
+                            rule.usernames = Some(Vec::new());
+                        }
+                        if rule.cert_common_names.is_none() {
+                            rule.cert_common_names = Some(Vec::new());
                         }
                     }
                     let policy_information = self.policy_information_point(&rules)?;
@@ -225,11 +223,8 @@ impl PolicyEnforcer {
     ) -> ZResult<PolicyInformation> {
         let mut policy_rules: Vec<PolicyRule> = Vec::new();
         for config_rule in config_rule_set {
-            // config validation
+            // Config validation
             let mut validation_err = String::new();
-            if config_rule.interfaces.as_ref().unwrap().is_empty() {
-                validation_err.push_str("ACL config interfaces list is empty. ");
-            }
             if config_rule.actions.is_empty() {
                 validation_err.push_str("ACL config actions list is empty. ");
             }
@@ -242,6 +237,28 @@ impl PolicyEnforcer {
             if !validation_err.is_empty() {
                 bail!("{}", validation_err);
             }
+
+            // At least one must not be empty
+            let mut subject_validation_err: usize = 0;
+            validation_err = String::new();
+
+            if config_rule.interfaces.as_ref().unwrap().is_empty() {
+                subject_validation_err += 1;
+                validation_err.push_str("ACL config interfaces list is empty. ");
+            }
+            if config_rule.cert_common_names.as_ref().unwrap().is_empty() {
+                subject_validation_err += 1;
+                validation_err.push_str("ACL config certificate common names list is empty. ");
+            }
+            if config_rule.usernames.as_ref().unwrap().is_empty() {
+                subject_validation_err += 1;
+                validation_err.push_str("ACL config usernames list is empty. ");
+            }
+
+            if subject_validation_err == 3 {
+                bail!("{}", validation_err);
+            }
+
             for subject in config_rule.interfaces.as_ref().unwrap() {
                 if subject.trim().is_empty() {
                     bail!("found an empty interface value in interfaces list");
@@ -263,10 +280,52 @@ impl PolicyEnforcer {
                     }
                 }
             }
+            for subject in config_rule.cert_common_names.as_ref().unwrap() {
+                if subject.trim().is_empty() {
+                    bail!("found an empty value in certificate common names list");
+                }
+                for flow in config_rule.flows.as_ref().unwrap() {
+                    for action in &config_rule.actions {
+                        for key_expr in &config_rule.key_exprs {
+                            if key_expr.trim().is_empty() {
+                                bail!("found an empty key-expression value in key_exprs list");
+                            }
+                            policy_rules.push(PolicyRule {
+                                subject: Subject::CertCommonName(subject.clone()),
+                                key_expr: key_expr.clone(),
+                                action: *action,
+                                permission: config_rule.permission,
+                                flow: *flow,
+                            })
+                        }
+                    }
+                }
+            }
+            for subject in config_rule.usernames.as_ref().unwrap() {
+                if subject.trim().is_empty() {
+                    bail!("found an empty value in usernames list");
+                }
+                for flow in config_rule.flows.as_ref().unwrap() {
+                    for action in &config_rule.actions {
+                        for key_expr in &config_rule.key_exprs {
+                            if key_expr.trim().is_empty() {
+                                bail!("found an empty key-expression value in key_exprs list");
+                            }
+                            policy_rules.push(PolicyRule {
+                                subject: Subject::Username(subject.clone()),
+                                key_expr: key_expr.clone(),
+                                action: *action,
+                                permission: config_rule.permission,
+                                flow: *flow,
+                            })
+                        }
+                    }
+                }
+            }
         }
         let mut subject_map = SubjectMap::default();
         let mut counter = 1;
-        //starting at 1 since 0 is the init value and should not match anything
+        // Starting at 1 since 0 is the init value and should not match anything
         for rule in policy_rules.iter() {
             if !subject_map.contains_key(&rule.subject) {
                 subject_map.insert(rule.subject.clone(), counter);
@@ -279,10 +338,9 @@ impl PolicyEnforcer {
         })
     }
 
-    /*
-       checks each msg against the ACL ruleset for allow/deny
-    */
-
+    /**
+     * Check each msg against the ACL ruleset for allow/deny
+     */
     pub fn policy_decision_point(
         &self,
         subject: usize,
@@ -291,6 +349,9 @@ impl PolicyEnforcer {
         key_expr: &str,
     ) -> ZResult<Permission> {
         let policy_map = &self.policy_map;
+        if policy_map.is_empty() {
+            return Ok(self.default_permission);
+        }
         match policy_map.get(&subject) {
             Some(single_policy) => {
                 let deny_result = single_policy

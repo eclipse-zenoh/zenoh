@@ -11,21 +11,21 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::super::router::*;
-use super::tables::TablesLock;
-use super::{resource::*, tables};
-use crate::net::primitives::{McastMux, Mux, Primitives};
-use crate::net::routing::interceptor::{InterceptorTrait, InterceptorsChain};
-use crate::KeyExpr;
-use std::any::Any;
-use std::collections::HashMap;
-use std::fmt;
-use std::sync::{Arc, Weak};
+use std::{
+    any::Any,
+    collections::HashMap,
+    fmt,
+    sync::{Arc, Weak},
+};
+
 use tokio_util::sync::CancellationToken;
-use zenoh_protocol::zenoh::RequestBody;
 use zenoh_protocol::{
-    core::{ExprId, WhatAmI, ZenohId},
-    network::{Mapping, Push, Request, RequestId, Response, ResponseFinal},
+    core::{ExprId, WhatAmI, ZenohIdProto},
+    network::{
+        interest::{InterestId, InterestMode, InterestOptions},
+        Mapping, Push, Request, RequestId, Response, ResponseFinal,
+    },
+    zenoh::RequestBody,
 };
 use zenoh_sync::get_mut_unchecked;
 use zenoh_task::TaskController;
@@ -33,13 +33,37 @@ use zenoh_transport::multicast::TransportMulticast;
 #[cfg(feature = "stats")]
 use zenoh_transport::stats::TransportStats;
 
+use super::{
+    super::router::*,
+    interests::{declare_final, declare_interest, undeclare_interest, CurrentInterest},
+    resource::*,
+    tables::{self, TablesLock},
+};
+use crate::{
+    api::key_expr::KeyExpr,
+    net::{
+        primitives::{McastMux, Mux, Primitives},
+        routing::interceptor::{InterceptorTrait, InterceptorsChain},
+    },
+};
+
+pub(crate) struct InterestState {
+    pub(crate) options: InterestOptions,
+    pub(crate) res: Option<Arc<Resource>>,
+    pub(crate) finalized: bool,
+}
+
 pub struct FaceState {
     pub(crate) id: usize,
-    pub(crate) zid: ZenohId,
+    pub(crate) zid: ZenohIdProto,
     pub(crate) whatami: WhatAmI,
     #[cfg(feature = "stats")]
     pub(crate) stats: Option<Arc<TransportStats>>,
     pub(crate) primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
+    pub(crate) local_interests: HashMap<InterestId, InterestState>,
+    pub(crate) remote_key_interests: HashMap<InterestId, Option<Arc<Resource>>>,
+    pub(crate) pending_current_interests:
+        HashMap<InterestId, (Arc<CurrentInterest>, CancellationToken)>,
     pub(crate) local_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) remote_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) next_qid: RequestId,
@@ -54,7 +78,7 @@ impl FaceState {
     #[allow(clippy::too_many_arguments)] // @TODO fix warning
     pub(crate) fn new(
         id: usize,
-        zid: ZenohId,
+        zid: ZenohIdProto,
         whatami: WhatAmI,
         #[cfg(feature = "stats")] stats: Option<Arc<TransportStats>>,
         primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
@@ -69,6 +93,9 @@ impl FaceState {
             #[cfg(feature = "stats")]
             stats,
             primitives,
+            local_interests: HashMap::new(),
+            remote_key_interests: HashMap::new(),
+            pending_current_interests: HashMap::new(),
             local_mappings: HashMap::new(),
             remote_mappings: HashMap::new(),
             next_qid: 0,
@@ -106,7 +133,7 @@ impl FaceState {
 
     pub(crate) fn get_next_local_id(&self) -> ExprId {
         let mut id = 1;
-        while self.local_mappings.get(&id).is_some() || self.remote_mappings.get(&id).is_some() {
+        while self.local_mappings.contains_key(&id) || self.remote_mappings.contains_key(&id) {
             id += 1;
         }
         id
@@ -154,7 +181,7 @@ impl fmt::Display for FaceState {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct WeakFace {
     pub(crate) tables: Weak<TablesLock>,
     pub(crate) state: Weak<FaceState>,
@@ -185,6 +212,34 @@ impl Face {
 }
 
 impl Primitives for Face {
+    fn send_interest(&self, msg: zenoh_protocol::network::Interest) {
+        let ctrl_lock = zlock!(self.tables.ctrl_lock);
+        if msg.mode != InterestMode::Final {
+            let mut declares = vec![];
+            declare_interest(
+                ctrl_lock.as_ref(),
+                &self.tables,
+                &mut self.state.clone(),
+                msg.id,
+                msg.wire_expr.as_ref(),
+                msg.mode,
+                msg.options,
+                &mut |p, m| declares.push((p.clone(), m)),
+            );
+            drop(ctrl_lock);
+            for (p, m) in declares {
+                p.send_declare(m);
+            }
+        } else {
+            undeclare_interest(
+                ctrl_lock.as_ref(),
+                &self.tables,
+                &mut self.state.clone(),
+                msg.id,
+            );
+        }
+    }
+
     fn send_declare(&self, msg: zenoh_protocol::network::Declare) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         match msg.body {
@@ -195,50 +250,132 @@ impl Primitives for Face {
                 unregister_expr(&self.tables, &mut self.state.clone(), m.id);
             }
             zenoh_protocol::network::DeclareBody::DeclareSubscriber(m) => {
+                let mut declares = vec![];
                 declare_subscription(
                     ctrl_lock.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
+                    m.id,
                     &m.wire_expr,
                     &m.ext_info,
                     msg.ext_nodeid.node_id,
+                    &mut |p, m| declares.push((p.clone(), m)),
                 );
+                drop(ctrl_lock);
+                for (p, m) in declares {
+                    p.send_declare(m);
+                }
             }
             zenoh_protocol::network::DeclareBody::UndeclareSubscriber(m) => {
+                let mut declares = vec![];
                 undeclare_subscription(
                     ctrl_lock.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
+                    m.id,
                     &m.ext_wire_expr.wire_expr,
                     msg.ext_nodeid.node_id,
+                    &mut |p, m| declares.push((p.clone(), m)),
                 );
+                drop(ctrl_lock);
+                for (p, m) in declares {
+                    p.send_declare(m);
+                }
             }
             zenoh_protocol::network::DeclareBody::DeclareQueryable(m) => {
+                let mut declares = vec![];
                 declare_queryable(
                     ctrl_lock.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
+                    m.id,
                     &m.wire_expr,
                     &m.ext_info,
                     msg.ext_nodeid.node_id,
+                    &mut |p, m| declares.push((p.clone(), m)),
                 );
+                drop(ctrl_lock);
+                for (p, m) in declares {
+                    p.send_declare(m);
+                }
             }
             zenoh_protocol::network::DeclareBody::UndeclareQueryable(m) => {
+                let mut declares = vec![];
                 undeclare_queryable(
                     ctrl_lock.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
+                    m.id,
                     &m.ext_wire_expr.wire_expr,
                     msg.ext_nodeid.node_id,
+                    &mut |p, m| declares.push((p.clone(), m)),
                 );
+                drop(ctrl_lock);
+                for (p, m) in declares {
+                    p.send_declare(m);
+                }
             }
-            zenoh_protocol::network::DeclareBody::DeclareToken(_m) => todo!(),
-            zenoh_protocol::network::DeclareBody::UndeclareToken(_m) => todo!(),
-            zenoh_protocol::network::DeclareBody::DeclareInterest(_m) => todo!(),
-            zenoh_protocol::network::DeclareBody::FinalInterest(_m) => todo!(),
-            zenoh_protocol::network::DeclareBody::UndeclareInterest(_m) => todo!(),
+            zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
+                let mut declares = vec![];
+                declare_token(
+                    ctrl_lock.as_ref(),
+                    &self.tables,
+                    &mut self.state.clone(),
+                    m.id,
+                    &m.wire_expr,
+                    msg.ext_nodeid.node_id,
+                    msg.interest_id,
+                    &mut |p, m| declares.push((p.clone(), m)),
+                );
+                drop(ctrl_lock);
+                for (p, m) in declares {
+                    p.send_declare(m);
+                }
+            }
+            zenoh_protocol::network::DeclareBody::UndeclareToken(m) => {
+                let mut declares = vec![];
+                undeclare_token(
+                    ctrl_lock.as_ref(),
+                    &self.tables,
+                    &mut self.state.clone(),
+                    m.id,
+                    &m.ext_wire_expr,
+                    msg.ext_nodeid.node_id,
+                    &mut |p, m| declares.push((p.clone(), m)),
+                );
+                drop(ctrl_lock);
+                for (p, m) in declares {
+                    p.send_declare(m);
+                }
+            }
+            zenoh_protocol::network::DeclareBody::DeclareFinal(_) => {
+                if let Some(id) = msg.interest_id {
+                    get_mut_unchecked(&mut self.state.clone())
+                        .local_interests
+                        .entry(id)
+                        .and_modify(|interest| interest.finalized = true);
+
+                    let mut declares = vec![];
+                    declare_final(&mut self.state.clone(), id, &mut |p, m| {
+                        declares.push((p.clone(), m))
+                    });
+
+                    // recompute routes
+                    // TODO: disable  routes and recompute them in parallel to avoid holding
+                    // tables write lock for a long time.
+                    let mut wtables = zwrite!(self.tables.tables);
+                    let mut root_res = wtables.root_res.clone();
+                    update_data_routes_from(&mut wtables, &mut root_res);
+                    update_query_routes_from(&mut wtables, &mut root_res);
+
+                    drop(wtables);
+                    drop(ctrl_lock);
+                    for (p, m) in declares {
+                        p.send_declare(m);
+                    }
+                }
+            }
         }
-        drop(ctrl_lock);
     }
 
     #[inline]
@@ -248,6 +385,7 @@ impl Primitives for Face {
             &self.state,
             &msg.wire_expr,
             msg.ext_qos,
+            msg.ext_tstamp,
             msg.payload,
             msg.ext_nodeid.node_id,
         );
@@ -260,19 +398,15 @@ impl Primitives for Face {
                     &self.tables,
                     &self.state,
                     &msg.wire_expr,
-                    // parameters,
                     msg.id,
+                    msg.ext_qos,
+                    msg.ext_tstamp,
                     msg.ext_target,
-                    // consolidation,
+                    msg.ext_budget,
+                    msg.ext_timeout,
                     msg.payload,
                     msg.ext_nodeid.node_id,
                 );
-            }
-            RequestBody::Pull(_) => {
-                pull_data(&self.tables.tables, &self.state.clone(), msg.wire_expr);
-            }
-            _ => {
-                tracing::error!("Unsupported request");
             }
         }
     }
@@ -282,6 +416,8 @@ impl Primitives for Face {
             &self.tables,
             &mut self.state.clone(),
             msg.rid,
+            msg.ext_qos,
+            msg.ext_tstamp,
             msg.ext_respid,
             msg.wire_expr,
             msg.payload,

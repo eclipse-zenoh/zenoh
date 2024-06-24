@@ -12,8 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use crate::{keyexpr, OwnedKeyExpr};
 use alloc::boxed::Box;
+
+use crate::{keyexpr, OwnedKeyExpr};
 pub mod default_impls;
 
 /// The basic immutable methods of all KeTrees.
@@ -54,8 +55,10 @@ pub trait IKeyExprTree<'a, Weight> {
         Self::TreeIterItem: AsNode<Box<Self::Node>>,
     {
         self.tree_iter().filter_map(|node| {
-            unsafe { core::mem::transmute::<_, Option<&Weight>>(node.as_node().weight()) }
-                .map(|w| (node.as_node().keyexpr(), w))
+            unsafe {
+                core::mem::transmute::<Option<&Weight>, Option<&Weight>>(node.as_node().weight())
+            }
+            .map(|w| (node.as_node().keyexpr(), w))
         })
     }
 
@@ -192,7 +195,7 @@ pub trait IKeyExprTreeMut<'a, Weight>: IKeyExprTree<'a, Weight> {
         self.prune_where(|node| node.weight().is_none())
     }
 }
-/// The basic operations of a KeTree when a Token is necessary to acess data.
+/// The basic operations of a KeTree when a Token is necessary to access data.
 pub trait ITokenKeyExprTree<'a, Weight, Token> {
     /// An immutable guard to a node of the tree.
     type Node: IKeyExprTreeNode<Weight>;

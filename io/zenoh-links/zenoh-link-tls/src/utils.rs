@@ -11,7 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::config::*;
+use std::{
+    convert::TryFrom,
+    fs::File,
+    io,
+    io::{BufReader, Cursor},
+    net::SocketAddr,
+    sync::Arc,
+};
+
 use rustls::{
     pki_types::{CertificateDer, PrivateKeyDer, TrustAnchor},
     server::WebPkiClientVerifier,
@@ -20,19 +28,16 @@ use rustls::{
 };
 use rustls_pki_types::ServerName;
 use secrecy::ExposeSecret;
-use std::fs::File;
-use std::io;
-use std::{convert::TryFrom, net::SocketAddr};
-use std::{
-    io::{BufReader, Cursor},
-    sync::Arc,
-};
 use webpki::anchor_from_trusted_cert;
 use zenoh_config::Config as ZenohConfig;
 use zenoh_link_commons::{tls::WebPkiVerifierAnyServerName, ConfigurationInspector};
-use zenoh_protocol::core::endpoint::Config;
-use zenoh_protocol::core::endpoint::{self, Address};
+use zenoh_protocol::core::{
+    endpoint::{Address, Config},
+    parameters,
+};
 use zenoh_result::{bail, zerror, ZError, ZResult};
+
+use crate::config::*;
 
 #[derive(Default, Clone, Copy, Debug)]
 pub struct TlsConfigurator;
@@ -137,10 +142,7 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
             };
         }
 
-        let mut s = String::new();
-        endpoint::Parameters::extend(ps.drain(..), &mut s);
-
-        Ok(s)
+        Ok(parameters::from_iter(ps.drain(..)))
     }
 }
 
@@ -187,6 +189,16 @@ impl TlsServerConfig {
         if keys.is_empty() {
             bail!("No private key found for TLS server.");
         }
+
+        // Install ring based rustls CryptoProvider.
+        rustls::crypto::ring::default_provider()
+            // This can be called successfully at most once in any process execution.
+            // Call this early in your process to configure which provider is used for the provider.
+            // The configuration should happen before any use of ClientConfig::builder() or ServerConfig::builder().
+            .install_default()
+            // Ignore the error here, because `rustls::crypto::ring::default_provider().install_default()` will inevitably be executed multiple times
+            // when there are multiple quic links, and all but the first execution will fail.
+            .ok();
 
         let sc = if tls_server_client_auth {
             let root_cert_store = load_trust_anchors(config)?.map_or_else(
@@ -268,6 +280,16 @@ impl TlsClientConfig {
             tracing::debug!("Loading user-generated certificates.");
             root_cert_store.extend(custom_root_cert.roots);
         }
+
+        // Install ring based rustls CryptoProvider.
+        rustls::crypto::ring::default_provider()
+            // This can be called successfully at most once in any process execution.
+            // Call this early in your process to configure which provider is used for the provider.
+            // The configuration should happen before any use of ClientConfig::builder() or ServerConfig::builder().
+            .install_default()
+            // Ignore the error here, because `rustls::crypto::ring::default_provider().install_default()` will inevitably be executed multiple times
+            // when there are multiple quic links, and all but the first execution will fail.
+            .ok();
 
         let cc = if tls_client_server_auth {
             tracing::debug!("Loading client authentication key and certificate...");
@@ -453,8 +475,7 @@ fn load_trust_anchors(config: &Config<'_>) -> ZResult<Option<RootCertStore>> {
 }
 
 pub fn base64_decode(data: &str) -> ZResult<Vec<u8>> {
-    use base64::engine::general_purpose;
-    use base64::Engine;
+    use base64::{engine::general_purpose, Engine};
     Ok(general_purpose::STANDARD
         .decode(data)
         .map_err(|e| zerror!("Unable to perform base64 decoding: {e:?}"))?)

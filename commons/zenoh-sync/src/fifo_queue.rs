@@ -11,10 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::Condition;
 use tokio::sync::Mutex;
 use zenoh_collections::RingBuffer;
 use zenoh_core::zasynclock;
+
+use crate::Condition;
 
 pub struct FifoQueue<T> {
     not_empty: Condition,

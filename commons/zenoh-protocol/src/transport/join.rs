@@ -11,11 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use core::time::Duration;
+
 use crate::{
-    core::{Priority, Resolution, WhatAmI, ZenohId},
+    core::{Priority, Resolution, WhatAmI, ZenohIdProto},
     transport::{BatchSize, PrioritySn},
 };
-use core::time::Duration;
 
 /// # Join message
 ///
@@ -104,7 +105,7 @@ pub mod flag {
 pub struct Join {
     pub version: u8,
     pub whatami: WhatAmI,
-    pub zid: ZenohId,
+    pub zid: ZenohIdProto,
     pub resolution: Resolution,
     pub batch_size: BatchSize,
     pub lease: Duration,
@@ -115,9 +116,10 @@ pub struct Join {
 
 // Extensions
 pub mod ext {
+    use alloc::boxed::Box;
+
     use super::{Priority, PrioritySn};
     use crate::{common::ZExtZBuf, zextzbuf};
-    use alloc::boxed::Box;
 
     /// # QoS extension
     /// Used to announce next sn when QoS is enabled
@@ -132,16 +134,17 @@ pub mod ext {
 impl Join {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::common::ZExtZBuf;
         use rand::Rng;
+
+        use crate::common::ZExtZBuf;
 
         let mut rng = rand::thread_rng();
 
         let version: u8 = rng.gen();
         let whatami = WhatAmI::rand();
-        let zid = ZenohId::default();
+        let zid = ZenohIdProto::default();
         let resolution = Resolution::rand();
-        let batch_size: u16 = rng.gen();
+        let batch_size: BatchSize = rng.gen();
         let lease = if rng.gen_bool(0.5) {
             Duration::from_secs(rng.gen())
         } else {

@@ -24,7 +24,7 @@ categories = ["network-programming", "web-programming::http-server"]
 description = "The zenoh REST plugin"
 
 [features]
-default = ["dynamic_plugin", "zenoh/default", "zenoh/unstable", "zenoh/plugins"]
+default = ["dynamic_plugin"]
 dynamic_plugin = []
 
 [lib]
@@ -36,20 +36,23 @@ anyhow = { workspace = true, features = ["default"] }
 async-std = { workspace = true, features = ["default", "attributes"] }
 base64 = { workspace = true }
 const_format = { workspace = true }
-zenoh-util = {workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
 http-types = { workspace = true }
 lazy_static = { workspace = true }
-tracing = {workspace = true}
+tracing = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 tide = { workspace = true }
-zenoh = { workspace = true, features = ["unstable"] }
+zenoh = { workspace = true, features = [
+    "plugins",
+    "default",
+    "internal",
+    "unstable",
+] }
 zenoh-plugin-trait = { workspace = true }
-zenoh-result = { workspace = true }
 
 [build-dependencies]
 rustc_version = { workspace = true }

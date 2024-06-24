@@ -18,16 +18,20 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 
-use crate::net::routing::interceptor::*;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
+
 use zenoh_config::{DownsamplingItemConf, DownsamplingRuleConf, InterceptorFlow};
 use zenoh_core::zlock;
-use zenoh_keyexpr::keyexpr_tree::impls::KeyedSetProvider;
-use zenoh_keyexpr::keyexpr_tree::{support::UnknownWildness, KeBoxTree};
-use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut};
+use zenoh_keyexpr::keyexpr_tree::{
+    impls::KeyedSetProvider, support::UnknownWildness, IKeyExprTree, IKeyExprTreeMut, KeBoxTree,
+};
 use zenoh_protocol::network::NetworkBody;
 use zenoh_result::ZResult;
+
+use crate::net::routing::interceptor::*;
 
 pub(crate) fn downsampling_interceptor_factories(
     config: &Vec<DownsamplingItemConf>,
@@ -149,11 +153,11 @@ impl InterceptorTrait for DownsamplingInterceptor {
                                 return None;
                             }
                         } else {
-                            tracing::debug!("unxpected cache ID {}", id);
+                            tracing::debug!("unexpected cache ID {}", id);
                         }
                     }
                 } else {
-                    tracing::debug!("unxpected cache type {:?}", ctx.full_expr());
+                    tracing::debug!("unexpected cache type {:?}", ctx.full_expr());
                 }
             }
         }

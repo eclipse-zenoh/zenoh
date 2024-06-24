@@ -13,7 +13,6 @@
 //
 mod encoding;
 mod locator;
-mod property;
 #[cfg(feature = "shared-memory")]
 mod shm;
 mod timestamp;
@@ -23,12 +22,14 @@ mod zenohid;
 mod zint;
 mod zslice;
 
-use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Bounded};
 use alloc::{string::String, vec::Vec};
+
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
+
+use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Bounded};
 
 // [u8; N]
 macro_rules! array_impl {

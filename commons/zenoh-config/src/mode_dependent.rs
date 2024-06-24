@@ -12,15 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use std::{fmt, marker::PhantomData};
+
 use serde::{
     de::{self, MapAccess, Visitor},
     Deserialize, Serialize,
 };
-use std::fmt;
-use std::marker::PhantomData;
-pub use zenoh_protocol::core::{
-    whatami, EndPoint, Locator, Priority, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor, ZenohId,
-};
+use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor};
 
 pub trait ModeDependent<T> {
     fn router(&self) -> Option<&T>;

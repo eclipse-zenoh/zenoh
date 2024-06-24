@@ -14,22 +14,23 @@
 
 // This module extends Storage with alignment protocol that aligns storages subscribing to the same key_expr
 
-use crate::backends_mgt::StoreIntercept;
-use crate::storages_mgt::StorageMessage;
-use async_std::stream::{interval, StreamExt};
-use async_std::sync::Arc;
-use async_std::sync::RwLock;
+use std::{
+    collections::{HashMap, HashSet},
+    str::{self, FromStr},
+    time::{Duration, SystemTime},
+};
+
+use async_std::{
+    stream::{interval, StreamExt},
+    sync::{Arc, RwLock},
+};
 use flume::{Receiver, Sender};
 use futures::{pin_mut, select, FutureExt};
-use std::collections::{HashMap, HashSet};
-use std::str;
-use std::str::FromStr;
-use std::time::{Duration, SystemTime};
 use urlencoding::encode;
-use zenoh::prelude::r#async::*;
-use zenoh::time::Timestamp;
-use zenoh::Session;
+use zenoh::prelude::*;
 use zenoh_backend_traits::config::{ReplicaConfig, StorageConfig};
+
+use crate::{backends_mgt::StoreIntercept, storages_mgt::StorageMessage};
 
 pub mod align_queryable;
 pub mod aligner;
@@ -42,6 +43,7 @@ pub use aligner::Aligner;
 pub use digest::{Digest, DigestConfig, EraType, LogEntry};
 pub use snapshotter::Snapshotter;
 pub use storage::{ReplicationService, StorageService};
+use zenoh::{key_expr::OwnedKeyExpr, sample::Locality, time::Timestamp, Session};
 
 const ERA: &str = "era";
 const INTERVALS: &str = "intervals";
@@ -109,6 +111,9 @@ impl Replica {
             }
         };
 
+        // Zid of session for generating timestamps
+        let zid = session.zid();
+
         let replica = Replica {
             name: name.to_string(),
             session,
@@ -116,7 +121,6 @@ impl Replica {
             replica_config: storage_config.replica_config.clone().unwrap(),
             digests_published: RwLock::new(HashSet::new()),
         };
-
         // Create channels for communication between components
         // channel to queue digests to be aligned
         let (tx_digest, rx_digest) = flume::unbounded();
@@ -127,7 +131,7 @@ impl Replica {
 
         let config = replica.replica_config.clone();
         // snapshotter
-        let snapshotter = Arc::new(Snapshotter::new(rx_log, &startup_entries, &config).await);
+        let snapshotter = Arc::new(Snapshotter::new(zid, rx_log, &startup_entries, &config).await);
         // digest sub
         let digest_sub = replica.start_digest_sub(tx_digest).fuse();
         // queryable for alignment
@@ -208,7 +212,6 @@ impl Replica {
             .session
             .declare_subscriber(&digest_key)
             .allowed_origin(Locality::Remote)
-            .res()
             .await
             .unwrap();
         loop {
@@ -219,22 +222,25 @@ impl Replica {
                     continue;
                 }
             };
-            let from = &sample.key_expr.as_str()
+            let from = &sample.key_expr().as_str()
                 [Replica::get_digest_key(&self.key_expr, ALIGN_PREFIX).len() + 1..];
-            tracing::trace!(
-                "[DIGEST_SUB] From {} Received {} ('{}': '{}')",
-                from,
-                sample.kind,
-                sample.key_expr.as_str(),
-                sample.value
-            );
-            let digest: Digest = match serde_json::from_str(&format!("{}", sample.value)) {
+
+            let digest: Digest = match serde_json::from_reader(sample.payload().reader()) {
                 Ok(digest) => digest,
                 Err(e) => {
                     tracing::error!("[DIGEST_SUB] Error in decoding the digest: {}", e);
                     continue;
                 }
             };
+
+            tracing::trace!(
+                "[DIGEST_SUB] From {} Received {} ('{}': '{:?}')",
+                from,
+                sample.kind(),
+                sample.key_expr().as_str(),
+                digest,
+            );
+
             let ts = digest.timestamp;
             let to_be_processed = self
                 .processing_needed(
@@ -253,7 +259,7 @@ impl Replica {
                         tracing::error!("[DIGEST_SUB] Error sending digest to aligner: {}", e)
                     }
                 }
-            };
+            }
             received.insert(from.to_string(), ts);
         }
     }
@@ -266,12 +272,7 @@ impl Replica {
             .unwrap();
 
         tracing::debug!("[DIGEST_PUB] Declaring Publisher on '{}'...", digest_key);
-        let publisher = self
-            .session
-            .declare_publisher(digest_key)
-            .res()
-            .await
-            .unwrap();
+        let publisher = self.session.declare_publisher(digest_key).await.unwrap();
 
         // Ensure digest gets published every interval, accounting for
         // time it takes to publish.
@@ -288,7 +289,7 @@ impl Replica {
             drop(digest);
 
             tracing::trace!("[DIGEST_PUB] Putting Digest: {} ...", digest_json);
-            match publisher.put(digest_json).res().await {
+            match publisher.put(digest_json).await {
                 Ok(()) => {}
                 Err(e) => tracing::error!("[DIGEST_PUB] Digest publication failed: {}", e),
             }

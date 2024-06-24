@@ -11,13 +11,16 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{convert::TryFrom, time::Duration};
+
 use const_format::concatcp;
 use derive_more::{AsMut, AsRef};
 use schemars::JsonSchema;
 use serde_json::{Map, Value};
-use std::convert::TryFrom;
-use std::time::Duration;
-use zenoh::{key_expr::keyexpr, prelude::OwnedKeyExpr, Result as ZResult};
+use zenoh::{
+    core::Result as ZResult,
+    key_expr::{keyexpr, OwnedKeyExpr},
+};
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_result::{bail, zerror, Error};
 
@@ -87,7 +90,7 @@ impl Default for ReplicaConfig {
             // This will determine the time upto which replicas might be diverged
             // This can be different for each replica if not used to compute hot and warm
             publication_interval: Duration::from_secs(5),
-            // This indicates the uncertainity due to the network
+            // This indicates the uncertainty due to the network
             // The messages might still be in transit in the network
             propagation_delay: Duration::from_millis(200),
             // This is the chunk that you would like your data to be divide into in time.

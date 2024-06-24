@@ -36,11 +36,12 @@ pub const mode: WhatAmI = WhatAmI::Peer;
 #[allow(dead_code)]
 pub mod scouting {
     pub const timeout: u64 = 3000;
-    pub const delay: u64 = 200;
+    pub const delay: u64 = 500;
     pub mod multicast {
         pub const enabled: bool = true;
         pub const address: ([u8; 4], u16) = ([224, 0, 0, 224], 7446);
         pub const interface: &str = "auto";
+        pub const ttl: u32 = 1;
         pub mod autoconnect {
             pub const router: &crate::WhatAmIMatcher = // ""
                 &crate::WhatAmIMatcher::empty();
@@ -215,7 +216,7 @@ impl Default for LinkRxConf {
 
 // Make explicit the value and ignore clippy warning
 #[allow(clippy::derivable_impls)]
-impl Default for SharedMemoryConf {
+impl Default for ShmConf {
     fn default() -> Self {
         Self { enabled: false }
     }

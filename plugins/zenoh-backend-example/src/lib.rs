@@ -11,20 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::collections::{hash_map::Entry, HashMap};
+
 use async_std::sync::RwLock;
 use async_trait::async_trait;
-use std::{
-    collections::{hash_map::Entry, HashMap},
-    sync::Arc,
-};
-use zenoh::{prelude::OwnedKeyExpr, sample::Sample, time::Timestamp, value::Value};
+use zenoh::{internal::Value, key_expr::OwnedKeyExpr, prelude::*, time::Timestamp};
 use zenoh_backend_traits::{
     config::{StorageConfig, VolumeConfig},
     Capability, History, Persistence, Storage, StorageInsertionResult, StoredData, Volume,
     VolumeInstance,
 };
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin};
-use zenoh_result::ZResult;
 
 #[cfg(feature = "dynamic_plugin")]
 zenoh_plugin_trait::declare_plugin!(ExampleBackend);
@@ -70,12 +67,6 @@ impl Volume for ExampleBackend {
     }
     async fn create_storage(&self, _props: StorageConfig) -> ZResult<Box<dyn Storage>> {
         Ok(Box::<ExampleStorage>::default())
-    }
-    fn incoming_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
-        None
-    }
-    fn outgoing_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
-        None
     }
 }
 

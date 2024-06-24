@@ -15,11 +15,8 @@
 //! Configuration to pass to `zenoh::open()` and `zenoh::scout()` functions and associated constants.
 pub mod defaults;
 mod include;
+pub mod wrappers;
 
-use include::recursive_include;
-use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
-use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
 #[allow(unused_imports)]
 use std::convert::TryFrom; // This is a false positive from the rust analyser
 use std::{
@@ -31,11 +28,17 @@ use std::{
     path::Path,
     sync::{Arc, Mutex, MutexGuard, Weak},
 };
+
+use include::recursive_include;
+use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 use validated_struct::ValidatedMapAssociatedTypes;
 pub use validated_struct::{GetError, ValidatedMap};
+pub use wrappers::ZenohId;
 use zenoh_core::zlock;
 pub use zenoh_protocol::core::{
-    whatami, EndPoint, Locator, Priority, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor, ZenohId,
+    whatami, EndPoint, Locator, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor,
 };
 use zenoh_protocol::{
     core::{key_expr::OwnedKeyExpr, Bits},
@@ -103,6 +106,8 @@ pub struct DownsamplingItemConf {
 #[derive(Serialize, Debug, Deserialize, Clone)]
 pub struct AclConfigRules {
     pub interfaces: Option<Vec<String>>,
+    pub cert_common_names: Option<Vec<String>>,
+    pub usernames: Option<Vec<String>>,
     pub key_exprs: Vec<String>,
     pub actions: Vec<Action>,
     pub flows: Option<Vec<InterceptorFlow>>,
@@ -123,6 +128,8 @@ pub struct PolicyRule {
 #[serde(rename_all = "snake_case")]
 pub enum Subject {
     Interface(String),
+    CertCommonName(String),
+    Username(String),
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
@@ -153,7 +160,7 @@ pub trait ConfigValidator: Send + Sync {
     }
 }
 
-// Necessary to allow to set default emplty weak referece value to plugin.validator field
+// Necessary to allow to set default emplty weak reference value to plugin.validator field
 // because empty weak value is not allowed for Arc<dyn Trait>
 impl ConfigValidator for () {}
 
@@ -254,6 +261,8 @@ validated_struct::validator! {
                 address: Option<SocketAddr>,
                 /// The network interface which should be used for multicast scouting. `zenohd` will automatically select an interface if none is provided.
                 interface: Option<String>,
+                /// The time-to-live on multicast scouting packets. (default: 1)
+                pub ttl: Option<u32>,
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through UDP multicast.
                 #[serde(deserialize_with = "treat_error_as_none")]
                 autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
@@ -265,8 +274,8 @@ validated_struct::validator! {
             GossipConf {
                 /// Whether gossip scouting is enabled or not.
                 enabled: Option<bool>,
-                /// When true, gossip scouting informations are propagated multiple hops to all nodes in the local network.
-                /// When false, gossip scouting informations are only propagated to the next hop.
+                /// When true, gossip scouting information are propagated multiple hops to all nodes in the local network.
+                /// When false, gossip scouting information are only propagated to the next hop.
                 /// Activating multihop gossip implies more scouting traffic and a lower scalability.
                 /// It mostly makes sense when using "linkstate" routing mode where all nodes in the subsystem don't have
                 /// direct connectivity with each other.
@@ -373,7 +382,7 @@ validated_struct::validator! {
                     sequence_number_resolution: Bits where (sequence_number_resolution_validator),
                     /// Link lease duration in milliseconds (default: 10000)
                     lease: u64,
-                    /// Number fo keep-alive messages in a link lease duration (default: 4)
+                    /// Number of keep-alive messages in a link lease duration (default: 4)
                     keep_alive: usize,
                     /// Zenoh's MTU equivalent (default: 2^16-1)
                     batch_size: BatchSize,
@@ -394,7 +403,7 @@ validated_struct::validator! {
                             background: usize,
                         } where (queue_size_validator),
                         /// Congestion occurs when the queue is empty (no available batch).
-                        /// Using CongestionControl::Block the caller is blocked until a batch is available and re-insterted into the queue.
+                        /// Using CongestionControl::Block the caller is blocked until a batch is available and re-inserted into the queue.
                         /// Using CongestionControl::Drop the message might be dropped, depending on conditions configured here.
                         pub congestion_control: CongestionControlConf {
                             /// The maximum time in microseconds to wait for an available batch before dropping the message if still no batch is available.
@@ -410,7 +419,7 @@ validated_struct::validator! {
                 pub rx: LinkRxConf {
                     /// Receiving buffer size in bytes for each link
                     /// The default the rx_buffer_size value is the same as the default batch size: 65335.
-                    /// For very high throughput scenarios, the rx_buffer_size can be increased to accomodate
+                    /// For very high throughput scenarios, the rx_buffer_size can be increased to accommodate
                     /// more in-flight data. This is particularly relevant when dealing with large messages.
                     /// E.g. for 16MiB rx_buffer_size set the value to: 16777216.
                     buffer_size: usize,
@@ -445,7 +454,7 @@ validated_struct::validator! {
                 },
             },
             pub shared_memory:
-            SharedMemoryConf {
+            ShmConf {
                 /// Whether shared memory is enabled or not.
                 /// If set to `true`, the SHM buffer optimization support will be announced to other parties. (default `false`).
                 /// This option doesn't make SHM buffer optimization mandatory, the real support depends on other party setting
@@ -453,7 +462,7 @@ validated_struct::validator! {
             },
             pub auth: #[derive(Default)]
             AuthConf {
-                /// The configuration of authentification.
+                /// The configuration of authentication.
                 /// A password implies a username is required.
                 pub usrpwd: #[derive(Default)]
                 UsrPwdConf {
@@ -1020,6 +1029,7 @@ fn load_external_plugin_config(title: &str, value: &mut Value) -> ZResult<()> {
 
 #[derive(Debug, Clone)]
 pub struct PluginLoad {
+    pub id: String,
     pub name: String,
     pub paths: Option<Vec<String>>,
     pub required: bool,
@@ -1038,22 +1048,27 @@ impl PluginsConfig {
         Ok(())
     }
     pub fn load_requests(&'_ self) -> impl Iterator<Item = PluginLoad> + '_ {
-        self.values.as_object().unwrap().iter().map(|(name, value)| {
+        self.values.as_object().unwrap().iter().map(|(id, value)| {
             let value = value.as_object().expect("Plugin configurations must be objects");
             let required = match value.get("__required__") {
                 None => false,
                 Some(Value::Bool(b)) => *b,
-                _ => panic!("Plugin '{}' has an invalid '__required__' configuration property (must be a boolean)", name)
+                _ => panic!("Plugin '{}' has an invalid '__required__' configuration property (must be a boolean)", id)
             };
+            let name = match value.get("__plugin__") {
+                Some(Value::String(p)) => p,
+                _ => id,
+            };
+
             if let Some(paths) = value.get("__path__"){
                 let paths = match paths {
                     Value::String(s) => vec![s.clone()],
-                    Value::Array(a) => a.iter().map(|s| if let Value::String(s) = s {s.clone()} else {panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", name)}).collect(),
-                    _ => panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", name)
+                    Value::Array(a) => a.iter().map(|s| if let Value::String(s) = s {s.clone()} else {panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", id)}).collect(),
+                    _ => panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", id)
                 };
-                PluginLoad {name: name.clone(), paths: Some(paths), required}
+                PluginLoad {id: id.clone(), name: name.clone(), paths: Some(paths), required}
             } else {
-                PluginLoad {name: name.clone(), paths: None, required}
+                PluginLoad {id: id.clone(), name: name.clone(), paths: None, required}
             }
         })
     }
@@ -1078,7 +1093,11 @@ impl PluginsConfig {
         for next in split {
             match remove_from {
                 Value::Object(o) => match o.get_mut(current) {
-                    Some(v) => unsafe { remove_from = std::mem::transmute(v) },
+                    Some(v) => {
+                        remove_from = unsafe {
+                            std::mem::transmute::<&mut serde_json::Value, &mut serde_json::Value>(v)
+                        }
+                    }
                     None => bail!("{:?} has no {} property", o, current),
                 },
                 Value::Array(a) => {

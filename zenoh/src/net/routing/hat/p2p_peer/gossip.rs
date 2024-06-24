@@ -11,23 +11,28 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::net::codec::Zenoh080Routing;
-use crate::net::protocol::linkstate::{LinkState, LinkStateList};
-use crate::net::runtime::Runtime;
-use crate::runtime::WeakRuntime;
-use petgraph::graph::NodeIndex;
-use rand::Rng;
 use std::convert::TryInto;
+
+use petgraph::graph::NodeIndex;
 use vec_map::VecMap;
-use zenoh_buffers::writer::{DidntWrite, HasWriter};
-use zenoh_buffers::ZBuf;
+use zenoh_buffers::{
+    writer::{DidntWrite, HasWriter},
+    ZBuf,
+};
 use zenoh_codec::WCodec;
 use zenoh_link::Locator;
-use zenoh_protocol::common::ZExtBody;
-use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher, ZenohId};
-use zenoh_protocol::network::oam::id::OAM_LINKSTATE;
-use zenoh_protocol::network::{oam, NetworkBody, NetworkMessage, Oam};
+use zenoh_protocol::{
+    common::ZExtBody,
+    core::{WhatAmI, WhatAmIMatcher, ZenohIdProto},
+    network::{oam, oam::id::OAM_LINKSTATE, NetworkBody, NetworkMessage, Oam},
+};
 use zenoh_transport::unicast::TransportUnicast;
+
+use crate::net::{
+    codec::Zenoh080Routing,
+    protocol::linkstate::{LinkState, LinkStateList},
+    runtime::{Runtime, WeakRuntime},
+};
 
 #[derive(Clone)]
 struct Details {
@@ -38,11 +43,11 @@ struct Details {
 
 #[derive(Clone)]
 pub(super) struct Node {
-    pub(super) zid: ZenohId,
+    pub(super) zid: ZenohIdProto,
     pub(super) whatami: Option<WhatAmI>,
     pub(super) locators: Option<Vec<Locator>>,
     pub(super) sn: u64,
-    pub(super) links: Vec<ZenohId>,
+    pub(super) links: Vec<ZenohIdProto>,
 }
 
 impl std::fmt::Debug for Node {
@@ -53,8 +58,8 @@ impl std::fmt::Debug for Node {
 
 pub(super) struct Link {
     pub(super) transport: TransportUnicast,
-    zid: ZenohId,
-    mappings: VecMap<ZenohId>,
+    zid: ZenohIdProto,
+    mappings: VecMap<ZenohIdProto>,
     local_mappings: VecMap<u64>,
 }
 
@@ -70,12 +75,12 @@ impl Link {
     }
 
     #[inline]
-    pub(super) fn set_zid_mapping(&mut self, psid: u64, zid: ZenohId) {
+    pub(super) fn set_zid_mapping(&mut self, psid: u64, zid: ZenohIdProto) {
         self.mappings.insert(psid.try_into().unwrap(), zid);
     }
 
     #[inline]
-    pub(super) fn get_zid(&self, psid: &u64) -> Option<&ZenohId> {
+    pub(super) fn get_zid(&self, psid: &u64) -> Option<&ZenohIdProto> {
         self.mappings.get((*psid).try_into().unwrap())
     }
 
@@ -101,7 +106,7 @@ pub(super) struct Network {
 impl Network {
     pub(super) fn new(
         name: String,
-        zid: ZenohId,
+        zid: ZenohIdProto,
         runtime: Runtime,
         router_peers_failover_brokering: bool,
         gossip: bool,
@@ -139,14 +144,14 @@ impl Network {
     // }
 
     #[inline]
-    pub(super) fn get_idx(&self, zid: &ZenohId) -> Option<NodeIndex> {
+    pub(super) fn get_idx(&self, zid: &ZenohIdProto) -> Option<NodeIndex> {
         self.graph
             .node_indices()
             .find(|idx| self.graph[*idx].zid == *zid)
     }
 
     #[inline]
-    pub(super) fn get_link_from_zid(&self, zid: &ZenohId) -> Option<&Link> {
+    pub(super) fn get_link_from_zid(&self, zid: &ZenohIdProto) -> Option<&Link> {
         self.links.values().find(|link| link.zid == *zid)
     }
 
@@ -215,7 +220,7 @@ impl Network {
         Ok(NetworkBody::OAM(Oam {
             id: OAM_LINKSTATE,
             body: ZExtBody::ZBuf(buf),
-            ext_qos: oam::ext::QoSType::oam_default(),
+            ext_qos: oam::ext::QoSType::OAM,
             ext_tstamp: None,
         })
         .into())
@@ -266,7 +271,7 @@ impl Network {
                 }))
     }
 
-    pub(super) fn link_states(&mut self, link_states: Vec<LinkState>, src: ZenohId) {
+    pub(super) fn link_states(&mut self, link_states: Vec<LinkState>, src: ZenohIdProto) {
         tracing::trace!("{} Received from {} raw: {:?}", self.name, src, link_states);
         let strong_runtime = self.runtime.upgrade().unwrap();
 
@@ -328,7 +333,7 @@ impl Network {
         let link_states = link_states
             .into_iter()
             .map(|(zid, wai, locs, sn, links)| {
-                let links: Vec<ZenohId> = links
+                let links: Vec<ZenohIdProto> = links
                     .iter()
                     .filter_map(|l| {
                         if let Some(zid) = src_link.get_zid(l) {
@@ -381,9 +386,9 @@ impl Network {
                     (oldsn < sn)
                         .then(|| {
                             node.sn = sn;
-                            node.links = links.clone();
+                            node.links.clone_from(&links);
                             (node.locators != locators && locators.is_some()).then(|| {
-                                node.locators = locators.clone();
+                                node.locators.clone_from(&locators);
                                 idx
                             })
                         })
@@ -393,6 +398,11 @@ impl Network {
 
             if self.gossip {
                 if let Some(idx) = idx {
+                    zenoh_runtime::ZRuntime::Net.block_in_place(
+                        strong_runtime
+                            .start_conditions()
+                            .add_peer_connector_zid(zid),
+                    );
                     if self.gossip_multihop || self.links.values().any(|link| link.zid == zid) {
                         self.send_on_links(
                             vec![(
@@ -418,12 +428,11 @@ impl Network {
                                     .await
                                     .is_none()
                                 {
-                                    // random backoff
-                                    let sleep_time = std::time::Duration::from_millis(
-                                        rand::thread_rng().gen_range(0..100),
-                                    );
-                                    tokio::time::sleep(sleep_time).await;
                                     runtime.connect_peer(&zid, &locators).await;
+                                    runtime
+                                        .start_conditions()
+                                        .terminate_peer_connector_zid(zid)
+                                        .await;
                                 }
                             });
                         }
@@ -431,6 +440,11 @@ impl Network {
                 }
             }
         }
+        zenoh_runtime::ZRuntime::Net.block_in_place(
+            strong_runtime
+                .start_conditions()
+                .terminate_peer_connector_zid(src),
+        );
     }
 
     pub(super) fn add_link(&mut self, transport: TransportUnicast) -> usize {
@@ -537,7 +551,7 @@ impl Network {
         free_index
     }
 
-    pub(super) fn remove_link(&mut self, zid: &ZenohId) -> Vec<(NodeIndex, Node)> {
+    pub(super) fn remove_link(&mut self, zid: &ZenohIdProto) -> Vec<(NodeIndex, Node)> {
         tracing::trace!("{} remove_link {}", self.name, zid);
         self.links.retain(|_, link| link.zid != *zid);
         self.graph[self.idx].links.retain(|link| *link != *zid);

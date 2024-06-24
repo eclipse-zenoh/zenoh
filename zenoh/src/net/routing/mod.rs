@@ -24,14 +24,13 @@ pub mod router;
 
 use std::{cell::OnceCell, sync::Arc};
 
-use zenoh_protocol::core::key_expr::OwnedKeyExpr;
-use zenoh_protocol::{core::WireExpr, network::NetworkMessage};
+use zenoh_protocol::{
+    core::{key_expr::OwnedKeyExpr, WireExpr},
+    network::NetworkMessage,
+};
 
 use self::{dispatcher::face::Face, router::Resource};
-
 use super::runtime;
-
-pub(crate) static PREFIX_LIVELINESS: &str = "@/liveliness";
 
 pub(crate) struct RoutingContext<Msg> {
     pub(crate) msg: Msg,
@@ -100,13 +99,13 @@ impl<Msg> RoutingContext<Msg> {
 impl RoutingContext<NetworkMessage> {
     #[inline]
     pub(crate) fn wire_expr(&self) -> Option<&WireExpr> {
-        use zenoh_protocol::network::DeclareBody;
-        use zenoh_protocol::network::NetworkBody;
+        use zenoh_protocol::network::{DeclareBody, NetworkBody};
         match &self.msg.body {
             NetworkBody::Push(m) => Some(&m.wire_expr),
             NetworkBody::Request(m) => Some(&m.wire_expr),
             NetworkBody::Response(m) => Some(&m.wire_expr),
             NetworkBody::ResponseFinal(_) => None,
+            NetworkBody::Interest(m) => m.wire_expr.as_ref(),
             NetworkBody::Declare(m) => match &m.body {
                 DeclareBody::DeclareKeyExpr(m) => Some(&m.wire_expr),
                 DeclareBody::UndeclareKeyExpr(_) => None,
@@ -116,9 +115,7 @@ impl RoutingContext<NetworkMessage> {
                 DeclareBody::UndeclareQueryable(m) => Some(&m.ext_wire_expr.wire_expr),
                 DeclareBody::DeclareToken(m) => Some(&m.wire_expr),
                 DeclareBody::UndeclareToken(m) => Some(&m.ext_wire_expr.wire_expr),
-                DeclareBody::DeclareInterest(m) => Some(&m.wire_expr),
-                DeclareBody::FinalInterest(_) => None,
-                DeclareBody::UndeclareInterest(m) => Some(&m.ext_wire_expr.wire_expr),
+                DeclareBody::DeclareFinal(_) => None,
             },
             NetworkBody::OAM(_) => None,
         }

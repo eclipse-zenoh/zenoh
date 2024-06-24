@@ -79,8 +79,8 @@
 
 ### z_pull
 
-   Declares a key expression and a pull subscriber.
-   On each pull, the pull subscriber will be notified of the last `put` or `delete` made on each key expression matching the subscriber key expression, and will print this notification.
+   Declares a key expression and a pull subscriber.  
+   On each pull, the pull subscriber will be notified of the last N `put` or `delete` made on each key expression matching the subscriber key expression, and will print this notification.
 
 
    Typical usage:
@@ -89,7 +89,7 @@
    ```
    or
    ```bash
-   z_pull -k 'demo/**'
+      z_pull -k demo/** --size 3
    ```
 
 ### z_get
@@ -213,7 +213,7 @@
 
    Declares a liveliness token on a given key expression (`group1/zenoh-rs` by default).
    This token will be seen alive byt the `z_get_liveliness` and `z_sub_liveliness` until
-   user explicitely drops the token by pressing `'d'` or implicitely dropped by terminating
+   user explicitly drops the token by pressing `'d'` or implicitly dropped by terminating
    or killing the `z_liveliness` example.
 
    Typical usage:
@@ -245,7 +245,7 @@
    liveliness tokens being dropped) that match a given key expression
    (`group1/**` by default). Those tokens could be declared by the `z_liveliness`
    example.
-   Note: the `z_sub_liveliness` example will not receive informations about
+   Note: the `z_sub_liveliness` example will not receive information about
    matching liveliness tokens that were alive before it's start.
 
    Typical usage:

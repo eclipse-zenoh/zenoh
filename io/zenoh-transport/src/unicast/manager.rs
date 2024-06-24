@@ -11,8 +11,34 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicUsize, Ordering::SeqCst},
+        Arc,
+    },
+    time::Duration,
+};
+
+use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
+#[cfg(feature = "transport_compression")]
+use zenoh_config::CompressionUnicastConf;
 #[cfg(feature = "shared-memory")]
-use super::shared_memory_unicast::SharedMemoryUnicast;
+use zenoh_config::ShmConf;
+use zenoh_config::{Config, LinkTxConf, QoSUnicastConf, TransportUnicastConf};
+use zenoh_core::{zasynclock, zcondfeat};
+use zenoh_crypto::PseudoRng;
+use zenoh_link::*;
+use zenoh_protocol::{
+    core::{parameters, ZenohIdProto},
+    transport::{close, TransportSn},
+};
+use zenoh_result::{bail, zerror, ZResult};
+#[cfg(feature = "shared-memory")]
+use zenoh_shm::reader::ShmReader;
+
+#[cfg(feature = "shared-memory")]
+use super::establishment::ext::shm::AuthUnicast;
 use super::{link::LinkUnicastWithOpenAck, transport_unicast_inner::InitTransportResult};
 #[cfg(feature = "transport_auth")]
 use crate::unicast::establishment::ext::auth::Auth;
@@ -27,28 +53,6 @@ use crate::{
     },
     TransportManager, TransportPeer,
 };
-use std::{
-    collections::HashMap,
-    sync::{
-        atomic::{AtomicUsize, Ordering::SeqCst},
-        Arc,
-    },
-    time::Duration,
-};
-use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
-#[cfg(feature = "transport_compression")]
-use zenoh_config::CompressionUnicastConf;
-#[cfg(feature = "shared-memory")]
-use zenoh_config::SharedMemoryConf;
-use zenoh_config::{Config, LinkTxConf, QoSUnicastConf, TransportUnicastConf};
-use zenoh_core::{zasynclock, zcondfeat};
-use zenoh_crypto::PseudoRng;
-use zenoh_link::*;
-use zenoh_protocol::{
-    core::{endpoint, ZenohId},
-    transport::{close, TransportSn},
-};
-use zenoh_result::{bail, zerror, ZResult};
 
 /*************************************/
 /*         TRANSPORT CONFIG          */
@@ -75,16 +79,17 @@ pub struct TransportManagerStateUnicast {
     // Established listeners
     pub(super) protocols: Arc<AsyncMutex<HashMap<String, LinkManagerUnicast>>>,
     // Established transports
-    pub(super) transports: Arc<AsyncMutex<HashMap<ZenohId, Arc<dyn TransportUnicastTrait>>>>,
+    pub(super) transports: Arc<AsyncMutex<HashMap<ZenohIdProto, Arc<dyn TransportUnicastTrait>>>>,
     // Multilink
     #[cfg(feature = "transport_multilink")]
     pub(super) multilink: Arc<MultiLink>,
     // Active authenticators
     #[cfg(feature = "transport_auth")]
     pub(super) authenticator: Arc<Auth>,
-    // Shared memory
+    // SHM probing
+    // Option will be None if SHM is disabled by Config
     #[cfg(feature = "shared-memory")]
-    pub(super) shm: Arc<SharedMemoryUnicast>,
+    pub(super) auth_shm: Option<AuthUnicast>,
 }
 
 pub struct TransportManagerParamsUnicast {
@@ -95,7 +100,7 @@ pub struct TransportManagerParamsUnicast {
 pub struct TransportManagerBuilderUnicast {
     // NOTE: In order to consider eventual packet loss and transmission latency and jitter,
     //       set the actual keep_alive timeout to one fourth of the lease time.
-    //       This is in-line with the ITU-T G.8013/Y.1731 specification on continous connectivity
+    //       This is in-line with the ITU-T G.8013/Y.1731 specification on continuous connectivity
     //       check which considers a link as failed when no messages are received in 3.5 times the
     //       target interval.
     pub(super) lease: Duration,
@@ -211,6 +216,7 @@ impl TransportManagerBuilderUnicast {
     pub fn build(
         self,
         #[allow(unused)] prng: &mut PseudoRng, // Required for #[cfg(feature = "transport_multilink")]
+        #[cfg(feature = "shared-memory")] shm_reader: &ShmReader,
     ) -> ZResult<TransportManagerParamsUnicast> {
         if self.is_qos && self.is_lowlatency {
             bail!("'qos' and 'lowlatency' options are incompatible");
@@ -237,11 +243,16 @@ impl TransportManagerBuilderUnicast {
             protocols: Arc::new(AsyncMutex::new(HashMap::new())),
             transports: Arc::new(AsyncMutex::new(HashMap::new())),
             #[cfg(feature = "transport_multilink")]
-            multilink: Arc::new(MultiLink::make(prng)?),
-            #[cfg(feature = "shared-memory")]
-            shm: Arc::new(SharedMemoryUnicast::make()?),
+            multilink: Arc::new(MultiLink::make(prng, config.max_links > 1)?),
             #[cfg(feature = "transport_auth")]
             authenticator: Arc::new(self.authenticator),
+            #[cfg(feature = "shared-memory")]
+            auth_shm: match self.is_shm {
+                true => Some(AuthUnicast::new(
+                    shm_reader.supported_protocols().as_slice(),
+                )?),
+                false => None,
+            },
         };
 
         let params = TransportManagerParamsUnicast { config, state };
@@ -256,7 +267,7 @@ impl Default for TransportManagerBuilderUnicast {
         let link_tx = LinkTxConf::default();
         let qos = QoSUnicastConf::default();
         #[cfg(feature = "shared-memory")]
-        let shm = SharedMemoryConf::default();
+        let shm = ShmConf::default();
         #[cfg(feature = "transport_compression")]
         let compression = CompressionUnicastConf::default();
 
@@ -286,11 +297,6 @@ impl Default for TransportManagerBuilderUnicast {
 impl TransportManager {
     pub fn config_unicast() -> TransportManagerBuilderUnicast {
         TransportManagerBuilderUnicast::default()
-    }
-
-    #[cfg(feature = "shared-memory")]
-    pub(crate) fn shm(&self) -> &Arc<SharedMemoryUnicast> {
-        &self.state.unicast.shm
     }
 
     pub async fn close_unicast(&self) {
@@ -381,7 +387,7 @@ impl TransportManager {
         if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
             endpoint
                 .config_mut()
-                .extend(endpoint::Parameters::iter(config))?;
+                .extend_from_iter(parameters::iter(config))?;
         };
         manager.new_listener(endpoint).await
     }
@@ -444,7 +450,7 @@ impl TransportManager {
         }
 
         // Add the link to the transport
-        let (start_tx_rx, ack) = transport
+        let (start_tx, start_rx, ack) = transport
             .add_link(link, other_initial_sn, other_lease)
             .await
             .map_err(InitTransportError::Link)?;
@@ -456,10 +462,12 @@ impl TransportManager {
             .await
             .map_err(|e| InitTransportError::Transport((e, c_t, close::reason::GENERIC)))?;
 
+        start_tx();
+
         // notify transport's callback interface that there is a new link
         Self::notify_new_link_unicast(&transport, c_link);
 
-        start_tx_rx();
+        start_rx();
 
         Ok(transport)
     }
@@ -504,7 +512,7 @@ impl TransportManager {
         link: LinkUnicastWithOpenAck,
         other_initial_sn: TransportSn,
         other_lease: Duration,
-        mut guard: AsyncMutexGuard<'_, HashMap<ZenohId, Arc<dyn TransportUnicastTrait>>>,
+        mut guard: AsyncMutexGuard<'_, HashMap<ZenohIdProto, Arc<dyn TransportUnicastTrait>>>,
     ) -> InitTransportResult {
         macro_rules! link_error {
             ($s:expr, $reason:expr) => {
@@ -548,7 +556,8 @@ impl TransportManager {
         };
 
         // Add the link to the transport
-        let (start_tx_rx, ack) = match t.add_link(link, other_initial_sn, other_lease).await {
+        let (start_tx, start_rx, ack) = match t.add_link(link, other_initial_sn, other_lease).await
+        {
             Ok(val) => val,
             Err(e) => {
                 let _ = t.close(e.2).await;
@@ -575,6 +584,8 @@ impl TransportManager {
         guard.insert(config.zid, t.clone());
         drop(guard);
 
+        start_tx();
+
         // Notify manager's interface that there is a new transport
         transport_error!(
             self.notify_new_transport_unicast(&t),
@@ -584,20 +595,20 @@ impl TransportManager {
         // Notify transport's callback interface that there is a new link
         Self::notify_new_link_unicast(&t, c_link);
 
-        start_tx_rx();
+        start_rx();
 
         zcondfeat!(
             "shared-memory",
             {
                 tracing::debug!(
-            "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {}, shm: {}, multilink: {}, lowlatency: {}",
+            "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {}, shm: {:?}, multilink: {}, lowlatency: {}",
             self.config.zid,
             config.zid,
             config.whatami,
             config.sn_resolution,
             config.tx_initial_sn,
             config.is_qos,
-            config.is_shm,
+            config.shm,
             is_multilink,
             config.is_lowlatency
         );
@@ -692,7 +703,7 @@ impl TransportManager {
         if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
             endpoint
                 .config_mut()
-                .extend(endpoint::Parameters::iter(config))?;
+                .extend_from_iter(parameters::iter(config))?;
         };
 
         // Create a new link associated by calling the Link Manager
@@ -701,7 +712,7 @@ impl TransportManager {
         super::establishment::open::open_link(link, self).await
     }
 
-    pub async fn get_transport_unicast(&self, peer: &ZenohId) -> Option<TransportUnicast> {
+    pub async fn get_transport_unicast(&self, peer: &ZenohIdProto) -> Option<TransportUnicast> {
         zasynclock!(self.state.unicast.transports)
             .get(peer)
             .map(|t| TransportUnicast(Arc::downgrade(t)))
@@ -714,7 +725,7 @@ impl TransportManager {
             .collect()
     }
 
-    pub(super) async fn del_transport_unicast(&self, peer: &ZenohId) -> ZResult<()> {
+    pub(super) async fn del_transport_unicast(&self, peer: &ZenohIdProto) -> ZResult<()> {
         zasynclock!(self.state.unicast.transports)
             .remove(peer)
             .ok_or_else(|| {
@@ -746,13 +757,17 @@ impl TransportManager {
         let c_manager = self.clone();
         self.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Acceptor, async move {
-                if let Err(e) = tokio::time::timeout(
+                if tokio::time::timeout(
                     c_manager.config.unicast.accept_timeout,
                     super::establishment::accept::accept_link(link, &c_manager),
                 )
                 .await
+                .is_err()
                 {
-                    tracing::debug!("{}", e);
+                    tracing::debug!(
+                        "Failed to accept link before deadline ({}ms)",
+                        c_manager.config.unicast.accept_timeout.as_millis()
+                    );
                 }
                 incoming_counter.fetch_sub(1, SeqCst);
             });

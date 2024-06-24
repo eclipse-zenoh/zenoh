@@ -40,7 +40,7 @@
     exit_on_failure: { router: false, peer: false, client: true },
     /// connect establishing retry configuration
     retry: {
-      /// intial wait timeout until next connect try
+      /// initial wait timeout until next connect try
       period_init_ms: 1000,
       /// maximum wait timeout until next connect try
       period_max_ms: 4000,
@@ -73,7 +73,7 @@
     exit_on_failure: true,
     /// listen retry configuration
     retry: {
-      /// intial wait timeout until next try
+      /// initial wait timeout until next try
       period_init_ms: 1000,
       /// maximum wait timeout until next try
       period_max_ms: 4000,
@@ -95,6 +95,8 @@
       address: "224.0.0.224:7446",
       /// The network interface which should be used for multicast scouting
       interface: "auto", // If not set or set to "auto" the interface if picked automatically
+      /// The time-to-live on multicast scouting packets
+      ttl: 1,
       /// Which type of Zenoh instances to automatically establish sessions with upon discovery on UDP multicast.
       /// Accepts a single value or different values for router, peer and client.
       /// Each value is bit-or-like combinations of "peer", "router" and "client".
@@ -106,8 +108,8 @@
     gossip: {
       /// Whether gossip scouting is enabled or not
       enabled: true,
-      /// When true, gossip scouting informations are propagated multiple hops to all nodes in the local network.
-      /// When false, gossip scouting informations are only propagated to the next hop.
+      /// When true, gossip scouting information are propagated multiple hops to all nodes in the local network.
+      /// When false, gossip scouting information are only propagated to the next hop.
       /// Activating multihop gossip implies more scouting traffic and a lower scalability.
       /// It mostly makes sense when using "linkstate" routing mode where all nodes in the subsystem don't have
       /// direct connectivity with each other.
@@ -194,8 +196,17 @@
   //       "key_exprs": [
   //         "test/demo"
   //       ],
+  //       /// Subjects can be interfaces
   //       "interfaces": [
   //         "lo0"
+  //       ],
+  //       /// Subjects can be cert_common_names when using TLS or Quic 
+  //       "cert_common_names": [
+  //         "example.zenoh.io"
+  //       ],
+  //       /// Subjects can be usernames when using user/password authentication
+  //       "usernames": [
+  //         "zenoh-example"
   //       ]
   //     },
   //  ]
@@ -219,6 +230,8 @@
       /// NOTE: Currently, the LowLatency transport doesn't preserve QoS prioritization.
       /// NOTE: Due to the note above, 'lowlatency' is incompatible with 'qos' option, so in order to
       ///       enable 'lowlatency' you need to explicitly disable 'qos'.
+      /// NOTE: LowLatency transport does not support the fragmentation, so the message size should be 
+      ///       smaller than the tx batch_size.
       lowlatency: false,
       /// Enables QoS on unicast communications.
       qos: {
@@ -263,7 +276,7 @@
         ///       set the actual keep_alive interval to one fourth of the lease time: i.e. send
         ///       4 keep_alive messages in a lease period. Changing the lease time will have the
         ///       keep_alive messages sent more or less often.
-        ///       This is in-line with the ITU-T G.8013/Y.1731 specification on continous connectivity
+        ///       This is in-line with the ITU-T G.8013/Y.1731 specification on continuous connectivity
         ///       check which considers a link as failed when no messages are received in 3.5 times the
         ///       target interval.
         keep_alive: 4,
@@ -274,6 +287,7 @@
         /// Each zenoh link has a transmission queue that can be configured
         queue: {
           /// The size of each priority queue indicates the number of batches a given queue can contain.
+          /// NOTE: the number of batches in each priority must be included between 1 and 16. Different values will result in an error.
           /// The amount of memory being allocated for each queue is then SIZE_XXX * BATCH_SIZE.
           /// In the case of the transport link MTU being smaller than the ZN_BATCH_SIZE,
           /// then amount of memory being allocated for each queue is SIZE_XXX * LINK_MTU.
@@ -289,7 +303,7 @@
             background: 4,
           },
           /// Congestion occurs when the queue is empty (no available batch).
-          /// Using CongestionControl::Block the caller is blocked until a batch is available and re-insterted into the queue.
+          /// Using CongestionControl::Block the caller is blocked until a batch is available and re-inserted into the queue.
           /// Using CongestionControl::Drop the message might be dropped, depending on conditions configured here.
           congestion_control: {
             /// The maximum time in microseconds to wait for an available batch before dropping the message if still no batch is available.
@@ -304,7 +318,7 @@
       rx: {
         /// Receiving buffer size in bytes for each link
         /// The default the rx_buffer_size value is the same as the default batch size: 65335.
-        /// For very high throughput scenarios, the rx_buffer_size can be increased to accomodate
+        /// For very high throughput scenarios, the rx_buffer_size can be increased to accommodate
         /// more in-flight data. This is particularly relevant when dealing with large messages.
         /// E.g. for 16MiB rx_buffer_size set the value to: 16777216.
         buffer_size: 65535,
@@ -341,7 +355,7 @@
       enabled: false,
     },
     auth: {
-      /// The configuration of authentification.
+      /// The configuration of authentication.
       /// A password implies a username is required.
       usrpwd: {
         user: null,
@@ -394,7 +408,7 @@
   //    /// - If json objects in loaded file contains `__config__` properties, they are processed recursively
   //    ///   This is used in the 'storage_manager' which supports subplugins, each with it's own config
   //    ///
-  //    /// See below exapmle of plugin configuration using `__config__` property
+  //    /// See below example of plugin configuration using `__config__` property
   //
   //    /// Configure the REST API plugin
   //    rest: {

@@ -13,18 +13,21 @@
 //
 use std::{
     str::FromStr,
-    sync::{atomic::AtomicUsize, atomic::Ordering, Arc},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
     time::Duration,
 };
+
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh::{
-    config::{Config, ModeDependentValue},
-    prelude::r#async::*,
-    value::Value,
-    Result,
+    config::{ModeDependentValue, WhatAmI, WhatAmIMatcher},
+    prelude::*,
+    publisher::CongestionControl,
+    Config, Result, Session,
 };
 use zenoh_core::ztimeout;
-use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher};
 use zenoh_result::bail;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
@@ -54,14 +57,14 @@ impl Task {
         match self {
             // The Sub task checks if the incoming message matches the expected size until it receives enough counts.
             Self::Sub(ke, expected_size) => {
-                let sub = ztimeout!(session.declare_subscriber(ke).res_async())?;
+                let sub = ztimeout!(session.declare_subscriber(ke))?;
                 let mut counter = 0;
                 loop {
                     tokio::select! {
                         _  = token.cancelled() => break,
                         res = sub.recv_async() => {
                             if let Ok(sample) = res {
-                                let recv_size = sample.value.payload.len();
+                                let recv_size = sample.payload().len();
                                 if recv_size != *expected_size {
                                     bail!("Received payload size {recv_size} mismatches the expected {expected_size}");
                                 }
@@ -79,17 +82,16 @@ impl Task {
 
             // The Pub task keeps putting messages until all checkpoints are finished.
             Self::Pub(ke, payload_size) => {
-                let value: Value = vec![0u8; *payload_size].into();
-                // while remaining_checkpoints.load(Ordering::Relaxed) > 0 {
                 loop {
                     tokio::select! {
                         _  = token.cancelled() => break,
 
                         // WARN: this won't yield after a timeout since the put is a blocking call
-                        res = tokio::time::timeout(std::time::Duration::from_secs(1), session
-                            .put(ke, value.clone())
+                        res = tokio::time::timeout(std::time::Duration::from_secs(1), async {session
+                            .put(ke, vec![0u8; *payload_size])
                             .congestion_control(CongestionControl::Block)
-                            .res()) => {
+                            .await
+                        }) => {
                             let _ = res?;
                         }
                     }
@@ -103,12 +105,12 @@ impl Task {
                 while counter < MSG_COUNT {
                     tokio::select! {
                         _  = token.cancelled() => break,
-                        replies = session.get(ke).timeout(Duration::from_secs(10)).res() => {
+                        replies = async { session.get(ke).timeout(Duration::from_secs(10)).await } => {
                             let replies = replies?;
                             while let Ok(reply) = replies.recv_async().await {
-                                match reply.sample {
+                                match reply.result() {
                                     Ok(sample) => {
-                                        let recv_size = sample.value.payload.len();
+                                        let recv_size = sample.payload().len();
                                         if recv_size != *expected_size {
                                             bail!("Received payload size {recv_size} mismatches the expected {expected_size}");
                                         }
@@ -116,7 +118,7 @@ impl Task {
 
                                     Err(err) => {
                                         tracing::warn!(
-                                            "Sample got from {} failed to unwrap! Error: {}.",
+                                            "Sample got from {} failed to unwrap! Error: {:?}.",
                                             ke,
                                             err
                                         );
@@ -133,14 +135,14 @@ impl Task {
 
             // The Queryable task keeps replying to requested messages until all checkpoints are finished.
             Self::Queryable(ke, payload_size) => {
-                let queryable = session.declare_queryable(ke).res_async().await?;
-                let sample = Sample::try_from(ke.clone(), vec![0u8; *payload_size])?;
+                let queryable = ztimeout!(session.declare_queryable(ke))?;
+                let payload = vec![0u8; *payload_size];
 
                 loop {
                     tokio::select! {
                         _  = token.cancelled() => break,
                         query = queryable.recv_async() => {
-                            query?.reply(Ok(sample.clone())).res_async().await?;
+                            ztimeout!(query?.reply(ke.to_owned(), payload.clone()))?;
                         },
                     }
                 }
@@ -285,7 +287,7 @@ impl Recipe {
 
                     // In case of client can't connect to some peers/routers
                     loop {
-                        if let Ok(session) = zenoh::open(config.clone()).res_async().await {
+                        if let Ok(session) = ztimeout!(zenoh::open(config.clone())) {
                             break session.into_arc();
                         } else {
                             tokio::time::sleep(Duration::from_secs(1)).await;
@@ -320,12 +322,8 @@ impl Recipe {
                 // node_task_tracker.close();
                 // node_task_tracker.wait().await;
 
-                // Close the session once all the task assoicated with the node are done.
-                Arc::try_unwrap(session)
-                    .unwrap()
-                    .close()
-                    .res_async()
-                    .await?;
+                // Close the session once all the task associated with the node are done.
+                ztimeout!(Arc::try_unwrap(session).unwrap().close())?;
 
                 println!("Node: {} is closed.", &node.name);
                 Result::Ok(())
@@ -365,7 +363,7 @@ impl Recipe {
 // And the message transmission should work even if the common node disappears after a while.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn gossip() -> Result<()> {
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
 
     let locator = String::from("tcp/127.0.0.1:17446");
     let ke = String::from("testKeyExprGossip");
@@ -433,7 +431,7 @@ async fn gossip() -> Result<()> {
 // Simulate two peers connecting to a router but not directly reachable to each other can exchange messages via the brokering by the router.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn static_failover_brokering() -> Result<()> {
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
     let locator = String::from("tcp/127.0.0.1:17449");
     let ke = String::from("testKeyExprStaticFailoverBrokering");
     let msg_size = 8;
@@ -494,7 +492,7 @@ async fn static_failover_brokering() -> Result<()> {
 // Total cases = 2 x 4 x 6 = 48
 #[tokio::test(flavor = "multi_thread", worker_threads = 9)]
 async fn three_node_combination() -> Result<()> {
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
     let modes = [WhatAmI::Peer, WhatAmI::Client];
     let delay_in_secs = [
         (0, 1, 2),
@@ -625,7 +623,7 @@ async fn three_node_combination() -> Result<()> {
 // Total cases = 2 x 8 = 16
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
 async fn two_node_combination() -> Result<()> {
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
 
     #[derive(Clone, Copy)]
     struct IsFirstListen(bool);

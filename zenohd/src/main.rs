@@ -14,15 +14,13 @@
 use clap::Parser;
 use futures::future;
 use git_version::git_version;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
-use zenoh::config::{Config, ModeDependentValue, PermissionsConf, ValidatedMap};
-use zenoh::prelude::r#async::*;
-use zenoh::Result;
-
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 #[cfg(feature = "loki")]
 use url::Url;
+use zenoh::{
+    config::{Config, EndPoint, ModeDependentValue, PermissionsConf, ValidatedMap, WhatAmI},
+    core::Result,
+};
 
 #[cfg(feature = "loki")]
 const LOKI_ENDPOINT_VAR: &str = "LOKI_ENDPOINT";
@@ -105,7 +103,7 @@ fn main() {
             let config = config_from_args(&args);
             tracing::info!("Initial conf: {}", &config);
 
-            let _session = match zenoh::open(config).res().await {
+            let _session = match zenoh::open(config).await {
                 Ok(runtime) => runtime,
                 Err(e) => {
                     println!("{e}. Exiting...");
@@ -131,7 +129,7 @@ fn config_from_args(args: &Args) -> Config {
     if let Some(id) = &args.id {
         config.set_id(id.parse().unwrap()).unwrap();
     }
-    // apply '--rest-http-port' to config only if explicitly set (overwritting config),
+    // apply '--rest-http-port' to config only if explicitly set (overwriting config),
     // or if no config file is set (to apply its default value)
     if args.rest_http_port.is_some() || args.config.is_none() {
         let value = args.rest_http_port.as_deref().unwrap_or("8000");
@@ -338,7 +336,6 @@ fn test_default_features() {
         concat!(
             " zenoh/auth_pubkey",
             " zenoh/auth_usrpwd",
-            // " zenoh/complete_n",
             // " zenoh/shared-memory",
             // " zenoh/stats",
             " zenoh/transport_multilink",
@@ -365,7 +362,6 @@ fn test_no_default_features() {
         concat!(
             // " zenoh/auth_pubkey",
             // " zenoh/auth_usrpwd",
-            // " zenoh/complete_n",
             // " zenoh/shared-memory",
             // " zenoh/stats",
             // " zenoh/transport_multilink",

@@ -67,7 +67,7 @@ pub mod ext {
     pub type TimestampType = crate::network::ext::TimestampType<{ Timestamp::ID }>;
 
     pub type ResponderId = zextzbuf!(0x3, false);
-    pub type ResponderIdType = crate::network::ext::EntityIdType<{ ResponderId::ID }>;
+    pub type ResponderIdType = crate::network::ext::EntityGlobalIdType<{ ResponderId::ID }>;
 }
 
 impl Response {

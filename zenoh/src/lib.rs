@@ -34,28 +34,28 @@
 //! ### Publishing Data
 //! The example below shows how to produce a value for a key expression.
 //! ```
-//! use zenoh::prelude::r#async::*;
+//! use zenoh::prelude::*;
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     let session = zenoh::open(config::default()).res().await.unwrap();
-//!     session.put("key/expression", "value").res().await.unwrap();
-//!     session.close().res().await.unwrap();
+//!     let session = zenoh::open(zenoh::config::default()).await.unwrap();
+//!     session.put("key/expression", "value").await.unwrap();
+//!     session.close().await.unwrap();
 //! }
 //! ```
 //!
 //! ### Subscribe
-//! The example below shows how to consume values for a key expresison.
+//! The example below shows how to consume values for a key expressions.
 //! ```no_run
 //! use futures::prelude::*;
-//! use zenoh::prelude::r#async::*;
+//! use zenoh::prelude::*;
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     let session = zenoh::open(config::default()).res().await.unwrap();
-//!     let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
+//!     let session = zenoh::open(zenoh::config::default()).await.unwrap();
+//!     let subscriber = session.declare_subscriber("key/expression").await.unwrap();
 //!     while let Ok(sample) = subscriber.recv_async().await {
-//!         println!("Received: {}", sample);
+//!         println!("Received: {:?}", sample);
 //!     };
 //! }
 //! ```
@@ -65,14 +65,14 @@
 //! resources whose key match the given *key expression*.
 //! ```
 //! use futures::prelude::*;
-//! use zenoh::prelude::r#async::*;
+//! use zenoh::prelude::*;
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     let session = zenoh::open(config::default()).res().await.unwrap();
-//!     let replies = session.get("key/expression").res().await.unwrap();
+//!     let session = zenoh::open(zenoh::config::default()).await.unwrap();
+//!     let replies = session.get("key/expression").await.unwrap();
 //!     while let Ok(reply) = replies.recv_async().await {
-//!         println!(">> Received {:?}", reply.sample);
+//!         println!(">> Received {:?}", reply.result());
 //!     }
 //! }
 //! ```
@@ -81,36 +81,19 @@ extern crate zenoh_core;
 #[macro_use]
 extern crate zenoh_result;
 
-use git_version::git_version;
-use handlers::DefaultHandler;
-#[zenoh_macros::unstable]
-use net::runtime::Runtime;
-use prelude::*;
-use scouting::ScoutBuilder;
-use std::future::Ready;
-use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
-pub use zenoh_macros::{ke, kedefine, keformat, kewrite};
-use zenoh_protocol::core::WhatAmIMatcher;
-use zenoh_result::{zerror, ZResult};
-use zenoh_util::concat_enabled_features;
-
-/// A zenoh error.
-pub use zenoh_result::Error;
-/// A zenoh result.
-pub use zenoh_result::ZResult as Result;
-
-const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
+mod api;
+mod net;
 
 lazy_static::lazy_static!(
     static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
 );
 
-pub const FEATURES: &str = concat_enabled_features!(
+const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
+pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
     prefix = "zenoh",
     features = [
         "auth_pubkey",
         "auth_usrpwd",
-        "complete_n",
         "shared-memory",
         "stats",
         "transport_multilink",
@@ -128,267 +111,334 @@ pub const FEATURES: &str = concat_enabled_features!(
     ]
 );
 
-mod admin;
-#[macro_use]
-mod session;
-pub use session::*;
+#[doc(inline)]
+pub use {
+    crate::{
+        config::Config,
+        core::{Error, Result},
+        scouting::scout,
+        session::{open, Session},
+    },
+    zenoh_util::{init_log_from_env_or, try_init_log_from_env},
+};
 
-pub mod key_expr;
-pub(crate) mod net;
-pub use net::runtime;
-pub mod selector;
-#[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
-pub use zenoh_config as config;
-pub mod handlers;
-pub mod info;
-#[cfg(feature = "unstable")]
-pub mod liveliness;
-#[cfg(all(feature = "unstable", feature = "plugins"))]
-pub mod plugins;
 pub mod prelude;
-pub mod publication;
-pub mod query;
-pub mod queryable;
-pub mod sample;
-pub mod subscriber;
-pub mod value;
-#[cfg(feature = "shared-memory")]
-pub use zenoh_shm as shm;
 
-/// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
-/// reading and writing data.
-pub use zenoh_buffers as buffers;
+/// Zenoh core types
+pub mod core {
+    #[allow(deprecated)]
+    pub use zenoh_core::{AsyncResolve, SyncResolve};
+    pub use zenoh_core::{Resolvable, Resolve, Wait};
+    pub use zenoh_result::ErrNo;
+    /// A zenoh error.
+    pub use zenoh_result::Error;
+    /// A zenoh result.
+    pub use zenoh_result::ZResult as Result;
 
-/// Time related types and functions.
+    /// Zenoh message priority
+    pub use crate::api::publisher::Priority;
+}
+
+/// [Key expression](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md) are Zenoh's address space.
+///
+/// In Zenoh, operations are performed on keys. To allow addressing multiple keys with a single operation, we use Key Expressions (KE).
+/// KEs are a small language that express sets of keys through a glob-like language.
+///
+/// These semantics can be a bit difficult to implement, so this module provides the following facilities:
+///
+/// # Storing Key Expressions
+/// This module provides 3 flavours to store strings that have been validated to respect the KE syntax:
+/// - [`keyexpr`] is the equivalent of a [`str`],
+/// - [`OwnedKeyExpr`] works like an [`std::sync::Arc<str>`],
+/// - [`KeyExpr`] works like a [`std::borrow::Cow<str>`], but also stores some additional context internal to Zenoh to optimize
+/// routing and network usage.
+///
+/// All of these types [`Deref`](core::ops::Deref) to [`keyexpr`], which notably has methods to check whether a given [`keyexpr::intersects`] with another,
+/// or even if a [`keyexpr::includes`] another.
+///
+/// # Tying values to Key Expressions
+/// When storing values tied to Key Expressions, you might want something more specialized than a [`HashMap`](std::collections::HashMap) if you want to respect
+/// the Key Expression semantics with high performance.
+///
+/// Enter [KeTrees](keyexpr_tree). These are data-structures specially built to store KE-value pairs in a manner that supports the set-semantics of KEs.
+///
+/// # Building and parsing Key Expressions
+/// A common issue in REST API is the association of meaning to sections of the URL, and respecting that API in a convenient manner.
+/// The same issue arises naturally when designing a KE space, and [`KeFormat`](format::KeFormat) was designed to help you with this,
+/// both in constructing and in parsing KEs that fit the formats you've defined.
+///
+/// [`kedefine`] also allows you to define formats at compile time, allowing a more performant, but more importantly safer and more convenient use of said formats,
+/// as the [`keformat`] and [`kewrite`] macros will be able to tell you if you're attempting to set fields of the format that do not exist.
+pub mod key_expr {
+    #[zenoh_macros::unstable]
+    pub mod keyexpr_tree {
+        pub use zenoh_keyexpr::keyexpr_tree::{
+            impls::KeyedSetProvider,
+            support::{NonWild, UnknownWildness},
+            IKeyExprTree, IKeyExprTreeMut, KeBoxTree,
+        };
+    }
+    #[zenoh_macros::unstable]
+    pub use zenoh_keyexpr::SetIntersectionLevel;
+    pub use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
+
+    pub use crate::api::key_expr::{KeyExpr, KeyExprUndeclaration};
+    // keyexpr format macro support
+    #[zenoh_macros::unstable]
+    pub mod format {
+        pub use zenoh_keyexpr::format::*;
+        pub use zenoh_macros::{kedefine, keformat, kewrite};
+        pub mod macro_support {
+            pub use zenoh_keyexpr::format::macro_support::*;
+        }
+    }
+}
+
+/// Zenoh [`Session`](crate::session::Session) and associated types
+pub mod session {
+    #[zenoh_macros::internal]
+    pub use crate::api::session::{init, InitBuilder};
+    pub use crate::api::{
+        builders::publisher::{SessionDeleteBuilder, SessionPutBuilder},
+        query::SessionGetBuilder,
+        session::{open, OpenBuilder, Session, SessionDeclarations, SessionRef, Undeclarable},
+    };
+}
+
+/// Tools to access information about the current zenoh [`Session`](crate::Session).
+pub mod info {
+    pub use zenoh_config::wrappers::{EntityGlobalId, ZenohId};
+    pub use zenoh_protocol::core::EntityId;
+
+    pub use crate::api::info::{
+        PeersZenohIdBuilder, RoutersZenohIdBuilder, SessionInfo, ZenohIdBuilder,
+    };
+}
+
+/// Sample primitives
+pub mod sample {
+    #[zenoh_macros::unstable]
+    pub use crate::api::sample::Locality;
+    #[zenoh_macros::unstable]
+    pub use crate::api::sample::SourceInfo;
+    pub use crate::api::{
+        builders::sample::{
+            EncodingBuilderTrait, QoSBuilderTrait, SampleBuilder, SampleBuilderAny,
+            SampleBuilderDelete, SampleBuilderPut, SampleBuilderTrait, TimestampBuilderTrait,
+        },
+        sample::{Sample, SampleFields, SampleKind, SourceSn},
+    };
+}
+
+/// Encoding support
+pub mod encoding {
+    pub use crate::api::encoding::Encoding;
+}
+
+/// Payload primitives
+pub mod bytes {
+    pub use crate::api::bytes::{
+        Deserialize, OptionZBytes, Serialize, ZBytes, ZBytesIterator, ZBytesReader, ZBytesWriter,
+        ZDeserializeError, ZSerde,
+    };
+}
+
+/// [Selector](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) to issue queries
+pub mod selector {
+    pub use zenoh_protocol::core::Parameters;
+    #[zenoh_macros::unstable]
+    pub use zenoh_util::time_range::{TimeBound, TimeExpr, TimeRange};
+
+    pub use crate::api::selector::Selector;
+    #[zenoh_macros::unstable]
+    pub use crate::api::selector::ZenohParameters;
+}
+
+/// Subscribing primitives
+pub mod subscriber {
+    /// The kind of reliability.
+    pub use zenoh_protocol::core::Reliability;
+
+    pub use crate::api::subscriber::{FlumeSubscriber, Subscriber, SubscriberBuilder};
+}
+
+/// Publishing primitives
+pub mod publisher {
+    pub use zenoh_protocol::core::CongestionControl;
+
+    #[zenoh_macros::unstable]
+    pub use crate::api::publisher::MatchingListener;
+    #[zenoh_macros::unstable]
+    pub use crate::api::publisher::MatchingListenerBuilder;
+    #[zenoh_macros::unstable]
+    pub use crate::api::publisher::MatchingListenerUndeclaration;
+    #[zenoh_macros::unstable]
+    pub use crate::api::publisher::MatchingStatus;
+    #[zenoh_macros::unstable]
+    pub use crate::api::publisher::PublisherDeclarations;
+    #[zenoh_macros::unstable]
+    pub use crate::api::publisher::PublisherRef;
+    pub use crate::api::{
+        builders::publisher::{
+            PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
+            PublisherDeleteBuilder, PublisherPutBuilder,
+        },
+        publisher::{Publisher, PublisherUndeclaration},
+    };
+}
+
+/// Get operation primitives
+pub mod querier {
+    // Later the `Querier` with `get`` operation will be added here, in addition to `Session::get`,
+    // similarly to the `Publisher` with `put` operation and `Session::put`
+}
+
+/// Query and Reply primitives
+pub mod query {
+    #[zenoh_macros::unstable]
+    pub use crate::api::query::ReplyKeyExpr;
+    #[zenoh_macros::internal]
+    pub use crate::api::queryable::ReplySample;
+    pub use crate::api::{
+        query::{ConsolidationMode, QueryConsolidation, QueryTarget, Reply, ReplyError},
+        queryable::{Query, ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
+    };
+}
+
+/// Queryable primitives
+pub mod queryable {
+    pub use crate::api::queryable::{Queryable, QueryableBuilder, QueryableUndeclaration};
+}
+
+/// Callback handler trait
+pub mod handlers {
+    pub use crate::api::handlers::{
+        locked, Callback, CallbackDrop, DefaultHandler, FifoChannel, IntoHandler, RingChannel,
+        RingChannelHandler,
+    };
+}
+
+/// Scouting primitives
+pub mod scouting {
+    pub use zenoh_config::wrappers::Hello;
+
+    pub use crate::api::scouting::{scout, Scout, ScoutBuilder};
+}
+
+/// Liveliness primitives
+#[zenoh_macros::unstable]
+pub mod liveliness {
+    pub use crate::api::liveliness::{
+        Liveliness, LivelinessGetBuilder, LivelinessSubscriberBuilder, LivelinessToken,
+        LivelinessTokenBuilder, LivelinessTokenUndeclaration,
+    };
+}
+
+/// Timestamp support
 pub mod time {
-    use std::convert::TryFrom;
-
     pub use zenoh_protocol::core::{Timestamp, TimestampId, NTP64};
 
-    /// Generates a reception [`Timestamp`] with id=0x01.
-    /// This operation should be called if a timestamp is required for an incoming [`zenoh::Sample`](crate::Sample)
-    /// that doesn't contain any timestamp.
-    pub fn new_reception_timestamp() -> Timestamp {
-        use std::time::{SystemTime, UNIX_EPOCH};
+    pub use crate::api::time::new_timestamp;
+}
 
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-        Timestamp::new(now.into(), TimestampId::try_from([1]).unwrap())
+/// Configuration to pass to [`open`](crate::session::open) and [`scout`](crate::scouting::scout) functions and associated constants
+pub mod config {
+    // pub use zenoh_config::{
+    //     client, default, peer, Config, EndPoint, Locator, ModeDependentValue, PermissionsConf,
+    //     PluginLoad, ValidatedMap, ZenohId,
+    // };
+    pub use zenoh_config::*;
+}
+
+#[cfg(all(feature = "internal", not(feature = "unstable")))]
+compile_error!(
+    "All internal functionality is unstable. The `unstable` feature must be enabled to use `internal`."
+);
+#[cfg(all(
+    feature = "plugins",
+    not(all(feature = "unstable", feature = "internal"))
+))]
+compile_error!(
+    "The plugins support is internal and unstable. The `unstable` and `internal` features must be enabled to use `plugins`."
+);
+
+#[zenoh_macros::internal]
+pub mod internal {
+    pub use zenoh_core::{
+        zasync_executor_init, zasynclock, zerror, zlock, zread, ztimeout, zwrite, ResolveFuture,
+    };
+    pub use zenoh_result::bail;
+    pub use zenoh_sync::Condition;
+    pub use zenoh_task::{TaskController, TerminatableTask};
+    pub use zenoh_util::{
+        zenoh_home, LibLoader, Timed, TimedEvent, TimedHandle, Timer, ZENOH_HOME_ENV_VAR,
+    };
+
+    /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
+    /// reading and writing data.
+    pub mod buffers {
+        pub use zenoh_buffers::{
+            buffer::{Buffer, SplitBuffer},
+            reader::{
+                AdvanceableReader, BacktrackableReader, DidntRead, DidntSiphon, HasReader, Reader,
+                SiphonableReader,
+            },
+            writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
+            ZBuf, ZBufReader, ZSlice, ZSliceBuffer,
+        };
     }
-}
+    /// Initialize a Session with an existing Runtime.
+    /// This operation is used by the plugins to share the same Runtime as the router.
+    #[zenoh_macros::internal]
+    pub mod runtime {
+        pub use zenoh_runtime::ZRuntime;
 
-/// A map of key/value (String,String) properties.
-pub mod properties {
-    use super::prelude::Value;
-    pub use zenoh_collections::Properties;
-
-    /// Convert a set of [`Properties`] into a [`Value`].
-    /// For instance, Properties: `[("k1", "v1"), ("k2, v2")]`
-    /// is converted into Json: `{ "k1": "v1", "k2": "v2" }`
-    pub fn properties_to_json_value(props: &Properties) -> Value {
-        let json_map = props
-            .iter()
-            .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
-            .collect::<serde_json::map::Map<String, serde_json::Value>>();
-        serde_json::Value::Object(json_map).into()
+        pub use crate::net::runtime::{AdminSpace, Runtime, RuntimeBuilder};
     }
-}
-
-/// Scouting primitives.
-pub mod scouting;
-
-/// Scout for routers and/or peers.
-///
-/// [`scout`] spawns a task that periodically sends scout messages and waits for [`Hello`](crate::scouting::Hello) replies.
-///
-/// Drop the returned [`Scout`](crate::scouting::Scout) to stop the scouting task.
-///
-/// # Arguments
-///
-/// * `what` - The kind of zenoh process to scout for
-/// * `config` - The configuration [`Config`] to use for scouting
-///
-/// # Examples
-/// ```no_run
-/// # #[tokio::main]
-/// # async fn main() {
-/// use zenoh::prelude::r#async::*;
-/// use zenoh::scouting::WhatAmI;
-///
-/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
-///     .res()
-///     .await
-///     .unwrap();
-/// while let Ok(hello) = receiver.recv_async().await {
-///     println!("{}", hello);
-/// }
-/// # }
-/// ```
-pub fn scout<I: Into<WhatAmIMatcher>, TryIntoConfig>(
-    what: I,
-    config: TryIntoConfig,
-) -> ScoutBuilder<DefaultHandler>
-where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error:
-        Into<zenoh_result::Error>,
-{
-    ScoutBuilder {
-        what: what.into(),
-        config: config.try_into().map_err(|e| e.into()),
-        handler: DefaultHandler,
+    /// Plugins support
+    #[cfg(feature = "plugins")]
+    pub mod plugins {
+        pub use crate::api::plugins::{
+            PluginsManager, Response, RunningPlugin, RunningPluginTrait, ZenohPlugin, PLUGIN_PREFIX,
+        };
     }
-}
 
-/// Open a zenoh [`Session`].
-///
-/// # Arguments
-///
-/// * `config` - The [`Config`] for the zenoh session
-///
-/// # Examples
-/// ```
-/// # #[tokio::main]
-/// # async fn main() {
-/// use zenoh::prelude::r#async::*;
-///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// # }
-/// ```
-///
-/// ```
-/// # #[tokio::main]
-/// # async fn main() {
-/// use std::str::FromStr;
-/// use zenoh::prelude::r#async::*;
-///
-/// let mut config = config::peer();
-/// config.set_id(ZenohId::from_str("221b72df20924c15b8794c6bdb471150").unwrap());
-/// config.connect.endpoints.extend("tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".split(',').map(|s|s.parse().unwrap()));
-///
-/// let session = zenoh::open(config).res().await.unwrap();
-/// # }
-/// ```
-pub fn open<TryIntoConfig>(config: TryIntoConfig) -> OpenBuilder<TryIntoConfig>
-where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
-{
-    OpenBuilder { config }
-}
-
-/// A builder returned by [`open`] used to open a zenoh [`Session`].
-///
-/// # Examples
-/// ```
-/// # #[tokio::main]
-/// # async fn main() {
-/// use zenoh::prelude::r#async::*;
-///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// # }
-/// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-pub struct OpenBuilder<TryIntoConfig>
-where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
-{
-    config: TryIntoConfig,
-}
-
-impl<TryIntoConfig> Resolvable for OpenBuilder<TryIntoConfig>
-where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
-{
-    type To = ZResult<Session>;
-}
-
-impl<TryIntoConfig> SyncResolve for OpenBuilder<TryIntoConfig>
-where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
-{
-    fn res_sync(self) -> <Self as Resolvable>::To {
-        let config: crate::config::Config = self
-            .config
-            .try_into()
-            .map_err(|e| zerror!("Invalid Zenoh configuration {:?}", &e))?;
-        Session::new(config).res_sync()
-    }
-}
-
-impl<TryIntoConfig> AsyncResolve for OpenBuilder<TryIntoConfig>
-where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
-{
-    type Future = Ready<Self::To>;
-
-    fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
-    }
-}
-
-/// Initialize a Session with an existing Runtime.
-/// This operation is used by the plugins to share the same Runtime as the router.
-#[doc(hidden)]
-#[zenoh_macros::unstable]
-pub fn init(runtime: Runtime) -> InitBuilder {
-    InitBuilder {
-        runtime,
-        aggregated_subscribers: vec![],
-        aggregated_publishers: vec![],
-    }
-}
-
-/// A builder returned by [`init`] and used to initialize a Session with an existing Runtime.
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-#[doc(hidden)]
-#[zenoh_macros::unstable]
-pub struct InitBuilder {
-    runtime: Runtime,
-    aggregated_subscribers: Vec<OwnedKeyExpr>,
-    aggregated_publishers: Vec<OwnedKeyExpr>,
+    pub use crate::api::value::Value;
 }
 
 #[zenoh_macros::unstable]
-impl InitBuilder {
-    #[inline]
-    pub fn aggregated_subscribers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
-        self.aggregated_subscribers = exprs;
-        self
-    }
-
-    #[inline]
-    pub fn aggregated_publishers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
-        self.aggregated_publishers = exprs;
-        self
-    }
-}
-
-#[zenoh_macros::unstable]
-impl Resolvable for InitBuilder {
-    type To = ZResult<Session>;
-}
-
-#[zenoh_macros::unstable]
-impl SyncResolve for InitBuilder {
-    fn res_sync(self) -> <Self as Resolvable>::To {
-        Ok(Session::init(
-            self.runtime,
-            self.aggregated_subscribers,
-            self.aggregated_publishers,
-        )
-        .res_sync())
-    }
-}
-
-#[zenoh_macros::unstable]
-impl AsyncResolve for InitBuilder {
-    type Future = Ready<Self::To>;
-
-    fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
-    }
+#[cfg(feature = "shared-memory")]
+pub mod shm {
+    pub use zenoh_shm::api::{
+        buffer::{
+            zshm::{zshm, ZShm},
+            zshmmut::{zshmmut, ZShmMut},
+        },
+        client::{shm_client::ShmClient, shm_segment::ShmSegment},
+        client_storage::{ShmClientStorage, GLOBAL_CLIENT_STORAGE},
+        common::types::{ChunkID, ProtocolID, SegmentID},
+        protocol_implementations::posix::{
+            posix_shm_client::PosixShmClient,
+            posix_shm_provider_backend::{
+                LayoutedPosixShmProviderBackendBuilder, PosixShmProviderBackend,
+                PosixShmProviderBackendBuilder,
+            },
+            protocol_id::POSIX_PROTOCOL_ID,
+        },
+        provider::{
+            chunk::{AllocatedChunk, ChunkDescriptor},
+            shm_provider::{
+                AllocBuilder, AllocBuilder2, AllocLayout, AllocLayoutSizedBuilder, AllocPolicy,
+                AsyncAllocPolicy, BlockOn, DeallocEldest, DeallocOptimal, DeallocYoungest,
+                Deallocate, Defragment, DynamicProtocolID, ForceDeallocPolicy, GarbageCollect,
+                JustAlloc, ProtocolIDSource, ShmProvider, ShmProviderBuilder,
+                ShmProviderBuilderBackendID, ShmProviderBuilderID, StaticProtocolID,
+            },
+            shm_provider_backend::ShmProviderBackend,
+            types::{
+                AllocAlignment, BufAllocResult, BufLayoutAllocResult, ChunkAllocResult,
+                MemoryLayout, ZAllocError, ZLayoutAllocError, ZLayoutError,
+            },
+        },
+    };
 }

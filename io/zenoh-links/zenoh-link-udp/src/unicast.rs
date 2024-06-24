@@ -11,27 +11,33 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{
+    collections::HashMap,
+    fmt,
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    sync::{Arc, Mutex, Weak},
+    time::Duration,
+};
+
+use async_trait::async_trait;
+use tokio::{net::UdpSocket, sync::Mutex as AsyncMutex};
+use tokio_util::sync::CancellationToken;
+use zenoh_core::{zasynclock, zlock};
+use zenoh_link_commons::{
+    get_ip_interface_names, ConstructibleLinkManagerUnicast, LinkAuthId, LinkManagerUnicastTrait,
+    LinkUnicast, LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
+};
+use zenoh_protocol::{
+    core::{EndPoint, Locator},
+    transport::BatchSize,
+};
+use zenoh_result::{bail, zerror, Error as ZError, ZResult};
+use zenoh_sync::Mvar;
+
 use super::{
     get_udp_addrs, socket_addr_to_udp_locator, UDP_ACCEPT_THROTTLE_TIME, UDP_DEFAULT_MTU,
     UDP_MAX_MTU,
 };
-use async_trait::async_trait;
-use std::collections::HashMap;
-use std::fmt;
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
-use std::sync::{Arc, Mutex, Weak};
-use std::time::Duration;
-use tokio::net::UdpSocket;
-use tokio::sync::Mutex as AsyncMutex;
-use tokio_util::sync::CancellationToken;
-use zenoh_core::{zasynclock, zlock};
-use zenoh_link_commons::{
-    get_ip_interface_names, ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast,
-    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
-};
-use zenoh_protocol::core::{EndPoint, Locator};
-use zenoh_result::{bail, zerror, Error as ZError, ZResult};
-use zenoh_sync::Mvar;
 
 type LinkHashMap = Arc<Mutex<HashMap<(SocketAddr, SocketAddr), Weak<LinkUnicastUdpUnconnected>>>>;
 type LinkInput = (Vec<u8>, usize);
@@ -200,7 +206,7 @@ impl LinkUnicastTrait for LinkUnicastUdp {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> u16 {
+    fn get_mtu(&self) -> BatchSize {
         *UDP_DEFAULT_MTU
     }
 
@@ -217,6 +223,11 @@ impl LinkUnicastTrait for LinkUnicastUdp {
     #[inline(always)]
     fn is_streamed(&self) -> bool {
         false
+    }
+
+    #[inline(always)]
+    fn get_auth_id(&self) -> &LinkAuthId {
+        &LinkAuthId::NONE
     }
 }
 
@@ -497,6 +508,10 @@ async fn accept_read_task(
     })?;
 
     tracing::trace!("Ready to accept UDP connections on: {:?}", src_addr);
+
+    if src_addr.ip().is_unspecified() {
+        tracing::warn!("Interceptors (e.g. Access Control, Downsampling) are not guaranteed to work on UDP when listening on 0.0.0.0 or [::]. Their usage is discouraged. See https://github.com/eclipse-zenoh/zenoh/issues/1126.");
+    }
 
     loop {
         // Buffers for deserialization

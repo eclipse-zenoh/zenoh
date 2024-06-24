@@ -11,19 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-pub mod ack;
 pub mod del;
 pub mod err;
-pub mod pull;
 pub mod put;
 pub mod query;
 pub mod reply;
 
-#[cfg(not(feature = "shared-memory"))]
-use crate::Zenoh080Bounded;
-#[cfg(feature = "shared-memory")]
-use crate::Zenoh080Sliced;
-use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -33,9 +26,15 @@ use zenoh_buffers::{
 use zenoh_protocol::common::{iext, ZExtUnit};
 use zenoh_protocol::{
     common::{imsg, ZExtZBufHeader},
-    core::{Encoding, ZenohId},
+    core::{Encoding, EntityGlobalIdProto, EntityId, ZenohIdProto},
     zenoh::{ext, id, PushBody, RequestBody, ResponseBody},
 };
+
+#[cfg(not(feature = "shared-memory"))]
+use crate::Zenoh080Bounded;
+#[cfg(feature = "shared-memory")]
+use crate::Zenoh080Sliced;
+use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
 
 // Push
 impl<W> WCodec<&PushBody, &mut W> for Zenoh080
@@ -82,9 +81,6 @@ where
     fn write(self, writer: &mut W, x: &RequestBody) -> Self::Output {
         match x {
             RequestBody::Query(b) => self.write(&mut *writer, b),
-            RequestBody::Put(b) => self.write(&mut *writer, b),
-            RequestBody::Del(b) => self.write(&mut *writer, b),
-            RequestBody::Pull(b) => self.write(&mut *writer, b),
         }
     }
 }
@@ -101,9 +97,6 @@ where
         let codec = Zenoh080Header::new(header);
         let body = match imsg::mid(codec.header) {
             id::QUERY => RequestBody::Query(codec.read(&mut *reader)?),
-            id::PUT => RequestBody::Put(codec.read(&mut *reader)?),
-            id::DEL => RequestBody::Del(codec.read(&mut *reader)?),
-            id::PULL => RequestBody::Pull(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
 
@@ -122,8 +115,6 @@ where
         match x {
             ResponseBody::Reply(b) => self.write(&mut *writer, b),
             ResponseBody::Err(b) => self.write(&mut *writer, b),
-            ResponseBody::Ack(b) => self.write(&mut *writer, b),
-            ResponseBody::Put(b) => self.write(&mut *writer, b),
         }
     }
 }
@@ -141,8 +132,6 @@ where
         let body = match imsg::mid(codec.header) {
             id::REPLY => ResponseBody::Reply(codec.read(&mut *reader)?),
             id::ERR => ResponseBody::Err(codec.read(&mut *reader)?),
-            id::ACK => ResponseBody::Ack(codec.read(&mut *reader)?),
-            id::PUT => ResponseBody::Put(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
 
@@ -153,9 +142,9 @@ where
 // Extension: SourceInfo
 impl<const ID: u8> LCodec<&ext::SourceInfoType<{ ID }>> for Zenoh080 {
     fn w_len(self, x: &ext::SourceInfoType<{ ID }>) -> usize {
-        let ext::SourceInfoType { zid, eid, sn } = x;
+        let ext::SourceInfoType { id, sn } = x;
 
-        1 + self.w_len(zid) + self.w_len(*eid) + self.w_len(*sn)
+        1 + self.w_len(&id.zid) + self.w_len(id.eid) + self.w_len(*sn)
     }
 }
 
@@ -167,18 +156,18 @@ where
 
     fn write(self, writer: &mut W, x: (&ext::SourceInfoType<{ ID }>, bool)) -> Self::Output {
         let (x, more) = x;
-        let ext::SourceInfoType { zid, eid, sn } = x;
+        let ext::SourceInfoType { id, sn } = x;
 
         let header: ZExtZBufHeader<{ ID }> = ZExtZBufHeader::new(self.w_len(x));
         self.write(&mut *writer, (&header, more))?;
 
-        let flags: u8 = (zid.size() as u8 - 1) << 4;
+        let flags: u8 = (id.zid.size() as u8 - 1) << 4;
         self.write(&mut *writer, flags)?;
 
-        let lodec = Zenoh080Length::new(zid.size());
-        lodec.write(&mut *writer, zid)?;
+        let lodec = Zenoh080Length::new(id.zid.size());
+        lodec.write(&mut *writer, &id.zid)?;
 
-        self.write(&mut *writer, eid)?;
+        self.write(&mut *writer, id.eid)?;
         self.write(&mut *writer, sn)?;
         Ok(())
     }
@@ -197,12 +186,18 @@ where
         let length = 1 + ((flags >> 4) as usize);
 
         let lodec = Zenoh080Length::new(length);
-        let zid: ZenohId = lodec.read(&mut *reader)?;
+        let zid: ZenohIdProto = lodec.read(&mut *reader)?;
 
-        let eid: u32 = self.codec.read(&mut *reader)?;
+        let eid: EntityId = self.codec.read(&mut *reader)?;
         let sn: u32 = self.codec.read(&mut *reader)?;
 
-        Ok((ext::SourceInfoType { zid, eid, sn }, more))
+        Ok((
+            ext::SourceInfoType {
+                id: EntityGlobalIdProto { zid, eid },
+                sn,
+            },
+            more,
+        ))
     }
 }
 

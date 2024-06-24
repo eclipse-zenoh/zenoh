@@ -11,10 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{
-    buffer::{Buffer, SplitBuffer},
-    reader::{BacktrackableReader, DidntRead, HasReader, Reader},
-};
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use core::{
     any::Any,
@@ -25,23 +21,30 @@ use core::{
     option,
 };
 
+use crate::{
+    buffer::{Buffer, SplitBuffer},
+    reader::{BacktrackableReader, DidntRead, HasReader, Reader},
+};
+
 /*************************************/
 /*           ZSLICE BUFFER           */
 /*************************************/
-pub trait ZSliceBuffer: Send + Sync + fmt::Debug {
+pub trait ZSliceBuffer: Any + Send + Sync + fmt::Debug {
     fn as_slice(&self) -> &[u8];
-    fn as_mut_slice(&mut self) -> &mut [u8];
     fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 impl ZSliceBuffer for Vec<u8> {
     fn as_slice(&self) -> &[u8] {
         self.as_ref()
     }
-    fn as_mut_slice(&mut self) -> &mut [u8] {
-        self.as_mut()
-    }
+
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 }
@@ -50,10 +53,12 @@ impl ZSliceBuffer for Box<[u8]> {
     fn as_slice(&self) -> &[u8] {
         self.as_ref()
     }
-    fn as_mut_slice(&mut self) -> &mut [u8] {
-        self.as_mut()
-    }
+
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 }
@@ -62,10 +67,12 @@ impl<const N: usize> ZSliceBuffer for [u8; N] {
     fn as_slice(&self) -> &[u8] {
         self.as_ref()
     }
-    fn as_mut_slice(&mut self) -> &mut [u8] {
-        self.as_mut()
-    }
+
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 }
@@ -92,21 +99,42 @@ pub struct ZSlice {
 }
 
 impl ZSlice {
+    #[deprecated(since = "1.0.0", note = "use `new` instead")]
     pub fn make(
         buf: Arc<dyn ZSliceBuffer>,
         start: usize,
         end: usize,
     ) -> Result<ZSlice, Arc<dyn ZSliceBuffer>> {
+        Self::new(buf, start, end)
+    }
+
+    pub fn new(
+        buf: Arc<dyn ZSliceBuffer>,
+        start: usize,
+        end: usize,
+    ) -> Result<ZSlice, Arc<dyn ZSliceBuffer>> {
         if start <= end && end <= buf.as_slice().len() {
-            Ok(ZSlice {
-                buf,
-                start,
-                end,
-                #[cfg(feature = "shared-memory")]
-                kind: ZSliceKind::Raw,
-            })
+            // unsafe: this operation is safe because we just checked the slice boundaries
+            Ok(unsafe { ZSlice::new_unchecked(buf, start, end) })
         } else {
             Err(buf)
+        }
+    }
+
+    pub fn empty() -> Self {
+        unsafe { ZSlice::new_unchecked(Arc::new([]), 0, 0) }
+    }
+
+    /// # Safety
+    /// This function does not verify whether the `start` and `end` indexes are within the buffer boundaries.
+    /// If a [`ZSlice`] is built via this constructor, a later access may panic if `start` and `end` indexes are out-of-bound.
+    pub unsafe fn new_unchecked(buf: Arc<dyn ZSliceBuffer>, start: usize, end: usize) -> Self {
+        ZSlice {
+            buf,
+            start,
+            end,
+            #[cfg(feature = "shared-memory")]
+            kind: ZSliceKind::Raw,
         }
     }
 
@@ -117,6 +145,15 @@ impl ZSlice {
         T: Any,
     {
         self.buf.as_any().downcast_ref::<T>()
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn downcast_mut<T>(&mut self) -> Option<&mut T>
+    where
+        T: Any,
+    {
+        Arc::get_mut(&mut self.buf).and_then(|val| val.as_any_mut().downcast_mut::<T>())
     }
 
     #[inline]
@@ -403,8 +440,9 @@ mod tests {
         assert_eq!(buf.as_slice(), zslice.as_slice());
 
         let range = zslice.range();
-        let mbuf = Arc::get_mut(&mut zslice.buf).unwrap();
-        mbuf.as_mut_slice()[range][..buf.len()].clone_from_slice(&buf[..]);
+        let mut_slice = zslice.downcast_mut::<Vec<u8>>().unwrap();
+
+        mut_slice[range][..buf.len()].clone_from_slice(&buf[..]);
 
         assert_eq!(buf.as_slice(), zslice.as_slice());
     }

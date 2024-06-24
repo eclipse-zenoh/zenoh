@@ -19,35 +19,38 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 #![recursion_limit = "512"]
 
+use std::{
+    collections::HashMap,
+    convert::TryFrom,
+    sync::{Arc, Mutex},
+};
+
 use async_std::task;
 use flume::Sender;
 use memory_backend::MemoryBackend;
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::sync::Arc;
-use std::sync::Mutex;
 use storages_mgt::StorageMessage;
-use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
-use zenoh::prelude::sync::*;
-use zenoh::runtime::Runtime;
-use zenoh::Session;
-use zenoh_backend_traits::config::ConfigDiff;
-use zenoh_backend_traits::config::PluginConfig;
-use zenoh_backend_traits::config::StorageConfig;
-use zenoh_backend_traits::config::VolumeConfig;
-use zenoh_backend_traits::VolumeInstance;
-use zenoh_core::zlock;
-use zenoh_plugin_trait::plugin_long_version;
-use zenoh_plugin_trait::plugin_version;
-use zenoh_plugin_trait::Plugin;
-use zenoh_plugin_trait::PluginControl;
-use zenoh_plugin_trait::PluginReport;
-use zenoh_plugin_trait::PluginStatusRec;
-use zenoh_result::ZResult;
-use zenoh_util::LibLoader;
+use zenoh::{
+    core::Result as ZResult,
+    internal::{
+        plugins::{Response, RunningPlugin, RunningPluginTrait, ZenohPlugin},
+        runtime::Runtime,
+        zlock, LibLoader,
+    },
+    key_expr::{keyexpr, KeyExpr},
+    prelude::Wait,
+    session::Session,
+};
+use zenoh_backend_traits::{
+    config::{ConfigDiff, PluginConfig, StorageConfig, VolumeConfig},
+    VolumeInstance,
+};
+use zenoh_plugin_trait::{
+    plugin_long_version, plugin_version, Plugin, PluginControl, PluginReport, PluginStatusRec,
+};
 
 mod backends_mgt;
 use backends_mgt::*;
+
 mod memory_backend;
 mod replica;
 mod storages_mgt;
@@ -63,10 +66,10 @@ impl Plugin for StoragesPlugin {
     const PLUGIN_LONG_VERSION: &'static str = plugin_long_version!();
 
     type StartArgs = Runtime;
-    type Instance = zenoh::plugins::RunningPlugin;
+    type Instance = RunningPlugin;
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::Instance> {
-        zenoh_util::try_init_log_from_env();
+        zenoh::try_init_log_from_env();
         tracing::debug!("StorageManager plugin {}", Self::PLUGIN_VERSION);
         let config =
             { PluginConfig::try_from((name, runtime.config().lock().plugin(name).unwrap())) }?;
@@ -99,7 +102,7 @@ impl StorageRuntimeInner {
         // Try to initiate login.
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
-        zenoh_util::try_init_log_from_env();
+        zenoh::try_init_log_from_env();
         let PluginConfig {
             name,
             backend_search_dirs,
@@ -111,10 +114,11 @@ impl StorageRuntimeInner {
             .map(|search_dirs| LibLoader::new(&search_dirs, false))
             .unwrap_or_default();
 
-        let plugins_manager = PluginsManager::dynamic(lib_loader.clone(), BACKEND_LIB_PREFIX)
-            .declare_static_plugin::<MemoryBackend>(true);
+        let plugins_manager =
+            PluginsManager::dynamic(lib_loader.clone(), BACKEND_LIB_PREFIX)
+                .declare_static_plugin::<MemoryBackend, &str>(MEMORY_BACKEND_NAME, true);
 
-        let session = Arc::new(zenoh::init(runtime.clone()).res_sync()?);
+        let session = Arc::new(zenoh::session::init(runtime.clone()).wait()?);
 
         // After this moment result should be only Ok. Failure of loading of one voulme or storage should not affect others.
 
@@ -194,17 +198,22 @@ impl StorageRuntimeInner {
             volume_id,
             backend_name
         );
-        let declared = if let Some(declared) = self.plugins_manager.plugin_mut(volume_id) {
+        let declared = if let Some(declared) = self.plugins_manager.plugin_mut(backend_name) {
             declared
         } else if let Some(paths) = config.paths() {
-            self.plugins_manager
-                .declare_dynamic_plugin_by_paths(volume_id, paths, true)?
+            self.plugins_manager.declare_dynamic_plugin_by_paths(
+                backend_name,
+                volume_id,
+                paths,
+                true,
+            )?
         } else {
             self.plugins_manager
                 .declare_dynamic_plugin_by_name(volume_id, backend_name, true)?
         };
         let loaded = declared.load()?;
         loaded.start(config)?;
+
         Ok(())
     }
     fn kill_storage(&mut self, config: &StorageConfig) {
@@ -218,7 +227,7 @@ impl StorageRuntimeInner {
                     config.volume_id
                 );
                 // let _ = async_std::task::block_on(storage.send(StorageMessage::Stop));
-                let _ = storage.send(StorageMessage::Stop); // TODO: was previosuly spawning a task. do we need that?
+                let _ = storage.send(StorageMessage::Stop); // TODO: was previously spawning a task. do we need that?
             }
         }
     }
@@ -239,14 +248,10 @@ impl StorageRuntimeInner {
             volume_id,
             backend.name()
         );
-        let in_interceptor = backend.instance().incoming_data_interceptor();
-        let out_interceptor = backend.instance().outgoing_data_interceptor();
         let stopper = async_std::task::block_on(create_and_start_storage(
             admin_key,
             storage.clone(),
             backend.instance(),
-            in_interceptor,
-            out_interceptor,
             self.session.clone(),
         ))?;
         self.storages
@@ -299,18 +304,15 @@ impl RunningPluginTrait for StorageRuntime {
 
     fn adminspace_getter<'a>(
         &'a self,
-        selector: &'a Selector<'a>,
+        key_expr: &'a KeyExpr<'a>,
         plugin_status_key: &str,
-    ) -> ZResult<Vec<zenoh::plugins::Response>> {
+    ) -> ZResult<Vec<Response>> {
         let mut responses = Vec::new();
         let mut key = String::from(plugin_status_key);
         // TODO: to be removed when "__version__" is implemented in admoin space
         with_extended_string(&mut key, &["/version"], |key| {
-            if keyexpr::new(key.as_str())
-                .unwrap()
-                .intersects(&selector.key_expr)
-            {
-                responses.push(zenoh::plugins::Response::new(
+            if keyexpr::new(key.as_str()).unwrap().intersects(key_expr) {
+                responses.push(Response::new(
                     key.clone(),
                     StoragesPlugin::PLUGIN_VERSION.into(),
                 ))
@@ -319,23 +321,14 @@ impl RunningPluginTrait for StorageRuntime {
         let guard = self.0.lock().unwrap();
         with_extended_string(&mut key, &["/volumes/"], |key| {
             for plugin in guard.plugins_manager.started_plugins_iter() {
-                with_extended_string(key, &[plugin.name()], |key| {
+                with_extended_string(key, &[plugin.id()], |key| {
                     with_extended_string(key, &["/__path__"], |key| {
-                        if keyexpr::new(key.as_str())
-                            .unwrap()
-                            .intersects(&selector.key_expr)
-                        {
-                            responses.push(zenoh::plugins::Response::new(
-                                key.clone(),
-                                plugin.path().into(),
-                            ))
+                        if keyexpr::new(key.as_str()).unwrap().intersects(key_expr) {
+                            responses.push(Response::new(key.clone(), plugin.path().into()))
                         }
                     });
-                    if keyexpr::new(key.as_str())
-                        .unwrap()
-                        .intersects(&selector.key_expr)
-                    {
-                        responses.push(zenoh::plugins::Response::new(
+                    if keyexpr::new(key.as_str()).unwrap().intersects(key_expr) {
+                        responses.push(Response::new(
                             key.clone(),
                             plugin.instance().get_admin_status(),
                         ))
@@ -347,16 +340,13 @@ impl RunningPluginTrait for StorageRuntime {
             for storages in guard.storages.values() {
                 for (storage, handle) in storages {
                     with_extended_string(key, &[storage], |key| {
-                        if keyexpr::new(key.as_str())
-                            .unwrap()
-                            .intersects(&selector.key_expr)
-                        {
+                        if keyexpr::new(key.as_str()).unwrap().intersects(key_expr) {
                             if let Ok(value) = task::block_on(async {
                                 let (tx, rx) = async_std::channel::bounded(1);
                                 let _ = handle.send(StorageMessage::GetStatus(tx));
                                 rx.recv().await
                             }) {
-                                responses.push(zenoh::plugins::Response::new(key.clone(), value))
+                                responses.push(Response::new(key.clone(), value))
                             }
                         }
                     })

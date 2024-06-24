@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
 use zenoh_buffers::{
     reader::{BacktrackableReader, DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -24,6 +23,8 @@ use zenoh_protocol::{
         id,
     },
 };
+
+use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
 
 // FragmentHeader
 impl<W> WCodec<&FragmentHeader, &mut W> for Zenoh080
@@ -48,7 +49,7 @@ where
         if *more {
             header |= flag::M;
         }
-        if ext_qos != &ext::QoSType::default() {
+        if ext_qos != &ext::QoSType::DEFAULT {
             header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
@@ -57,7 +58,7 @@ where
         self.write(&mut *writer, sn)?;
 
         // Extensions
-        if ext_qos != &ext::QoSType::default() {
+        if ext_qos != &ext::QoSType::DEFAULT {
             self.write(&mut *writer, (*ext_qos, false))?;
         }
 
@@ -97,7 +98,7 @@ where
         let sn: TransportSn = self.codec.read(&mut *reader)?;
 
         // Extensions
-        let mut ext_qos = ext::QoSType::default();
+        let mut ext_qos = ext::QoSType::DEFAULT;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {

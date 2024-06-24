@@ -11,16 +11,16 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{collections::HashMap, sync::Arc};
+
 use async_std::sync::RwLock;
 use async_trait::async_trait;
-use std::collections::HashMap;
-use std::sync::Arc;
-use zenoh::prelude::r#async::*;
-use zenoh::time::Timestamp;
-use zenoh_backend_traits::config::{StorageConfig, VolumeConfig};
-use zenoh_backend_traits::*;
+use zenoh::{core::Result as ZResult, internal::Value, key_expr::OwnedKeyExpr, time::Timestamp};
+use zenoh_backend_traits::{
+    config::{StorageConfig, VolumeConfig},
+    *,
+};
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin};
-use zenoh_result::ZResult;
 
 use crate::MEMORY_BACKEND_NAME;
 
@@ -60,26 +60,6 @@ impl Volume for MemoryBackend {
     async fn create_storage(&self, properties: StorageConfig) -> ZResult<Box<dyn Storage>> {
         tracing::debug!("Create Memory Storage with configuration: {:?}", properties);
         Ok(Box::new(MemoryStorage::new(properties).await?))
-    }
-
-    fn incoming_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
-        // By default: no interception point
-        None
-        // To test interceptors, uncomment this line:
-        // Some(Arc::new(|sample| {
-        //     trace!(">>>> IN INTERCEPTOR FOR {:?}", sample);
-        //     sample
-        // }))
-    }
-
-    fn outgoing_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
-        // By default: no interception point
-        None
-        // To test interceptors, uncomment this line:
-        // Some(Arc::new(|sample| {
-        //     trace!("<<<< OUT INTERCEPTOR FOR {:?}", sample);
-        //     sample
-        // }))
     }
 }
 

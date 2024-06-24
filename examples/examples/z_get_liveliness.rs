@@ -11,35 +11,39 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use clap::Parser;
-use std::convert::TryFrom;
 use std::time::Duration;
-use zenoh::config::Config;
-use zenoh::prelude::r#async::*;
+
+use clap::Parser;
+use zenoh::{key_expr::KeyExpr, prelude::*, Config};
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
 async fn main() {
     // initiate logging
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
 
     let (config, key_expr, timeout) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Sending Liveliness Query '{key_expr}'...");
     let replies = session
         .liveliness()
         .get(&key_expr)
         .timeout(timeout)
-        .res()
         .await
         .unwrap();
     while let Ok(reply) = replies.recv_async().await {
-        match reply.sample {
-            Ok(sample) => println!(">> Alive token ('{}')", sample.key_expr.as_str(),),
-            Err(err) => println!(">> Received (ERROR: '{}')", String::try_from(&err).unwrap()),
+        match reply.result() {
+            Ok(sample) => println!(">> Alive token ('{}')", sample.key_expr().as_str(),),
+            Err(err) => {
+                let payload = err
+                    .payload()
+                    .deserialize::<String>()
+                    .unwrap_or_else(|e| format!("{}", e));
+                println!(">> Received (ERROR: '{}')", payload);
+            }
         }
     }
 }
