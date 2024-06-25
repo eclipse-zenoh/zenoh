@@ -590,12 +590,11 @@ impl<'a> HasWriter for &'a mut ZBuf {
 
 impl Writer for ZBufWriter<'_> {
     fn write(&mut self, bytes: &[u8]) -> Result<NonZeroUsize, DidntWrite> {
-        if bytes.is_empty() {
+        let Some(len) = NonZeroUsize::new(bytes.len()) else {
             return Err(DidntWrite);
-        }
+        };
         self.write_exact(bytes)?;
-        // SAFETY: this operation is safe since we check if bytes is empty
-        Ok(unsafe { NonZeroUsize::new_unchecked(bytes.len()) })
+        Ok(len)
     }
 
     fn write_exact(&mut self, bytes: &[u8]) -> Result<(), DidntWrite> {
@@ -646,7 +645,7 @@ impl Writer for ZBufWriter<'_> {
         Ok(())
     }
 
-    fn with_slot<F>(&mut self, mut len: usize, f: F) -> Result<NonZeroUsize, DidntWrite>
+    unsafe fn with_slot<F>(&mut self, mut len: usize, f: F) -> Result<NonZeroUsize, DidntWrite>
     where
         F: FnOnce(&mut [u8]) -> usize,
     {

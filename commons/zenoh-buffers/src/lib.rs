@@ -139,7 +139,7 @@ pub mod writer {
         }
         /// Provides a buffer of exactly `len` uninitialized bytes to `f` to allow in-place writing.
         /// `f` must return the number of bytes it actually wrote.
-        fn with_slot<F>(&mut self, len: usize, f: F) -> Result<NonZeroUsize, DidntWrite>
+        unsafe fn with_slot<F>(&mut self, len: usize, f: F) -> Result<NonZeroUsize, DidntWrite>
         where
             F: FnOnce(&mut [u8]) -> usize;
     }

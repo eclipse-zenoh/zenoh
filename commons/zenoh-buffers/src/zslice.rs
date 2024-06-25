@@ -122,7 +122,7 @@ impl ZSlice {
     }
 
     pub fn empty() -> Self {
-        unsafe { ZSlice::new_unchecked(Arc::new([]), 0, 0) }
+        Self::new(Arc::new([]), 0, 0).unwrap()
     }
 
     /// # Safety
