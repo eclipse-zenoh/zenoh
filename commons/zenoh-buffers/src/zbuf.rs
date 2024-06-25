@@ -645,7 +645,7 @@ impl Writer for ZBufWriter<'_> {
         Ok(())
     }
 
-    unsafe fn with_slot<F>(&mut self, mut len: usize, f: F) -> Result<NonZeroUsize, DidntWrite>
+    unsafe fn with_slot<F>(&mut self, mut len: usize, write: F) -> Result<NonZeroUsize, DidntWrite>
     where
         F: FnOnce(&mut [u8]) -> usize,
     {
@@ -657,7 +657,7 @@ impl Writer for ZBufWriter<'_> {
         let s = crate::unsafe_slice_mut!(cache.spare_capacity_mut(), ..len);
         // SAFETY: converting MaybeUninit<u8> into [u8] is safe because we are going to write on it.
         //         The returned len tells us how many bytes have been written so as to update the len accordingly.
-        len = unsafe { f(&mut *(s as *mut [mem::MaybeUninit<u8>] as *mut [u8])) };
+        len = unsafe { write(&mut *(s as *mut [mem::MaybeUninit<u8>] as *mut [u8])) };
         // SAFETY: we already reserved len elements on the vector.
         unsafe { cache.set_len(prev_cache_len + len) };
 

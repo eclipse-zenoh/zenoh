@@ -83,10 +83,6 @@ impl Writer for &mut [u8] {
         self.len()
     }
 
-    /// # Safety
-    ///
-    /// Caller must ensure that `write` return a length lesser than or equal to the length of
-    /// the slice passed in argument
     unsafe fn with_slot<F>(&mut self, len: usize, write: F) -> Result<NonZeroUsize, DidntWrite>
     where
         F: FnOnce(&mut [u8]) -> usize,
