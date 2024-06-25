@@ -31,6 +31,7 @@ use zenoh::sample::SampleKind;
 
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use tracing::{debug, error};
@@ -98,17 +99,7 @@ struct RunningPlugin(JoinHandle<()>);
 
 impl PluginControl for RunningPlugin {}
 
-impl RunningPluginTrait for RunningPlugin {
-    // fn adminspace_getter<'a>(
-    //     &'a self,
-    //     selector: &'a Selector<'a>,
-    //     plugin_status_key: &str,
-    // ) -> ZResult<Vec<zenoh::plugins::Response>> {
-    //     let mut responses = Vec::new();
-    //     // TODO :
-    //     Ok(responses)
-    // }
-}
+impl RunningPluginTrait for RunningPlugin {}
 
 #[derive(Debug, Serialize, Deserialize)]
 enum RemoteAPIMsg {
@@ -139,7 +130,7 @@ enum ControlMsg {
     DeleteKeyExpr(KeyExprWrapper),
 
     // Subscriber
-    DeclareSubscriber(String),
+    DeclareSubscriber(String, String),
     // CreateSubscriber(KeyExprWrapper),
     Subscriber(Uuid),
     UndeclareSubscriber(),
@@ -153,6 +144,7 @@ enum ErrorMsg {}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct SampleWS {
+    subscriber_id: Uuid,
     key_expr: KeyExpr<'static>,
     value: Vec<u8>,
     kind: SampleKindWS,
@@ -174,13 +166,16 @@ impl From<SampleKind> for SampleKindWS {
     }
 }
 
-impl TryFrom<Sample> for SampleWS {
+impl TryFrom<(Sample, Uuid)> for SampleWS {
     type Error = ZError;
 
-    fn try_from(s: Sample) -> Result<Self, Self::Error> {
+    fn try_from(sample_and_id: (Sample, Uuid)) -> Result<Self, Self::Error> {
+        let (s, sub_id) = sample_and_id;
+        let z_bytes: Vec<u8> = s.payload().try_into()?;
         let z_bytes: Vec<u8> = s.payload().try_into()?;
 
         Ok(SampleWS {
+            subscriber_id: sub_id,
             key_expr: s.key_expr().clone(),
             value: z_bytes,
             kind: s.kind().into(),
@@ -305,6 +300,7 @@ async fn handle_message(
                 RemoteAPIMsg::Data(data_msg) => handle_data_message(data_msg),
             },
             Err(err) => {
+                println!("{} : {}", text, err);
                 debug!(
                     "RemoteAPI: WS Message Cannot be Deserialized to RemoteAPIMsg {}",
                     err
@@ -349,18 +345,32 @@ async fn handle_control_message(
         }
 
         ControlMsg::DeleteKeyExpr(_) => todo!(),
-        ControlMsg::DeclareSubscriber(key_expr_str) => {
+        ControlMsg::DeclareSubscriber(key_expr_str, uuid) => {
             let mut state_writer = state_map.write().await;
+            println!("{}, {}", key_expr_str, uuid);
 
             if let Some(remote_state) = state_writer.get_mut(&sock_addr) {
                 let key_expr = KeyExpr::new(key_expr_str).unwrap();
                 let ch_tx = remote_state.channel_tx.clone();
 
+                let sub_id = match Uuid::from_str(&uuid) {
+                    Ok(uuid) => uuid,
+                    Err(err) => {
+                        println!("Could not create UUID from string {uuid}, {err}");
+                        tracing::error!("Could not create UUID from string {uuid}, {err}");
+                        return None;
+                    }
+                };
+
+                println!("Key Expression {key_expr}");
+
                 let subscriber = remote_state
                     .session
                     .declare_subscriber(key_expr)
                     .callback(move |sample| {
-                        match SampleWS::try_from(sample) {
+                        println!("RCV sample {}", sample.key_expr());
+
+                        match SampleWS::try_from((sample, sub_id)) {
                             Ok(sample_ws) => {
                                 let remote_api_message =
                                     RemoteAPIMsg::Data(DataMsg::Sample(sample_ws));
@@ -376,7 +386,6 @@ async fn handle_control_message(
                     .await
                     .unwrap();
 
-                let sub_id = Uuid::new_v4();
                 let arc_subscriber = Arc::new(subscriber);
                 remote_state.subscribers.insert(sub_id, arc_subscriber);
 
