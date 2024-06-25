@@ -112,7 +112,7 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, mut x: u64) -> Self::Output {
-        let write = move |buffer| {
+        let write = move |buffer: &mut [u8]| {
             let mut len = 0;
             while (x & !0x7f_u64) != 0 {
                 // SAFETY: buffer is guaranteed to be VLE_LEN long where VLE_LEN is
