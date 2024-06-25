@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
+#![cfg(feature = "test")]
 use std::{
     sync::{atomic::AtomicBool, Arc},
     time::Duration,
