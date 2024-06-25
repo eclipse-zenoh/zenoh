@@ -22,24 +22,32 @@ fn main() {
     let payload = ZBytes::from(input);
     let output: u32 = payload.deserialize().unwrap();
     assert_eq!(input, output);
+    // Corresponding encoding to be used in operations like `.put()`, `.reply()`, etc.
+    // let encoding = Encoding::ZENOH_UINT32;
 
     // String
     let input = String::from("test");
     let payload = ZBytes::from(&input);
     let output: String = payload.deserialize().unwrap();
     assert_eq!(input, output);
+    // Corresponding encoding to be used in operations like `.put()`, `.reply()`, etc.
+    // let encoding = Encoding::ZENOH_STRING;
 
     // Cow
     let input = Cow::from("test");
     let payload = ZBytes::from(&input);
     let output: Cow<str> = payload.deserialize().unwrap();
     assert_eq!(input, output);
+    // Corresponding encoding to be used in operations like `.put()`, `.reply()`, etc.
+    // let encoding = Encoding::ZENOH_STRING;
 
     // Vec<u8>: The deserialization should be infallible
     let input: Vec<u8> = vec![1, 2, 3, 4];
     let payload = ZBytes::from(&input);
     let output: Vec<u8> = payload.into();
     assert_eq!(input, output);
+    // Corresponding encoding to be used in operations like `.put()`, `.reply()`, etc.
+    // let encoding = Encoding::ZENOH_BYTES;
 
     // Writer & Reader
     // serialization
