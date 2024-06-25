@@ -23,6 +23,11 @@ fn canonize(bytes: &mut [u8]) -> usize {
     let mut double_wild = false;
     loop {
         match &bytes[index..] {
+            [b'*', b'*'] => {
+                bytes[written..written + 2].copy_from_slice(b"**");
+                written += 2;
+                return written;
+            }
             [b'*', b'*', b'/', ..] => {
                 double_wild = true;
                 index += 3;
@@ -47,7 +52,7 @@ fn canonize(bytes: &mut [u8]) -> usize {
                 index += 2;
             }
             _ => {
-                if double_wild {
+                if double_wild && &bytes[index..] != b"**" {
                     bytes[written..written + 3].copy_from_slice(b"**/");
                     written += 3;
                     double_wild = false;
@@ -134,6 +139,9 @@ fn canonizer() {
     let mut s = String::from("hello/**/**/bye");
     s.canonize();
     assert_eq!(s, "hello/**/bye");
+    let mut s = String::from("hello/**/**");
+    s.canonize();
+    assert_eq!(s, "hello/**");
 
     // Any $* chunk is replaced by a * chunk
     let mut s = String::from("hello/$*/bye");
