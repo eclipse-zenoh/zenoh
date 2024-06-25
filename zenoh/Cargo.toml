@@ -91,6 +91,7 @@ serde-pickle = { workspace = true }
 serde_yaml = { workspace = true }
 socket2 = { workspace = true }
 stop-token = { workspace = true }
+trie-rs = { workspace = true }
 uhlc = { workspace = true, features = ["default"] }
 unwrap-infallible = { workspace = true }
 uuid = { workspace = true, features = ["default"] }
