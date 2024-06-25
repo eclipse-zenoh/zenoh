@@ -31,7 +31,7 @@ use zenoh::{
     selector::Selector,
     session::{SessionDeclarations, SessionRef},
     subscriber::{Reliability, Subscriber},
-    time::{new_timestamp, Timestamp},
+    time::Timestamp,
 };
 
 use crate::ExtractSample;
@@ -622,7 +622,7 @@ where
 /// # }
 /// ```
 pub struct FetchingSubscriber<'a, Handler> {
-    subscriber: Subscriber<'a, ()>,
+    pub(crate) subscriber: Subscriber<'a, ()>,
     callback: Arc<dyn Fn(Sample) + Send + Sync + 'static>,
     state: Arc<Mutex<InnerState>>,
     handler: Handler,
@@ -655,7 +655,7 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
         InputHandler: IntoHandler<'static, Sample, Handler = Handler> + Send,
         TryIntoSample: ExtractSample + Send + Sync,
     {
-        let zid = conf.session.zid();
+        let timestamp = conf.session.new_timestamp();
         let state = Arc::new(Mutex::new(InnerState {
             pending_fetches: 0,
             merge_queue: MergeQueue::new(),
@@ -673,9 +673,10 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
                     tracing::trace!(
                         "Sample received while fetch in progress: push it to merge_queue"
                     );
+
                     // ensure the sample has a timestamp, thus it will always be sorted into the MergeQueue
                     // after any timestamped Sample possibly coming from a fetch reply.
-                    let timestamp = s.timestamp().cloned().unwrap_or(new_timestamp(zid));
+                    let timestamp = s.timestamp().cloned().unwrap_or(timestamp);
                     state
                         .merge_queue
                         .push(SampleBuilder::from(s).timestamp(timestamp).into());

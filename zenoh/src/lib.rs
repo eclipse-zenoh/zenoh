@@ -337,8 +337,6 @@ pub mod liveliness {
 /// Timestamp support
 pub mod time {
     pub use zenoh_protocol::core::{Timestamp, TimestampId, NTP64};
-
-    pub use crate::api::time::new_timestamp;
 }
 
 /// Configuration to pass to [`open`](crate::session::open) and [`scout`](crate::scouting::scout) functions and associated constants
