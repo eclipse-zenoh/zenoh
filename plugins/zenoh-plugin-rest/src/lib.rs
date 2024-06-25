@@ -67,7 +67,6 @@ pub fn base64_encode(data: &[u8]) -> String {
 }
 
 fn payload_to_json(payload: &ZBytes, encoding: &Encoding) -> serde_json::Value {
-    println!("Encoding is: {encoding:?}");
     match payload.is_empty() {
         // If the value is empty return a JSON null
         true => serde_json::Value::Null,

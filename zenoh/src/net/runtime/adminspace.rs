@@ -622,8 +622,15 @@ fn local_data(context: &AdminContext, query: Query) {
     }
 
     tracing::trace!("AdminSpace router_data: {:?}", json);
+    let payload = match ZBytes::try_from(json) {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::error!("Error serializing AdminSpace reply: {:?}", e);
+            return;
+        }
+    };
     if let Err(e) = query
-        .reply(reply_key, json.to_string())
+        .reply(reply_key, payload)
         .encoding(Encoding::APPLICATION_JSON)
         .wait()
     {
