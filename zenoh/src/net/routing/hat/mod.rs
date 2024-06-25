@@ -256,7 +256,7 @@ pub(crate) fn new_hat(whatami: WhatAmI, config: &Config) -> Box<dyn HatTrait + S
     }
 }
 
-pub trait HatTokenTrait {
+pub(crate) trait HatTokenTrait {
     #[allow(clippy::too_many_arguments)]
     fn declare_token(
         &self,
