@@ -17,9 +17,13 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use std::{collections::HashMap, net::Ipv4Addr};
+use std::{
+    collections::{HashMap, HashSet},
+    net::Ipv4Addr,
+};
 
 use ahash::RandomState;
+use trie_rs::map::{Trie as TrieMap, TrieBuilder as TrieMapBuilder};
 use zenoh_config::{
     AclConfig, AclConfigRules, Action, InterceptorFlow, Permission, PolicyRule, Subject,
 };
@@ -32,7 +36,70 @@ use zenoh_util::net::get_interface_names_by_addr;
 type PolicyForSubject = FlowPolicy;
 
 type PolicyMap = HashMap<usize, PolicyForSubject, RandomState>;
-type SubjectMap = HashMap<Subject, usize, RandomState>;
+
+#[derive(Debug, Clone)]
+pub(crate) struct SubjectMap {
+    inner: TrieMap<Subject, usize>,
+}
+
+impl SubjectMap {
+    pub(crate) fn builder() -> SubjectMapBuilder {
+        SubjectMapBuilder::new()
+    }
+
+    pub(crate) fn get(&self, subject: &Subject) -> Option<&usize> {
+        todo!()
+    }
+}
+
+impl Default for SubjectMap {
+    fn default() -> Self {
+        Self {
+            inner: SubjectMapBuilder::new().inner.build(),
+        }
+    }
+}
+
+pub(crate) struct SubjectMapBuilder {
+    inner: TrieMapBuilder<Subject, usize>,
+    subject_set: HashSet<Vec<Subject>, RandomState>,
+    id_counter: usize,
+}
+
+impl SubjectMapBuilder {
+    pub(crate) fn new() -> Self {
+        Self {
+            inner: TrieMapBuilder::new(),
+            subject_set: HashSet::with_hasher(RandomState::default()),
+            id_counter: 0,
+        }
+    }
+
+    pub(crate) fn build(self) -> SubjectMap {
+        SubjectMap {
+            inner: self.inner.build(),
+        }
+    }
+
+    pub(crate) fn insert_single_subject(&mut self, subject: Subject) -> Option<usize> {
+        if matches!(&subject, Subject::None) || !self.subject_set.insert(vec![subject.clone()]) {
+            return None;
+        }
+        self.id_counter += 1;
+        match subject {
+            Subject::Interface(_) => self.inner.push([subject], self.id_counter),
+            Subject::CertCommonName(_) => {
+                self.inner.push([Subject::None, subject], self.id_counter)
+            }
+            Subject::Username(_) => self
+                .inner
+                .push([Subject::None, Subject::None, subject], self.id_counter),
+            Subject::None => {}
+        }
+        Some(self.id_counter)
+    }
+}
+
 type KeTreeRule = KeBoxTree<bool>;
 
 #[derive(Default)]
@@ -323,17 +390,13 @@ impl PolicyEnforcer {
                 }
             }
         }
-        let mut subject_map = SubjectMap::default();
-        let mut counter = 1;
+        let mut subject_map_builder = SubjectMap::builder();
         // Starting at 1 since 0 is the init value and should not match anything
         for rule in policy_rules.iter() {
-            if !subject_map.contains_key(&rule.subject) {
-                subject_map.insert(rule.subject.clone(), counter);
-                counter += 1;
-            }
+            subject_map_builder.insert_single_subject(rule.subject.clone());
         }
         Ok(PolicyInformation {
-            subject_map,
+            subject_map: subject_map_builder.build(),
             policy_rules,
         })
     }

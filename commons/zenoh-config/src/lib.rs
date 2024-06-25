@@ -123,13 +123,14 @@ pub struct PolicyRule {
     pub flow: InterceptorFlow,
 }
 
-#[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone)]
+#[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
 #[serde(untagged)]
 #[serde(rename_all = "snake_case")]
 pub enum Subject {
     Interface(String),
     CertCommonName(String),
     Username(String),
+    None,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
