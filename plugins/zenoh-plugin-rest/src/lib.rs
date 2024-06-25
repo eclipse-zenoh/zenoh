@@ -77,10 +77,19 @@ fn payload_to_json(payload: &ZBytes, encoding: &Encoding) -> serde_json::Value {
                 &Encoding::APPLICATION_JSON | &Encoding::TEXT_JSON | &Encoding::TEXT_JSON5 => {
                     payload
                         .deserialize::<serde_json::Value>()
-                        .unwrap_or_else(|_| {
+                        .unwrap_or_else(|e| {
+                            tracing::warn!("Encoding is JSON but data is not JSON, converting to base64, Error: {e:?}");
                             serde_json::Value::String(base64_encode(&Cow::from(payload)))
                         })
                 }
+                &Encoding::TEXT_PLAIN | &Encoding::ZENOH_STRING  => serde_json::Value::String(
+                    payload
+                        .deserialize::<String>()
+                        .unwrap_or_else(|e| {
+                            tracing::warn!("Encoding is String but data is not String, converting to base64, Error: {e:?}");
+                            base64_encode(&Cow::from(payload))
+                        }),
+                ),
                 // otherwise convert to JSON string
                 _ => serde_json::Value::String(base64_encode(&Cow::from(payload))),
             }
