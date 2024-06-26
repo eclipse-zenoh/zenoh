@@ -2958,6 +2958,7 @@ impl<const ID: u8> From<AttachmentType<ID>> for ZBytes {
     }
 }
 
+#[cfg(test)]
 mod tests {
     #[test]
     fn serializer() {

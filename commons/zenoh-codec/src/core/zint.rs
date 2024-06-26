@@ -320,6 +320,7 @@ zint_impl!(usize);
 //     }
 // }
 
+// #[cfg(test)]
 // mod tests {
 //     #[test]
 //     fn u64_overhead() {

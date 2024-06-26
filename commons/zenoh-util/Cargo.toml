@@ -31,9 +31,6 @@ description = "Internal crate for zenoh."
 [badges]
 maintenance = { status = "actively-developed" }
 
-[features]
-test = []
-
 [dependencies]
 async-std = { workspace = true, features = ["default", "unstable"] }
 tokio = { workspace = true, features = ["time", "net"] }

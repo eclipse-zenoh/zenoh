@@ -112,14 +112,12 @@ pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
 );
 
 #[doc(inline)]
-pub use {
-    crate::{
-        config::Config,
-        core::{Error, Result},
-        scouting::scout,
-        session::{open, Session},
-    },
-    zenoh_util::{init_log_from_env_or, try_init_log_from_env},
+pub use crate::{
+    config::Config,
+    core::{Error, Result},
+    logging::{init_logging, init_logging_with_level},
+    scouting::scout,
+    session::{open, Session},
 };
 
 pub mod prelude;
@@ -137,6 +135,12 @@ pub mod core {
 
     /// Zenoh message priority
     pub use crate::api::publisher::Priority;
+}
+
+pub mod logging {
+    pub use zenoh_util::{init_logging, init_logging_with_level, InvalidLogLevel, LogLevel};
+    #[cfg(feature = "internal")]
+    pub use zenoh_util::{init_logging_with_callback, try_init_logging};
 }
 
 /// [Key expression](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md) are Zenoh's address space.

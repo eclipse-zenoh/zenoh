@@ -20,7 +20,7 @@ use zenoh::{
 #[tokio::main]
 async fn main() {
     let _z = zenoh_runtime::ZRuntimePoolGuard;
-    zenoh_util::init_log_test();
+    zenoh::init_logging();
 
     let queryable_key_expr = KeyExpr::try_from("test/valgrind/data").unwrap();
     let get_selector = Selector::try_from("test/valgrind/**").unwrap();

@@ -23,7 +23,7 @@ use zenoh::{
 #[tokio::main]
 async fn main() {
     // Initiate logging
-    zenoh::try_init_log_from_env();
+    zenoh::init_logging();
     run().await.unwrap()
 }
 

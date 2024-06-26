@@ -745,6 +745,7 @@ impl ZBuf {
     }
 }
 
+#[cfg(test)]
 mod tests {
     #[test]
     fn zbuf_eq() {

@@ -27,7 +27,7 @@ const N: usize = 10;
 #[tokio::main]
 async fn main() -> Result<(), ZError> {
     // Initiate logging
-    zenoh::try_init_log_from_env();
+    zenoh::init_logging();
 
     let (mut config, path, payload) = parse_args();
 

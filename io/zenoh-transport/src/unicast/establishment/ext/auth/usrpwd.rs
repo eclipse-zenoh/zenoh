@@ -452,6 +452,7 @@ impl<'a> AcceptFsm for &'a AuthUsrPwdFsm<'a> {
     }
 }
 
+#[cfg(test)]
 mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn authenticator_usrpwd_config() {

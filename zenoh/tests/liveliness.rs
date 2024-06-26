@@ -15,7 +15,7 @@
 use zenoh_core::ztimeout;
 
 #[cfg(feature = "unstable")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 async fn test_liveliness_subscriber_clique() {
     use std::time::Duration;
 
@@ -26,8 +26,6 @@ async fn test_liveliness_subscriber_clique() {
     const SLEEP: Duration = Duration::from_secs(1);
     const PEER1_ENDPOINT: &str = "tcp/localhost:47447";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/clique";
-
-    zenoh_util::try_init_log_from_env();
 
     let peer1 = {
         let mut c = config::default();
@@ -72,7 +70,7 @@ async fn test_liveliness_subscriber_clique() {
 }
 
 #[cfg(feature = "unstable")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 async fn test_liveliness_query_clique() {
     use std::time::Duration;
 
@@ -83,8 +81,6 @@ async fn test_liveliness_query_clique() {
     const SLEEP: Duration = Duration::from_secs(1);
     const PEER1_ENDPOINT: &str = "tcp/localhost:47448";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/query/clique";
-
-    zenoh_util::try_init_log_from_env();
 
     let peer1 = {
         let mut c = config::default();
@@ -122,7 +118,7 @@ async fn test_liveliness_query_clique() {
 }
 
 #[cfg(feature = "unstable")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 async fn test_liveliness_subscriber_brokered() {
     use std::time::Duration;
 
@@ -134,8 +130,6 @@ async fn test_liveliness_subscriber_brokered() {
     const SLEEP: Duration = Duration::from_secs(1);
     const ROUTER_ENDPOINT: &str = "tcp/localhost:47449";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/brokered";
-
-    zenoh_util::try_init_log_from_env();
 
     let _router = {
         let mut c = config::default();
@@ -192,7 +186,7 @@ async fn test_liveliness_subscriber_brokered() {
 }
 
 #[cfg(feature = "unstable")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 async fn test_liveliness_query_brokered() {
     use std::time::Duration;
 
@@ -203,8 +197,6 @@ async fn test_liveliness_query_brokered() {
     const SLEEP: Duration = Duration::from_secs(1);
     const ROUTER_ENDPOINT: &str = "tcp/localhost:47450";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/query/brokered";
-
-    zenoh_util::try_init_log_from_env();
 
     let _router = {
         let mut c = config::default();
@@ -254,7 +246,7 @@ async fn test_liveliness_query_brokered() {
 }
 
 #[cfg(feature = "unstable")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 async fn test_liveliness_subscriber_local() {
     use std::time::Duration;
 
@@ -263,8 +255,6 @@ async fn test_liveliness_subscriber_local() {
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/local";
-
-    zenoh_util::try_init_log_from_env();
 
     let peer = {
         let mut c = config::default();
@@ -294,7 +284,7 @@ async fn test_liveliness_subscriber_local() {
 }
 
 #[cfg(feature = "unstable")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 async fn test_liveliness_query_local() {
     use std::time::Duration;
 
@@ -303,8 +293,6 @@ async fn test_liveliness_query_local() {
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/query/local";
-
-    zenoh_util::try_init_log_from_env();
 
     let peer = {
         let mut c = config::default();

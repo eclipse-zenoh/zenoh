@@ -18,7 +18,7 @@ use zenoh::{config::Config, key_expr::KeyExpr, prelude::*};
 #[tokio::main]
 async fn main() {
     let _z = zenoh_runtime::ZRuntimePoolGuard;
-    zenoh_util::init_log_test();
+    zenoh::init_logging();
 
     let pub_key_expr = KeyExpr::try_from("test/valgrind/data").unwrap();
     let sub_key_expr = KeyExpr::try_from("test/valgrind/**").unwrap();

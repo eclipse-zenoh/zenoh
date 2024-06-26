@@ -128,10 +128,8 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
 }
 
 #[cfg(feature = "transport_tcp")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 async fn transport_unicast_defragmentation_tcp_only() {
-    zenoh_util::try_init_log_from_env();
-
     // Define the locators
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 11000).parse().unwrap();
     // Define the reliability and congestion control
@@ -160,11 +158,9 @@ async fn transport_unicast_defragmentation_tcp_only() {
 }
 
 #[cfg(feature = "transport_ws")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 #[ignore]
 async fn transport_unicast_defragmentation_ws_only() {
-    zenoh_util::try_init_log_from_env();
-
     // Define the locators
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 11010).parse().unwrap();
     // Define the reliability and congestion control
@@ -193,11 +189,9 @@ async fn transport_unicast_defragmentation_ws_only() {
 }
 
 #[cfg(feature = "transport_unixpipe")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 4))]
 #[ignore]
 async fn transport_unicast_defragmentation_unixpipe_only() {
-    zenoh_util::try_init_log_from_env();
-
     // Define the locators
     let endpoint: EndPoint = "unixpipe/transport_unicast_defragmentation_unixpipe_only"
         .parse()
