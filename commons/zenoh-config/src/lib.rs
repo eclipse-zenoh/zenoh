@@ -386,6 +386,8 @@ validated_struct::validator! {
                     keep_alive: usize,
                     /// Zenoh's MTU equivalent (default: 2^16-1)
                     batch_size: BatchSize,
+                    /// Perform automatic batching of messages if they are smaller of the batch_size
+                    automatic_batching: bool,
                     pub queue: QueueConf {
                         /// The size of each priority queue indicates the number of batches a given queue can contain.
                         /// The amount of memory being allocated for each queue is then SIZE_XXX * BATCH_SIZE.

@@ -124,6 +124,7 @@ struct StageIn {
     s_out: StageInOut,
     mutex: StageInMutex,
     fragbuf: ZBuf,
+    automatic_batching: bool,
 }
 
 impl StageIn {
@@ -179,7 +180,7 @@ impl StageIn {
 
         macro_rules! zretok {
             ($batch:expr, $msg:expr) => {{
-                if $msg.is_express() {
+                if !self.automatic_batching || $msg.is_express() {
                     // Move out existing batch
                     self.s_out.move_batch($batch);
                     return true;
@@ -315,11 +316,17 @@ impl StageIn {
 
         macro_rules! zretok {
             ($batch:expr) => {{
-                let bytes = $batch.len();
-                *c_guard = Some($batch);
-                drop(c_guard);
-                self.s_out.notify(bytes);
-                return true;
+                if !self.automatic_batching {
+                    // Move out existing batch
+                    self.s_out.move_batch($batch);
+                    return true;
+                } else {
+                    let bytes = $batch.len();
+                    *c_guard = Some($batch);
+                    drop(c_guard);
+                    self.s_out.notify(bytes);
+                    return true;
+                }
             }};
         }
 
@@ -494,6 +501,7 @@ pub(crate) struct TransmissionPipelineConf {
     pub(crate) batch: BatchConfig,
     pub(crate) queue_size: [usize; Priority::NUM],
     pub(crate) wait_before_drop: Duration,
+    pub(crate) automatic_batching: bool,
     pub(crate) backoff: Duration,
 }
 
@@ -554,6 +562,7 @@ impl TransmissionPipeline {
                     priority: priority[prio].clone(),
                 },
                 fragbuf: ZBuf::empty(),
+                automatic_batching: config.automatic_batching,
             }));
 
             // The stage out for this priority
@@ -765,6 +774,7 @@ mod tests {
             is_compression: true,
         },
         queue_size: [1; Priority::NUM],
+        automatic_batching: true,
         wait_before_drop: Duration::from_millis(1),
         backoff: Duration::from_micros(1),
     };
@@ -777,6 +787,7 @@ mod tests {
             is_compression: false,
         },
         queue_size: [1; Priority::NUM],
+        automatic_batching: true,
         wait_before_drop: Duration::from_millis(1),
         backoff: Duration::from_micros(1),
     };
