@@ -353,7 +353,7 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ZReadOrDeserializeError::Read(_) => f.write_str("Didn't read"),
+            ZReadOrDeserializeError::Read(_) => f.write_str("Read error"),
             ZReadOrDeserializeError::Deserialize(e) => f.write_fmt(format_args!("{:?}", e)),
         }
     }
@@ -2296,8 +2296,12 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ZReadOrDeserializeErrorTuple2::One(e) => f.write_fmt(format_args!("{}", e)),
-            ZReadOrDeserializeErrorTuple2::Two(e) => f.write_fmt(format_args!("{}", e)),
+            ZReadOrDeserializeErrorTuple2::One(e) => {
+                f.write_fmt(format_args!("1st tuple element: {}", e))
+            }
+            ZReadOrDeserializeErrorTuple2::Two(e) => {
+                f.write_fmt(format_args!("2nd tuple element: {}", e))
+            }
         }
     }
 }
@@ -2480,9 +2484,15 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ZReadOrDeserializeErrorTuple3::One(e) => f.write_fmt(format_args!("{}", e)),
-            ZReadOrDeserializeErrorTuple3::Two(e) => f.write_fmt(format_args!("{}", e)),
-            ZReadOrDeserializeErrorTuple3::Three(e) => f.write_fmt(format_args!("{}", e)),
+            ZReadOrDeserializeErrorTuple3::One(e) => {
+                f.write_fmt(format_args!("1st tuple element: {}", e))
+            }
+            ZReadOrDeserializeErrorTuple3::Two(e) => {
+                f.write_fmt(format_args!("2nd tuple element: {}", e))
+            }
+            ZReadOrDeserializeErrorTuple3::Three(e) => {
+                f.write_fmt(format_args!("3rd tuple element: {}", e))
+            }
         }
     }
 }
@@ -2695,10 +2705,18 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ZReadOrDeserializeErrorTuple4::One(e) => f.write_fmt(format_args!("{}", e)),
-            ZReadOrDeserializeErrorTuple4::Two(e) => f.write_fmt(format_args!("{}", e)),
-            ZReadOrDeserializeErrorTuple4::Three(e) => f.write_fmt(format_args!("{}", e)),
-            ZReadOrDeserializeErrorTuple4::Four(e) => f.write_fmt(format_args!("{}", e)),
+            ZReadOrDeserializeErrorTuple4::One(e) => {
+                f.write_fmt(format_args!("1st tuple element: {}", e))
+            }
+            ZReadOrDeserializeErrorTuple4::Two(e) => {
+                f.write_fmt(format_args!("2nd tuple element: {}", e))
+            }
+            ZReadOrDeserializeErrorTuple4::Three(e) => {
+                f.write_fmt(format_args!("3rd tuple element: {}", e))
+            }
+            ZReadOrDeserializeErrorTuple4::Four(e) => {
+                f.write_fmt(format_args!("4th tuple element: {}", e))
+            }
         }
     }
 }
