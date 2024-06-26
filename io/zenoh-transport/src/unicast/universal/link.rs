@@ -62,7 +62,7 @@ impl TransportLinkUnicastUniversal {
             },
             queue_size: transport.manager.config.queue_size,
             wait_before_drop: transport.manager.config.wait_before_drop,
-            automatic_batching: transport.manager.config.automatic_batching,
+            batching: transport.manager.config.batching,
             backoff: transport.manager.config.queue_backoff,
         };
 

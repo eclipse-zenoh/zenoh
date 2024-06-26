@@ -100,7 +100,7 @@ pub struct TransportManagerConfig {
     pub whatami: WhatAmI,
     pub resolution: Resolution,
     pub batch_size: BatchSize,
-    pub automatic_batching: bool,
+    pub batching: bool,
     pub wait_before_drop: Duration,
     pub queue_size: [usize; Priority::NUM],
     pub queue_backoff: Duration,
@@ -130,7 +130,7 @@ pub struct TransportManagerBuilder {
     whatami: WhatAmI,
     resolution: Resolution,
     batch_size: BatchSize,
-    automatic_batching: bool,
+    batching: bool,
     wait_before_drop: Duration,
     queue_size: QueueSizeConf,
     queue_backoff: Duration,
@@ -172,8 +172,8 @@ impl TransportManagerBuilder {
         self
     }
 
-    pub fn automatic_batching(mut self, automatic_batching: bool) -> Self {
-        self.automatic_batching = automatic_batching;
+    pub fn batching(mut self, batching: bool) -> Self {
+        self.batching = batching;
         self
     }
 
@@ -238,7 +238,7 @@ impl TransportManagerBuilder {
         resolution.set(Field::FrameSN, *link.tx().sequence_number_resolution());
         self = self.resolution(resolution);
         self = self.batch_size(*link.tx().batch_size());
-        self = self.automatic_batching(*link.tx().automatic_batching());
+        self = self.batching(*link.tx().batching());
         self = self.defrag_buff_size(*link.rx().max_message_size());
         self = self.link_rx_buffer_size(*link.rx().buffer_size());
         self = self.wait_before_drop(Duration::from_micros(
@@ -301,7 +301,7 @@ impl TransportManagerBuilder {
             whatami: self.whatami,
             resolution: self.resolution,
             batch_size: self.batch_size,
-            automatic_batching: self.automatic_batching,
+            batching: self.batching,
             wait_before_drop: self.wait_before_drop,
             queue_size,
             queue_backoff: self.queue_backoff,
@@ -348,7 +348,7 @@ impl Default for TransportManagerBuilder {
             whatami: zenoh_config::defaults::mode,
             resolution: Resolution::default(),
             batch_size: BatchSize::MAX,
-            automatic_batching: true,
+            batching: true,
             wait_before_drop: Duration::from_micros(wait_before_drop),
             queue_size: queue.size,
             queue_backoff: Duration::from_nanos(backoff),

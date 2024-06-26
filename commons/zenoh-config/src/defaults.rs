@@ -163,7 +163,7 @@ impl Default for LinkTxConf {
             batch_size: BatchSize::MAX,
             queue: QueueConf::default(),
             threads: num,
-            automatic_batching: true,
+            batching: true,
         }
     }
 }
