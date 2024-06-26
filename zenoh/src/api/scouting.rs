@@ -116,7 +116,7 @@ impl ScoutBuilder<DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the [`Hello`] messages from this scout with a [`Handler`](crate::prelude::IntoHandler).
+    /// Receive the [`Hello`] messages from this scout with a [`Handler`](crate::handlers::IntoHandler).
     ///
     /// # Examples
     /// ```no_run
@@ -238,7 +238,7 @@ impl fmt::Debug for ScoutInner {
     }
 }
 
-/// A scout that returns [`Hello`] messages through a [`Handler`](crate::prelude::IntoHandler).
+/// A scout that returns [`Hello`] messages through a [`Handler`](crate::handlers::IntoHandler).
 ///
 /// # Examples
 /// ```no_run
@@ -348,12 +348,12 @@ fn _scout(
 ///
 /// [`scout`] spawns a task that periodically sends scout messages and waits for [`Hello`](crate::scouting::Hello) replies.
 ///
-/// Drop the returned [`Scout`](crate::scouting::Scout) to stop the scouting task.
+/// Drop the returned [`Scout`] to stop the scouting task.
 ///
 /// # Arguments
 ///
 /// * `what` - The kind of zenoh process to scout for
-/// * `config` - The configuration [`Config`] to use for scouting
+/// * `config` - The configuration [`crate::Config`] to use for scouting
 ///
 /// # Examples
 /// ```no_run

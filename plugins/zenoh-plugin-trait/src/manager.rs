@@ -100,7 +100,7 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> DeclaredPlugin<StartA
 }
 
 /// A plugins manager that handles starting and stopping plugins.
-/// Plugins can be loaded from shared libraries using [`Self::load_plugin_by_name`] or [`Self::load_plugin_by_paths`], or added directly from the binary if available using [`Self::add_static`].
+/// Plugins can be loaded from shared libraries using [`Self::declare_dynamic_plugin_by_name`] or [`Self::declare_dynamic_plugin_by_paths`], or added directly from the binary if available using [`Self::declare_static_plugin`].
 pub struct PluginsManager<StartArgs: PluginStartArgs, Instance: PluginInstance> {
     default_lib_prefix: String,
     loader: Option<LibLoader>,

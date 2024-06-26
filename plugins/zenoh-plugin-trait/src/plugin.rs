@@ -175,9 +175,9 @@ pub trait Plugin: Sized + 'static {
     type Instance: PluginInstance;
     /// Plugins' default name when statically linked.
     const DEFAULT_NAME: &'static str;
-    /// Plugin's version. Used only for information purposes. It's recommended to use [plugin_version!] macro to generate this string.
+    /// Plugin's version. Used only for information purposes. It's recommended to use [plugin_version!](crate::plugin_version!) macro to generate this string.
     const PLUGIN_VERSION: &'static str;
-    /// Plugin's long version (with git commit hash). Used only for information purposes. It's recommended to use [plugin_long_version!] macro to generate this string.
+    /// Plugin's long version (with git commit hash). Used only for information purposes. It's recommended to use [plugin_version!](crate::plugin_version!) macro to generate this string.
     const PLUGIN_LONG_VERSION: &'static str;
     /// Starts your plugin. Use `Ok` to return your plugin's control structure
     fn start(name: &str, args: &Self::StartArgs) -> ZResult<Self::Instance>;

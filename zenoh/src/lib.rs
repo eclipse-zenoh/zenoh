@@ -148,27 +148,27 @@ pub mod core {
 ///
 /// # Storing Key Expressions
 /// This module provides 3 flavours to store strings that have been validated to respect the KE syntax:
-/// - [`keyexpr`] is the equivalent of a [`str`],
-/// - [`OwnedKeyExpr`] works like an [`std::sync::Arc<str>`],
-/// - [`KeyExpr`] works like a [`std::borrow::Cow<str>`], but also stores some additional context internal to Zenoh to optimize
+/// - [`keyexpr`](crate::key_expr::keyexpr) is the equivalent of a [`str`],
+/// - [`OwnedKeyExpr`](crate::key_expr::OwnedKeyExpr) works like an [`std::sync::Arc<str>`],
+/// - [`KeyExpr`](crate::key_expr::KeyExpr) works like a [`std::borrow::Cow<str>`], but also stores some additional context internal to Zenoh to optimize
 /// routing and network usage.
 ///
-/// All of these types [`Deref`](core::ops::Deref) to [`keyexpr`], which notably has methods to check whether a given [`keyexpr::intersects`] with another,
-/// or even if a [`keyexpr::includes`] another.
+/// All of these types [`Deref`](std::ops::Deref) to [`keyexpr`](crate::key_expr::keyexpr), which notably has methods to check whether a given [`intersects`](crate::key_expr::keyexpr::includes) with another,
+/// or even if a [`includes`](crate::key_expr::keyexpr::includes) another.
 ///
 /// # Tying values to Key Expressions
 /// When storing values tied to Key Expressions, you might want something more specialized than a [`HashMap`](std::collections::HashMap) if you want to respect
 /// the Key Expression semantics with high performance.
 ///
-/// Enter [KeTrees](keyexpr_tree). These are data-structures specially built to store KE-value pairs in a manner that supports the set-semantics of KEs.
+/// Enter [KeTrees](crate::key_expr::keyexpr_tree). These are data-structures specially built to store KE-value pairs in a manner that supports the set-semantics of KEs.
 ///
 /// # Building and parsing Key Expressions
 /// A common issue in REST API is the association of meaning to sections of the URL, and respecting that API in a convenient manner.
-/// The same issue arises naturally when designing a KE space, and [`KeFormat`](format::KeFormat) was designed to help you with this,
+/// The same issue arises naturally when designing a KE space, and [`KeFormat`](crate::key_expr::format::KeFormat) was designed to help you with this,
 /// both in constructing and in parsing KEs that fit the formats you've defined.
 ///
-/// [`kedefine`] also allows you to define formats at compile time, allowing a more performant, but more importantly safer and more convenient use of said formats,
-/// as the [`keformat`] and [`kewrite`] macros will be able to tell you if you're attempting to set fields of the format that do not exist.
+/// [`kedefine`](crate::key_expr::format::kedefine) also allows you to define formats at compile time, allowing a more performant, but more importantly safer and more convenient use of said formats,
+/// as the [`keformat`](crate::key_expr::format::keformat) and [`kewrite`](crate::key_expr::format::kewrite) macros will be able to tell you if you're attempting to set fields of the format that do not exist.
 pub mod key_expr {
     #[zenoh_macros::unstable]
     pub mod keyexpr_tree {
@@ -194,7 +194,7 @@ pub mod key_expr {
     }
 }
 
-/// Zenoh [`Session`](crate::session::Session) and associated types
+/// Zenoh [`Session`] and associated types
 pub mod session {
     #[zenoh_macros::internal]
     pub use crate::api::session::{init, InitBuilder};
@@ -205,7 +205,7 @@ pub mod session {
     };
 }
 
-/// Tools to access information about the current zenoh [`Session`](crate::Session).
+/// Tools to access information about the current zenoh [`Session`].
 pub mod info {
     pub use zenoh_config::wrappers::{EntityGlobalId, ZenohId};
     pub use zenoh_protocol::core::EntityId;
@@ -393,7 +393,7 @@ pub mod time {
     pub use crate::api::time::new_timestamp;
 }
 
-/// Configuration to pass to [`open`](crate::session::open) and [`scout`](crate::scouting::scout) functions and associated constants
+/// Configuration to pass to [`open`] and [`scout`] functions and associated constants
 pub mod config {
     // pub use zenoh_config::{
     //     client, default, peer, Config, EndPoint, Locator, ModeDependentValue, PermissionsConf,

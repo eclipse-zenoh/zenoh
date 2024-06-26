@@ -17,8 +17,8 @@ use crate::core::{Locator, WhatAmI, ZenohIdProto};
 
 /// # Hello message
 ///
-/// The [`Hello`] message is used to advertise the locators a zenoh node is reachable at.
-/// The [`Hello`] message SHOULD be sent in a unicast fashion in response to a [`super::Scout`]
+/// The `Hello` message is used to advertise the locators a zenoh node is reachable at.
+/// The `Hello` message SHOULD be sent in a unicast fashion in response to a [`super::Scout`]
 /// message as shown below:
 ///
 /// ```text
@@ -34,7 +34,7 @@ use crate::core::{Locator, WhatAmI, ZenohIdProto};
 /// |                   |                   |
 /// ```
 ///
-/// Moreover, a [`Hello`] message MAY be sent in the network in a multicast
+/// Moreover, a `Hello` message MAY be sent in the network in a multicast
 /// fashion to advertise the presence of zenoh node. The advertisement operation MAY be performed
 /// periodically as shown below:
 ///
@@ -54,7 +54,7 @@ use crate::core::{Locator, WhatAmI, ZenohIdProto};
 /// |                   |                   |
 /// ```
 ///
-/// Examples of locators included in the [`Hello`] message are:
+/// Examples of locators included in the `Hello` message are:
 ///
 /// ```text
 ///  udp/192.168.1.1:7447
@@ -63,7 +63,7 @@ use crate::core::{Locator, WhatAmI, ZenohIdProto};
 ///  tcp/localhost:7447
 /// ```
 ///
-/// The [`Hello`] message structure is defined as follows:
+/// The `Hello` message structure is defined as follows:
 ///
 /// ```text
 /// Header flags:

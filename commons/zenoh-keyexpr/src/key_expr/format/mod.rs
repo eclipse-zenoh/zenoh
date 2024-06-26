@@ -17,8 +17,8 @@
 //! The same issue arises naturally when designing a KE space, and [`KeFormat`] was designed to help you with this,
 //! both in constructing and in parsing KEs that fit the formats you've defined.
 //!
-//! [`kedefine`](https://docs.rs/zenoh/0.10.1-rc/zenoh/macro.kedefine.html) also allows you to define formats at compile time, allowing a more performant, but more importantly safer and more convenient use of said formats,
-//! as the [`keformat`](https://docs.rs/zenoh/0.10.1-rc/zenoh/macro.keformat.html) and [`kewrite`](https://docs.rs/zenoh/0.10.1-rc/zenoh/macro.kewrite.html) macros will be able to tell you if you're attempting to set fields of the format that do not exist.
+//! [`kedefine`](https://docs.rs/zenoh/latest/zenoh/key_expr/format/macro.kedefine.html) also allows you to define formats at compile time, allowing a more performant, but more importantly safer and more convenient use of said formats,
+//! as the [`keformat`](https://docs.rs/zenoh/latest/zenoh/key_expr/format/macro.keformat.htmll) and [`kewrite`](https://docs.rs/zenoh/latest/zenoh/key_expr/format/macro.kewrite.html) macros will be able to tell you if you're attempting to set fields of the format that do not exist.
 //!
 //! ## The format syntax
 //! KE formats are defined following a syntax that extends the [`keyexpr`] syntax. In addition to existing chunk types, KE formmats support "specification" chunks.
@@ -67,8 +67,8 @@ use support::{IterativeConstructor, Spec};
 /// The same issue arises naturally when designing a KE space, and [`KeFormat`] was designed to help you with this,
 /// both in constructing and in parsing KEs that fit the formats you've defined.
 ///
-/// [`zenoh::kedefine`](https://docs.rs/zenoh/0.10.1-rc/zenoh/macro.kedefine.html) also allows you to define formats at compile time, allowing a more performant, but more importantly safer and more convenient use of said formats,
-/// as the [`zenoh::keformat`](https://docs.rs/zenoh/0.10.1-rc/zenoh/macro.keformat.html) and [`zenoh::kewrite`](https://docs.rs/zenoh/0.10.1-rc/zenoh/macro.kewrite.html) macros will be able to tell you if you're attempting to set fields of the format that do not exist.
+/// [`kedefine`](https://docs.rs/zenoh/latest/zenoh/key_expr/format/macro.kedefine.html) also allows you to define formats at compile time, allowing a more performant, but more importantly safer and more convenient use of said formats,
+/// as the [`keformat`](https://docs.rs/zenoh/latest/zenoh/key_expr/format/macro.keformat.html) and [`kewrite`](https://docs.rs/zenoh/latest/zenoh/macro.kewrite.html) macros will be able to tell you if you're attempting to set fields of the format that do not exist.
 ///
 /// ## The format syntax
 /// KE formats are defined following a syntax that extends the [`keyexpr`] syntax. In addition to existing chunk types, KE formmats support "specification" chunks.
@@ -120,7 +120,7 @@ impl<'s> KeFormat<'s, Vec<Segment<'s>>> {
     ///
     /// `N` is simply the number of specifications in `value`. If this number of specs isn't known at compile-time, use [`KeFormat::new`] instead.
     ///
-    /// If you know `value` at compile time, using [`zenoh::kedefine`](https://docs.rs/zenoh/0.10.1-rc/zenoh/macro.kedefine.html) instead is advised,
+    /// If you know `value` at compile time, using [`kedefine`](https://docs.rs/zenoh/latest/zenoh/key_expr/format/macro.kedefine.html) instead is advised,
     /// as it will provide more features and construct higher performance formats than this constructor.
     pub fn noalloc_new<const N: usize>(value: &'s str) -> ZResult<KeFormat<'s, [Segment<'s>; N]>> {
         value.try_into()
