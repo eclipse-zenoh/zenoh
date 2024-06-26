@@ -32,7 +32,8 @@ mod _prelude {
     pub use crate::{
         api::{
             builders::sample::{
-                EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
+                DynamicQoSBuilderTrait, EncodingBuilderTrait, FixedQoSBuilderTrait,
+                SampleBuilderTrait, TimestampBuilderTrait,
             },
             session::{SessionDeclarations, Undeclarable},
         },

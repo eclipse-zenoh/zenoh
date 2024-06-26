@@ -19,9 +19,8 @@ use zenoh_protocol::{core::CongestionControl, network::Mapping};
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
 use crate::api::{
-    builders::sample::{
-        EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
-    },
+    builders::sample::{DynamicQoSBuilderTrait, FixedQoSBuilderTrait},
+    builders::sample::{EncodingBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait},
     bytes::{OptionZBytes, ZBytes},
     encoding::Encoding,
     key_expr::KeyExpr,
@@ -78,7 +77,7 @@ pub struct PublicationBuilder<P, T> {
     pub(crate) attachment: Option<ZBytes>,
 }
 
-impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
+impl<T> DynamicQoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
     #[inline]
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         Self {
@@ -87,16 +86,19 @@ impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
         }
     }
     #[inline]
-    fn priority(self, priority: Priority) -> Self {
-        Self {
-            publisher: self.publisher.priority(priority),
-            ..self
-        }
-    }
-    #[inline]
     fn express(self, is_express: bool) -> Self {
         Self {
             publisher: self.publisher.express(is_express),
+            ..self
+        }
+    }
+}
+
+impl<T> FixedQoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
+    #[inline]
+    fn priority(self, priority: Priority) -> Self {
+        Self {
+            publisher: self.publisher.priority(priority),
             ..self
         }
     }
@@ -248,7 +250,7 @@ impl<'a, 'b> Clone for PublisherBuilder<'a, 'b> {
     }
 }
 
-impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
+impl DynamicQoSBuilderTrait for PublisherBuilder<'_, '_> {
     /// Change the `congestion_control` to apply when routing the data.
     #[inline]
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
@@ -257,19 +259,20 @@ impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
             ..self
         }
     }
-
-    /// Change the priority of the written data.
-    #[inline]
-    fn priority(self, priority: Priority) -> Self {
-        Self { priority, ..self }
-    }
-
     /// Change the `express` policy to apply when routing the data.
     /// When express is set to `true`, then the message will not be batched.
     /// This usually has a positive impact on latency but negative impact on throughput.
     #[inline]
     fn express(self, is_express: bool) -> Self {
         Self { is_express, ..self }
+    }
+}
+
+impl FixedQoSBuilderTrait for PublisherBuilder<'_, '_> {
+    /// Change the priority of the written data.
+    #[inline]
+    fn priority(self, priority: Priority) -> Self {
+        Self { priority, ..self }
     }
 }
 

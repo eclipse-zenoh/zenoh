@@ -37,8 +37,8 @@ use {
 use super::selector::ZenohParameters;
 use super::{
     builders::sample::{
-        EncodingBuilderTrait, QoSBuilderTrait, SampleBuilder, SampleBuilderTrait,
-        TimestampBuilderTrait,
+        DynamicQoSBuilderTrait, EncodingBuilderTrait, FixedQoSBuilderTrait, SampleBuilder,
+        SampleBuilderTrait, TimestampBuilderTrait,
     },
     bytes::{OptionZBytes, ZBytes},
     encoding::Encoding,
@@ -327,19 +327,20 @@ impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
     }
 }
 
-impl<T> QoSBuilderTrait for ReplyBuilder<'_, '_, T> {
+impl<T> DynamicQoSBuilderTrait for ReplyBuilder<'_, '_, T> {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let qos = self.qos.congestion_control(congestion_control);
         Self { qos, ..self }
     }
-
-    fn priority(self, priority: Priority) -> Self {
-        let qos = self.qos.priority(priority);
-        Self { qos, ..self }
-    }
-
     fn express(self, is_express: bool) -> Self {
         let qos = self.qos.express(is_express);
+        Self { qos, ..self }
+    }
+}
+
+impl<T> FixedQoSBuilderTrait for ReplyBuilder<'_, '_, T> {
+    fn priority(self, priority: Priority) -> Self {
+        let qos = self.qos.priority(priority);
         Self { qos, ..self }
     }
 }

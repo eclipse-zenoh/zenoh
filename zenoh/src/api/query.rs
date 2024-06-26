@@ -30,7 +30,7 @@ use super::{
     selector::ZenohParameters,
 };
 use super::{
-    builders::sample::{EncodingBuilderTrait, QoSBuilderTrait},
+    builders::sample::{DynamicQoSBuilderTrait, EncodingBuilderTrait, FixedQoSBuilderTrait},
     bytes::ZBytes,
     encoding::Encoding,
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
@@ -225,19 +225,20 @@ impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
     }
 }
 
-impl QoSBuilderTrait for SessionGetBuilder<'_, '_, DefaultHandler> {
+impl DynamicQoSBuilderTrait for SessionGetBuilder<'_, '_, DefaultHandler> {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let qos = self.qos.congestion_control(congestion_control);
         Self { qos, ..self }
     }
-
-    fn priority(self, priority: Priority) -> Self {
-        let qos = self.qos.priority(priority);
-        Self { qos, ..self }
-    }
-
     fn express(self, is_express: bool) -> Self {
         let qos = self.qos.express(is_express);
+        Self { qos, ..self }
+    }
+}
+
+impl FixedQoSBuilderTrait for SessionGetBuilder<'_, '_, DefaultHandler> {
+    fn priority(self, priority: Priority) -> Self {
+        let qos = self.qos.priority(priority);
         Self { qos, ..self }
     }
 }

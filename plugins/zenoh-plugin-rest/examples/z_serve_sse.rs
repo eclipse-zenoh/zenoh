@@ -15,8 +15,8 @@ use std::time::Duration;
 
 use clap::{arg, Command};
 use zenoh::{
-    config::Config, key_expr::keyexpr, publisher::CongestionControl, sample::QoSBuilderTrait,
-    session::SessionDeclarations,
+    config::Config, key_expr::keyexpr, publisher::CongestionControl,
+    sample::DynamicQoSBuilderTrait, session::SessionDeclarations,
 };
 
 const HTML: &str = r#"

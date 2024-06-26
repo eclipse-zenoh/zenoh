@@ -27,15 +27,20 @@ use crate::api::{
 #[cfg(feature = "unstable")]
 use crate::sample::SourceInfo;
 
-pub trait QoSBuilderTrait {
+/// Quality of Service (QoS) related settings which can be configured dynamically for each data sample.
+pub trait DynamicQoSBuilderTrait {
     /// Change the `congestion_control` to apply when routing the data.
     fn congestion_control(self, congestion_control: CongestionControl) -> Self;
-    /// Change the priority of the written data.
-    fn priority(self, priority: Priority) -> Self;
     /// Change the `express` policy to apply when routing the data.
     /// When express is set to `true`, then the message will not be batched.
     /// This usually has a positive impact on latency but negative impact on throughput.
     fn express(self, is_express: bool) -> Self;
+}
+
+/// Quality of Service (QoS) related settings which can be configured only once for e.g. Publisher instance.
+pub trait FixedQoSBuilderTrait {
+    /// Change the priority of the written data.
+    fn priority(self, priority: Priority) -> Self;
 }
 
 pub trait TimestampBuilderTrait {
@@ -185,7 +190,7 @@ impl<T> SampleBuilderTrait for SampleBuilder<T> {
     }
 }
 
-impl<T> QoSBuilderTrait for SampleBuilder<T> {
+impl<T> DynamicQoSBuilderTrait for SampleBuilder<T> {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let qos: QoSBuilder = self.sample.qos.into();
         let qos = qos.congestion_control(congestion_control).into();
@@ -194,17 +199,20 @@ impl<T> QoSBuilderTrait for SampleBuilder<T> {
             _t: PhantomData::<T>,
         }
     }
-    fn priority(self, priority: Priority) -> Self {
+    fn express(self, is_express: bool) -> Self {
         let qos: QoSBuilder = self.sample.qos.into();
-        let qos = qos.priority(priority).into();
+        let qos = qos.express(is_express).into();
         Self {
             sample: Sample { qos, ..self.sample },
             _t: PhantomData::<T>,
         }
     }
-    fn express(self, is_express: bool) -> Self {
+}
+
+impl<T> FixedQoSBuilderTrait for SampleBuilder<T> {
+    fn priority(self, priority: Priority) -> Self {
         let qos: QoSBuilder = self.sample.qos.into();
-        let qos = qos.express(is_express).into();
+        let qos = qos.priority(priority).into();
         Self {
             sample: Sample { qos, ..self.sample },
             _t: PhantomData::<T>,

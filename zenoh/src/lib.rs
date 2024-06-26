@@ -223,8 +223,9 @@ pub mod sample {
     pub use crate::api::sample::SourceInfo;
     pub use crate::api::{
         builders::sample::{
-            EncodingBuilderTrait, QoSBuilderTrait, SampleBuilder, SampleBuilderAny,
-            SampleBuilderDelete, SampleBuilderPut, SampleBuilderTrait, TimestampBuilderTrait,
+            DynamicQoSBuilderTrait, EncodingBuilderTrait, FixedQoSBuilderTrait, SampleBuilder,
+            SampleBuilderAny, SampleBuilderDelete, SampleBuilderPut, SampleBuilderTrait,
+            TimestampBuilderTrait,
         },
         sample::{Sample, SampleFields, SampleKind, SourceSn},
     };

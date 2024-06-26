@@ -24,8 +24,12 @@ use zenoh_protocol::{
 };
 
 use super::{
-    builders::sample::QoSBuilderTrait, bytes::ZBytes, encoding::Encoding, key_expr::KeyExpr,
-    publisher::Priority, value::Value,
+    builders::sample::{DynamicQoSBuilderTrait, FixedQoSBuilderTrait},
+    bytes::ZBytes,
+    encoding::Encoding,
+    key_expr::KeyExpr,
+    publisher::Priority,
+    value::Value,
 };
 
 pub type SourceSn = u64;
@@ -394,22 +398,23 @@ impl From<QoSBuilder> for QoS {
     }
 }
 
-impl QoSBuilderTrait for QoSBuilder {
+impl DynamicQoSBuilderTrait for QoSBuilder {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let mut inner = self.0.inner;
         inner.set_congestion_control(congestion_control);
         Self(QoS { inner })
     }
-
-    fn priority(self, priority: Priority) -> Self {
-        let mut inner = self.0.inner;
-        inner.set_priority(priority.into());
-        Self(QoS { inner })
-    }
-
     fn express(self, is_express: bool) -> Self {
         let mut inner = self.0.inner;
         inner.set_is_express(is_express);
+        Self(QoS { inner })
+    }
+}
+
+impl FixedQoSBuilderTrait for QoSBuilder {
+    fn priority(self, priority: Priority) -> Self {
+        let mut inner = self.0.inner;
+        inner.set_priority(priority.into());
         Self(QoS { inner })
     }
 }
