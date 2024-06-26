@@ -409,6 +409,7 @@ impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
         PublisherBuilder {
             session: self.clone(),
             key_expr: key_expr.try_into().map_err(Into::into),
+            encoding: Encoding::default(),
             congestion_control: CongestionControl::DEFAULT,
             priority: Priority::DEFAULT,
             is_express: false,
@@ -2092,6 +2093,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
         PublisherBuilder {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.try_into().map_err(Into::into),
+            encoding: Encoding::default(),
             congestion_control: CongestionControl::DEFAULT,
             priority: Priority::DEFAULT,
             is_express: false,
