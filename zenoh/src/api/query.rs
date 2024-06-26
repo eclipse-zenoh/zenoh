@@ -42,7 +42,7 @@ use super::{
     value::Value,
 };
 
-/// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
+/// The [`Queryable`](crate::query::Queryable)s that should be target of a [`get`](Session::get).
 pub type QueryTarget = zenoh_protocol::network::request::ext::TargetType;
 
 /// The kind of consolidation.

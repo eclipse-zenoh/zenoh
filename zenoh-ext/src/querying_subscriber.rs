@@ -26,11 +26,10 @@ use zenoh::{
     internal::zlock,
     key_expr::KeyExpr,
     prelude::Wait,
-    query::{QueryConsolidation, QueryTarget, ReplyKeyExpr},
+    pubsub::{Reliability, Subscriber},
+    query::{QueryConsolidation, QueryTarget, ReplyKeyExpr, Selector},
     sample::{Locality, Sample, SampleBuilder, TimestampBuilderTrait},
-    selector::Selector,
     session::{SessionDeclarations, SessionRef},
-    subscriber::{Reliability, Subscriber},
     time::{new_timestamp, Timestamp},
 };
 

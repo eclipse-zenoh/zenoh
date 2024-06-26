@@ -2063,7 +2063,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
         }
     }
 
-    /// Create a [`Publisher`](crate::publisher::Publisher) for the given key expression.
+    /// Create a [`Publisher`](crate::pubsub::Publisher) for the given key expression.
     ///
     /// # Arguments
     ///
@@ -2620,8 +2620,8 @@ impl fmt::Debug for Session {
 /// Functions to create zenoh entities
 ///
 /// This trait contains functions to create zenoh entities like
-/// [`Subscriber`](crate::subscriber::Subscriber), and
-/// [`Queryable`](crate::queryable::Queryable)
+/// [`Subscriber`](crate::pubsub::Subscriber), and
+/// [`Queryable`](crate::query::Queryable)
 ///
 /// This trait is implemented by [`Session`](crate::session::Session) itself and
 /// by wrappers [`SessionRef`](crate::session::SessionRef) and [`Arc<Session>`](std::sync::Arc)
@@ -2644,7 +2644,7 @@ impl fmt::Debug for Session {
 /// # }
 /// ```
 pub trait SessionDeclarations<'s, 'a> {
-    /// Create a [`Subscriber`](crate::subscriber::Subscriber) for the given key expression.
+    /// Create a [`Subscriber`](crate::pubsub::Subscriber) for the given key expression.
     ///
     /// # Arguments
     ///
@@ -2675,12 +2675,12 @@ pub trait SessionDeclarations<'s, 'a> {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>;
 
-    /// Create a [`Queryable`](crate::queryable::Queryable) for the given key expression.
+    /// Create a [`Queryable`](crate::query::Queryable) for the given key expression.
     ///
     /// # Arguments
     ///
     /// * `key_expr` - The key expression matching the queries the
-    /// [`Queryable`](crate::queryable::Queryable) will reply to
+    /// [`Queryable`](crate::query::Queryable) will reply to
     ///
     /// # Examples
     /// ```no_run
@@ -2710,7 +2710,7 @@ pub trait SessionDeclarations<'s, 'a> {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>;
 
-    /// Create a [`Publisher`](crate::publisher::Publisher) for the given key expression.
+    /// Create a [`Publisher`](crate::pubsub::Publisher) for the given key expression.
     ///
     /// # Arguments
     ///
@@ -2826,7 +2826,7 @@ impl crate::net::primitives::EPrimitives for Session {
 /// # #[tokio::main]
 /// # async fn main() {
 /// use std::str::FromStr;
-/// use zenoh::{info::ZenohId, prelude::*};
+/// use zenoh::{session::ZenohId, prelude::*};
 ///
 /// let mut config = zenoh::config::peer();
 /// config.set_id(ZenohId::from_str("221b72df20924c15b8794c6bdb471150").unwrap());

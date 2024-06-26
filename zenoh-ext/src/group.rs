@@ -32,7 +32,7 @@ use zenoh::{
     internal::{bail, Condition, TaskController},
     key_expr::{keyexpr, KeyExpr, OwnedKeyExpr},
     prelude::*,
-    publisher::Publisher,
+    pubsub::Publisher,
     Session,
 };
 

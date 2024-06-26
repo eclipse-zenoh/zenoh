@@ -18,9 +18,9 @@ use futures::stream::{Forward, Map};
 use zenoh::{
     core::Result as ZResult,
     liveliness::LivelinessSubscriberBuilder,
+    pubsub::{Reliability, Subscriber, SubscriberBuilder},
     query::{QueryConsolidation, QueryTarget, ReplyKeyExpr},
     sample::{Locality, Sample},
-    subscriber::{Reliability, Subscriber, SubscriberBuilder},
 };
 
 use crate::{
@@ -42,7 +42,7 @@ where
     }
 }
 
-/// Some extensions to the [`zenoh::subscriber::SubscriberBuilder`](zenoh::subscriber::SubscriberBuilder)
+/// Some extensions to the [`zenoh::subscriber::SubscriberBuilder`](zenoh::pubsub::SubscriberBuilder)
 pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     type KeySpace;
 

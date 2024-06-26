@@ -16,9 +16,9 @@ use std::time::{Duration, Instant};
 use clap::Parser;
 use zenoh::{
     bytes::ZBytes,
+    core::CongestionControl,
     key_expr::keyexpr,
     prelude::*,
-    publisher::CongestionControl,
     shm::{PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID},
     Config,
 };

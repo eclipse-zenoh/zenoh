@@ -14,8 +14,8 @@
 use clap::Parser;
 use zenoh::{
     bytes::ZBytes,
+    core::CongestionControl,
     prelude::*,
-    publisher::CongestionControl,
     shm::{PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID},
     Config,
 };

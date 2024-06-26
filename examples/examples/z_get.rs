@@ -14,7 +14,10 @@
 use std::time::Duration;
 
 use clap::Parser;
-use zenoh::{query::QueryTarget, selector::Selector, Config};
+use zenoh::{
+    query::{QueryTarget, Selector},
+    Config,
+};
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
