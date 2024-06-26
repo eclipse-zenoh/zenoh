@@ -295,3 +295,7 @@
    ```bash
    z_sub_liveliness -k 'group1/**'
    ```
+
+### z_bytes
+
+   Show how to serialize different message types into ZBytes, and then deserialize from ZBytes to the original message types.
