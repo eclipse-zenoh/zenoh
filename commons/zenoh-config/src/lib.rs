@@ -104,14 +104,26 @@ pub struct DownsamplingItemConf {
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
-pub struct AclConfigRules {
-    pub interfaces: Option<Vec<String>>,
-    pub cert_common_names: Option<Vec<String>>,
-    pub usernames: Option<Vec<String>>,
+pub struct AclConfigRule {
+    pub id: String,
     pub key_exprs: Vec<String>,
     pub actions: Vec<Action>,
     pub flows: Option<Vec<InterceptorFlow>>,
     pub permission: Permission,
+}
+
+#[derive(Serialize, Debug, Deserialize, Clone)]
+pub struct AclConfigSubjects {
+    pub id: String,
+    pub interfaces: Option<Vec<String>>,
+    pub cert_common_names: Option<Vec<String>>,
+    pub usernames: Option<Vec<String>>,
+}
+
+#[derive(Serialize, Debug, Deserialize, Clone)]
+pub struct AclConfigPolicy {
+    pub rules: Vec<String>,
+    pub subjects: Vec<String>,
 }
 
 #[derive(Clone, Serialize, Debug, Deserialize)]
@@ -514,7 +526,9 @@ validated_struct::validator! {
         pub access_control: AclConfig {
             pub enabled: bool,
             pub default_permission: Permission,
-            pub rules: Option<Vec<AclConfigRules>>
+            pub rules: Option<Vec<AclConfigRule>>,
+            pub subjects: Option<Vec<AclConfigSubjects>>,
+            pub policy: Option<Vec<AclConfigPolicy>>,
         },
 
         /// A list of directories where plugins may be searched for if no `__path__` was specified for them.
