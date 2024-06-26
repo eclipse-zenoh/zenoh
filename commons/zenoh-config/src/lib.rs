@@ -130,7 +130,6 @@ pub enum Subject {
     Interface(String),
     CertCommonName(String),
     Username(String),
-    None,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]

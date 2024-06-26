@@ -47,56 +47,67 @@ impl SubjectMap {
         SubjectMapBuilder::new()
     }
 
+    /// WIP, to replace with `get_`
     pub(crate) fn get(&self, subject: &Subject) -> Option<&usize> {
-        todo!()
+        unreachable!()
+    }
+
+    pub(crate) fn get_(&self, subjects: &Vec<Subject>) -> Vec<(Vec<Subject>, &usize)> {
+        let mut subjects = subjects.clone();
+        subjects.sort_unstable();
+        let mut res: Vec<(Vec<Subject>, &usize)> = vec![];
+        for subject in subjects {
+            let map_query: Vec<(Vec<Subject>, &usize)> =
+                self.inner.predictive_search([subject]).map(|x| x).collect();
+            for (subject, id) in map_query {
+                if subject.len() > 1 {
+                    for s in &subject {
+                        if subject.binary_search(s).is_err() {
+                            continue;
+                        }
+                    }
+                }
+                res.push((subject, id))
+            }
+        }
+        res
     }
 }
 
 impl Default for SubjectMap {
     fn default() -> Self {
         Self {
-            inner: SubjectMapBuilder::new().inner.build(),
+            inner: SubjectMapBuilder::new().builder.build(),
         }
     }
 }
 
 pub(crate) struct SubjectMapBuilder {
-    inner: TrieMapBuilder<Subject, usize>,
-    subject_set: HashSet<Vec<Subject>, RandomState>,
+    builder: TrieMapBuilder<Subject, usize>,
     id_counter: usize,
 }
 
 impl SubjectMapBuilder {
     pub(crate) fn new() -> Self {
         Self {
-            inner: TrieMapBuilder::new(),
-            subject_set: HashSet::with_hasher(RandomState::default()),
+            builder: TrieMapBuilder::new(),
             id_counter: 0,
         }
     }
 
     pub(crate) fn build(self) -> SubjectMap {
         SubjectMap {
-            inner: self.inner.build(),
+            inner: self.builder.build(),
         }
     }
 
-    pub(crate) fn insert_single_subject(&mut self, subject: Subject) -> Option<usize> {
-        if matches!(&subject, Subject::None) || !self.subject_set.insert(vec![subject.clone()]) {
-            return None;
-        }
+    /// Assumes subject contains at most one instance of each Subject variant
+    pub(crate) fn insert(&mut self, subject: Vec<Subject>) -> usize {
+        let mut subject = subject.clone();
+        subject.sort_unstable();
         self.id_counter += 1;
-        match subject {
-            Subject::Interface(_) => self.inner.push([subject], self.id_counter),
-            Subject::CertCommonName(_) => {
-                self.inner.push([Subject::None, subject], self.id_counter)
-            }
-            Subject::Username(_) => self
-                .inner
-                .push([Subject::None, Subject::None, subject], self.id_counter),
-            Subject::None => {}
-        }
-        Some(self.id_counter)
+        self.builder.insert(subject, self.id_counter);
+        self.id_counter
     }
 }
 
@@ -391,9 +402,8 @@ impl PolicyEnforcer {
             }
         }
         let mut subject_map_builder = SubjectMap::builder();
-        // Starting at 1 since 0 is the init value and should not match anything
         for rule in policy_rules.iter() {
-            subject_map_builder.insert_single_subject(rule.subject.clone());
+            subject_map_builder.insert(vec![rule.subject.clone()]);
         }
         Ok(PolicyInformation {
             subject_map: subject_map_builder.build(),
