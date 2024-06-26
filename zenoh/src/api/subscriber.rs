@@ -285,7 +285,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the samples for this subscription with a [`Handler`](crate::prelude::IntoHandler).
+    /// Receive the samples for this subscription with a [`Handler`](crate::handlers::IntoHandler).
     ///
     /// # Examples
     /// ```no_run
@@ -410,10 +410,10 @@ where
     }
 }
 
-/// A subscriber that provides data through a [`Handler`](crate::prelude::IntoHandler).
+/// A subscriber that provides data through a [`Handler`](crate::handlers::IntoHandler).
 ///
 /// Subscribers can be created from a zenoh [`Session`](crate::Session)
-/// with the [`declare_subscriber`](crate::SessionDeclarations::declare_subscriber) function
+/// with the [`declare_subscriber`](crate::session::SessionDeclarations::declare_subscriber) function
 /// and the [`with`](SubscriberBuilder::with) function
 /// of the resulting builder.
 ///

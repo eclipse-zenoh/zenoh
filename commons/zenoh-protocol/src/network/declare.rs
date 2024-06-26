@@ -32,6 +32,7 @@ pub mod flag {
     pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
 }
 
+/// ```text
 /// Flags:
 /// - I: Interest       If I==1 then interest_id is present
 /// - X: Reserved
@@ -47,7 +48,7 @@ pub mod flag {
 /// +---------------+
 /// ~  declaration  ~
 /// +---------------+
-///
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Declare {
     pub interest_id: Option<super::interest::InterestId>,
@@ -178,6 +179,7 @@ pub mod common {
     pub mod ext {
         use super::*;
 
+        /// ```text
         /// Flags:
         /// - N: Named          If N==1 then the key expr has name/suffix
         /// - M: Mapping        if M==1 then key expr mapping is the one declared by the sender, else it is the one declared by the receiver
@@ -190,7 +192,7 @@ pub mod common {
         /// +---------------+
         /// ~  key_suffix   ~  if N==1 -- <u8;z16>
         /// +---------------+
-        ///
+        /// ```
         pub type WireExprExt = zextzbuf!(0x0f, true);
         #[derive(Debug, Clone, PartialEq, Eq)]
         pub struct WireExprType {
@@ -513,6 +515,7 @@ pub mod queryable {
             pub const C: u8 = 1; // 0x01 Complete      if C==1 then the queryable is complete
         }
         ///
+        /// ```text
         ///  7 6 5 4 3 2 1 0
         /// +-+-+-+-+-+-+-+-+
         /// |Z|0_1|    ID   |
@@ -521,6 +524,7 @@ pub mod queryable {
         /// +---------------+
         /// ~ distance <z16>~
         /// +---------------+
+        /// ```
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         pub struct QueryableInfoType {
             pub complete: bool, // Default false: incomplete

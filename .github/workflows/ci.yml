@@ -86,6 +86,11 @@ jobs:
       - name: Run doctests
         run: cargo test --doc
 
+      - name: Build doc
+        run: cargo doc --no-deps --features unstable
+        env:
+          RUSTDOCFLAGS: -Dwarnings
+
       - name: Check licenses
         run: cargo deny check licenses
 

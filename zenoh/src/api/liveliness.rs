@@ -705,7 +705,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the replies for this liveliness query with a [`Handler`](crate::prelude::IntoHandler).
+    /// Receive the replies for this liveliness query with a [`Handler`](crate::handlers::IntoHandler).
     ///
     /// # Examples
     /// ```
