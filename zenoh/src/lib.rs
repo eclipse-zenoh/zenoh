@@ -326,6 +326,58 @@ pub mod scouting {
 }
 
 /// Liveliness primitives
+///
+/// A [`LivelinessToken`](liveliness::LivelinessToken) is a token which liveliness is tied
+/// to the Zenoh [`Session`](Session) and can be monitored by remote applications.
+///
+/// # Examples
+/// ### Declaring a token
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::prelude::*;
+///
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let liveliness = session
+///     .liveliness()
+///     .declare_token("key/expression")
+///     .await
+///     .unwrap();
+/// # }
+/// ```
+///
+/// ### Querying tokens
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::prelude::*;
+///
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let replies = session.liveliness().get("key/**").await.unwrap();
+/// while let Ok(reply) = replies.recv_async().await {
+///     if let Ok(sample) = reply.result() {
+///         println!(">> Liveliness token {}", sample.key_expr());
+///     }
+/// }
+/// # }
+/// ```
+///
+/// ### Subscribing to liveliness changes
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::{prelude::*, sample::SampleKind};
+///
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let subscriber = session.liveliness().declare_subscriber("key/**").await.unwrap();
+/// while let Ok(sample) = subscriber.recv_async().await {
+///     match sample.kind() {
+///         SampleKind::Put => println!("New liveliness: {}", sample.key_expr()),
+///         SampleKind::Delete => println!("Lost liveliness: {}", sample.key_expr()),
+///     }
+/// }
+/// # }
+/// ```
 #[zenoh_macros::unstable]
 pub mod liveliness {
     pub use crate::api::liveliness::{
