@@ -250,7 +250,7 @@ impl<'a, 'b> Clone for PublisherBuilder<'a, 'b> {
                 Ok(k) => Ok(k.clone()),
                 Err(e) => Err(zerror!("Cloned KE Error: {}", e).into()),
             },
-            encoding: Encoding::default(),
+            encoding: self.encoding.clone(),
             congestion_control: self.congestion_control,
             priority: self.priority,
             is_express: self.is_express,
