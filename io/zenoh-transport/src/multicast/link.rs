@@ -323,6 +323,7 @@ impl TransportLinkMulticastUniversal {
                 batch: self.link.config.batch,
                 queue_size: self.transport.manager.config.queue_size,
                 wait_before_drop: self.transport.manager.config.wait_before_drop,
+                batching: self.transport.manager.config.batching,
                 backoff: self.transport.manager.config.queue_backoff,
             };
             // The pipeline
