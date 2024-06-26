@@ -31,6 +31,21 @@ on:
         type: string
         description: Release branch
         required: false
+  workflow_call:
+    inputs:
+      live-run:
+        type: boolean
+        description: Live-run
+        required: false
+        default: false
+      version:
+        type: string
+        description: Release number
+        required: false
+      branch:
+        type: string
+        description: Release branch
+        required: false
 
 jobs:
   tag:
