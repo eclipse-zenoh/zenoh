@@ -22,9 +22,9 @@ use std::{
 
 use zenoh::{
     config,
-    core::CongestionControl,
     prelude::*,
     pubsub::Reliability,
+    qos::CongestionControl,
     shm::{
         BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID,
     },

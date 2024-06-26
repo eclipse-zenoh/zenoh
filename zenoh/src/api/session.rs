@@ -793,7 +793,7 @@ impl Session {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::{encoding::Encoding, prelude::*};
+    /// use zenoh::{bytes::Encoding, prelude::*};
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// session

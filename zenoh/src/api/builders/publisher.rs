@@ -56,7 +56,7 @@ pub struct PublicationBuilderDelete;
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::{encoding::Encoding, prelude::*, core::CongestionControl};
+/// use zenoh::{bytes::Encoding, prelude::*, qos::CongestionControl};
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// session
@@ -220,7 +220,7 @@ impl IntoFuture for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuil
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::{prelude::*, core::CongestionControl};
+/// use zenoh::{prelude::*, qos::CongestionControl};
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let publisher = session

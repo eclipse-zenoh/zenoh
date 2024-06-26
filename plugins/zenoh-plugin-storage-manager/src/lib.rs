@@ -30,7 +30,6 @@ use flume::Sender;
 use memory_backend::MemoryBackend;
 use storages_mgt::StorageMessage;
 use zenoh::{
-    core::Result as ZResult,
     internal::{
         plugins::{Response, RunningPlugin, RunningPluginTrait, ZenohPlugin},
         runtime::Runtime,
@@ -39,6 +38,7 @@ use zenoh::{
     key_expr::{keyexpr, KeyExpr},
     prelude::Wait,
     session::Session,
+    Result as ZResult,
 };
 use zenoh_backend_traits::{
     config::{ConfigDiff, PluginConfig, StorageConfig, VolumeConfig},

@@ -111,34 +111,24 @@ pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
     ]
 );
 
+#[allow(deprecated)]
+pub use zenoh_core::{AsyncResolve, SyncResolve};
+pub use zenoh_core::{Resolvable, Resolve, Wait};
+/// A zenoh error.
+pub use zenoh_result::Error;
+/// A zenoh result.
+pub use zenoh_result::ZResult as Result;
 #[doc(inline)]
-pub use {
-    crate::{
-        config::Config,
-        core::{Error, Result},
-        scouting::scout,
-        session::{open, Session},
-    },
-    zenoh_util::{init_log_from_env_or, try_init_log_from_env},
+pub use zenoh_util::{init_log_from_env_or, try_init_log_from_env};
+
+#[doc(inline)]
+pub use crate::{
+    config::Config,
+    scouting::scout,
+    session::{open, Session},
 };
 
 pub mod prelude;
-
-/// Zenoh core types
-pub mod core {
-    #[allow(deprecated)]
-    pub use zenoh_core::{AsyncResolve, SyncResolve};
-    pub use zenoh_core::{Resolvable, Resolve, Wait};
-    pub use zenoh_protocol::core::CongestionControl;
-    pub use zenoh_result::ErrNo;
-    /// A zenoh error.
-    pub use zenoh_result::Error;
-    /// A zenoh result.
-    pub use zenoh_result::ZResult as Result;
-
-    /// Zenoh message priority
-    pub use crate::api::publisher::Priority;
-}
 
 /// [Key expression](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md) are Zenoh's address space.
 ///
@@ -197,6 +187,7 @@ pub mod key_expr {
 
 /// Zenoh [`Session`] and associated types
 pub mod session {
+    #[zenoh_macros::unstable]
     pub use zenoh_config::wrappers::{EntityGlobalId, ZenohId};
     pub use zenoh_protocol::core::EntityId;
 
@@ -218,23 +209,22 @@ pub mod sample {
     pub use crate::api::sample::SourceInfo;
     pub use crate::api::{
         builders::sample::{
-            EncodingBuilderTrait, QoSBuilderTrait, SampleBuilder, SampleBuilderAny,
-            SampleBuilderDelete, SampleBuilderPut, SampleBuilderTrait, TimestampBuilderTrait,
+            SampleBuilder, SampleBuilderAny, SampleBuilderDelete, SampleBuilderPut,
+            SampleBuilderTrait, TimestampBuilderTrait,
         },
         sample::{Sample, SampleFields, SampleKind, SourceSn},
     };
 }
 
-/// Encoding support
-pub mod encoding {
-    pub use crate::api::encoding::Encoding;
-}
-
 /// Payload primitives
 pub mod bytes {
-    pub use crate::api::bytes::{
-        Deserialize, OptionZBytes, Serialize, ZBytes, ZBytesIterator, ZBytesReader, ZBytesWriter,
-        ZDeserializeError, ZSerde,
+    pub use crate::api::{
+        builders::sample::EncodingBuilderTrait,
+        bytes::{
+            Deserialize, OptionZBytes, Serialize, ZBytes, ZBytesIterator, ZBytesReader,
+            ZBytesWriter, ZDeserializeError, ZSerde,
+        },
+        encoding::Encoding,
     };
 }
 
@@ -283,6 +273,13 @@ pub mod handlers {
         locked, Callback, CallbackDrop, DefaultHandler, FifoChannel, IntoHandler, RingChannel,
         RingChannelHandler,
     };
+}
+
+/// Quality of service primitives
+pub mod qos {
+    pub use zenoh_protocol::core::CongestionControl;
+
+    pub use crate::api::{builders::sample::QoSBuilderTrait, publisher::Priority};
 }
 
 /// Scouting primitives
@@ -421,6 +418,8 @@ pub mod internal {
             PluginsManager, Response, RunningPlugin, RunningPluginTrait, ZenohPlugin, PLUGIN_PREFIX,
         };
     }
+
+    pub use zenoh_result::ErrNo;
 
     pub use crate::api::value::Value;
 }

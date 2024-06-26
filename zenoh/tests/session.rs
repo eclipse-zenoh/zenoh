@@ -22,10 +22,10 @@ use std::{
 #[cfg(feature = "internal")]
 use zenoh::internal::runtime::{Runtime, RuntimeBuilder};
 use zenoh::{
-    config, key_expr::KeyExpr, prelude::*, pubsub::Reliability, sample::SampleKind, Session,
+    config, key_expr::KeyExpr, prelude::*, pubsub::Reliability, qos::CongestionControl,
+    sample::SampleKind, Session,
 };
 use zenoh_core::ztimeout;
-use zenoh_protocol::core::CongestionControl;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);

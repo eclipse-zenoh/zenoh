@@ -16,11 +16,11 @@ use std::time::Duration;
 use flume::r#async::RecvStream;
 use futures::stream::{Forward, Map};
 use zenoh::{
-    core::Result as ZResult,
     liveliness::LivelinessSubscriberBuilder,
     pubsub::{Reliability, Subscriber, SubscriberBuilder},
     query::{QueryConsolidation, QueryTarget, ReplyKeyExpr},
     sample::{Locality, Sample},
+    Result as ZResult,
 };
 
 use crate::{

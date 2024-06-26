@@ -21,7 +21,6 @@ use std::{
 };
 
 use zenoh::{
-    core::{Error, Resolvable, Resolve, Result as ZResult},
     handlers::{locked, DefaultHandler, IntoHandler},
     internal::zlock,
     key_expr::KeyExpr,
@@ -31,6 +30,7 @@ use zenoh::{
     sample::{Locality, Sample, SampleBuilder, TimestampBuilderTrait},
     session::{SessionDeclarations, SessionRef},
     time::{new_timestamp, Timestamp},
+    Error, Resolvable, Resolve, Result as ZResult,
 };
 
 use crate::ExtractSample;

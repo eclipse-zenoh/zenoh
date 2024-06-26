@@ -23,9 +23,9 @@ use tokio::runtime::Handle;
 use zenoh::{
     config,
     config::{EndPoint, WhatAmI},
-    core::CongestionControl,
     key_expr::KeyExpr,
     prelude::*,
+    qos::CongestionControl,
     Session,
 };
 use zenoh_core::ztimeout;

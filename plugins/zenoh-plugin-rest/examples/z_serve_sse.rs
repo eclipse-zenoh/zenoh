@@ -15,7 +15,9 @@ use std::time::Duration;
 
 use clap::{arg, Command};
 use zenoh::{
-    config::Config, core::CongestionControl, key_expr::keyexpr, sample::QoSBuilderTrait,
+    config::Config,
+    key_expr::keyexpr,
+    qos::{CongestionControl, QoSBuilderTrait},
     session::SessionDeclarations,
 };
 
