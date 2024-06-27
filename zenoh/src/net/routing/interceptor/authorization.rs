@@ -371,36 +371,48 @@ impl PolicyEnforcer {
             if interfaces.is_empty() && cert_common_names.is_empty() && usernames.is_empty() {
                 bail!("Subject '{}' is malformed: one of interfaces, cert_common_names or usernames lists must be specified and not empty", config_subject.id)
             }
-            // create ACL subjects
-            let mut subject_interfaces: Vec<Option<Subject>> = vec![None];
-            let mut subject_ccns: Vec<Option<Subject>> = vec![None];
-            let mut subject_usernames: Vec<Option<Subject>> = vec![None];
-            for face in interfaces {
-                if face.trim().is_empty() {
-                    bail!(
-                        "Found empty interface value in subject '{}'",
-                        config_subject.id
-                    );
+            // create ACL individual subjects
+            let mut subject_interfaces: Vec<Option<Subject>> = vec![];
+            let mut subject_ccns: Vec<Option<Subject>> = vec![];
+            let mut subject_usernames: Vec<Option<Subject>> = vec![];
+            if interfaces.is_empty() {
+                subject_interfaces.push(None);
+            } else {
+                for face in interfaces {
+                    if face.trim().is_empty() {
+                        bail!(
+                            "Found empty interface value in subject '{}'",
+                            config_subject.id
+                        );
+                    }
+                    subject_interfaces.push(Some(Subject::Interface(face.into())));
                 }
-                subject_interfaces.push(Some(Subject::Interface(face.into())));
             }
-            for cert_common_name in cert_common_names {
-                if cert_common_name.trim().is_empty() {
-                    bail!(
-                        "Found empty cert_common_name value in subject '{}'",
-                        config_subject.id
-                    );
+            if cert_common_names.is_empty() {
+                subject_ccns.push(None);
+            } else {
+                for cert_common_name in cert_common_names {
+                    if cert_common_name.trim().is_empty() {
+                        bail!(
+                            "Found empty cert_common_name value in subject '{}'",
+                            config_subject.id
+                        );
+                    }
+                    subject_ccns.push(Some(Subject::CertCommonName(cert_common_name.into())));
                 }
-                subject_ccns.push(Some(Subject::CertCommonName(cert_common_name.into())));
             }
-            for username in usernames {
-                if username.trim().is_empty() {
-                    bail!(
-                        "Found empty username value in subject '{}'",
-                        config_subject.id
-                    );
+            if usernames.is_empty() {
+                subject_usernames.push(None);
+            } else {
+                for username in usernames {
+                    if username.trim().is_empty() {
+                        bail!(
+                            "Found empty username value in subject '{}'",
+                            config_subject.id
+                        );
+                    }
+                    subject_usernames.push(Some(Subject::Username(username.into())));
                 }
-                subject_usernames.push(Some(Subject::Username(username.into())));
             }
             // create ACL subject combinations
             let subject_combination_ids = subject_interfaces
