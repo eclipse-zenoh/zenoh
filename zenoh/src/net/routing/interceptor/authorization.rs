@@ -46,12 +46,7 @@ impl SubjectMap {
         SubjectMapBuilder::new()
     }
 
-    /// WIP, to replace with `get_`
-    pub(crate) fn get(&self, subject: &Subject) -> Option<&usize> {
-        unreachable!()
-    }
-
-    pub(crate) fn get_(&self, subjects: &[Subject]) -> Vec<(Vec<Subject>, &usize)> {
+    pub(crate) fn get(&self, subjects: &[Subject]) -> Vec<(Vec<Subject>, &usize)> {
         let mut subjects = subjects.to_owned();
         subjects.sort_unstable();
         let mut res: Vec<(Vec<Subject>, &usize)> = vec![];

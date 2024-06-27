@@ -144,6 +144,16 @@ pub enum Subject {
     Username(String),
 }
 
+impl std::fmt::Display for Subject {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Subject::Interface(s) => write!(f, "Interface({s})"),
+            Subject::CertCommonName(s) => write!(f, "CertCommonName({s})"),
+            Subject::Username(s) => write!(f, "Username({s})"),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Action {
