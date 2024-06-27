@@ -121,14 +121,14 @@ pub struct AclConfigSubjects {
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
-pub struct AclConfigPolicy {
+pub struct AclConfigPolicyEntry {
     pub rules: Vec<String>,
     pub subjects: Vec<String>,
 }
 
 #[derive(Clone, Serialize, Debug, Deserialize)]
 pub struct PolicyRule {
-    pub subject: Subject,
+    pub subject_id: usize,
     pub key_expr: String,
     pub action: Action,
     pub permission: Permission,
@@ -528,7 +528,7 @@ validated_struct::validator! {
             pub default_permission: Permission,
             pub rules: Option<Vec<AclConfigRule>>,
             pub subjects: Option<Vec<AclConfigSubjects>>,
-            pub policy: Option<Vec<AclConfigPolicy>>,
+            pub policy: Option<Vec<AclConfigPolicyEntry>>,
         },
 
         /// A list of directories where plugins may be searched for if no `__path__` was specified for them.
