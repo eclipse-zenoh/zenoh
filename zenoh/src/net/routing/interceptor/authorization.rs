@@ -51,13 +51,13 @@ impl SubjectMap {
         unreachable!()
     }
 
-    pub(crate) fn get_(&self, subjects: &Vec<Subject>) -> Vec<(Vec<Subject>, &usize)> {
-        let mut subjects = subjects.clone();
+    pub(crate) fn get_(&self, subjects: &[Subject]) -> Vec<(Vec<Subject>, &usize)> {
+        let mut subjects = subjects.to_owned();
         subjects.sort_unstable();
         let mut res: Vec<(Vec<Subject>, &usize)> = vec![];
         for subject in subjects {
             let map_query: Vec<(Vec<Subject>, &usize)> =
-                self.inner.predictive_search([subject]).map(|x| x).collect();
+                self.inner.predictive_search([subject]).collect();
             for (subject, id) in map_query {
                 if subject.len() > 1 {
                     for s in &subject {
@@ -274,8 +274,8 @@ impl PolicyEnforcer {
                     }
                     let policy_information =
                         self.policy_information_point(subjects, rules, policy)?;
-                    let mut main_policy: PolicyMap = PolicyMap::default();
 
+                    let mut main_policy: PolicyMap = PolicyMap::default();
                     for rule in policy_information.policy_rules {
                         let subject_policy = main_policy.entry(rule.subject_id).or_default();
                         subject_policy
@@ -304,9 +304,8 @@ impl PolicyEnforcer {
                     self.subject_map = policy_information.subject_map;
                 }
             } else {
-                tracing::warn!("One of access control rules/subjects/policy is not provided");
+                tracing::warn!("One of access control rules/subjects/policy lists is not provided");
             }
-        } else {
         }
         Ok(())
     }
