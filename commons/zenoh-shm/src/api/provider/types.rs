@@ -12,9 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::fmt::Display;
-
-use zenoh_result::{bail, ZResult};
+use std::{fmt::Display, num::NonZeroUsize};
 
 use super::chunk::AllocatedChunk;
 use crate::api::buffer::zshmmut::ZShmMut;
@@ -61,14 +59,18 @@ impl Default for AllocAlignment {
 
 impl AllocAlignment {
     #[zenoh_macros::unstable_doc]
-    pub fn new(pow: u8) -> Self {
-        Self { pow }
+    pub fn new(pow: u8) -> Result<Self, ZLayoutError> {
+        match pow {
+            pow if pow < 64 => Ok(Self { pow }),
+            _ => Err(ZLayoutError::IncorrectLayoutArgs),
+        }
     }
 
     /// Get alignment in normal units (bytes)
     #[zenoh_macros::unstable_doc]
-    pub fn get_alignment_value(&self) -> usize {
-        1usize << self.pow
+    pub fn get_alignment_value(&self) -> NonZeroUsize {
+        // SAFETY: this is safe
+        unsafe { NonZeroUsize::new_unchecked(1usize << self.pow) }
     }
 
     /// Align size according to inner alignment.
@@ -84,11 +86,13 @@ impl AllocAlignment {
     /// assert_eq!(aligned_size, 8);
     /// ```
     #[zenoh_macros::unstable_doc]
-    pub fn align_size(&self, size: usize) -> usize {
+    pub fn align_size(&self, size: NonZeroUsize) -> NonZeroUsize {
         let alignment = self.get_alignment_value();
-        match size % alignment {
+        match size.get() % alignment {
             0 => size,
-            remainder => size + (alignment - remainder),
+            remainder => unsafe {
+                NonZeroUsize::new_unchecked(size.get() + (alignment.get() - remainder))
+            },
         }
     }
 }
@@ -97,7 +101,7 @@ impl AllocAlignment {
 #[zenoh_macros::unstable_doc]
 #[derive(Debug)]
 pub struct MemoryLayout {
-    size: usize,
+    size: NonZeroUsize,
     alignment: AllocAlignment,
 }
 
@@ -113,16 +117,16 @@ impl Display for MemoryLayout {
 impl MemoryLayout {
     /// Try to create a new memory layout
     #[zenoh_macros::unstable_doc]
-    pub fn new(size: usize, alignment: AllocAlignment) -> ZResult<Self> {
+    pub fn new(size: NonZeroUsize, alignment: AllocAlignment) -> Result<Self, ZLayoutError> {
         // size of an allocation must be a miltiple of it's alignment!
-        match size % alignment.get_alignment_value() {
+        match size.get() % alignment.get_alignment_value() {
             0 => Ok(Self { size, alignment }),
-            _ => bail!("size of an allocation must be a miltiple of it's alignment!"),
+            _ => Err(ZLayoutError::IncorrectLayoutArgs),
         }
     }
 
     #[zenoh_macros::unstable_doc]
-    pub fn size(&self) -> usize {
+    pub fn size(&self) -> NonZeroUsize {
         self.size
     }
 
@@ -150,16 +154,12 @@ impl MemoryLayout {
     /// assert!(layout8b.is_ok()); // ok
     /// ```
     #[zenoh_macros::unstable_doc]
-    pub fn extend(&self, new_alignment: AllocAlignment) -> ZResult<MemoryLayout> {
+    pub fn extend(&self, new_alignment: AllocAlignment) -> Result<MemoryLayout, ZLayoutError> {
         if self.alignment <= new_alignment {
             let new_size = new_alignment.align_size(self.size);
             return MemoryLayout::new(new_size, new_alignment);
         }
-        bail!(
-            "Cannot extend alignment form {} to {}: new alignment must be >= old!",
-            self.alignment,
-            new_alignment
-        )
+        Err(ZLayoutError::IncorrectLayoutArgs)
     }
 }
 
