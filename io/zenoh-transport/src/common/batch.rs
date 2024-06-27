@@ -322,11 +322,12 @@ impl WBatch {
         // Compress the actual content
         let (_length, _header, payload) = Self::split(self.buffer.as_slice(), &self.config);
         let mut writer = support.writer();
-        // SAFETY: `lz4_flex::block::compress_into` returns the number of bytes written in b,
-        // so it must be lesser than or equal to the length of `b`
+        // SAFETY: assertion ensures `with_slot` precondition
         unsafe {
             writer.with_slot(writer.remaining(), |b| {
-                lz4_flex::block::compress_into(payload, b).unwrap_or(0)
+                let len = lz4_flex::block::compress_into(payload, b).unwrap_or(0);
+                assert!(len <= b.len());
+                len
             })
         }
         .map_err(|_| zerror!("Compression error"))?;

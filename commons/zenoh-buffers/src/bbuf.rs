@@ -135,7 +135,8 @@ impl Writer for &mut BBuf {
             return Err(DidntWrite);
         }
 
-        let written = write(self.as_writable_slice());
+        // SAFETY: self.remaining() >= len
+        let written = write(unsafe { self.as_writable_slice().get_unchecked_mut(..len) });
         self.len += written;
 
         NonZeroUsize::new(written).ok_or(DidntWrite)

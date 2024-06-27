@@ -201,10 +201,12 @@ impl<'a> SiphonableReader for &'a [u8] {
     where
         W: Writer,
     {
-        let len = writer.write(self).map_err(|_| DidntSiphon)?;
-        // SAFETY: len is returned from the writer, therefore it means
-        //         len amount of bytes have been written to the slice.
-        *self = unsafe { self.get_unchecked(len.get()..) };
-        Ok(len)
+        let res = writer.write(self).map_err(|_| DidntSiphon);
+        if let Ok(len) = res {
+            // SAFETY: len is returned from the writer, therefore it means
+            //         len amount of bytes have been written to the slice.
+            *self = crate::unsafe_slice!(self, len.get()..);
+        }
+        res
     }
 }
