@@ -113,6 +113,15 @@ impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
     }
 }
 
+impl EncodingBuilderTrait for PublisherBuilder<'_, '_> {
+    fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
+        Self {
+            encoding: encoding.into(),
+            ..self
+        }
+    }
+}
+
 impl<P> EncodingBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
@@ -226,6 +235,7 @@ impl IntoFuture for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuil
 pub struct PublisherBuilder<'a, 'b: 'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
+    pub(crate) encoding: Encoding,
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
     pub(crate) is_express: bool,
@@ -240,6 +250,7 @@ impl<'a, 'b> Clone for PublisherBuilder<'a, 'b> {
                 Ok(k) => Ok(k.clone()),
                 Err(e) => Err(zerror!("Cloned KE Error: {}", e).into()),
             },
+            encoding: self.encoding.clone(),
             congestion_control: self.congestion_control,
             priority: self.priority,
             is_express: self.is_express,
@@ -289,6 +300,7 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
             session: self.session,
             id: 0, // This is a one shot Publisher
             key_expr: self.key_expr?,
+            encoding: self.encoding,
             congestion_control: self.congestion_control,
             priority: self.priority,
             is_express: self.is_express,
@@ -343,6 +355,7 @@ impl<'a, 'b> Wait for PublisherBuilder<'a, 'b> {
                 session: self.session,
                 id,
                 key_expr,
+                encoding: self.encoding,
                 congestion_control: self.congestion_control,
                 priority: self.priority,
                 is_express: self.is_express,

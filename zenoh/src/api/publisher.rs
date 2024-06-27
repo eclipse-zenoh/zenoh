@@ -139,6 +139,7 @@ pub struct Publisher<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) id: Id,
     pub(crate) key_expr: KeyExpr<'a>,
+    pub(crate) encoding: Encoding,
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
     pub(crate) is_express: bool,
@@ -178,8 +179,14 @@ impl<'a> Publisher<'a> {
         &self.key_expr
     }
 
+    /// Get the [`Encoding`] used when publishing data.
     #[inline]
+    pub fn encoding(&self) -> &Encoding {
+        &self.encoding
+    }
+
     /// Get the `congestion_control` applied when routing the data.
+    #[inline]
     pub fn congestion_control(&self) -> CongestionControl {
         self.congestion_control
     }
@@ -248,7 +255,7 @@ impl<'a> Publisher<'a> {
             publisher: self,
             kind: PublicationBuilderPut {
                 payload: payload.into(),
-                encoding: Encoding::ZENOH_BYTES,
+                encoding: self.encoding.clone(),
             },
             timestamp: None,
             #[cfg(feature = "unstable")]
