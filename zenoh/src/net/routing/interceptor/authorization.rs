@@ -83,6 +83,7 @@ impl Default for SubjectMap {
 
 pub(crate) struct SubjectMapBuilder {
     builder: TrieMapBuilder<Subject, usize>,
+    hashmap: HashMap<Vec<Subject>, usize, RandomState>, // builder does not provide "insert_or_get" function, so we must use a hashmap during construction
     id_counter: usize,
 }
 
@@ -90,6 +91,7 @@ impl SubjectMapBuilder {
     pub(crate) fn new() -> Self {
         Self {
             builder: TrieMapBuilder::new(),
+            hashmap: HashMap::with_hasher(RandomState::default()),
             id_counter: 0,
         }
     }
@@ -101,12 +103,15 @@ impl SubjectMapBuilder {
     }
 
     /// Assumes subject contains at most one instance of each Subject variant
-    pub(crate) fn insert(&mut self, subject: Vec<Subject>) -> usize {
+    pub(crate) fn insert_or_get(&mut self, subject: Vec<Subject>) -> usize {
         let mut subject = subject.clone();
         subject.sort_unstable();
-        self.id_counter += 1;
-        self.builder.insert(subject, self.id_counter);
-        self.id_counter
+        let id = self.hashmap.entry(subject.clone()).or_insert_with(|| {
+            self.id_counter += 1;
+            self.builder.insert(subject, self.id_counter);
+            self.id_counter
+        });
+        *id
     }
 }
 
@@ -428,7 +433,7 @@ impl PolicyEnforcer {
                     usr.is_some()
                         .then(|| combination.push(usr.clone().unwrap()));
                     if !combination.is_empty() {
-                        return Some(subject_map_builder.insert(combination));
+                        return Some(subject_map_builder.insert_or_get(combination));
                     }
                     None
                 })
