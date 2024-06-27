@@ -12,8 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{borrow::Cow, collections::HashMap};
-
+use std::{borrow::Cow, collections::HashMap, io::Cursor};
 use zenoh::bytes::ZBytes;
 
 fn main() {
@@ -88,4 +87,56 @@ fn main() {
     let payload = ZBytes::from(input.clone());
     let output = payload.deserialize::<HashMap<usize, String>>().unwrap();
     assert_eq!(input, output);
+
+    // JSON
+    let data = r#"
+    {
+        "name": "John Doe",
+        "age": 43,
+        "phones": [
+            "+44 1234567",
+            "+44 2345678"
+        ]
+    }"#;
+    let input: serde_json::Value = serde_json::from_str(data).unwrap();
+    let payload = ZBytes::try_serialize(input.clone()).unwrap();
+    let output: serde_json::Value = payload.deserialize().unwrap();
+    assert_eq!(input, output);
+    // Corresponding encoding to be used in operations like `.put()`, `.reply()`, etc.
+    // let encoding = Encoding::APPLICATION_JSON;
+
+    // YAML
+    let data = r#"
+        name: "John Doe"
+        age: 43
+        phones:
+          - "+44 1234567"
+          - "+44 2345678"
+    "#;
+    let input: serde_yaml::Value = serde_yaml::from_str(data).unwrap();
+    let payload = ZBytes::try_serialize(input.clone()).unwrap();
+    let output: serde_yaml::Value = payload.deserialize().unwrap();
+    assert_eq!(input, output);
+    // Corresponding encoding to be used in operations like `.put()`, `.reply()`, etc.
+    // let encoding = Encoding::APPLICATION_YAML;
+
+    // Protobuf
+    use prost::Message;
+    #[derive(Message, Eq, PartialEq)]
+    struct EntityInfo {
+        #[prost(uint32)]
+        id: u32,
+        #[prost(string)]
+        name: String,
+    }
+    let input = EntityInfo {
+        id: 1234,
+        name: String::from("John Doe"),
+    };
+    let payload = ZBytes::from(input.encode_to_vec());
+    let output =
+        EntityInfo::decode(Cursor::new(payload.deserialize::<Vec<u8>>().unwrap())).unwrap();
+    assert_eq!(input, output);
+    // Corresponding encoding to be used in operations like `.put()`, `.reply()`, etc.
+    // let encoding = Encoding::APPLICATION_PROTOBUF;
 }
