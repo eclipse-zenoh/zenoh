@@ -441,7 +441,7 @@ impl PolicyEnforcer {
             if entry.rules.is_empty() || entry.subjects.is_empty() {
                 bail!(
                     "Policy entry #{} is malformed: empty subjects or rules list",
-                    entry_id + 1
+                    entry_id
                 );
             }
             for subject_config_id in &entry.subjects {
