@@ -591,6 +591,7 @@ client2name:client2passwd";
                     "default_permission": "deny",
                     "rules": [
                         {
+                            "id": "r1",
                             "permission": "allow",
                             "flows": ["ingress","egress"],
                             "actions": [
@@ -600,10 +601,21 @@ client2name:client2passwd";
                             "key_exprs": [
                                 "test/demo"
                             ],
+                        },
+                    ],
+                    "subjects": [
+                        {
+                            "id": "s1",
                             "cert_common_names": [
                                 "client_side"
                             ]
-                        },
+                        }
+                    ],
+                    "policy": [
+                        {
+                            "rules": ["r1"],
+                            "subjects": ["s1"],
+                        }
                     ]
                 }"#,
             )
@@ -647,6 +659,7 @@ client2name:client2passwd";
                     "default_permission": "allow",
                     "rules": [
                         {
+                            "id": "r1",
                             "permission": "deny",
                             "flows": ["egress"],
                             "actions": [
@@ -656,10 +669,21 @@ client2name:client2passwd";
                             "key_exprs": [
                                 "test/demo"
                             ],
+                        },
+                    ],
+                    "subjects": [
+                        {
+                            "id": "s1",
                             "cert_common_names": [
                                 "client_side"
                             ]
-                        },
+                        }
+                    ],
+                    "policy": [
+                        {
+                            "rules": ["r1"],
+                            "subjects": ["s1"],
+                        }
                     ]
                 }"#,
             )
@@ -705,8 +729,9 @@ client2name:client2passwd";
                     "default_permission": "deny",
                     "rules": [
                         {
+                            "id": "r1",
                             "permission": "allow",
-                            "flows": ["egress","ingress"],
+                            "flows": ["egress", "ingress"],
                             "actions": [
                                 "get",
                                 "declare_queryable"
@@ -714,10 +739,21 @@ client2name:client2passwd";
                             "key_exprs": [
                                 "test/demo"
                             ],
+                        },
+                    ],
+                    "subjects": [
+                        {
+                            "id": "s1",
                             "cert_common_names": [
                                 "client_side"
                             ]
-                        },
+                        }
+                    ],
+                    "policy": [
+                        {
+                            "rules": ["r1"],
+                            "subjects": ["s1"],
+                        }
                     ]
                 }"#,
             )
@@ -778,6 +814,7 @@ client2name:client2passwd";
                     "default_permission": "allow",
                     "rules": [
                         {
+                            "id": "r1",
                             "permission": "deny",
                             "flows": ["egress"],
                             "actions": [
@@ -787,10 +824,21 @@ client2name:client2passwd";
                             "key_exprs": [
                                 "test/demo"
                             ],
+                        },
+                    ],
+                    "subjects": [
+                        {
+                            "id": "s1",
                             "cert_common_names": [
                                 "client_side"
                             ]
-                        },
+                        }
+                    ],
+                    "policy": [
+                        {
+                            "rules": ["r1"],
+                            "subjects": ["s1"],
+                        }
                     ]
                 }"#,
             )
@@ -851,8 +899,9 @@ client2name:client2passwd";
                     "default_permission": "deny",
                     "rules": [
                         {
+                            "id": "r1",
                             "permission": "allow",
-                            "flows": ["ingress","egress"],
+                            "flows": ["egress", "ingress"],
                             "actions": [
                                 "put",
                                 "declare_subscriber"
@@ -860,10 +909,21 @@ client2name:client2passwd";
                             "key_exprs": [
                                 "test/demo"
                             ],
+                        },
+                    ],
+                    "subjects": [
+                        {
+                            "id": "s1",
                             "cert_common_names": [
                                 "client_side"
                             ]
-                        },
+                        }
+                    ],
+                    "policy": [
+                        {
+                            "rules": ["r1"],
+                            "subjects": ["s1"],
+                        }
                     ]
                 }"#,
             )
@@ -909,6 +969,7 @@ client2name:client2passwd";
                     "default_permission": "allow",
                     "rules": [
                         {
+                            "id": "r1",
                             "permission": "deny",
                             "flows": ["egress"],
                             "actions": [
@@ -918,10 +979,21 @@ client2name:client2passwd";
                             "key_exprs": [
                                 "test/demo"
                             ],
+                        },
+                    ],
+                    "subjects": [
+                        {
+                            "id": "s1",
                             "cert_common_names": [
                                 "client_side"
                             ]
-                        },
+                        }
+                    ],
+                    "policy": [
+                        {
+                            "rules": ["r1"],
+                            "subjects": ["s1"],
+                        }
                     ]
                 }"#,
             )
@@ -968,18 +1040,31 @@ client2name:client2passwd";
                     "default_permission": "deny",
                     "rules": [
                         {
+                            "id": "r1",
                             "permission": "allow",
-                            "flows": ["egress","ingress"],
+                            "flows": ["egress", "ingress"],
                             "actions": [
                                 "get",
-                                "declare_queryable"],
+                                "declare_queryable"
+                            ],
                             "key_exprs": [
                                 "test/demo"
                             ],
+                        },
+                    ],
+                    "subjects": [
+                        {
+                            "id": "s1",
                             "cert_common_names": [
                                 "client_side"
                             ]
-                        },
+                        }
+                    ],
+                    "policy": [
+                        {
+                            "rules": ["r1"],
+                            "subjects": ["s1"],
+                        }
                     ]
                 }"#,
             )
@@ -1039,9 +1124,9 @@ client2name:client2passwd";
                 r#"{
                     "enabled": true,
                     "default_permission": "allow",
-                    "rules":
-                    [
+                    "rules": [
                         {
+                            "id": "r1",
                             "permission": "deny",
                             "flows": ["egress"],
                             "actions": [
@@ -1051,10 +1136,21 @@ client2name:client2passwd";
                             "key_exprs": [
                                 "test/demo"
                             ],
+                        },
+                    ],
+                    "subjects": [
+                        {
+                            "id": "s1",
                             "cert_common_names": [
                                 "client_side"
                             ]
-                        },
+                        }
+                    ],
+                    "policy": [
+                        {
+                            "rules": ["r1"],
+                            "subjects": ["s1"],
+                        }
                     ]
                 }"#,
             )
@@ -1115,8 +1211,9 @@ client2name:client2passwd";
                     "default_permission": "deny",
                     "rules": [
                         {
+                            "id": "r1",
                             "permission": "allow",
-                            "flows": ["ingress","egress"],
+                            "flows": ["ingress", "egress"],
                             "actions": [
                                 "put",
                                 "declare_subscriber"
@@ -1124,11 +1221,22 @@ client2name:client2passwd";
                             "key_exprs": [
                                 "test/demo"
                             ],
+                        },
+                    ],
+                    "subjects": [
+                        {
+                            "id": "s1",
                             "usernames": [
                                 "client1name",
                                 "client2name"
                             ]
-                        },
+                        }
+                    ],
+                    "policy": [
+                        {
+                            "rules": ["r1"],
+                            "subjects": ["s1"],
+                        }
                     ]
                 }"#,
             )
@@ -1173,6 +1281,7 @@ client2name:client2passwd";
                     "default_permission": "allow",
                     "rules": [
                         {
+                            "id": "r1",
                             "permission": "deny",
                             "flows": ["egress"],
                             "actions": [
@@ -1182,11 +1291,22 @@ client2name:client2passwd";
                             "key_exprs": [
                                 "test/demo"
                             ],
+                        },
+                    ],
+                    "subjects": [
+                        {
+                            "id": "s1",
                             "usernames": [
                                 "client1name",
                                 "client2name"
                             ]
-                        },
+                        }
+                    ],
+                    "policy": [
+                        {
+                            "rules": ["r1"],
+                            "subjects": ["s1"],
+                        }
                     ]
                 }"#,
             )
@@ -1232,8 +1352,9 @@ client2name:client2passwd";
                     "default_permission": "deny",
                     "rules": [
                         {
+                            "id": "r1",
                             "permission": "allow",
-                            "flows": ["egress","ingress"],
+                            "flows": ["ingress", "egress"],
                             "actions": [
                                 "get",
                                 "declare_queryable"
@@ -1241,11 +1362,22 @@ client2name:client2passwd";
                             "key_exprs": [
                                 "test/demo"
                             ],
+                        },
+                    ],
+                    "subjects": [
+                        {
+                            "id": "s1",
                             "usernames": [
                                 "client1name",
                                 "client2name"
                             ]
-                        },
+                        }
+                    ],
+                    "policy": [
+                        {
+                            "rules": ["r1"],
+                            "subjects": ["s1"],
+                        }
                     ]
                 }"#,
             )
@@ -1306,6 +1438,7 @@ client2name:client2passwd";
                     "default_permission": "allow",
                     "rules": [
                         {
+                            "id": "r1",
                             "permission": "deny",
                             "flows": ["egress"],
                             "actions": [
@@ -1315,11 +1448,22 @@ client2name:client2passwd";
                             "key_exprs": [
                                 "test/demo"
                             ],
+                        },
+                    ],
+                    "subjects": [
+                        {
+                            "id": "s1",
                             "usernames": [
                                 "client1name",
                                 "client2name"
                             ]
-                        },
+                        }
+                    ],
+                    "policy": [
+                        {
+                            "rules": ["r1"],
+                            "subjects": ["s1"],
+                        }
                     ]
                 }"#,
             )
