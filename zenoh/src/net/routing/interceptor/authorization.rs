@@ -304,7 +304,7 @@ impl PolicyEnforcer {
                     self.subject_map = policy_information.subject_map;
                 }
             } else {
-                tracing::warn!("One of access control rules/subjects/policy lists is not provided");
+                bail!("All ACL rules/subjects/policy config lists must be provided");
             }
         }
         Ok(())
