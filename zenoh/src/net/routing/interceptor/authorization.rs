@@ -445,6 +445,9 @@ impl PolicyEnforcer {
                 );
             }
             for subject_config_id in &entry.subjects {
+                if subject_config_id.trim().is_empty() {
+                    bail!("Found empty subject id in policy entry #{}", entry_id)
+                }
                 if !subject_id_map.contains_key(subject_config_id) {
                     bail!(
                         "Subject '{}' in policy entry #{} does not exist in subjects list",
@@ -455,6 +458,9 @@ impl PolicyEnforcer {
             }
             // Create PolicyRules
             for rule_id in &entry.rules {
+                if rule_id.trim().is_empty() {
+                    bail!("Found empty rule id in policy entry #{}", entry_id)
+                }
                 let rule = rule_map.get(rule_id).ok_or(zerror!(
                     "Rule '{}' in policy entry #{} does not exist in rules list",
                     rule_id,
