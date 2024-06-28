@@ -15,7 +15,7 @@ mod test {
     use std::{
         fs,
         path::PathBuf,
-        sync::{Arc, Mutex},
+        sync::{atomic::AtomicBool, Arc, Mutex},
         time::Duration,
     };
 
@@ -34,36 +34,62 @@ mod test {
     const KEY_EXPR: &str = "test/demo";
     const VALUE: &str = "zenoh";
     static TESTFILES_PATH: Lazy<PathBuf> = Lazy::new(std::env::temp_dir);
+    static TESTFILES_CREATED: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn test_authentication() {
+    async fn test_authentication_usrpwd() {
         zenoh_util::try_init_log_from_env();
         create_new_files(TESTFILES_PATH.to_path_buf())
             .await
             .unwrap();
-        println!("testfiles created successfully.");
+        test_pub_sub_deny_then_allow_usrpswd(37447).await;
+        test_pub_sub_allow_then_deny_usrpswd(37447).await;
+        test_get_qbl_allow_then_deny_usrpswd(37447).await;
+        test_get_qbl_deny_then_allow_usrpswd(37447).await;
+    }
 
-        test_pub_sub_deny_then_allow_usrpswd().await;
-        test_pub_sub_allow_then_deny_usrpswd().await;
-        test_get_qbl_allow_then_deny_usrpswd().await;
-        test_get_qbl_deny_then_allow_usrpswd().await;
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_authentication_tls() {
+        zenoh_util::try_init_log_from_env();
+        create_new_files(TESTFILES_PATH.to_path_buf())
+            .await
+            .unwrap();
+        test_pub_sub_deny_then_allow_tls(37448).await;
+        test_pub_sub_allow_then_deny_tls(37449).await;
+        test_get_qbl_allow_then_deny_tls(37450).await;
+        test_get_qbl_deny_then_allow_tls(37451).await;
+    }
 
-        test_pub_sub_deny_then_allow_tls(3774).await;
-        test_pub_sub_allow_then_deny_tls(3775).await;
-        test_get_qbl_allow_then_deny_tls(3776).await;
-        test_get_qbl_deny_then_allow_tls(3777).await;
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_authentication_quic() {
+        zenoh_util::try_init_log_from_env();
+        create_new_files(TESTFILES_PATH.to_path_buf())
+            .await
+            .unwrap();
+        test_pub_sub_deny_then_allow_quic(37452, false).await;
+        test_pub_sub_allow_then_deny_quic(37453).await;
+        test_get_qbl_deny_then_allow_quic(37454).await;
+        test_get_qbl_allow_then_deny_quic(37455).await;
+    }
 
-        test_pub_sub_deny_then_allow_quic(3774, false).await;
-        test_pub_sub_allow_then_deny_quic(3775).await;
-        test_get_qbl_deny_then_allow_quic(3776).await;
-        test_get_qbl_allow_then_deny_quic(3777).await;
-
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_authentication_lowlatency() {
         // Test link AuthIds accessibility for lowlatency transport
-        test_pub_sub_deny_then_allow_quic(3778, true).await;
+        zenoh_util::try_init_log_from_env();
+        create_new_files(TESTFILES_PATH.to_path_buf())
+            .await
+            .unwrap();
+        test_pub_sub_deny_then_allow_quic(37456, true).await;
     }
 
     #[allow(clippy::all)]
     async fn create_new_files(certs_dir: std::path::PathBuf) -> std::io::Result<()> {
+        let created = TESTFILES_CREATED.fetch_or(true, std::sync::atomic::Ordering::SeqCst);
+        if created {
+            // only create files once per tests
+            println!("Skipping testfile creation: files already created by another test instance");
+            return Ok(());
+        }
         use std::io::prelude::*;
         let ca_pem = b"-----BEGIN CERTIFICATE-----
 MIIDiTCCAnGgAwIBAgIUO1x6LAlICgKs5+pYUTo4CughfKEwDQYJKoZIhvcNAQEL
@@ -229,6 +255,7 @@ client2name:client2passwd";
             file.write_all(test_file.value)?;
         }
 
+        println!("testfiles created successfully.");
         Ok(())
     }
 
@@ -324,10 +351,10 @@ client2name:client2passwd";
         config
     }
 
-    async fn get_basic_router_config_usrpswd() -> Config {
+    async fn get_basic_router_config_usrpswd(port: u16) -> Config {
         let mut config = config::default();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
-        config.listen.endpoints = vec!["tcp/127.0.0.1:37447".parse().unwrap()];
+        config.listen.endpoints = vec![format!("tcp/127.0.0.1:{port}").parse().unwrap()];
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
             .insert_json5(
@@ -537,9 +564,10 @@ client2name:client2passwd";
         (s01, s02)
     }
 
-    async fn get_client_sessions_usrpswd() -> (Session, Session) {
+    async fn get_client_sessions_usrpswd(port: u16) -> (Session, Session) {
         println!("Opening client sessions");
-        let mut config = config::client(["tcp/127.0.0.1:37447".parse::<EndPoint>().unwrap()]);
+        let mut config =
+            config::client([format!("tcp/127.0.0.1:{port}").parse::<EndPoint>().unwrap()]);
         config
             .insert_json5(
                 "transport",
@@ -1198,10 +1226,10 @@ client2name:client2passwd";
         close_router_session(session).await;
     }
 
-    async fn test_pub_sub_deny_then_allow_usrpswd() {
+    async fn test_pub_sub_deny_then_allow_usrpswd(port: u16) {
         println!("test_pub_sub_deny_then_allow_usrpswd");
 
-        let mut config_router = get_basic_router_config_usrpswd().await;
+        let mut config_router = get_basic_router_config_usrpswd(port).await;
 
         config_router
             .insert_json5(
@@ -1245,7 +1273,7 @@ client2name:client2passwd";
 
         let session = ztimeout!(zenoh::open(config_router)).unwrap();
 
-        let (sub_session, pub_session) = get_client_sessions_usrpswd().await;
+        let (sub_session, pub_session) = get_client_sessions_usrpswd(port).await;
         {
             let publisher = pub_session.declare_publisher(KEY_EXPR).await.unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
@@ -1269,10 +1297,10 @@ client2name:client2passwd";
         close_router_session(session).await;
     }
 
-    async fn test_pub_sub_allow_then_deny_usrpswd() {
+    async fn test_pub_sub_allow_then_deny_usrpswd(port: u16) {
         println!("test_pub_sub_allow_then_deny_usrpswd");
 
-        let mut config_router = get_basic_router_config_usrpswd().await;
+        let mut config_router = get_basic_router_config_usrpswd(port).await;
         config_router
             .insert_json5(
                 "access_control",
@@ -1314,7 +1342,7 @@ client2name:client2passwd";
         println!("Opening router session");
 
         let session = ztimeout!(zenoh::open(config_router)).unwrap();
-        let (sub_session, pub_session) = get_client_sessions_usrpswd().await;
+        let (sub_session, pub_session) = get_client_sessions_usrpswd(port).await;
         {
             let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
@@ -1340,10 +1368,10 @@ client2name:client2passwd";
         close_router_session(session).await;
     }
 
-    async fn test_get_qbl_deny_then_allow_usrpswd() {
+    async fn test_get_qbl_deny_then_allow_usrpswd(port: u16) {
         println!("test_get_qbl_deny_then_allow_usrpswd");
 
-        let mut config_router = get_basic_router_config_usrpswd().await;
+        let mut config_router = get_basic_router_config_usrpswd(port).await;
         config_router
             .insert_json5(
                 "access_control",
@@ -1387,7 +1415,7 @@ client2name:client2passwd";
 
         let session = ztimeout!(zenoh::open(config_router)).unwrap();
 
-        let (get_session, qbl_session) = get_client_sessions_usrpswd().await;
+        let (get_session, qbl_session) = get_client_sessions_usrpswd(port).await;
         {
             let mut received_value = String::new();
 
@@ -1426,10 +1454,10 @@ client2name:client2passwd";
         close_router_session(session).await;
     }
 
-    async fn test_get_qbl_allow_then_deny_usrpswd() {
+    async fn test_get_qbl_allow_then_deny_usrpswd(port: u16) {
         println!("test_get_qbl_allow_then_deny_usrpswd");
 
-        let mut config_router = get_basic_router_config_usrpswd().await;
+        let mut config_router = get_basic_router_config_usrpswd(port).await;
         config_router
             .insert_json5(
                 "access_control",
@@ -1472,7 +1500,7 @@ client2name:client2passwd";
 
         let session = ztimeout!(zenoh::open(config_router)).unwrap();
 
-        let (get_session, qbl_session) = get_client_sessions_usrpswd().await;
+        let (get_session, qbl_session) = get_client_sessions_usrpswd(port).await;
         {
             let mut received_value = String::new();
 

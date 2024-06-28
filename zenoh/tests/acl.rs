@@ -33,21 +33,26 @@ mod test {
     const VALUE: &str = "zenoh";
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn test_acl() {
+    async fn test_acl_pub_sub() {
         zenoh::try_init_log_from_env();
-        test_pub_sub_deny().await;
-        test_pub_sub_allow().await;
-        test_pub_sub_deny_then_allow().await;
-        test_pub_sub_allow_then_deny().await;
-        test_get_qbl_deny().await;
-        test_get_qbl_allow().await;
-        test_get_qbl_allow_then_deny().await;
-        test_get_qbl_deny_then_allow().await;
+        test_pub_sub_deny(27447).await;
+        test_pub_sub_allow(27447).await;
+        test_pub_sub_deny_then_allow(27447).await;
+        test_pub_sub_allow_then_deny(27447).await;
     }
-    async fn get_basic_router_config() -> Config {
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_acl_get_queryable() {
+        test_get_qbl_deny(27448).await;
+        test_get_qbl_allow(27448).await;
+        test_get_qbl_allow_then_deny(27448).await;
+        test_get_qbl_deny_then_allow(27448).await;
+    }
+
+    async fn get_basic_router_config(port: u16) -> Config {
         let mut config = config::default();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
-        config.listen.endpoints = vec!["tcp/127.0.0.1:27447".parse().unwrap()];
+        config.listen.endpoints = vec![format!("tcp/127.0.0.1:{port}").parse().unwrap()];
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
     }
@@ -57,11 +62,11 @@ mod test {
         ztimeout!(s.close()).unwrap();
     }
 
-    async fn get_client_sessions() -> (Session, Session) {
+    async fn get_client_sessions(port: u16) -> (Session, Session) {
         println!("Opening client sessions");
-        let config = config::client(["tcp/127.0.0.1:27447".parse::<EndPoint>().unwrap()]);
+        let config = config::client([format!("tcp/127.0.0.1:{port}").parse::<EndPoint>().unwrap()]);
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
-        let config = config::client(["tcp/127.0.0.1:27447".parse::<EndPoint>().unwrap()]);
+        let config = config::client([format!("tcp/127.0.0.1:{port}").parse::<EndPoint>().unwrap()]);
         let s02 = ztimeout!(zenoh::open(config)).unwrap();
         (s01, s02)
     }
@@ -72,10 +77,10 @@ mod test {
         ztimeout!(s02.close()).unwrap();
     }
 
-    async fn test_pub_sub_deny() {
+    async fn test_pub_sub_deny(port: u16) {
         println!("test_pub_sub_deny");
 
-        let mut config_router = get_basic_router_config().await;
+        let mut config_router = get_basic_router_config(port).await;
         config_router
             .insert_json5(
                 "access_control",
@@ -92,7 +97,7 @@ mod test {
 
         let session = ztimeout!(zenoh::open(config_router)).unwrap();
 
-        let (sub_session, pub_session) = get_client_sessions().await;
+        let (sub_session, pub_session) = get_client_sessions(port).await;
         {
             let publisher = pub_session.declare_publisher(KEY_EXPR).await.unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
@@ -116,9 +121,9 @@ mod test {
         close_router_session(session).await;
     }
 
-    async fn test_pub_sub_allow() {
+    async fn test_pub_sub_allow(port: u16) {
         println!("test_pub_sub_allow");
-        let mut config_router = get_basic_router_config().await;
+        let mut config_router = get_basic_router_config(port).await;
         config_router
             .insert_json5(
                 "access_control",
@@ -134,7 +139,7 @@ mod test {
         println!("Opening router session");
 
         let session = ztimeout!(zenoh::open(config_router)).unwrap();
-        let (sub_session, pub_session) = get_client_sessions().await;
+        let (sub_session, pub_session) = get_client_sessions(port).await;
         {
             let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
@@ -161,10 +166,10 @@ mod test {
         close_router_session(session).await;
     }
 
-    async fn test_pub_sub_allow_then_deny() {
+    async fn test_pub_sub_allow_then_deny(port: u16) {
         println!("test_pub_sub_allow_then_deny");
 
-        let mut config_router = get_basic_router_config().await;
+        let mut config_router = get_basic_router_config(port).await;
         config_router
             .insert_json5(
                 "access_control",
@@ -205,7 +210,7 @@ mod test {
         println!("Opening router session");
 
         let session = ztimeout!(zenoh::open(config_router)).unwrap();
-        let (sub_session, pub_session) = get_client_sessions().await;
+        let (sub_session, pub_session) = get_client_sessions(port).await;
         {
             let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
@@ -231,10 +236,10 @@ mod test {
         close_router_session(session).await;
     }
 
-    async fn test_pub_sub_deny_then_allow() {
+    async fn test_pub_sub_deny_then_allow(port: u16) {
         println!("test_pub_sub_deny_then_allow");
 
-        let mut config_router = get_basic_router_config().await;
+        let mut config_router = get_basic_router_config(port).await;
         config_router
             .insert_json5(
                 "access_control",
@@ -275,7 +280,7 @@ mod test {
         println!("Opening router session");
 
         let session = ztimeout!(zenoh::open(config_router)).unwrap();
-        let (sub_session, pub_session) = get_client_sessions().await;
+        let (sub_session, pub_session) = get_client_sessions(port).await;
         {
             let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
@@ -301,10 +306,10 @@ mod test {
         close_router_session(session).await;
     }
 
-    async fn test_get_qbl_deny() {
+    async fn test_get_qbl_deny(port: u16) {
         println!("test_get_qbl_deny");
 
-        let mut config_router = get_basic_router_config().await;
+        let mut config_router = get_basic_router_config(port).await;
         config_router
             .insert_json5(
                 "access_control",
@@ -321,7 +326,7 @@ mod test {
 
         let session = ztimeout!(zenoh::open(config_router)).unwrap();
 
-        let (get_session, qbl_session) = get_client_sessions().await;
+        let (get_session, qbl_session) = get_client_sessions(port).await;
         {
             let mut received_value = String::new();
 
@@ -355,10 +360,10 @@ mod test {
         close_router_session(session).await;
     }
 
-    async fn test_get_qbl_allow() {
+    async fn test_get_qbl_allow(port: u16) {
         println!("test_get_qbl_allow");
 
-        let mut config_router = get_basic_router_config().await;
+        let mut config_router = get_basic_router_config(port).await;
         config_router
             .insert_json5(
                 "access_control",
@@ -375,7 +380,7 @@ mod test {
 
         let session = ztimeout!(zenoh::open(config_router)).unwrap();
 
-        let (get_session, qbl_session) = get_client_sessions().await;
+        let (get_session, qbl_session) = get_client_sessions(port).await;
         {
             let mut received_value = String::new();
 
@@ -409,10 +414,10 @@ mod test {
         close_router_session(session).await;
     }
 
-    async fn test_get_qbl_deny_then_allow() {
+    async fn test_get_qbl_deny_then_allow(port: u16) {
         println!("test_get_qbl_deny_then_allow");
 
-        let mut config_router = get_basic_router_config().await;
+        let mut config_router = get_basic_router_config(port).await;
         config_router
             .insert_json5(
                 "access_control",
@@ -455,7 +460,7 @@ mod test {
 
         let session = ztimeout!(zenoh::open(config_router)).unwrap();
 
-        let (get_session, qbl_session) = get_client_sessions().await;
+        let (get_session, qbl_session) = get_client_sessions(port).await;
         {
             let mut received_value = String::new();
 
@@ -489,10 +494,10 @@ mod test {
         close_router_session(session).await;
     }
 
-    async fn test_get_qbl_allow_then_deny() {
+    async fn test_get_qbl_allow_then_deny(port: u16) {
         println!("test_get_qbl_allow_then_deny");
 
-        let mut config_router = get_basic_router_config().await;
+        let mut config_router = get_basic_router_config(port).await;
         config_router
             .insert_json5(
                 "access_control",
@@ -534,7 +539,7 @@ mod test {
 
         let session = ztimeout!(zenoh::open(config_router)).unwrap();
 
-        let (get_session, qbl_session) = get_client_sessions().await;
+        let (get_session, qbl_session) = get_client_sessions(port).await;
         {
             let mut received_value = String::new();
 
