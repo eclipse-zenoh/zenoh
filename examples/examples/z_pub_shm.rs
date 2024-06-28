@@ -95,7 +95,7 @@ async fn main() -> Result<(), ZError> {
 struct Args {
     #[arg(short, long, default_value = "demo/example/zenoh-rs-pub")]
     /// The key expression to publish onto.
-    path: KeyExpr<'static>,
+    key: KeyExpr<'static>,
     #[arg(short, long, default_value = "Pub from SHM Rust!")]
     /// The payload of to publish.
     payload: String,
@@ -105,5 +105,5 @@ struct Args {
 
 fn parse_args() -> (Config, KeyExpr<'static>, String) {
     let args = Args::parse();
-    (args.common.into(), args.path, args.payload)
+    (args.common.into(), args.key, args.payload)
 }
