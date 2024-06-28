@@ -582,7 +582,8 @@ client2name:client2passwd";
             )
             .unwrap();
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
-        let mut config = config::client(["tcp/127.0.0.1:37447".parse::<EndPoint>().unwrap()]);
+        let mut config =
+            config::client([format!("tcp/127.0.0.1:{port}").parse::<EndPoint>().unwrap()]);
         config
             .insert_json5(
                 "transport",
