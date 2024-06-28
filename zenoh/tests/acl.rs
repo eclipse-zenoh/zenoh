@@ -80,12 +80,12 @@ mod test {
             .insert_json5(
                 "access_control",
                 r#"{
-                "enabled": true,
-                "default_permission": "deny",
-                "rules":
-                [
-                ]
-            }"#,
+                    "enabled": true,
+                    "default_permission": "deny",
+                    "rules": [],
+                    "subjects": [],
+                    "policy": [],
+                }"#,
             )
             .unwrap();
         println!("Opening router session");
@@ -123,14 +123,12 @@ mod test {
             .insert_json5(
                 "access_control",
                 r#"{
-            
-              "enabled": false,
-              "default_permission": "allow",
-              "rules":
-              [
-              ]
-            
-          }"#,
+                    "enabled": true,
+                    "default_permission": "allow",
+                    "rules": [],
+                    "subjects": [],
+                    "policy": [],
+                }"#,
             )
             .unwrap();
         println!("Opening router session");
@@ -170,28 +168,38 @@ mod test {
         config_router
             .insert_json5(
                 "access_control",
-                r#"
-        {"enabled": true,
-          "default_permission": "allow",
-          "rules":
-          [
-            {
-              "permission": "deny",
-              "flows": ["egress"],
-              "actions": [
-                "put",
-                "declare_subscriber"
-              ],
-              "key_exprs": [
-                "test/demo"
-              ],
-              "interfaces": [
-                "lo","lo0"
-              ]
-            },
-          ]
-    }
-    "#,
+                r#"{
+                    "enabled": true,
+                    "default_permission": "allow",
+                    "rules": [
+                        {
+                            "id": "r1",
+                            "permission": "deny",
+                            "flows": ["egress"],
+                            "actions": [
+                                "put",
+                                "declare_subscriber"
+                            ],
+                            "key_exprs": [
+                                "test/demo"
+                            ],
+                        },
+                    ],
+                    "subjects": [
+                        {
+                            "id": "s1",
+                            "interfaces": [
+                                "lo", "lo0"
+                            ],
+                        }
+                    ],
+                    "policy": [
+                        {
+                            "rules": ["r1"],
+                            "subjects": ["s1"],
+                        }
+                    ]
+                }"#,
             )
             .unwrap();
         println!("Opening router session");
@@ -230,28 +238,38 @@ mod test {
         config_router
             .insert_json5(
                 "access_control",
-                r#"
-        {"enabled": true,
-          "default_permission": "deny",
-          "rules":
-          [
-            {
-              "permission": "allow",
-              "flows": ["egress","ingress"],
-              "actions": [
-                "put",
-                "declare_subscriber"
-              ],
-              "key_exprs": [
-                "test/demo"
-              ],
-              "interfaces": [
-                "lo","lo0"
-              ]
-            },
-          ]
-    }
-    "#,
+                r#"{
+                    "enabled": true,
+                    "default_permission": "deny",
+                    "rules": [
+                        {
+                            "id": "r1",
+                            "permission": "allow",
+                            "flows": ["egress", "ingress"],
+                            "actions": [
+                                "put",
+                                "declare_subscriber"
+                            ],
+                            "key_exprs": [
+                                "test/demo"
+                            ],
+                        },
+                    ],
+                    "subjects": [
+                        {
+                            "id": "s1",
+                            "interfaces": [
+                                "lo", "lo0"
+                            ],
+                        }
+                    ],
+                    "policy": [
+                        {
+                            "rules": ["r1"],
+                            "subjects": ["s1"],
+                        }
+                    ]
+                }"#,
             )
             .unwrap();
         println!("Opening router session");
@@ -291,12 +309,12 @@ mod test {
             .insert_json5(
                 "access_control",
                 r#"{
-                "enabled": true,
-                "default_permission": "deny",
-                "rules":
-                [
-                ]
-            }"#,
+                    "enabled": true,
+                    "default_permission": "deny",
+                    "rules": [],
+                    "subjects": [],
+                    "policy": [],
+                }"#,
             )
             .unwrap();
         println!("Opening router session");
@@ -345,12 +363,12 @@ mod test {
             .insert_json5(
                 "access_control",
                 r#"{
-                "enabled": true,
-                "default_permission": "allow",
-                "rules":
-                [
-                ]
-            }"#,
+                    "enabled": true,
+                    "default_permission": "allow",
+                    "rules": [],
+                    "subjects": [],
+                    "policy": [],
+                }"#,
             )
             .unwrap();
         println!("Opening router session");
@@ -398,27 +416,38 @@ mod test {
         config_router
             .insert_json5(
                 "access_control",
-                r#"
-        {"enabled": true,
-          "default_permission": "deny",
-          "rules":
-          [
-            {
-              "permission": "allow",
-              "flows": ["egress","ingress"],
-              "actions": [
-                "get",
-                "declare_queryable"],
-              "key_exprs": [
-                "test/demo"
-              ],
-              "interfaces": [
-                "lo","lo0"
-              ]
-            },
-          ]
-    }
-    "#,
+                r#"{
+                    "enabled": true,
+                    "default_permission": "deny",
+                    "rules": [
+                        {
+                            "id": "r1",
+                            "permission": "allow",
+                            "flows": ["egress", "ingress"],
+                            "actions": [
+                                "get",
+                                "declare_queryable"
+                            ],
+                            "key_exprs": [
+                                "test/demo"
+                            ],
+                        },
+                    ],
+                    "subjects": [
+                        {
+                            "id": "s1",
+                            "interfaces": [
+                                "lo", "lo0"
+                            ],
+                        }
+                    ],
+                    "policy": [
+                        {
+                            "rules": ["r1"],
+                            "subjects": ["s1"],
+                        }
+                    ]
+                }"#,
             )
             .unwrap();
 
@@ -467,27 +496,38 @@ mod test {
         config_router
             .insert_json5(
                 "access_control",
-                r#"
-        {"enabled": true,
-          "default_permission": "allow",
-          "rules":
-          [
-            {
-              "permission": "deny",
-              "flows": ["egress"],
-              "actions": [
-                "get",
-                "declare_queryable" ],
-              "key_exprs": [
-                "test/demo"
-              ],
-              "interfaces": [
-                "lo","lo0"
-              ]
-            },
-          ]
-    }
-    "#,
+                r#"{
+                    "enabled": true,
+                    "default_permission": "allow",
+                    "rules": [
+                        {
+                            "id": "r1",
+                            "permission": "deny",
+                            "flows": ["egress"],
+                            "actions": [
+                                "get",
+                                "declare_queryable"
+                            ],
+                            "key_exprs": [
+                                "test/demo"
+                            ],
+                        },
+                    ],
+                    "subjects": [
+                        {
+                            "id": "s1",
+                            "interfaces": [
+                                "lo", "lo0"
+                            ],
+                        }
+                    ],
+                    "policy": [
+                        {
+                            "rules": ["r1"],
+                            "subjects": ["s1"],
+                        }
+                    ]
+                }"#,
             )
             .unwrap();
         println!("Opening router session");
