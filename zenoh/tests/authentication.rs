@@ -82,6 +82,16 @@ mod test {
         test_pub_sub_deny_then_allow_quic(37456, true).await;
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_authentication_subject_combinations() {
+        zenoh_util::try_init_log_from_env();
+        create_new_files(TESTFILES_PATH.to_path_buf())
+            .await
+            .unwrap();
+        test_deny_allow_combination(37457).await;
+        test_allow_deny_combination(37458).await;
+    }
+
     #[allow(clippy::all)]
     async fn create_new_files(certs_dir: std::path::PathBuf) -> std::io::Result<()> {
         let created = TESTFILES_CREATED.fetch_or(true, std::sync::atomic::Ordering::SeqCst);
@@ -385,6 +395,67 @@ client2name:client2passwd";
         ztimeout!(s.close()).unwrap();
     }
 
+    async fn get_basic_router_config_quic_usrpswd(port: u16) -> Config {
+        let cert_path = TESTFILES_PATH.to_string_lossy();
+        let mut config = config::default();
+        config.set_mode(Some(WhatAmI::Router)).unwrap();
+        config.listen.endpoints = vec![
+            format!("quic/127.0.0.1:{}", port).parse().unwrap(),
+            format!("tcp/127.0.0.1:{}", port).parse().unwrap(),
+        ];
+        config.scouting.multicast.set_enabled(Some(false)).unwrap();
+        config
+            .insert_json5(
+                "transport",
+                r#"{
+                    "link": {
+                        "protocols": [
+                            "quic", "tcp"
+                        ],
+                        "tls": {
+                            "client_auth": true,
+                            "server_name_verification": false
+                        },
+                    },
+                    "auth": {
+                        usrpwd: {
+                            user: "routername",
+                            password: "routerpasswd",
+                        },
+                    },
+                }"#,
+            )
+            .unwrap();
+        config
+            .transport
+            .auth
+            .usrpwd
+            .set_dictionary_file(Some(format!(
+                "{}/credentials.txt",
+                TESTFILES_PATH.to_string_lossy()
+            )))
+            .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_server_private_key(Some(format!("{}/serversidekey.pem", cert_path)))
+            .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_server_certificate(Some(format!("{}/serverside.pem", cert_path)))
+            .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
+            .unwrap();
+        config
+    }
+
     async fn get_client_sessions_tls(port: u16) -> (Session, Session) {
         let cert_path = TESTFILES_PATH.to_string_lossy();
         println!("Opening client sessions");
@@ -596,6 +667,101 @@ client2name:client2passwd";
                     }
                 }"#,
             )
+            .unwrap();
+        let s02 = ztimeout!(zenoh::open(config)).unwrap();
+        (s01, s02)
+    }
+
+    async fn get_client_sessions_quic_usrpswd(port: u16) -> (Session, Session) {
+        let cert_path = TESTFILES_PATH.to_string_lossy();
+        println!("Opening client sessions");
+        let mut config = config::client([format!("quic/127.0.0.1:{port}")
+            .parse::<EndPoint>()
+            .unwrap()]);
+        config
+            .insert_json5(
+                "transport",
+                r#"{
+                    "link": {
+                        "protocols": [
+                            "quic"
+                        ],
+                        "tls": {
+                            "client_auth": true,
+                            "server_name_verification": false
+                        }
+                    },
+                    "auth": {
+                        usrpwd: {
+                            user: "client1name",
+                            password: "client1passwd",
+                        },
+                    }
+                }"#,
+            )
+            .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_client_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
+            .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_client_certificate(Some(format!("{}/clientside.pem", cert_path)))
+            .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
+            .unwrap();
+        let s01 = ztimeout!(zenoh::open(config)).unwrap();
+
+        let mut config = config::client([format!("quic/127.0.0.1:{}", port)
+            .parse::<EndPoint>()
+            .unwrap()]);
+        config
+            .insert_json5(
+                "transport",
+                r#"{
+                        "link": {
+                        "protocols": [
+                            "quic"
+                        ],
+                        "tls": {
+                            "client_auth": true,
+                            "server_name_verification": false
+                        }
+                    },
+                    "auth": {
+                        usrpwd: {
+                            user: "client2name",
+                            password: "client2passwd",
+                        },
+                    }
+                }"#,
+            )
+            .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_client_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
+            .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_client_certificate(Some(format!("{}/clientside.pem", cert_path)))
+            .unwrap();
+        config
+            .transport
+            .link
+            .tls
+            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
             .unwrap();
         let s02 = ztimeout!(zenoh::open(config)).unwrap();
         (s01, s02)
@@ -1537,6 +1703,198 @@ client2name:client2passwd";
             ztimeout!(qbl.undeclare()).unwrap();
         }
         close_sessions(get_session, qbl_session).await;
+        close_router_session(session).await;
+    }
+
+    async fn test_deny_allow_combination(port: u16) {
+        println!("test_deny_allow_combination");
+
+        let mut config_router = get_basic_router_config_quic_usrpswd(port).await;
+        config_router
+            .insert_json5(
+                "access_control",
+                r#"{
+                    "enabled": true,
+                    "default_permission": "deny",
+                    "rules": [
+                        {
+                            "id": "r1",
+                            "permission": "allow",
+                            "flows": ["ingress", "egress"],
+                            "actions": [
+                                "put",
+                                "declare_subscriber"
+                            ],
+                            "key_exprs": [
+                                "test/demo"
+                            ],
+                        },
+                    ],
+                    "subjects": [
+                        {
+                            "id": "s1",
+                            "cert_common_names": [
+                                "client_side"
+                            ],
+                            "usernames": [
+                                "client1name",
+                                "client2name"
+                            ]
+                        }
+                    ],
+                    "policy": [
+                        {
+                            "rules": ["r1"],
+                            "subjects": ["s1"],
+                        }
+                    ]
+                }"#,
+            )
+            .unwrap();
+
+        println!("Opening router session");
+        let session = ztimeout!(zenoh::open(config_router)).unwrap();
+        let (sub_session, pub_session) = get_client_sessions_usrpswd(port).await;
+        {
+            let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
+            let received_value = Arc::new(Mutex::new(String::new()));
+            let temp_recv_value = received_value.clone();
+            let subscriber =
+                ztimeout!(sub_session
+                    .declare_subscriber(KEY_EXPR)
+                    .callback(move |sample| {
+                        let mut temp_value = zlock!(temp_recv_value);
+                        *temp_value = sample.payload().deserialize::<String>().unwrap();
+                    }))
+                .unwrap();
+
+            tokio::time::sleep(SLEEP).await;
+
+            ztimeout!(publisher.put(VALUE)).unwrap();
+            tokio::time::sleep(SLEEP).await;
+
+            assert_ne!(*zlock!(received_value), VALUE);
+            ztimeout!(subscriber.undeclare()).unwrap();
+        }
+        close_sessions(sub_session, pub_session).await;
+        let (sub_session, pub_session) = get_client_sessions_quic_usrpswd(port).await;
+        {
+            let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
+            let received_value = Arc::new(Mutex::new(String::new()));
+            let temp_recv_value = received_value.clone();
+            let subscriber =
+                ztimeout!(sub_session
+                    .declare_subscriber(KEY_EXPR)
+                    .callback(move |sample| {
+                        let mut temp_value = zlock!(temp_recv_value);
+                        *temp_value = sample.payload().deserialize::<String>().unwrap();
+                    }))
+                .unwrap();
+
+            tokio::time::sleep(SLEEP).await;
+
+            ztimeout!(publisher.put(VALUE)).unwrap();
+            tokio::time::sleep(SLEEP).await;
+
+            assert_eq!(*zlock!(received_value), VALUE);
+            ztimeout!(subscriber.undeclare()).unwrap();
+        }
+        close_router_session(session).await;
+    }
+
+    async fn test_allow_deny_combination(port: u16) {
+        println!("test_allow_deny_combination");
+
+        let mut config_router = get_basic_router_config_quic_usrpswd(port).await;
+        config_router
+            .insert_json5(
+                "access_control",
+                r#"{
+                    "enabled": true,
+                    "default_permission": "allow",
+                    "rules": [
+                        {
+                            "id": "r1",
+                            "permission": "deny",
+                            "flows": ["egress"],
+                            "actions": [
+                                "put",
+                                "declare_subscriber"
+                            ],
+                            "key_exprs": [
+                                "test/demo"
+                            ],
+                        },
+                    ],
+                    "subjects": [
+                        {
+                            "id": "s1",
+                            "cert_common_names": [
+                                "client_side"
+                            ],
+                            "usernames": [
+                                "client1name",
+                                "client2name"
+                            ]
+                        }
+                    ],
+                    "policy": [
+                        {
+                            "rules": ["r1"],
+                            "subjects": ["s1"],
+                        }
+                    ]
+                }"#,
+            )
+            .unwrap();
+
+        println!("Opening router session");
+        let session = ztimeout!(zenoh::open(config_router)).unwrap();
+        let (sub_session, pub_session) = get_client_sessions_usrpswd(port).await;
+        {
+            let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
+            let received_value = Arc::new(Mutex::new(String::new()));
+            let temp_recv_value = received_value.clone();
+            let subscriber =
+                ztimeout!(sub_session
+                    .declare_subscriber(KEY_EXPR)
+                    .callback(move |sample| {
+                        let mut temp_value = zlock!(temp_recv_value);
+                        *temp_value = sample.payload().deserialize::<String>().unwrap();
+                    }))
+                .unwrap();
+
+            tokio::time::sleep(SLEEP).await;
+
+            ztimeout!(publisher.put(VALUE)).unwrap();
+            tokio::time::sleep(SLEEP).await;
+
+            assert_eq!(*zlock!(received_value), VALUE);
+            ztimeout!(subscriber.undeclare()).unwrap();
+        }
+        close_sessions(sub_session, pub_session).await;
+        let (sub_session, pub_session) = get_client_sessions_quic_usrpswd(port).await;
+        {
+            let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
+            let received_value = Arc::new(Mutex::new(String::new()));
+            let temp_recv_value = received_value.clone();
+            let subscriber =
+                ztimeout!(sub_session
+                    .declare_subscriber(KEY_EXPR)
+                    .callback(move |sample| {
+                        let mut temp_value = zlock!(temp_recv_value);
+                        *temp_value = sample.payload().deserialize::<String>().unwrap();
+                    }))
+                .unwrap();
+
+            tokio::time::sleep(SLEEP).await;
+
+            ztimeout!(publisher.put(VALUE)).unwrap();
+            tokio::time::sleep(SLEEP).await;
+
+            assert_ne!(*zlock!(received_value), VALUE);
+            ztimeout!(subscriber.undeclare()).unwrap();
+        }
         close_router_session(session).await;
     }
 }
