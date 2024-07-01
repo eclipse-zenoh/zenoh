@@ -176,7 +176,7 @@ jobs:
       runs-on: ${{ matrix.os }}
       steps:
         - name: Checkout sources
-          uses: actions/checkout@v2
+          uses: actions/checkout@v4
 
         - name: Install stable toolchain
           uses: actions-rs/toolchain@v1
@@ -187,22 +187,18 @@ jobs:
 
         - uses: Swatinem/rust-cache@v1
 
-        - name: Download grcov
-          run: |
-            mkdir -p "${HOME}/.local/bin"
-            curl -sL https://github.com/mozilla/grcov/releases/download/v0.8.10/grcov-x86_64-unknown-linux-gnu.tar.bz2 | tar jxf - -C "${HOME}/.local/bin"
-            echo "$HOME/.local/bin" >> $GITHUB_PATH
+        - name: Install cargo-llvm-cov
+          uses: taiki-e/install-action@cargo-llvm-cov
 
-        - name: Run xtask coverage
-          uses: actions-rs/cargo@v1
-          with:
-            command: xtask
-            args: coverage
+        - name: Generate code coverage
+          run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 
-        - name: Upload to codecov.io
+        - name: Upload coverage to Codecov
           uses: codecov/codecov-action@v3
           with:
-            files: coverage/*.lcov
+            #token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
+            files: lcov.info
+            fail_ci_if_error: true
 
   # NOTE: In GitHub repository settings, the "Require status checks to pass
   # before merging" branch protection rule ensures that commits are only merged
