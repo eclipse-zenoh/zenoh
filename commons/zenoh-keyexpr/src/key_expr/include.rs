@@ -41,7 +41,7 @@ impl Includer<&[u8], &[u8]> for LTRIncluder {
                 if (lempty && !right.has_verbatim()) || (!lempty && self.includes(lrest, right)) {
                     return true;
                 }
-                if unsafe { right.has_direct_verbatim_non_empty() } {
+                if right.has_direct_verbatim() {
                     return false;
                 }
                 right = Split::split_once(right, &DELIMITER).1;
