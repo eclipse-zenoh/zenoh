@@ -46,6 +46,7 @@ async fn main() {
         match query.payload() {
             None => println!(">> [Queryable ] Received Query '{}'", query.selector()),
             Some(query_payload) => {
+                // Refer to z_bytes.rs to see how to deserialize different types of message
                 let deserialized_payload = query_payload
                     .deserialize::<String>()
                     .unwrap_or_else(|e| format!("{}", e));
@@ -61,6 +62,7 @@ async fn main() {
             key_expr.as_str(),
             payload,
         );
+        // Refer to z_bytes.rs to see how to serialize different types of message
         query
             .reply(key_expr.clone(), payload.clone())
             .await
