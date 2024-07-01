@@ -18,8 +18,9 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 
-use std::{any::Any, sync::Arc};
+use std::{any::Any, collections::HashSet, sync::Arc};
 
+use ahash::RandomState;
 use zenoh_config::{AclConfig, Action, InterceptorFlow, Permission, Subject};
 use zenoh_protocol::{
     core::ZenohIdProto,
@@ -40,7 +41,7 @@ use crate::{api::key_expr::KeyExpr, net::routing::RoutingContext};
 pub struct AclEnforcer {
     enforcer: Arc<PolicyEnforcer>,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AuthSubject {
     id: usize,
     name: String,
@@ -86,21 +87,17 @@ impl InterceptorFactoryTrait for AclEnforcer {
         &self,
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
-        let mut authn_ids = vec![];
+        let mut authn_ids = HashSet::with_hasher(RandomState::default());
+        let mut subjects = vec![];
+        // Assuming this would only return at most one instance of each AuthId
         if let Ok(ids) = transport.get_auth_ids() {
             for auth_id in ids {
                 match auth_id {
                     AuthId::CertCommonName(name) => {
-                        let subject = &Subject::CertCommonName(name.clone());
-                        if let Some(val) = self.enforcer.subject_map.get(subject) {
-                            authn_ids.push(AuthSubject { id: *val, name });
-                        }
+                        subjects.push(Subject::CertCommonName(name.clone()));
                     }
                     AuthId::Username(name) => {
-                        let subject = &Subject::Username(name.clone());
-                        if let Some(val) = self.enforcer.subject_map.get(subject) {
-                            authn_ids.push(AuthSubject { id: *val, name });
-                        }
+                        subjects.push(Subject::Username(name.clone()));
                     }
                     AuthId::None => {}
                 }
@@ -112,11 +109,25 @@ impl InterceptorFactoryTrait for AclEnforcer {
                     Ok(links) => {
                         for link in links {
                             for face in link.interfaces {
-                                let subject = &Subject::Interface(face.clone());
-                                if let Some(val) = self.enforcer.subject_map.get(subject) {
-                                    authn_ids.push(AuthSubject {
-                                        id: *val,
-                                        name: face,
+                                // combining each interface with remaining AuthId values to get existing combinations
+                                // NOTE: current ACL logic does not apply correctly when multiple interfaces are returned
+                                let face = Subject::Interface(face.clone());
+                                let mut subject_query = subjects.clone();
+                                subject_query.push(face);
+                                for subject_combination in
+                                    self.enforcer.subject_map.get(&subject_query)
+                                {
+                                    authn_ids.insert(AuthSubject {
+                                        id: *subject_combination.1,
+                                        name: format!(
+                                            "({})",
+                                            subject_combination
+                                                .0
+                                                .iter()
+                                                .map(|s| s.to_string())
+                                                .collect::<Vec<String>>()
+                                                .join("+")
+                                        ),
                                     });
                                 }
                             }
@@ -127,6 +138,7 @@ impl InterceptorFactoryTrait for AclEnforcer {
                         return (None, None);
                     }
                 }
+                let authn_ids = authn_ids.into_iter().collect::<Vec<AuthSubject>>();
                 let ingress_interceptor = Box::new(IngressAclEnforcer {
                     policy_enforcer: self.enforcer.clone(),
                     zid,

@@ -104,32 +104,54 @@ pub struct DownsamplingItemConf {
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
-pub struct AclConfigRules {
-    pub interfaces: Option<Vec<String>>,
-    pub cert_common_names: Option<Vec<String>>,
-    pub usernames: Option<Vec<String>>,
+pub struct AclConfigRule {
+    pub id: String,
     pub key_exprs: Vec<String>,
     pub actions: Vec<Action>,
     pub flows: Option<Vec<InterceptorFlow>>,
     pub permission: Permission,
 }
 
+#[derive(Serialize, Debug, Deserialize, Clone)]
+pub struct AclConfigSubjects {
+    pub id: String,
+    pub interfaces: Option<Vec<String>>,
+    pub cert_common_names: Option<Vec<String>>,
+    pub usernames: Option<Vec<String>>,
+}
+
+#[derive(Serialize, Debug, Deserialize, Clone)]
+pub struct AclConfigPolicyEntry {
+    pub rules: Vec<String>,
+    pub subjects: Vec<String>,
+}
+
 #[derive(Clone, Serialize, Debug, Deserialize)]
 pub struct PolicyRule {
-    pub subject: Subject,
+    pub subject_id: usize,
     pub key_expr: String,
     pub action: Action,
     pub permission: Permission,
     pub flow: InterceptorFlow,
 }
 
-#[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone)]
+#[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
 #[serde(untagged)]
 #[serde(rename_all = "snake_case")]
 pub enum Subject {
     Interface(String),
     CertCommonName(String),
     Username(String),
+}
+
+impl std::fmt::Display for Subject {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Subject::Interface(s) => write!(f, "Interface({s})"),
+            Subject::CertCommonName(s) => write!(f, "CertCommonName({s})"),
+            Subject::Username(s) => write!(f, "Username({s})"),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
@@ -516,7 +538,9 @@ validated_struct::validator! {
         pub access_control: AclConfig {
             pub enabled: bool,
             pub default_permission: Permission,
-            pub rules: Option<Vec<AclConfigRules>>
+            pub rules: Option<Vec<AclConfigRule>>,
+            pub subjects: Option<Vec<AclConfigSubjects>>,
+            pub policy: Option<Vec<AclConfigPolicyEntry>>,
         },
 
         /// A list of directories where plugins may be searched for if no `__path__` was specified for them.

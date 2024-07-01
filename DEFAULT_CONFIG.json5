@@ -178,16 +178,18 @@
   //    },
   //  ],
 
-  //  /// configure access control (ACL) rules
+  //  /// Configure access control (ACL) rules
   //  access_control: {
-  //   ///[true/false] acl will be activated only if this is set to true
+  //   /// [true/false] acl will be activated only if this is set to true
   //   "enabled": false,
-  //   ///[deny/allow] default permission is deny (even if this is left empty or not specified)
+  //   /// [deny/allow] default permission is deny (even if this is left empty or not specified)
   //   "default_permission": "deny",
-  //   ///rule set for permissions allowing or denying access to key-expressions
+  //   /// Rule set for permissions allowing or denying access to key-expressions
   //   "rules":
   //   [
   //     {
+  //       /// Id has to be unique within the rule set
+  //       "id": "rule1",
   //       "actions": [
   //         "put", "get", "declare_subscriber", "declare_queryable"
   //       ],
@@ -196,9 +198,29 @@
   //       "key_exprs": [
   //         "test/demo"
   //       ],
+  //     },
+  //     {
+  //       "id": "rule2",
+  //       "actions": [
+  //         "put", "get", "declare_subscriber", "declare_queryable"
+  //       ],
+  //       "flows":["ingress"],
+  //       "permission": "allow",
+  //       "key_exprs": [
+  //         "**"
+  //       ],
+  //     },
+  //   ],
+  //   /// List of combinations of subjects
+  //   "subjects":
+  //   [
+  //     {
+  //       /// Id has to be unique within the subjects list
+  //       "id": "subject1",
   //       /// Subjects can be interfaces
   //       "interfaces": [
-  //         "lo0"
+  //         "lo0",
+  //         "en0",
   //       ],
   //       /// Subjects can be cert_common_names when using TLS or Quic 
   //       "cert_common_names": [
@@ -207,9 +229,43 @@
   //       /// Subjects can be usernames when using user/password authentication
   //       "usernames": [
   //         "zenoh-example"
-  //       ]
+  //       ],
+  //       /// This instance translates internally to this filter:
+  //       /// (interface="lo0" && cert_common_name="example.zenoh.io" && username="zenoh-example") ||
+  //       /// (interface="en0" && cert_common_name="example.zenoh.io" && username="zenoh-example")
   //     },
-  //  ]
+  //     {
+  //       "id": "subject2",
+  //       "interfaces": [
+  //         "lo0",
+  //         "en0",
+  //       ],
+  //       "cert_common_names": [
+  //         "example2.zenoh.io"
+  //       ],
+  //       /// This instance translates internally to this filter:
+  //       /// (interface="lo0" && cert_common_name="example2.zenoh.io") ||
+  //       /// (interface="en0" && cert_common_name="example2.zenoh.io")
+  //     },
+  //     {
+  //       "id": "subject3",
+  //       /// An empty subject combination is a wildcard (all interfaces)
+  //     },
+  //   ],
+  //   /// The policy list contains policy entries
+  //   "policy":
+  //   [  
+  //      /// Each policy entry associates one or multiple rules to one or multiple subject combinations
+  //      {
+  //         /// Rules and Subjects are identified with their unique IDs declared above
+  //         "rules": ["rule1"],
+  //         "subjects": ["subject1", "subject2"],
+  //      },
+  //      {
+  //         "rules": ["rule2"],
+  //         "subjects": ["subject3"],
+  //      },
+  //   ]
   //},
 
   /// Configure internal transport parameters
