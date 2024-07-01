@@ -105,7 +105,7 @@ impl AllocAlignment {
         // The properties are
         // 1. All bits after the alignment bit should be zero to be a valid multiple
         // 2. For any x, (x & !(A - 1)) % A = 0 since it wipes out all digits after the alignment bit.
-        // 3. S + (A-1) doesn't carry if S % A = 0, otherwise it carries one bit since the alignment bit.
+        // 3. S + (A-1) doesn't carry if S % A = 0, otherwise it carries one bit to the alignment bit.
         // Hence (S+(A-1)) & !(A-1) is min({x | x >= S, x % A = 0})
         let a = self.get_alignment_value().get() - 1;
         (size.get() + a) & !a
