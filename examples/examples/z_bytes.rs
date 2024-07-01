@@ -136,7 +136,7 @@ fn main() {
     };
     let payload = ZBytes::from(input.encode_to_vec());
     let output =
-        EntityInfo::decode(Cursor::new(payload.deserialize::<Vec<u8>>().unwrap())).unwrap();
+        EntityInfo::decode(Cursor::new(payload.deserialize::<Cow<[u8]>>().unwrap())).unwrap();
     assert_eq!(input, output);
     // Corresponding encoding to be used in operations like `.put()`, `.reply()`, etc.
     // let encoding = Encoding::APPLICATION_PROTOBUF;
