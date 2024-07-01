@@ -92,19 +92,23 @@ impl AllocAlignment {
     /// ```
     #[zenoh_macros::unstable_doc]
     pub fn align_size(&self, size: NonZeroUsize) -> NonZeroUsize {
-        let alignment = self.get_alignment_value();
-        match size.get() % alignment {
-            0 => size,
-            // SAFETY:
-            // This unsafe block is always safe:
-            // 1. 0 < remainder < alignment
-            // 2. because of 1, the value of (alignment.get() - remainder) is always > 0
-            // 3. because of 2, we add nonzero size to nonzero (alignment.get() - remainder) and it is always positive if no overflow
-            // 4. we make sure that there is no overflow condition in 3 by means of alignment limitation in `new` by limiting pow value
-            remainder => unsafe {
-                NonZeroUsize::new_unchecked(size.get() + (alignment.get() - remainder))
-            },
-        }
+        // Notations:
+        //     size: S, alignment value: A, Output: O
+        // Assumption: A is power of 2
+        // Return the smallest multiple of A that is greater than or equal to S
+        //
+        // Example 1: A = 4 = 0b00100, S = 4 = 0b00100 => O = 4  = 0b00100
+        // Example 2: A = 4 = 0b00100, S = 7 = 0b00111 => O = 8  = 0b01000
+        // Example 3: A = 4 = 0b00100, S = 8 = 0b01000 => O = 8  = 0b01000
+        // Example 4: A = 4 = 0b00100, S = 9 = 0b01001 => O = 12 = 0b01100
+        //
+        // The properties are
+        // 1. All bits after the alignment bit should be zero to be a valid multiple
+        // 2. For any x, (x & !(A - 1)) % A = 0 since it wipes out all digits after the alignment bit.
+        // 3. S + (A-1) doesn't carry if S % A = 0, otherwise it carries one bit since the alignment bit.
+        // Hence (S+(A-1)) & !(A-1) is min({x | x >= S, x % A = 0})
+        let a = self.get_alignment_value().get() - 1;
+        (size.get() + a) & !a
     }
 }
 
