@@ -50,7 +50,7 @@ use crate::{
         queryable::{Query, QueryInner},
         value::Value,
     },
-    encoding::Encoding,
+    bytes::Encoding,
     net::primitives::Primitives,
 };
 

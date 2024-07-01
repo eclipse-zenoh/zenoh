@@ -2959,6 +2959,7 @@ impl<const ID: u8> From<AttachmentType<ID>> for ZBytes {
 }
 
 mod tests {
+
     #[test]
     fn serializer() {
         use std::borrow::Cow;

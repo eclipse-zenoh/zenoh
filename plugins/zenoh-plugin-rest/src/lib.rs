@@ -26,8 +26,7 @@ use http_types::Method;
 use serde::{Deserialize, Serialize};
 use tide::{http::Mime, sse::Sender, Request, Response, Server, StatusCode};
 use zenoh::{
-    bytes::ZBytes,
-    encoding::Encoding,
+    bytes::{Encoding, ZBytes},
     internal::{
         bail,
         plugins::{RunningPluginTrait, ZenohPlugin},
@@ -36,16 +35,15 @@ use zenoh::{
     },
     key_expr::{keyexpr, KeyExpr},
     prelude::*,
-    query::{QueryConsolidation, Reply},
-    sample::{EncodingBuilderTrait, Sample, SampleKind},
-    selector::{Parameters, Selector, ZenohParameters},
+    query::{Parameters, QueryConsolidation, Reply, Selector, ZenohParameters},
+    sample::{Sample, SampleKind},
     session::{Session, SessionDeclarations},
 };
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 
 mod config;
 pub use config::Config;
-use zenoh::query::ReplyError;
+use zenoh::{bytes::EncodingBuilderTrait, query::ReplyError};
 
 const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 lazy_static::lazy_static! {

@@ -18,7 +18,7 @@ use zenoh::{
     bytes::ZBytes,
     key_expr::keyexpr,
     prelude::*,
-    publisher::CongestionControl,
+    qos::CongestionControl,
     shm::{PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID},
     Config,
 };

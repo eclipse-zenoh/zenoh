@@ -19,16 +19,14 @@ use std::{
 };
 
 use zenoh::{
-    core::{Error, Resolvable, Resolve, Result as ZResult},
     internal::{bail, runtime::ZRuntime, ResolveFuture, TerminatableTask},
     key_expr::{keyexpr, KeyExpr, OwnedKeyExpr},
     prelude::Wait,
-    query::Query,
-    queryable::Queryable,
+    pubsub::FlumeSubscriber,
+    query::{Query, Queryable, ZenohParameters},
     sample::{Locality, Sample},
-    selector::ZenohParameters,
     session::{SessionDeclarations, SessionRef},
-    subscriber::FlumeSubscriber,
+    Error, Resolvable, Resolve, Result as ZResult,
 };
 
 /// The builder of PublicationCache, allowing to configure it.

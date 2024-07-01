@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::{key_expr::keyexpr, prelude::*, publisher::CongestionControl, Config};
+use zenoh::{key_expr::keyexpr, prelude::*, qos::CongestionControl, Config};
 use zenoh_examples::CommonArgs;
 
 fn main() {

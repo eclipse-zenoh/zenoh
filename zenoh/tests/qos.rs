@@ -13,7 +13,11 @@
 //
 use std::time::Duration;
 
-use zenoh::{core::Priority, encoding::Encoding, prelude::*, publisher::CongestionControl};
+use zenoh::{
+    bytes::Encoding,
+    prelude::*,
+    qos::{CongestionControl, Priority},
+};
 use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);

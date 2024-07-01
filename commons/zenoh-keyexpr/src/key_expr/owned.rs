@@ -22,7 +22,7 @@ use core::{
     str::FromStr,
 };
 
-use super::{canon::Canonizable, keyexpr};
+use super::{canon::Canonize, keyexpr};
 
 /// A [`Arc<str>`] newtype that is statically known to be a valid key expression.
 ///
@@ -60,7 +60,7 @@ impl OwnedKeyExpr {
     pub fn autocanonize<T, E>(mut t: T) -> Result<Self, E>
     where
         Self: TryFrom<T, Error = E>,
-        T: Canonizable,
+        T: Canonize,
     {
         t.canonize();
         Self::new(t)

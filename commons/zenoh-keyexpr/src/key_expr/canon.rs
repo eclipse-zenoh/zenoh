@@ -19,13 +19,13 @@ use crate::key_expr::{
     DELIMITER, DOUBLE_WILD, SINGLE_WILD,
 };
 
-pub trait Canonizable {
+pub trait Canonize {
     fn canonize(&mut self);
 }
 
 const DOLLAR_STAR: &[u8; 2] = b"$*";
 
-impl Canonizable for &mut str {
+impl Canonize for &mut str {
     fn canonize(&mut self) {
         let mut writer = Writer {
             ptr: self.as_mut_ptr(),
@@ -114,7 +114,7 @@ impl Canonizable for &mut str {
     }
 }
 
-impl Canonizable for String {
+impl Canonize for String {
     fn canonize(&mut self) {
         let mut s = self.as_mut();
         s.canonize();

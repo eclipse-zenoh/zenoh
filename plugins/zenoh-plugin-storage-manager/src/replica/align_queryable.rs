@@ -21,7 +21,7 @@ use std::{
 
 use async_std::sync::Arc;
 use zenoh::{
-    internal::Value, key_expr::OwnedKeyExpr, prelude::*, sample::Sample, selector::Parameters,
+    internal::Value, key_expr::OwnedKeyExpr, prelude::*, query::Parameters, sample::Sample,
     time::Timestamp, Session,
 };
 

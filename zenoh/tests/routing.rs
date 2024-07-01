@@ -24,7 +24,7 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh::{
     config::{ModeDependentValue, WhatAmI, WhatAmIMatcher},
     prelude::*,
-    publisher::CongestionControl,
+    qos::CongestionControl,
     Config, Result, Session,
 };
 use zenoh_core::ztimeout;
