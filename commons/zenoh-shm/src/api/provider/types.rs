@@ -85,11 +85,23 @@ impl AllocAlignment {
     /// ```
     #[zenoh_macros::unstable_doc]
     pub fn align_size(&self, size: usize) -> usize {
-        let alignment = self.get_alignment_value();
-        match size % alignment {
-            0 => size,
-            remainder => size + (alignment - remainder),
-        }
+        // Notations:
+        //     size: S, alignment value: A, Output: O
+        // Assumption: A is power of 2
+        // Return the smallest multiple of A that is greater than or equal to S
+        //
+        // Example 1: A = 4 = 0b00100, S = 4 = 0b00100 => O = 4  = 0b00100
+        // Example 2: A = 4 = 0b00100, S = 7 = 0b00111 => O = 8  = 0b01000
+        // Example 3: A = 4 = 0b00100, S = 8 = 0b01000 => O = 8  = 0b01000
+        // Example 4: A = 4 = 0b00100, S = 9 = 0b01001 => O = 12 = 0b01100
+        //
+        // The properties are
+        // 1. All bits after the alignment bit should be zero to be a valid multiple
+        // 2. For any x, (x & !(A - 1)) % A = 0 since it wipes out all digits after the alignment bit.
+        // 3. S + (A-1) doesn't carry if S % A = 0, otherwise it carries one bit to the alignment bit.
+        // Hence (S+(A-1)) & !(A-1) is min({x | x >= S, x % A = 0})
+        let a = self.get_alignment_value() - 1;
+        (size + a) & !a
     }
 }
 
