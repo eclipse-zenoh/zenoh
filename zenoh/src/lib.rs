@@ -115,8 +115,6 @@ pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
 pub use {
     crate::{
         config::Config,
-        core::{Error, Result},
-        scouting::scout,
         session::{open, Session},
     },
     zenoh_util::{init_log_from_env_or, try_init_log_from_env},

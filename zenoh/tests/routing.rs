@@ -23,9 +23,10 @@ use std::{
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh::{
     config::{ModeDependentValue, WhatAmI, WhatAmIMatcher},
+    core::Result,
     prelude::*,
     publisher::CongestionControl,
-    Config, Result, Session,
+    Config, Session,
 };
 use zenoh_core::ztimeout;
 use zenoh_result::bail;
