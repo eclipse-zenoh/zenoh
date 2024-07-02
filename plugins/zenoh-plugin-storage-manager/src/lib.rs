@@ -93,8 +93,9 @@ struct StorageRuntimeInner {
 impl StorageRuntimeInner {
     fn status_key(&self) -> String {
         format!(
-            "@/router/{}/status/plugins/{}",
+            "@/{}/{}/status/plugins/{}",
             &self.runtime.zid(),
+            &self.runtime.whatami().to_str(),
             &self.name
         )
     }
