@@ -170,6 +170,7 @@ jobs:
   coverage:
       name: Coverage
       strategy:
+        fail-fast: false
         matrix:
           os: [ubuntu-latest]
           rust: [nightly, stable]
