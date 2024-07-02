@@ -190,8 +190,7 @@ jobs:
 
         - name: Run tests and report code coverage
           run: |
-            # enable nightly features so that we can also include Doctests
-            RUSTC_BOOTSTRAP=1 cargo tarpaulin -o xml -o lcov -o html --doc --tests
+            cargo tarpaulin -o lcov --doc --tests
 
         - name: Upload coverage to Codecov
           uses: codecov/codecov-action@v4
