@@ -190,7 +190,7 @@ jobs:
 
         - name: Run tests and report code coverage
           run: |
-            cargo tarpaulin -o lcov --doc --tests
+            cargo tarpaulin -o lcov ${{ matrix.rust == 'nightly' && '--doc' || '' }} --tests
 
         - name: Upload coverage to Codecov
           uses: codecov/codecov-action@v4
