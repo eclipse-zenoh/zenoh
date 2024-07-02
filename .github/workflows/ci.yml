@@ -186,7 +186,7 @@ jobs:
             override: true
             components: llvm-tools-preview
 
-        - uses: Swatinem/rust-cache@v1
+        - uses: Swatinem/rust-cache@v2
 
         - name: Install cargo-llvm-cov
           uses: taiki-e/install-action@cargo-llvm-cov
