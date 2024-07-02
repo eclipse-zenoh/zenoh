@@ -179,7 +179,7 @@ jobs:
         - name: Checkout sources
           uses: actions/checkout@v4
 
-        - name: Install stable toolchain
+        - name: Install ${{ matrix.rust }} toolchain
           uses: actions-rs/toolchain@v1
           with:
             toolchain: ${{ matrix.rust }}
@@ -192,7 +192,7 @@ jobs:
           uses: taiki-e/install-action@cargo-llvm-cov
 
         - name: Generate code coverage
-          run: cargo +${{ matrix.rust }} llvm-cov test --features unstable --features test --features shared-memory --html --no-cfg-coverage --no-cfg-coverage-nightly -- --skip test_default_features
+          run: cargo +${{ matrix.rust }} llvm-cov test --features unstable --features test --features shared-memory --lcov --output-path lcov.info --no-cfg-coverage --no-cfg-coverage-nightly -- --skip test_default_features
 
         - name: Upload coverage to Codecov
           uses: codecov/codecov-action@v3
