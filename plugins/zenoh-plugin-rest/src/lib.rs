@@ -517,10 +517,10 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
 
 fn path_to_key_expr<'a>(path: &'a str, zid: &str) -> ZResult<KeyExpr<'a>> {
     let path = path.strip_prefix('/').unwrap_or(path);
-    if path == "@/router/local" {
-        KeyExpr::try_from(format!("@/router/{zid}"))
-    } else if let Some(suffix) = path.strip_prefix("@/router/local/") {
-        KeyExpr::try_from(format!("@/router/{zid}/{suffix}"))
+    if path == "@/local" {
+        KeyExpr::try_from(format!("@/{zid}"))
+    } else if let Some(suffix) = path.strip_prefix("@/local/") {
+        KeyExpr::try_from(format!("@/{zid}/{suffix}"))
     } else {
         KeyExpr::try_from(path)
     }

@@ -28,7 +28,7 @@ pub(crate) async fn start_storage(
     admin_key: String,
     zenoh: Arc<Session>,
 ) -> ZResult<flume::Sender<StorageMessage>> {
-    // Ex: @/router/390CEC11A1E34977A1C609A35BC015E6/status/plugins/storage_manager/storages/demo1 -> 390CEC11A1E34977A1C609A35BC015E6/demo1 (/<type> needed????)
+    // Ex: @/390CEC11A1E34977A1C609A35BC015E6/router/status/plugins/storage_manager/storages/demo1 -> 390CEC11A1E34977A1C609A35BC015E6/demo1 (/<type> needed????)
     let parts: Vec<&str> = admin_key.split('/').collect();
     let uuid = parts[2];
     let storage_name = parts[7];
