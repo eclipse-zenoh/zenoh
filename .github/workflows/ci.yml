@@ -167,6 +167,38 @@ jobs:
       - name: Check spelling
         uses: crate-ci/typos@master
 
+  coverage:
+      name: Coverage
+      strategy:
+        fail-fast: false
+        matrix:
+          os: [ubuntu-latest]
+          rust: [nightly, stable]
+      runs-on: ${{ matrix.os }}
+      steps:
+        - name: Checkout sources
+          uses: actions/checkout@v4
+
+        - name: Install ${{ matrix.rust }} Rust toolchain
+          run: |
+            rustup override set ${{ matrix.rust }}
+            rustup update ${{ matrix.rust }}
+            rustup component add llvm-tools-preview
+
+        - uses: taiki-e/install-action@cargo-tarpaulin
+        - uses: Swatinem/rust-cache@v2
+
+        - name: Run tests and report code coverage
+          run: |
+            cargo tarpaulin -o lcov ${{ matrix.rust == 'nightly' && '--doc' || '' }} --tests
+
+        - name: Upload coverage to Codecov
+          uses: codecov/codecov-action@v4
+          with:
+            #token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
+            files: lcov.info
+            fail_ci_if_error: true
+
   # NOTE: In GitHub repository settings, the "Require status checks to pass
   # before merging" branch protection rule ensures that commits are only merged
   # from branches where specific status checks have passed. These checks are
