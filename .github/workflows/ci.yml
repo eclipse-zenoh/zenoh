@@ -179,12 +179,11 @@ jobs:
         - name: Checkout sources
           uses: actions/checkout@v4
 
-        - name: Install ${{ matrix.rust }} toolchain
-          uses: actions-rs/toolchain@v1
-          with:
-            toolchain: ${{ matrix.rust }}
-            override: true
-            components: llvm-tools-preview
+        - name: Install ${{ matrix.rust }} Rust toolchain
+          run: |
+            rustup override set ${{ matrix.rust }}
+            rustup update ${{ matrix.rust }}
+            rustup component add llvm-tools-preview
 
         - uses: Swatinem/rust-cache@v2
 
