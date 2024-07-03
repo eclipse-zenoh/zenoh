@@ -21,17 +21,16 @@ use std::{
 };
 
 use zenoh::{
-    core::{Error, Resolvable, Resolve, Result as ZResult},
     handlers::{locked, DefaultHandler, IntoHandler},
     internal::zlock,
     key_expr::KeyExpr,
     prelude::Wait,
-    query::{QueryConsolidation, QueryTarget, ReplyKeyExpr},
+    pubsub::{Reliability, Subscriber},
+    query::{QueryConsolidation, QueryTarget, ReplyKeyExpr, Selector},
     sample::{Locality, Sample, SampleBuilder, TimestampBuilderTrait},
-    selector::Selector,
     session::{SessionDeclarations, SessionRef},
-    subscriber::{Reliability, Subscriber},
     time::{new_timestamp, Timestamp},
+    Error, Resolvable, Resolve, Result as ZResult,
 };
 
 use crate::ExtractSample;

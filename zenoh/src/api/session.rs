@@ -515,8 +515,8 @@ impl Session {
     /// pointer to it (`Arc<Session>`). This is equivalent to `Arc::new(session)`.
     ///
     /// This is useful to share ownership of the `Session` between several threads
-    /// and tasks. It also allows to create [`Subscriber`](crate::subscriber::Subscriber) and
-    /// [`Queryable`](crate::queryable::Queryable) with static lifetime that can be moved to several
+    /// and tasks. It also allows to create [`Subscriber`](crate::pubsub::Subscriber) and
+    /// [`Queryable`](crate::query::Queryable) with static lifetime that can be moved to several
     /// threads and tasks
     ///
     /// Note: the given zenoh `Session` will be closed when the last reference to
@@ -548,7 +548,7 @@ impl Session {
     /// the program's life. Dropping the returned reference will cause a memory
     /// leak.
     ///
-    /// This is useful to move entities (like [`Subscriber`](crate::subscriber::Subscriber)) which
+    /// This is useful to move entities (like [`Subscriber`](crate::pubsub::Subscriber)) which
     /// lifetimes are bound to the session lifetime in several threads or tasks.
     ///
     /// Note: the given zenoh `Session` cannot be closed any more. At process
@@ -793,7 +793,7 @@ impl Session {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::{encoding::Encoding, prelude::*};
+    /// use zenoh::{bytes::Encoding, prelude::*};
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// session
@@ -1979,7 +1979,7 @@ impl Session {
 }
 
 impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
-    /// Create a [`Subscriber`](crate::subscriber::Subscriber) for the given key expression.
+    /// Create a [`Subscriber`](crate::pubsub::Subscriber) for the given key expression.
     ///
     /// # Arguments
     ///
@@ -2019,12 +2019,12 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
         }
     }
 
-    /// Create a [`Queryable`](crate::queryable::Queryable) for the given key expression.
+    /// Create a [`Queryable`](crate::query::Queryable) for the given key expression.
     ///
     /// # Arguments
     ///
     /// * `key_expr` - The key expression matching the queries the
-    /// [`Queryable`](crate::queryable::Queryable) will reply to
+    /// [`Queryable`](crate::query::Queryable) will reply to
     ///
     /// # Examples
     /// ```no_run
@@ -2063,7 +2063,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
         }
     }
 
-    /// Create a [`Publisher`](crate::publisher::Publisher) for the given key expression.
+    /// Create a [`Publisher`](crate::pubsub::Publisher) for the given key expression.
     ///
     /// # Arguments
     ///
@@ -2620,8 +2620,8 @@ impl fmt::Debug for Session {
 /// Functions to create zenoh entities
 ///
 /// This trait contains functions to create zenoh entities like
-/// [`Subscriber`](crate::subscriber::Subscriber), and
-/// [`Queryable`](crate::queryable::Queryable)
+/// [`Subscriber`](crate::pubsub::Subscriber), and
+/// [`Queryable`](crate::query::Queryable)
 ///
 /// This trait is implemented by [`Session`](crate::session::Session) itself and
 /// by wrappers [`SessionRef`](crate::session::SessionRef) and [`Arc<Session>`](std::sync::Arc)
@@ -2644,7 +2644,7 @@ impl fmt::Debug for Session {
 /// # }
 /// ```
 pub trait SessionDeclarations<'s, 'a> {
-    /// Create a [`Subscriber`](crate::subscriber::Subscriber) for the given key expression.
+    /// Create a [`Subscriber`](crate::pubsub::Subscriber) for the given key expression.
     ///
     /// # Arguments
     ///
@@ -2675,12 +2675,12 @@ pub trait SessionDeclarations<'s, 'a> {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>;
 
-    /// Create a [`Queryable`](crate::queryable::Queryable) for the given key expression.
+    /// Create a [`Queryable`](crate::query::Queryable) for the given key expression.
     ///
     /// # Arguments
     ///
     /// * `key_expr` - The key expression matching the queries the
-    /// [`Queryable`](crate::queryable::Queryable) will reply to
+    /// [`Queryable`](crate::query::Queryable) will reply to
     ///
     /// # Examples
     /// ```no_run
@@ -2710,7 +2710,7 @@ pub trait SessionDeclarations<'s, 'a> {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>;
 
-    /// Create a [`Publisher`](crate::publisher::Publisher) for the given key expression.
+    /// Create a [`Publisher`](crate::pubsub::Publisher) for the given key expression.
     ///
     /// # Arguments
     ///
@@ -2826,7 +2826,7 @@ impl crate::net::primitives::EPrimitives for Session {
 /// # #[tokio::main]
 /// # async fn main() {
 /// use std::str::FromStr;
-/// use zenoh::{info::ZenohId, prelude::*};
+/// use zenoh::{session::ZenohId, prelude::*};
 ///
 /// let mut config = zenoh::config::peer();
 /// config.set_id(ZenohId::from_str("221b72df20924c15b8794c6bdb471150").unwrap());
