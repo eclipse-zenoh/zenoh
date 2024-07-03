@@ -37,6 +37,7 @@ async fn main() {
         // // Uncomment this line to use a ring channel instead.
         // // More information on the ring channel are available in the z_pull example.
         // .with(zenoh::handlers::RingChannel::default())
+        // Refer to z_bytes.rs to see how to serialize different types of message
         .payload(payload.unwrap_or_default())
         .target(target)
         .timeout(timeout)
@@ -45,6 +46,7 @@ async fn main() {
     while let Ok(reply) = replies.recv_async().await {
         match reply.result() {
             Ok(sample) => {
+                // Refer to z_bytes.rs to see how to deserialize different types of message
                 let payload = sample
                     .payload()
                     .deserialize::<String>()
