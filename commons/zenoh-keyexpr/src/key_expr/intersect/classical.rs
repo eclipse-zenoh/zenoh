@@ -110,7 +110,7 @@ fn it_intersect<const STAR_DSL: bool>(mut it1: &[u8], mut it2: &[u8]) -> bool {
     }
     (it1.is_empty() || it1 == b"**") && (it2.is_empty() || it2 == b"**")
 }
-/// Retruns `true` if the given key expressions intersect.
+/// Returns `true` if the given key expressions intersect.
 ///
 /// I.e. if it exists a resource key (with no wildcards) that matches
 /// both given key expressions.

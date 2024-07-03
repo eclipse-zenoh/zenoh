@@ -24,8 +24,8 @@ use tokio::{net::UdpSocket, sync::Mutex as AsyncMutex};
 use tokio_util::sync::CancellationToken;
 use zenoh_core::{zasynclock, zlock};
 use zenoh_link_commons::{
-    get_ip_interface_names, ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast,
-    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
+    get_ip_interface_names, ConstructibleLinkManagerUnicast, LinkAuthId, LinkManagerUnicastTrait,
+    LinkUnicast, LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -223,6 +223,11 @@ impl LinkUnicastTrait for LinkUnicastUdp {
     #[inline(always)]
     fn is_streamed(&self) -> bool {
         false
+    }
+
+    #[inline(always)]
+    fn get_auth_id(&self) -> &LinkAuthId {
+        &LinkAuthId::NONE
     }
 }
 
@@ -503,6 +508,10 @@ async fn accept_read_task(
     })?;
 
     tracing::trace!("Ready to accept UDP connections on: {:?}", src_addr);
+
+    if src_addr.ip().is_unspecified() {
+        tracing::warn!("Interceptors (e.g. Access Control, Downsampling) are not guaranteed to work on UDP when listening on 0.0.0.0 or [::]. Their usage is discouraged. See https://github.com/eclipse-zenoh/zenoh/issues/1126.");
+    }
 
     loop {
         // Buffers for deserialization

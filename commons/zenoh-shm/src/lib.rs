@@ -50,14 +50,14 @@ pub mod posix_shm;
 pub mod reader;
 pub mod watchdog;
 
-/// Informations about a [`SharedMemoryBuf`].
+/// Information about a [`ShmBufInner`].
 ///
-/// This that can be serialized and can be used to retrieve the [`SharedMemoryBuf`] in a remote process.
+/// This that can be serialized and can be used to retrieve the [`ShmBufInner`] in a remote process.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SharedMemoryBufInfo {
+pub struct ShmBufInfo {
     /// The data chunk descriptor
     pub data_descriptor: ChunkDescriptor,
-    /// Protocol identifier for particular SharedMemory implementation
+    /// Protocol identifier for particular SHM implementation
     pub shm_protocol: ProtocolID,
     /// Actual data length
     /// NOTE: data_descriptor's len is >= of this len and describes the actual memory length
@@ -72,7 +72,7 @@ pub struct SharedMemoryBufInfo {
     pub generation: u32,
 }
 
-impl SharedMemoryBufInfo {
+impl ShmBufInfo {
     pub fn new(
         data_descriptor: ChunkDescriptor,
         shm_protocol: ProtocolID,
@@ -80,8 +80,8 @@ impl SharedMemoryBufInfo {
         watchdog_descriptor: Descriptor,
         header_descriptor: HeaderDescriptor,
         generation: u32,
-    ) -> SharedMemoryBufInfo {
-        SharedMemoryBufInfo {
+    ) -> ShmBufInfo {
+        ShmBufInfo {
             data_descriptor,
             shm_protocol,
             data_len,
@@ -94,26 +94,26 @@ impl SharedMemoryBufInfo {
 
 /// A zenoh buffer in shared memory.
 #[non_exhaustive]
-pub struct SharedMemoryBuf {
+pub struct ShmBufInner {
     pub(crate) header: OwnedHeaderDescriptor,
     pub(crate) buf: AtomicPtr<u8>,
-    pub info: SharedMemoryBufInfo,
+    pub info: ShmBufInfo,
     pub(crate) watchdog: Arc<ConfirmedDescriptor>,
 }
 
-impl PartialEq for SharedMemoryBuf {
+impl PartialEq for ShmBufInner {
     fn eq(&self, other: &Self) -> bool {
         // currently there is no API to resize an SHM buffer, but it is intended in the future,
-        // so I add size comparsion here to avoid future bugs :)
+        // so I add size comparison here to avoid future bugs :)
         self.buf.load(Ordering::Relaxed) == other.buf.load(Ordering::Relaxed)
             && self.info.data_len == other.info.data_len
     }
 }
-impl Eq for SharedMemoryBuf {}
+impl Eq for ShmBufInner {}
 
-impl std::fmt::Debug for SharedMemoryBuf {
+impl std::fmt::Debug for ShmBufInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SharedMemoryBuf")
+        f.debug_struct("ShmBufInner")
             .field("header", &self.header)
             .field("buf", &self.buf)
             .field("info", &self.info)
@@ -121,7 +121,7 @@ impl std::fmt::Debug for SharedMemoryBuf {
     }
 }
 
-impl SharedMemoryBuf {
+impl ShmBufInner {
     pub fn len(&self) -> usize {
         self.info.data_len
     }
@@ -154,10 +154,7 @@ impl SharedMemoryBuf {
 
     // PRIVATE:
     fn as_slice(&self) -> &[u8] {
-        tracing::trace!(
-            "SharedMemoryBuf::as_slice() == len = {:?}",
-            self.info.data_len
-        );
+        tracing::trace!("ShmBufInner::as_slice() == len = {:?}", self.info.data_len);
         let bp = self.buf.load(Ordering::SeqCst);
         unsafe { std::slice::from_raw_parts(bp, self.info.data_len) }
     }
@@ -183,21 +180,21 @@ impl SharedMemoryBuf {
     }
 }
 
-impl Drop for SharedMemoryBuf {
+impl Drop for ShmBufInner {
     fn drop(&mut self) {
         // # Safety
-        // obviouly, we need to decrement refcount when dropping SharedMemoryBuf instance
+        // obviouly, we need to decrement refcount when dropping ShmBufInner instance
         unsafe { self.dec_ref_count() };
     }
 }
 
-impl Clone for SharedMemoryBuf {
+impl Clone for ShmBufInner {
     fn clone(&self) -> Self {
         // # Safety
-        // obviouly, we need to increment refcount when cloning SharedMemoryBuf instance
+        // obviouly, we need to increment refcount when cloning ShmBufInner instance
         unsafe { self.inc_ref_count() };
         let bp = self.buf.load(Ordering::SeqCst);
-        SharedMemoryBuf {
+        ShmBufInner {
             header: self.header.clone(),
             buf: AtomicPtr::new(bp),
             info: self.info.clone(),
@@ -207,20 +204,20 @@ impl Clone for SharedMemoryBuf {
 }
 
 // Buffer impls
-// - SharedMemoryBuf
-impl AsRef<[u8]> for SharedMemoryBuf {
+// - ShmBufInner
+impl AsRef<[u8]> for ShmBufInner {
     fn as_ref(&self) -> &[u8] {
         self.as_slice()
     }
 }
 
-impl AsMut<[u8]> for SharedMemoryBuf {
+impl AsMut<[u8]> for ShmBufInner {
     fn as_mut(&mut self) -> &mut [u8] {
         unsafe { self.as_mut_slice_inner() }
     }
 }
 
-impl ZSliceBuffer for SharedMemoryBuf {
+impl ZSliceBuffer for ShmBufInner {
     fn as_slice(&self) -> &[u8] {
         self.as_ref()
     }

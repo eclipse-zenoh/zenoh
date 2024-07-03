@@ -18,21 +18,17 @@ use std::{
 };
 
 use ordered_float::OrderedFloat;
-use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
     core::{
         key_expr::{
             include::{Includer, DEFAULT_INCLUDER},
             OwnedKeyExpr,
         },
-        WhatAmI, WireExpr,
+        WhatAmI,
     },
-    network::{
-        declare::{
-            common::ext::WireExprType, ext, queryable::ext::QueryableInfoType, Declare,
-            DeclareBody, DeclareQueryable, QueryableId, UndeclareQueryable,
-        },
-        interest::{InterestId, InterestMode},
+    network::declare::{
+        common::ext::WireExprType, ext, queryable::ext::QueryableInfoType, Declare, DeclareBody,
+        DeclareQueryable, QueryableId, UndeclareQueryable,
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -44,9 +40,9 @@ use crate::net::routing::{
         resource::{NodeId, Resource, SessionContext},
         tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
     },
-    hat::{HatQueriesTrait, Sources},
+    hat::{HatQueriesTrait, SendDeclare, Sources},
     router::RoutesIndexes,
-    RoutingContext, PREFIX_LIVELINESS,
+    RoutingContext,
 };
 
 #[inline]
@@ -84,16 +80,23 @@ fn propagate_simple_queryable(
     tables: &mut Tables,
     res: &Arc<Resource>,
     src_face: Option<&mut Arc<FaceState>>,
+    send_declare: &mut SendDeclare,
 ) {
     let faces = tables.faces.values().cloned();
     for mut dst_face in faces {
         let info = local_qabl_info(tables, res, &dst_face);
         let current = face_hat!(dst_face).local_qabls.get(res);
-        if (src_face.is_none() || src_face.as_ref().unwrap().id != dst_face.id)
+        if src_face
+            .as_ref()
+            .map(|src_face| dst_face.id != src_face.id)
+            .unwrap_or(true)
             && (current.is_none() || current.unwrap().1 != info)
-            && (src_face.is_none()
-                || src_face.as_ref().unwrap().whatami == WhatAmI::Client
-                || dst_face.whatami == WhatAmI::Client)
+            && src_face
+                .as_ref()
+                .map(|src_face| {
+                    src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client
+                })
+                .unwrap_or(true)
         {
             let id = current
                 .map(|c| c.0)
@@ -103,20 +106,23 @@ fn propagate_simple_queryable(
                 .insert(res.clone(), (id, info));
             let key_expr = Resource::decl_key(res, &mut dst_face);
             println!("Decled key = {key_expr:?}");
-            dst_face.primitives.send_declare(RoutingContext::with_expr(
-                Declare {
-                    interest_id: None,
-                    ext_qos: ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                        id,
-                        wire_expr: key_expr,
-                        ext_info: info,
-                    }),
-                },
-                res.expr(),
-            ));
+            send_declare(
+                &dst_face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        interest_id: None,
+                        ext_qos: ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                            id,
+                            wire_expr: key_expr,
+                            ext_info: info,
+                        }),
+                    },
+                    res.expr(),
+                ),
+            );
         }
     }
 }
@@ -147,9 +153,10 @@ fn declare_client_queryable(
     id: QueryableId,
     res: &mut Arc<Resource>,
     qabl_info: &QueryableInfoType,
+    send_declare: &mut SendDeclare,
 ) {
     register_client_queryable(tables, face, id, res, qabl_info);
-    propagate_simple_queryable(tables, res, Some(face));
+    propagate_simple_queryable(tables, res, Some(face), send_declare);
 }
 
 #[inline]
@@ -166,22 +173,29 @@ fn client_qabls(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
         .collect()
 }
 
-fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource>) {
+fn propagate_forget_simple_queryable(
+    tables: &mut Tables,
+    res: &mut Arc<Resource>,
+    send_declare: &mut SendDeclare,
+) {
     for face in tables.faces.values_mut() {
         if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
-            face.primitives.send_declare(RoutingContext::with_expr(
-                Declare {
-                    interest_id: None,
-                    ext_qos: ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                        id,
-                        ext_wire_expr: WireExprType::null(),
-                    }),
-                },
-                res.expr(),
-            ));
+            send_declare(
+                &face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        interest_id: None,
+                        ext_qos: ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                            id,
+                            ext_wire_expr: WireExprType::null(),
+                        }),
+                    },
+                    res.expr(),
+                ),
+            );
         }
     }
 }
@@ -190,6 +204,7 @@ pub(super) fn undeclare_client_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
+    send_declare: &mut SendDeclare,
 ) {
     if !face_hat_mut!(face)
         .remote_qabls
@@ -202,26 +217,29 @@ pub(super) fn undeclare_client_queryable(
 
         let mut client_qabls = client_qabls(res);
         if client_qabls.is_empty() {
-            propagate_forget_simple_queryable(tables, res);
+            propagate_forget_simple_queryable(tables, res, send_declare);
         } else {
-            propagate_simple_queryable(tables, res, None);
+            propagate_simple_queryable(tables, res, None, send_declare);
         }
         if client_qabls.len() == 1 {
             let face = &mut client_qabls[0];
             if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
-                face.primitives.send_declare(RoutingContext::with_expr(
-                    Declare {
-                        interest_id: None,
-                        ext_qos: ext::QoSType::DECLARE,
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                        body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                            id,
-                            ext_wire_expr: WireExprType::null(),
-                        }),
-                    },
-                    res.expr(),
-                ));
+                send_declare(
+                    &face.primitives,
+                    RoutingContext::with_expr(
+                        Declare {
+                            interest_id: None,
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                                id,
+                                ext_wire_expr: WireExprType::null(),
+                            }),
+                        },
+                        res.expr(),
+                    ),
+                );
             }
         }
     }
@@ -231,16 +249,21 @@ fn forget_client_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     id: QueryableId,
+    send_declare: &mut SendDeclare,
 ) -> Option<Arc<Resource>> {
     if let Some(mut res) = face_hat_mut!(face).remote_qabls.remove(&id) {
-        undeclare_client_queryable(tables, face, &mut res);
+        undeclare_client_queryable(tables, face, &mut res, send_declare);
         Some(res)
     } else {
         None
     }
 }
 
-pub(super) fn queries_new_face(tables: &mut Tables, _face: &mut Arc<FaceState>) {
+pub(super) fn queries_new_face(
+    tables: &mut Tables,
+    _face: &mut Arc<FaceState>,
+    send_declare: &mut SendDeclare,
+) {
     for face in tables
         .faces
         .values()
@@ -248,7 +271,7 @@ pub(super) fn queries_new_face(tables: &mut Tables, _face: &mut Arc<FaceState>) 
         .collect::<Vec<Arc<FaceState>>>()
     {
         for qabl in face_hat!(face).remote_qabls.values() {
-            propagate_simple_queryable(tables, qabl, Some(&mut face.clone()));
+            propagate_simple_queryable(tables, qabl, Some(&mut face.clone()), send_declare);
         }
     }
 }
@@ -258,27 +281,6 @@ lazy_static::lazy_static! {
 }
 
 impl HatQueriesTrait for HatCode {
-    fn declare_qabl_interest(
-        &self,
-        _tables: &mut Tables,
-        _face: &mut Arc<FaceState>,
-        _id: InterestId,
-        _res: Option<&mut Arc<Resource>>,
-        _mode: InterestMode,
-        _aggregate: bool,
-    ) {
-        // ignore
-    }
-
-    fn undeclare_qabl_interest(
-        &self,
-        _tables: &mut Tables,
-        _face: &mut Arc<FaceState>,
-        _id: InterestId,
-    ) {
-        // ignore
-    }
-
     fn declare_queryable(
         &self,
         tables: &mut Tables,
@@ -287,8 +289,9 @@ impl HatQueriesTrait for HatCode {
         res: &mut Arc<Resource>,
         qabl_info: &QueryableInfoType,
         _node_id: NodeId,
+        send_declare: &mut SendDeclare,
     ) {
-        declare_client_queryable(tables, face, id, res, qabl_info);
+        declare_client_queryable(tables, face, id, res, qabl_info, send_declare);
     }
 
     fn undeclare_queryable(
@@ -298,8 +301,9 @@ impl HatQueriesTrait for HatCode {
         id: QueryableId,
         _res: Option<Arc<Resource>>,
         _node_id: NodeId,
+        send_declare: &mut SendDeclare,
     ) -> Option<Arc<Resource>> {
-        forget_client_queryable(tables, face, id)
+        forget_client_queryable(tables, face, id, send_declare)
     }
 
     fn get_queryables(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
@@ -382,44 +386,6 @@ impl HatQueriesTrait for HatCode {
         }
         route.sort_by_key(|qabl| OrderedFloat(qabl.distance));
         Arc::new(route)
-    }
-
-    #[inline]
-    fn compute_local_replies(
-        &self,
-        tables: &Tables,
-        prefix: &Arc<Resource>,
-        suffix: &str,
-        face: &Arc<FaceState>,
-    ) -> Vec<(WireExpr<'static>, ZBuf)> {
-        let mut result = vec![];
-        // Only the first routing point in the query route
-        // should return the liveliness tokens
-        if face.whatami == WhatAmI::Client {
-            let key_expr = prefix.expr() + suffix;
-            let key_expr = match OwnedKeyExpr::try_from(key_expr) {
-                Ok(ke) => ke,
-                Err(e) => {
-                    tracing::warn!("Invalid KE reached the system: {}", e);
-                    return result;
-                }
-            };
-            if key_expr.starts_with(PREFIX_LIVELINESS) {
-                let res = Resource::get_resource(prefix, suffix);
-                let matches = res
-                    .as_ref()
-                    .and_then(|res| res.context.as_ref())
-                    .map(|ctx| Cow::from(&ctx.matches))
-                    .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
-                for mres in matches.iter() {
-                    let mres = mres.upgrade().unwrap();
-                    if mres.session_ctxs.values().any(|ctx| ctx.subs.is_some()) {
-                        result.push((Resource::get_best_key(&mres, "", face.id), ZBuf::default()));
-                    }
-                }
-            }
-        }
-        result
     }
 
     fn get_query_routes_entries(&self, _tables: &Tables) -> RoutesIndexes {

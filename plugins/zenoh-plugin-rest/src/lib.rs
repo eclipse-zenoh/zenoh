@@ -26,22 +26,24 @@ use http_types::Method;
 use serde::{Deserialize, Serialize};
 use tide::{http::Mime, sse::Sender, Request, Response, Server, StatusCode};
 use zenoh::{
-    bytes::{StringOrBase64, ZBytes},
-    encoding::Encoding,
+    bytes::{Encoding, ZBytes},
+    internal::{
+        bail,
+        plugins::{RunningPluginTrait, ZenohPlugin},
+        runtime::Runtime,
+        zerror,
+    },
     key_expr::{keyexpr, KeyExpr},
-    plugins::{RunningPluginTrait, ZenohPlugin},
-    query::{QueryConsolidation, Reply},
-    runtime::Runtime,
-    sample::{Sample, SampleKind, ValueBuilderTrait},
-    selector::{Selector, TIME_RANGE_KEY},
+    prelude::*,
+    query::{Parameters, QueryConsolidation, Reply, Selector, ZenohParameters},
+    sample::{Sample, SampleKind},
     session::{Session, SessionDeclarations},
-    value::Value,
 };
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
-use zenoh_result::{bail, zerror, ZResult};
 
 mod config;
 pub use config::Config;
+use zenoh::{bytes::EncodingBuilderTrait, query::ReplyError};
 
 const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 lazy_static::lazy_static! {
@@ -73,12 +75,21 @@ fn payload_to_json(payload: &ZBytes, encoding: &Encoding) -> serde_json::Value {
                 &Encoding::APPLICATION_JSON | &Encoding::TEXT_JSON | &Encoding::TEXT_JSON5 => {
                     payload
                         .deserialize::<serde_json::Value>()
-                        .unwrap_or_else(|_| {
-                            serde_json::Value::String(StringOrBase64::from(payload).into_string())
+                        .unwrap_or_else(|e| {
+                            tracing::warn!("Encoding is JSON but data is not JSON, converting to base64, Error: {e:?}");
+                            serde_json::Value::String(base64_encode(&Cow::from(payload)))
                         })
                 }
+                &Encoding::TEXT_PLAIN | &Encoding::ZENOH_STRING  => serde_json::Value::String(
+                    payload
+                        .deserialize::<String>()
+                        .unwrap_or_else(|e| {
+                            tracing::warn!("Encoding is String but data is not String, converting to base64, Error: {e:?}");
+                            base64_encode(&Cow::from(payload))
+                        }),
+                ),
                 // otherwise convert to JSON string
-                _ => serde_json::Value::String(StringOrBase64::from(payload).into_string()),
+                _ => serde_json::Value::String(base64_encode(&Cow::from(payload))),
             }
         }
     }
@@ -93,7 +104,7 @@ fn sample_to_json(sample: &Sample) -> JSONSample {
     }
 }
 
-fn result_to_json(sample: Result<&Sample, &Value>) -> JSONSample {
+fn result_to_json(sample: Result<&Sample, &ReplyError>) -> JSONSample {
     match sample {
         Ok(sample) => sample_to_json(sample),
         Err(err) => JSONSample {
@@ -134,7 +145,7 @@ fn sample_to_html(sample: &Sample) -> String {
     )
 }
 
-fn result_to_html(sample: Result<&Sample, &Value>) -> String {
+fn result_to_html(sample: Result<&Sample, &ReplyError>) -> String {
     match sample {
         Ok(sample) => sample_to_html(sample),
         Err(err) => {
@@ -212,16 +223,19 @@ impl ZenohPlugin for RestPlugin {}
 
 impl Plugin for RestPlugin {
     type StartArgs = Runtime;
-    type Instance = zenoh::plugins::RunningPlugin;
+    type Instance = zenoh::internal::plugins::RunningPlugin;
     const DEFAULT_NAME: &'static str = "rest";
     const PLUGIN_VERSION: &'static str = plugin_version!();
     const PLUGIN_LONG_VERSION: &'static str = plugin_long_version!();
 
-    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<zenoh::plugins::RunningPlugin> {
+    fn start(
+        name: &str,
+        runtime: &Self::StartArgs,
+    ) -> ZResult<zenoh::internal::plugins::RunningPlugin> {
         // Try to initiate login.
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
-        zenoh_util::try_init_log_from_env();
+        zenoh::try_init_log_from_env();
         tracing::debug!("REST plugin {}", LONG_VERSION.as_str());
 
         let runtime_conf = runtime.config().lock();
@@ -247,17 +261,14 @@ impl PluginControl for RunningPlugin {}
 impl RunningPluginTrait for RunningPlugin {
     fn adminspace_getter<'a>(
         &'a self,
-        selector: &'a Selector<'a>,
+        key_expr: &'a KeyExpr<'a>,
         plugin_status_key: &str,
-    ) -> ZResult<Vec<zenoh::plugins::Response>> {
+    ) -> ZResult<Vec<zenoh::internal::plugins::Response>> {
         let mut responses = Vec::new();
         let mut key = String::from(plugin_status_key);
         with_extended_string(&mut key, &["/version"], |key| {
-            if keyexpr::new(key.as_str())
-                .unwrap()
-                .intersects(selector.key_expr())
-            {
-                responses.push(zenoh::plugins::Response::new(
+            if keyexpr::new(key.as_str()).unwrap().intersects(key_expr) {
+                responses.push(zenoh::internal::plugins::Response::new(
                     key.clone(),
                     GIT_VERSION.into(),
                 ))
@@ -266,9 +277,9 @@ impl RunningPluginTrait for RunningPlugin {
         with_extended_string(&mut key, &["/port"], |port_key| {
             if keyexpr::new(port_key.as_str())
                 .unwrap()
-                .intersects(selector.key_expr())
+                .intersects(key_expr)
             {
-                responses.push(zenoh::plugins::Response::new(
+                responses.push(zenoh::internal::plugins::Response::new(
                     port_key.clone(),
                     (&self.0).into(),
                 ))
@@ -380,18 +391,18 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
             }
         };
         let query_part = url.query();
-        let selector = if let Some(q) = query_part {
-            Selector::new(key_expr, q)
-        } else {
-            key_expr.into()
-        };
-        let consolidation = if selector.parameters().contains_key(TIME_RANGE_KEY) {
+        let parameters = Parameters::from(query_part.unwrap_or_default());
+        let consolidation = if parameters.time_range().is_some() {
             QueryConsolidation::from(zenoh::query::ConsolidationMode::None)
         } else {
             QueryConsolidation::from(zenoh::query::ConsolidationMode::Latest)
         };
-        let raw = selector.parameters().contains_key(RAW_KEY);
-        let mut query = req.state().0.get(&selector).consolidation(consolidation);
+        let raw = parameters.contains_key(RAW_KEY);
+        let mut query = req
+            .state()
+            .0
+            .get(Selector::borrowed(&key_expr, &parameters))
+            .consolidation(consolidation);
         if !body.is_empty() {
             let encoding: Encoding = req
                 .content_type()
@@ -465,7 +476,7 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
     // Try to initiate login.
     // Required in case of dynamic lib, otherwise no logs.
     // But cannot be done twice in case of static link.
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
 
     let zid = runtime.zid().to_string();
     let session = zenoh::session::init(runtime).await.unwrap();

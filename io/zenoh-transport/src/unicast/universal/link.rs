@@ -62,6 +62,7 @@ impl TransportLinkUnicastUniversal {
             },
             queue_size: transport.manager.config.queue_size,
             wait_before_drop: transport.manager.config.wait_before_drop,
+            batching: transport.manager.config.batching,
             backoff: transport.manager.config.queue_backoff,
         };
 
@@ -99,7 +100,7 @@ impl TransportLinkUnicastUniversal {
             .await;
 
             if let Err(e) = res {
-                tracing::debug!("{}", e);
+                tracing::debug!("TX task failed: {}", e);
                 // Spawn a task to avoid a deadlock waiting for this same task
                 // to finish in the close() joining its handle
                 // TODO(yuyuan): do more study to check which ZRuntime should be used or refine the
@@ -127,7 +128,7 @@ impl TransportLinkUnicastUniversal {
 
             // TODO(yuyuan): improve this callback
             if let Err(e) = res {
-                tracing::debug!("{}", e);
+                tracing::debug!("RX task failed: {}", e);
 
                 // Spawn a task to avoid a deadlock waiting for this same task
                 // to finish in the close() joining its handle

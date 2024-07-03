@@ -21,17 +21,16 @@ use std::{
 };
 
 use zenoh::{
-    core::{Error, Resolvable, Resolve, Result as ZResult},
     handlers::{locked, DefaultHandler, IntoHandler},
     internal::zlock,
     key_expr::KeyExpr,
     prelude::Wait,
-    query::{QueryConsolidation, QueryTarget, ReplyKeyExpr},
+    pubsub::{Reliability, Subscriber},
+    query::{QueryConsolidation, QueryTarget, ReplyKeyExpr, Selector},
     sample::{Locality, Sample, SampleBuilder, TimestampBuilderTrait},
-    selector::Selector,
     session::{SessionDeclarations, SessionRef},
-    subscriber::{Reliability, Subscriber},
-    time::{new_reception_timestamp, Timestamp},
+    time::{new_timestamp, Timestamp},
+    Error, Resolvable, Resolve, Result as ZResult,
 };
 
 use crate::ExtractSample;
@@ -106,7 +105,7 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
         self.callback(locked(callback))
     }
 
-    /// Use the given handler to recieve Samples.
+    /// Use the given handler to receive Samples.
     #[inline]
     pub fn with<Handler>(
         self,
@@ -590,9 +589,9 @@ where
     }
 }
 
-/// A Subscriber that will run the given user defined `fetch` funtion at startup.
+/// A Subscriber that will run the given user defined `fetch` function at startup.
 ///
-/// The user defined `fetch` funtion should fetch some samples and return them through the callback funtion
+/// The user defined `fetch` function should fetch some samples and return them through the callback function
 /// (it could typically be a Session::get()). Those samples will be merged with the received publications and made available in the receiver.
 /// Later on, new fetches can be performed again, calling [`FetchingSubscriber::fetch()`](super::FetchingSubscriber::fetch()).
 ///
@@ -655,6 +654,7 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
         InputHandler: IntoHandler<'static, Sample, Handler = Handler> + Send,
         TryIntoSample: ExtractSample + Send + Sync,
     {
+        let zid = conf.session.zid();
         let state = Arc::new(Mutex::new(InnerState {
             pending_fetches: 0,
             merge_queue: MergeQueue::new(),
@@ -674,7 +674,7 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
                     );
                     // ensure the sample has a timestamp, thus it will always be sorted into the MergeQueue
                     // after any timestamped Sample possibly coming from a fetch reply.
-                    let timestamp = s.timestamp().cloned().unwrap_or(new_reception_timestamp());
+                    let timestamp = s.timestamp().cloned().unwrap_or(new_timestamp(zid));
                     state
                         .merge_queue
                         .push(SampleBuilder::from(s).timestamp(timestamp).into());
@@ -730,7 +730,7 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
 
     /// Perform an additional `fetch`.
     ///
-    /// The provided `fetch` funtion should fetch some samples and return them through the callback funtion
+    /// The provided `fetch` function should fetch some samples and return them through the callback function
     /// (it could typically be a Session::get()). Those samples will be merged with the received publications and made available in the receiver.
     ///
     /// # Examples

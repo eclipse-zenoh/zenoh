@@ -50,7 +50,6 @@ use crate::common::batch::BatchConfig;
 type NanoSeconds = u32;
 
 const RBLEN: usize = QueueSizeConf::MAX;
-const TSLOT: NanoSeconds = 100;
 
 // Inner structure to reuse serialization batches
 struct StageInRefill {
@@ -125,6 +124,7 @@ struct StageIn {
     s_out: StageInOut,
     mutex: StageInMutex,
     fragbuf: ZBuf,
+    batching: bool,
 }
 
 impl StageIn {
@@ -180,7 +180,7 @@ impl StageIn {
 
         macro_rules! zretok {
             ($batch:expr, $msg:expr) => {{
-                if $msg.is_express() {
+                if !self.batching || $msg.is_express() {
                     // Move out existing batch
                     self.s_out.move_batch($batch);
                     return true;
@@ -258,7 +258,7 @@ impl StageIn {
             // Treat all messages as non-droppable once we start fragmenting
             batch = zgetbatch_rets!(true, tch.sn.set(sn).unwrap());
 
-            // Serialize the message fragmnet
+            // Serialize the message fragment
             match batch.encode((&mut reader, &mut fragment)) {
                 Ok(_) => {
                     // Update the SN
@@ -316,11 +316,17 @@ impl StageIn {
 
         macro_rules! zretok {
             ($batch:expr) => {{
-                let bytes = $batch.len();
-                *c_guard = Some($batch);
-                drop(c_guard);
-                self.s_out.notify(bytes);
-                return true;
+                if !self.batching {
+                    // Move out existing batch
+                    self.s_out.move_batch($batch);
+                    return true;
+                } else {
+                    let bytes = $batch.len();
+                    *c_guard = Some($batch);
+                    drop(c_guard);
+                    self.s_out.notify(bytes);
+                    return true;
+                }
             }};
         }
 
@@ -354,6 +360,7 @@ enum Pull {
 // Inner structure to keep track and signal backoff operations
 #[derive(Clone)]
 struct Backoff {
+    tslot: NanoSeconds,
     retry_time: NanoSeconds,
     last_bytes: BatchSize,
     bytes: Arc<AtomicBatchSize>,
@@ -361,8 +368,9 @@ struct Backoff {
 }
 
 impl Backoff {
-    fn new(bytes: Arc<AtomicBatchSize>, backoff: Arc<AtomicBool>) -> Self {
+    fn new(tslot: NanoSeconds, bytes: Arc<AtomicBatchSize>, backoff: Arc<AtomicBool>) -> Self {
         Self {
+            tslot,
             retry_time: 0,
             last_bytes: 0,
             bytes,
@@ -372,7 +380,7 @@ impl Backoff {
 
     fn next(&mut self) {
         if self.retry_time == 0 {
-            self.retry_time = TSLOT;
+            self.retry_time = self.tslot;
             self.backoff.store(true, Ordering::Relaxed);
         } else {
             match self.retry_time.checked_mul(2) {
@@ -390,7 +398,7 @@ impl Backoff {
         }
     }
 
-    fn stop(&mut self) {
+    fn reset(&mut self) {
         self.retry_time = 0;
         self.backoff.store(false, Ordering::Relaxed);
     }
@@ -407,7 +415,6 @@ impl StageOutIn {
     #[inline]
     fn try_pull(&mut self) -> Pull {
         if let Some(batch) = self.s_out_r.pull() {
-            self.backoff.stop();
             return Pull::Some(batch);
         }
 
@@ -419,41 +426,26 @@ impl StageOutIn {
         let old_bytes = self.backoff.last_bytes;
         self.backoff.last_bytes = new_bytes;
 
-        match new_bytes.cmp(&old_bytes) {
-            std::cmp::Ordering::Equal => {
-                // No new bytes have been written on the batch, try to pull
-                if let Ok(mut g) = self.current.try_lock() {
-                    // First try to pull from stage OUT
-                    if let Some(batch) = self.s_out_r.pull() {
-                        self.backoff.stop();
-                        return Pull::Some(batch);
-                    }
-
-                    // An incomplete (non-empty) batch is available in the state IN pipeline.
-                    match g.take() {
-                        Some(batch) => {
-                            self.backoff.stop();
-                            return Pull::Some(batch);
-                        }
-                        None => {
-                            self.backoff.stop();
-                            return Pull::None;
-                        }
-                    }
-                }
-                // Go to backoff
-            }
-            std::cmp::Ordering::Less => {
-                // There should be a new batch in Stage OUT
+        if new_bytes == old_bytes {
+            // It seems no new bytes have been written on the batch, try to pull
+            if let Ok(mut g) = self.current.try_lock() {
+                // First try to pull from stage OUT to make sure we are not in the case
+                // where new_bytes == old_bytes are because of two identical serializations
                 if let Some(batch) = self.s_out_r.pull() {
-                    self.backoff.stop();
                     return Pull::Some(batch);
                 }
-                // Go to backoff
+
+                // An incomplete (non-empty) batch may be available in the state IN pipeline.
+                match g.take() {
+                    Some(batch) => {
+                        return Pull::Some(batch);
+                    }
+                    None => {
+                        return Pull::None;
+                    }
+                }
             }
-            std::cmp::Ordering::Greater => {
-                // Go to backoff
-            }
+            // Go to backoff
         }
 
         // Do backoff
@@ -509,6 +501,7 @@ pub(crate) struct TransmissionPipelineConf {
     pub(crate) batch: BatchConfig,
     pub(crate) queue_size: [usize; Priority::NUM],
     pub(crate) wait_before_drop: Duration,
+    pub(crate) batching: bool,
     pub(crate) backoff: Duration,
 }
 
@@ -569,6 +562,7 @@ impl TransmissionPipeline {
                     priority: priority[prio].clone(),
                 },
                 fragbuf: ZBuf::empty(),
+                batching: config.batching,
             }));
 
             // The stage out for this priority
@@ -576,7 +570,7 @@ impl TransmissionPipeline {
                 s_in: StageOutIn {
                     s_out_r,
                     current,
-                    backoff: Backoff::new(bytes, backoff),
+                    backoff: Backoff::new(config.backoff.as_nanos() as NanoSeconds, bytes, backoff),
                 },
                 s_ref: StageOutRefill { n_ref_w, s_ref_w },
             });
@@ -664,6 +658,11 @@ pub(crate) struct TransmissionPipelineConsumer {
 
 impl TransmissionPipelineConsumer {
     pub(crate) async fn pull(&mut self) -> Option<(WBatch, usize)> {
+        // Reset backoff before pulling
+        for queue in self.stage_out.iter_mut() {
+            queue.s_in.backoff.reset();
+        }
+
         while self.active.load(Ordering::Relaxed) {
             // Calculate the backoff maximum
             let mut bo = NanoSeconds::MAX;
@@ -681,10 +680,29 @@ impl TransmissionPipelineConsumer {
                 }
             }
 
+            // In case of writing many small messages, `recv_async()` will most likely return immedietaly.
+            // While trying to pull from the queue, the stage_in `lock()` will most likely taken, leading to
+            // a spinning behaviour while attempting to take the lock. Yield the current task to avoid
+            // spinning the current task indefinitely.
+            tokio::task::yield_now().await;
+
             // Wait for the backoff to expire or for a new message
-            let _ =
+            let res =
                 tokio::time::timeout(Duration::from_nanos(bo as u64), self.n_out_r.recv_async())
                     .await;
+            match res {
+                Ok(Ok(())) => {
+                    // We have received a notification from the channel that some bytes are available, retry to pull.
+                }
+                Ok(Err(_channel_error)) => {
+                    // The channel is closed, we can't be notified anymore. Break the loop and return None.
+                    break;
+                }
+                Err(_timeout) => {
+                    // The backoff timeout expired. Be aware that tokio timeout may not sleep for short duration since
+                    // it has time resolution of 1ms: https://docs.rs/tokio/latest/tokio/time/fn.sleep.html
+                }
+            }
         }
         None
     }
@@ -756,6 +774,7 @@ mod tests {
             is_compression: true,
         },
         queue_size: [1; Priority::NUM],
+        batching: true,
         wait_before_drop: Duration::from_millis(1),
         backoff: Duration::from_micros(1),
     };
@@ -768,6 +787,7 @@ mod tests {
             is_compression: false,
         },
         queue_size: [1; Priority::NUM],
+        batching: true,
         wait_before_drop: Duration::from_millis(1),
         backoff: Duration::from_micros(1),
     };

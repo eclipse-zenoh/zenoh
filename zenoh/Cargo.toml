@@ -31,6 +31,19 @@ maintenance = { status = "actively-developed" }
 [features]
 auth_pubkey = ["zenoh-transport/auth_pubkey"]
 auth_usrpwd = ["zenoh-transport/auth_usrpwd"]
+default = [
+    "auth_pubkey",
+    "auth_usrpwd",
+    "transport_multilink",
+    "transport_compression",
+    "transport_quic",
+    "transport_tcp",
+    "transport_tls",
+    "transport_udp",
+    "transport_unixsock-stream",
+    "transport_ws",
+]
+internal = ["zenoh-keyexpr/internal", "zenoh-config/internal"]
 plugins = []
 shared-memory = [
     "zenoh-shm",
@@ -50,19 +63,7 @@ transport_udp = ["zenoh-transport/transport_udp"]
 transport_unixsock-stream = ["zenoh-transport/transport_unixsock-stream"]
 transport_ws = ["zenoh-transport/transport_ws"]
 transport_vsock = ["zenoh-transport/transport_vsock"]
-unstable = []
-default = [
-    "auth_pubkey",
-    "auth_usrpwd",
-    "transport_multilink",
-    "transport_compression",
-    "transport_quic",
-    "transport_tcp",
-    "transport_tls",
-    "transport_udp",
-    "transport_unixsock-stream",
-    "transport_ws",
-]
+unstable = ["zenoh-keyexpr/unstable"]
 
 [dependencies]
 tokio = { workspace = true, features = ["rt", "macros", "time"] }
@@ -70,7 +71,6 @@ tokio-util = { workspace = true }
 ahash = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
-const_format = { workspace = true }
 event-listener = { workspace = true }
 flume = { workspace = true }
 form_urlencoded = { workspace = true }
@@ -113,6 +113,7 @@ zenoh-transport = { workspace = true }
 zenoh-util = { workspace = true }
 zenoh-runtime = { workspace = true }
 zenoh-task = { workspace = true }
+once_cell = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }

@@ -42,7 +42,7 @@ async fn main() {
         );
         match sample.payload().deserialize::<&zshm>() {
             Ok(payload) => print!("'{}'", String::from_utf8_lossy(payload)),
-            Err(e) => print!("'Not a SharedMemoryBuf: {:?}'", e),
+            Err(e) => print!("'Not a ShmBufInner: {:?}'", e),
         }
         println!(")");
     }
@@ -62,7 +62,7 @@ async fn main() {
     //             kind, key_expr, payload
     //         ),
     //         Err(e) => {
-    //             println!(">> [Subscriber] Not a SharedMemoryBuf: {:?}", e);
+    //             println!(">> [Subscriber] Not a ShmBufInner: {:?}", e);
     //         }
     //     }
     // }

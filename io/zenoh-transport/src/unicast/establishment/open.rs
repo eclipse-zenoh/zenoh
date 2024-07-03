@@ -20,7 +20,7 @@ use zenoh_core::zasynclock;
 use zenoh_core::{zcondfeat, zerror};
 use zenoh_link::LinkUnicast;
 use zenoh_protocol::{
-    core::{Field, Resolution, WhatAmI, ZenohId},
+    core::{Field, Resolution, WhatAmI, ZenohIdProto},
     transport::{
         batch_size, close, BatchSize, Close, InitSyn, OpenSyn, TransportBody, TransportMessage,
         TransportSn,
@@ -32,6 +32,8 @@ use zenoh_result::ZResult;
 use super::ext::shm::AuthSegment;
 #[cfg(feature = "shared-memory")]
 use crate::shm::TransportShmConfig;
+#[cfg(feature = "auth_usrpwd")]
+use crate::unicast::establishment::ext::auth::UsrPwdId;
 use crate::{
     common::batch::BatchConfig,
     unicast::{
@@ -75,13 +77,13 @@ struct State {
 // InitSyn
 struct SendInitSynIn {
     mine_version: u8,
-    mine_zid: ZenohId,
+    mine_zid: ZenohIdProto,
     mine_whatami: WhatAmI,
 }
 
 // InitAck
 struct RecvInitAckOut {
-    other_zid: ZenohId,
+    other_zid: ZenohIdProto,
     other_whatami: WhatAmI,
     other_cookie: ZSlice,
     #[cfg(feature = "shared-memory")]
@@ -90,9 +92,9 @@ struct RecvInitAckOut {
 
 // OpenSyn
 struct SendOpenSynIn {
-    mine_zid: ZenohId,
+    mine_zid: ZenohIdProto,
     mine_lease: Duration,
-    other_zid: ZenohId,
+    other_zid: ZenohIdProto,
     other_cookie: ZSlice,
     #[cfg(feature = "shared-memory")]
     ext_shm: Option<AuthSegment>,
@@ -644,6 +646,8 @@ pub(crate) async fn open_link(
             false => None,
         },
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
+        #[cfg(feature = "auth_usrpwd")]
+        auth_id: UsrPwdId(None),
     };
 
     let o_config = TransportLinkUnicastConfig {

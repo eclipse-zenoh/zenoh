@@ -22,7 +22,7 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite, zread, zwrite};
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{WhatAmI, ZenohId},
+    core::{WhatAmI, ZenohIdProto},
     network::NetworkMessage,
     transport::{close, Close, TransportBodyLowLatency, TransportMessageLowLatency, TransportSn},
 };
@@ -32,6 +32,7 @@ use zenoh_result::{zerror, ZResult};
 use crate::stats::TransportStats;
 use crate::{
     unicast::{
+        authentication::AuthId,
         link::{LinkUnicastWithOpenAck, TransportLinkUnicast},
         transport_unicast_inner::{AddLinkResult, TransportUnicastTrait},
         TransportConfigUnicast,
@@ -183,8 +184,23 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         vec![]
     }
 
-    fn get_zid(&self) -> ZenohId {
+    fn get_zid(&self) -> ZenohIdProto {
         self.config.zid
+    }
+
+    fn get_auth_ids(&self) -> Vec<AuthId> {
+        // Convert LinkUnicast auth id to AuthId
+        let mut auth_ids: Vec<AuthId> = vec![];
+        let handle = tokio::runtime::Handle::current();
+        let guard =
+            tokio::task::block_in_place(|| handle.block_on(async { zasyncread!(self.link) }));
+        if let Some(val) = guard.as_ref() {
+            auth_ids.push(val.link.get_auth_id().to_owned().into());
+        }
+        // Convert usrpwd auth id to AuthId
+        #[cfg(feature = "auth_usrpwd")]
+        auth_ids.push(self.config.auth_id.clone().into());
+        auth_ids
     }
 
     fn get_whatami(&self) -> WhatAmI {
@@ -246,17 +262,19 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         drop(guard);
 
         // create a callback to start the link
-        let start_link = Box::new(move || {
+        let start_tx = Box::new(move || {
             // start keepalive task
             let keep_alive =
                 self.manager.config.unicast.lease / self.manager.config.unicast.keep_alive as u32;
             self.start_keepalive(keep_alive);
+        });
 
+        let start_rx = Box::new(move || {
             // start RX task
             self.internal_start_rx(other_lease);
         });
 
-        Ok((start_link, ack))
+        Ok((start_tx, start_rx, ack))
     }
 
     /*************************************/

@@ -14,7 +14,7 @@
 use std::{pin::Pin, sync::MutexGuard};
 
 use event_listener::{Event, EventListener};
-use tokio::sync::MutexGuard as AysncMutexGuard;
+use tokio::sync::MutexGuard as AsyncMutexGuard;
 
 pub type ConditionWaiter = Pin<Box<EventListener>>;
 /// This is a Condition Variable similar to that provided by POSIX.
@@ -45,7 +45,7 @@ impl Condition {
 
     /// Waits for the condition to be notified
     #[inline]
-    pub async fn wait<T>(&self, guard: AysncMutexGuard<'_, T>) {
+    pub async fn wait<T>(&self, guard: AsyncMutexGuard<'_, T>) {
         let listener = self.event.listen();
         drop(guard);
         listener.await;
@@ -55,7 +55,7 @@ impl Condition {
     pub fn waiter<T>(&self, guard: MutexGuard<'_, T>) -> ConditionWaiter {
         let listener = self.event.listen();
         drop(guard);
-        listener
+        Box::pin(listener)
     }
 
     /// Notifies one pending listener

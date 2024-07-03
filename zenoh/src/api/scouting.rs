@@ -20,8 +20,9 @@ use std::{
 };
 
 use tokio::net::UdpSocket;
+use zenoh_config::wrappers::Hello;
 use zenoh_core::{Resolvable, Wait};
-use zenoh_protocol::{core::WhatAmIMatcher, scouting::Hello};
+use zenoh_protocol::core::WhatAmIMatcher;
 use zenoh_result::ZResult;
 use zenoh_task::TerminatableTask;
 
@@ -115,7 +116,7 @@ impl ScoutBuilder<DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the [`Hello`] messages from this scout with a [`Handler`](crate::prelude::IntoHandler).
+    /// Receive the [`Hello`] messages from this scout with a [`Handler`](crate::handlers::IntoHandler).
     ///
     /// # Examples
     /// ```no_run
@@ -237,7 +238,7 @@ impl fmt::Debug for ScoutInner {
     }
 }
 
-/// A scout that returns [`Hello`] messages through a [`Handler`](crate::prelude::IntoHandler).
+/// A scout that returns [`Hello`] messages through a [`Handler`](crate::handlers::IntoHandler).
 ///
 /// # Examples
 /// ```no_run
@@ -324,7 +325,7 @@ fn _scout(
                     let scout = Runtime::scout(&sockets, what, &addr, move |hello| {
                         let callback = callback.clone();
                         async move {
-                            callback(hello);
+                            callback(hello.into());
                             Loop::Continue
                         }
                     });
@@ -347,12 +348,12 @@ fn _scout(
 ///
 /// [`scout`] spawns a task that periodically sends scout messages and waits for [`Hello`](crate::scouting::Hello) replies.
 ///
-/// Drop the returned [`Scout`](crate::scouting::Scout) to stop the scouting task.
+/// Drop the returned [`Scout`] to stop the scouting task.
 ///
 /// # Arguments
 ///
 /// * `what` - The kind of zenoh process to scout for
-/// * `config` - The configuration [`Config`] to use for scouting
+/// * `config` - The configuration [`crate::Config`] to use for scouting
 ///
 /// # Examples
 /// ```no_run

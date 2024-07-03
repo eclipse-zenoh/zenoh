@@ -99,7 +99,7 @@ pub struct ZSlice {
 }
 
 impl ZSlice {
-    #[deprecated(note = "use `new` instead")]
+    #[deprecated(since = "1.0.0", note = "use `new` instead")]
     pub fn make(
         buf: Arc<dyn ZSliceBuffer>,
         start: usize,
@@ -122,11 +122,11 @@ impl ZSlice {
     }
 
     pub fn empty() -> Self {
-        unsafe { ZSlice::new_unchecked(Arc::new([]), 0, 0) }
+        Self::new(Arc::new([]), 0, 0).unwrap()
     }
 
     /// # Safety
-    /// This function does not verify wether the `start` and `end` indexes are within the buffer boundaries.
+    /// This function does not verify whether the `start` and `end` indexes are within the buffer boundaries.
     /// If a [`ZSlice`] is built via this constructor, a later access may panic if `start` and `end` indexes are out-of-bound.
     pub unsafe fn new_unchecked(buf: Arc<dyn ZSliceBuffer>, start: usize, end: usize) -> Self {
         ZSlice {

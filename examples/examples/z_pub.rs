@@ -14,7 +14,7 @@
 use std::time::Duration;
 
 use clap::Parser;
-use zenoh::{key_expr::KeyExpr, prelude::*, Config};
+use zenoh::{bytes::Encoding, key_expr::KeyExpr, prelude::*, Config};
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
@@ -22,7 +22,7 @@ async fn main() {
     // Initiate logging
     zenoh::try_init_log_from_env();
 
-    let (config, key_expr, value, attachment) = parse_args();
+    let (config, key_expr, payload, attachment) = parse_args();
 
     println!("Opening session...");
     let session = zenoh::open(config).await.unwrap();
@@ -33,9 +33,15 @@ async fn main() {
     println!("Press CTRL-C to quit...");
     for idx in 0..u32::MAX {
         tokio::time::sleep(Duration::from_secs(1)).await;
-        let buf = format!("[{idx:4}] {value}");
+        let buf = format!("[{idx:4}] {payload}");
         println!("Putting Data ('{}': '{}')...", &key_expr, buf);
-        publisher.put(buf).attachment(&attachment).await.unwrap();
+        // Refer to z_bytes.rs to see how to serialize different types of message
+        publisher
+            .put(buf)
+            .encoding(Encoding::TEXT_PLAIN) // Optionally set the encoding metadata 
+            .attachment(&attachment) // Optionally add an attachment
+            .await
+            .unwrap();
     }
 }
 
@@ -45,12 +51,10 @@ struct Args {
     /// The key expression to write to.
     key: KeyExpr<'static>,
     #[arg(short, long, default_value = "Pub from Rust!")]
-    /// The value to write.
-    value: String,
+    /// The payload to write.
+    payload: String,
     #[arg(short, long)]
     /// The attachments to add to each put.
-    ///
-    /// The key-value pairs are &-separated, and = serves as the separator between key and value.
     attach: Option<String>,
     #[command(flatten)]
     common: CommonArgs,
@@ -58,5 +62,5 @@ struct Args {
 
 fn parse_args() -> (Config, KeyExpr<'static>, String, Option<String>) {
     let args = Args::parse();
-    (args.common.into(), args.key, args.value, args.attach)
+    (args.common.into(), args.key, args.payload, args.attach)
 }

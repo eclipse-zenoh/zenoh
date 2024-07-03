@@ -16,8 +16,7 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    str,
-    str::FromStr,
+    str::{self, FromStr},
     time::{Duration, SystemTime},
 };
 
@@ -44,9 +43,7 @@ pub use aligner::Aligner;
 pub use digest::{Digest, DigestConfig, EraType, LogEntry};
 pub use snapshotter::Snapshotter;
 pub use storage::{ReplicationService, StorageService};
-use zenoh::{
-    bytes::StringOrBase64, key_expr::OwnedKeyExpr, sample::Locality, time::Timestamp, Session,
-};
+use zenoh::{key_expr::OwnedKeyExpr, sample::Locality, time::Timestamp, Session};
 
 const ERA: &str = "era";
 const INTERVALS: &str = "intervals";
@@ -114,6 +111,9 @@ impl Replica {
             }
         };
 
+        // Zid of session for generating timestamps
+        let zid = session.zid();
+
         let replica = Replica {
             name: name.to_string(),
             session,
@@ -121,7 +121,6 @@ impl Replica {
             replica_config: storage_config.replica_config.clone().unwrap(),
             digests_published: RwLock::new(HashSet::new()),
         };
-
         // Create channels for communication between components
         // channel to queue digests to be aligned
         let (tx_digest, rx_digest) = flume::unbounded();
@@ -132,7 +131,7 @@ impl Replica {
 
         let config = replica.replica_config.clone();
         // snapshotter
-        let snapshotter = Arc::new(Snapshotter::new(rx_log, &startup_entries, &config).await);
+        let snapshotter = Arc::new(Snapshotter::new(zid, rx_log, &startup_entries, &config).await);
         // digest sub
         let digest_sub = replica.start_digest_sub(tx_digest).fuse();
         // queryable for alignment
@@ -225,21 +224,23 @@ impl Replica {
             };
             let from = &sample.key_expr().as_str()
                 [Replica::get_digest_key(&self.key_expr, ALIGN_PREFIX).len() + 1..];
-            tracing::trace!(
-                "[DIGEST_SUB] From {} Received {} ('{}': '{}')",
-                from,
-                sample.kind(),
-                sample.key_expr().as_str(),
-                StringOrBase64::from(sample.payload())
-            );
-            let digest: Digest = match serde_json::from_str(&StringOrBase64::from(sample.payload()))
-            {
+
+            let digest: Digest = match serde_json::from_reader(sample.payload().reader()) {
                 Ok(digest) => digest,
                 Err(e) => {
                     tracing::error!("[DIGEST_SUB] Error in decoding the digest: {}", e);
                     continue;
                 }
             };
+
+            tracing::trace!(
+                "[DIGEST_SUB] From {} Received {} ('{}': '{:?}')",
+                from,
+                sample.kind(),
+                sample.key_expr().as_str(),
+                digest,
+            );
+
             let ts = digest.timestamp;
             let to_be_processed = self
                 .processing_needed(
@@ -258,7 +259,7 @@ impl Replica {
                         tracing::error!("[DIGEST_SUB] Error sending digest to aligner: {}", e)
                     }
                 }
-            };
+            }
             received.insert(from.to_string(), ts);
         }
     }

@@ -14,7 +14,7 @@
 
 use serde::{Deserialize, Serialize};
 use zenoh_core::zparse_default;
-use zenoh_protocol::core::WhatAmI;
+use zenoh_protocol::core::{EndPoint, WhatAmI};
 
 use crate::{
     defaults::{
@@ -27,7 +27,7 @@ use crate::{
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ConnectionRetryModeDependentConf {
-    // intial wait timeout until next try
+    // initial wait timeout until next try
     pub period_init_ms: Option<ModeDependentValue<i64>>,
     // maximum wait timeout until next try
     pub period_max_ms: Option<ModeDependentValue<i64>>,

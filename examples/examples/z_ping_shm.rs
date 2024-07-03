@@ -15,11 +15,11 @@ use std::time::{Duration, Instant};
 
 use clap::Parser;
 use zenoh::{
-    buffers::ZSlice,
+    bytes::ZBytes,
     key_expr::keyexpr,
     prelude::*,
-    publisher::CongestionControl,
-    shm::{PosixSharedMemoryProviderBackend, SharedMemoryProviderBuilder, POSIX_PROTOCOL_ID},
+    qos::CongestionControl,
+    shm::{PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID},
     Config,
 };
 use zenoh_examples::CommonArgs;
@@ -53,14 +53,14 @@ fn main() {
     let mut samples = Vec::with_capacity(n);
 
     // create an SHM backend...
-    // NOTE: For extended PosixSharedMemoryProviderBackend API please check z_posix_shm_provider.rs
-    let backend = PosixSharedMemoryProviderBackend::builder()
+    // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
+    let backend = PosixShmProviderBackend::builder()
         .with_size(size)
         .unwrap()
         .res()
         .unwrap();
     // ...and an SHM provider
-    let provider = SharedMemoryProviderBuilder::builder()
+    let provider = ShmProviderBuilder::builder()
         .protocol_id::<POSIX_PROTOCOL_ID>()
         .backend(backend)
         .res();
@@ -70,8 +70,8 @@ fn main() {
     // NOTE: For buf's API please check z_bytes_shm.rs example
     let buf = provider.alloc(size).wait().unwrap();
 
-    // convert ZShmMut into ZSlice as ZShmMut does not support Clone
-    let buf: ZSlice = buf.into();
+    // convert ZShmMut into ZBytes as ZShmMut does not support Clone
+    let buf: ZBytes = buf.into();
 
     // -- warmup --
     println!("Warming up for {warmup:?}...");

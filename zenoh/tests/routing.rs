@@ -23,11 +23,12 @@ use std::{
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh::{
     config::{ModeDependentValue, WhatAmI, WhatAmIMatcher},
-    internal::{bail, ztimeout},
     prelude::*,
-    publisher::CongestionControl,
+    qos::CongestionControl,
     Config, Result, Session,
 };
+use zenoh_core::ztimeout;
+use zenoh_result::bail;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 const MSG_COUNT: usize = 50;
@@ -321,7 +322,7 @@ impl Recipe {
                 // node_task_tracker.close();
                 // node_task_tracker.wait().await;
 
-                // Close the session once all the task assoicated with the node are done.
+                // Close the session once all the task associated with the node are done.
                 ztimeout!(Arc::try_unwrap(session).unwrap().close())?;
 
                 println!("Node: {} is closed.", &node.name);

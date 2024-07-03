@@ -18,27 +18,27 @@ use std::borrow::{Borrow, BorrowMut};
 use zenoh_buffers::{ZBuf, ZSlice};
 
 use super::{
-    traits::{SHMBuf, SHMBufMut},
+    traits::{ShmBuf, ShmBufMut},
     zshm::{zshm, ZShm},
 };
-use crate::SharedMemoryBuf;
+use crate::ShmBufInner;
 
 /// A mutable SHM buffer
 #[zenoh_macros::unstable_doc]
 #[derive(Debug, PartialEq, Eq)]
 #[repr(transparent)]
-pub struct ZShmMut(SharedMemoryBuf);
+pub struct ZShmMut(ShmBufInner);
 
-impl SHMBuf for ZShmMut {
+impl ShmBuf for ZShmMut {
     fn is_valid(&self) -> bool {
         self.0.is_valid()
     }
 }
 
-impl SHMBufMut for ZShmMut {}
+impl ShmBufMut for ZShmMut {}
 
 impl ZShmMut {
-    pub(crate) unsafe fn new_unchecked(data: SharedMemoryBuf) -> Self {
+    pub(crate) unsafe fn new_unchecked(data: ShmBufInner) -> Self {
         Self(data)
     }
 }
@@ -49,10 +49,10 @@ impl PartialEq<zshmmut> for &ZShmMut {
     }
 }
 
-impl TryFrom<SharedMemoryBuf> for ZShmMut {
-    type Error = SharedMemoryBuf;
+impl TryFrom<ShmBufInner> for ZShmMut {
+    type Error = ShmBufInner;
 
-    fn try_from(value: SharedMemoryBuf) -> Result<Self, Self::Error> {
+    fn try_from(value: ShmBufInner) -> Result<Self, Self::Error> {
         match value.is_unique() && value.is_valid() {
             true => Ok(Self(value)),
             false => Err(value),
@@ -74,7 +74,7 @@ impl TryFrom<ZShm> for ZShmMut {
 impl Borrow<zshm> for ZShmMut {
     fn borrow(&self) -> &zshm {
         // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
-        // to SharedMemoryBuf type, so it is safe to transmute them in any direction
+        // to ShmBufInner type, so it is safe to transmute them in any direction
         unsafe { core::mem::transmute(self) }
     }
 }
@@ -82,7 +82,7 @@ impl Borrow<zshm> for ZShmMut {
 impl BorrowMut<zshm> for ZShmMut {
     fn borrow_mut(&mut self) -> &mut zshm {
         // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
-        // to SharedMemoryBuf type, so it is safe to transmute them in any direction
+        // to ShmBufInner type, so it is safe to transmute them in any direction
         unsafe { core::mem::transmute(self) }
     }
 }
@@ -90,7 +90,7 @@ impl BorrowMut<zshm> for ZShmMut {
 impl Borrow<zshmmut> for ZShmMut {
     fn borrow(&self) -> &zshmmut {
         // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
-        // to SharedMemoryBuf type, so it is safe to transmute them in any direction
+        // to ShmBufInner type, so it is safe to transmute them in any direction
         unsafe { core::mem::transmute(self) }
     }
 }
@@ -98,7 +98,7 @@ impl Borrow<zshmmut> for ZShmMut {
 impl BorrowMut<zshmmut> for ZShmMut {
     fn borrow_mut(&mut self) -> &mut zshmmut {
         // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
-        // to SharedMemoryBuf type, so it is safe to transmute them in any direction
+        // to ShmBufInner type, so it is safe to transmute them in any direction
         unsafe { core::mem::transmute(self) }
     }
 }
@@ -174,14 +174,14 @@ impl DerefMut for zshmmut {
     }
 }
 
-impl TryFrom<&mut SharedMemoryBuf> for &mut zshmmut {
+impl TryFrom<&mut ShmBufInner> for &mut zshmmut {
     type Error = ();
 
-    fn try_from(value: &mut SharedMemoryBuf) -> Result<Self, Self::Error> {
+    fn try_from(value: &mut ShmBufInner) -> Result<Self, Self::Error> {
         match value.is_unique() && value.is_valid() {
             // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
-            // to SharedMemoryBuf type, so it is safe to transmute them in any direction
-            true => Ok(unsafe { core::mem::transmute(value) }),
+            // to ShmBufInner type, so it is safe to transmute them in any direction
+            true => Ok(unsafe { core::mem::transmute::<&mut ShmBufInner, &mut zshmmut>(value) }),
             false => Err(()),
         }
     }

@@ -20,9 +20,9 @@ use super::{
 };
 
 /// The provider backend trait
-/// Implemet this interface to create a Zenoh-compatible shared memory provider
+/// Implement this interface to create a Zenoh-compatible shared memory provider
 #[zenoh_macros::unstable_doc]
-pub trait SharedMemoryProviderBackend {
+pub trait ShmProviderBackend {
     /// Allocate the chunk of desired size.
     /// If successful, the result's chunk size will be >= len
     #[zenoh_macros::unstable_doc]

@@ -19,12 +19,13 @@ use std::{
     time::Duration,
 };
 
-#[cfg(feature = "unstable")]
-use zenoh::runtime::{Runtime, RuntimeBuilder};
+#[cfg(feature = "internal")]
+use zenoh::internal::runtime::{Runtime, RuntimeBuilder};
 use zenoh::{
-    config, internal::ztimeout, key_expr::KeyExpr, prelude::*, publisher::CongestionControl,
-    sample::SampleKind, subscriber::Reliability, Session,
+    config, key_expr::KeyExpr, prelude::*, pubsub::Reliability, qos::CongestionControl,
+    sample::SampleKind, Session,
 };
+use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
@@ -261,7 +262,7 @@ async fn zenoh_session_multicast() {
     close_session(peer01, peer02).await;
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(feature = "internal")]
 async fn open_session_unicast_runtime(endpoints: &[&str]) -> (Runtime, Runtime) {
     // Open the sessions
     let mut config = config::peer();
@@ -287,7 +288,7 @@ async fn open_session_unicast_runtime(endpoints: &[&str]) -> (Runtime, Runtime) 
     (r1, r2)
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(feature = "internal")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_2sessions_1runtime_init() {
     let (r1, r2) = open_session_unicast_runtime(&["tcp/127.0.0.1:17449"]).await;

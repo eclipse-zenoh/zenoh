@@ -149,7 +149,7 @@ impl BatchHeader {
         self.0
     }
 
-    /// Verify that the [`WBatch`][WBatch] is for a stream-based protocol, i.e., the first
+    /// Verify that the [`WBatch`] is for a stream-based protocol, i.e., the first
     /// 2 bytes are reserved to encode the total amount of serialized bytes as 16-bits little endian.
     #[cfg(feature = "transport_compression")]
     #[inline(always)]
@@ -181,22 +181,22 @@ pub enum Finalize {
 
 /// Write Batch
 ///
-/// A [`WBatch`][WBatch] is a non-expandable and contiguous region of memory
-/// that is used to serialize [`TransportMessage`][TransportMessage] and [`ZenohMessage`][ZenohMessage].
+/// A [`WBatch`] is a non-expandable and contiguous region of memory
+/// that is used to serialize [`TransportMessage`] and [`NetworkMessage`].
 ///
-/// [`TransportMessage`][TransportMessage] are always serialized on the batch as they are, while
-/// [`ZenohMessage`][ZenohMessage] are always serializaed on the batch as part of a [`TransportMessage`]
+/// [`TransportMessage`] are always serialized on the batch as they are, while
+/// [`NetworkMessage`] are always serializaed on the batch as part of a [`TransportMessage`]
 /// [TransportMessage] Frame. Reliable and Best Effort Frames can be interleaved on the same
-/// [`WBatch`][WBatch] as long as they fit in the remaining buffer capacity.
+/// [`WBatch`] as long as they fit in the remaining buffer capacity.
 ///
-/// In the serialized form, the [`WBatch`][WBatch] always contains one or more
-/// [`TransportMessage`][TransportMessage]. In the particular case of [`TransportMessage`][TransportMessage] Frame,
-/// its payload is either (i) one or more complete [`ZenohMessage`][ZenohMessage] or (ii) a fragment of a
-/// a [`ZenohMessage`][ZenohMessage].
+/// In the serialized form, the [`WBatch`] always contains one or more
+/// [`TransportMessage`]. In the particular case of [`TransportMessage`] Frame,
+/// its payload is either (i) one or more complete [`NetworkMessage`] or (ii) a fragment of a
+/// a [`NetworkMessage`].
 ///
-/// As an example, the content of the [`WBatch`][WBatch] in memory could be:
+/// As an example, the content of the [`WBatch`] in memory could be:
 ///
-/// | Keep Alive | Frame Reliable<Zenoh Message, Zenoh Message> | Frame Best Effort<Zenoh Message Fragment> |
+/// | Keep Alive | Frame Reliable\<Zenoh Message, Zenoh Message\> | Frame Best Effort\<Zenoh Message Fragment\> |
 ///
 #[derive(Clone, Debug)]
 pub struct WBatch {
@@ -227,20 +227,20 @@ impl WBatch {
         batch
     }
 
-    /// Verify that the [`WBatch`][WBatch] has no serialized bytes.
+    /// Verify that the [`WBatch`] has no serialized bytes.
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    /// Get the total number of bytes that have been serialized on the [`WBatch`][WBatch].
+    /// Get the total number of bytes that have been serialized on the [`WBatch`].
     #[inline(always)]
     pub fn len(&self) -> BatchSize {
         let (_l, _h, p) = Self::split(self.buffer.as_slice(), &self.config);
         p.len() as BatchSize
     }
 
-    /// Clear the [`WBatch`][WBatch] memory buffer and related internal state.
+    /// Clear the [`WBatch`] memory buffer and related internal state.
     #[inline(always)]
     pub fn clear(&mut self) {
         self.buffer.clear();
@@ -322,13 +322,17 @@ impl WBatch {
         // Compress the actual content
         let (_length, _header, payload) = Self::split(self.buffer.as_slice(), &self.config);
         let mut writer = support.writer();
-        writer
-            .with_slot(writer.remaining(), |b| {
-                lz4_flex::block::compress_into(payload, b).unwrap_or(0)
+        // SAFETY: assertion ensures `with_slot` precondition
+        unsafe {
+            writer.with_slot(writer.remaining(), |b| {
+                let len = lz4_flex::block::compress_into(payload, b).unwrap_or(0);
+                assert!(len <= b.len());
+                len
             })
-            .map_err(|_| zerror!("Compression error"))?;
+        }
+        .map_err(|_| zerror!("Compression error"))?;
 
-        // Verify wether the resulting compressed data is smaller than the initial input
+        // Verify whether the resulting compressed data is smaller than the initial input
         if support.len() < self.buffer.len() {
             Ok(Finalize::Buffer)
         } else {

@@ -20,10 +20,10 @@ use std::{
 };
 
 use zenoh_core::{Resolvable, Wait};
-#[cfg(feature = "unstable")]
-use zenoh_protocol::core::EntityGlobalId;
 use zenoh_protocol::{core::Reliability, network::declare::subscriber::ext::SubscriberInfo};
 use zenoh_result::ZResult;
+#[cfg(feature = "unstable")]
+use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
 
 use super::{
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
@@ -37,7 +37,6 @@ pub(crate) struct SubscriberState {
     pub(crate) id: Id,
     pub(crate) remote_id: Id,
     pub(crate) key_expr: KeyExpr<'static>,
-    pub(crate) scope: Option<KeyExpr<'static>>,
     pub(crate) origin: Locality,
     pub(crate) callback: Callback<'static, Sample>,
 }
@@ -78,7 +77,8 @@ impl fmt::Debug for SubscriberState {
 pub(crate) struct SubscriberInner<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<SubscriberState>,
-    pub(crate) alive: bool,
+    pub(crate) kind: SubscriberKind,
+    pub(crate) undeclare_on_drop: bool,
 }
 
 impl<'a> SubscriberInner<'a> {
@@ -142,10 +142,11 @@ impl Resolvable for SubscriberUndeclaration<'_> {
 
 impl Wait for SubscriberUndeclaration<'_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        self.subscriber.alive = false;
+        // set the flag first to avoid double panic if this function panic
+        self.subscriber.undeclare_on_drop = false;
         self.subscriber
             .session
-            .undeclare_subscriber_inner(self.subscriber.state.id)
+            .undeclare_subscriber_inner(self.subscriber.state.id, self.subscriber.kind)
     }
 }
 
@@ -160,8 +161,10 @@ impl IntoFuture for SubscriberUndeclaration<'_> {
 
 impl Drop for SubscriberInner<'_> {
     fn drop(&mut self) {
-        if self.alive {
-            let _ = self.session.undeclare_subscriber_inner(self.state.id);
+        if self.undeclare_on_drop {
+            let _ = self
+                .session
+                .undeclare_subscriber_inner(self.state.id, self.kind);
         }
     }
 }
@@ -282,7 +285,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the samples for this subscription with a [`Handler`](crate::prelude::IntoHandler).
+    /// Receive the samples for this subscription with a [`Handler`](crate::handlers::IntoHandler).
     ///
     /// # Examples
     /// ```no_run
@@ -376,7 +379,6 @@ where
         session
             .declare_subscriber_inner(
                 &key_expr,
-                &None,
                 self.origin,
                 callback,
                 &SubscriberInfo {
@@ -387,7 +389,8 @@ where
                 subscriber: SubscriberInner {
                     session,
                     state: sub_state,
-                    alive: true,
+                    kind: SubscriberKind::Subscriber,
+                    undeclare_on_drop: true,
                 },
                 handler: receiver,
             })
@@ -407,10 +410,10 @@ where
     }
 }
 
-/// A subscriber that provides data through a [`Handler`](crate::prelude::IntoHandler).
+/// A subscriber that provides data through a [`Handler`](crate::handlers::IntoHandler).
 ///
 /// Subscribers can be created from a zenoh [`Session`](crate::Session)
-/// with the [`declare_subscriber`](crate::SessionDeclarations::declare_subscriber) function
+/// with the [`declare_subscriber`](crate::session::SessionDeclarations::declare_subscriber) function
 /// and the [`with`](SubscriberBuilder::with) function
 /// of the resulting builder.
 ///
@@ -458,10 +461,11 @@ impl<'a, Handler> Subscriber<'a, Handler> {
     /// ```
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
-        EntityGlobalId {
-            zid: self.subscriber.session.zid(),
+        EntityGlobalIdProto {
+            zid: self.subscriber.session.zid().into(),
             eid: self.subscriber.state.id,
         }
+        .into()
     }
 
     /// Returns the [`KeyExpr`] this Subscriber subscribes to.
@@ -505,6 +509,16 @@ impl<'a, Handler> Subscriber<'a, Handler> {
     pub fn undeclare(self) -> SubscriberUndeclaration<'a> {
         self.subscriber.undeclare()
     }
+
+    /// Make the subscriber run in background, until the session is closed.
+    #[inline]
+    #[zenoh_macros::unstable]
+    pub fn background(mut self) {
+        // It's not necessary to undeclare this resource when session close, as other sessions
+        // will clean all resources related to the closed one.
+        // So we can just never undeclare it.
+        self.subscriber.undeclare_on_drop = false;
+    }
 }
 
 impl<'a, T> Undeclarable<(), SubscriberUndeclaration<'a>> for Subscriber<'a, T> {
@@ -528,3 +542,9 @@ impl<Handler> DerefMut for Subscriber<'_, Handler> {
 
 /// A [`Subscriber`] that provides data through a `flume` channel.
 pub type FlumeSubscriber<'a> = Subscriber<'a, flume::Receiver<Sample>>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SubscriberKind {
+    Subscriber,
+    LivelinessSubscriber,
+}

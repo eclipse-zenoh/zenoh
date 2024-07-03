@@ -75,7 +75,7 @@ where
 {
     type Node = KeyExprTreeNode<Weight, Wildness, Children>;
     fn node(&'a self, at: &keyexpr) -> Option<&'a Self::Node> {
-        let mut chunks = at.chunks();
+        let mut chunks = at.chunks_impl();
         let mut node = self.children.child_at(chunks.next().unwrap())?;
         for chunk in chunks {
             node = node.as_node().children.child_at(chunk)?;
@@ -94,7 +94,7 @@ where
         &'a Self::Node,
     >;
     fn intersecting_nodes(&'a self, ke: &'a keyexpr) -> Self::Intersection {
-        if self.wildness.get() || ke.is_wild() {
+        if self.wildness.get() || ke.is_wild_impl() {
             Intersection::new(&self.children, ke).into()
         } else {
             let node = self.node(ke);
@@ -108,7 +108,7 @@ where
         &'a Self::Node,
     >;
     fn included_nodes(&'a self, ke: &'a keyexpr) -> Self::Inclusion {
-        if self.wildness.get() || ke.is_wild() {
+        if self.wildness.get() || ke.is_wild_impl() {
             Inclusion::new(&self.children, ke).into()
         } else {
             let node = self.node(ke);
@@ -122,7 +122,7 @@ where
         &'a Self::Node,
     >;
     fn nodes_including(&'a self, ke: &'a keyexpr) -> Self::Includer {
-        if self.wildness.get() || ke.is_wild() {
+        if self.wildness.get() || ke.is_wild_impl() {
             Includer::new(&self.children, ke).into()
         } else {
             let node = self.node(ke);
@@ -145,7 +145,7 @@ where
         > + 'a,
 {
     fn node_mut<'b>(&'b mut self, at: &keyexpr) -> Option<&'b mut Self::Node> {
-        let mut chunks = at.chunks();
+        let mut chunks = at.chunks_impl();
         let mut node = self.children.child_at_mut(chunks.next().unwrap())?;
         for chunk in chunks {
             node = node.as_node_mut().children.child_at_mut(chunk)?;
@@ -158,7 +158,7 @@ where
         if !node.children.is_empty() {
             node.weight.take()
         } else {
-            let chunk = unsafe { core::mem::transmute::<_, &keyexpr>(node.chunk()) };
+            let chunk = unsafe { core::mem::transmute::<&keyexpr, &keyexpr>(node.chunk()) };
             match node.parent {
                 None => &mut self.children,
                 Some(parent) => unsafe { &mut (*parent.as_ptr()).children },
@@ -169,10 +169,10 @@ where
     }
 
     fn node_mut_or_create<'b>(&'b mut self, at: &keyexpr) -> &'b mut Self::Node {
-        if at.is_wild() {
+        if at.is_wild_impl() {
             self.wildness.set(true);
         }
-        let mut chunks = at.chunks();
+        let mut chunks = at.chunks_impl();
         let mut node = self
             .children
             .entry(chunks.next().unwrap())
@@ -210,7 +210,7 @@ where
         &'a mut Self::Node,
     >;
     fn intersecting_nodes_mut(&'a mut self, ke: &'a keyexpr) -> Self::IntersectionMut {
-        if self.wildness.get() || ke.is_wild() {
+        if self.wildness.get() || ke.is_wild_impl() {
             IntersectionMut::new(&mut self.children, ke).into()
         } else {
             let node = self.node_mut(ke);
@@ -223,7 +223,7 @@ where
         &'a mut Self::Node,
     >;
     fn included_nodes_mut(&'a mut self, ke: &'a keyexpr) -> Self::InclusionMut {
-        if self.wildness.get() || ke.is_wild() {
+        if self.wildness.get() || ke.is_wild_impl() {
             InclusionMut::new(&mut self.children, ke).into()
         } else {
             let node = self.node_mut(ke);
@@ -236,7 +236,7 @@ where
         &'a mut Self::Node,
     >;
     fn nodes_including_mut(&'a mut self, ke: &'a keyexpr) -> Self::IncluderMut {
-        if self.wildness.get() || ke.is_wild() {
+        if self.wildness.get() || ke.is_wild_impl() {
             IncluderMut::new(&mut self.children, ke).into()
         } else {
             let node = self.node_mut(ke);
@@ -365,7 +365,7 @@ where
             });
         if predicate(self) && self.children.is_empty() {
             result = PruneResult::Delete
-        } else if self.chunk.is_wild() {
+        } else if self.chunk.is_wild_impl() {
             result = PruneResult::Wild
         }
         result

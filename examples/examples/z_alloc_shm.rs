@@ -14,8 +14,8 @@
 use zenoh::{
     prelude::*,
     shm::{
-        AllocAlignment, BlockOn, Deallocate, Defragment, GarbageCollect,
-        PosixSharedMemoryProviderBackend, SharedMemoryProviderBuilder, POSIX_PROTOCOL_ID,
+        AllocAlignment, BlockOn, Deallocate, Defragment, GarbageCollect, PosixShmProviderBackend,
+        ShmProviderBuilder, POSIX_PROTOCOL_ID,
     },
     Config,
 };
@@ -29,14 +29,14 @@ async fn main() {
 
 async fn run() -> ZResult<()> {
     // create an SHM backend...
-    // NOTE: For extended PosixSharedMemoryProviderBackend API please check z_posix_shm_provider.rs
-    let backend = PosixSharedMemoryProviderBackend::builder()
+    // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
+    let backend = PosixShmProviderBackend::builder()
         .with_size(65536)
         .unwrap()
         .res()
         .unwrap();
     // ...and an SHM provider
-    let provider = SharedMemoryProviderBuilder::builder()
+    let provider = ShmProviderBuilder::builder()
         .protocol_id::<POSIX_PROTOCOL_ID>()
         .backend(backend)
         .res();
@@ -44,14 +44,14 @@ async fn run() -> ZResult<()> {
     // There are two API-defined ways of making shm buffer allocations: direct and through the layout...
 
     // Direct allocation
-    // The direct allocation calcualtes all layouting checks on each allocation. It is good for making
+    // The direct allocation calculates all layouting checks on each allocation. It is good for making
     // uniquely-layouted allocations. For making series of similar allocations, please refer to  layout
     // allocation API which is shown later in this example...
     let _direct_allocation = {
         // OPTION: Simple allocation
         let simple = provider.alloc(512).wait().unwrap();
 
-        // OPTION: Allocation with custom alignemnt and alloc policy customization
+        // OPTION: Allocation with custom alignment and alloc policy customization
         let _comprehensive = provider
             .alloc(512)
             .with_alignment(AllocAlignment::new(2))
@@ -60,7 +60,7 @@ async fn run() -> ZResult<()> {
             .wait()
             .unwrap();
 
-        // OPTION: Allocation with custom alignemnt and async alloc policy
+        // OPTION: Allocation with custom alignment and async alloc policy
         let _async = provider
             .alloc(512)
             .with_alignment(AllocAlignment::new(2))
@@ -90,9 +90,9 @@ async fn run() -> ZResult<()> {
         simple_layout
     };
 
-    // Allocate SharedMemoryBuf
+    // Allocate ShmBufInner
     // Policy is a generics-based API to describe necessary allocation behaviour
-    // that will be higly optimized at compile-time.
+    // that will be highly optimized at compile-time.
     // Policy resolvable can be sync and async.
     // The basic policies are:
     // -JustAlloc (sync)

@@ -3,6 +3,7 @@
 ## Start instructions
 
    When Zenoh is built in release mode:
+
    ```bash
    ./target/release/example/<example_name>
    ```
@@ -20,6 +21,7 @@
    Scouts for Zenoh peers and routers available on the network.
 
    Typical usage:
+
    ```bash
    z_scout
    ```
@@ -29,10 +31,10 @@
    Gets information about the Zenoh session.
 
    Typical usage:
+
    ```bash
    z_info
    ```
-
 
 ### z_put
 
@@ -41,10 +43,13 @@
    and [z_storage](#z_storage) examples.
 
    Typical usage:
+
    ```bash
    z_put
    ```
+
    or
+
    ```bash
    z_put -k demo/example/test -v 'Hello World'
    ```
@@ -55,10 +60,13 @@
    The published value will be received by all matching subscribers, for instance the [z_sub](#z_sub) and [z_storage](#z_storage) examples.
 
    Typical usage:
+
    ```bash
    z_pub
    ```
+
    or
+
    ```bash
    z_pub -k demo/example/test -v 'Hello World'
    ```
@@ -69,10 +77,13 @@
    The subscriber will be notified of each `put` or `delete` made on any key expression matching the subscriber key expression, and will print this notification.
 
    Typical usage:
+
    ```bash
    z_sub
    ```
+
    or
+
    ```bash
    z_sub -k 'demo/**'
    ```
@@ -82,14 +93,16 @@
    Declares a key expression and a pull subscriber.  
    On each pull, the pull subscriber will be notified of the last N `put` or `delete` made on each key expression matching the subscriber key expression, and will print this notification.
 
-
    Typical usage:
+
    ```bash
    z_pull
    ```
+
    or
+
    ```bash
-      z_pull -k demo/** --size 3
+   z_pull -k demo/** --size 3
    ```
 
 ### z_get
@@ -99,10 +112,13 @@
    will receive this query and reply with paths/values that will be received by the receiver stream.
 
    Typical usage:
+
    ```bash
    z_get
    ```
+
    or
+
    ```bash
    z_get -s 'demo/**'
    ```
@@ -114,10 +130,13 @@
    with a selector that matches the path, and will return a value to the querier.
 
    Typical usage:
+
    ```bash
    z_queryable
    ```
+
    or
+
    ```bash
    z_queryable -k demo/example/queryable -v 'This is the result'
    ```
@@ -131,10 +150,13 @@
    and that match the queried selector.
 
    Typical usage:
+
    ```bash
    z_storage
    ```
+
    or
+
    ```bash
    z_storage -k 'demo/**'
    ```
@@ -145,11 +167,13 @@
    Note that on subscriber side, the same `z_sub` example than for non-shared-memory example is used.
 
    Typical Subscriber usage:
+
    ```bash
    z_sub
    ```
 
    Typical Publisher usage:
+
    ```bash
    z_pub_shm
    ```
@@ -161,11 +185,13 @@
    put operations and a subscriber receiving notifications of those puts.
 
    Typical Subscriber usage:
+
    ```bash
    z_sub_thr
    ```
 
    Typical Publisher usage:
+
    ```bash
    z_pub_thr 1024
    ```
@@ -182,11 +208,13 @@
   :warning: z_pong needs to start first to avoid missing the kickoff from z_ping.
 
    Typical Pong usage:
+
    ```bash
    z_pong
    ```
 
    Typical Ping usage:
+
    ```bash
    z_ping 1024
    ```
@@ -200,11 +228,13 @@
    Note that on subscriber side, the same `z_sub_thr` example than for non-shared-memory example is used.
 
    Typical Subscriber usage:
+
    ```bash
    z_sub_thr
    ```
 
    Typical Publisher usage:
+
    ```bash
    z_pub_shm_thr
    ```
@@ -213,14 +243,17 @@
 
    Declares a liveliness token on a given key expression (`group1/zenoh-rs` by default).
    This token will be seen alive byt the `z_get_liveliness` and `z_sub_liveliness` until
-   user explicitely drops the token by pressing `'d'` or implicitely dropped by terminating
+   user explicitly drops the token by pressing `'d'` or implicitly dropped by terminating
    or killing the `z_liveliness` example.
 
    Typical usage:
+
    ```bash
    z_liveliness
    ```
+
    or
+
    ```bash
    z_liveliness -k 'group1/member1'
    ```
@@ -231,10 +264,13 @@
    (`group1/**` by default). Those tokens could be declared by the `z_liveliness` example.
 
    Typical usage:
+
    ```bash
    z_get_liveliness
    ```
+
    or
+
    ```bash
    z_get_liveliness -k 'group1/**'
    ```
@@ -245,14 +281,21 @@
    liveliness tokens being dropped) that match a given key expression
    (`group1/**` by default). Those tokens could be declared by the `z_liveliness`
    example.
-   Note: the `z_sub_liveliness` example will not receive informations about
+   Note: the `z_sub_liveliness` example will not receive information about
    matching liveliness tokens that were alive before it's start.
 
    Typical usage:
+
    ```bash
    z_sub_liveliness
    ```
+
    or
+
    ```bash
    z_sub_liveliness -k 'group1/**'
    ```
+
+### z_bytes
+
+   Show how to serialize different message types into ZBytes, and then deserialize from ZBytes to the original message types.

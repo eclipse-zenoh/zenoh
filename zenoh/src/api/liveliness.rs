@@ -21,26 +21,16 @@ use std::{
 
 use zenoh_config::unwrap_or_default;
 use zenoh_core::{Resolvable, Resolve, Result as ZResult, Wait};
-use zenoh_keyexpr::keyexpr;
-use zenoh_protocol::network::{declare::subscriber::ext::SubscriberInfo, request};
 
 use super::{
     handlers::{locked, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
-    query::{QueryConsolidation, QueryTarget, Reply},
-    sample::{Locality, Sample, SourceInfo},
+    query::Reply,
+    sample::{Locality, Sample},
     session::{Session, SessionRef, Undeclarable},
     subscriber::{Subscriber, SubscriberInner},
     Id,
 };
-
-#[zenoh_macros::unstable]
-pub(crate) static PREFIX_LIVELINESS: &str = crate::net::routing::PREFIX_LIVELINESS;
-
-#[zenoh_macros::unstable]
-lazy_static::lazy_static!(
-    pub(crate) static ref KE_PREFIX_LIVELINESS: &'static keyexpr = unsafe { keyexpr::from_str_unchecked(PREFIX_LIVELINESS) };
-);
 
 /// A structure with functions to declare a
 /// [`LivelinessToken`](LivelinessToken), query
@@ -50,14 +40,12 @@ lazy_static::lazy_static!(
 /// A [`LivelinessToken`](LivelinessToken) is a token which liveliness is tied
 /// to the Zenoh [`Session`](Session) and can be monitored by remote applications.
 ///
-/// A [`LivelinessToken`](LivelinessToken) with key `key/expression` can be
-/// queried or subscribed to on key `@/liveliness/key/expression`.
-///
 /// The `Liveliness` structure can be obtained with the
 /// [`Session::liveliness()`](Session::liveliness) function
 /// of the [`Session`] struct.
 ///
 /// # Examples
+/// ### Declaring a token
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
@@ -69,6 +57,39 @@ lazy_static::lazy_static!(
 ///     .declare_token("key/expression")
 ///     .await
 ///     .unwrap();
+/// # }
+/// ```
+///
+/// ### Querying tokens
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::prelude::*;
+///
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let replies = session.liveliness().get("key/**").await.unwrap();
+/// while let Ok(reply) = replies.recv_async().await {
+///     if let Ok(sample) = reply.result() {
+///         println!(">> Liveliness token {}", sample.key_expr());
+///     }
+/// }
+/// # }
+/// ```
+///
+/// ### Subscribing to liveliness changes
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::{prelude::*, sample::SampleKind};
+///
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let subscriber = session.liveliness().declare_subscriber("key/**").await.unwrap();
+/// while let Ok(sample) = subscriber.recv_async().await {
+///     match sample.kind() {
+///         SampleKind::Put => println!("New liveliness: {}", sample.key_expr()),
+///         SampleKind::Delete => println!("Lost liveliness: {}", sample.key_expr()),
+///     }
+/// }
 /// # }
 /// ```
 #[zenoh_macros::unstable]
@@ -235,7 +256,7 @@ impl Wait for LivelinessTokenBuilder<'_, '_> {
             .map(|tok_state| LivelinessToken {
                 session,
                 state: tok_state,
-                alive: true,
+                undeclare_on_drop: true,
             })
     }
 }
@@ -259,9 +280,6 @@ pub(crate) struct LivelinessTokenState {
 
 /// A token whose liveliness is tied to the Zenoh [`Session`](Session)
 /// and can be monitored by remote applications.
-///
-/// A `LivelinessToken` with key `key/expression` can be queried or subscribed
-/// to on key `@/liveliness/key/expression`.
 ///
 /// A declared liveliness token will be seen as alive by any other Zenoh
 /// application in the system that monitors it while the liveliness token
@@ -291,7 +309,7 @@ pub(crate) struct LivelinessTokenState {
 pub struct LivelinessToken<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<LivelinessTokenState>,
-    pub(crate) alive: bool,
+    undeclare_on_drop: bool,
 }
 
 /// A [`Resolvable`] returned when undeclaring a [`LivelinessToken`](LivelinessToken).
@@ -326,7 +344,8 @@ impl Resolvable for LivelinessTokenUndeclaration<'_> {
 #[zenoh_macros::unstable]
 impl Wait for LivelinessTokenUndeclaration<'_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        self.token.alive = false;
+        // set the flag first to avoid double panic if this function panic
+        self.token.undeclare_on_drop = false;
         self.token.session.undeclare_liveliness(self.token.state.id)
     }
 }
@@ -369,6 +388,16 @@ impl<'a> LivelinessToken<'a> {
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())
     }
+
+    /// Keep this liveliness token in background, until the session is closed.
+    #[inline]
+    #[zenoh_macros::unstable]
+    pub fn background(mut self) {
+        // It's not necessary to undeclare this resource when session close, as other sessions
+        // will clean all resources related to the closed one.
+        // So we can just never undeclare it.
+        self.undeclare_on_drop = false;
+    }
 }
 
 #[zenoh_macros::unstable]
@@ -381,13 +410,13 @@ impl<'a> Undeclarable<(), LivelinessTokenUndeclaration<'a>> for LivelinessToken<
 #[zenoh_macros::unstable]
 impl Drop for LivelinessToken<'_> {
     fn drop(&mut self) {
-        if self.alive {
+        if self.undeclare_on_drop {
             let _ = self.session.undeclare_liveliness(self.state.id);
         }
     }
 }
 
-/// A builder for initializing a [`FlumeSubscriber`](FlumeSubscriber).
+/// A builder for initializing a liveliness [`FlumeSubscriber`](FlumeSubscriber).
 ///
 /// # Examples
 /// ```
@@ -397,8 +426,8 @@ impl Drop for LivelinessToken<'_> {
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let subscriber = session
+///     .liveliness()
 ///     .declare_subscriber("key/expression")
-///     .best_effort()
 ///     .await
 ///     .unwrap();
 /// # }
@@ -414,7 +443,7 @@ pub struct LivelinessSubscriberBuilder<'a, 'b, Handler> {
 
 #[zenoh_macros::unstable]
 impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
-    /// Receive the samples for this subscription with a callback.
+    /// Receive the samples for this liveliness subscription with a callback.
     ///
     /// # Examples
     /// ```
@@ -424,6 +453,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let subscriber = session
+    ///     .liveliness()
     ///     .declare_subscriber("key/expression")
     ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr(), sample.payload()); })
     ///     .await
@@ -451,10 +481,10 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
         }
     }
 
-    /// Receive the samples for this subscription with a mutable callback.
+    /// Receive the samples for this liveliness subscription with a mutable callback.
     ///
     /// Using this guarantees that your callback will never be called concurrently.
-    /// If your callback is also accepted by the [`callback`](SubscriberBuilder::callback) method, we suggest you use it instead of `callback_mut`
+    /// If your callback is also accepted by the [`callback`](LivelinessSubscriberBuilder::callback) method, we suggest you use it instead of `callback_mut`
     ///
     /// # Examples
     /// ```
@@ -465,6 +495,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let mut n = 0;
     /// let subscriber = session
+    ///     .liveliness()
     ///     .declare_subscriber("key/expression")
     ///     .callback_mut(move |_sample| { n += 1; })
     ///     .await
@@ -483,7 +514,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the samples for this subscription with a [`Handler`](crate::prelude::IntoHandler).
+    /// Receive the samples for this liveliness subscription with a [`Handler`](crate::prelude::IntoHandler).
     ///
     /// # Examples
     /// ```no_run
@@ -493,6 +524,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let subscriber = session
+    ///     .liveliness()
     ///     .declare_subscriber("key/expression")
     ///     .with(flume::bounded(32))
     ///     .await
@@ -538,22 +570,19 @@ where
 {
     #[zenoh_macros::unstable]
     fn wait(self) -> <Self as Resolvable>::To {
+        use super::subscriber::SubscriberKind;
+
         let key_expr = self.key_expr?;
         let session = self.session;
         let (callback, handler) = self.handler.into_handler();
         session
-            .declare_subscriber_inner(
-                &key_expr,
-                &Some(KeyExpr::from(*KE_PREFIX_LIVELINESS)),
-                Locality::default(),
-                callback,
-                &SubscriberInfo::DEFAULT,
-            )
+            .declare_liveliness_subscriber_inner(&key_expr, Locality::default(), callback)
             .map(|sub_state| Subscriber {
                 subscriber: SubscriberInner {
                     session,
                     state: sub_state,
-                    alive: true,
+                    kind: SubscriberKind::LivelinessSubscriber,
+                    undeclare_on_drop: true,
                 },
                 handler,
             })
@@ -644,7 +673,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
         }
     }
 
-    /// Receive the replies for this query with a mutable callback.
+    /// Receive the replies for this liveliness query with a mutable callback.
     ///
     /// Using this guarantees that your callback will never be called concurrently.
     /// If your callback is also accepted by the [`callback`](LivelinessGetBuilder::callback) method, we suggest you use it instead of `callback_mut`
@@ -676,7 +705,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the replies for this query with a [`Handler`](crate::prelude::IntoHandler).
+    /// Receive the replies for this liveliness query with a [`Handler`](crate::handlers::IntoHandler).
     ///
     /// # Examples
     /// ```
@@ -741,20 +770,7 @@ where
     fn wait(self) -> <Self as Resolvable>::To {
         let (callback, receiver) = self.handler.into_handler();
         self.session
-            .query(
-                &self.key_expr?.into(),
-                &Some(KeyExpr::from(*KE_PREFIX_LIVELINESS)),
-                QueryTarget::DEFAULT,
-                QueryConsolidation::DEFAULT,
-                request::ext::QoSType::REQUEST.into(),
-                Locality::default(),
-                self.timeout,
-                None,
-                #[cfg(feature = "unstable")]
-                None,
-                SourceInfo::empty(),
-                callback,
-            )
+            .liveliness_query(&self.key_expr?, self.timeout, callback)
             .map(|_| receiver)
     }
 }

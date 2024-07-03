@@ -22,7 +22,8 @@ use zenoh_config::Config;
 use zenoh_core::zlock;
 use zenoh_protocol::{
     core::{
-        key_expr::keyexpr, Encoding, ExprId, Reliability, WhatAmI, WireExpr, ZenohId, EMPTY_EXPR_ID,
+        key_expr::keyexpr, Encoding, ExprId, Reliability, WhatAmI, WireExpr, ZenohIdProto,
+        EMPTY_EXPR_ID,
     },
     network::{
         declare::subscriber::ext::SubscriberInfo, ext, Declare, DeclareBody, DeclareKeyExpr,
@@ -43,7 +44,7 @@ use crate::net::{
 fn base_test() {
     let config = Config::default();
     let router = Router::new(
-        ZenohId::try_from([1]).unwrap(),
+        ZenohIdProto::try_from([1]).unwrap(),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         &config,
@@ -78,6 +79,7 @@ fn base_test() {
         &WireExpr::from(1).with_suffix("four/five"),
         &sub_info,
         NodeId::default(),
+        &mut |p, m| p.send_declare(m),
     );
 
     Tables::print(&zread!(tables.tables));
@@ -139,7 +141,7 @@ fn match_test() {
 
     let config = Config::default();
     let router = Router::new(
-        ZenohId::try_from([1]).unwrap(),
+        ZenohIdProto::try_from([1]).unwrap(),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         &config,
@@ -179,7 +181,7 @@ fn match_test() {
 fn multisub_test() {
     let config = Config::default();
     let router = Router::new(
-        ZenohId::try_from([1]).unwrap(),
+        ZenohIdProto::try_from([1]).unwrap(),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         &config,
@@ -203,6 +205,7 @@ fn multisub_test() {
         &"sub".into(),
         &sub_info,
         NodeId::default(),
+        &mut |p, m| p.send_declare(m),
     );
     let optres = Resource::get_resource(zread!(tables.tables)._get_root(), "sub")
         .map(|res| Arc::downgrade(&res));
@@ -218,6 +221,7 @@ fn multisub_test() {
         &"sub".into(),
         &sub_info,
         NodeId::default(),
+        &mut |p, m| p.send_declare(m),
     );
     assert!(res.upgrade().is_some());
 
@@ -228,6 +232,7 @@ fn multisub_test() {
         0,
         &WireExpr::empty(),
         NodeId::default(),
+        &mut |p, m| p.send_declare(m),
     );
     assert!(res.upgrade().is_some());
 
@@ -238,6 +243,7 @@ fn multisub_test() {
         1,
         &WireExpr::empty(),
         NodeId::default(),
+        &mut |p, m| p.send_declare(m),
     );
     assert!(res.upgrade().is_none());
 
@@ -248,7 +254,7 @@ fn multisub_test() {
 async fn clean_test() {
     let config = Config::default();
     let router = Router::new(
-        ZenohId::try_from([1]).unwrap(),
+        ZenohIdProto::try_from([1]).unwrap(),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         &config,
@@ -322,6 +328,7 @@ async fn clean_test() {
         &"todrop1/todrop11".into(),
         &sub_info,
         NodeId::default(),
+        &mut |p, m| p.send_declare(m),
     );
     let optres2 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1/todrop11")
         .map(|res| Arc::downgrade(&res));
@@ -337,6 +344,7 @@ async fn clean_test() {
         &WireExpr::from(1).with_suffix("/todrop12"),
         &sub_info,
         NodeId::default(),
+        &mut |p, m| p.send_declare(m),
     );
     let optres3 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1/todrop12")
         .map(|res| Arc::downgrade(&res));
@@ -352,6 +360,7 @@ async fn clean_test() {
         1,
         &WireExpr::empty(),
         NodeId::default(),
+        &mut |p, m| p.send_declare(m),
     );
 
     println!("COUNT2: {}", res3.strong_count());
@@ -367,6 +376,7 @@ async fn clean_test() {
         0,
         &WireExpr::empty(),
         NodeId::default(),
+        &mut |p, m| p.send_declare(m),
     );
     assert!(res1.upgrade().is_some());
     assert!(res2.upgrade().is_none());
@@ -387,6 +397,7 @@ async fn clean_test() {
         &"todrop3".into(),
         &sub_info,
         NodeId::default(),
+        &mut |p, m| p.send_declare(m),
     );
     let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop3")
         .map(|res| Arc::downgrade(&res));
@@ -401,6 +412,7 @@ async fn clean_test() {
         2,
         &WireExpr::empty(),
         NodeId::default(),
+        &mut |p, m| p.send_declare(m),
     );
     assert!(res1.upgrade().is_some());
 
@@ -418,6 +430,7 @@ async fn clean_test() {
         &"todrop5".into(),
         &sub_info,
         NodeId::default(),
+        &mut |p, m| p.send_declare(m),
     );
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
@@ -427,6 +440,7 @@ async fn clean_test() {
         &"todrop6".into(),
         &sub_info,
         NodeId::default(),
+        &mut |p, m| p.send_declare(m),
     );
 
     let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop4")
@@ -568,7 +582,7 @@ impl EPrimitives for ClientPrimitives {
 fn client_test() {
     let config = Config::default();
     let router = Router::new(
-        ZenohId::try_from([1]).unwrap(),
+        ZenohIdProto::try_from([1]).unwrap(),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         &config,
@@ -609,6 +623,7 @@ fn client_test() {
         &WireExpr::from(11).with_suffix("/**"),
         &sub_info,
         NodeId::default(),
+        &mut |p, m| p.send_declare(m),
     );
     register_expr(
         &tables,
@@ -659,6 +674,7 @@ fn client_test() {
         &WireExpr::from(21).with_suffix("/**"),
         &sub_info,
         NodeId::default(),
+        &mut |p, m| p.send_declare(m),
     );
     register_expr(
         &tables,
@@ -709,6 +725,7 @@ fn client_test() {
         &WireExpr::from(31).with_suffix("/**"),
         &sub_info,
         NodeId::default(),
+        &mut |p, m| p.send_declare(m),
     );
 
     primitives0.clear_data();
@@ -734,13 +751,13 @@ fn client_test() {
         0,
     );
 
-    // functionnal check
+    // functional check
     assert!(primitives1.get_last_name().is_some());
     assert_eq!(primitives1.get_last_name().unwrap(), "test/client/z1_wr1");
     // mapping strategy check
     // assert_eq!(primitives1.get_last_key().unwrap(), KeyExpr::IdWithSuffix(21, "/z1_wr1".to_string()));
 
-    // functionnal check
+    // functional check
     assert!(primitives2.get_last_name().is_some());
     assert_eq!(primitives2.get_last_name().unwrap(), "test/client/z1_wr1");
     // mapping strategy check
@@ -768,13 +785,13 @@ fn client_test() {
         0,
     );
 
-    // functionnal check
+    // functional check
     assert!(primitives1.get_last_name().is_some());
     assert_eq!(primitives1.get_last_name().unwrap(), "test/client/z1_wr2");
     // mapping strategy check
     // assert_eq!(primitives1.get_last_key().unwrap(), KeyExpr::IdWithSuffix(21, "/z1_wr2".to_string()));
 
-    // functionnal check
+    // functional check
     assert!(primitives2.get_last_name().is_some());
     assert_eq!(primitives2.get_last_name().unwrap(), "test/client/z1_wr2");
     // mapping strategy check
@@ -802,13 +819,13 @@ fn client_test() {
         0,
     );
 
-    // functionnal check
+    // functional check
     assert!(primitives0.get_last_name().is_some());
     assert_eq!(primitives0.get_last_name().unwrap(), "test/client/**");
     // mapping strategy check
     // assert_eq!(primitives1.get_last_key().unwrap(), KeyExpr::IdWithSuffix(11, "/**".to_string()));
 
-    // functionnal check
+    // functional check
     assert!(primitives2.get_last_name().is_some());
     assert_eq!(primitives2.get_last_name().unwrap(), "test/client/**");
     // mapping strategy check
@@ -836,13 +853,13 @@ fn client_test() {
         0,
     );
 
-    // functionnal check
+    // functional check
     assert!(primitives1.get_last_name().is_some());
     assert_eq!(primitives1.get_last_name().unwrap(), "test/client/z1_pub1");
     // mapping strategy check
     // assert_eq!(primitives1.get_last_key().unwrap(), KeyExpr::IdWithSuffix(21, "/z1_pub1".to_string()));
 
-    // functionnal check
+    // functional check
     assert!(primitives2.get_last_name().is_some());
     assert_eq!(primitives2.get_last_name().unwrap(), "test/client/z1_pub1");
     // mapping strategy check
@@ -870,13 +887,13 @@ fn client_test() {
         0,
     );
 
-    // functionnal check
+    // functional check
     assert!(primitives0.get_last_name().is_some());
     assert_eq!(primitives0.get_last_name().unwrap(), "test/client/z2_pub1");
     // mapping strategy check
     // assert_eq!(primitives1.get_last_key().unwrap(), KeyExpr::IdWithSuffix(11, "/z2_pub1".to_string()));
 
-    // functionnal check
+    // functional check
     assert!(primitives2.get_last_name().is_some());
     assert_eq!(primitives2.get_last_name().unwrap(), "test/client/z2_pub1");
     // mapping strategy check

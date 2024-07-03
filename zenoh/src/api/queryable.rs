@@ -21,29 +21,32 @@ use std::{
 use uhlc::Timestamp;
 use zenoh_core::{Resolvable, Resolve, Wait};
 use zenoh_protocol::{
-    core::{CongestionControl, EntityId, WireExpr, ZenohId},
+    core::{CongestionControl, EntityId, Parameters, WireExpr, ZenohIdProto},
     network::{response, Mapping, RequestId, Response, ResponseFinal},
     zenoh::{self, reply::ReplyBody, Del, Put, ResponseBody},
 };
 use zenoh_result::ZResult;
 #[zenoh_macros::unstable]
 use {
-    super::{
-        builders::sample::SampleBuilderTrait, bytes::OptionZBytes, query::ReplyKeyExpr,
-        sample::SourceInfo,
-    },
-    zenoh_protocol::core::EntityGlobalId,
+    super::{query::ReplyKeyExpr, sample::SourceInfo},
+    zenoh_config::wrappers::EntityGlobalId,
+    zenoh_protocol::core::EntityGlobalIdProto,
 };
 
+#[zenoh_macros::unstable]
+use super::selector::ZenohParameters;
 use super::{
-    builders::sample::{QoSBuilderTrait, SampleBuilder, TimestampBuilderTrait, ValueBuilderTrait},
-    bytes::ZBytes,
+    builders::sample::{
+        EncodingBuilderTrait, QoSBuilderTrait, SampleBuilder, SampleBuilderTrait,
+        TimestampBuilderTrait,
+    },
+    bytes::{OptionZBytes, ZBytes},
     encoding::Encoding,
     handlers::{locked, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
     publisher::Priority,
     sample::{Locality, QoSBuilder, Sample, SampleKind},
-    selector::{Parameters, Selector},
+    selector::Selector,
     session::{SessionRef, Undeclarable},
     value::Value,
     Id,
@@ -54,7 +57,7 @@ pub(crate) struct QueryInner {
     pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) parameters: Parameters<'static>,
     pub(crate) qid: RequestId,
-    pub(crate) zid: ZenohId,
+    pub(crate) zid: ZenohIdProto,
     pub(crate) primitives: Arc<dyn Primitives>,
 }
 
@@ -74,7 +77,6 @@ pub struct Query {
     pub(crate) inner: Arc<QueryInner>,
     pub(crate) eid: EntityId,
     pub(crate) value: Option<Value>,
-    #[cfg(feature = "unstable")]
     pub(crate) attachment: Option<ZBytes>,
 }
 
@@ -82,10 +84,7 @@ impl Query {
     /// The full [`Selector`] of this Query.
     #[inline(always)]
     pub fn selector(&self) -> Selector<'_> {
-        Selector {
-            key_expr: self.inner.key_expr.clone(),
-            parameters: self.inner.parameters.clone(),
-        }
+        Selector::borrowed(&self.inner.key_expr, &self.inner.parameters)
     }
 
     /// The key selector part of this Query.
@@ -96,20 +95,8 @@ impl Query {
 
     /// This Query's selector parameters.
     #[inline(always)]
-    pub fn parameters(&self) -> &Parameters {
+    pub fn parameters(&self) -> &Parameters<'static> {
         &self.inner.parameters
-    }
-
-    /// This Query's value.
-    #[inline(always)]
-    pub fn value(&self) -> Option<&Value> {
-        self.value.as_ref()
-    }
-
-    /// This Query's value.
-    #[inline(always)]
-    pub fn value_mut(&mut self) -> Option<&mut Value> {
-        self.value.as_mut()
     }
 
     /// This Query's payload.
@@ -131,13 +118,11 @@ impl Query {
     }
 
     /// This Query's attachment.
-    #[zenoh_macros::unstable]
     pub fn attachment(&self) -> Option<&ZBytes> {
         self.attachment.as_ref()
     }
 
     /// This Query's attachment.
-    #[zenoh_macros::unstable]
     pub fn attachment_mut(&mut self) -> Option<&mut ZBytes> {
         self.attachment.as_mut()
     }
@@ -149,8 +134,7 @@ impl Query {
     /// replying on a disjoint key expression will result in an error when resolving the reply.
     /// This api is for internal use only.
     #[inline(always)]
-    #[cfg(feature = "unstable")]
-    #[doc(hidden)]
+    #[zenoh_macros::internal]
     pub fn reply_sample(&self, sample: Sample) -> ReplySample<'_> {
         ReplySample {
             query: self,
@@ -185,7 +169,6 @@ impl Query {
             timestamp: None,
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
-            #[cfg(feature = "unstable")]
             attachment: None,
         }
     }
@@ -225,7 +208,6 @@ impl Query {
             timestamp: None,
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
-            #[cfg(feature = "unstable")]
             attachment: None,
         }
     }
@@ -244,11 +226,7 @@ impl Query {
     }
     #[cfg(feature = "unstable")]
     fn _accepts_any_replies(&self) -> ZResult<bool> {
-        use crate::api::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM;
-
-        Ok(self
-            .parameters()
-            .contains_key(_REPLY_KEY_EXPR_ANY_SEL_PARAM))
+        Ok(self.parameters().reply_key_expr_any())
     }
 }
 
@@ -272,21 +250,25 @@ impl fmt::Display for Query {
     }
 }
 
+#[zenoh_macros::internal]
 pub struct ReplySample<'a> {
     query: &'a Query,
     sample: Sample,
 }
 
+#[zenoh_macros::internal]
 impl Resolvable for ReplySample<'_> {
     type To = ZResult<()>;
 }
 
+#[zenoh_macros::internal]
 impl Wait for ReplySample<'_> {
     fn wait(self) -> <Self as Resolvable>::To {
         self.query._reply_sample(self.sample)
     }
 }
 
+#[zenoh_macros::internal]
 impl IntoFuture for ReplySample<'_> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
@@ -313,11 +295,8 @@ pub struct ReplyBuilder<'a, 'b, T> {
     kind: T,
     timestamp: Option<Timestamp>,
     qos: QoSBuilder,
-
     #[cfg(feature = "unstable")]
     source_info: SourceInfo,
-
-    #[cfg(feature = "unstable")]
     attachment: Option<ZBytes>,
 }
 
@@ -330,9 +309,7 @@ impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
     }
 }
 
-#[cfg(feature = "unstable")]
 impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
-    #[cfg(feature = "unstable")]
     fn attachment<U: Into<OptionZBytes>>(self, attachment: U) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
@@ -367,30 +344,13 @@ impl<T> QoSBuilderTrait for ReplyBuilder<'_, '_, T> {
     }
 }
 
-impl ValueBuilderTrait for ReplyBuilder<'_, '_, ReplyBuilderPut> {
+impl EncodingBuilderTrait for ReplyBuilder<'_, '_, ReplyBuilderPut> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
             kind: ReplyBuilderPut {
                 encoding: encoding.into(),
                 ..self.kind
             },
-            ..self
-        }
-    }
-
-    fn payload<T: Into<ZBytes>>(self, payload: T) -> Self {
-        Self {
-            kind: ReplyBuilderPut {
-                payload: payload.into(),
-                ..self.kind
-            },
-            ..self
-        }
-    }
-    fn value<T: Into<Value>>(self, value: T) -> Self {
-        let Value { payload, encoding } = value.into();
-        Self {
-            kind: ReplyBuilderPut { payload, encoding },
             ..self
         }
     }
@@ -409,7 +369,6 @@ impl Wait for ReplyBuilder<'_, '_, ReplyBuilderPut> {
             .qos(self.qos.into());
         #[cfg(feature = "unstable")]
         let sample = sample.source_info(self.source_info);
-        #[cfg(feature = "unstable")]
         let sample = sample.attachment(self.attachment);
         self.query._reply_sample(sample.into())
     }
@@ -423,7 +382,6 @@ impl Wait for ReplyBuilder<'_, '_, ReplyBuilderDelete> {
             .qos(self.qos.into());
         #[cfg(feature = "unstable")]
         let sample = sample.source_info(self.source_info);
-        #[cfg(feature = "unstable")]
         let sample = sample.attachment(self.attachment);
         self.query._reply_sample(sample.into())
     }
@@ -460,20 +418,14 @@ impl Query {
                         ext_sinfo,
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
-                        #[cfg(feature = "unstable")]
                         ext_attachment: sample.attachment.map(|a| a.into()),
-                        #[cfg(not(feature = "unstable"))]
-                        ext_attachment: None,
                         ext_unknown: vec![],
                         payload: sample.payload.into(),
                     }),
                     SampleKind::Delete => ReplyBody::Del(Del {
                         timestamp: sample.timestamp,
                         ext_sinfo,
-                        #[cfg(feature = "unstable")]
                         ext_attachment: sample.attachment.map(|a| a.into()),
-                        #[cfg(not(feature = "unstable"))]
-                        ext_attachment: None,
                         ext_unknown: vec![],
                     }),
                 },
@@ -515,24 +467,11 @@ pub struct ReplyErrBuilder<'a> {
     value: Value,
 }
 
-impl ValueBuilderTrait for ReplyErrBuilder<'_> {
+impl EncodingBuilderTrait for ReplyErrBuilder<'_> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         let mut value = self.value.clone();
         value.encoding = encoding.into();
         Self { value, ..self }
-    }
-
-    fn payload<T: Into<ZBytes>>(self, payload: T) -> Self {
-        let mut value = self.value.clone();
-        value.payload = payload.into();
-        Self { value, ..self }
-    }
-
-    fn value<T: Into<Value>>(self, value: T) -> Self {
-        Self {
-            value: value.into(),
-            ..self
-        }
     }
 }
 
@@ -625,7 +564,7 @@ impl fmt::Debug for QueryableState {
 pub(crate) struct CallbackQueryable<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<QueryableState>,
-    pub(crate) alive: bool,
+    undeclare_on_drop: bool,
 }
 
 impl<'a> Undeclarable<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> {
@@ -658,7 +597,8 @@ impl Resolvable for QueryableUndeclaration<'_> {
 
 impl Wait for QueryableUndeclaration<'_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        self.queryable.alive = false;
+        // set the flag first to avoid double panic if this function panic
+        self.queryable.undeclare_on_drop = false;
         self.queryable
             .session
             .close_queryable(self.queryable.state.id)
@@ -676,7 +616,7 @@ impl<'a> IntoFuture for QueryableUndeclaration<'a> {
 
 impl Drop for CallbackQueryable<'_> {
     fn drop(&mut self) {
-        if self.alive {
+        if self.undeclare_on_drop {
             let _ = self.session.close_queryable(self.state.id);
         }
     }
@@ -773,7 +713,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the queries for this Queryable with a [`Handler`](crate::prelude::IntoHandler).
+    /// Receive the queries for this Queryable with a [`Handler`](crate::handlers::IntoHandler).
     ///
     /// # Examples
     /// ```no_run
@@ -831,10 +771,10 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
     }
 }
 
-/// A queryable that provides data through a [`Handler`](crate::prelude::IntoHandler).
+/// A queryable that provides data through a [`Handler`](crate::handlers::IntoHandler).
 ///
-/// Queryables can be created from a zenoh [`Session`]
-/// with the [`declare_queryable`](crate::Session::declare_queryable) function
+/// Queryables can be created from a zenoh [`Session`](crate::Session)
+/// with the [`declare_queryable`](crate::session::SessionDeclarations::declare_queryable) function
 /// and the [`with`](QueryableBuilder::with) function
 /// of the resulting builder.
 ///
@@ -885,10 +825,11 @@ impl<'a, Handler> Queryable<'a, Handler> {
     /// ```
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
-        EntityGlobalId {
-            zid: self.queryable.session.zid(),
+        EntityGlobalIdProto {
+            zid: self.queryable.session.zid().into(),
             eid: self.queryable.state.id,
         }
+        .into()
     }
 
     /// Returns a reference to this queryable's handler.
@@ -908,6 +849,16 @@ impl<'a, Handler> Queryable<'a, Handler> {
     #[inline]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())
+    }
+
+    /// Make the queryable run in background, until the session is closed.
+    #[inline]
+    #[zenoh_macros::unstable]
+    pub fn background(mut self) {
+        // It's not necessary to undeclare this resource when session close, as other sessions
+        // will clean all resources related to the closed one.
+        // So we can just never undeclare it.
+        self.queryable.undeclare_on_drop = false;
     }
 }
 
@@ -958,7 +909,7 @@ where
                 queryable: CallbackQueryable {
                     session,
                     state: qable_state,
-                    alive: true,
+                    undeclare_on_drop: true,
                 },
                 handler: receiver,
             })

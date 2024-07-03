@@ -32,7 +32,7 @@ zconfigurable! {
     pub static ref LIB_DEFAULT_SEARCH_PATHS: String = ".:~/.zenoh/lib:/opt/homebrew/lib:/usr/local/lib:/usr/lib".to_string();
 }
 
-/// LibLoader allows search for librairies and to load them.
+/// LibLoader allows search for libraries and to load them.
 #[derive(Clone, Debug)]
 pub struct LibLoader {
     search_paths: Vec<PathBuf>,
@@ -145,7 +145,7 @@ impl LibLoader {
         bail!("Library file '{}' not found", filename)
     }
 
-    /// Search and load all librairies with filename starting with [struct@LIB_PREFIX]+`prefix` and ending with [struct@LIB_SUFFIX].
+    /// Search and load all libraries with filename starting with [struct@LIB_PREFIX]+`prefix` and ending with [struct@LIB_SUFFIX].
     /// The result is a list of tuple with:
     ///    * the [Library]
     ///    * its full path

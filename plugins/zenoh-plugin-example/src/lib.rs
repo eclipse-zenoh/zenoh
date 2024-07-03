@@ -26,15 +26,18 @@ use std::{
 use futures::select;
 use tracing::{debug, info};
 use zenoh::{
+    internal::{
+        bail,
+        plugins::{RunningPluginTrait, ZenohPlugin},
+        runtime::Runtime,
+        zlock,
+    },
     key_expr::{keyexpr, KeyExpr},
-    plugins::{RunningPluginTrait, ZenohPlugin},
-    runtime::Runtime,
+    prelude::ZResult,
     sample::Sample,
     session::SessionDeclarations,
 };
-use zenoh_core::zlock;
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
-use zenoh_result::{bail, ZResult};
 
 // The struct implementing the ZenohPlugin and ZenohPlugin traits
 pub struct ExamplePlugin {}
@@ -50,7 +53,7 @@ const DEFAULT_SELECTOR: &str = "demo/example/**";
 impl ZenohPlugin for ExamplePlugin {}
 impl Plugin for ExamplePlugin {
     type StartArgs = Runtime;
-    type Instance = zenoh::plugins::RunningPlugin;
+    type Instance = zenoh::internal::plugins::RunningPlugin;
 
     // A mandatory const to define, in case of the plugin is built as a standalone executable
     const DEFAULT_NAME: &'static str = "example";
@@ -181,7 +184,7 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
                 let query = query.unwrap();
                 info!("Handling query '{}'", query.selector());
                 for (key_expr, sample) in stored.iter() {
-                    if query.selector().key_expr().intersects(unsafe{keyexpr::from_str_unchecked(key_expr)}) {
+                    if query.key_expr().intersects(unsafe{keyexpr::from_str_unchecked(key_expr)}) {
                         query.reply_sample(sample.clone()).await.unwrap();
                     }
                 }

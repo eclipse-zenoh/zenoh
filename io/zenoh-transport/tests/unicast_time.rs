@@ -19,7 +19,7 @@ use std::{
 
 use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;
-use zenoh_protocol::core::{WhatAmI, ZenohId};
+use zenoh_protocol::core::{WhatAmI, ZenohIdProto};
 use zenoh_result::ZResult;
 use zenoh_transport::{
     multicast::TransportMulticast,
@@ -96,7 +96,7 @@ async fn time_transport(
         println!(">>> Universal transport");
     }
     /* [ROUTER] */
-    let router_id = ZenohId::try_from([1]).unwrap();
+    let router_id = ZenohIdProto::try_from([1]).unwrap();
 
     let router_handler = Arc::new(SHRouterOpenClose);
     // Create the router transport manager
@@ -116,7 +116,7 @@ async fn time_transport(
         .unwrap();
 
     /* [CLIENT] */
-    let client01_id = ZenohId::try_from([2]).unwrap();
+    let client01_id = ZenohIdProto::try_from([2]).unwrap();
 
     // Create the transport transport manager for the first client
     let unicast = make_transport_manager_builder(

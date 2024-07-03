@@ -15,14 +15,13 @@ use std::collections::{hash_map::Entry, HashMap};
 
 use async_std::sync::RwLock;
 use async_trait::async_trait;
-use zenoh::{key_expr::OwnedKeyExpr, time::Timestamp, value::Value};
+use zenoh::{internal::Value, key_expr::OwnedKeyExpr, prelude::*, time::Timestamp};
 use zenoh_backend_traits::{
     config::{StorageConfig, VolumeConfig},
     Capability, History, Persistence, Storage, StorageInsertionResult, StoredData, Volume,
     VolumeInstance,
 };
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin};
-use zenoh_result::ZResult;
 
 #[cfg(feature = "dynamic_plugin")]
 zenoh_plugin_trait::declare_plugin!(ExampleBackend);

@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
+#![cfg(feature = "test")]
 use std::{
     sync::{atomic::AtomicBool, Arc},
     time::Duration,
@@ -306,6 +306,6 @@ fn watchdog_validated_high_load() {
 #[test]
 #[ignore]
 fn watchdog_validated_overloaded_system() {
-    let _load = CpuLoad::exessive();
+    let _load = CpuLoad::excessive();
     execute_concurrent(1000, 10, watchdog_validated_overloaded_system_fn());
 }

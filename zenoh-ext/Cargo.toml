@@ -29,9 +29,7 @@ maintenance = { status = "actively-developed" }
 [features]
 unstable = []
 default = []
-shared-memory = [
-    "zenoh/shared-memory",
-]
+shared-memory = ["zenoh/shared-memory"]
 
 [dependencies]
 tokio = { workspace = true, features = [
@@ -50,8 +48,11 @@ tracing = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
-zenoh = { workspace = true, features = ["unstable"], default-features = false }
+zenoh = { workspace = true, features = ["unstable", "internal"], default-features = false }
 zenoh-macros = { workspace = true }
+
+[dev-dependencies]
+zenoh = { workspace = true, features = ["unstable"], default-features = true }
 
 [package.metadata.docs.rs]
 features = ["unstable"]

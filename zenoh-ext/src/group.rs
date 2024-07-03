@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! To manage groups and group memeberships
+//! To manage groups and group memberships
 
 use std::{
     collections::HashMap,
@@ -31,7 +31,8 @@ use zenoh::{
     internal::{bail, Condition, TaskController},
     key_expr::{keyexpr, KeyExpr, OwnedKeyExpr},
     prelude::*,
-    publisher::{Priority, Publisher},
+    pubsub::Publisher,
+    qos::Priority,
     Session,
 };
 

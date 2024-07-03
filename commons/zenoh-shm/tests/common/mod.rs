@@ -80,10 +80,11 @@ impl Drop for CpuLoad {
 }
 
 impl CpuLoad {
-    pub fn exessive() -> Self {
+    pub fn excessive() -> Self {
         Self::new(1000)
     }
 
+    #[cfg(feature = "test")]
     pub fn optimal_high() -> Self {
         Self::new(num_cpus::get())
     }

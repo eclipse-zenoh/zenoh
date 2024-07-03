@@ -11,14 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{whatami::WhatAmIMatcher, ZenohId};
+use crate::core::{whatami::WhatAmIMatcher, ZenohIdProto};
 
 /// # Scout message
 ///
 /// The [`Scout`] message MAY be sent at any point in time to discover the available zenoh nodes in the
 /// network. The [`Scout`] message SHOULD be sent in a multicast or broadcast fashion. Upon receiving a
 /// [`Scout`] message, a zenoh node MUST first verify whether the matching criteria are satisfied, then
-/// it SHOULD reply with a [`super::Hello`] message in a unicast fashion including all the requested
+/// it SHOULD reply with a [`super::HelloProto`] message in a unicast fashion including all the requested
 /// information.
 ///
 /// The scouting message flow is the following:
@@ -75,7 +75,7 @@ pub mod flag {
 pub struct Scout {
     pub version: u8,
     pub what: WhatAmIMatcher,
-    pub zid: Option<ZenohId>,
+    pub zid: Option<ZenohIdProto>,
 }
 
 impl Scout {
@@ -87,7 +87,7 @@ impl Scout {
 
         let version: u8 = rng.gen();
         let what = WhatAmIMatcher::rand();
-        let zid = rng.gen_bool(0.5).then_some(ZenohId::rand());
+        let zid = rng.gen_bool(0.5).then_some(ZenohIdProto::rand());
         Self { version, what, zid }
     }
 }

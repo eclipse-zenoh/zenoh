@@ -18,7 +18,7 @@ use zenoh_result::ZResult;
 
 use crate::{
     api::{
-        client::shared_memory_segment::SharedMemorySegment,
+        client::shm_segment::ShmSegment,
         common::types::{ChunkID, SegmentID},
     },
     posix_shm::array::ArrayInSHM,
@@ -27,11 +27,11 @@ use crate::{
 const POSIX_SHM_SEGMENT_PREFIX: &str = "posix_shm_provider_segment";
 
 #[derive(Debug)]
-pub(crate) struct PosixSharedMemorySegment {
+pub(crate) struct PosixShmSegment {
     pub(crate) segment: ArrayInSHM<SegmentID, u8, ChunkID>,
 }
 
-impl PosixSharedMemorySegment {
+impl PosixShmSegment {
     pub(crate) fn create(alloc_size: usize) -> ZResult<Self> {
         let segment = ArrayInSHM::create(alloc_size, POSIX_SHM_SEGMENT_PREFIX)?;
         Ok(Self { segment })
@@ -43,7 +43,7 @@ impl PosixSharedMemorySegment {
     }
 }
 
-impl SharedMemorySegment for PosixSharedMemorySegment {
+impl ShmSegment for PosixShmSegment {
     fn map(&self, chunk: ChunkID) -> ZResult<AtomicPtr<u8>> {
         unsafe { Ok(AtomicPtr::new(self.segment.elem_mut(chunk))) }
     }

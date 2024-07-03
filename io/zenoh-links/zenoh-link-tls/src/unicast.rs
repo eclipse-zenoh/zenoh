@@ -21,10 +21,11 @@ use tokio::{
 };
 use tokio_rustls::{TlsAcceptor, TlsConnector, TlsStream};
 use tokio_util::sync::CancellationToken;
+use x509_parser::prelude::*;
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
-    get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
-    ListenersUnicastIP, NewLinkChannelSender,
+    get_ip_interface_names, LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast,
+    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -36,6 +37,9 @@ use crate::{
     utils::{get_tls_addr, get_tls_host, get_tls_server_name, TlsClientConfig, TlsServerConfig},
     TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
 };
+
+#[derive(Default, Debug, PartialEq, Eq, Hash)]
+pub struct TlsCommonName(String);
 
 pub struct LinkUnicastTls {
     // The underlying socket as returned from the async-rustls library
@@ -56,6 +60,7 @@ pub struct LinkUnicastTls {
     // Make sure there are no concurrent read or writes
     write_mtx: AsyncMutex<()>,
     read_mtx: AsyncMutex<()>,
+    auth_identifier: LinkAuthId,
 }
 
 unsafe impl Send for LinkUnicastTls {}
@@ -66,6 +71,7 @@ impl LinkUnicastTls {
         socket: TlsStream<TcpStream>,
         src_addr: SocketAddr,
         dst_addr: SocketAddr,
+        auth_identifier: LinkAuthId,
     ) -> LinkUnicastTls {
         let (tcp_stream, _) = socket.get_ref();
         // Set the TLS nodelay option
@@ -99,6 +105,7 @@ impl LinkUnicastTls {
             dst_locator: Locator::new(TLS_LOCATOR_PREFIX, dst_addr.to_string(), "").unwrap(),
             write_mtx: AsyncMutex::new(()),
             read_mtx: AsyncMutex::new(()),
+            auth_identifier,
         }
     }
 
@@ -188,6 +195,11 @@ impl LinkUnicastTrait for LinkUnicastTls {
     #[inline(always)]
     fn is_streamed(&self) -> bool {
         true
+    }
+
+    #[inline(always)]
+    fn get_auth_id(&self) -> &LinkAuthId {
+        &self.auth_identifier
     }
 }
 
@@ -282,9 +294,18 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
                     e
                 )
             })?;
+
+        let (_, tls_conn) = tls_stream.get_ref();
+        let auth_identifier = get_server_cert_common_name(tls_conn)?;
+
         let tls_stream = TlsStream::Client(tls_stream);
 
-        let link = Arc::new(LinkUnicastTls::new(tls_stream, src_addr, dst_addr));
+        let link = Arc::new(LinkUnicastTls::new(
+            tls_stream,
+            src_addr,
+            dst_addr,
+            auth_identifier.into(),
+        ));
 
         Ok(LinkUnicast(link))
     }
@@ -373,6 +394,15 @@ async fn accept_task(
             res = accept(&socket) => {
                 match res {
                     Ok((tcp_stream, dst_addr)) => {
+                        // Get the right source address in case an unsepecified IP (i.e. 0.0.0.0 or [::]) is used
+                        let src_addr =  match tcp_stream.local_addr()  {
+                            Ok(sa) => sa,
+                            Err(e) => {
+                                tracing::debug!("Can not accept TLS connection: {}", e);
+                                continue;
+                            }
+                        };
+
                         // Accept the TLS connection
                         let tls_stream = match acceptor.accept(tcp_stream).await {
                             Ok(stream) => TlsStream::Server(stream),
@@ -383,9 +413,18 @@ async fn accept_task(
                             }
                         };
 
+                        // Get TLS auth identifier
+                        let (_, tls_conn) = tls_stream.get_ref();
+                        let auth_identifier = get_client_cert_common_name(tls_conn)?;
+
                         tracing::debug!("Accepted TLS connection on {:?}: {:?}", src_addr, dst_addr);
                         // Create the new link object
-                        let link = Arc::new(LinkUnicastTls::new(tls_stream, src_addr, dst_addr));
+                        let link = Arc::new(LinkUnicastTls::new(
+                            tls_stream,
+                            src_addr,
+                            dst_addr,
+                            auth_identifier.into(),
+                        ));
 
                         // Communicate the new link to the initial transport manager
                         if let Err(e) = manager.send_async(LinkUnicast(link)).await {
@@ -408,4 +447,57 @@ async fn accept_task(
     }
 
     Ok(())
+}
+
+fn get_client_cert_common_name(tls_conn: &rustls::CommonState) -> ZResult<TlsAuthId> {
+    if let Some(serv_certs) = tls_conn.peer_certificates() {
+        let (_, cert) = X509Certificate::from_der(serv_certs[0].as_ref())?;
+        let subject_name = &cert
+            .subject
+            .iter_common_name()
+            .next()
+            .and_then(|cn| cn.as_str().ok())
+            .unwrap();
+
+        Ok(TlsAuthId {
+            auth_value: Some(subject_name.to_string()),
+        })
+    } else {
+        Ok(TlsAuthId { auth_value: None })
+    }
+}
+
+fn get_server_cert_common_name(tls_conn: &rustls::ClientConnection) -> ZResult<TlsAuthId> {
+    let serv_certs = tls_conn.peer_certificates().unwrap();
+    let mut auth_id = TlsAuthId { auth_value: None };
+
+    // Need the first certificate in the chain so no need for looping
+    if let Some(item) = serv_certs.iter().next() {
+        let (_, cert) = X509Certificate::from_der(item.as_ref())?;
+        let subject_name = &cert
+            .subject
+            .iter_common_name()
+            .next()
+            .and_then(|cn| cn.as_str().ok())
+            .unwrap();
+
+        auth_id = TlsAuthId {
+            auth_value: Some(subject_name.to_string()),
+        };
+        return Ok(auth_id);
+    }
+    Ok(auth_id)
+}
+
+struct TlsAuthId {
+    auth_value: Option<String>,
+}
+
+impl From<TlsAuthId> for LinkAuthId {
+    fn from(value: TlsAuthId) -> Self {
+        LinkAuthId::builder()
+            .auth_type(LinkAuthType::Tls)
+            .auth_value(value.auth_value.clone())
+            .build()
+    }
 }

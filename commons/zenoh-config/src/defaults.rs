@@ -163,6 +163,7 @@ impl Default for LinkTxConf {
             batch_size: BatchSize::MAX,
             queue: QueueConf::default(),
             threads: num,
+            batching: true,
         }
     }
 }
@@ -216,7 +217,7 @@ impl Default for LinkRxConf {
 
 // Make explicit the value and ignore clippy warning
 #[allow(clippy::derivable_impls)]
-impl Default for SharedMemoryConf {
+impl Default for ShmConf {
     fn default() -> Self {
         Self { enabled: false }
     }

@@ -42,12 +42,12 @@
 //! KeTrees were designed to maximize code reuse. As such, their core properties are reflected through the [`IKeyExprTree`] and [`IKeyExprTreeMut`] traits.
 //!
 //! KeTrees are made up of node, where nodes may or may not have a value (called `weight`) associated with them. To access these weighs, as well as other
-//! properties of a node, you can go throught the [`IKeyExprTreeNode`] and [`IKeyExprTreeNodeMut`] traits.
+//! properties of a node, you can go through the [`IKeyExprTreeNode`] and [`IKeyExprTreeNodeMut`] traits.
 //!
 //! # Iterators
 //! KeTrees provide iterators for the following operations:
 //! - Iterating on all nodes ([`IKeyExprTree::tree_iter`]/[`IKeyExprTreeMut::tree_iter_mut`])
-//! - Iterating on key-value pairs in the KeTree ([`IKeyExprTreeExt::key_value_pairs`])
+//! - Iterating on key-value pairs in the KeTree ([`IKeyExprTree::key_value_pairs`])
 //! - Iterating on nodes whose KE intersects with a queried KE ([`IKeyExprTree::intersecting_nodes`], [`IKeyExprTreeMut::intersecting_nodes_mut`])
 //! - Iterating on nodes whose KE are included by a queried KE ([`IKeyExprTree::included_nodes`], [`IKeyExprTreeMut::included_nodes_mut`])
 //! - Iterating on nodes whose KE includes a queried KE ([`IKeyExprTree::nodes_including`], [`IKeyExprTreeMut::nodes_including_mut`])

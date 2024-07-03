@@ -15,8 +15,9 @@
 //! Tools to access information about the current zenoh [`Session`](crate::Session).
 use std::future::{IntoFuture, Ready};
 
+use zenoh_config::wrappers::ZenohId;
 use zenoh_core::{Resolvable, Wait};
-use zenoh_protocol::core::{WhatAmI, ZenohId};
+use zenoh_protocol::core::WhatAmI;
 
 use super::session::SessionRef;
 
@@ -93,7 +94,7 @@ impl<'a> Wait for RoutersZenohIdBuilder<'a> {
                     s.get_whatami()
                         .ok()
                         .and_then(|what| (what == WhatAmI::Router).then_some(()))
-                        .and_then(|_| s.get_zid().ok())
+                        .and_then(|_| s.get_zid().map(Into::into).ok())
                 }),
         )
     }
@@ -143,7 +144,7 @@ impl<'a> Wait for PeersZenohIdBuilder<'a> {
                     s.get_whatami()
                         .ok()
                         .and_then(|what| (what == WhatAmI::Peer).then_some(()))
-                        .and_then(|_| s.get_zid().ok())
+                        .and_then(|_| s.get_zid().map(Into::into).ok())
                 }),
         )
     }
@@ -158,8 +159,8 @@ impl<'a> IntoFuture for PeersZenohIdBuilder<'a> {
     }
 }
 
-/// Struct returned by [`Session::info()`](crate::SessionDeclarations::info) which allows
-/// to access informations about the current zenoh [`Session`](crate::Session).
+/// Struct returned by [`Session::info()`](crate::session::SessionDeclarations::info) which allows
+/// to access information about the current zenoh [`Session`](crate::Session).
 ///
 /// # Examples
 /// ```

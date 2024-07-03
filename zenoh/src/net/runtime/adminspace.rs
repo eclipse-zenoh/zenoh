@@ -19,14 +19,14 @@ use std::{
 use serde_json::json;
 use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
-use zenoh_config::{unwrap_or_default, ConfigValidator, ValidatedMap, WhatAmI};
+use zenoh_config::{unwrap_or_default, wrappers::ZenohId, ConfigValidator, ValidatedMap, WhatAmI};
 use zenoh_core::Wait;
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, ExprId, WireExpr, ZenohId, EMPTY_EXPR_ID},
+    core::{key_expr::OwnedKeyExpr, ExprId, WireExpr, EMPTY_EXPR_ID},
     network::{
         declare::{
             queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
@@ -40,17 +40,17 @@ use zenoh_result::ZResult;
 use zenoh_transport::unicast::TransportUnicast;
 
 use super::{routing::dispatcher::face::Face, Runtime};
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 use crate::api::plugins::PluginsManager;
 use crate::{
     api::{
-        builders::sample::ValueBuilderTrait,
+        builders::sample::EncodingBuilderTrait,
         bytes::ZBytes,
         key_expr::KeyExpr,
         queryable::{Query, QueryInner},
         value::Value,
     },
-    encoding::Encoding,
+    bytes::Encoding,
     net::primitives::Primitives,
 };
 
@@ -71,7 +71,7 @@ pub struct AdminSpace {
     context: Arc<AdminContext>,
 }
 
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 #[derive(Debug, Clone)]
 enum PluginDiff {
     Delete(String),
@@ -86,7 +86,7 @@ impl ConfigValidator for AdminSpace {
         current: &serde_json::Map<String, serde_json::Value>,
         new: &serde_json::Map<String, serde_json::Value>,
     ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        #[cfg(feature = "plugins")]
         {
             let plugins_mgr = self.context.runtime.plugins_manager();
             let Some(plugin) = plugins_mgr.started_plugin(name) else {
@@ -97,7 +97,7 @@ impl ConfigValidator for AdminSpace {
             };
             plugin.instance().config_checker(path, current, new)
         }
-        #[cfg(not(all(feature = "unstable", feature = "plugins")))]
+        #[cfg(not(feature = "plugins"))]
         {
             let _ = (name, path, current, new);
             Ok(None)
@@ -106,7 +106,7 @@ impl ConfigValidator for AdminSpace {
 }
 
 impl AdminSpace {
-    #[cfg(all(feature = "unstable", feature = "plugins"))]
+    #[cfg(feature = "plugins")]
     fn start_plugin(
         plugin_mgr: &mut PluginsManager,
         config: &zenoh_config::PluginLoad,
@@ -195,7 +195,7 @@ impl AdminSpace {
             Arc::new(queryables_data),
         );
 
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        #[cfg(feature = "plugins")]
         handlers.insert(
             format!("@/{whatami_str}/{zid_str}/plugins/**")
                 .try_into()
@@ -203,7 +203,7 @@ impl AdminSpace {
             Arc::new(plugins_data),
         );
 
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        #[cfg(feature = "plugins")]
         handlers.insert(
             format!("@/{whatami_str}/{zid_str}/status/plugins/**")
                 .try_into()
@@ -211,7 +211,7 @@ impl AdminSpace {
             Arc::new(plugins_status),
         );
 
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        #[cfg(feature = "plugins")]
         let mut active_plugins = runtime
             .plugins_manager()
             .started_plugins_iter()
@@ -234,7 +234,7 @@ impl AdminSpace {
 
         config.set_plugin_validator(Arc::downgrade(&admin));
 
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        #[cfg(feature = "plugins")]
         {
             let cfg_rx = admin.context.runtime.state.config.subscribe();
 
@@ -468,12 +468,11 @@ impl Primitives for AdminSpace {
                         key_expr: key_expr.clone(),
                         parameters: query.parameters.into(),
                         qid: msg.id,
-                        zid,
+                        zid: zid.into(),
                         primitives,
                     }),
                     eid: self.queryable_id,
                     value: query.ext_body.map(|b| Value::new(b.payload, b.encoding)),
-                    #[cfg(feature = "unstable")]
                     attachment: query.ext_attachment.map(Into::into),
                 };
 
@@ -546,7 +545,7 @@ fn local_data(context: &AdminContext, query: Query) {
     let transport_mgr = context.runtime.manager().clone();
 
     // plugins info
-    #[cfg(all(feature = "unstable", feature = "plugins"))]
+    #[cfg(feature = "plugins")]
     let plugins: serde_json::Value = {
         let plugins_mgr = context.runtime.plugins_manager();
         plugins_mgr
@@ -578,7 +577,6 @@ fn local_data(context: &AdminContext, query: Query) {
         #[cfg(feature = "stats")]
         {
             let stats = query
-                .selector()
                 .parameters()
                 .iter()
                 .any(|(k, v)| k == "_stats" && v != "false");
@@ -612,7 +610,6 @@ fn local_data(context: &AdminContext, query: Query) {
     #[cfg(feature = "stats")]
     {
         let stats = query
-            .selector()
             .parameters()
             .iter()
             .any(|(k, v)| k == "_stats" && v != "false");
@@ -650,7 +647,7 @@ fn metrics(context: &AdminContext, query: Query) {
     .unwrap();
     #[allow(unused_mut)]
     let mut metrics = format!(
-        r#"# HELP zenoh_build Informations about zenoh.
+        r#"# HELP zenoh_build Information about zenoh.
 # TYPE zenoh_build gauge
 zenoh_build{{version="{}"}} 1
 "#,
@@ -667,7 +664,11 @@ zenoh_build{{version="{}"}} 1
             .openmetrics_text(),
     );
 
-    if let Err(e) = query.reply(reply_key, metrics).wait() {
+    if let Err(e) = query
+        .reply(reply_key, metrics)
+        .encoding(Encoding::TEXT_PLAIN)
+        .wait()
+    {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
 }
@@ -684,6 +685,7 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
 
     if let Err(e) = query
         .reply(reply_key, tables.hat_code.info(&tables, WhatAmI::Router))
+        .encoding(Encoding::TEXT_PLAIN)
         .wait()
     {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
@@ -702,6 +704,7 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
 
     if let Err(e) = query
         .reply(reply_key, tables.hat_code.info(&tables, WhatAmI::Peer))
+        .encoding(Encoding::TEXT_PLAIN)
         .wait()
     {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
@@ -756,7 +759,7 @@ fn queryables_data(context: &AdminContext, query: Query) {
     }
 }
 
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 fn plugins_data(context: &AdminContext, query: Query) {
     let guard = context.runtime.plugins_manager();
     let root_key = format!(
@@ -773,7 +776,11 @@ fn plugins_data(context: &AdminContext, query: Query) {
             let status = serde_json::to_value(status).unwrap();
             match ZBytes::try_from(status) {
                 Ok(zbuf) => {
-                    if let Err(e) = query.reply(key, zbuf).wait() {
+                    if let Err(e) = query
+                        .reply(key, zbuf)
+                        .encoding(Encoding::APPLICATION_JSON)
+                        .wait()
+                    {
                         tracing::error!("Error sending AdminSpace reply: {:?}", e);
                     }
                 }
@@ -783,11 +790,9 @@ fn plugins_data(context: &AdminContext, query: Query) {
     }
 }
 
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 fn plugins_status(context: &AdminContext, query: Query) {
-    use crate::bytes::{Serialize, ZSerde};
-
-    let selector = query.selector();
+    let key_expr = query.key_expr();
     let guard = context.runtime.plugins_manager();
     let mut root_key = format!(
         "@/{}/{}/status/plugins/",
@@ -801,7 +806,8 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 if let Ok(key_expr) = KeyExpr::try_from(plugin_path_key.clone()) {
                     if query.key_expr().intersects(&key_expr) {
                         if let Err(e) = query
-                            .reply(key_expr, ZSerde.serialize(plugin.path()))
+                            .reply(key_expr, plugin.path())
+                            .encoding(Encoding::TEXT_PLAIN)
                             .wait()
                         {
                             tracing::error!("Error sending AdminSpace reply: {:?}", e);
@@ -820,14 +826,14 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 return;
             }
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                plugin.instance().adminspace_getter(&selector, plugin_key)
+                plugin.instance().adminspace_getter(key_expr, plugin_key)
             })) {
                 Ok(Ok(responses)) => {
                     for response in responses {
                         if let Ok(key_expr) = KeyExpr::try_from(response.key) {
                             match ZBytes::try_from(response.value) {
                                 Ok(zbuf) => {
-                                    if let Err(e) = query.reply(key_expr, zbuf).wait() {
+                                    if let Err(e) = query.reply(key_expr, zbuf).encoding(Encoding::APPLICATION_JSON).wait() {
                                         tracing::error!("Error sending AdminSpace reply: {:?}", e);
                                     }
                                 },
@@ -854,7 +860,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
     }
 }
 
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 fn with_extended_string<R, F: FnMut(&mut String) -> R>(
     prefix: &mut String,
     suffixes: &[&str],

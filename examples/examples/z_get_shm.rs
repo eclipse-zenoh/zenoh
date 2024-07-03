@@ -15,12 +15,10 @@ use std::time::Duration;
 
 use clap::Parser;
 use zenoh::{
-    prelude::*,
-    query::QueryTarget,
-    selector::Selector,
+    query::{QueryTarget, Selector},
     shm::{
-        zshm, BlockOn, GarbageCollect, PosixSharedMemoryProviderBackend,
-        SharedMemoryProviderBuilder, POSIX_PROTOCOL_ID,
+        zshm, BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder,
+        POSIX_PROTOCOL_ID,
     },
     Config,
 };
@@ -33,7 +31,7 @@ async fn main() {
     // initiate logging
     zenoh::try_init_log_from_env();
 
-    let (mut config, selector, mut value, target, timeout) = parse_args();
+    let (mut config, selector, mut payload, target, timeout) = parse_args();
 
     // A probing procedure for shared memory is performed upon session opening. To enable `z_pub_shm` to operate
     // over shared memory (and to not fallback on network mode), shared memory needs to be enabled also on the
@@ -45,14 +43,14 @@ async fn main() {
 
     println!("Creating POSIX SHM provider...");
     // create an SHM backend...
-    // NOTE: For extended PosixSharedMemoryProviderBackend API please check z_posix_shm_provider.rs
-    let backend = PosixSharedMemoryProviderBackend::builder()
+    // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
+    let backend = PosixShmProviderBackend::builder()
         .with_size(N * 1024)
         .unwrap()
         .res()
         .unwrap();
     // ...and an SHM provider
-    let provider = SharedMemoryProviderBuilder::builder()
+    let provider = ShmProviderBuilder::builder()
         .protocol_id::<POSIX_PROTOCOL_ID>()
         .backend(backend)
         .res();
@@ -67,15 +65,15 @@ async fn main() {
         .await
         .unwrap();
 
-    let content = value
+    let content = payload
         .take()
-        .unwrap_or_else(|| "Get from SharedMemory Rust!".to_string());
+        .unwrap_or_else(|| "Get from SHM Rust!".to_string());
     sbuf[0..content.len()].copy_from_slice(content.as_bytes());
 
     println!("Sending Query '{selector}'...");
     let replies = session
         .get(&selector)
-        .value(sbuf)
+        .payload(sbuf)
         .target(target)
         .timeout(timeout)
         .await
@@ -87,7 +85,7 @@ async fn main() {
                 print!(">> Received ('{}': ", sample.key_expr().as_str());
                 match sample.payload().deserialize::<&zshm>() {
                     Ok(payload) => println!("'{}')", String::from_utf8_lossy(payload),),
-                    Err(e) => println!("'Not a SharedMemoryBuf: {:?}')", e),
+                    Err(e) => println!("'Not a ShmBufInner: {:?}')", e),
                 }
             }
             Err(err) => {
@@ -114,8 +112,8 @@ struct Args {
     #[arg(short, long, default_value = "demo/example/**")]
     /// The selection of resources to query
     selector: Selector<'static>,
-    /// The value to publish.
-    value: Option<String>,
+    /// The payload to publish.
+    payload: Option<String>,
     #[arg(short, long, default_value = "BEST_MATCHING")]
     /// The target queryables of the query.
     target: Qt,
@@ -137,7 +135,7 @@ fn parse_args() -> (
     (
         args.common.into(),
         args.selector,
-        args.value,
+        args.payload,
         match args.target {
             Qt::BestMatching => QueryTarget::BestMatching,
             Qt::All => QueryTarget::All,

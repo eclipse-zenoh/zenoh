@@ -12,11 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#[cfg(feature = "internal")]
+use alloc::vec::Vec;
 use alloc::{
     borrow::{Borrow, ToOwned},
     format,
     string::String,
-    vec::Vec,
 };
 use core::{
     convert::{TryFrom, TryInto},
@@ -26,7 +27,7 @@ use core::{
 
 use zenoh_result::{bail, Error as ZError, ZResult};
 
-use super::{canon::Canonizable, OwnedKeyExpr, FORBIDDEN_CHARS};
+use super::{canon::Canonize, OwnedKeyExpr, FORBIDDEN_CHARS};
 
 /// A [`str`] newtype that is statically known to be a valid key expression.
 ///
@@ -71,7 +72,7 @@ impl keyexpr {
     pub fn autocanonize<'a, T, E>(t: &'a mut T) -> Result<&'a Self, E>
     where
         &'a Self: TryFrom<&'a T, Error = E>,
-        T: Canonizable + ?Sized,
+        T: Canonize + ?Sized,
     {
         t.canonize();
         Self::new(t)
@@ -92,6 +93,7 @@ impl keyexpr {
     /// Returns the relation between `self` and `other` from `self`'s point of view ([`SetIntersectionLevel::Includes`] signifies that `self` includes `other`).
     ///
     /// Note that this is slower than [`keyexpr::intersects`] and [`keyexpr::includes`], so you should favor these methods for most applications.
+    #[cfg(feature = "unstable")]
     pub fn relation_to(&self, other: &Self) -> SetIntersectionLevel {
         use SetIntersectionLevel::*;
         if self.intersects(other) {
@@ -109,7 +111,7 @@ impl keyexpr {
 
     /// Joins both sides, inserting a `/` in between them.
     ///
-    /// This should be your prefered method when concatenating path segments.
+    /// This should be your preferred method when concatenating path segments.
     ///
     /// This is notably useful for workspaces:
     /// ```rust
@@ -126,7 +128,12 @@ impl keyexpr {
     }
 
     /// Returns `true` if `self` contains any wildcard character (`**` or `$*`).
+    #[cfg(feature = "internal")]
+    #[doc(hidden)]
     pub fn is_wild(&self) -> bool {
+        self.is_wild_impl()
+    }
+    pub(crate) fn is_wild_impl(&self) -> bool {
         self.0.contains(super::SINGLE_WILD as char)
     }
 
@@ -139,7 +146,7 @@ impl keyexpr {
     ///
     /// NOTE: this operation can typically be used in a backend implementation, at creation of a Storage to get the keys prefix,
     /// and then in `zenoh_backend_traits::Storage::on_sample()` this prefix has to be stripped from all received
-    /// `Sample::key_expr` to retrieve the corrsponding key.
+    /// `Sample::key_expr` to retrieve the corresponding key.
     ///
     /// # Examples:
     /// ```
@@ -163,6 +170,8 @@ impl keyexpr {
     ///     None,
     ///     keyexpr::new("dem$*").unwrap().get_nonwild_prefix());
     /// ```
+    #[cfg(feature = "internal")]
+    #[doc(hidden)]
     pub fn get_nonwild_prefix(&self) -> Option<&keyexpr> {
         match self.0.find('*') {
             Some(i) => match self.0[..i].rfind('/') {
@@ -174,12 +183,12 @@ impl keyexpr {
     }
 
     /// Remove the specified `prefix` from `self`.
-    /// The result is a list of `keyexpr`, since there might be several ways for the prefix to match the begining of the `self` key expression.  
+    /// The result is a list of `keyexpr`, since there might be several ways for the prefix to match the beginning of the `self` key expression.  
     /// For instance, if `self` is `"a/**/c/*" and `prefix` is `a/b/c` then:  
     ///   - the `prefix` matches `"a/**/c"` leading to a result of `"*"` when stripped from `self`
     ///   - the `prefix` matches `"a/**"` leading to a result of `"**/c/*"` when stripped from `self`
     /// So the result is `["*", "**/c/*"]`.  
-    /// If `prefix` cannot match the begining of `self`, an empty list is reuturned.
+    /// If `prefix` cannot match the beginning of `self`, an empty list is reuturned.
     ///
     /// See below more examples.
     ///
@@ -227,6 +236,8 @@ impl keyexpr {
     ///     keyexpr::new("demo/example/test/**").unwrap().strip_prefix(keyexpr::new("not/a/prefix").unwrap()).is_empty()
     /// );
     /// ```
+    #[cfg(feature = "internal")]
+    #[doc(hidden)]
     pub fn strip_prefix(&self, prefix: &Self) -> Vec<&keyexpr> {
         let mut result = alloc::vec![];
         'chunks: for i in (0..=self.len()).rev() {
@@ -292,7 +303,13 @@ impl keyexpr {
     pub unsafe fn from_slice_unchecked(s: &[u8]) -> &Self {
         core::mem::transmute(s)
     }
+
+    #[cfg(feature = "internal")]
+    #[doc(hidden)]
     pub const fn chunks(&self) -> Chunks {
+        self.chunks_impl()
+    }
+    pub(crate) const fn chunks_impl(&self) -> Chunks {
         Chunks {
             inner: self.as_str(),
         }
@@ -551,6 +568,7 @@ impl Div for &keyexpr {
 ///
 /// You can check for intersection with `level >= SetIntersecionLevel::Intersection` and for inclusion with `level >= SetIntersectionLevel::Includes`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg(feature = "unstable")]
 pub enum SetIntersectionLevel {
     Disjoint,
     Intersects,
@@ -583,7 +601,7 @@ enum KeyExprConstructionError {
     LoneDollarStar = -1,
     SingleStarAfterDoubleStar = -2,
     DoubleStarAfterDoubleStar = -3,
-    EmpyChunk = -4,
+    EmptyChunk = -4,
     StarsInChunk = -5,
     DollarAfterDollarOrStar = -6,
     ContainsSharpOrQMark = -7,
@@ -597,7 +615,7 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
         let mut in_big_wild = false;
         for chunk in value.split('/') {
             if chunk.is_empty() {
-                bail!((KeyExprConstructionError::EmpyChunk) "Invalid Key Expr `{}`: empty chunks are forbidden, as well as leading and trailing slashes", value)
+                bail!((KeyExprConstructionError::EmptyChunk) "Invalid Key Expr `{}`: empty chunks are forbidden, as well as leading and trailing slashes", value)
             }
             if chunk == "$*" {
                 bail!((KeyExprConstructionError::LoneDollarStar)

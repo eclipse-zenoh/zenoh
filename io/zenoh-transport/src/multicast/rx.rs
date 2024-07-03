@@ -65,7 +65,7 @@ impl TransportMulticastInner {
             || join.ext_qos.is_some() != peer.is_qos()
         {
             let e = format!(
-                "Ingoring Join on {} of peer: {}. Inconsistent parameters.",
+                "Ignoring Join on {} of peer: {}. Inconsistent parameters.",
                 peer.locator, peer.zid,
             );
             tracing::debug!("{}", e);
@@ -83,7 +83,7 @@ impl TransportMulticastInner {
     ) -> ZResult<()> {
         if zread!(self.peers).len() >= self.manager.config.multicast.max_sessions {
             tracing::debug!(
-                "Ingoring Join on {} from peer: {}. Max sessions reached: {}.",
+                "Ignoring Join on {} from peer: {}. Max sessions reached: {}.",
                 locator,
                 join.zid,
                 self.manager.config.multicast.max_sessions,
@@ -93,7 +93,7 @@ impl TransportMulticastInner {
 
         if join.version != self.manager.config.version {
             tracing::debug!(
-                "Ingoring Join on {} from peer: {}. Unsupported version: {}. Expected: {}.",
+                "Ignoring Join on {} from peer: {}. Unsupported version: {}. Expected: {}.",
                 locator,
                 join.zid,
                 join.version,
@@ -104,7 +104,7 @@ impl TransportMulticastInner {
 
         if join.resolution != self.manager.config.resolution {
             tracing::debug!(
-                "Ingoring Join on {} from peer: {}. Unsupported SN resolution: {:?}. Expected: {:?}.",
+                "Ignoring Join on {} from peer: {}. Unsupported SN resolution: {:?}. Expected: {:?}.",
                 locator,
                 join.zid,
                 join.resolution,
@@ -115,7 +115,7 @@ impl TransportMulticastInner {
 
         if join.batch_size != batch_size {
             tracing::debug!(
-                "Ingoring Join on {} from peer: {}. Unsupported Batch Size: {:?}. Expected: {:?}.",
+                "Ignoring Join on {} from peer: {}. Unsupported Batch Size: {:?}. Expected: {:?}.",
                 locator,
                 join.zid,
                 join.batch_size,
@@ -126,7 +126,7 @@ impl TransportMulticastInner {
 
         if !self.manager.config.multicast.is_qos && join.ext_qos.is_some() {
             tracing::debug!(
-                "Ingoring Join on {} from peer: {}. QoS is not supported.",
+                "Ignoring Join on {} from peer: {}. QoS is not supported.",
                 locator,
                 join.zid,
             );

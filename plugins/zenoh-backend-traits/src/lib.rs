@@ -29,7 +29,7 @@
 //! ```
 //! use std::sync::Arc;
 //! use async_trait::async_trait;
-//! use zenoh::{key_expr::OwnedKeyExpr, prelude::*, time::Timestamp, value::Value};
+//! use zenoh::{key_expr::OwnedKeyExpr, prelude::*, time::Timestamp, internal::Value};
 //! use zenoh_backend_traits::*;
 //! use zenoh_backend_traits::config::*;
 //!
@@ -90,7 +90,7 @@
 //!
 //!     async fn put(&mut self, key: Option<OwnedKeyExpr>, value: Value, timestamp: Timestamp) -> ZResult<StorageInsertionResult> {
 //!         // the key will be None if it exactly matched with the strip_prefix
-//!         // create a storge specific special structure to store it
+//!         // create a storage specific special structure to store it
 //!         // Store the data with timestamp
 //!         // @TODO:
 //!         // store (key, value, timestamp)
@@ -124,10 +124,10 @@
 use async_trait::async_trait;
 use const_format::concatcp;
 use zenoh::{
-    core::Result as ZResult,
+    internal::Value,
     key_expr::{keyexpr, OwnedKeyExpr},
     time::Timestamp,
-    value::Value,
+    Result as ZResult,
 };
 use zenoh_plugin_trait::{PluginControl, PluginInstance, PluginStatusRec, StructVersion};
 use zenoh_util::concat_enabled_features;
@@ -225,7 +225,7 @@ pub trait Storage: Send + Sync {
     /// on the administration space for this storage.
     fn get_admin_status(&self) -> serde_json::Value;
 
-    /// Function called for each incoming data ([`Sample`]) to be stored in this storage.
+    /// Function called for each incoming data ([`Sample`](zenoh::sample::Sample)) to be stored in this storage.
     /// A key can be `None` if it matches the `strip_prefix` exactly.
     /// In order to avoid data loss, the storage must store the `value` and `timestamp` associated with the `None` key
     /// in a manner suitable for the given backend technology

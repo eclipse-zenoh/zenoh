@@ -17,20 +17,17 @@ use zenoh_core::{Resolvable, Result as ZResult, Wait};
 use zenoh_protocol::{core::CongestionControl, network::Mapping};
 
 #[cfg(feature = "unstable")]
-use crate::api::bytes::OptionZBytes;
-#[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
 use crate::api::{
     builders::sample::{
-        QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait, ValueBuilderTrait,
+        EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
     },
-    bytes::ZBytes,
+    bytes::{OptionZBytes, ZBytes},
     encoding::Encoding,
     key_expr::KeyExpr,
     publisher::{Priority, Publisher},
     sample::{Locality, SampleKind},
     session::SessionRef,
-    value::Value,
 };
 
 pub type SessionPutBuilder<'a, 'b> =
@@ -53,13 +50,13 @@ pub struct PublicationBuilderPut {
 pub struct PublicationBuilderDelete;
 
 /// A builder for initializing  [`Session::put`](crate::session::Session::put), [`Session::delete`](crate::session::Session::delete),
-/// [`Publisher::put`](crate::publisher::Publisher::put), and [`Publisher::delete`](crate::publisher::Publisher::delete) operations.
+/// [`Publisher::put`](crate::pubsub::Publisher::put), and [`Publisher::delete`](crate::pubsub::Publisher::delete) operations.
 ///
 /// # Examples
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::{encoding::Encoding, prelude::*, publisher::CongestionControl};
+/// use zenoh::{bytes::Encoding, prelude::*, qos::CongestionControl};
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// session
@@ -78,7 +75,6 @@ pub struct PublicationBuilder<P, T> {
     pub(crate) timestamp: Option<uhlc::Timestamp>,
     #[cfg(feature = "unstable")]
     pub(crate) source_info: SourceInfo,
-    #[cfg(feature = "unstable")]
     pub(crate) attachment: Option<ZBytes>,
 }
 
@@ -117,33 +113,22 @@ impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
     }
 }
 
-impl<P> ValueBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
+impl EncodingBuilderTrait for PublisherBuilder<'_, '_> {
+    fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
+        Self {
+            encoding: encoding.into(),
+            ..self
+        }
+    }
+}
+
+impl<P> EncodingBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
             kind: PublicationBuilderPut {
                 encoding: encoding.into(),
                 ..self.kind
             },
-            ..self
-        }
-    }
-
-    fn payload<IntoPayload>(self, payload: IntoPayload) -> Self
-    where
-        IntoPayload: Into<ZBytes>,
-    {
-        Self {
-            kind: PublicationBuilderPut {
-                payload: payload.into(),
-                ..self.kind
-            },
-            ..self
-        }
-    }
-    fn value<T: Into<Value>>(self, value: T) -> Self {
-        let Value { payload, encoding } = value.into();
-        Self {
-            kind: PublicationBuilderPut { payload, encoding },
             ..self
         }
     }
@@ -157,7 +142,6 @@ impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
             ..self
         }
     }
-    #[cfg(feature = "unstable")]
     fn attachment<TA: Into<OptionZBytes>>(self, attachment: TA) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
@@ -191,7 +175,6 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
-            #[cfg(feature = "unstable")]
             self.attachment,
         )
     }
@@ -208,7 +191,6 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDel
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
-            #[cfg(feature = "unstable")]
             self.attachment,
         )
     }
@@ -238,7 +220,7 @@ impl IntoFuture for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuil
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::{prelude::*, publisher::CongestionControl};
+/// use zenoh::{prelude::*, qos::CongestionControl};
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let publisher = session
@@ -253,6 +235,7 @@ impl IntoFuture for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuil
 pub struct PublisherBuilder<'a, 'b: 'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
+    pub(crate) encoding: Encoding,
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
     pub(crate) is_express: bool,
@@ -267,6 +250,7 @@ impl<'a, 'b> Clone for PublisherBuilder<'a, 'b> {
                 Ok(k) => Ok(k.clone()),
                 Err(e) => Err(zerror!("Cloned KE Error: {}", e).into()),
             },
+            encoding: self.encoding.clone(),
             congestion_control: self.congestion_control,
             priority: self.priority,
             is_express: self.is_express,
@@ -310,16 +294,20 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
         self
     }
 
-    // internal function for perfroming the publication
+    // internal function for performing the publication
     fn create_one_shot_publisher(self) -> ZResult<Publisher<'a>> {
         Ok(Publisher {
             session: self.session,
             id: 0, // This is a one shot Publisher
             key_expr: self.key_expr?,
+            encoding: self.encoding,
             congestion_control: self.congestion_control,
             priority: self.priority,
             is_express: self.is_express,
             destination: self.destination,
+            #[cfg(feature = "unstable")]
+            matching_listeners: Default::default(),
+            undeclare_on_drop: true,
         })
     }
 }
@@ -367,10 +355,14 @@ impl<'a, 'b> Wait for PublisherBuilder<'a, 'b> {
                 session: self.session,
                 id,
                 key_expr,
+                encoding: self.encoding,
                 congestion_control: self.congestion_control,
                 priority: self.priority,
                 is_express: self.is_express,
                 destination: self.destination,
+                #[cfg(feature = "unstable")]
+                matching_listeners: Default::default(),
+                undeclare_on_drop: true,
             })
     }
 }
@@ -393,7 +385,6 @@ impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
-            #[cfg(feature = "unstable")]
             self.attachment,
         )
     }
@@ -408,7 +399,6 @@ impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
-            #[cfg(feature = "unstable")]
             self.attachment,
         )
     }

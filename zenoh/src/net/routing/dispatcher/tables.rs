@@ -21,7 +21,7 @@ use std::{
 use uhlc::HLC;
 use zenoh_config::{unwrap_or_default, Config};
 use zenoh_protocol::{
-    core::{ExprId, WhatAmI, ZenohId},
+    core::{ExprId, WhatAmI, ZenohIdProto},
     network::Mapping,
 };
 use zenoh_result::ZResult;
@@ -30,8 +30,8 @@ use zenoh_sync::get_mut_unchecked;
 use super::face::FaceState;
 pub use super::{pubsub::*, queries::*, resource::*};
 use crate::net::routing::{
-    hat,
-    hat::HatTrait,
+    dispatcher::interests::finalize_pending_interests,
+    hat::{self, HatTrait},
     interceptor::{interceptor_factories, InterceptorFactory},
 };
 
@@ -61,7 +61,7 @@ impl<'a> RoutingExpr<'a> {
 }
 
 pub struct Tables {
-    pub(crate) zid: ZenohId,
+    pub(crate) zid: ZenohIdProto,
     pub(crate) whatami: WhatAmI,
     pub(crate) face_counter: usize,
     #[allow(dead_code)]
@@ -79,7 +79,7 @@ pub struct Tables {
 
 impl Tables {
     pub fn new(
-        zid: ZenohId,
+        zid: ZenohIdProto,
         whatami: WhatAmI,
         hlc: Option<Arc<HLC>>,
         config: &Config,
@@ -145,7 +145,7 @@ impl Tables {
     }
 
     #[inline]
-    pub(crate) fn get_face(&self, zid: &ZenohId) -> Option<&Arc<FaceState>> {
+    pub(crate) fn get_face(&self, zid: &ZenohIdProto) -> Option<&Arc<FaceState>> {
         self.faces.values().find(|face| face.zid == *zid)
     }
 
@@ -175,7 +175,16 @@ pub fn close_face(tables: &TablesLock, face: &Weak<FaceState>) {
             tracing::debug!("Close {}", face);
             face.task_controller.terminate_all(Duration::from_secs(10));
             finalize_pending_queries(tables, &mut face);
-            zlock!(tables.ctrl_lock).close_face(tables, &mut face);
+            let mut declares = vec![];
+            let ctrl_lock = zlock!(tables.ctrl_lock);
+            finalize_pending_interests(tables, &mut face, &mut |p, m| {
+                declares.push((p.clone(), m))
+            });
+            ctrl_lock.close_face(tables, &mut face, &mut |p, m| declares.push((p.clone(), m)));
+            drop(ctrl_lock);
+            for (p, m) in declares {
+                p.send_declare(m);
+            }
         }
         None => tracing::error!("Face already closed!"),
     }

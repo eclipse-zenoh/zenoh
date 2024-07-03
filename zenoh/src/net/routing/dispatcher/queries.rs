@@ -21,18 +21,19 @@ use async_trait::async_trait;
 use tokio_util::sync::CancellationToken;
 use zenoh_buffers::ZBuf;
 use zenoh_config::WhatAmI;
+#[cfg(feature = "stats")]
+use zenoh_protocol::zenoh::reply::ReplyBody;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, Encoding, WireExpr},
     network::{
         declare::{ext, queryable::ext::QueryableInfoType, QueryableId},
-        interest::{InterestId, InterestMode},
         request::{
             ext::{BudgetType, TargetType, TimeoutType},
             Request, RequestId,
         },
         response::{self, ext::ResponderIdType, Response, ResponseFinal},
     },
-    zenoh::{self, query::Consolidation, reply::ReplyBody, Put, Reply, RequestBody, ResponseBody},
+    zenoh::{self, RequestBody, ResponseBody},
 };
 use zenoh_sync::get_mut_unchecked;
 use zenoh_util::Timed;
@@ -42,94 +43,17 @@ use super::{
     resource::{QueryRoute, QueryRoutes, QueryTargetQablSet, Resource},
     tables::{NodeId, RoutingExpr, Tables, TablesLock},
 };
-use crate::net::routing::{hat::HatTrait, RoutingContext};
-
-#[allow(clippy::too_many_arguments)] // TODO refactor
-pub(crate) fn declare_qabl_interest(
-    hat_code: &(dyn HatTrait + Send + Sync),
-    tables: &TablesLock,
-    face: &mut Arc<FaceState>,
-    id: InterestId,
-    expr: Option<&WireExpr>,
-    mode: InterestMode,
-    aggregate: bool,
-) {
-    if let Some(expr) = expr {
-        let rtables = zread!(tables.tables);
-        match rtables
-            .get_mapping(face, &expr.scope, expr.mapping)
-            .cloned()
-        {
-            Some(mut prefix) => {
-                tracing::debug!(
-                    "{} Declare qabl interest {} ({}{})",
-                    face,
-                    id,
-                    prefix.expr(),
-                    expr.suffix
-                );
-                let res = Resource::get_resource(&prefix, &expr.suffix);
-                let (mut res, mut wtables) = if res
-                    .as_ref()
-                    .map(|r| r.context.is_some())
-                    .unwrap_or(false)
-                {
-                    drop(rtables);
-                    let wtables = zwrite!(tables.tables);
-                    (res.unwrap(), wtables)
-                } else {
-                    let mut fullexpr = prefix.expr();
-                    fullexpr.push_str(expr.suffix.as_ref());
-                    let mut matches = keyexpr::new(fullexpr.as_str())
-                        .map(|ke| Resource::get_matches(&rtables, ke))
-                        .unwrap_or_default();
-                    drop(rtables);
-                    let mut wtables = zwrite!(tables.tables);
-                    let mut res =
-                        Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
-                    matches.push(Arc::downgrade(&res));
-                    Resource::match_resource(&wtables, &mut res, matches);
-                    (res, wtables)
-                };
-
-                hat_code.declare_qabl_interest(
-                    &mut wtables,
-                    face,
-                    id,
-                    Some(&mut res),
-                    mode,
-                    aggregate,
-                );
-            }
-            None => tracing::error!(
-                "{} Declare qabl interest {} for unknown scope {}!",
-                face,
-                id,
-                expr.scope
-            ),
-        }
-    } else {
-        let mut wtables = zwrite!(tables.tables);
-        hat_code.declare_qabl_interest(&mut wtables, face, id, None, mode, aggregate);
-    }
-}
-
-pub(crate) fn undeclare_qabl_interest(
-    hat_code: &(dyn HatTrait + Send + Sync),
-    tables: &TablesLock,
-    face: &mut Arc<FaceState>,
-    id: InterestId,
-) {
-    tracing::debug!("{} Undeclare qabl interest {}", face, id,);
-    let mut wtables = zwrite!(tables.tables);
-    hat_code.undeclare_qabl_interest(&mut wtables, face, id);
-}
+use crate::net::routing::{
+    hat::{HatTrait, SendDeclare},
+    RoutingContext,
+};
 
 pub(crate) struct Query {
     src_face: Arc<FaceState>,
     src_qid: RequestId,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn declare_queryable(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
@@ -138,6 +62,7 @@ pub(crate) fn declare_queryable(
     expr: &WireExpr,
     qabl_info: &QueryableInfoType,
     node_id: NodeId,
+    send_declare: &mut SendDeclare,
 ) {
     let rtables = zread!(tables.tables);
     match rtables
@@ -173,7 +98,15 @@ pub(crate) fn declare_queryable(
                     (res, wtables)
                 };
 
-            hat_code.declare_queryable(&mut wtables, face, id, &mut res, qabl_info, node_id);
+            hat_code.declare_queryable(
+                &mut wtables,
+                face,
+                id,
+                &mut res,
+                qabl_info,
+                node_id,
+                send_declare,
+            );
 
             disable_matches_query_routes(&mut wtables, &mut res);
             drop(wtables);
@@ -206,6 +139,7 @@ pub(crate) fn undeclare_queryable(
     id: QueryableId,
     expr: &WireExpr,
     node_id: NodeId,
+    send_declare: &mut SendDeclare,
 ) {
     let res = if expr.is_empty() {
         None
@@ -235,7 +169,9 @@ pub(crate) fn undeclare_queryable(
         }
     };
     let mut wtables = zwrite!(tables.tables);
-    if let Some(mut res) = hat_code.undeclare_queryable(&mut wtables, face, id, res, node_id) {
+    if let Some(mut res) =
+        hat_code.undeclare_queryable(&mut wtables, face, id, res, node_id, send_declare)
+    {
         tracing::debug!("{} Undeclare queryable {} ({})", face, id, res.expr());
         disable_matches_query_routes(&mut wtables, &mut res);
         drop(wtables);
@@ -318,7 +254,7 @@ pub(crate) fn update_query_routes(tables: &Tables, res: &Arc<Resource>) {
 pub(crate) fn update_query_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
     update_query_routes(tables, res);
     let res = get_mut_unchecked(res);
-    for child in res.childs.values_mut() {
+    for child in res.children.values_mut() {
         update_query_routes_from(tables, child);
     }
 }
@@ -473,6 +409,8 @@ impl Timed for QueryCleanup {
                 &self.tables,
                 &mut face,
                 self.qid,
+                response::ext::QoSType::RESPONSE,
+                None,
                 ext_respid,
                 WireExpr::empty(),
                 ResponseBody::Err(zenoh::Err {
@@ -609,6 +547,8 @@ pub fn route_query(
     face: &Arc<FaceState>,
     expr: &WireExpr,
     qid: RequestId,
+    ext_qos: ext::QoSType,
+    ext_tstamp: Option<ext::TimestampType>,
     ext_target: TargetType,
     ext_budget: Option<BudgetType>,
     ext_timeout: Option<TimeoutType>,
@@ -650,57 +590,9 @@ pub fn route_query(
                 let queries_lock = zwrite!(tables_ref.queries_lock);
                 let route =
                     compute_final_route(&rtables, &route, face, &mut expr, &ext_target, query);
-                let local_replies =
-                    rtables
-                        .hat_code
-                        .compute_local_replies(&rtables, &prefix, expr.suffix, face);
-                let zid = rtables.zid;
-
                 let timeout = ext_timeout.unwrap_or(rtables.queries_default_timeout);
-
                 drop(queries_lock);
                 drop(rtables);
-
-                for (wexpr, payload) in local_replies {
-                    let payload = ResponseBody::Reply(Reply {
-                        consolidation: Consolidation::DEFAULT, // @TODO: handle Del case
-                        ext_unknown: vec![],                   // @TODO: handle unknown extensions
-                        payload: ReplyBody::Put(Put {
-                            // @TODO: handle Del case
-                            timestamp: None,             // @TODO: handle timestamp
-                            encoding: Encoding::empty(), // @TODO: handle encoding
-                            ext_sinfo: None,             // @TODO: handle source info
-                            ext_attachment: None,        // @TODO: expose it in the API
-                            #[cfg(feature = "shared-memory")]
-                            ext_shm: None,
-                            ext_unknown: vec![], // @TODO: handle unknown extensions
-                            payload,
-                        }),
-                    });
-                    #[cfg(feature = "stats")]
-                    if !admin {
-                        inc_res_stats!(face, tx, user, payload)
-                    } else {
-                        inc_res_stats!(face, tx, admin, payload)
-                    }
-
-                    face.primitives
-                        .clone()
-                        .send_response(RoutingContext::with_expr(
-                            Response {
-                                rid: qid,
-                                wire_expr: wexpr,
-                                payload,
-                                ext_qos: response::ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_respid: Some(response::ext::ResponderIdType {
-                                    zid,
-                                    eid: 0, // 0 is reserved for routing core
-                                }),
-                            },
-                            expr.full_expr().to_string(),
-                        ));
-                }
 
                 if route.is_empty() {
                     tracing::debug!(
@@ -733,8 +625,8 @@ pub fn route_query(
                             Request {
                                 id: *qid,
                                 wire_expr: key_expr.into(),
-                                ext_qos: ext::QoSType::REQUEST,
-                                ext_tstamp: None,
+                                ext_qos,
+                                ext_tstamp,
                                 ext_nodeid: ext::NodeIdType { node_id: *context },
                                 ext_target,
                                 ext_budget,
@@ -781,10 +673,13 @@ pub fn route_query(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn route_send_response(
     tables_ref: &Arc<TablesLock>,
     face: &mut Arc<FaceState>,
     qid: RequestId,
+    ext_qos: ext::QoSType,
+    ext_tstamp: Option<ext::TimestampType>,
     ext_respid: Option<ResponderIdType>,
     key_expr: WireExpr,
     body: ResponseBody,
@@ -819,8 +714,8 @@ pub(crate) fn route_send_response(
                         rid: query.src_qid,
                         wire_expr: key_expr.to_owned(),
                         payload: body,
-                        ext_qos: response::ext::QoSType::RESPONSE,
-                        ext_tstamp: None,
+                        ext_qos,
+                        ext_tstamp,
                         ext_respid,
                     },
                     "".to_string(), // @TODO provide the proper key expression of the response for interceptors

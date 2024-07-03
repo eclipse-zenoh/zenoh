@@ -112,7 +112,7 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, mut x: u64) -> Self::Output {
-        writer.with_slot(VLE_LEN_MAX, move |buffer| {
+        let write = move |buffer: &mut [u8]| {
             let mut len = 0;
             while (x & !0x7f_u64) != 0 {
                 // SAFETY: buffer is guaranteed to be VLE_LEN long where VLE_LEN is
@@ -139,7 +139,10 @@ where
             }
             // The number of written bytes
             len
-        })?;
+        };
+        // SAFETY: write algorithm guarantees than returned length is lesser than or equal to
+        // `VLE_LEN_MAX`.
+        unsafe { writer.with_slot(VLE_LEN_MAX, write)? };
         Ok(())
     }
 }
@@ -287,7 +290,7 @@ zint_impl!(usize);
 //             // guarantees at this point that `x` is never `0`. Since `x` is 64bit,
 //             // then `n` is guaranteed to have a value between 1 and 8, both inclusives.
 //             // `into` is guaranteed to be exactly 9 bytes long. Therefore, copying at most
-//             // 8 bytes with a pointer offest of 1 is actually safe.
+//             // 8 bytes with a pointer offset of 1 is actually safe.
 //             let n = 8 - (x.leading_zeros() / 8) as usize;
 //             unsafe {
 //                 core::ptr::copy_nonoverlapping(
@@ -361,7 +364,7 @@ zint_impl!(usize);
 
 // macro_rules! non_zero_array {
 //     ($($i: expr,)*) => {
-//         [$(match NonZeroU8::new($i) {Some(x) => x, None => panic!("Attempted to place 0 in an array of non-zeros litteral")}),*]
+//         [$(match NonZeroU8::new($i) {Some(x) => x, None => panic!("Attempted to place 0 in an array of non-zeros literal")}),*]
 //     };
 // }
 

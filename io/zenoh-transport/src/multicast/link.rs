@@ -23,7 +23,7 @@ use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
 use zenoh_core::{zcondfeat, zlock};
 use zenoh_link::{Link, LinkMulticast, Locator};
 use zenoh_protocol::{
-    core::{Bits, Priority, Resolution, WhatAmI, ZenohId},
+    core::{Bits, Priority, Resolution, WhatAmI, ZenohIdProto},
     transport::{BatchSize, Close, Join, PrioritySn, TransportMessage, TransportSn},
 };
 use zenoh_result::{zerror, ZResult};
@@ -251,7 +251,7 @@ impl fmt::Debug for TransportLinkMulticastRx {
 /**************************************/
 pub(super) struct TransportLinkMulticastConfigUniversal {
     pub(super) version: u8,
-    pub(super) zid: ZenohId,
+    pub(super) zid: ZenohIdProto,
     pub(super) whatami: WhatAmI,
     pub(super) lease: Duration,
     pub(super) join_interval: Duration,
@@ -323,6 +323,7 @@ impl TransportLinkMulticastUniversal {
                 batch: self.link.config.batch,
                 queue_size: self.transport.manager.config.queue_size,
                 wait_before_drop: self.transport.manager.config.wait_before_drop,
+                batching: self.transport.manager.config.batching,
                 backoff: self.transport.manager.config.queue_backoff,
             };
             // The pipeline
@@ -344,7 +345,7 @@ impl TransportLinkMulticastUniversal {
                 )
                 .await;
                 if let Err(e) = res {
-                    tracing::debug!("{}", e);
+                    tracing::debug!("TX task failed: {}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
                     zenoh_runtime::ZRuntime::Net.spawn(async move { c_transport.delete().await });
@@ -380,7 +381,7 @@ impl TransportLinkMulticastUniversal {
                 .await;
                 c_signal.trigger();
                 if let Err(e) = res {
-                    tracing::debug!("{}", e);
+                    tracing::debug!("RX task failed: {}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
                     zenoh_runtime::ZRuntime::Net.spawn(async move { c_transport.delete().await });

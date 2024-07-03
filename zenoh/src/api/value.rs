@@ -19,8 +19,8 @@ use super::{bytes::ZBytes, encoding::Encoding};
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Value {
-    pub(crate) payload: ZBytes,
-    pub(crate) encoding: Encoding,
+    pub payload: ZBytes,
+    pub encoding: Encoding,
 }
 
 impl Value {
@@ -56,18 +56,6 @@ impl Value {
     /// Gets [`Encoding`] of this [`Value`].
     pub fn encoding(&self) -> &Encoding {
         &self.encoding
-    }
-}
-
-impl<T> From<T> for Value
-where
-    T: Into<ZBytes>,
-{
-    fn from(t: T) -> Self {
-        Value {
-            payload: t.into(),
-            encoding: Encoding::default(),
-        }
     }
 }
 

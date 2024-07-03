@@ -14,7 +14,10 @@
 use std::{convert::TryFrom, time::Duration};
 
 use zenoh::{
-    config::Config, key_expr::KeyExpr, prelude::*, query::QueryTarget, selector::Selector,
+    config::Config,
+    key_expr::KeyExpr,
+    prelude::*,
+    query::{QueryTarget, Selector},
 };
 
 #[tokio::main]
@@ -34,7 +37,7 @@ async fn main() {
             let queryable_key_expr = queryable_key_expr.clone();
             zenoh_runtime::ZRuntime::Application.block_in_place(async move {
                 query
-                    .reply(queryable_key_expr, query.value().unwrap().payload().clone())
+                    .reply(queryable_key_expr, query.payload().unwrap().clone())
                     .await
                     .unwrap();
             });
@@ -51,7 +54,7 @@ async fn main() {
         println!("Sending Query '{get_selector}'...");
         let replies = get_session
             .get(&get_selector)
-            .value(idx)
+            .payload(idx)
             .target(QueryTarget::All)
             .await
             .unwrap();

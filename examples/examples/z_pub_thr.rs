@@ -18,7 +18,7 @@ use clap::Parser;
 use zenoh::{
     bytes::ZBytes,
     prelude::*,
-    publisher::{CongestionControl, Priority},
+    qos::{CongestionControl, Priority},
 };
 use zenoh_examples::CommonArgs;
 

@@ -27,7 +27,7 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_link_commons::{
-    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
+    LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -142,6 +142,11 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
     #[inline(always)]
     fn is_streamed(&self) -> bool {
         true
+    }
+
+    #[inline(always)]
+    fn get_auth_id(&self) -> &LinkAuthId {
+        &LinkAuthId::NONE
     }
 }
 
@@ -372,7 +377,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
             e
         })?;
 
-        // Update the endpoint with the acutal local path
+        // Update the endpoint with the actual local path
         endpoint = EndPoint::new(
             endpoint.protocol(),
             local_path_str,

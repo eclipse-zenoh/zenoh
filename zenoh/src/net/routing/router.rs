@@ -18,11 +18,12 @@ use std::{
 
 use uhlc::HLC;
 use zenoh_config::Config;
-use zenoh_protocol::core::{WhatAmI, ZenohId};
+use zenoh_protocol::core::{WhatAmI, ZenohIdProto};
 // use zenoh_collections::Timer;
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast, TransportPeer};
 
+pub(crate) use super::dispatcher::token::*;
 pub use super::dispatcher::{pubsub::*, queries::*, resource::*};
 use super::{
     dispatcher::{
@@ -45,7 +46,7 @@ pub struct Router {
 
 impl Router {
     pub fn new(
-        zid: ZenohId,
+        zid: ZenohIdProto,
         whatami: WhatAmI,
         hlc: Option<Arc<HLC>>,
         config: &Config,
@@ -60,7 +61,6 @@ impl Router {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn init_link_state(&mut self, runtime: Runtime) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut tables = zwrite!(self.tables.tables);
@@ -100,11 +100,17 @@ impl Router {
             tables: self.tables.clone(),
             state: newface,
         };
+        let mut declares = vec![];
         ctrl_lock
-            .new_local_face(&mut tables, &self.tables, &mut face)
+            .new_local_face(&mut tables, &self.tables, &mut face, &mut |p, m| {
+                declares.push((p.clone(), m))
+            })
             .unwrap();
         drop(tables);
         drop(ctrl_lock);
+        for (p, m) in declares {
+            p.send_declare(m);
+        }
         Arc::new(face)
     }
 
@@ -156,7 +162,19 @@ impl Router {
 
         let _ = mux.face.set(Face::downgrade(&face));
 
-        ctrl_lock.new_transport_unicast_face(&mut tables, &self.tables, &mut face, &transport)?;
+        let mut declares = vec![];
+        ctrl_lock.new_transport_unicast_face(
+            &mut tables,
+            &self.tables,
+            &mut face,
+            &transport,
+            &mut |p, m| declares.push((p.clone(), m)),
+        )?;
+        drop(tables);
+        drop(ctrl_lock);
+        for (p, m) in declares {
+            p.send_declare(m);
+        }
 
         Ok(Arc::new(DeMux::new(face, Some(transport), ingress)))
     }
@@ -176,7 +194,7 @@ impl Router {
         let mux = Arc::new(McastMux::new(transport.clone(), interceptor));
         let face = FaceState::new(
             fid,
-            ZenohId::from_str("1").unwrap(),
+            ZenohIdProto::from_str("1").unwrap(),
             WhatAmI::Peer,
             #[cfg(feature = "stats")]
             None,

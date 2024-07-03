@@ -21,7 +21,7 @@ use std::{
 use zenoh_core::{Resolvable, Wait};
 use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
 use zenoh_protocol::{
-    core::{key_expr::canon::Canonizable, ExprId, WireExpr},
+    core::{key_expr::canon::Canonize, ExprId, WireExpr},
     network::{declare, DeclareBody, Mapping, UndeclareKeyExpr},
 };
 use zenoh_result::ZResult;
@@ -51,7 +51,7 @@ pub(crate) enum KeyExprInner<'a> {
 
 /// A possibly-owned version of [`keyexpr`] that may carry optimisations for use with a [`Session`] that may have declared it.
 ///
-/// Check [`keyexpr`]'s documentation for detailed explainations of the Key Expression Language.
+/// Check [`keyexpr`]'s documentation for detailed explanations of the Key Expression Language.
 #[repr(transparent)]
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
 #[serde(from = "OwnedKeyExpr")]
@@ -145,7 +145,7 @@ impl<'a> KeyExpr<'a> {
     pub fn autocanonize<T, E>(mut t: T) -> Result<Self, E>
     where
         Self: TryFrom<T, Error = E>,
-        T: Canonizable,
+        T: Canonize,
     {
         t.canonize();
         Self::new(t)
@@ -200,7 +200,7 @@ impl<'a> KeyExpr<'a> {
 
     /// Joins both sides, inserting a `/` in between them.
     ///
-    /// This should be your prefered method when concatenating path segments.
+    /// This should be your preferred method when concatenating path segments.
     ///
     /// This is notably useful for workspaces:
     /// ```rust
@@ -234,7 +234,7 @@ impl<'a> KeyExpr<'a> {
 
     /// Performs string concatenation and returns the result as a [`KeyExpr`] if possible.
     ///
-    /// You should probably prefer [`KeyExpr::join`] as Zenoh may then take advantage of the hierachical separation it inserts.
+    /// You should probably prefer [`KeyExpr::join`] as Zenoh may then take advantage of the hierarchical separation it inserts.
     pub fn concat<S: AsRef<str> + ?Sized>(&self, s: &S) -> ZResult<KeyExpr<'static>> {
         let s = s.as_ref();
         self._concat(s)
@@ -358,6 +358,7 @@ impl<'a> From<KeyExpr<'a>> for String {
         }
     }
 }
+
 impl<'a> TryFrom<String> for KeyExpr<'a> {
     type Error = zenoh_result::Error;
     fn try_from(value: String) -> Result<Self, Self::Error> {

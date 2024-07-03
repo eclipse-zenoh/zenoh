@@ -27,7 +27,7 @@ use zenoh_codec::WCodec;
 use zenoh_link::Locator;
 use zenoh_protocol::{
     common::ZExtBody,
-    core::{WhatAmI, WhatAmIMatcher, ZenohId},
+    core::{WhatAmI, WhatAmIMatcher, ZenohIdProto},
     network::{oam, oam::id::OAM_LINKSTATE, NetworkBody, NetworkMessage, Oam},
 };
 use zenoh_transport::unicast::TransportUnicast;
@@ -48,11 +48,11 @@ struct Details {
 
 #[derive(Clone)]
 pub(super) struct Node {
-    pub(super) zid: ZenohId,
+    pub(super) zid: ZenohIdProto,
     pub(super) whatami: Option<WhatAmI>,
     pub(super) locators: Option<Vec<Locator>>,
     pub(super) sn: u64,
-    pub(super) links: Vec<ZenohId>,
+    pub(super) links: Vec<ZenohIdProto>,
 }
 
 impl std::fmt::Debug for Node {
@@ -63,8 +63,8 @@ impl std::fmt::Debug for Node {
 
 pub(super) struct Link {
     pub(super) transport: TransportUnicast,
-    zid: ZenohId,
-    mappings: VecMap<ZenohId>,
+    zid: ZenohIdProto,
+    mappings: VecMap<ZenohIdProto>,
     local_mappings: VecMap<u64>,
 }
 
@@ -80,12 +80,12 @@ impl Link {
     }
 
     #[inline]
-    pub(super) fn set_zid_mapping(&mut self, psid: u64, zid: ZenohId) {
+    pub(super) fn set_zid_mapping(&mut self, psid: u64, zid: ZenohIdProto) {
         self.mappings.insert(psid.try_into().unwrap(), zid);
     }
 
     #[inline]
-    pub(super) fn get_zid(&self, psid: &u64) -> Option<&ZenohId> {
+    pub(super) fn get_zid(&self, psid: &u64) -> Option<&ZenohIdProto> {
         self.mappings.get((*psid).try_into().unwrap())
     }
 
@@ -109,7 +109,7 @@ pub(super) struct Changes {
 #[derive(Clone)]
 pub(super) struct Tree {
     pub(super) parent: Option<NodeIndex>,
-    pub(super) childs: Vec<NodeIndex>,
+    pub(super) children: Vec<NodeIndex>,
     pub(super) directions: Vec<Option<NodeIndex>>,
 }
 
@@ -132,7 +132,7 @@ impl Network {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
         name: String,
-        zid: ZenohId,
+        zid: ZenohIdProto,
         runtime: Runtime,
         full_linkstate: bool,
         router_peers_failover_brokering: bool,
@@ -160,7 +160,7 @@ impl Network {
             links: VecMap::new(),
             trees: vec![Tree {
                 parent: None,
-                childs: vec![],
+                children: vec![],
                 directions: vec![None],
             }],
             distances: vec![0.0],
@@ -177,7 +177,7 @@ impl Network {
     }
 
     #[inline]
-    pub(super) fn get_idx(&self, zid: &ZenohId) -> Option<NodeIndex> {
+    pub(super) fn get_idx(&self, zid: &ZenohIdProto) -> Option<NodeIndex> {
         self.graph
             .node_indices()
             .find(|idx| self.graph[*idx].zid == *zid)
@@ -189,7 +189,7 @@ impl Network {
     }
 
     #[inline]
-    pub(super) fn get_link_from_zid(&self, zid: &ZenohId) -> Option<&Link> {
+    pub(super) fn get_link_from_zid(&self, zid: &ZenohIdProto) -> Option<&Link> {
         self.links.values().find(|link| link.zid == *zid)
     }
 
@@ -344,7 +344,11 @@ impl Network {
         self.graph.update_edge(idx1, idx2, weight);
     }
 
-    pub(super) fn link_states(&mut self, link_states: Vec<LinkState>, src: ZenohId) -> Changes {
+    pub(super) fn link_states(
+        &mut self,
+        link_states: Vec<LinkState>,
+        src: ZenohIdProto,
+    ) -> Changes {
         tracing::trace!("{} Received from {} raw: {:?}", self.name, src, link_states);
         let strong_runtime = self.runtime.upgrade().unwrap();
 
@@ -409,7 +413,7 @@ impl Network {
         let link_states = link_states
             .into_iter()
             .map(|(zid, wai, locs, sn, links)| {
-                let links: Vec<ZenohId> = links
+                let links: Vec<ZenohIdProto> = links
                     .iter()
                     .filter_map(|l| {
                         if let Some(zid) = src_link.get_zid(l) {
@@ -559,7 +563,7 @@ impl Network {
                     }
                 },
             )
-            .collect::<Vec<(Vec<ZenohId>, NodeIndex, bool)>>();
+            .collect::<Vec<(Vec<ZenohIdProto>, NodeIndex, bool)>>();
 
         // Add/remove edges from graph
         let mut reintroduced_nodes = vec![];
@@ -611,7 +615,7 @@ impl Network {
         let link_states = link_states
             .into_iter()
             .filter(|ls| !removed.iter().any(|(idx, _)| idx == &ls.1))
-            .collect::<Vec<(Vec<ZenohId>, NodeIndex, bool)>>();
+            .collect::<Vec<(Vec<ZenohIdProto>, NodeIndex, bool)>>();
 
         if !self.autoconnect.is_empty() {
             // Connect discovered peers
@@ -650,8 +654,8 @@ impl Network {
         #[allow(clippy::type_complexity)] // This is only used here
         if !link_states.is_empty() {
             let (new_idxs, updated_idxs): (
-                Vec<(Vec<ZenohId>, NodeIndex, bool)>,
-                Vec<(Vec<ZenohId>, NodeIndex, bool)>,
+                Vec<(Vec<ZenohIdProto>, NodeIndex, bool)>,
+                Vec<(Vec<ZenohIdProto>, NodeIndex, bool)>,
             ) = link_states.into_iter().partition(|(_, _, new)| *new);
             let new_idxs = new_idxs
                 .into_iter()
@@ -815,7 +819,7 @@ impl Network {
         free_index
     }
 
-    pub(super) fn remove_link(&mut self, zid: &ZenohId) -> Vec<(NodeIndex, Node)> {
+    pub(super) fn remove_link(&mut self, zid: &ZenohIdProto) -> Vec<(NodeIndex, Node)> {
         tracing::trace!("{} remove_link {}", self.name, zid);
         self.links.retain(|_, link| link.zid != *zid);
         self.graph[self.idx].links.retain(|link| *link != *zid);
@@ -898,12 +902,13 @@ impl Network {
         let indexes = self.graph.node_indices().collect::<Vec<NodeIndex>>();
         let max_idx = indexes.iter().max().unwrap();
 
-        let old_childs: Vec<Vec<NodeIndex>> = self.trees.iter().map(|t| t.childs.clone()).collect();
+        let old_children: Vec<Vec<NodeIndex>> =
+            self.trees.iter().map(|t| t.children.clone()).collect();
 
         self.trees.clear();
         self.trees.resize_with(max_idx.index() + 1, || Tree {
             parent: None,
-            childs: vec![],
+            children: vec![],
             directions: vec![],
         });
 
@@ -937,7 +942,7 @@ impl Network {
             for idx in &indexes {
                 if let Some(parent_idx) = paths.predecessors[idx.index()] {
                     if parent_idx == self.idx {
-                        self.trees[tree_root_idx.index()].childs.push(*idx);
+                        self.trees[tree_root_idx.index()].children.push(*idx);
                     }
                 }
             }
@@ -975,22 +980,22 @@ impl Network {
             }
         }
 
-        let mut new_childs = Vec::with_capacity(self.trees.len());
-        new_childs.resize(self.trees.len(), vec![]);
+        let mut new_children = Vec::with_capacity(self.trees.len());
+        new_children.resize(self.trees.len(), vec![]);
 
-        for i in 0..new_childs.len() {
-            new_childs[i] = if i < old_childs.len() {
+        for i in 0..new_children.len() {
+            new_children[i] = if i < old_children.len() {
                 self.trees[i]
-                    .childs
+                    .children
                     .iter()
-                    .filter(|idx| !old_childs[i].contains(idx))
+                    .filter(|idx| !old_children[i].contains(idx))
                     .cloned()
                     .collect()
             } else {
-                self.trees[i].childs.clone()
+                self.trees[i].children.clone()
             };
         }
 
-        new_childs
+        new_children
     }
 }

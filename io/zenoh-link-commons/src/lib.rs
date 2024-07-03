@@ -50,6 +50,7 @@ pub struct Link {
     pub is_reliable: bool,
     pub is_streamed: bool,
     pub interfaces: Vec<String>,
+    pub auth_identifier: LinkAuthId,
 }
 
 #[async_trait]
@@ -78,6 +79,7 @@ impl From<&LinkUnicast> for Link {
             is_reliable: link.is_reliable(),
             is_streamed: link.is_streamed(),
             interfaces: link.get_interface_names(),
+            auth_identifier: link.get_auth_id().clone(),
         }
     }
 }
@@ -98,6 +100,7 @@ impl From<&LinkMulticast> for Link {
             is_reliable: link.is_reliable(),
             is_streamed: false,
             interfaces: vec![],
+            auth_identifier: LinkAuthId::default(),
         }
     }
 }

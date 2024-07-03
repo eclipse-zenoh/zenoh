@@ -33,7 +33,7 @@ use zenoh_config::Config as ZenohConfig;
 use zenoh_link_commons::{tls::WebPkiVerifierAnyServerName, ConfigurationInspector};
 use zenoh_protocol::core::{
     endpoint::{Address, Config},
-    Parameters,
+    parameters,
 };
 use zenoh_result::{bail, zerror, ZError, ZResult};
 
@@ -142,7 +142,7 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
             };
         }
 
-        Ok(Parameters::from_iter(ps.drain(..)))
+        Ok(parameters::from_iter(ps.drain(..)))
     }
 }
 
@@ -189,6 +189,16 @@ impl TlsServerConfig {
         if keys.is_empty() {
             bail!("No private key found for TLS server.");
         }
+
+        // Install ring based rustls CryptoProvider.
+        rustls::crypto::ring::default_provider()
+            // This can be called successfully at most once in any process execution.
+            // Call this early in your process to configure which provider is used for the provider.
+            // The configuration should happen before any use of ClientConfig::builder() or ServerConfig::builder().
+            .install_default()
+            // Ignore the error here, because `rustls::crypto::ring::default_provider().install_default()` will inevitably be executed multiple times
+            // when there are multiple quic links, and all but the first execution will fail.
+            .ok();
 
         let sc = if tls_server_client_auth {
             let root_cert_store = load_trust_anchors(config)?.map_or_else(
@@ -270,6 +280,16 @@ impl TlsClientConfig {
             tracing::debug!("Loading user-generated certificates.");
             root_cert_store.extend(custom_root_cert.roots);
         }
+
+        // Install ring based rustls CryptoProvider.
+        rustls::crypto::ring::default_provider()
+            // This can be called successfully at most once in any process execution.
+            // Call this early in your process to configure which provider is used for the provider.
+            // The configuration should happen before any use of ClientConfig::builder() or ServerConfig::builder().
+            .install_default()
+            // Ignore the error here, because `rustls::crypto::ring::default_provider().install_default()` will inevitably be executed multiple times
+            // when there are multiple quic links, and all but the first execution will fail.
+            .ok();
 
         let cc = if tls_client_server_auth {
             tracing::debug!("Loading client authentication key and certificate...");

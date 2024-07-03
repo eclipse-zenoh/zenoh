@@ -13,6 +13,7 @@
 //
 
 use std::{
+    borrow::Cow,
     collections::{HashMap, HashSet},
     str,
 };
@@ -20,13 +21,12 @@ use std::{
 use async_std::sync::{Arc, RwLock};
 use flume::{Receiver, Sender};
 use zenoh::{
-    bytes::StringOrBase64,
+    internal::Value,
     key_expr::{KeyExpr, OwnedKeyExpr},
     prelude::*,
+    query::Selector,
     sample::{Sample, SampleBuilder},
-    selector::Selector,
     time::Timestamp,
-    value::Value,
     Session,
 };
 
@@ -137,13 +137,13 @@ impl Aligner {
         from: &str,
     ) -> (HashMap<OwnedKeyExpr, (Timestamp, Value)>, bool) {
         let mut result = HashMap::new();
-        let properties = format!(
+        let parameters = format!(
             "timestamp={}&{}={}",
             timestamp,
             CONTENTS,
             serde_json::to_string(missing_content).unwrap()
         );
-        let (replies, no_err) = self.perform_query(from, properties.clone()).await;
+        let (replies, no_err) = self.perform_query(from, parameters.clone()).await;
 
         for sample in replies {
             result.insert(
@@ -211,12 +211,12 @@ impl Aligner {
         other_rep: &str,
     ) -> (HashSet<u64>, bool) {
         let (other_intervals, no_err) = if era.eq(&EraType::Cold) {
-            let properties = format!("timestamp={}&{}=cold", other.timestamp, ERA);
-            let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
+            let parameters = format!("timestamp={}&{}=cold", other.timestamp, ERA);
+            let (reply_content, mut no_err) = self.perform_query(other_rep, parameters).await;
             let mut other_intervals: HashMap<u64, u64> = HashMap::new();
             // expecting sample.payload to be a vec of intervals with their checksum
             for each in reply_content {
-                match serde_json::from_str(&StringOrBase64::from(each.payload())) {
+                match serde_json::from_reader(each.payload().reader()) {
                     Ok((i, c)) => {
                         other_intervals.insert(i, c);
                     }
@@ -224,7 +224,7 @@ impl Aligner {
                         tracing::error!("[ALIGNER] Error decoding reply: {}", e);
                         no_err = false;
                     }
-                };
+                }
             }
             (other_intervals, no_err)
         } else {
@@ -252,17 +252,17 @@ impl Aligner {
                 for each_int in diff_intervals {
                     diff_string.push(each_int.to_string());
                 }
-                let properties = format!(
+                let parameters = format!(
                     "timestamp={}&{}=[{}]",
                     other.timestamp,
                     INTERVALS,
                     diff_string.join(",")
                 );
                 // expecting sample.payload to be a vec of subintervals with their checksum
-                let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
+                let (reply_content, mut no_err) = self.perform_query(other_rep, parameters).await;
                 let mut other_subintervals: HashMap<u64, u64> = HashMap::new();
                 for each in reply_content {
-                    match serde_json::from_str(&StringOrBase64::from(each.payload())) {
+                    match serde_json::from_reader(each.payload().reader()) {
                         Ok((i, c)) => {
                             other_subintervals.insert(i, c);
                         }
@@ -270,7 +270,7 @@ impl Aligner {
                             tracing::error!("[ALIGNER] Error decoding reply: {}", e);
                             no_err = false;
                         }
-                    };
+                    }
                 }
                 (other_subintervals, no_err)
             };
@@ -293,17 +293,17 @@ impl Aligner {
             for each_sub in diff_subintervals {
                 diff_string.push(each_sub.to_string());
             }
-            let properties = format!(
+            let parameters = format!(
                 "timestamp={}&{}=[{}]",
                 other.timestamp,
                 SUBINTERVALS,
                 diff_string.join(",")
             );
             // expecting sample.payload to be a vec of log entries with their checksum
-            let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
+            let (reply_content, mut no_err) = self.perform_query(other_rep, parameters).await;
             let mut other_content: HashMap<u64, Vec<LogEntry>> = HashMap::new();
             for each in reply_content {
-                match serde_json::from_str(&StringOrBase64::from(each.payload())) {
+                match serde_json::from_reader(each.payload().reader()) {
                     Ok((i, c)) => {
                         other_content.insert(i, c);
                     }
@@ -311,7 +311,7 @@ impl Aligner {
                         tracing::error!("[ALIGNER] Error decoding reply: {}", e);
                         no_err = false;
                     }
-                };
+                }
             }
             // get subintervals diff
             let result = this.get_full_content_diff(other_content);
@@ -321,11 +321,11 @@ impl Aligner {
         }
     }
 
-    async fn perform_query(&self, from: &str, properties: String) -> (Vec<Sample>, bool) {
+    async fn perform_query(&self, from: &str, parameters: String) -> (Vec<Sample>, bool) {
         let mut no_err = true;
-        let selector = Selector::new(
+        let selector = Selector::owned(
             KeyExpr::from(&self.digest_key).join(&from).unwrap(),
-            properties,
+            parameters,
         );
         tracing::trace!("[ALIGNER] Sending Query '{}'...", selector);
         let mut return_val = Vec::new();
@@ -343,7 +343,10 @@ impl Aligner {
                             tracing::trace!(
                                 "[ALIGNER] Received ('{}': '{}')",
                                 sample.key_expr().as_str(),
-                                StringOrBase64::from(sample.payload())
+                                sample
+                                    .payload()
+                                    .deserialize::<Cow<str>>()
+                                    .unwrap_or(Cow::Borrowed("<malformed>"))
                             );
                             return_val.push(sample);
                         }

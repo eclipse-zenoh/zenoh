@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#![cfg(unix)]
+
 use std::{
     collections::HashMap,
     sync::{

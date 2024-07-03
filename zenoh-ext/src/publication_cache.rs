@@ -19,15 +19,14 @@ use std::{
 };
 
 use zenoh::{
-    core::{Error, Resolvable, Resolve, Result as ZResult},
-    internal::{bail, ResolveFuture, TerminatableTask},
+    internal::{bail, runtime::ZRuntime, ResolveFuture, TerminatableTask},
     key_expr::{keyexpr, KeyExpr, OwnedKeyExpr},
     prelude::Wait,
-    queryable::{Query, Queryable},
-    runtime::ZRuntime,
+    pubsub::FlumeSubscriber,
+    query::{Query, Queryable, ZenohParameters},
     sample::{Locality, Sample},
     session::{SessionDeclarations, SessionRef},
-    subscriber::FlumeSubscriber,
+    Error, Resolvable, Resolve, Result as ZResult,
 };
 
 /// The builder of PublicationCache, allowing to configure it.
@@ -209,13 +208,13 @@ impl<'a> PublicationCache<'a> {
                             }
                         },
 
-                        // on query, reply with cache content
+                        // on query, reply with cached content
                         query = quer_recv.recv_async() => {
                             if let Ok(query) = query {
-                                if !query.selector().key_expr().as_str().contains('*') {
-                                    if let Some(queue) = cache.get(query.selector().key_expr().as_keyexpr()) {
+                                if !query.key_expr().as_str().contains('*') {
+                                    if let Some(queue) = cache.get(query.key_expr().as_keyexpr()) {
                                         for sample in queue {
-                                            if let (Ok(Some(time_range)), Some(timestamp)) = (query.parameters().time_range(), sample.timestamp()) {
+                                            if let (Some(Ok(time_range)), Some(timestamp)) = (query.parameters().time_range(), sample.timestamp()) {
                                                 if !time_range.contains(timestamp.get_time().to_system_time()){
                                                     continue;
                                                 }
@@ -227,9 +226,9 @@ impl<'a> PublicationCache<'a> {
                                     }
                                 } else {
                                     for (key_expr, queue) in cache.iter() {
-                                        if query.selector().key_expr().intersects(unsafe{ keyexpr::from_str_unchecked(key_expr) }) {
+                                        if query.key_expr().intersects(unsafe{ keyexpr::from_str_unchecked(key_expr) }) {
                                             for sample in queue {
-                                                if let (Ok(Some(time_range)), Some(timestamp)) = (query.parameters().time_range(), sample.timestamp()) {
+                                                if let (Some(Ok(time_range)), Some(timestamp)) = (query.parameters().time_range(), sample.timestamp()) {
                                                     if !time_range.contains(timestamp.get_time().to_system_time()){
                                                         continue;
                                                     }

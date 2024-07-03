@@ -34,7 +34,7 @@ use tokio_tungstenite::{accept_async, tungstenite::Message, MaybeTlsStream, WebS
 use tokio_util::sync::CancellationToken;
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
 use zenoh_link_commons::{
-    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
+    LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -226,6 +226,11 @@ impl LinkUnicastTrait for LinkUnicastWs {
     fn is_streamed(&self) -> bool {
         false
     }
+
+    #[inline(always)]
+    fn get_auth_id(&self) -> &LinkAuthId {
+        &LinkAuthId::NONE
+    }
 }
 
 impl Drop for LinkUnicastWs {
@@ -302,7 +307,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
         let dst_url = get_ws_url(endpoint.address()).await?;
 
-        let (stream, _) = tokio_tungstenite::connect_async(&dst_url)
+        let (stream, _) = tokio_tungstenite::connect_async(dst_url.as_str())
             .await
             .map_err(|e| {
                 zerror!(
@@ -502,6 +507,15 @@ async fn accept_task(
             },
 
             _ = token.cancelled() => break,
+        };
+
+        // Get the right source address in case an unsepecified IP (i.e. 0.0.0.0 or [::]) is used
+        let src_addr = match stream.local_addr() {
+            Ok(sa) => sa,
+            Err(e) => {
+                tracing::debug!("Can not accept TCP connection: {}", e);
+                continue;
+            }
         };
 
         tracing::debug!(
