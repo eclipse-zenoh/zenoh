@@ -187,17 +187,22 @@ impl LinkUnicastTrait for LinkUnicastTls {
 
     #[inline(always)]
     fn get_mtu(&self) -> BatchSize {
-        // target_os limitation of socket2: https://docs.rs/socket2/latest/src/socket2/sys/unix.rs.html#1544
-        #[cfg(not(target_os = "redox"))]
+        // target limitation of socket2: https://docs.rs/socket2/latest/src/socket2/sys/unix.rs.html#1544
+        #[cfg(target_family = "unix")]
         {
             let socket = socket2::SockRef::from(self.get_socket().get_ref().0);
             let mss = socket.mss().unwrap_or(*TLS_DEFAULT_MTU as u32);
             mss.min(*TLS_DEFAULT_MTU as u32) as BatchSize
         }
 
-        #[cfg(target_os = "redox")]
+        #[cfg(not(target_family = "unix"))]
         {
-            *TLS_DEFAULT_MTU
+            // See IETF RFC6691 https://datatracker.ietf.org/doc/rfc6691/
+            let header = match self.src_addr.ip() {
+                std::net::IpAddr::V4(_) => 40,
+                std::net::IpAddr::V6(_) => 60,
+            };
+            *TLS_DEFAULT_MTU - header
         }
     }
 
