@@ -27,7 +27,7 @@ use tracing_subscriber::{
 /// Calling this function initializes a `lazy_static` in the `tracing` crate
 /// such static is not deallocated prior to process existing, thus tools such as `valgrind`
 /// will report a memory leak.
-/// Refer to this issue: https://github.com/tokio-rs/tracing/issues/2069
+/// Refer to this issue: <https://github.com/tokio-rs/tracing/issues/2069>
 pub fn try_init_log_from_env() {
     if let Ok(env_filter) = EnvFilter::try_from_default_env() {
         init_env_filter(env_filter);
@@ -41,7 +41,7 @@ pub fn try_init_log_from_env() {
 /// Calling this function initializes a `lazy_static` in the `tracing` crate
 /// such static is not deallocated prior to process existing, thus tools such as `valgrind`
 /// will report a memory leak.
-/// Refer to this issue: https://github.com/tokio-rs/tracing/issues/2069
+/// Refer to this issue: <https://github.com/tokio-rs/tracing/issues/2069>
 pub fn init_log_from_env_or<S>(fallback: S)
 where
     S: AsRef<str>,

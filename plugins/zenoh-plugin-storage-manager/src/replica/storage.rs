@@ -22,7 +22,7 @@ use async_trait::async_trait;
 use flume::{Receiver, Sender};
 use futures::select;
 use zenoh::{
-    core::Result as ZResult,
+    bytes::EncodingBuilderTrait,
     internal::{
         bail,
         buffers::{SplitBuffer, ZBuf},
@@ -35,9 +35,10 @@ use zenoh::{
         KeyExpr, OwnedKeyExpr,
     },
     query::{ConsolidationMode, QueryTarget},
-    sample::{EncodingBuilderTrait, Sample, SampleBuilder, SampleKind, TimestampBuilderTrait},
+    sample::{Sample, SampleBuilder, SampleKind, TimestampBuilderTrait},
     session::{Session, SessionDeclarations},
     time::{Timestamp, NTP64},
+    Result as ZResult,
 };
 use zenoh_backend_traits::{
     config::{GarbageCollectionConfig, StorageConfig},

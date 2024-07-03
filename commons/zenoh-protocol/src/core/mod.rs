@@ -273,7 +273,7 @@ impl<'de> serde::Deserialize<'de> for ZenohIdProto {
     }
 }
 
-/// The unique id of a zenoh entity inside it's parent [`Session`].
+/// The unique id of a zenoh entity inside it's parent `Session`.
 pub type EntityId = u32;
 
 /// The global unique id of a zenoh entity.

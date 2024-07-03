@@ -14,7 +14,7 @@
 use std::time::Duration;
 
 use clap::Parser;
-use zenoh::{key_expr::KeyExpr, prelude::*, Config};
+use zenoh::{bytes::Encoding, key_expr::KeyExpr, prelude::*, Config};
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
@@ -35,7 +35,13 @@ async fn main() {
         tokio::time::sleep(Duration::from_secs(1)).await;
         let buf = format!("[{idx:4}] {payload}");
         println!("Putting Data ('{}': '{}')...", &key_expr, buf);
-        publisher.put(buf).attachment(&attachment).await.unwrap();
+        // Refer to z_bytes.rs to see how to serialize different types of message
+        publisher
+            .put(buf)
+            .encoding(Encoding::TEXT_PLAIN) // Optionally set the encoding metadata 
+            .attachment(&attachment) // Optionally add an attachment
+            .await
+            .unwrap();
     }
 }
 
@@ -49,8 +55,6 @@ struct Args {
     payload: String,
     #[arg(short, long)]
     /// The attachments to add to each put.
-    ///
-    /// The key-value pairs are &-separated, and = serves as the separator between key and value.
     attach: Option<String>,
     #[command(flatten)]
     common: CommonArgs,

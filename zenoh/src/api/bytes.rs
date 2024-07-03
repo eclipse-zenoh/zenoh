@@ -345,6 +345,28 @@ where
     Deserialize(<T as TryFrom<ZBytes>>::Error),
 }
 
+impl<T> std::fmt::Display for ZReadOrDeserializeError<T>
+where
+    T: Debug,
+    T: TryFrom<ZBytes>,
+    <T as TryFrom<ZBytes>>::Error: Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ZReadOrDeserializeError::Read(_) => f.write_str("Read error"),
+            ZReadOrDeserializeError::Deserialize(e) => f.write_fmt(format_args!("{:?}", e)),
+        }
+    }
+}
+
+impl<T> std::error::Error for ZReadOrDeserializeError<T>
+where
+    T: Debug,
+    T: TryFrom<ZBytes>,
+    <T as TryFrom<ZBytes>>::Error: Debug,
+{
+}
+
 impl ZBytesReader<'_> {
     /// Returns the number of bytes that can still be read
     pub fn remaining(&self) -> usize {
@@ -479,6 +501,14 @@ pub struct ZSerde;
 
 #[derive(Debug, Clone, Copy)]
 pub struct ZDeserializeError;
+
+impl std::fmt::Display for ZDeserializeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Deserialize error")
+    }
+}
+
+impl std::error::Error for ZDeserializeError {}
 
 // ZBytes
 impl Serialize<ZBytes> for ZSerde {
@@ -2255,6 +2285,38 @@ where
     Two(ZReadOrDeserializeError<B>),
 }
 
+impl<A, B> std::fmt::Display for ZReadOrDeserializeErrorTuple2<A, B>
+where
+    A: Debug,
+    A: TryFrom<ZBytes>,
+    <A as TryFrom<ZBytes>>::Error: Debug,
+    B: Debug,
+    B: TryFrom<ZBytes>,
+    <B as TryFrom<ZBytes>>::Error: Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ZReadOrDeserializeErrorTuple2::One(e) => {
+                f.write_fmt(format_args!("1st tuple element: {}", e))
+            }
+            ZReadOrDeserializeErrorTuple2::Two(e) => {
+                f.write_fmt(format_args!("2nd tuple element: {}", e))
+            }
+        }
+    }
+}
+
+impl<A, B> std::error::Error for ZReadOrDeserializeErrorTuple2<A, B>
+where
+    A: Debug,
+    A: TryFrom<ZBytes>,
+    <A as TryFrom<ZBytes>>::Error: Debug,
+    B: Debug,
+    B: TryFrom<ZBytes>,
+    <B as TryFrom<ZBytes>>::Error: Debug,
+{
+}
+
 impl<A, B> Deserialize<(A, B)> for ZSerde
 where
     A: TryFrom<ZBytes>,
@@ -2406,6 +2468,47 @@ where
     One(ZReadOrDeserializeError<A>),
     Two(ZReadOrDeserializeError<B>),
     Three(ZReadOrDeserializeError<C>),
+}
+
+impl<A, B, C> std::fmt::Display for ZReadOrDeserializeErrorTuple3<A, B, C>
+where
+    A: Debug,
+    A: TryFrom<ZBytes>,
+    <A as TryFrom<ZBytes>>::Error: Debug,
+    B: Debug,
+    B: TryFrom<ZBytes>,
+    <B as TryFrom<ZBytes>>::Error: Debug,
+    C: Debug,
+    C: TryFrom<ZBytes>,
+    <C as TryFrom<ZBytes>>::Error: Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ZReadOrDeserializeErrorTuple3::One(e) => {
+                f.write_fmt(format_args!("1st tuple element: {}", e))
+            }
+            ZReadOrDeserializeErrorTuple3::Two(e) => {
+                f.write_fmt(format_args!("2nd tuple element: {}", e))
+            }
+            ZReadOrDeserializeErrorTuple3::Three(e) => {
+                f.write_fmt(format_args!("3rd tuple element: {}", e))
+            }
+        }
+    }
+}
+
+impl<A, B, C> std::error::Error for ZReadOrDeserializeErrorTuple3<A, B, C>
+where
+    A: Debug,
+    A: TryFrom<ZBytes>,
+    <A as TryFrom<ZBytes>>::Error: Debug,
+    B: Debug,
+    B: TryFrom<ZBytes>,
+    <B as TryFrom<ZBytes>>::Error: Debug,
+    C: Debug,
+    C: TryFrom<ZBytes>,
+    <C as TryFrom<ZBytes>>::Error: Debug,
+{
 }
 
 impl<A, B, C> Deserialize<(A, B, C)> for ZSerde
@@ -2583,6 +2686,56 @@ where
     Two(ZReadOrDeserializeError<B>),
     Three(ZReadOrDeserializeError<C>),
     Four(ZReadOrDeserializeError<D>),
+}
+
+impl<A, B, C, D> std::fmt::Display for ZReadOrDeserializeErrorTuple4<A, B, C, D>
+where
+    A: Debug,
+    A: TryFrom<ZBytes>,
+    <A as TryFrom<ZBytes>>::Error: Debug,
+    B: Debug,
+    B: TryFrom<ZBytes>,
+    <B as TryFrom<ZBytes>>::Error: Debug,
+    C: Debug,
+    C: TryFrom<ZBytes>,
+    <C as TryFrom<ZBytes>>::Error: Debug,
+    D: Debug,
+    D: TryFrom<ZBytes>,
+    <D as TryFrom<ZBytes>>::Error: Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ZReadOrDeserializeErrorTuple4::One(e) => {
+                f.write_fmt(format_args!("1st tuple element: {}", e))
+            }
+            ZReadOrDeserializeErrorTuple4::Two(e) => {
+                f.write_fmt(format_args!("2nd tuple element: {}", e))
+            }
+            ZReadOrDeserializeErrorTuple4::Three(e) => {
+                f.write_fmt(format_args!("3rd tuple element: {}", e))
+            }
+            ZReadOrDeserializeErrorTuple4::Four(e) => {
+                f.write_fmt(format_args!("4th tuple element: {}", e))
+            }
+        }
+    }
+}
+
+impl<A, B, C, D> std::error::Error for ZReadOrDeserializeErrorTuple4<A, B, C, D>
+where
+    A: Debug,
+    A: TryFrom<ZBytes>,
+    <A as TryFrom<ZBytes>>::Error: Debug,
+    B: Debug,
+    B: TryFrom<ZBytes>,
+    <B as TryFrom<ZBytes>>::Error: Debug,
+    C: Debug,
+    C: TryFrom<ZBytes>,
+    <C as TryFrom<ZBytes>>::Error: Debug,
+    D: Debug,
+    D: TryFrom<ZBytes>,
+    <D as TryFrom<ZBytes>>::Error: Debug,
+{
 }
 
 impl<A, B, C, D> Deserialize<(A, B, C, D)> for ZSerde
@@ -2806,6 +2959,7 @@ impl<const ID: u8> From<AttachmentType<ID>> for ZBytes {
 }
 
 mod tests {
+
     #[test]
     fn serializer() {
         use std::borrow::Cow;

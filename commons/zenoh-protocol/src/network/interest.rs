@@ -195,8 +195,12 @@ impl Interest {
 
         let id = rng.gen::<InterestId>();
         let mode = InterestMode::rand();
-        let options = InterestOptions::rand();
-        let wire_expr = rng.gen_bool(0.5).then_some(WireExpr::rand());
+        let options = if mode == InterestMode::Final {
+            InterestOptions::empty()
+        } else {
+            InterestOptions::rand()
+        };
+        let wire_expr = options.restricted().then_some(WireExpr::rand());
         let ext_qos = ext::QoSType::rand();
         let ext_tstamp = rng.gen_bool(0.5).then(ext::TimestampType::rand);
         let ext_nodeid = ext::NodeIdType::rand();

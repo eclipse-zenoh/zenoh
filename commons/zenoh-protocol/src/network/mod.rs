@@ -418,6 +418,7 @@ pub mod ext {
         }
     }
 
+    /// ```text
     ///  7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
     /// |zid_len|X|X|X|X|
@@ -426,6 +427,7 @@ pub mod ext {
     /// +---------------+
     /// %      eid      %
     /// +---------------+
+    /// ```
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct EntityGlobalIdType<const ID: u8> {
         pub zid: ZenohIdProto,

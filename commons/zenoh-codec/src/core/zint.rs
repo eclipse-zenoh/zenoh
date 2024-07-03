@@ -112,7 +112,7 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, mut x: u64) -> Self::Output {
-        writer.with_slot(VLE_LEN_MAX, move |buffer| {
+        let write = move |buffer: &mut [u8]| {
             let mut len = 0;
             while (x & !0x7f_u64) != 0 {
                 // SAFETY: buffer is guaranteed to be VLE_LEN long where VLE_LEN is
@@ -139,7 +139,10 @@ where
             }
             // The number of written bytes
             len
-        })?;
+        };
+        // SAFETY: write algorithm guarantees than returned length is lesser than or equal to
+        // `VLE_LEN_MAX`.
+        unsafe { writer.with_slot(VLE_LEN_MAX, write)? };
         Ok(())
     }
 }

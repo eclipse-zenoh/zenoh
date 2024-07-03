@@ -37,29 +37,29 @@ mod _prelude {
             session::{SessionDeclarations, Undeclarable},
         },
         config::ValidatedMap,
-        core::{Error as ZError, Resolvable, Resolve, Result as ZResult},
+        Error as ZError, Resolvable, Resolve, Result as ZResult,
     };
 }
 
 pub use _prelude::*;
 
 #[allow(deprecated)]
-pub use crate::core::AsyncResolve;
+pub use crate::AsyncResolve;
 #[allow(deprecated)]
-pub use crate::core::SyncResolve;
-pub use crate::core::Wait;
+pub use crate::SyncResolve;
+pub use crate::Wait;
 
 /// Prelude to import when using Zenoh's sync API.
 #[deprecated(since = "1.0.0", note = "use `zenoh::prelude` instead")]
 pub mod sync {
     pub use super::_prelude::*;
     #[allow(deprecated)]
-    pub use crate::core::SyncResolve;
+    pub use crate::SyncResolve;
 }
 /// Prelude to import when using Zenoh's async API.
 #[deprecated(since = "1.0.0", note = "use `zenoh::prelude` instead")]
 pub mod r#async {
     pub use super::_prelude::*;
     #[allow(deprecated)]
-    pub use crate::core::AsyncResolve;
+    pub use crate::AsyncResolve;
 }

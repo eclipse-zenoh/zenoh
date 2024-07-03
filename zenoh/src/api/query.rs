@@ -42,7 +42,7 @@ use super::{
     value::Value,
 };
 
-/// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
+/// The [`Queryable`](crate::query::Queryable)s that should be target of a [`get`](Session::get).
 pub type QueryTarget = zenoh_protocol::network::request::ext::TargetType;
 
 /// The kind of consolidation.
@@ -308,7 +308,7 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     /// Receive the replies for this query with a mutable callback.
     ///
     /// Using this guarantees that your callback will never be called concurrently.
-    /// If your callback is also accepted by the [`callback`](GetBuilder::callback) method, we suggest you use it instead of `callback_mut`
+    /// If your callback is also accepted by the [`callback`](crate::session::SessionGetBuilder::callback) method, we suggest you use it instead of `callback_mut`
     ///
     /// # Examples
     /// ```
@@ -336,7 +336,7 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the replies for this query with a [`Handler`](crate::prelude::IntoHandler).
+    /// Receive the replies for this query with a [`Handler`](crate::handlers::IntoHandler).
     ///
     /// # Examples
     /// ```
