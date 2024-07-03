@@ -380,7 +380,12 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
             QueryConsolidation::from(zenoh::query::ConsolidationMode::Latest)
         };
         let raw = selector.decode().any(|(k, _)| k.as_ref() == RAW_KEY);
-        let mut query = req.state().0.get(&selector).consolidation(consolidation);
+        let mut query = req
+            .state()
+            .0
+            .get(&selector)
+            .with(flume::unbounded())
+            .consolidation(consolidation);
         if !body.is_empty() {
             let encoding: Encoding = req
                 .content_type()
