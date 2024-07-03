@@ -80,6 +80,12 @@ impl LinkUnicastTcp {
             dst_locator: Locator::new(TCP_LOCATOR_PREFIX, dst_addr.to_string(), "").unwrap(),
         }
     }
+
+    #[allow(clippy::mut_from_ref)]
+    fn get_socket(&self) -> &TcpStream {
+        unsafe { &*self.socket.get() }
+    }
+
     #[allow(clippy::mut_from_ref)]
     fn get_mut_socket(&self) -> &mut TcpStream {
         unsafe { &mut *self.socket.get() }
@@ -147,7 +153,18 @@ impl LinkUnicastTrait for LinkUnicastTcp {
 
     #[inline(always)]
     fn get_mtu(&self) -> BatchSize {
-        *TCP_DEFAULT_MTU
+        // target_os limitation of socket2: https://docs.rs/socket2/latest/src/socket2/sys/unix.rs.html#1544
+        #[cfg(not(target_os = "redox"))]
+        {
+            let socket = socket2::SockRef::from(self.get_socket());
+            let mss = socket.mss().unwrap_or(*TCP_DEFAULT_MTU as u32);
+            mss.min(*TCP_DEFAULT_MTU as u32) as BatchSize
+        }
+
+        #[cfg(target_os = "redox")]
+        {
+            *TCP_DEFAULT_MTU
+        }
     }
 
     #[inline(always)]
@@ -195,6 +212,7 @@ impl fmt::Debug for LinkUnicastTcp {
         f.debug_struct("Tcp")
             .field("src", &self.src_addr)
             .field("dst", &self.dst_addr)
+            .field("mtu", &self.get_mtu())
             .finish()
     }
 }

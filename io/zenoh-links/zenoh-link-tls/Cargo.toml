@@ -33,6 +33,7 @@ rustls-pemfile = { workspace = true }
 rustls-pki-types = { workspace = true }
 rustls-webpki = { workspace = true }
 secrecy = { workspace = true }
+socket2 = { workspace = true }
 tokio = { workspace = true, features = ["fs", "io-util", "net", "sync"] }
 tokio-rustls = { workspace = true }
 tokio-util = { workspace = true, features = ["rt"] }

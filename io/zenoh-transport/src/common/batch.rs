@@ -120,14 +120,6 @@ impl BatchConfig {
                 .then_some(BatchHeader::new(BatchHeader::COMPRESSION))
         }
     }
-
-    pub fn max_buffer_size(&self) -> usize {
-        let mut len = self.mtu as usize;
-        if self.is_streamed {
-            len += BatchSize::BITS as usize / 8;
-        }
-        len
-    }
 }
 
 // Batch header
@@ -214,7 +206,7 @@ pub struct WBatch {
 impl WBatch {
     pub fn new(config: BatchConfig) -> Self {
         let mut batch = Self {
-            buffer: BBuf::with_capacity(config.max_buffer_size()),
+            buffer: BBuf::with_capacity(config.mtu as usize),
             codec: Zenoh080Batch::new(),
             config,
             #[cfg(feature = "stats")]

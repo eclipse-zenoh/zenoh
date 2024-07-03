@@ -769,7 +769,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         .await?;
 
     tracing::debug!(
-        "New transport link accepted from {} to {}: {}.",
+        "New transport link accepted from {} to {}: {}",
         osyn_out.other_zid,
         manager.config.zid,
         s_link,
