@@ -81,7 +81,7 @@ impl LinkUnicastTcp {
         }
     }
 
-    #[allow(clippy::mut_from_ref)]
+    #[cfg(target_family = "unix")]
     fn get_socket(&self) -> &TcpStream {
         unsafe { &*self.socket.get() }
     }

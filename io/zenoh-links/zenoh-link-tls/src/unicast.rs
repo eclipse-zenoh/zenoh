@@ -109,6 +109,7 @@ impl LinkUnicastTls {
         }
     }
 
+    #[cfg(target_family = "unix")]
     fn get_socket(&self) -> &TlsStream<TcpStream> {
         unsafe { &*self.inner.get() }
     }
