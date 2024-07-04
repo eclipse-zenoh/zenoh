@@ -43,8 +43,6 @@ const RCV_BUF_SIZE: usize = u16::MAX as usize;
 const SCOUT_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
 const SCOUT_MAX_PERIOD: Duration = Duration::from_millis(8_000);
 const SCOUT_PERIOD_INCREASE_FACTOR: u32 = 2;
-const ROUTER_DEFAULT_LISTENER: &str = "tcp/[::]:7447";
-const PEER_DEFAULT_LISTENER: &str = "tcp/[::]:0";
 
 pub enum Loop {
     Continue,
@@ -130,7 +128,12 @@ impl Runtime {
         let (peers, scouting, addr, ifaces, timeout, multicast_ttl) = {
             let guard = self.state.config.lock();
             (
-                guard.connect().endpoints().clone(),
+                guard
+                    .connect()
+                    .endpoints()
+                    .client()
+                    .unwrap_or(&vec![])
+                    .clone(),
                 unwrap_or_default!(guard.scouting().multicast().enabled()),
                 unwrap_or_default!(guard.scouting().multicast().address()),
                 unwrap_or_default!(guard.scouting().multicast().interface()),
@@ -168,27 +171,14 @@ impl Runtime {
     async fn start_peer(&self) -> ZResult<()> {
         let (listeners, peers, scouting, listen, autoconnect, addr, ifaces, delay, linkstate) = {
             let guard = &self.state.config.lock();
-            let listeners = if guard.listen().endpoints().is_empty() {
-                let endpoint: EndPoint = PEER_DEFAULT_LISTENER.parse().unwrap();
-                let protocol = endpoint.protocol();
-                let mut listeners = vec![];
-                if self
-                    .state
-                    .manager
-                    .config
-                    .protocols
-                    .iter()
-                    .any(|p| p.as_str() == protocol.as_str())
-                {
-                    listeners.push(endpoint)
-                }
-                listeners
-            } else {
-                guard.listen().endpoints().clone()
-            };
             (
-                listeners,
-                guard.connect().endpoints().clone(),
+                guard.listen().endpoints().peer().unwrap_or(&vec![]).clone(),
+                guard
+                    .connect()
+                    .endpoints()
+                    .peer()
+                    .unwrap_or(&vec![])
+                    .clone(),
                 unwrap_or_default!(guard.scouting().multicast().enabled()),
                 *unwrap_or_default!(guard.scouting().multicast().listen().peer()),
                 *unwrap_or_default!(guard.scouting().multicast().autoconnect().peer()),
@@ -223,27 +213,19 @@ impl Runtime {
     async fn start_router(&self) -> ZResult<()> {
         let (listeners, peers, scouting, listen, autoconnect, addr, ifaces, delay) = {
             let guard = self.state.config.lock();
-            let listeners = if guard.listen().endpoints().is_empty() {
-                let endpoint: EndPoint = ROUTER_DEFAULT_LISTENER.parse().unwrap();
-                let protocol = endpoint.protocol();
-                let mut listeners = vec![];
-                if self
-                    .state
-                    .manager
-                    .config
-                    .protocols
-                    .iter()
-                    .any(|p| p.as_str() == protocol.as_str())
-                {
-                    listeners.push(endpoint)
-                }
-                listeners
-            } else {
-                guard.listen().endpoints().clone()
-            };
             (
-                listeners,
-                guard.connect().endpoints().clone(),
+                guard
+                    .listen()
+                    .endpoints()
+                    .router()
+                    .unwrap_or(&vec![])
+                    .clone(),
+                guard
+                    .connect()
+                    .endpoints()
+                    .router()
+                    .unwrap_or(&vec![])
+                    .clone(),
                 unwrap_or_default!(guard.scouting().multicast().enabled()),
                 *unwrap_or_default!(guard.scouting().multicast().listen().router()),
                 *unwrap_or_default!(guard.scouting().multicast().autoconnect().router()),
@@ -422,7 +404,16 @@ impl Runtime {
     }
 
     pub(crate) async fn update_peers(&self) -> ZResult<()> {
-        let peers = { self.state.config.lock().connect().endpoints().clone() };
+        let peers = {
+            self.state
+                .config
+                .lock()
+                .connect()
+                .endpoints()
+                .get(self.state.whatami)
+                .unwrap_or(&vec![])
+                .clone()
+        };
         let transports = self.manager().get_transports_unicast().await;
 
         if self.state.whatami == WhatAmI::Client {
@@ -1163,6 +1154,8 @@ impl Runtime {
                             .lock()
                             .connect()
                             .endpoints()
+                            .get(session.runtime.state.whatami)
+                            .unwrap_or(&vec![])
                             .clone()
                     };
                     if peers.contains(endpoint) {

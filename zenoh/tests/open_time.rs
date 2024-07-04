@@ -41,7 +41,8 @@ async fn time_open(
     router_config.set_mode(Some(WhatAmI::Router)).unwrap();
     router_config
         .listen
-        .set_endpoints(vec![listen_endpoint.clone()])
+        .endpoints
+        .set(vec![listen_endpoint.clone()])
         .unwrap();
     router_config
         .transport
@@ -70,7 +71,8 @@ async fn time_open(
     app_config.set_mode(Some(connect_mode)).unwrap();
     app_config
         .connect
-        .set_endpoints(vec![connect_endpoint.clone()])
+        .endpoints
+        .set(vec![connect_endpoint.clone()])
         .unwrap();
     app_config
         .transport
