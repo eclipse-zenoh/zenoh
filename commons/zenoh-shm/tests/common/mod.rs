@@ -84,6 +84,7 @@ impl CpuLoad {
         Self::new(1000)
     }
 
+    #[cfg(feature = "test")]
     pub fn optimal_high() -> Self {
         Self::new(num_cpus::get())
     }

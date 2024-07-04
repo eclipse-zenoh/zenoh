@@ -124,10 +124,10 @@
 use async_trait::async_trait;
 use const_format::concatcp;
 use zenoh::{
-    core::Result as ZResult,
     internal::Value,
     key_expr::{keyexpr, OwnedKeyExpr},
     time::Timestamp,
+    Result as ZResult,
 };
 use zenoh_plugin_trait::{PluginControl, PluginInstance, PluginStatusRec, StructVersion};
 use zenoh_util::concat_enabled_features;
@@ -225,7 +225,7 @@ pub trait Storage: Send + Sync {
     /// on the administration space for this storage.
     fn get_admin_status(&self) -> serde_json::Value;
 
-    /// Function called for each incoming data ([`Sample`]) to be stored in this storage.
+    /// Function called for each incoming data ([`Sample`](zenoh::sample::Sample)) to be stored in this storage.
     /// A key can be `None` if it matches the `strip_prefix` exactly.
     /// In order to avoid data loss, the storage must store the `value` and `timestamp` associated with the `None` key
     /// in a manner suitable for the given backend technology

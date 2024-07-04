@@ -26,8 +26,7 @@ use http_types::Method;
 use serde::{Deserialize, Serialize};
 use tide::{http::Mime, sse::Sender, Request, Response, Server, StatusCode};
 use zenoh::{
-    bytes::ZBytes,
-    encoding::Encoding,
+    bytes::{Encoding, ZBytes},
     internal::{
         bail,
         plugins::{RunningPluginTrait, ZenohPlugin},
@@ -36,16 +35,15 @@ use zenoh::{
     },
     key_expr::{keyexpr, KeyExpr},
     prelude::*,
-    query::{QueryConsolidation, Reply},
-    sample::{EncodingBuilderTrait, Sample, SampleKind},
-    selector::{Parameters, Selector, ZenohParameters},
+    query::{Parameters, QueryConsolidation, Reply, Selector, ZenohParameters},
+    sample::{Sample, SampleKind},
     session::{Session, SessionDeclarations},
 };
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 
 mod config;
 pub use config::Config;
-use zenoh::query::ReplyError;
+use zenoh::{bytes::EncodingBuilderTrait, query::ReplyError};
 
 const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 lazy_static::lazy_static! {
@@ -77,10 +75,19 @@ fn payload_to_json(payload: &ZBytes, encoding: &Encoding) -> serde_json::Value {
                 &Encoding::APPLICATION_JSON | &Encoding::TEXT_JSON | &Encoding::TEXT_JSON5 => {
                     payload
                         .deserialize::<serde_json::Value>()
-                        .unwrap_or_else(|_| {
+                        .unwrap_or_else(|e| {
+                            tracing::warn!("Encoding is JSON but data is not JSON, converting to base64, Error: {e:?}");
                             serde_json::Value::String(base64_encode(&Cow::from(payload)))
                         })
                 }
+                &Encoding::TEXT_PLAIN | &Encoding::ZENOH_STRING  => serde_json::Value::String(
+                    payload
+                        .deserialize::<String>()
+                        .unwrap_or_else(|e| {
+                            tracing::warn!("Encoding is String but data is not String, converting to base64, Error: {e:?}");
+                            base64_encode(&Cow::from(payload))
+                        }),
+                ),
                 // otherwise convert to JSON string
                 _ => serde_json::Value::String(base64_encode(&Cow::from(payload))),
             }

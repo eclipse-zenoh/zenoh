@@ -22,8 +22,8 @@ use std::{
 #[cfg(feature = "internal")]
 use zenoh::internal::runtime::{Runtime, RuntimeBuilder};
 use zenoh::{
-    config, key_expr::KeyExpr, prelude::*, publisher::CongestionControl, sample::SampleKind,
-    subscriber::Reliability, Session,
+    config, key_expr::KeyExpr, prelude::*, pubsub::Reliability, qos::CongestionControl,
+    sample::SampleKind, Session,
 };
 use zenoh_core::ztimeout;
 

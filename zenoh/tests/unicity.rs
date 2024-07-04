@@ -25,7 +25,7 @@ use zenoh::{
     config::{EndPoint, WhatAmI},
     key_expr::KeyExpr,
     prelude::*,
-    publisher::CongestionControl,
+    qos::CongestionControl,
     Session,
 };
 use zenoh_core::ztimeout;

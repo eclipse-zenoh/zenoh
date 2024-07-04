@@ -19,7 +19,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 use url::Url;
 use zenoh::{
     config::{Config, EndPoint, ModeDependentValue, PermissionsConf, ValidatedMap, WhatAmI},
-    core::Result,
+    Result,
 };
 
 #[cfg(feature = "loki")]
@@ -56,7 +56,7 @@ struct Args {
     /// WARNING: this identifier must be unique in the system and must be 16 bytes maximum (32 chars)!
     #[arg(short, long)]
     id: Option<String>,
-    /// A plugin that MUST be loaded. You can give just the name of the plugin, zenohd will search for a library named 'libzenoh_plugin_<name>.so' (exact name depending the OS). Or you can give such a string: "<plugin_name>:<library_path>
+    /// A plugin that MUST be loaded. You can give just the name of the plugin, zenohd will search for a library named 'libzenoh_plugin_\<name\>.so' (exact name depending the OS). Or you can give such a string: "\<plugin_name\>:\<library_path\>"
     /// Repeat this option to load several plugins. If loading failed, zenohd will exit.
     #[arg(short = 'P', long)]
     plugin: Vec<String>,

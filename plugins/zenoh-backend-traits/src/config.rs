@@ -18,8 +18,8 @@ use derive_more::{AsMut, AsRef};
 use schemars::JsonSchema;
 use serde_json::{Map, Value};
 use zenoh::{
-    core::Result as ZResult,
     key_expr::{keyexpr, OwnedKeyExpr},
+    Result as ZResult,
 };
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_result::{bail, zerror, Error};
