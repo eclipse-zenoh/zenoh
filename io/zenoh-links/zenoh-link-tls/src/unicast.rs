@@ -200,7 +200,8 @@ impl LinkUnicastTrait for LinkUnicastTls {
         #[cfg(target_family = "unix")]
         {
             let socket = socket2::SockRef::from(self.get_socket().get_ref().0);
-            let mss = socket.mss().unwrap_or(mtu as u32);
+            // Get the MSS and divide it by 2 to ensure we can at least fill half the MSS
+            let mss = socket.mss().unwrap_or(mtu as u32) / 2;
             // Compute largest multiple of TCP MSS that is smaller of default MTU
             let mut tgt = mss;
             while (tgt + mss) < mtu as u32 {
