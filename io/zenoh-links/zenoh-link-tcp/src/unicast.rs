@@ -153,23 +153,28 @@ impl LinkUnicastTrait for LinkUnicastTcp {
 
     #[inline(always)]
     fn get_mtu(&self) -> BatchSize {
+        // See IETF RFC6691: https://datatracker.ietf.org/doc/rfc6691/
+        let header = match self.src_addr.ip() {
+            std::net::IpAddr::V4(_) => 40,
+            std::net::IpAddr::V6(_) => 60,
+        };
+        #[allow(unused_mut)] // mut is not needed when target_family != unix
+        let mut mtu = *TCP_DEFAULT_MTU - header;
+
         // target limitation of socket2: https://docs.rs/socket2/latest/src/socket2/sys/unix.rs.html#1544
         #[cfg(target_family = "unix")]
         {
             let socket = socket2::SockRef::from(self.get_socket());
-            let mss = socket.mss().unwrap_or(*TCP_DEFAULT_MTU as u32);
-            mss.min(*TCP_DEFAULT_MTU as u32) as BatchSize
+            let mss = socket.mss().unwrap_or(mtu as u32);
+            // Compute largest multiple of TCP MSS that is smaller of default MTU
+            let mut tgt = mss;
+            while (tgt + mss) < mtu as u32 {
+                tgt += mss;
+            }
+            mtu = (mtu as u32).min(tgt) as BatchSize;
         }
 
-        #[cfg(not(target_family = "unix"))]
-        {
-            // See IETF RFC6691 https://datatracker.ietf.org/doc/rfc6691/
-            let header = match self.src_addr.ip() {
-                std::net::IpAddr::V4(_) => 40,
-                std::net::IpAddr::V6(_) => 60,
-            };
-            *TCP_DEFAULT_MTU - header
-        }
+        mtu
     }
 
     #[inline(always)]
