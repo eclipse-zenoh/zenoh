@@ -193,7 +193,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
             std::net::IpAddr::V4(_) => 40,
             std::net::IpAddr::V6(_) => 60,
         };
-        #[allow(unused_mut, assign)] // mut is not needed when target_family != unix
+        #[allow(unused_mut)] // mut is not needed when target_family != unix
         let mut mtu = *TLS_DEFAULT_MTU - header;
 
         // target limitation of socket2: https://docs.rs/socket2/latest/src/socket2/sys/unix.rs.html#1544
