@@ -229,16 +229,18 @@ validated_struct::validator! {
         ConnectConfig {
             /// global timeout for full connect cycle
             pub timeout_ms: Option<ModeDependentValue<i64>>,
+            /// The list of endpoints to connect to
             pub endpoints: ModeDependentValue<Vec<EndPoint>>,
             /// if connection timeout exceed, exit from application
             pub exit_on_failure: Option<ModeDependentValue<bool>>,
             pub retry: Option<connection_retry::ConnectionRetryModeDependentConf>,
         },
-        /// Which endpoints to listen on. `zenohd` will add `tcp/[::]:7447` to these locators if left empty.
+        /// Which endpoints to listen on.
         pub listen:
         ListenConfig {
             /// global timeout for full listen cycle
             pub timeout_ms: Option<ModeDependentValue<i64>>,
+            /// The list of endpoints to listen on
             pub endpoints: ModeDependentValue<Vec<EndPoint>>,
             /// if connection timeout exceed, exit from application
             pub exit_on_failure: Option<ModeDependentValue<bool>>,
