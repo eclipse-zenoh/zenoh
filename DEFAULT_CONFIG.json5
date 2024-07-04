@@ -272,9 +272,11 @@
         ///       target interval.
         keep_alive: 4,
         /// Batch size in bytes is expressed as a 16bit unsigned integer.
-        /// Therefore, the maximum batch size is 2^16-1 (i.e. 65535).
-        /// The default batch size value is the maximum batch size: 65535.
-        batch_size: 65535,
+        /// However to account for the headers used by TCP, UDP and IP along
+        /// with the additional headers used by Zenoh, it is wise to use a
+        /// slighly smaller size to avoid a batch go beyond the maximum size
+        /// of a datagram.
+        batch_size: 64512,
         /// Each zenoh link has a transmission queue that can be configured
         queue: {
           /// The size of each priority queue indicates the number of batches a given queue can contain.
