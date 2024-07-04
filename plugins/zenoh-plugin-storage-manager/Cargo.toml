@@ -40,6 +40,7 @@ derive-new = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
+lazy_static = { workspace = true }
 libloading = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true, features = ["default"] }
