@@ -40,7 +40,7 @@ use uhlc::Timestamp;
 use uuid::Uuid;
 
 use zenoh::prelude::*;
-use zenoh::subscriber::Subscriber;
+use zenoh::pubsub::Subscriber;
 use zenoh::Session;
 use zenoh::{
     internal::{
@@ -171,7 +171,6 @@ impl TryFrom<(Sample, Uuid)> for SampleWS {
 
     fn try_from(sample_and_id: (Sample, Uuid)) -> Result<Self, Self::Error> {
         let (s, sub_id) = sample_and_id;
-        let z_bytes: Vec<u8> = s.payload().try_into()?;
         let z_bytes: Vec<u8> = s.payload().try_into()?;
 
         Ok(SampleWS {
