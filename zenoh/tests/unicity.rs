@@ -38,23 +38,39 @@ const MSG_SIZE: [usize; 2] = [1_024, 100_000];
 async fn open_p2p_sessions() -> (Session, Session, Session) {
     // Open the sessions
     let mut config = config::peer();
-    config.listen.endpoints = vec!["tcp/127.0.0.1:27447".parse().unwrap()];
+    config
+        .listen
+        .endpoints
+        .set(vec!["tcp/127.0.0.1:27447".parse().unwrap()])
+        .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][01a] Opening s01 session");
     let s01 = ztimeout!(zenoh::open(config)).unwrap();
 
     let mut config = config::peer();
-    config.listen.endpoints = vec!["tcp/127.0.0.1:27448".parse().unwrap()];
-    config.connect.endpoints = vec!["tcp/127.0.0.1:27447".parse().unwrap()];
+    config
+        .listen
+        .endpoints
+        .set(vec!["tcp/127.0.0.1:27448".parse().unwrap()])
+        .unwrap();
+    config
+        .connect
+        .endpoints
+        .set(vec!["tcp/127.0.0.1:27447".parse().unwrap()])
+        .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][02a] Opening s02 session");
     let s02 = ztimeout!(zenoh::open(config)).unwrap();
 
     let mut config = config::peer();
-    config.connect.endpoints = vec![
-        "tcp/127.0.0.1:27447".parse().unwrap(),
-        "tcp/127.0.0.1:27448".parse().unwrap(),
-    ];
+    config
+        .connect
+        .endpoints
+        .set(vec![
+            "tcp/127.0.0.1:27447".parse().unwrap(),
+            "tcp/127.0.0.1:27448".parse().unwrap(),
+        ])
+        .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][03a] Opening s03 session");
     let s03 = ztimeout!(zenoh::open(config)).unwrap();
@@ -66,7 +82,11 @@ async fn open_router_session() -> Session {
     // Open the sessions
     let mut config = config::default();
     config.set_mode(Some(WhatAmI::Router)).unwrap();
-    config.listen.endpoints = vec!["tcp/127.0.0.1:37447".parse().unwrap()];
+    config
+        .listen
+        .endpoints
+        .set(vec!["tcp/127.0.0.1:37447".parse().unwrap()])
+        .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][00a] Opening router session");
     ztimeout!(zenoh::open(config)).unwrap()

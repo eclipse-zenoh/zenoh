@@ -59,9 +59,7 @@
     /// Accepts a single value or different values for router, peer and client.
     timeout_ms: 0,
 
-    endpoints: [
-      // "<proto>/<address>"
-    ],
+    endpoints: { router: ["tcp/[::]:7447"], peer: ["tcp/[::]:0"] },
 
     /// Global listen configuration,
     /// Accepts a single value or different values for router, peer and client.

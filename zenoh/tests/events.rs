@@ -20,14 +20,26 @@ const TIMEOUT: Duration = Duration::from_secs(10);
 
 async fn open_session(listen: &[&str], connect: &[&str]) -> Session {
     let mut config = config::peer();
-    config.listen.endpoints = listen
-        .iter()
-        .map(|e| e.parse().unwrap())
-        .collect::<Vec<_>>();
-    config.connect.endpoints = connect
-        .iter()
-        .map(|e| e.parse().unwrap())
-        .collect::<Vec<_>>();
+    config
+        .listen
+        .endpoints
+        .set(
+            listen
+                .iter()
+                .map(|e| e.parse().unwrap())
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+    config
+        .connect
+        .endpoints
+        .set(
+            connect
+                .iter()
+                .map(|e| e.parse().unwrap())
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][01a] Opening session");
     ztimeout!(zenoh::open(config)).unwrap()

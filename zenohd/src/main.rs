@@ -37,8 +37,6 @@ lazy_static::lazy_static!(
     static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
 );
 
-const DEFAULT_LISTENER: &str = "tcp/[::]:7447";
-
 #[derive(Debug, Parser)]
 #[command(version=GIT_VERSION, long_version=LONG_VERSION.as_str(), about="The zenoh router")]
 struct Args {
@@ -168,7 +166,8 @@ fn config_from_args(args: &Args) -> Config {
     if !args.connect.is_empty() {
         config
             .connect
-            .set_endpoints(
+            .endpoints
+            .set(
                 args.connect
                     .iter()
                     .map(|v| match v.parse::<EndPoint>() {
@@ -184,7 +183,8 @@ fn config_from_args(args: &Args) -> Config {
     if !args.listen.is_empty() {
         config
             .listen
-            .set_endpoints(
+            .endpoints
+            .set(
                 args.listen
                     .iter()
                     .map(|v| match v.parse::<EndPoint>() {
@@ -196,12 +196,6 @@ fn config_from_args(args: &Args) -> Config {
                     .collect(),
             )
             .unwrap();
-    }
-    if config.listen.endpoints.is_empty() {
-        config
-            .listen
-            .endpoints
-            .push(DEFAULT_LISTENER.parse().unwrap())
     }
     if args.no_timestamp {
         config

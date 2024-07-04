@@ -185,10 +185,8 @@ pub fn peer() -> Config {
 pub fn client<I: IntoIterator<Item = T>, T: Into<EndPoint>>(peers: I) -> Config {
     let mut config = Config::default();
     config.set_mode(Some(WhatAmI::Client)).unwrap();
-    config
-        .connect
-        .endpoints
-        .extend(peers.into_iter().map(|t| t.into()));
+    config.connect.endpoints =
+        ModeDependentValue::Unique(peers.into_iter().map(|t| t.into()).collect());
     config
 }
 
@@ -227,21 +225,21 @@ validated_struct::validator! {
         /// The node's mode ("router" (default value in `zenohd`), "peer" or "client").
         mode: Option<whatami::WhatAmI>,
         /// Which zenoh nodes to connect to.
-        pub connect: #[derive(Default)]
+        pub connect:
         ConnectConfig {
             /// global timeout for full connect cycle
             pub timeout_ms: Option<ModeDependentValue<i64>>,
-            pub endpoints: Vec<EndPoint>,
+            pub endpoints: ModeDependentValue<Vec<EndPoint>>,
             /// if connection timeout exceed, exit from application
             pub exit_on_failure: Option<ModeDependentValue<bool>>,
             pub retry: Option<connection_retry::ConnectionRetryModeDependentConf>,
         },
         /// Which endpoints to listen on. `zenohd` will add `tcp/[::]:7447` to these locators if left empty.
-        pub listen: #[derive(Default)]
+        pub listen:
         ListenConfig {
             /// global timeout for full listen cycle
             pub timeout_ms: Option<ModeDependentValue<i64>>,
-            pub endpoints: Vec<EndPoint>,
+            pub endpoints: ModeDependentValue<Vec<EndPoint>>,
             /// if connection timeout exceed, exit from application
             pub exit_on_failure: Option<ModeDependentValue<bool>>,
             pub retry: Option<connection_retry::ConnectionRetryModeDependentConf>,
