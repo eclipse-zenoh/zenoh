@@ -137,6 +137,7 @@ impl Reply {
         self.result
     }
 
+    #[zenoh_macros::unstable]
     /// Gets the id of the zenoh instance that answered this Reply.
     pub fn replier_id(&self) -> Option<ZenohId> {
         self.replier_id.map(Into::into)
