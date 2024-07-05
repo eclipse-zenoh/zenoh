@@ -24,7 +24,7 @@ use zenoh_result::ZResult;
 use super::{callback::Callback, Dyn, IntoHandler};
 use crate::api::session::API_DATA_RECEPTION_CHANNEL_SIZE;
 
-/// A synchrounous ring channel with a limited size that allows users to keep the last N data.
+/// A synchronous ring channel with a limited size that allows users to keep the last N data.
 pub struct RingChannel {
     capacity: usize,
 }
