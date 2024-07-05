@@ -25,7 +25,7 @@ use std::{
 };
 
 use tracing::{error, trace, warn};
-use uhlc::{Timestamp, HLC};
+use uhlc::{Timestamp, HLC, NTP64};
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::{unwrap_or_default, wrappers::ZenohId, Config, Notifier};
@@ -676,7 +676,15 @@ impl Session {
     /// ```
     pub fn new_timestamp(&self) -> Timestamp {
         let id = self.runtime.zid();
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into(); // UNIX_EPOCH is Returns a Timespec::zero(), Unwrap Should be permissable here
+        let now = match self.hlc() {
+            Some(hlc) => *hlc.new_timestamp().get_time(),
+            None => {
+                // Called in the case that the runtime is not initialized with an hlc
+                // UNIX_EPOCH is Returns a Timespec::zero(), Unwrap Should be permissable here
+                SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into()
+            }
+        };
+
         Timestamp::new(now, id.into())
     }
 }
