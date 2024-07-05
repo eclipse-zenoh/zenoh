@@ -118,6 +118,7 @@ impl From<Value> for ReplyError {
 #[derive(Clone, Debug)]
 pub struct Reply {
     pub(crate) result: Result<Sample, ReplyError>,
+    #[cfg(feature = "unstable")]
     pub(crate) replier_id: Option<ZenohIdProto>,
 }
 

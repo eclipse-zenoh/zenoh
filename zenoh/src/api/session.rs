@@ -1775,6 +1775,7 @@ impl Session {
                                 }
                                 (query.callback)(Reply {
                                     result: Err(Value::new("Timeout", Encoding::ZENOH_STRING).into()),
+                                    #[cfg(feature = "unstable")]
                                     replier_id: Some(zid.into()),
                                 });
                             }
@@ -1874,6 +1875,7 @@ impl Session {
                                 tracing::debug!("Timeout on liveliness query {}! Send error and close.", id);
                                 (query.callback)(Reply {
                                     result: Err(Value::new("Timeout", Encoding::ZENOH_STRING).into()),
+                                    #[cfg(feature = "unstable")]
                                     replier_id: Some(zid.into()),
                                 });
                             }
@@ -2238,6 +2240,7 @@ impl Primitives for Session {
                                             #[cfg(feature = "unstable")]
                                             attachment: None,
                                         }),
+                                        #[cfg(feature = "unstable")]
                                         replier_id: None,
                                     };
 
@@ -2404,8 +2407,9 @@ impl Primitives for Session {
                             encoding: e.encoding.into(),
                         };
                         let new_reply = Reply {
-                            replier_id: e.ext_sinfo.map(|info| info.id.zid),
                             result: Err(value.into()),
+                            #[cfg(feature = "unstable")]
+                            replier_id: e.ext_sinfo.map(|info| info.id.zid),
                         };
                         callback(new_reply);
                     }
@@ -2487,6 +2491,7 @@ impl Primitives for Session {
                         let sample = info.into_sample(key_expr.into_owned(), payload, attachment);
                         let new_reply = Reply {
                             result: Ok(sample),
+                            #[cfg(feature = "unstable")]
                             replier_id: None,
                         };
                         let callback =
