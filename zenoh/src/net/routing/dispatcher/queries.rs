@@ -722,7 +722,7 @@ pub(crate) fn route_send_response(
                 ));
         }
         None => tracing::warn!(
-            "Route reply {}:{} from {}: Query nof found!",
+            "Route reply {}:{} from {}: Query not found!",
             face,
             qid,
             face
@@ -748,7 +748,7 @@ pub(crate) fn route_send_response_final(
             finalize_pending_query(query);
         }
         None => tracing::warn!(
-            "Route final reply {}:{} from {}: Query nof found!",
+            "Route final reply {}:{} from {}: Query not found!",
             face,
             qid,
             face
