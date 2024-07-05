@@ -685,7 +685,6 @@ impl Session {
             }
         }
     }
-
 }
 
 impl<'a> SessionDeclarations<'a, 'a> for Session {
