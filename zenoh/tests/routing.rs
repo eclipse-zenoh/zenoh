@@ -445,9 +445,7 @@ async fn static_failover_brokering() -> Result<()> {
         config
             .scouting
             .gossip
-            .set_autoconnect(Some(ModeDependentValue::Unique(
-                WhatAmIMatcher::from_str("").unwrap(),
-            )))
+            .set_autoconnect(Some(ModeDependentValue::Unique(WhatAmIMatcher::empty())))
             .unwrap();
         Some(config)
     };
