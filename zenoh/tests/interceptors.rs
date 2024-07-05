@@ -56,8 +56,16 @@ fn build_config(
         .set_enabled(Some(false))
         .unwrap();
 
-    sub_config.listen.endpoints = vec![locator.parse().unwrap()];
-    pub_config.connect.endpoints = vec![locator.parse().unwrap()];
+    sub_config
+        .listen
+        .endpoints
+        .set(vec![locator.parse().unwrap()])
+        .unwrap();
+    pub_config
+        .connect
+        .endpoints
+        .set(vec![locator.parse().unwrap()])
+        .unwrap();
 
     match flow {
         InterceptorFlow::Egress => pub_config.set_downsampling(ds_config).unwrap(),

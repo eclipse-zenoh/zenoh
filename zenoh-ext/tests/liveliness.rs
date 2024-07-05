@@ -37,7 +37,8 @@ async fn test_liveliness_querying_subscriber_clique() {
     let peer1 = {
         let mut c = config::default();
         c.listen
-            .set_endpoints(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .endpoints
+            .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -49,7 +50,8 @@ async fn test_liveliness_querying_subscriber_clique() {
     let peer2 = {
         let mut c = config::default();
         c.connect
-            .set_endpoints(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .endpoints
+            .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -107,7 +109,8 @@ async fn test_liveliness_querying_subscriber_brokered() {
     let _router = {
         let mut c = config::default();
         c.listen
-            .set_endpoints(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Router));
@@ -119,7 +122,8 @@ async fn test_liveliness_querying_subscriber_brokered() {
     let client1 = {
         let mut c = config::default();
         c.connect
-            .set_endpoints(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
@@ -131,7 +135,8 @@ async fn test_liveliness_querying_subscriber_brokered() {
     let client2 = {
         let mut c = config::default();
         c.connect
-            .set_endpoints(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
@@ -143,7 +148,8 @@ async fn test_liveliness_querying_subscriber_brokered() {
     let client3 = {
         let mut c = config::default();
         c.connect
-            .set_endpoints(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
@@ -201,7 +207,8 @@ async fn test_liveliness_fetching_subscriber_clique() {
     let peer1 = {
         let mut c = config::default();
         c.listen
-            .set_endpoints(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .endpoints
+            .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -213,7 +220,8 @@ async fn test_liveliness_fetching_subscriber_clique() {
     let peer2 = {
         let mut c = config::default();
         c.connect
-            .set_endpoints(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .endpoints
+            .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -275,7 +283,8 @@ async fn test_liveliness_fetching_subscriber_brokered() {
     let _router = {
         let mut c = config::default();
         c.listen
-            .set_endpoints(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Router));
@@ -287,7 +296,8 @@ async fn test_liveliness_fetching_subscriber_brokered() {
     let client1 = {
         let mut c = config::default();
         c.connect
-            .set_endpoints(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
@@ -299,7 +309,8 @@ async fn test_liveliness_fetching_subscriber_brokered() {
     let client2 = {
         let mut c = config::default();
         c.connect
-            .set_endpoints(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
@@ -311,7 +322,8 @@ async fn test_liveliness_fetching_subscriber_brokered() {
     let client3 = {
         let mut c = config::default();
         c.connect
-            .set_endpoints(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));

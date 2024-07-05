@@ -56,7 +56,7 @@ struct JSONSample {
     key: String,
     value: serde_json::Value,
     encoding: String,
-    time: Option<String>,
+    timestamp: Option<String>,
 }
 
 pub fn base64_encode(data: &[u8]) -> String {
@@ -100,7 +100,7 @@ fn sample_to_json(sample: &Sample) -> JSONSample {
         key: sample.key_expr().as_str().to_string(),
         value: payload_to_json(sample.payload(), sample.encoding()),
         encoding: sample.encoding().to_string(),
-        time: sample.timestamp().map(|ts| ts.to_string()),
+        timestamp: sample.timestamp().map(|ts| ts.to_string()),
     }
 }
 
@@ -111,7 +111,7 @@ fn result_to_json(sample: Result<&Sample, &ReplyError>) -> JSONSample {
             key: "ERROR".into(),
             value: payload_to_json(err.payload(), err.encoding()),
             encoding: err.encoding().to_string(),
-            time: None,
+            timestamp: None,
         },
     }
 }

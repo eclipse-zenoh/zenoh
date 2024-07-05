@@ -36,19 +36,31 @@ const MSG_SIZE: [usize; 2] = [1_024, 100_000];
 async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
     // Open the sessions
     let mut config = config::peer();
-    config.listen.endpoints = endpoints
-        .iter()
-        .map(|e| e.parse().unwrap())
-        .collect::<Vec<_>>();
+    config
+        .listen
+        .endpoints
+        .set(
+            endpoints
+                .iter()
+                .map(|e| e.parse().unwrap())
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][01a] Opening peer01 session: {:?}", endpoints);
     let peer01 = ztimeout!(zenoh::open(config)).unwrap();
 
     let mut config = config::peer();
-    config.connect.endpoints = endpoints
-        .iter()
-        .map(|e| e.parse().unwrap())
-        .collect::<Vec<_>>();
+    config
+        .connect
+        .endpoints
+        .set(
+            endpoints
+                .iter()
+                .map(|e| e.parse().unwrap())
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][02a] Opening peer02 session: {:?}", endpoints);
     let peer02 = ztimeout!(zenoh::open(config)).unwrap();
@@ -59,13 +71,21 @@ async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
 async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session, Session) {
     // Open the sessions
     let mut config = config::peer();
-    config.listen.endpoints = vec![endpoint01.parse().unwrap()];
+    config
+        .listen
+        .endpoints
+        .set(vec![endpoint01.parse().unwrap()])
+        .unwrap();
     config.scouting.multicast.set_enabled(Some(true)).unwrap();
     println!("[  ][01a] Opening peer01 session: {}", endpoint01);
     let peer01 = ztimeout!(zenoh::open(config)).unwrap();
 
     let mut config = config::peer();
-    config.listen.endpoints = vec![endpoint02.parse().unwrap()];
+    config
+        .listen
+        .endpoints
+        .set(vec![endpoint02.parse().unwrap()])
+        .unwrap();
     config.scouting.multicast.set_enabled(Some(true)).unwrap();
     println!("[  ][02a] Opening peer02 session: {}", endpoint02);
     let peer02 = ztimeout!(zenoh::open(config)).unwrap();
@@ -266,20 +286,32 @@ async fn zenoh_session_multicast() {
 async fn open_session_unicast_runtime(endpoints: &[&str]) -> (Runtime, Runtime) {
     // Open the sessions
     let mut config = config::peer();
-    config.listen.endpoints = endpoints
-        .iter()
-        .map(|e| e.parse().unwrap())
-        .collect::<Vec<_>>();
+    config
+        .listen
+        .endpoints
+        .set(
+            endpoints
+                .iter()
+                .map(|e| e.parse().unwrap())
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][01a] Creating r1 session runtime: {:?}", endpoints);
     let mut r1 = RuntimeBuilder::new(config).build().await.unwrap();
     r1.start().await.unwrap();
 
     let mut config = config::peer();
-    config.connect.endpoints = endpoints
-        .iter()
-        .map(|e| e.parse().unwrap())
-        .collect::<Vec<_>>();
+    config
+        .connect
+        .endpoints
+        .set(
+            endpoints
+                .iter()
+                .map(|e| e.parse().unwrap())
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][02a] Creating r2 session runtime: {:?}", endpoints);
     let mut r2 = RuntimeBuilder::new(config).build().await.unwrap();

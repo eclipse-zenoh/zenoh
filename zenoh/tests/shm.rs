@@ -41,20 +41,32 @@ const MSG_SIZE: [usize; 2] = [1_024, 100_000];
 async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
     // Open the sessions
     let mut config = config::peer();
-    config.listen.endpoints = endpoints
-        .iter()
-        .map(|e| e.parse().unwrap())
-        .collect::<Vec<_>>();
+    config
+        .listen
+        .endpoints
+        .set(
+            endpoints
+                .iter()
+                .map(|e| e.parse().unwrap())
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     config.transport.shared_memory.set_enabled(true).unwrap();
     println!("[  ][01a] Opening peer01 session: {:?}", endpoints);
     let peer01 = ztimeout!(zenoh::open(config)).unwrap();
 
     let mut config = config::peer();
-    config.connect.endpoints = endpoints
-        .iter()
-        .map(|e| e.parse().unwrap())
-        .collect::<Vec<_>>();
+    config
+        .connect
+        .endpoints
+        .set(
+            endpoints
+                .iter()
+                .map(|e| e.parse().unwrap())
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     config.transport.shared_memory.set_enabled(true).unwrap();
     println!("[  ][02a] Opening peer02 session: {:?}", endpoints);
@@ -66,14 +78,22 @@ async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
 async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session, Session) {
     // Open the sessions
     let mut config = config::peer();
-    config.listen.endpoints = vec![endpoint01.parse().unwrap()];
+    config
+        .listen
+        .endpoints
+        .set(vec![endpoint01.parse().unwrap()])
+        .unwrap();
     config.scouting.multicast.set_enabled(Some(true)).unwrap();
     config.transport.shared_memory.set_enabled(true).unwrap();
     println!("[  ][01a] Opening peer01 session: {}", endpoint01);
     let peer01 = ztimeout!(zenoh::open(config)).unwrap();
 
     let mut config = config::peer();
-    config.listen.endpoints = vec![endpoint02.parse().unwrap()];
+    config
+        .listen
+        .endpoints
+        .set(vec![endpoint02.parse().unwrap()])
+        .unwrap();
     config.scouting.multicast.set_enabled(Some(true)).unwrap();
     config.transport.shared_memory.set_enabled(true).unwrap();
     println!("[  ][02a] Opening peer02 session: {}", endpoint02);

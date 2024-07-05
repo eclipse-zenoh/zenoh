@@ -43,6 +43,8 @@ pub struct LinkUnicastTcp {
     // The destination socket address of this link (address used on the remote host)
     dst_addr: SocketAddr,
     dst_locator: Locator,
+    // The computed mtu
+    mtu: BatchSize,
 }
 
 unsafe impl Sync for LinkUnicastTcp {}
@@ -71,6 +73,29 @@ impl LinkUnicastTcp {
             );
         }
 
+        // Compute the MTU
+        // See IETF RFC6691: https://datatracker.ietf.org/doc/rfc6691/
+        let header = match src_addr.ip() {
+            std::net::IpAddr::V4(_) => 40,
+            std::net::IpAddr::V6(_) => 60,
+        };
+        #[allow(unused_mut)] // mut is not needed when target_family != unix
+        let mut mtu = *TCP_DEFAULT_MTU - header;
+
+        // target limitation of socket2: https://docs.rs/socket2/latest/src/socket2/sys/unix.rs.html#1544
+        #[cfg(target_family = "unix")]
+        {
+            let socket = socket2::SockRef::from(&socket);
+            // Get the MSS and divide it by 2 to ensure we can at least fill half the MSS
+            let mss = socket.mss().unwrap_or(mtu as u32) / 2;
+            // Compute largest multiple of TCP MSS that is smaller of default MTU
+            let mut tgt = mss;
+            while (tgt + mss) < mtu as u32 {
+                tgt += mss;
+            }
+            mtu = (mtu as u32).min(tgt) as BatchSize;
+        }
+
         // Build the Tcp object
         LinkUnicastTcp {
             socket: UnsafeCell::new(socket),
@@ -78,8 +103,10 @@ impl LinkUnicastTcp {
             src_locator: Locator::new(TCP_LOCATOR_PREFIX, src_addr.to_string(), "").unwrap(),
             dst_addr,
             dst_locator: Locator::new(TCP_LOCATOR_PREFIX, dst_addr.to_string(), "").unwrap(),
+            mtu,
         }
     }
+
     #[allow(clippy::mut_from_ref)]
     fn get_mut_socket(&self) -> &mut TcpStream {
         unsafe { &mut *self.socket.get() }
@@ -147,7 +174,7 @@ impl LinkUnicastTrait for LinkUnicastTcp {
 
     #[inline(always)]
     fn get_mtu(&self) -> BatchSize {
-        *TCP_DEFAULT_MTU
+        self.mtu
     }
 
     #[inline(always)]
@@ -195,6 +222,7 @@ impl fmt::Debug for LinkUnicastTcp {
         f.debug_struct("Tcp")
             .field("src", &self.src_addr)
             .field("dst", &self.dst_addr)
+            .field("mtu", &self.get_mtu())
             .finish()
     }
 }

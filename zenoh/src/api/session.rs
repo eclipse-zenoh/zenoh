@@ -2836,7 +2836,8 @@ impl crate::net::primitives::EPrimitives for Session {
 ///
 /// let mut config = zenoh::config::peer();
 /// config.set_id(ZenohId::from_str("221b72df20924c15b8794c6bdb471150").unwrap());
-/// config.connect.endpoints.extend("tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".split(',').map(|s|s.parse().unwrap()));
+/// config.connect.endpoints.set(
+///     ["tcp/10.10.10.10:7447", "tcp/11.11.11.11:7447"].iter().map(|s|s.parse().unwrap()).collect());
 ///
 /// let session = zenoh::open(config).await.unwrap();
 /// # }

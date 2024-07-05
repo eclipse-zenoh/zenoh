@@ -18,9 +18,10 @@ use const_format::formatcp;
 use zenoh_result::{bail, ZError};
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum WhatAmI {
     Router = 0b001,
+    #[default]
     Peer = 0b010,
     Client = 0b100,
 }

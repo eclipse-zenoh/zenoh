@@ -86,8 +86,7 @@ async fn test_updates_in_order() {
         &session,
         "operation/test/a",
         "1",
-        Timestamp::from_str("2022-01-17T10:42:10.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
-            .unwrap(),
+        Timestamp::from_str("7054123566570568799/BC779A06D7E049BD88C3FF3DB0C17FCC").unwrap(),
     )
     .await;
 
@@ -102,8 +101,7 @@ async fn test_updates_in_order() {
         &session,
         "operation/test/b",
         "2",
-        Timestamp::from_str("2022-01-17T10:43:10.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
-            .unwrap(),
+        Timestamp::from_str("7054123824268606559/BC779A06D7E049BD88C3FF3DB0C17FCC").unwrap(),
     )
     .await;
 
@@ -117,8 +115,7 @@ async fn test_updates_in_order() {
     delete_data(
         &session,
         "operation/test/a",
-        Timestamp::from_str("2022-01-17T10:43:10.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
-            .unwrap(),
+        Timestamp::from_str("7054123824268606559/BC779A06D7E049BD88C3FF3DB0C17FCC").unwrap(),
     )
     .await;
 

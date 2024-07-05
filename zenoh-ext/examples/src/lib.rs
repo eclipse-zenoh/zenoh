@@ -50,10 +50,18 @@ impl From<&CommonArgs> for Config {
         }
         .unwrap();
         if !value.connect.is_empty() {
-            config.connect.endpoints = value.connect.iter().map(|v| v.parse().unwrap()).collect();
+            config
+                .connect
+                .endpoints
+                .set(value.connect.iter().map(|v| v.parse().unwrap()).collect())
+                .unwrap();
         }
         if !value.listen.is_empty() {
-            config.listen.endpoints = value.listen.iter().map(|v| v.parse().unwrap()).collect();
+            config
+                .listen
+                .endpoints
+                .set(value.listen.iter().map(|v| v.parse().unwrap()).collect())
+                .unwrap();
         }
         config
     }
