@@ -675,10 +675,17 @@ impl Session {
     /// # }
     /// ```
     pub fn new_timestamp(&self) -> Timestamp {
-        let id = self.runtime.zid();
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into(); // UNIX_EPOCH is Returns a Timespec::zero(), Unwrap Should be permissable here
-        Timestamp::new(now, id.into())
+        match self.hlc() {
+            Some(hlc) => hlc.new_timestamp(),
+            None => {
+                // Called in the case that the runtime is not initialized with an hlc
+                // UNIX_EPOCH is Returns a Timespec::zero(), Unwrap Should be permissable here
+                let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into();
+                Timestamp::new(now, self.runtime.zid().into())
+            }
+        }
     }
+
 }
 
 impl<'a> SessionDeclarations<'a, 'a> for Session {
