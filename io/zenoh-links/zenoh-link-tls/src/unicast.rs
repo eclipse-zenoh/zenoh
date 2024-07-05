@@ -61,6 +61,7 @@ pub struct LinkUnicastTls {
     write_mtx: AsyncMutex<()>,
     read_mtx: AsyncMutex<()>,
     auth_identifier: LinkAuthId,
+    mtu: BatchSize,
 }
 
 unsafe impl Send for LinkUnicastTls {}
@@ -96,6 +97,29 @@ impl LinkUnicastTls {
             );
         }
 
+        // Compute the MTU
+        // See IETF RFC6691: https://datatracker.ietf.org/doc/rfc6691/
+        let header = match src_addr.ip() {
+            std::net::IpAddr::V4(_) => 40,
+            std::net::IpAddr::V6(_) => 60,
+        };
+        #[allow(unused_mut)] // mut is not needed when target_family != unix
+        let mut mtu = *TLS_DEFAULT_MTU - header;
+
+        // target limitation of socket2: https://docs.rs/socket2/latest/src/socket2/sys/unix.rs.html#1544
+        #[cfg(target_family = "unix")]
+        {
+            let socket = socket2::SockRef::from(&tcp_stream);
+            // Get the MSS and divide it by 2 to ensure we can at least fill half the MSS
+            let mss = socket.mss().unwrap_or(mtu as u32) / 2;
+            // Compute largest multiple of TCP MSS that is smaller of default MTU
+            let mut tgt = mss;
+            while (tgt + mss) < mtu as u32 {
+                tgt += mss;
+            }
+            mtu = (mtu as u32).min(tgt) as BatchSize;
+        }
+
         // Build the Tls object
         LinkUnicastTls {
             inner: UnsafeCell::new(socket),
@@ -106,6 +130,7 @@ impl LinkUnicastTls {
             write_mtx: AsyncMutex::new(()),
             read_mtx: AsyncMutex::new(()),
             auth_identifier,
+            mtu,
         }
     }
 
@@ -113,7 +138,7 @@ impl LinkUnicastTls {
     //       or concurrent writes will ever happen. The read_mtx and write_mtx
     //       are respectively acquired in any read and write operation.
     #[allow(clippy::mut_from_ref)]
-    fn get_sock_mut(&self) -> &mut TlsStream<TcpStream> {
+    fn get_mut_socket(&self) -> &mut TlsStream<TcpStream> {
         unsafe { &mut *self.inner.get() }
     }
 }
@@ -124,7 +149,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
         tracing::trace!("Closing TLS link: {}", self);
         // Flush the TLS stream
         let _guard = zasynclock!(self.write_mtx);
-        let tls_stream = self.get_sock_mut();
+        let tls_stream = self.get_mut_socket();
         let res = tls_stream.flush().await;
         tracing::trace!("TLS link flush {}: {:?}", self, res);
         // Close the underlying TCP stream
@@ -136,7 +161,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         let _guard = zasynclock!(self.write_mtx);
-        self.get_sock_mut().write(buffer).await.map_err(|e| {
+        self.get_mut_socket().write(buffer).await.map_err(|e| {
             tracing::trace!("Write error on TLS link {}: {}", self, e);
             zerror!(e).into()
         })
@@ -144,7 +169,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
 
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         let _guard = zasynclock!(self.write_mtx);
-        self.get_sock_mut().write_all(buffer).await.map_err(|e| {
+        self.get_mut_socket().write_all(buffer).await.map_err(|e| {
             tracing::trace!("Write error on TLS link {}: {}", self, e);
             zerror!(e).into()
         })
@@ -152,7 +177,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         let _guard = zasynclock!(self.read_mtx);
-        self.get_sock_mut().read(buffer).await.map_err(|e| {
+        self.get_mut_socket().read(buffer).await.map_err(|e| {
             tracing::trace!("Read error on TLS link {}: {}", self, e);
             zerror!(e).into()
         })
@@ -160,10 +185,14 @@ impl LinkUnicastTrait for LinkUnicastTls {
 
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         let _guard = zasynclock!(self.read_mtx);
-        let _ = self.get_sock_mut().read_exact(buffer).await.map_err(|e| {
-            tracing::trace!("Read error on TLS link {}: {}", self, e);
-            zerror!(e)
-        })?;
+        let _ = self
+            .get_mut_socket()
+            .read_exact(buffer)
+            .await
+            .map_err(|e| {
+                tracing::trace!("Read error on TLS link {}: {}", self, e);
+                zerror!(e)
+            })?;
         Ok(())
     }
 
@@ -179,7 +208,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
 
     #[inline(always)]
     fn get_mtu(&self) -> BatchSize {
-        *TLS_DEFAULT_MTU
+        self.mtu
     }
 
     #[inline(always)]
@@ -206,7 +235,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
 impl Drop for LinkUnicastTls {
     fn drop(&mut self) {
         // Close the underlying TCP stream
-        let (tcp_stream, _) = self.get_sock_mut().get_mut();
+        let (tcp_stream, _) = self.get_mut_socket().get_mut();
         let _ = zenoh_runtime::ZRuntime::Acceptor
             .block_in_place(async move { tcp_stream.shutdown().await });
     }
