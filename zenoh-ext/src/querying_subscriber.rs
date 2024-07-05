@@ -17,7 +17,7 @@ use std::{
     future::{IntoFuture, Ready},
     mem::swap,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use zenoh::{
@@ -654,7 +654,8 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
         InputHandler: IntoHandler<'static, Sample, Handler = Handler> + Send,
         TryIntoSample: ExtractSample + Send + Sync,
     {
-        let timestamp = conf.session.new_timestamp();
+        let session_id = conf.session.zid();
+
         let state = Arc::new(Mutex::new(InnerState {
             pending_fetches: 0,
             merge_queue: MergeQueue::new(),
@@ -675,7 +676,11 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
 
                     // ensure the sample has a timestamp, thus it will always be sorted into the MergeQueue
                     // after any timestamped Sample possibly coming from a fetch reply.
-                    let timestamp = s.timestamp().cloned().unwrap_or(timestamp);
+                    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into(); // UNIX_EPOCH is Returns a Timespec::zero(), Unwrap Should be permissable here
+                    let timestamp = s
+                        .timestamp()
+                        .cloned()
+                        .unwrap_or(Timestamp::new(now, session_id.into()));
                     state
                         .merge_queue
                         .push(SampleBuilder::from(s).timestamp(timestamp).into());
@@ -688,7 +693,7 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
         // register fetch handler
         let handler = register_handler(state.clone(), callback.clone());
         // declare subscriber
-        let subscriber = match conf.key_space.into() {
+        let subscriber: Subscriber<'a, ()> = match conf.key_space.into() {
             crate::KeySpace::User => conf
                 .session
                 .declare_subscriber(&key_expr)

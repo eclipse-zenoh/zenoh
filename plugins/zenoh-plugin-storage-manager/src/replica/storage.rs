@@ -148,9 +148,6 @@ impl StorageService {
         );
         t.add_async(gc).await;
 
-        // get session id for timestamp generation
-        let session_timestamp = self.session.new_timestamp();
-
         // subscribe on key_expr
         let storage_sub = match self.session.declare_subscriber(&self.key_expr).await {
             Ok(storage_sub) => storage_sub,
@@ -240,7 +237,7 @@ impl StorageService {
                                 continue;
                             }
                         };
-                        let timestamp = sample.timestamp().cloned().unwrap_or(session_timestamp);
+                        let timestamp = sample.timestamp().cloned().unwrap_or(self.session.new_timestamp());
                         let sample = SampleBuilder::from(sample).timestamp(timestamp).into();
                         self.process_sample(sample).await;
                     },
