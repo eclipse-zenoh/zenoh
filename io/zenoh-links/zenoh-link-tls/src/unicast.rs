@@ -61,6 +61,7 @@ pub struct LinkUnicastTls {
     write_mtx: AsyncMutex<()>,
     read_mtx: AsyncMutex<()>,
     auth_identifier: LinkAuthId,
+    mtu: BatchSize,
 }
 
 unsafe impl Send for LinkUnicastTls {}
@@ -96,6 +97,29 @@ impl LinkUnicastTls {
             );
         }
 
+        // Compute the MTU
+        // See IETF RFC6691: https://datatracker.ietf.org/doc/rfc6691/
+        let header = match src_addr.ip() {
+            std::net::IpAddr::V4(_) => 40,
+            std::net::IpAddr::V6(_) => 60,
+        };
+        #[allow(unused_mut)] // mut is not needed when target_family != unix
+        let mut mtu = *TLS_DEFAULT_MTU - header;
+
+        // target limitation of socket2: https://docs.rs/socket2/latest/src/socket2/sys/unix.rs.html#1544
+        #[cfg(target_family = "unix")]
+        {
+            let socket = socket2::SockRef::from(&tcp_stream);
+            // Get the MSS and divide it by 2 to ensure we can at least fill half the MSS
+            let mss = socket.mss().unwrap_or(mtu as u32) / 2;
+            // Compute largest multiple of TCP MSS that is smaller of default MTU
+            let mut tgt = mss;
+            while (tgt + mss) < mtu as u32 {
+                tgt += mss;
+            }
+            mtu = (mtu as u32).min(tgt) as BatchSize;
+        }
+
         // Build the Tls object
         LinkUnicastTls {
             inner: UnsafeCell::new(socket),
@@ -106,12 +130,8 @@ impl LinkUnicastTls {
             write_mtx: AsyncMutex::new(()),
             read_mtx: AsyncMutex::new(()),
             auth_identifier,
+            mtu,
         }
-    }
-
-    #[cfg(target_family = "unix")]
-    fn get_socket(&self) -> &TlsStream<TcpStream> {
-        unsafe { &*self.inner.get() }
     }
 
     // NOTE: It is safe to suppress Clippy warning since no concurrent reads
@@ -188,29 +208,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
 
     #[inline(always)]
     fn get_mtu(&self) -> BatchSize {
-        // See IETF RFC6691: https://datatracker.ietf.org/doc/rfc6691/
-        let header = match self.src_addr.ip() {
-            std::net::IpAddr::V4(_) => 40,
-            std::net::IpAddr::V6(_) => 60,
-        };
-        #[allow(unused_mut)] // mut is not needed when target_family != unix
-        let mut mtu = *TLS_DEFAULT_MTU - header;
-
-        // target limitation of socket2: https://docs.rs/socket2/latest/src/socket2/sys/unix.rs.html#1544
-        #[cfg(target_family = "unix")]
-        {
-            let socket = socket2::SockRef::from(self.get_socket().get_ref().0);
-            // Get the MSS and divide it by 2 to ensure we can at least fill half the MSS
-            let mss = socket.mss().unwrap_or(mtu as u32) / 2;
-            // Compute largest multiple of TCP MSS that is smaller of default MTU
-            let mut tgt = mss;
-            while (tgt + mss) < mtu as u32 {
-                tgt += mss;
-            }
-            mtu = (mtu as u32).min(tgt) as BatchSize;
-        }
-
-        mtu
+        self.mtu
     }
 
     #[inline(always)]
