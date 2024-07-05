@@ -1760,6 +1760,7 @@ impl Session {
         self.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
                 let state = self.state.clone();
+                #[cfg(feature = "unstable")]
                 let zid = self.runtime.zid();
                 async move {
                     tokio::select! {

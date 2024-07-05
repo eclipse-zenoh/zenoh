@@ -18,13 +18,16 @@ use std::{
     time::Duration,
 };
 
+#[cfg(feature = "unstable")]
 use zenoh_config::ZenohId;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_keyexpr::OwnedKeyExpr;
-use zenoh_protocol::core::{CongestionControl, Parameters, ZenohIdProto};
+#[cfg(feature = "unstable")]
+use zenoh_protocol::core::ZenohIdProto;
+use zenoh_protocol::core::{CongestionControl, Parameters};
 use zenoh_result::ZResult;
 
-#[zenoh_macros::unstable]
+#[cfg(feature = "unstable")]
 use super::{
     builders::sample::SampleBuilderTrait, bytes::OptionZBytes, sample::SourceInfo,
     selector::ZenohParameters,
