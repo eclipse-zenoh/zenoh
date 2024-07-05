@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    str::FromStr,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
