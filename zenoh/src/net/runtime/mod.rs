@@ -70,7 +70,6 @@ pub(crate) struct RuntimeState {
     zid: ZenohId,
     whatami: WhatAmI,
     next_id: AtomicU32,
-    metadata: serde_json::Value,
     router: Arc<Router>,
     config: Notifier<Config>,
     manager: TransportManager,
@@ -138,7 +137,6 @@ impl RuntimeBuilder {
         tracing::info!("Using ZID: {}", zid);
 
         let whatami = unwrap_or_default!(config.mode());
-        let metadata = config.metadata().clone();
         let hlc = (*unwrap_or_default!(config.timestamping().enabled().get(whatami)))
             .then(|| Arc::new(HLCBuilder::new().with_id(uhlc::ID::from(&zid)).build()));
 
@@ -179,7 +177,6 @@ impl RuntimeBuilder {
                 zid: zid.into(),
                 whatami,
                 next_id: AtomicU32::new(1), // 0 is reserved for routing core
-                metadata,
                 router,
                 config: config.clone(),
                 manager: transport_manager,

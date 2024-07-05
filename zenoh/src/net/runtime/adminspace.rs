@@ -57,7 +57,6 @@ use crate::{
 pub struct AdminContext {
     runtime: Runtime,
     version: String,
-    metadata: serde_json::Value,
 }
 
 type Handler = Arc<dyn Fn(&AdminContext, Query) + Send + Sync>;
@@ -153,7 +152,6 @@ impl AdminSpace {
         let zid_str = runtime.state.zid.to_string();
         let whatami_str = runtime.state.whatami.to_str();
         let mut config = runtime.config().lock();
-        let metadata = runtime.state.metadata.clone();
         let root_key: OwnedKeyExpr = format!("@/{whatami_str}/{zid_str}").try_into().unwrap();
 
         let mut handlers: HashMap<_, Handler> = HashMap::new();
@@ -221,7 +219,6 @@ impl AdminSpace {
         let context = Arc::new(AdminContext {
             runtime: runtime.clone(),
             version,
-            metadata,
         });
         let admin = Arc::new(AdminSpace {
             zid: runtime.zid(),
@@ -601,7 +598,7 @@ fn local_data(context: &AdminContext, query: Query) {
     let mut json = json!({
         "zid": context.runtime.state.zid,
         "version": context.version,
-        "metadata": context.metadata,
+        "metadata": context.runtime.config().lock().metadata(),
         "locators": locators,
         "sessions": transports,
         "plugins": plugins,
