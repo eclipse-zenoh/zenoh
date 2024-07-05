@@ -73,9 +73,7 @@ impl TransportLinkMulticast {
                     .batch
                     .is_compression
                     .then_some(BBuf::with_capacity(
-                        lz4_flex::block::get_maximum_output_size(
-                            self.config.batch.max_buffer_size()
-                        ),
+                        lz4_flex::block::get_maximum_output_size(self.config.batch.mtu as usize),
                     )),
                 None
             ),
@@ -551,7 +549,7 @@ async fn rx_task(
     }
 
     // The pool of buffers
-    let mtu = link.inner.config.batch.max_buffer_size();
+    let mtu = link.inner.config.batch.mtu as usize;
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;

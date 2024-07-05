@@ -5695,6 +5695,7 @@ name = "zenoh-link-tcp"
 version = "0.11.0-dev"
 dependencies = [
  "async-trait",
+ "socket2 0.5.6",
  "tokio",
  "tokio-util",
  "tracing",
@@ -5719,6 +5720,7 @@ dependencies = [
  "rustls-pki-types",
  "rustls-webpki",
  "secrecy",
+ "socket2 0.5.6",
  "tokio",
  "tokio-rustls",
  "tokio-util",

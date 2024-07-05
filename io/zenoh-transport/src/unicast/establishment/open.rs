@@ -208,6 +208,8 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
         }
         .into();
 
+        tracing::trace!("Establishment Open InitSyn: {}. Sent: {:?}", link, msg);
+
         let _ = link
             .send(&msg)
             .await
@@ -228,6 +230,8 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             .recv()
             .await
             .map_err(|e| (e, Some(close::reason::INVALID)))?;
+
+        tracing::trace!("Establishment Open InitAck: {}. Received: {:?}", link, msg);
 
         let init_ack = match msg.body {
             TransportBody::InitAck(init_ack) => init_ack,
@@ -414,7 +418,7 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
         // Build and send an OpenSyn message
         let mine_initial_sn =
             compute_sn(input.mine_zid, input.other_zid, state.transport.resolution);
-        let message: TransportMessage = OpenSyn {
+        let msg: TransportMessage = OpenSyn {
             lease: input.mine_lease,
             initial_sn: mine_initial_sn,
             cookie: input.other_cookie,
@@ -429,9 +433,11 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
         .into();
 
         let _ = link
-            .send(&message)
+            .send(&msg)
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
+        tracing::trace!("Establishment Open OpenSyn: {}. Sent: {:?}", link, msg);
 
         let output = SendOpenSynOut {
             mine_initial_sn,
@@ -453,6 +459,8 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             .recv()
             .await
             .map_err(|e| (e, Some(close::reason::INVALID)))?;
+
+        tracing::trace!("Establishment Open OpenAck: {}. Received: {:?}", link, msg);
 
         let open_ack = match msg.body {
             TransportBody::OpenAck(open_ack) => open_ack,
