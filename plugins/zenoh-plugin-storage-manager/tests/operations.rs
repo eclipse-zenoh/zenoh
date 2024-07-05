@@ -70,6 +70,18 @@ async fn test_updates_in_order() {
                 }"#,
         )
         .unwrap();
+    config
+        .insert_json5(
+            "timestamping",
+            r#"{
+                    enabled: {
+                        router: true,
+                        peer: true,
+                        client: true
+                    }
+                }"#,
+        )
+        .unwrap();
 
     let runtime = zenoh::internal::runtime::RuntimeBuilder::new(config)
         .build()
