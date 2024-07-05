@@ -621,7 +621,7 @@ where
 /// # }
 /// ```
 pub struct FetchingSubscriber<'a, Handler> {
-    pub(crate) subscriber: Subscriber<'a, ()>,
+    subscriber: Subscriber<'a, ()>,
     callback: Arc<dyn Fn(Sample) + Send + Sync + 'static>,
     state: Arc<Mutex<InnerState>>,
     handler: Handler,
@@ -693,7 +693,7 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
         // register fetch handler
         let handler = register_handler(state.clone(), callback.clone());
         // declare subscriber
-        let subscriber: Subscriber<'a, ()> = match conf.key_space.into() {
+        let subscriber = match conf.key_space.into() {
             crate::KeySpace::User => conf
                 .session
                 .declare_subscriber(&key_expr)
