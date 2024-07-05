@@ -37,7 +37,7 @@ use zenoh::{
     query::{ConsolidationMode, QueryTarget},
     sample::{Sample, SampleBuilder, SampleKind, TimestampBuilderTrait},
     session::{Session, SessionDeclarations},
-    time::{new_timestamp, Timestamp, NTP64},
+    time::{Timestamp, NTP64},
     Result as ZResult,
 };
 use zenoh_backend_traits::{
@@ -148,9 +148,6 @@ impl StorageService {
         );
         t.add_async(gc).await;
 
-        // get session id for timestamp generation
-        let zid = self.session.info().zid().await;
-
         // subscribe on key_expr
         let storage_sub = match self.session.declare_subscriber(&self.key_expr).await {
             Ok(storage_sub) => storage_sub,
@@ -240,7 +237,7 @@ impl StorageService {
                                 continue;
                             }
                         };
-                        let timestamp = sample.timestamp().cloned().unwrap_or(new_timestamp(zid));
+                        let timestamp = sample.timestamp().cloned().unwrap_or(self.session.new_timestamp());
                         let sample = SampleBuilder::from(sample).timestamp(timestamp).into();
                         self.process_sample(sample).await;
                     },
