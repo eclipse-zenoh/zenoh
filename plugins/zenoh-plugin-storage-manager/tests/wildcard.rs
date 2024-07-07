@@ -71,6 +71,18 @@ async fn test_wild_card_in_order() {
                 }"#,
         )
         .unwrap();
+    config
+        .insert_json5(
+            "timestamping",
+            r#"{
+                    enabled: {
+                        router: true,
+                        peer: true,
+                        client: true
+                    }
+                }"#,
+        )
+        .unwrap();
 
     let runtime = zenoh::internal::runtime::RuntimeBuilder::new(config)
         .build()
