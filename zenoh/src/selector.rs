@@ -30,7 +30,7 @@ use std::{
 
 /// A selector is the combination of a [Key Expression](crate::prelude::KeyExpr), which defines the
 /// set of keys that are relevant to an operation, and a set of parameters
-/// with a few intendend uses:
+/// with a few intended uses:
 /// - specifying arguments to a queryable, allowing the passing of Remote Procedure Call parameters
 /// - filtering by value,
 /// - filtering by metadata, such as the timestamp of a value,
