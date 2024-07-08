@@ -13,7 +13,7 @@
 //
 use std::{
     borrow::Cow,
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     sync::{atomic::Ordering, Arc},
 };
 
@@ -224,10 +224,11 @@ fn register_router_subscription(
     router: ZenohIdProto,
     send_declare: &mut SendDeclare,
 ) {
-    if !res_hat!(res).router_subs.contains(&router) {
+    // TODO manage sub update
+    if !res_hat!(res).router_subs.contains_key(&router) {
         // Register router subscription
         {
-            res_hat_mut!(res).router_subs.insert(router);
+            res_hat_mut!(res).router_subs.insert(router, *sub_info);
             hat_mut!(tables).router_subs.insert(res.clone());
         }
 
@@ -261,10 +262,11 @@ fn register_peer_subscription(
     sub_info: &SubscriberInfo,
     peer: ZenohIdProto,
 ) {
-    if !res_hat!(res).peer_subs.contains(&peer) {
+    // TODO manage sub update
+    if !res_hat!(res).peer_subs.contains_key(&peer) {
         // Register peer subscription
         {
-            res_hat_mut!(res).peer_subs.insert(peer);
+            res_hat_mut!(res).peer_subs.insert(peer, *sub_info);
             hat_mut!(tables).peer_subs.insert(res.clone());
         }
 
@@ -329,21 +331,37 @@ fn declare_client_subscription(
 }
 
 #[inline]
-fn remote_router_subs(tables: &Tables, res: &Arc<Resource>) -> bool {
-    res.context.is_some()
-        && res_hat!(res)
-            .router_subs
-            .iter()
-            .any(|peer| peer != &tables.zid)
+fn remote_router_subs(tables: &Tables, res: &Arc<Resource>) -> Option<SubscriberInfo> {
+    let mut sub_info = None;
+    if res.context.is_some() {
+        for (router, info) in &res_hat!(res).router_subs {
+            if router != &tables.zid {
+                if info.reliability == Reliability::Reliable {
+                    return Some(*info);
+                } else {
+                    sub_info = Some(*info);
+                }
+            }
+        }
+    }
+    sub_info
 }
 
 #[inline]
-fn remote_peer_subs(tables: &Tables, res: &Arc<Resource>) -> bool {
-    res.context.is_some()
-        && res_hat!(res)
-            .peer_subs
-            .iter()
-            .any(|peer| peer != &tables.zid)
+fn remote_peer_subs(tables: &Tables, res: &Arc<Resource>) -> Option<SubscriberInfo> {
+    let mut sub_info = None;
+    if res.context.is_some() {
+        for (peer, info) in &res_hat!(res).peer_subs {
+            if peer != &tables.zid {
+                if info.reliability == Reliability::Reliable {
+                    return Some(*info);
+                } else {
+                    sub_info = Some(*info);
+                }
+            }
+        }
+    }
+    sub_info
 }
 
 #[inline]
@@ -361,10 +379,20 @@ fn client_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 }
 
 #[inline]
-fn remote_client_subs(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
-    res.session_ctxs
-        .values()
-        .any(|ctx| ctx.face.id != face.id && ctx.subs.is_some())
+fn remote_client_subs(res: &Arc<Resource>, face: &Arc<FaceState>) -> Option<SubscriberInfo> {
+    let mut sub_info = None;
+    for ctx in res.session_ctxs.values() {
+        if ctx.face.id != face.id {
+            if let Some(info) = ctx.subs {
+                if info.reliability == Reliability::Reliable {
+                    return Some(info);
+                } else {
+                    sub_info = Some(info);
+                }
+            }
+        }
+    }
+    sub_info
 }
 
 #[inline]
@@ -442,9 +470,9 @@ fn propagate_forget_simple_subscription(
             if !res.context().matches.iter().any(|m| {
                 m.upgrade().is_some_and(|m| {
                     m.context.is_some()
-                        && (remote_client_subs(&m, &face)
-                            || remote_peer_subs(tables, &m)
-                            || remote_router_subs(tables, &m))
+                        && (remote_client_subs(&m, &face).is_some()
+                            || remote_peer_subs(tables, &m).is_some()
+                            || remote_router_subs(tables, &m).is_some())
                 })
             }) {
                 if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
@@ -477,7 +505,7 @@ fn propagate_forget_simple_subscription_to_peers(
 ) {
     if !hat!(tables).full_net(WhatAmI::Peer)
         && res_hat!(res).router_subs.len() == 1
-        && res_hat!(res).router_subs.contains(&tables.zid)
+        && res_hat!(res).router_subs.contains_key(&tables.zid)
     {
         for mut face in tables
             .faces
@@ -560,7 +588,7 @@ fn unregister_router_subscription(
     router: &ZenohIdProto,
     send_declare: &mut SendDeclare,
 ) {
-    res_hat_mut!(res).router_subs.retain(|sub| sub != router);
+    res_hat_mut!(res).router_subs.retain(|sub, _| sub != router);
 
     if res_hat!(res).router_subs.is_empty() {
         hat_mut!(tables)
@@ -583,7 +611,7 @@ fn undeclare_router_subscription(
     router: &ZenohIdProto,
     send_declare: &mut SendDeclare,
 ) {
-    if res_hat!(res).router_subs.contains(router) {
+    if res_hat!(res).router_subs.contains_key(router) {
         unregister_router_subscription(tables, res, router, send_declare);
         propagate_forget_sourced_subscription(tables, res, face, router, WhatAmI::Router);
     }
@@ -600,7 +628,7 @@ fn forget_router_subscription(
 }
 
 fn unregister_peer_subscription(tables: &mut Tables, res: &mut Arc<Resource>, peer: &ZenohIdProto) {
-    res_hat_mut!(res).peer_subs.retain(|sub| sub != peer);
+    res_hat_mut!(res).peer_subs.retain(|sub, _| sub != peer);
 
     if res_hat!(res).peer_subs.is_empty() {
         hat_mut!(tables)
@@ -615,7 +643,7 @@ fn undeclare_peer_subscription(
     res: &mut Arc<Resource>,
     peer: &ZenohIdProto,
 ) {
-    if res_hat!(res).peer_subs.contains(peer) {
+    if res_hat!(res).peer_subs.contains_key(peer) {
         unregister_peer_subscription(tables, res, peer);
         propagate_forget_sourced_subscription(tables, res, face, peer, WhatAmI::Peer);
     }
@@ -632,7 +660,7 @@ fn forget_peer_subscription(
     let client_subs = res.session_ctxs.values().any(|ctx| ctx.subs.is_some());
     let peer_subs = remote_peer_subs(tables, res);
     let zid = tables.zid;
-    if !client_subs && !peer_subs {
+    if !client_subs && peer_subs.is_none() {
         undeclare_router_subscription(tables, None, res, &zid, send_declare);
     }
 }
@@ -651,13 +679,13 @@ pub(super) fn undeclare_client_subscription(
         let mut client_subs = client_subs(res);
         let router_subs = remote_router_subs(tables, res);
         let peer_subs = remote_peer_subs(tables, res);
-        if client_subs.is_empty() && !peer_subs {
+        if client_subs.is_empty() && peer_subs.is_none() {
             undeclare_router_subscription(tables, None, res, &tables.zid.clone(), send_declare);
         } else {
             propagate_forget_simple_subscription_to_peers(tables, res, send_declare);
         }
 
-        if client_subs.len() == 1 && !router_subs && !peer_subs {
+        if client_subs.len() == 1 && router_subs.is_none() && peer_subs.is_none() {
             let mut face = &mut client_subs[0];
             if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
                 send_declare(
@@ -686,9 +714,9 @@ pub(super) fn undeclare_client_subscription(
                 if !res.context().matches.iter().any(|m| {
                     m.upgrade().is_some_and(|m| {
                         m.context.is_some()
-                            && (remote_client_subs(&m, face)
-                                || remote_peer_subs(tables, &m)
-                                || remote_router_subs(tables, &m))
+                            && (remote_client_subs(&m, face).is_some()
+                                || remote_peer_subs(tables, &m).is_some()
+                                || remote_router_subs(tables, &m).is_some())
                     })
                 }) {
                     if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
@@ -740,7 +768,7 @@ pub(super) fn pubsub_remove_node(
             for mut res in hat!(tables)
                 .router_subs
                 .iter()
-                .filter(|res| res_hat!(res).router_subs.contains(node))
+                .filter(|res| res_hat!(res).router_subs.contains_key(node))
                 .cloned()
                 .collect::<Vec<Arc<Resource>>>()
             {
@@ -754,14 +782,14 @@ pub(super) fn pubsub_remove_node(
             for mut res in hat!(tables)
                 .peer_subs
                 .iter()
-                .filter(|res| res_hat!(res).peer_subs.contains(node))
+                .filter(|res| res_hat!(res).peer_subs.contains_key(node))
                 .cloned()
                 .collect::<Vec<Arc<Resource>>>()
             {
                 unregister_peer_subscription(tables, &mut res, node);
                 let client_subs = res.session_ctxs.values().any(|ctx| ctx.subs.is_some());
                 let peer_subs = remote_peer_subs(tables, &res);
-                if !client_subs && !peer_subs {
+                if !client_subs && peer_subs.is_none() {
                     undeclare_router_subscription(
                         tables,
                         None,
@@ -808,7 +836,7 @@ pub(super) fn pubsub_tree_change(
                         WhatAmI::Router => &res_hat!(res).router_subs,
                         _ => &res_hat!(res).peer_subs,
                     };
-                    for sub in subs {
+                    for sub in subs.keys() {
                         if *sub == tree_id {
                             let sub_info = SubscriberInfo {
                                 reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
@@ -846,7 +874,7 @@ pub(super) fn pubsub_linkstate_change(
                     .session_ctxs
                     .values()
                     .any(|ctx| ctx.face.whatami == WhatAmI::Client && ctx.subs.is_some());
-                if !remote_router_subs(tables, res) && !client_subs {
+                if remote_router_subs(tables, res).is_none() && !client_subs {
                     for ctx in get_mut_unchecked(&mut res.clone())
                         .session_ctxs
                         .values_mut()
@@ -947,9 +975,9 @@ pub(crate) fn declare_sub_interest(
                 if hat!(tables).router_subs.iter().any(|sub| {
                     sub.context.is_some()
                         && sub.matches(res)
-                        && (remote_client_subs(sub, face)
-                            || remote_peer_subs(tables, sub)
-                            || remote_router_subs(tables, sub))
+                        && (remote_client_subs(sub, face).is_some()
+                            || remote_peer_subs(tables, sub).is_some()
+                            || remote_router_subs(tables, sub).is_some())
                 }) {
                     let id = if mode.future() {
                         let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
@@ -981,8 +1009,8 @@ pub(crate) fn declare_sub_interest(
                 for sub in &hat!(tables).router_subs {
                     if sub.context.is_some()
                         && sub.matches(res)
-                        && (res_hat!(sub).router_subs.iter().any(|r| *r != tables.zid)
-                            || res_hat!(sub).peer_subs.iter().any(|r| *r != tables.zid)
+                        && (res_hat!(sub).router_subs.keys().any(|r| *r != tables.zid)
+                            || res_hat!(sub).peer_subs.keys().any(|r| *r != tables.zid)
                             || sub.session_ctxs.values().any(|s| {
                                 s.face.id != face.id
                                     && s.subs.is_some()
@@ -1024,8 +1052,8 @@ pub(crate) fn declare_sub_interest(
         } else {
             for sub in &hat!(tables).router_subs {
                 if sub.context.is_some()
-                    && (res_hat!(sub).router_subs.iter().any(|r| *r != tables.zid)
-                        || res_hat!(sub).peer_subs.iter().any(|r| *r != tables.zid)
+                    && (res_hat!(sub).router_subs.keys().any(|r| *r != tables.zid)
+                        || res_hat!(sub).peer_subs.keys().any(|r| *r != tables.zid)
                         || sub.session_ctxs.values().any(|s| {
                             s.subs.is_some()
                                 && (s.face.whatami != WhatAmI::Peer
@@ -1147,9 +1175,9 @@ impl HatPubSubTrait for HatCode {
                     // Compute the list of routers, peers and clients that are known
                     // sources of those subscriptions
                     Sources {
-                        routers: Vec::from_iter(res_hat!(s).router_subs.iter().cloned()),
+                        routers: Vec::from_iter(res_hat!(s).router_subs.keys().cloned()),
                         peers: if hat!(tables).full_net(WhatAmI::Peer) {
-                            Vec::from_iter(res_hat!(s).peer_subs.iter().cloned())
+                            Vec::from_iter(res_hat!(s).peer_subs.keys().cloned())
                         } else {
                             s.session_ctxs
                                 .values()
@@ -1187,10 +1215,10 @@ impl HatPubSubTrait for HatCode {
             tables: &Tables,
             net: &Network,
             source: NodeId,
-            subs: &HashSet<ZenohIdProto>,
+            subs: &HashMap<ZenohIdProto, SubscriberInfo>,
         ) {
             if net.trees.len() > source as usize {
-                for sub in subs {
+                for sub in subs.keys() {
                     if let Some(sub_idx) = net.get_idx(sub) {
                         if net.trees[source as usize].directions.len() > sub_idx.index() {
                             if let Some(direction) =
@@ -1321,10 +1349,10 @@ impl HatPubSubTrait for HatCode {
             tables: &Tables,
             net: &Network,
             source: usize,
-            subs: &HashSet<ZenohIdProto>,
+            subs: &HashMap<ZenohIdProto, SubscriberInfo>,
         ) {
             if net.trees.len() > source {
-                for sub in subs {
+                for sub in subs.keys() {
                     if let Some(sub_idx) = net.get_idx(sub) {
                         if net.trees[source].directions.len() > sub_idx.index() {
                             if let Some(direction) = net.trees[source].directions[sub_idx.index()] {

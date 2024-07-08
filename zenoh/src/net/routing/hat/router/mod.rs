@@ -31,7 +31,10 @@ use zenoh_protocol::{
     common::ZExtBody,
     core::ZenohIdProto,
     network::{
-        declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
+        declare::{
+            queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
+            SubscriberId, TokenId,
+        },
         interest::{InterestId, InterestOptions},
         oam::id::OAM_LINKSTATE,
         Oam,
@@ -843,8 +846,8 @@ impl HatBaseTrait for HatCode {
 }
 
 struct HatContext {
-    router_subs: HashSet<ZenohIdProto>,
-    peer_subs: HashSet<ZenohIdProto>,
+    router_subs: HashMap<ZenohIdProto, SubscriberInfo>,
+    peer_subs: HashMap<ZenohIdProto, SubscriberInfo>,
     router_qabls: HashMap<ZenohIdProto, QueryableInfoType>,
     peer_qabls: HashMap<ZenohIdProto, QueryableInfoType>,
     router_tokens: HashSet<ZenohIdProto>,
@@ -854,8 +857,8 @@ struct HatContext {
 impl HatContext {
     fn new() -> Self {
         Self {
-            router_subs: HashSet::new(),
-            peer_subs: HashSet::new(),
+            router_subs: HashMap::new(),
+            peer_subs: HashMap::new(),
             router_qabls: HashMap::new(),
             peer_qabls: HashMap::new(),
             router_tokens: HashSet::new(),
