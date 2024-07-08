@@ -22,6 +22,7 @@ pub struct RingBuffer<T> {
 impl<T> RingBuffer<T> {
     #[must_use]
     pub fn new(capacity: usize) -> RingBuffer<T> {
+        assert!(capacity > 0, "capacity must be non-zero");
         let buffer = VecDeque::<T>::with_capacity(capacity);
         RingBuffer {
             capacity,

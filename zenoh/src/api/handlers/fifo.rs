@@ -38,7 +38,11 @@ impl<T: Send + 'static> IntoHandler<'static, T> for FifoChannel {
     type Handler = flume::Receiver<T>;
 
     fn into_handler(self) -> (Callback<'static, T>, Self::Handler) {
-        flume::bounded(self.capacity).into_handler()
+        if self.capacity == 0 {
+            flume::unbounded().into_handler()
+        } else {
+            flume::bounded(self.capacity).into_handler()
+        }
     }
 }
 
