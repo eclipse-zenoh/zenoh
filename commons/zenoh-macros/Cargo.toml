@@ -20,7 +20,7 @@ homepage = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
-categories = ["proc-macros"]
+categories = ["development-tools::procedural-macro-helpers"]
 description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
