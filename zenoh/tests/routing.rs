@@ -32,7 +32,10 @@ use zenoh_result::bail;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 const MSG_COUNT: usize = 50;
-const DELAY: Duration = Duration::from_millis(10);
+const PUB_DELAY: Duration = Duration::from_millis(1);
+const GET_DELAY: Duration = Duration::from_millis(1);
+#[cfg(feature = "unstable")]
+const LIVELINESSGET_DELAY: Duration = Duration::from_millis(10);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Task {
@@ -95,7 +98,7 @@ impl Task {
                             .await
                         }) => {
                             let _ = res?;
-                            tokio::time::sleep(DELAY).await;
+                            tokio::time::sleep(PUB_DELAY).await;
                         }
                     }
                 }
@@ -146,7 +149,7 @@ impl Task {
                                 }
                                 counter += 1;
                             }
-                            tokio::time::sleep(DELAY).await;
+                            tokio::time::sleep(GET_DELAY).await;
                         }
                     }
                 }
@@ -182,7 +185,7 @@ impl Task {
                                 }
                                 counter += 1;
                             }
-                            tokio::time::sleep(DELAY).await;
+                            tokio::time::sleep(LIVELINESSGET_DELAY).await;
                         }
                     }
                 }
