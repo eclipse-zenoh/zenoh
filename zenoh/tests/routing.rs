@@ -32,8 +32,6 @@ use zenoh_result::bail;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 const MSG_COUNT: usize = 50;
-const PUB_DELAY: Duration = Duration::from_millis(1);
-const GET_DELAY: Duration = Duration::from_millis(1);
 #[cfg(feature = "unstable")]
 const LIVELINESSGET_DELAY: Duration = Duration::from_millis(10);
 
@@ -98,7 +96,6 @@ impl Task {
                             .await
                         }) => {
                             let _ = res?;
-                            tokio::time::sleep(PUB_DELAY).await;
                         }
                     }
                 }
@@ -149,7 +146,6 @@ impl Task {
                                 }
                                 counter += 1;
                             }
-                            tokio::time::sleep(GET_DELAY).await;
                         }
                     }
                 }
