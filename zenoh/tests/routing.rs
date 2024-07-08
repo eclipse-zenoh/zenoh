@@ -20,7 +20,7 @@ use std::{
     time::Duration,
 };
 
-use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use tokio_util::sync::CancellationToken;
 use zenoh::{
     config::{ModeDependentValue, WhatAmI, WhatAmIMatcher},
     prelude::*,
@@ -32,10 +32,7 @@ use zenoh_result::bail;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 const MSG_COUNT: usize = 50;
-const MSG_SIZE: [usize; 2] = [1_024, 131_072];
 const DELAY: Duration = Duration::from_millis(10);
-// Maximal recipes to run at once
-const PARALLEL_RECIPES: usize = 4;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Task {
@@ -43,7 +40,9 @@ enum Task {
     Sub(String, usize),
     Queryable(String, usize),
     Get(String, usize),
+    #[cfg(feature = "unstable")]
     Liveliness(String),
+    #[cfg(feature = "unstable")]
     LivelinessGet(String),
     Sleep(Duration),
     Wait,
@@ -96,9 +95,9 @@ impl Task {
                             .await
                         }) => {
                             let _ = res?;
+                            tokio::time::sleep(DELAY).await;
                         }
                     }
-                    tokio::time::sleep(DELAY).await;
                 }
                 println!("Pub task done.");
             }
@@ -147,13 +146,14 @@ impl Task {
                                 }
                                 counter += 1;
                             }
+                            tokio::time::sleep(DELAY).await;
                         }
                     }
-                    tokio::time::sleep(DELAY).await;
                 }
                 println!("Get got sufficient amount of messages. Done.");
             }
 
+            #[cfg(feature = "unstable")]
             // The Liveliness task.
             Self::Liveliness(ke) => {
                 let _liveliness = ztimeout!(session.liveliness().declare_token(ke))?;
@@ -162,6 +162,7 @@ impl Task {
                 println!("Liveliness task done.");
             }
 
+            #[cfg(feature = "unstable")]
             // The LivelinessGet task.
             Self::LivelinessGet(ke) => {
                 let mut counter = 0;
@@ -181,9 +182,9 @@ impl Task {
                                 }
                                 counter += 1;
                             }
+                            tokio::time::sleep(DELAY).await;
                         }
                     }
-                    tokio::time::sleep(DELAY).await;
                 }
                 println!("LivelinessGet got sufficient amount of messages. Done.");
             }
@@ -527,12 +528,21 @@ async fn static_failover_brokering() -> Result<()> {
     Result::Ok(())
 }
 
+#[cfg(feature = "unstable")]
+use tokio_util::task::TaskTracker;
+#[cfg(feature = "unstable")]
+const MSG_SIZE: [usize; 2] = [1_024, 131_072];
+// Maximal recipes to run at once
+#[cfg(feature = "unstable")]
+const PARALLEL_RECIPES: usize = 4;
+
 // All test cases varying in
 // 1. Message size: 2 (sizes)
 // 2. Mode: {Client, Peer} x {Client x Peer} x {Router} = 2 x 2 x 1 = 4 (cases)
 // 3. Spawning order (delay_in_secs for node1, node2, and node3) = 6 (cases)
 //
 // Total cases = 2 x 4 x 6 = 48
+#[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 9)]
 async fn three_node_combination() -> Result<()> {
     zenoh::try_init_log_from_env();
@@ -684,6 +694,7 @@ async fn three_node_combination() -> Result<()> {
 // 2. Mode: {Client, Peer} x {Client, Peer} x {IsFirstListen} = 2 x 2 x 2 = 8 (modes)
 //
 // Total cases = 2 x 8 = 16
+#[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
 async fn two_node_combination() -> Result<()> {
     zenoh::try_init_log_from_env();
