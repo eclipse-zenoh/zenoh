@@ -571,7 +571,7 @@ fn config_deser() {
         scouting: {
           multicast: {
             enabled: false,
-            autoconnect: "peer|router"
+            autoconnect: ["peer", "router"]
           }
         }
       }"#,
@@ -598,7 +598,7 @@ fn config_deser() {
         scouting: {
           multicast: {
             enabled: false,
-            autoconnect: {router: "", peer: "peer|router"}
+            autoconnect: {router: [], peer: ["peer", "router"]}
           }
         }
       }"#,
