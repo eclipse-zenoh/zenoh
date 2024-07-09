@@ -137,9 +137,14 @@ pub mod writer {
         fn can_write(&self) -> bool {
             self.remaining() != 0
         }
-        /// Provides a buffer of exactly `len` uninitialized bytes to `f` to allow in-place writing.
-        /// `f` must return the number of bytes it actually wrote.
-        fn with_slot<F>(&mut self, len: usize, f: F) -> Result<NonZeroUsize, DidntWrite>
+        /// Provides a buffer of exactly `len` uninitialized bytes to `write` to allow in-place writing.
+        /// `write` must return the number of bytes it actually wrote.
+        ///
+        /// # Safety
+        ///
+        /// Caller must ensure that `write` return an integer lesser than or equal to the length of
+        /// the slice passed in argument
+        unsafe fn with_slot<F>(&mut self, len: usize, write: F) -> Result<NonZeroUsize, DidntWrite>
         where
             F: FnOnce(&mut [u8]) -> usize;
     }

@@ -28,11 +28,11 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use zenoh::{
     bytes::ZBytesReader,
-    core::Priority,
     internal::{bail, Condition, TaskController},
     key_expr::{keyexpr, KeyExpr, OwnedKeyExpr},
     prelude::*,
-    publisher::Publisher,
+    pubsub::Publisher,
+    qos::Priority,
     Session,
 };
 

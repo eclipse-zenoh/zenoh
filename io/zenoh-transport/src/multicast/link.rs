@@ -73,9 +73,7 @@ impl TransportLinkMulticast {
                     .batch
                     .is_compression
                     .then_some(BBuf::with_capacity(
-                        lz4_flex::block::get_maximum_output_size(
-                            self.config.batch.max_buffer_size()
-                        ),
+                        lz4_flex::block::get_maximum_output_size(self.config.batch.mtu as usize),
                     )),
                 None
             ),
@@ -323,6 +321,7 @@ impl TransportLinkMulticastUniversal {
                 batch: self.link.config.batch,
                 queue_size: self.transport.manager.config.queue_size,
                 wait_before_drop: self.transport.manager.config.wait_before_drop,
+                batching: self.transport.manager.config.batching,
                 backoff: self.transport.manager.config.queue_backoff,
             };
             // The pipeline
@@ -550,7 +549,7 @@ async fn rx_task(
     }
 
     // The pool of buffers
-    let mtu = link.inner.config.batch.max_buffer_size();
+    let mtu = link.inner.config.batch.mtu as usize;
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;

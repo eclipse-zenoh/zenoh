@@ -713,7 +713,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the queries for this Queryable with a [`Handler`](crate::prelude::IntoHandler).
+    /// Receive the queries for this Queryable with a [`Handler`](crate::handlers::IntoHandler).
     ///
     /// # Examples
     /// ```no_run
@@ -771,10 +771,10 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
     }
 }
 
-/// A queryable that provides data through a [`Handler`](crate::prelude::IntoHandler).
+/// A queryable that provides data through a [`Handler`](crate::handlers::IntoHandler).
 ///
-/// Queryables can be created from a zenoh [`Session`]
-/// with the [`declare_queryable`](crate::Session::declare_queryable) function
+/// Queryables can be created from a zenoh [`Session`](crate::Session)
+/// with the [`declare_queryable`](crate::session::SessionDeclarations::declare_queryable) function
 /// and the [`with`](QueryableBuilder::with) function
 /// of the resulting builder.
 ///

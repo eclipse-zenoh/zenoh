@@ -50,7 +50,7 @@ pub fn iter(s: &str) -> impl DoubleEndedIterator<Item = (&str, &str)> + Clone {
         .map(|p| split_once(p, FIELD_SEPARATOR))
 }
 
-/// Same as [`Self::from_iter_into`] but keys are sorted in alphabetical order.
+/// Same as [`from_iter_into`] but keys are sorted in alphabetical order.
 pub fn sort<'s, I>(iter: I) -> impl Iterator<Item = (&'s str, &'s str)>
 where
     I: Iterator<Item = (&'s str, &'s str)>,
@@ -84,7 +84,7 @@ where
     into
 }
 
-/// Same as [`Self::from_iter`] but it writes into a user-provided string instead of allocating a new one.
+/// Same as [`from_iter`] but it writes into a user-provided string instead of allocating a new one.
 pub fn from_iter_into<'s, I>(iter: I, into: &mut String)
 where
     I: Iterator<Item = (&'s str, &'s str)>,
@@ -131,7 +131,7 @@ pub fn insert<'s>(s: &'s str, k: &'s str, v: &'s str) -> (String, Option<&'s str
     (from_iter(iter), item)
 }
 
-/// Same as [`Self::insert`] but keys are sorted in alphabetical order.
+/// Same as [`insert`] but keys are sorted in alphabetical order.
 pub fn insert_sort<'s>(s: &'s str, k: &'s str, v: &'s str) -> (String, Option<&'s str>) {
     let (iter, item) = _insert(iter(s), k, v);
     (from_iter(sort(iter)), item)

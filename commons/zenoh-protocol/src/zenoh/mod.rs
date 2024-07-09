@@ -138,6 +138,7 @@ pub mod ext {
 
     use crate::core::{Encoding, EntityGlobalIdProto};
 
+    /// ```text
     ///  7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
     /// |zid_len|X|X|X|X|
@@ -148,6 +149,7 @@ pub mod ext {
     /// +---------------+
     /// %      sn       %
     /// +---------------+
+    /// ```
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct SourceInfoType<const ID: u8> {
         pub id: EntityGlobalIdProto,

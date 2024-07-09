@@ -16,6 +16,7 @@ use zenoh::{
     prelude::*,
     Config,
 };
+use zenoh_config::ModeDependent;
 
 #[test]
 fn retry_config_overriding() {
@@ -74,7 +75,14 @@ fn retry_config_overriding() {
         },
     ];
 
-    for (i, endpoint) in config.listen().endpoints().iter().enumerate() {
+    for (i, endpoint) in config
+        .listen()
+        .endpoints()
+        .get(config.mode().unwrap_or_default())
+        .unwrap_or(&vec![])
+        .iter()
+        .enumerate()
+    {
         let retry_config = zenoh_config::get_retry_config(&config, Some(endpoint), true);
         assert_eq!(retry_config, expected[i]);
     }

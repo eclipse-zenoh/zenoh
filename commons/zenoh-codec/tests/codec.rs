@@ -533,6 +533,11 @@ fn codec_declare_body() {
 }
 
 #[test]
+fn codec_interest() {
+    run!(Interest, Interest::rand());
+}
+
+#[test]
 fn codec_declare_keyexpr() {
     run!(DeclareKeyExpr, DeclareKeyExpr::rand());
 }

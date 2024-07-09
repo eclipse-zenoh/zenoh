@@ -24,7 +24,7 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh::{
     config::{ModeDependentValue, WhatAmI, WhatAmIMatcher},
     prelude::*,
-    publisher::CongestionControl,
+    qos::CongestionControl,
     Config, Result, Session,
 };
 use zenoh_core::ztimeout;
@@ -268,16 +268,20 @@ impl Recipe {
                         let mut config = node.config.unwrap_or_default();
                         config.set_mode(Some(node.mode)).unwrap();
                         config.scouting.multicast.set_enabled(Some(false)).unwrap();
-                        config
-                            .listen
-                            .set_endpoints(node.listen.iter().map(|x| x.parse().unwrap()).collect())
-                            .unwrap();
-                        config
-                            .connect
-                            .set_endpoints(
-                                node.connect.iter().map(|x| x.parse().unwrap()).collect(),
-                            )
-                            .unwrap();
+                        if !node.listen.is_empty() {
+                            config
+                                .listen
+                                .endpoints
+                                .set(node.listen.iter().map(|x| x.parse().unwrap()).collect())
+                                .unwrap();
+                        }
+                        if !node.connect.is_empty() {
+                            config
+                                .connect
+                                .endpoints
+                                .set(node.connect.iter().map(|x| x.parse().unwrap()).collect())
+                                .unwrap();
+                        }
                         config
                     };
 

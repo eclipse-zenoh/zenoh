@@ -18,7 +18,7 @@ pub use crate::transport::TransportSn;
 
 /// # Fragment message
 ///
-/// The [`Fragment`] message is used to transmit on the wire large [`crate::zenoh::ZenohMessage`]
+/// The [`Fragment`] message is used to transmit on the wire large [`crate::network::NetworkMessage`]
 /// that require fragmentation because they are larger than the maximum batch size
 /// (i.e. 2^16-1) and/or the link MTU.
 ///

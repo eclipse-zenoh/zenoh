@@ -24,8 +24,8 @@ use zenoh::{
     internal::Value,
     key_expr::{KeyExpr, OwnedKeyExpr},
     prelude::*,
+    query::Selector,
     sample::{Sample, SampleBuilder},
-    selector::Selector,
     time::Timestamp,
     Session,
 };

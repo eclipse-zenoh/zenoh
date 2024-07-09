@@ -18,7 +18,7 @@ use crate::core::{whatami::WhatAmIMatcher, ZenohIdProto};
 /// The [`Scout`] message MAY be sent at any point in time to discover the available zenoh nodes in the
 /// network. The [`Scout`] message SHOULD be sent in a multicast or broadcast fashion. Upon receiving a
 /// [`Scout`] message, a zenoh node MUST first verify whether the matching criteria are satisfied, then
-/// it SHOULD reply with a [`super::Hello`] message in a unicast fashion including all the requested
+/// it SHOULD reply with a [`super::HelloProto`] message in a unicast fashion including all the requested
 /// information.
 ///
 /// The scouting message flow is the following:

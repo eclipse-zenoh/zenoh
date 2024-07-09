@@ -100,6 +100,34 @@ pub mod routing {
     }
 }
 
+impl Default for ListenConfig {
+    #[allow(clippy::unnecessary_cast)]
+    fn default() -> Self {
+        Self {
+            timeout_ms: None,
+            endpoints: ModeDependentValue::Dependent(ModeValues {
+                router: Some(vec!["tcp/[::]:7447".parse().unwrap()]),
+                peer: Some(vec!["tcp/[::]:0".parse().unwrap()]),
+                client: None,
+            }),
+            exit_on_failure: None,
+            retry: None,
+        }
+    }
+}
+
+impl Default for ConnectConfig {
+    #[allow(clippy::unnecessary_cast)]
+    fn default() -> Self {
+        Self {
+            timeout_ms: None,
+            endpoints: ModeDependentValue::Unique(vec![]),
+            exit_on_failure: None,
+            retry: None,
+        }
+    }
+}
+
 impl Default for TransportUnicastConf {
     fn default() -> Self {
         Self {
@@ -163,6 +191,7 @@ impl Default for LinkTxConf {
             batch_size: BatchSize::MAX,
             queue: QueueConf::default(),
             threads: num,
+            batching: true,
         }
     }
 }

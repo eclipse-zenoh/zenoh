@@ -26,8 +26,7 @@ use http_types::Method;
 use serde::{Deserialize, Serialize};
 use tide::{http::Mime, sse::Sender, Request, Response, Server, StatusCode};
 use zenoh::{
-    bytes::ZBytes,
-    encoding::Encoding,
+    bytes::{Encoding, ZBytes},
     internal::{
         bail,
         plugins::{RunningPluginTrait, ZenohPlugin},
@@ -36,16 +35,15 @@ use zenoh::{
     },
     key_expr::{keyexpr, KeyExpr},
     prelude::*,
-    query::{QueryConsolidation, Reply},
-    sample::{EncodingBuilderTrait, Sample, SampleKind},
-    selector::{Parameters, Selector, ZenohParameters},
+    query::{Parameters, QueryConsolidation, Reply, Selector, ZenohParameters},
+    sample::{Sample, SampleKind},
     session::{Session, SessionDeclarations},
 };
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 
 mod config;
 pub use config::Config;
-use zenoh::query::ReplyError;
+use zenoh::{bytes::EncodingBuilderTrait, query::ReplyError};
 
 const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 lazy_static::lazy_static! {
@@ -58,7 +56,7 @@ struct JSONSample {
     key: String,
     value: serde_json::Value,
     encoding: String,
-    time: Option<String>,
+    timestamp: Option<String>,
 }
 
 pub fn base64_encode(data: &[u8]) -> String {
@@ -102,7 +100,7 @@ fn sample_to_json(sample: &Sample) -> JSONSample {
         key: sample.key_expr().as_str().to_string(),
         value: payload_to_json(sample.payload(), sample.encoding()),
         encoding: sample.encoding().to_string(),
-        time: sample.timestamp().map(|ts| ts.to_string()),
+        timestamp: sample.timestamp().map(|ts| ts.to_string()),
     }
 }
 
@@ -113,7 +111,7 @@ fn result_to_json(sample: Result<&Sample, &ReplyError>) -> JSONSample {
             key: "ERROR".into(),
             value: payload_to_json(err.payload(), err.encoding()),
             encoding: err.encoding().to_string(),
-            time: None,
+            timestamp: None,
         },
     }
 }

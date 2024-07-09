@@ -17,21 +17,20 @@ use std::{
     future::{IntoFuture, Ready},
     mem::swap,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use zenoh::{
-    core::{Error, Resolvable, Resolve, Result as ZResult},
     handlers::{locked, DefaultHandler, IntoHandler},
     internal::zlock,
     key_expr::KeyExpr,
     prelude::Wait,
-    query::{QueryConsolidation, QueryTarget, ReplyKeyExpr},
+    pubsub::{Reliability, Subscriber},
+    query::{QueryConsolidation, QueryTarget, ReplyKeyExpr, Selector},
     sample::{Locality, Sample, SampleBuilder, TimestampBuilderTrait},
-    selector::Selector,
     session::{SessionDeclarations, SessionRef},
-    subscriber::{Reliability, Subscriber},
-    time::{new_timestamp, Timestamp},
+    time::Timestamp,
+    Error, Resolvable, Resolve, Result as ZResult,
 };
 
 use crate::ExtractSample;
@@ -655,7 +654,8 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
         InputHandler: IntoHandler<'static, Sample, Handler = Handler> + Send,
         TryIntoSample: ExtractSample + Send + Sync,
     {
-        let zid = conf.session.zid();
+        let session_id = conf.session.zid();
+
         let state = Arc::new(Mutex::new(InnerState {
             pending_fetches: 0,
             merge_queue: MergeQueue::new(),
@@ -673,9 +673,14 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
                     tracing::trace!(
                         "Sample received while fetch in progress: push it to merge_queue"
                     );
+
                     // ensure the sample has a timestamp, thus it will always be sorted into the MergeQueue
                     // after any timestamped Sample possibly coming from a fetch reply.
-                    let timestamp = s.timestamp().cloned().unwrap_or(new_timestamp(zid));
+                    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into(); // UNIX_EPOCH is Returns a Timespec::zero(), Unwrap Should be permissable here
+                    let timestamp = s
+                        .timestamp()
+                        .cloned()
+                        .unwrap_or(Timestamp::new(now, session_id.into()));
                     state
                         .merge_queue
                         .push(SampleBuilder::from(s).timestamp(timestamp).into());
