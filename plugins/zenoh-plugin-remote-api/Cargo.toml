@@ -36,6 +36,7 @@ name = "zenoh_plugin_remote_api"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+
 anyhow = { workspace = true, features = ["default"] }
 async-std = { workspace = true, features = ["default", "attributes"] }
 async-tungstenite = { version = "0.25.1", features = ["async-std"] }
@@ -45,6 +46,7 @@ flume = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
 lazy_static = { workspace = true }
+ts-rs = { version = "9.0", features = ["uuid-impl"] }
 tracing = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["default"] }
@@ -65,10 +67,6 @@ jsonschema = { workspace = true }
 
 [dev-dependencies]
 clap = { workspace = true }
-
-[[example]]
-name = "z_serve_sse"
-path = "examples/z_serve_sse.rs"
 
 [package.metadata.deb]
 name = "zenoh-plugin-remote-api"

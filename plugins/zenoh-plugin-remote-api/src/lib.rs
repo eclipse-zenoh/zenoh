@@ -18,29 +18,23 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 
-use ::serde::{Deserialize, Serialize};
 use async_std::net::TcpListener;
 use async_std::sync::RwLock;
 use async_std::task::{self, JoinHandle};
 use async_tungstenite::tungstenite::{self, Message};
+use interface::{ControlMsg, DataMsg, RemoteAPIMsg, SampleWS};
 
 use flume::Sender;
 use futures::prelude::*;
 use futures::{future, pin_mut};
-use zenoh::sample::SampleKind;
 
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
-use std::str::FromStr;
 use std::sync::Arc;
-
-use tracing::{debug, error};
-
-use uhlc::Timestamp;
+use tracing::{debug, error, warn};
 use uuid::Uuid;
-
 use zenoh::prelude::*;
-use zenoh::pubsub::Subscriber;
+use zenoh::pubsub::{Publisher, Subscriber};
 use zenoh::Session;
 use zenoh::{
     internal::{
@@ -48,13 +42,14 @@ use zenoh::{
         runtime::Runtime,
     },
     key_expr::KeyExpr,
-    sample::Sample,
 };
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 use zenoh_result::ZResult;
 
 mod config;
 pub use config::Config;
+
+mod interface;
 
 const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 lazy_static::lazy_static! {
@@ -101,98 +96,17 @@ impl PluginControl for RunningPlugin {}
 
 impl RunningPluginTrait for RunningPlugin {}
 
-#[derive(Debug, Serialize, Deserialize)]
-enum RemoteAPIMsg {
-    Data(DataMsg),
-    Control(ControlMsg),
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-enum DataMsg {
-    Sample(SampleWS), // SubscriberMessage(Uuid, Vec<u8>),
-}
-// #[derive(Debug, Serialize, Deserialize)]
-// struct Subscriber(Uuid);
-
-#[derive(Debug, Serialize, Deserialize)]
-struct KeyExprWrapper(KeyExpr<'static>);
-
-#[derive(Debug, Serialize, Deserialize)]
-enum ControlMsg {
-    // Session
-    OpenSession,
-    Session(Uuid),
-    CloseSession(Uuid),
-
-    // KeyExpr
-    CreateKeyExpr(String),
-    KeyExpr(KeyExprWrapper),
-    DeleteKeyExpr(KeyExprWrapper),
-
-    // Subscriber
-    DeclareSubscriber(String, String),
-    // CreateSubscriber(KeyExprWrapper),
-    Subscriber(Uuid),
-    UndeclareSubscriber(),
-
-    //
-    Error(),
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-enum ErrorMsg {}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct SampleWS {
-    subscriber_id: Uuid,
-    key_expr: KeyExpr<'static>,
-    value: Vec<u8>,
-    kind: SampleKindWS,
-    timestamp: Option<Timestamp>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum SampleKindWS {
-    Put = 0,
-    Delete = 1,
-}
-
-impl From<SampleKind> for SampleKindWS {
-    fn from(sk: SampleKind) -> Self {
-        match sk {
-            SampleKind::Put => SampleKindWS::Put,
-            SampleKind::Delete => SampleKindWS::Delete,
-        }
-    }
-}
-
-impl TryFrom<(Sample, Uuid)> for SampleWS {
-    type Error = ZError;
-
-    fn try_from(sample_and_id: (Sample, Uuid)) -> Result<Self, Self::Error> {
-        let (s, sub_id) = sample_and_id;
-        let z_bytes: Vec<u8> = s.payload().try_into()?;
-
-        Ok(SampleWS {
-            subscriber_id: sub_id,
-            key_expr: s.key_expr().clone(),
-            value: z_bytes,
-            kind: s.kind().into(),
-            timestamp: s.timestamp().copied(),
-        })
-    }
-}
-
 type StateMap = Arc<RwLock<HashMap<SocketAddr, RemoteState>>>;
 
 // sender
 struct RemoteState {
     channel_tx: Sender<RemoteAPIMsg>,
     session_id: Uuid,
-    session: Arc<Session>,               // keyExpr: Vec<KeyExpr>,
-    key_expr: HashSet<KeyExpr<'static>>, // keyExpr: Vec<KeyExpr>,
-    // subscribers: HashMap<Uuid, Arc<Subscriber<'static, Receiver<Sample>>>>,
-    subscribers: HashMap<Uuid, Arc<Subscriber<'static, ()>>>,
+    // session: Session,
+    session: Arc<Session>,
+    key_expr: HashSet<KeyExpr<'static>>,
+    subscribers: HashMap<Uuid, Subscriber<'static, ()>>,
+    publishers: HashMap<Uuid, Publisher<'static>>,
 }
 
 // TODO:
@@ -220,13 +134,15 @@ pub async fn run_websocket_server() {
                     let mut write_guard = state_map.write().await;
                     let config = zenoh::config::default();
                     let session = zenoh::open(config).await.unwrap().into_arc();
+                    // let session = zenoh::open(config).await.unwrap();
 
-                    let state = RemoteState {
+                    let state: RemoteState = RemoteState {
                         channel_tx: ch_tx.clone(),
                         session_id: Uuid::new_v4(),
                         session,
                         key_expr: HashSet::new(),
                         subscribers: HashMap::new(),
+                        publishers: HashMap::new(),
                     };
 
                     sock_adress = Arc::new(sock_addr);
@@ -296,11 +212,13 @@ async fn handle_message(
                         .await
                         .map(RemoteAPIMsg::Control)
                 }
-                RemoteAPIMsg::Data(data_msg) => handle_data_message(data_msg),
+                RemoteAPIMsg::Data(data_msg) => {
+                    handle_data_message(data_msg, sock_addr, state_map).await
+                }
             },
             Err(err) => {
-                println!("{} : {}", text, err);
-                debug!(
+                println!("{} \n {}", err, text);
+                error!(
                     "RemoteAPI: WS Message Cannot be Deserialized to RemoteAPIMsg {}",
                     err
                 );
@@ -329,39 +247,63 @@ async fn handle_control_message(
                 None
             }
         }
-        ControlMsg::Session(_id) => todo!(),
-        ControlMsg::CloseSession(_id) => todo!(),
+        ControlMsg::CloseSession => {
+            // session.close().res().await.unwrap();
+            let mut state_write = state_map.write().await;
+            if let Some(state_map) = state_write.remove(&sock_addr) {
+                //  Undeclare Publishers and Subscribers
+                for (_, publisher) in state_map.publishers {
+                    if let Err(err) = publisher.undeclare().await {
+                        tracing::error!("Close Session, Error undeclaring Publisher {err}");
+                    };
+                }
+                for (_, subscriber) in state_map.subscribers {
+                    if let Err(err) = subscriber.undeclare().await {
+                        tracing::error!("Close Session, Error undeclaring Subscriber {err}");
+                    };
+                }
+
+                //  Close Session
+                // TODO: Close session, tie lifetime of session to statemap entry
+
+                // let x = state_map;
+                // let mut_borrow = state_map.session.borrow_mut();
+                // if let Err(err)= state_map.session.close().await{
+                //     tracing::error!("Could not close session {err}");
+                //     Some(ControlMsg::Error(err.to_string()))
+                // }else{
+                //     None
+                // }
+                None
+            } else {
+                println!("State Map Does not contain SocketAddr");
+                None
+            }
+            // None
+        }
         ControlMsg::CreateKeyExpr(key_expr_str) => {
             let mut state_writer = state_map.write().await;
             if let Some(remote_state) = state_writer.get_mut(&sock_addr) {
                 let key_expr = KeyExpr::new(key_expr_str).unwrap();
                 remote_state.key_expr.insert(key_expr.clone());
-                Some(ControlMsg::KeyExpr(KeyExprWrapper(key_expr)))
+                Some(ControlMsg::KeyExpr(key_expr.to_string()))
             } else {
                 println!("State Map Does not contain SocketAddr");
                 None
             }
         }
-
         ControlMsg::DeleteKeyExpr(_) => todo!(),
-        ControlMsg::DeclareSubscriber(key_expr_str, uuid) => {
+        //
+        ControlMsg::DeclareSubscriber(key_expr_str, subscriber_uuid) => {
             let mut state_writer = state_map.write().await;
-            println!("{}, {}", key_expr_str, uuid);
+            println!("{}, {}", key_expr_str, subscriber_uuid);
 
             if let Some(remote_state) = state_writer.get_mut(&sock_addr) {
                 let key_expr = KeyExpr::new(key_expr_str).unwrap();
                 let ch_tx = remote_state.channel_tx.clone();
 
-                let sub_id = match Uuid::from_str(&uuid) {
-                    Ok(uuid) => uuid,
-                    Err(err) => {
-                        println!("Could not create UUID from string {uuid}, {err}");
-                        tracing::error!("Could not create UUID from string {uuid}, {err}");
-                        return None;
-                    }
-                };
-
                 println!("Key Expression {key_expr}");
+                let subscriber_uuid_cl = subscriber_uuid.clone();
 
                 let subscriber = remote_state
                     .session
@@ -369,10 +311,12 @@ async fn handle_control_message(
                     .callback(move |sample| {
                         println!("RCV sample {}", sample.key_expr());
 
-                        match SampleWS::try_from((sample, sub_id)) {
+                        match SampleWS::try_from(sample) {
                             Ok(sample_ws) => {
-                                let remote_api_message =
-                                    RemoteAPIMsg::Data(DataMsg::Sample(sample_ws));
+                                let remote_api_message = RemoteAPIMsg::Data(DataMsg::Sample(
+                                    sample_ws,
+                                    subscriber_uuid_cl.clone(),
+                                ));
                                 if let Err(e) = ch_tx.send(remote_api_message) {
                                     error!("Forward Sample Channel error: {e}");
                                 };
@@ -385,63 +329,89 @@ async fn handle_control_message(
                     .await
                     .unwrap();
 
-                let arc_subscriber = Arc::new(subscriber);
-                remote_state.subscribers.insert(sub_id, arc_subscriber);
+                // let arc_subscriber = Arc::new(subscriber);
+                remote_state.subscribers.insert(subscriber_uuid, subscriber);
 
-                Some(ControlMsg::Subscriber(sub_id))
+                Some(ControlMsg::Subscriber(subscriber_uuid))
             } else {
                 println!("State Map Does not contain SocketAddr");
                 None
             }
         }
-        ControlMsg::UndeclareSubscriber() => todo!(),
+        ControlMsg::UndeclareSubscriber(uuid) => {
+            let mut state_reader = state_map.write().await;
+            if let Some(state) = state_reader.get_mut(&sock_addr) {
+                if let Some(subscriber) = state.subscribers.remove(&uuid) {
+                    if let Err(err) = subscriber.undeclare().await {
+                        tracing::error!("Subscriber Undeclaration Error :{err}");
+                    };
+                }
+            }
+            None
+        }
+        ControlMsg::DeclarePublisher(key_expr, uuid) => {
+            println!("Declare Publisher {}  {}", key_expr, uuid);
+            //
+            let mut state_reader = state_map.write().await;
+            //
+            if let Some(state) = state_reader.get_mut(&sock_addr) {
+                //
+                match state.session.declare_publisher(key_expr.clone()).await {
+                    Ok(publisher) => {
+                        state.publishers.insert(uuid, publisher);
+                        tracing::info!("Publisher Created {uuid:?} : {key_expr:?}");
+                    }
+                    Err(err) => {
+                        tracing::error!("Could not Create Publisher {err}");
+                        println!("Could not Create Publisher {err}");
+                        return Some(ControlMsg::Error(err.to_string()));
+                    }
+                };
+            }
+            None
+        }
+
+        //
+
         // Backend should not receive this, make it unrepresentable
-        ControlMsg::KeyExpr(_) => todo!(),
-        ControlMsg::Subscriber(_) => todo!(),
-        ControlMsg::Error() => todo!(),
+        ControlMsg::Session(_) | ControlMsg::KeyExpr(_) | ControlMsg::Subscriber(_) => {
+            // TODO: Move these into own type
+            // make server recieving these types unrepresentable
+            println!("Backend should not get these types");
+            error!("Backend should not get these types");
+            None
+        }
+        ControlMsg::Error(client_err) => {
+            error!("Client sent error {}", client_err);
+            None
+        }
     }
 }
 
-fn handle_data_message(_data_msg: DataMsg) -> Option<RemoteAPIMsg> {
+async fn handle_data_message(
+    data_msg: DataMsg,
+    sock_addr: SocketAddr,
+    state_map: StateMap,
+) -> Option<RemoteAPIMsg> {
+    match data_msg {
+        DataMsg::Sample(sample, publisher_uuid) => {
+            warn!("Server has Recieved A Sample");
+        }
+        DataMsg::PublisherPut(payload, publisher_uuid) => {
+            let state_reader = state_map.read().await;
+            if let Some(state) = state_reader.get(&sock_addr) {
+                if let Some(publisher) = state.publishers.get(&publisher_uuid) {
+                    if let Err(err) = publisher.put(payload).await {
+                        err.to_string();
+                    }
+                } else {
+                    tracing::warn!("Publisher {publisher_uuid}, does not exist in State");
+                }
+            } else {
+                tracing::warn!("No state in map for Socket Addres {sock_addr}");
+                println!("No state in map for Socket Addres {sock_addr}");
+            }
+        }
+    }
     None
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn serialize_messages() {
-        let json: String =
-            serde_json::to_string(&RemoteAPIMsg::Control(ControlMsg::OpenSession)).unwrap();
-        eprintln!("{}", json);
-        let json: String =
-            serde_json::to_string(&RemoteAPIMsg::Control(ControlMsg::Session(Uuid::new_v4())))
-                .unwrap();
-        eprintln!("{}", json);
-        let json: String = serde_json::to_string(&RemoteAPIMsg::Control(ControlMsg::CloseSession(
-            Uuid::new_v4(),
-        )))
-        .unwrap();
-        eprintln!("{}", json);
-        let json: String = serde_json::to_string(&RemoteAPIMsg::Control(
-            ControlMsg::CreateKeyExpr("demo/tech".into()),
-        ))
-        .unwrap();
-        eprintln!("{}", json);
-        let key_expr = KeyExpr::new("demo/test").unwrap();
-        let json: String = serde_json::to_string(&RemoteAPIMsg::Control(ControlMsg::KeyExpr(
-            KeyExprWrapper(key_expr),
-        )))
-        .unwrap();
-        eprintln!("{}", json);
-
-        let json: String = serde_json::to_string(&RemoteAPIMsg::Control(
-            ControlMsg::DeclareSubscriber("hello".into()),
-        ))
-        .unwrap();
-        eprintln!("{}", json);
-
-        assert_eq!(1, 2);
-    }
 }
