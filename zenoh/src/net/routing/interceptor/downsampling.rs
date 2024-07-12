@@ -126,11 +126,12 @@ pub(crate) struct DownsamplingInterceptor {
 impl InterceptorTrait for DownsamplingInterceptor {
     fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
         let ke_id = zlock!(self.ke_id);
-        if let Some(id) = ke_id.weight_at(&key_expr.clone()) {
-            Some(Box::new(Some(*id)))
-        } else {
-            Some(Box::new(None::<usize>))
+        if let Some(node) = ke_id.intersecting_keys(key_expr).next() {
+            if let Some(id) = ke_id.weight_at(&node) {
+                return Some(Box::new(Some(*id)));
+            }
         }
+        Some(Box::new(None::<usize>))
     }
 
     fn intercept(
@@ -187,6 +188,11 @@ impl DownsamplingInterceptor {
                     threshold,
                     latest_message_timestamp,
                 },
+            );
+            tracing::debug!(
+                "New downsampler rule enabled: key_expr={:?}, threshold={:?}",
+                rule.key_expr,
+                threshold
             );
         }
         Self {
