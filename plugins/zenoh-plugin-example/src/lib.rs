@@ -78,8 +78,10 @@ impl Plugin for ExamplePlugin {
 
         // a flag to end the plugin's loop when the plugin is removed from the config
         let flag = Arc::new(AtomicBool::new(true));
+
         // spawn the task running the plugin's loop
         async_std::task::spawn(run(runtime.clone(), selector, flag.clone()));
+
         // return a RunningPlugin to zenohd
         Ok(Box::new(RunningPlugin(Arc::new(Mutex::new(
             RunningPluginInner {

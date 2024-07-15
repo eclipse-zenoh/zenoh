@@ -11,10 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use schemars::JsonSchema;
-use serde::de::{Unexpected, Visitor};
-use serde::{de, Deserialize, Deserializer};
 use std::fmt;
+
+use schemars::JsonSchema;
+use serde::{
+    de,
+    de::{Unexpected, Visitor},
+    Deserialize, Deserializer,
+};
 
 const DEFAULT_HTTP_INTERFACE: &str = "[::]";
 

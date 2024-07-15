@@ -18,33 +18,35 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 
-use async_std::net::TcpListener;
-use async_std::sync::RwLock;
-use async_std::task::{self, JoinHandle};
+use std::{
+    collections::{HashMap, HashSet},
+    net::SocketAddr,
+    sync::Arc,
+};
+
+use async_std::{
+    net::TcpListener,
+    sync::RwLock,
+    task::{self, JoinHandle},
+};
 use async_tungstenite::tungstenite::{self, Message};
-use interface::{ControlMsg, DataMsg, RemoteAPIMsg, SampleWS};
-
 use flume::Sender;
-use futures::prelude::*;
-use futures::{future, pin_mut};
-
-use std::collections::{HashMap, HashSet};
-use std::net::SocketAddr;
-use std::sync::Arc;
+use futures::{future, pin_mut, prelude::*};
+use interface::{ControlMsg, DataMsg, RemoteAPIMsg, SampleWS};
 use tracing::{debug, error, warn};
 use uuid::Uuid;
-use zenoh::prelude::*;
-use zenoh::pubsub::{Publisher, Subscriber};
-use zenoh::Session;
 use zenoh::{
     internal::{
         plugins::{RunningPluginTrait, ZenohPlugin},
         runtime::Runtime,
     },
     key_expr::KeyExpr,
+    prelude::*,
+    pubsub::{Publisher, Subscriber},
+    Session,
 };
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
-use zenoh_result::ZResult;
+use zenoh_result::{bail, ZResult};
 
 mod config;
 pub use config::Config;
@@ -72,24 +74,33 @@ impl Plugin for RemoteApiPlugin {
 
     fn start(
         name: &str,
-        _runtime: &Self::StartArgs,
+        runtime: &Self::StartArgs,
     ) -> ZResult<zenoh::internal::plugins::RunningPlugin> {
         // Try to initiate login.
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
         zenoh_util::try_init_log_from_env();
         tracing::info!("Starting {name}");
-        // Run WebServer
-        let join_handle = task::spawn(async {
-            run_websocket_server().await;
-        });
-        // Return WebServer And State
-        Ok(Box::new(RunningPlugin(join_handle)))
+        // TODO Should i store a WeakRuntime or a normal Runtime ?
+        let weak_runtime = Runtime::downgrade(runtime);
+        if let Some(runtime) = weak_runtime.upgrade() {
+            // Run WebServer
+            let join_handle = task::spawn(async {
+                run_websocket_server(runtime).await;
+            });
+            // Return WebServer And State
+            Ok(Box::new(RunningPlugin(join_handle)))
+        } else {
+            bail!("Cannot Get Instance of Runtime !")
+        }
     }
 }
 
 // TODO: Bring Config Back
 // struct RunningPlugin(Config);
+
+// TODO
+// struct RunningPluginInner{};
 struct RunningPlugin(JoinHandle<()>);
 
 impl PluginControl for RunningPlugin {}
@@ -112,7 +123,8 @@ struct RemoteState {
 // TODO:
 // What we want for this function achieve is to start a Zenoh session
 // Listen on the Zenoh Session
-pub async fn run_websocket_server() {
+pub async fn run_websocket_server(runtime: Runtime) {
+    // runtime.
     async_std::task::spawn(async move {
         let addr = "127.0.0.1:10000".to_string();
         println!("Spawning Remote API Plugin on {:?}", addr);
@@ -133,6 +145,7 @@ pub async fn run_websocket_server() {
                 Ok(sock_addr) => {
                     let mut write_guard = state_map.write().await;
                     let config = zenoh::config::default();
+                    // TODO Change this for a zenoh let session = zenoh::session::init(runtime).await.unwrap();
                     let session = zenoh::open(config).await.unwrap().into_arc();
                     // let session = zenoh::open(config).await.unwrap();
 
@@ -349,6 +362,7 @@ async fn handle_control_message(
             }
             None
         }
+        // Publisher
         ControlMsg::DeclarePublisher(key_expr, uuid) => {
             println!("Declare Publisher {}  {}", key_expr, uuid);
             //
@@ -370,7 +384,7 @@ async fn handle_control_message(
             }
             None
         }
-
+        ControlMsg::UndeclarePublisher(_) => todo!(),
         //
 
         // Backend should not receive this, make it unrepresentable

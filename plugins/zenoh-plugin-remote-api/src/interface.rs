@@ -31,7 +31,7 @@ pub enum ControlMsg {
     OpenSession,
     CloseSession,
 
-    //
+    // TODO: Session Related
     Session(Uuid),
 
     // KeyExpr
@@ -46,8 +46,9 @@ pub enum ControlMsg {
 
     //Publisher
     DeclarePublisher(KeyExpr, Uuid),
+    UndeclarePublisher(Uuid),
 
-    //
+    // Error string
     Error(String),
 }
 
