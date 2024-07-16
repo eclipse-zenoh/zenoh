@@ -17,6 +17,7 @@ pub trait Canonizable {
     fn canonize(&mut self);
 }
 
+// Return the length of the canonized string
 fn canonize(bytes: &mut [u8]) -> usize {
     let mut index = 0;
     let mut written = 0;
@@ -96,8 +97,7 @@ impl Canonizable for &mut str {
         // and remaining garbage bytes are zeroed
         let bytes = unsafe { self.as_bytes_mut() };
         let length = canonize(bytes);
-        // SAFETY: canonized length is lesser than or equal to the original length
-        unsafe { bytes.get_unchecked_mut(length..) }.fill(b'\0');
+        bytes[length..].fill(b'\0');
     }
 }
 
@@ -107,8 +107,7 @@ impl Canonizable for String {
         // and remaining garbage bytes are truncated
         let bytes = unsafe { self.as_mut_vec() };
         let length = canonize(bytes);
-        // SAFETY: canonized length is lesser than or equal to the original length
-        unsafe { bytes.set_len(length) };
+        bytes.truncate(length);
     }
 }
 
