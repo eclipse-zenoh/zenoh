@@ -143,8 +143,8 @@ impl<'a> PublicationCache<'a> {
         if conf.session.hlc().is_none() {
             bail!(
                 "Failed requirement for PublicationCache on {}: \
-                     the Session is not configured with 'add_timestamp=true'",
-                key_expr
+                     the 'timestamping' setting must be enabled in the Zenoh configuration",
+                key_expr,
             )
         }
 

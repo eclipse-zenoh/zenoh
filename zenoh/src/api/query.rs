@@ -18,13 +18,16 @@ use std::{
     time::Duration,
 };
 
+#[cfg(feature = "unstable")]
 use zenoh_config::ZenohId;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_keyexpr::OwnedKeyExpr;
-use zenoh_protocol::core::{CongestionControl, Parameters, ZenohIdProto};
+#[cfg(feature = "unstable")]
+use zenoh_protocol::core::ZenohIdProto;
+use zenoh_protocol::core::{CongestionControl, Parameters};
 use zenoh_result::ZResult;
 
-#[zenoh_macros::unstable]
+#[cfg(feature = "unstable")]
 use super::{
     builders::sample::SampleBuilderTrait, bytes::OptionZBytes, sample::SourceInfo,
     selector::ZenohParameters,
@@ -118,6 +121,7 @@ impl From<Value> for ReplyError {
 #[derive(Clone, Debug)]
 pub struct Reply {
     pub(crate) result: Result<Sample, ReplyError>,
+    #[cfg(feature = "unstable")]
     pub(crate) replier_id: Option<ZenohIdProto>,
 }
 
@@ -137,6 +141,7 @@ impl Reply {
         self.result
     }
 
+    #[zenoh_macros::unstable]
     /// Gets the id of the zenoh instance that answered this Reply.
     pub fn replier_id(&self) -> Option<ZenohId> {
         self.replier_id.map(Into::into)
