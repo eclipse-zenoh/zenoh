@@ -20,7 +20,7 @@ use std::{
     time::Duration,
 };
 
-use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use tokio_util::sync::CancellationToken;
 use zenoh::{
     config::{ModeDependentValue, WhatAmI, WhatAmIMatcher},
     prelude::*,
@@ -32,9 +32,8 @@ use zenoh_result::bail;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 const MSG_COUNT: usize = 50;
-const MSG_SIZE: [usize; 2] = [1_024, 131_072];
-// Maximal recipes to run at once
-const PARALLEL_RECIPES: usize = 4;
+#[cfg(feature = "unstable")]
+const LIVELINESSGET_DELAY: Duration = Duration::from_millis(10);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Task {
@@ -42,6 +41,14 @@ enum Task {
     Sub(String, usize),
     Queryable(String, usize),
     Get(String, usize),
+    #[cfg(feature = "unstable")]
+    Liveliness(String),
+    #[cfg(feature = "unstable")]
+    LivelinessGet(String),
+    #[cfg(feature = "unstable")]
+    LivelinessLoop(String),
+    #[cfg(feature = "unstable")]
+    LivelinessSub(String),
     Sleep(Duration),
     Wait,
     Checkpoint,
@@ -99,6 +106,22 @@ impl Task {
                 println!("Pub task done.");
             }
 
+            // The Queryable task keeps replying to requested messages until all checkpoints are finished.
+            Self::Queryable(ke, payload_size) => {
+                let queryable = ztimeout!(session.declare_queryable(ke))?;
+                let payload = vec![0u8; *payload_size];
+
+                loop {
+                    tokio::select! {
+                        _  = token.cancelled() => break,
+                        query = queryable.recv_async() => {
+                            ztimeout!(query?.reply(ke.to_owned(), payload.clone()))?;
+                        },
+                    }
+                }
+                println!("Queryable task done.");
+            }
+
             // The Get task gets and checks if the incoming message matches the expected size until it receives enough counts.
             Self::Get(ke, expected_size) => {
                 let mut counter = 0;
@@ -133,20 +156,92 @@ impl Task {
                 println!("Get got sufficient amount of messages. Done.");
             }
 
-            // The Queryable task keeps replying to requested messages until all checkpoints are finished.
-            Self::Queryable(ke, payload_size) => {
-                let queryable = ztimeout!(session.declare_queryable(ke))?;
-                let payload = vec![0u8; *payload_size];
+            #[cfg(feature = "unstable")]
+            // The Liveliness task.
+            Self::Liveliness(ke) => {
+                let _liveliness = ztimeout!(session.liveliness().declare_token(ke))?;
 
+                token.cancelled().await;
+                println!("Liveliness task done.");
+            }
+
+            #[cfg(feature = "unstable")]
+            // The LivelinessGet task.
+            Self::LivelinessGet(ke) => {
+                let mut counter = 0;
+                while counter < MSG_COUNT {
+                    tokio::select! {
+                        _  = token.cancelled() => break,
+                        replies = async { session.liveliness().get(ke).timeout(Duration::from_secs(10)).await } => {
+                            let replies = replies?;
+                            while let Ok(reply) = replies.recv_async().await {
+                                if let Err(err) = reply.result() {
+                                    tracing::warn!(
+                                        "Sample got from {} failed to unwrap! Error: {:?}.",
+                                        ke,
+                                        err
+                                    );
+                                    continue;
+                                }
+                                counter += 1;
+                            }
+                            tokio::time::sleep(LIVELINESSGET_DELAY).await;
+                        }
+                    }
+                }
+                println!("LivelinessGet got sufficient amount of messages. Done.");
+            }
+
+            // The LivelinessLoop task.
+            #[cfg(feature = "unstable")]
+            Self::LivelinessLoop(ke) => {
+                let mut liveliness: Option<zenoh::liveliness::LivelinessToken> = None;
+
+                loop {
+                    match liveliness.take() {
+                        Some(liveliness) => {
+                            tokio::select! {
+                                _  = token.cancelled() => break,
+                                res = tokio::time::timeout(std::time::Duration::from_secs(1), async {liveliness.undeclare().await}) => {
+                                    _ = res?;
+                                }
+                            }
+                        }
+                        None => {
+                            tokio::select! {
+                                _  = token.cancelled() => break,
+                                res = tokio::time::timeout(std::time::Duration::from_secs(1), async {session.liveliness().declare_token(ke)
+                                    .await
+                                }) => {
+                                    liveliness = res?.ok();
+                                }
+                            }
+                        }
+                    }
+                }
+                println!("LivelinessLoop task done.");
+            }
+
+            #[cfg(feature = "unstable")]
+            // The LivelinessSub task.
+            Self::LivelinessSub(ke) => {
+                let sub = ztimeout!(session.liveliness().declare_subscriber(ke))?;
+                let mut counter = 0;
                 loop {
                     tokio::select! {
                         _  = token.cancelled() => break,
-                        query = queryable.recv_async() => {
-                            ztimeout!(query?.reply(ke.to_owned(), payload.clone()))?;
-                        },
+                        res = sub.recv_async() => {
+                            if res.is_ok() {
+                                counter += 1;
+                                if counter >= MSG_COUNT {
+                                    println!("LivelinessSub received sufficient amount of messages. Done.");
+                                    break;
+                                }
+                            }
+                        }
                     }
                 }
-                println!("Queryable task done.");
+                println!("LivelinessSub task done.");
             }
 
             // Make the zenoh session sleep for a while.
@@ -488,12 +583,21 @@ async fn static_failover_brokering() -> Result<()> {
     Result::Ok(())
 }
 
+#[cfg(feature = "unstable")]
+use tokio_util::task::TaskTracker;
+#[cfg(feature = "unstable")]
+const MSG_SIZE: [usize; 2] = [1_024, 131_072];
+// Maximal recipes to run at once
+#[cfg(feature = "unstable")]
+const PARALLEL_RECIPES: usize = 4;
+
 // All test cases varying in
 // 1. Message size: 2 (sizes)
 // 2. Mode: {Client, Peer} x {Client x Peer} x {Router} = 2 x 2 x 1 = 4 (cases)
 // 3. Spawning order (delay_in_secs for node1, node2, and node3) = 6 (cases)
 //
 // Total cases = 2 x 4 x 6 = 48
+#[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 9)]
 async fn three_node_combination() -> Result<()> {
     zenoh::try_init_log_from_env();
@@ -524,6 +628,10 @@ async fn three_node_combination() -> Result<()> {
 
                 let ke_pubsub = format!("three_node_combination_keyexpr_pubsub_{idx}");
                 let ke_getqueryable = format!("three_node_combination_keyexpr_getqueryable_{idx}");
+                let ke_getliveliness =
+                    format!("three_node_combination_keyexpr_getliveliness_{idx}");
+                let ke_subliveliness =
+                    format!("three_node_combination_keyexpr_subliveliness_{idx}");
 
                 use rand::Rng;
                 let mut rng = rand::thread_rng();
@@ -538,7 +646,7 @@ async fn three_node_combination() -> Result<()> {
                     ..Default::default()
                 };
 
-                let (pub_node, queryable_node) = {
+                let (pub_node, queryable_node, liveliness_node, livelinessloop_node) = {
                     let base = Node {
                         mode: node1_mode,
                         connect: vec![locator.clone()],
@@ -554,7 +662,7 @@ async fn three_node_combination() -> Result<()> {
                     )])]);
                     pub_node.warmup += Duration::from_millis(rng.gen_range(0..500));
 
-                    let mut queryable_node = base;
+                    let mut queryable_node = base.clone();
                     queryable_node.name = format!("Queryable {node1_mode}");
                     queryable_node.con_task =
                         ConcurrentTask::from([SequentialTask::from([Task::Queryable(
@@ -563,10 +671,31 @@ async fn three_node_combination() -> Result<()> {
                         )])]);
                     queryable_node.warmup += Duration::from_millis(rng.gen_range(0..500));
 
-                    (pub_node, queryable_node)
+                    let mut liveliness_node = base.clone();
+                    liveliness_node.name = format!("Liveliness {node1_mode}");
+                    liveliness_node.con_task =
+                        ConcurrentTask::from([SequentialTask::from([Task::Liveliness(
+                            ke_getliveliness.clone(),
+                        )])]);
+                    liveliness_node.warmup += Duration::from_millis(rng.gen_range(0..500));
+
+                    let mut livelinessloop_node = base;
+                    livelinessloop_node.name = format!("LivelinessLoop {node1_mode}");
+                    livelinessloop_node.con_task =
+                        ConcurrentTask::from([SequentialTask::from([Task::LivelinessLoop(
+                            ke_subliveliness.clone(),
+                        )])]);
+                    livelinessloop_node.warmup += Duration::from_millis(rng.gen_range(0..500));
+
+                    (
+                        pub_node,
+                        queryable_node,
+                        liveliness_node,
+                        livelinessloop_node,
+                    )
                 };
 
-                let (sub_node, get_node) = {
+                let (sub_node, get_node, livelinessget_node, livelinesssub_node) = {
                     let base = Node {
                         mode: node2_mode,
                         connect: vec![locator],
@@ -582,7 +711,7 @@ async fn three_node_combination() -> Result<()> {
                     ])]);
                     sub_node.warmup += Duration::from_millis(rng.gen_range(0..500));
 
-                    let mut get_node = base;
+                    let mut get_node = base.clone();
                     get_node.name = format!("Get {node2_mode}");
                     get_node.con_task = ConcurrentTask::from([SequentialTask::from([
                         Task::Get(ke_getqueryable, msg_size),
@@ -590,12 +719,30 @@ async fn three_node_combination() -> Result<()> {
                     ])]);
                     get_node.warmup += Duration::from_millis(rng.gen_range(0..500));
 
-                    (sub_node, get_node)
+                    let mut livelinessget_node = base.clone();
+                    livelinessget_node.name = format!("LivelinessGet {node2_mode}");
+                    livelinessget_node.con_task = ConcurrentTask::from([SequentialTask::from([
+                        Task::LivelinessGet(ke_getliveliness),
+                        Task::Checkpoint,
+                    ])]);
+                    livelinessget_node.warmup += Duration::from_millis(rng.gen_range(0..500));
+
+                    let mut livelinesssub_node = base;
+                    livelinesssub_node.name = format!("LivelinessSub {node2_mode}");
+                    livelinesssub_node.con_task = ConcurrentTask::from([SequentialTask::from([
+                        Task::LivelinessSub(ke_subliveliness),
+                        Task::Checkpoint,
+                    ])]);
+                    livelinesssub_node.warmup += Duration::from_millis(rng.gen_range(0..500));
+
+                    (sub_node, get_node, livelinessget_node, livelinesssub_node)
                 };
 
                 (
                     Recipe::new([router_node.clone(), pub_node, sub_node]),
-                    Recipe::new([router_node, queryable_node, get_node]),
+                    Recipe::new([router_node.clone(), queryable_node, get_node]),
+                    Recipe::new([router_node.clone(), liveliness_node, livelinessget_node]),
+                    Recipe::new([router_node, livelinessloop_node, livelinesssub_node]),
                 )
             },
         )
@@ -603,10 +750,12 @@ async fn three_node_combination() -> Result<()> {
 
     for chunks in recipe_list.chunks(4).map(|x| x.to_vec()) {
         let mut join_set = tokio::task::JoinSet::new();
-        for (pubsub, getqueryable) in chunks {
+        for (pubsub, getqueryable, getliveliness, subliveliness) in chunks {
             join_set.spawn(async move {
                 pubsub.run().await?;
                 getqueryable.run().await?;
+                getliveliness.run().await?;
+                subliveliness.run().await?;
                 Result::Ok(())
             });
         }
@@ -625,6 +774,7 @@ async fn three_node_combination() -> Result<()> {
 // 2. Mode: {Client, Peer} x {Client, Peer} x {IsFirstListen} = 2 x 2 x 2 = 8 (modes)
 //
 // Total cases = 2 x 8 = 16
+#[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
 async fn two_node_combination() -> Result<()> {
     zenoh::try_init_log_from_env();
@@ -649,6 +799,8 @@ async fn two_node_combination() -> Result<()> {
             idx += 1;
             let ke_pubsub = format!("two_node_combination_keyexpr_pubsub_{idx}");
             let ke_getqueryable = format!("two_node_combination_keyexpr_getqueryable_{idx}");
+            let ke_subliveliness = format!("two_node_combination_keyexpr_subliveliness_{idx}");
+            let ke_getliveliness = format!("two_node_combination_keyexpr_getliveliness_{idx}");
 
             let (node1_listen_connect, node2_listen_connect) = {
                 let locator = format!("tcp/127.0.0.1:{}", base_port + idx);
@@ -662,7 +814,7 @@ async fn two_node_combination() -> Result<()> {
                 }
             };
 
-            let (pub_node, queryable_node) = {
+            let (pub_node, queryable_node, liveliness_node, livelinessloop_node) = {
                 let base = Node {
                     mode: node1_mode,
                     listen: node1_listen_connect.0,
@@ -677,7 +829,7 @@ async fn two_node_combination() -> Result<()> {
                     msg_size,
                 )])]);
 
-                let mut queryable_node = base;
+                let mut queryable_node = base.clone();
                 queryable_node.name = format!("Queryable {node1_mode}");
                 queryable_node.con_task =
                     ConcurrentTask::from([SequentialTask::from([Task::Queryable(
@@ -685,10 +837,29 @@ async fn two_node_combination() -> Result<()> {
                         msg_size,
                     )])]);
 
-                (pub_node, queryable_node)
+                let mut liveliness_node = base.clone();
+                liveliness_node.name = format!("Liveliness {node1_mode}");
+                liveliness_node.con_task =
+                    ConcurrentTask::from([SequentialTask::from([Task::Liveliness(
+                        ke_getliveliness.clone(),
+                    )])]);
+
+                let mut livelinessloop_node = base;
+                livelinessloop_node.name = format!("LivelinessLoop {node1_mode}");
+                livelinessloop_node.con_task =
+                    ConcurrentTask::from([SequentialTask::from([Task::LivelinessLoop(
+                        ke_subliveliness.clone(),
+                    )])]);
+
+                (
+                    pub_node,
+                    queryable_node,
+                    liveliness_node,
+                    livelinessloop_node,
+                )
             };
 
-            let (sub_node, get_node) = {
+            let (sub_node, get_node, livelinessget_node, livelinesssub_node) = {
                 let base = Node {
                     mode: node2_mode,
                     listen: node2_listen_connect.0,
@@ -703,29 +874,47 @@ async fn two_node_combination() -> Result<()> {
                     Task::Checkpoint,
                 ])]);
 
-                let mut get_node = base;
+                let mut get_node = base.clone();
                 get_node.name = format!("Get {node2_mode}");
                 get_node.con_task = ConcurrentTask::from([SequentialTask::from([
                     Task::Get(ke_getqueryable, msg_size),
                     Task::Checkpoint,
                 ])]);
 
-                (sub_node, get_node)
+                let mut livelinessget_node = base.clone();
+                livelinessget_node.name = format!("LivelinessGet {node2_mode}");
+                livelinessget_node.con_task = ConcurrentTask::from([SequentialTask::from([
+                    Task::LivelinessGet(ke_getliveliness),
+                    Task::Checkpoint,
+                ])]);
+
+                let mut livelinesssub_node = base;
+                livelinesssub_node.name = format!("LivelinessSub {node2_mode}");
+                livelinesssub_node.con_task = ConcurrentTask::from([SequentialTask::from([
+                    Task::LivelinessSub(ke_subliveliness),
+                    Task::Checkpoint,
+                ])]);
+
+                (sub_node, get_node, livelinessget_node, livelinesssub_node)
             };
 
             (
                 Recipe::new([pub_node, sub_node]),
                 Recipe::new([queryable_node, get_node]),
+                Recipe::new([liveliness_node, livelinessget_node]),
+                Recipe::new([livelinessloop_node, livelinesssub_node]),
             )
         })
         .collect();
 
     for chunks in recipe_list.chunks(PARALLEL_RECIPES).map(|x| x.to_vec()) {
         let task_tracker = TaskTracker::new();
-        for (pubsub, getqueryable) in chunks {
+        for (pubsub, getqueryable, getlivelienss, subliveliness) in chunks {
             task_tracker.spawn(async move {
                 pubsub.run().await?;
                 getqueryable.run().await?;
+                getlivelienss.run().await?;
+                subliveliness.run().await?;
                 Result::Ok(())
             });
         }
