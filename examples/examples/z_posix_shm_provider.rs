@@ -29,8 +29,7 @@ fn main() {
         let provider_alignment = AllocAlignment::default();
 
         // A layout for POSIX Provider's memory
-        let provider_layout =
-            MemoryLayout::new(size.try_into().unwrap(), provider_alignment).unwrap();
+        let provider_layout = MemoryLayout::new(size, provider_alignment).unwrap();
 
         // Build a provider backend
         PosixShmProviderBackend::builder()
