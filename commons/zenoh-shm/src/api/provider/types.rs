@@ -61,7 +61,7 @@ impl AllocAlignment {
     #[zenoh_macros::unstable_doc]
     pub fn new(pow: u8) -> Result<Self, ZLayoutError> {
         match pow {
-            pow if pow < 64 => Ok(Self { pow }),
+            pow if pow < usize::BITS as u8 => Ok(Self { pow }),
             _ => Err(ZLayoutError::IncorrectLayoutArgs),
         }
     }
