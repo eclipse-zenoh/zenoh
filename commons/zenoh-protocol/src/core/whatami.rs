@@ -142,12 +142,11 @@ impl WhatAmIMatcher {
             Self::U8_R => WhatAmI::STR_R,
             Self::U8_P => WhatAmI::STR_P,
             Self::U8_C => WhatAmI::STR_C,
-            Self::U8_R_P => formatcp!("[{},{}]", WhatAmI::STR_R, WhatAmI::STR_P),
-            Self::U8_R_C => formatcp!("[{},{}]", WhatAmI::STR_R, WhatAmI::STR_C),
-            Self::U8_P_C => formatcp!("[{},{}]", WhatAmI::STR_P, WhatAmI::STR_C),
-            Self::U8_R_P_C => {
-                formatcp!("[{},{},{}]", WhatAmI::STR_R, WhatAmI::STR_P, WhatAmI::STR_C)
-            }
+            Self::U8_R_P => formatcp!("{}|{}", WhatAmI::STR_R, WhatAmI::STR_P),
+            Self::U8_R_C => formatcp!("{}|{}", WhatAmI::STR_R, WhatAmI::STR_C),
+            Self::U8_P_C => formatcp!("{}|{}", WhatAmI::STR_P, WhatAmI::STR_C),
+            Self::U8_R_P_C => formatcp!("{}|{}|{}", WhatAmI::STR_R, WhatAmI::STR_P, WhatAmI::STR_C),
+
             _ => unreachable!(),
         }
     }
@@ -185,6 +184,24 @@ impl TryFrom<u8> for WhatAmIMatcher {
         } else {
             Err(())
         }
+    }
+}
+
+impl FromStr for WhatAmIMatcher {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut inner = 0;
+        for s in s.split('|') {
+            match s.trim() {
+                "" => {}
+                WhatAmI::STR_R => inner |= WhatAmI::U8_R,
+                WhatAmI::STR_P => inner |= WhatAmI::U8_P,
+                WhatAmI::STR_C => inner |= WhatAmI::U8_C,
+                _ => return Err(()),
+            }
+        }
+        Self::try_from(inner)
     }
 }
 
