@@ -58,6 +58,11 @@ impl Default for AllocAlignment {
 }
 
 impl AllocAlignment {
+    /// Try to create a new AllocAlignment from alignment representation in powers of 2.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if provided alignment power cannot fit into usize.
     #[zenoh_macros::unstable_doc]
     pub fn new(pow: u8) -> Result<Self, ZLayoutError> {
         match pow {
@@ -69,7 +74,7 @@ impl AllocAlignment {
     /// Get alignment in normal units (bytes)
     #[zenoh_macros::unstable_doc]
     pub fn get_alignment_value(&self) -> NonZeroUsize {
-        // SAFETY: this is safe
+        // SAFETY: this is safe because we limit pow in new based on usize size
         unsafe { NonZeroUsize::new_unchecked(1usize << self.pow) }
     }
 
@@ -90,6 +95,12 @@ impl AllocAlignment {
         let alignment = self.get_alignment_value();
         match size.get() % alignment {
             0 => size,
+            // SAFETY:
+            // This unsafe block is always safe:
+            // 1. 0 < remainder < alignment
+            // 2. because of 1, the value of (alignment.get() - remainder) is always > 0
+            // 3. because of 2, we add nonzero size to nonzero (alignment.get() - remainder) and it is always positive if no overflow
+            // 4. we make sure that there is no overflow condition in 3 by means of alignment limitation in `new` by limiting pow value
             remainder => unsafe {
                 NonZeroUsize::new_unchecked(size.get() + (alignment.get() - remainder))
             },
@@ -115,9 +126,20 @@ impl Display for MemoryLayout {
 }
 
 impl MemoryLayout {
-    /// Try to create a new memory layout
+    /// Try to create a new memory layout.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if zero size have passed or if the provided size is not the mutiply of the alignment.
     #[zenoh_macros::unstable_doc]
-    pub fn new(size: NonZeroUsize, alignment: AllocAlignment) -> Result<Self, ZLayoutError> {
+    pub fn new<T>(size: T, alignment: AllocAlignment) -> Result<Self, ZLayoutError>
+    where
+        T: TryInto<NonZeroUsize>,
+    {
+        let Ok(size) = size.try_into() else {
+            return Err(ZLayoutError::IncorrectLayoutArgs);
+        };
+
         // size of an allocation must be a miltiple of it's alignment!
         match size.get() % alignment.get_alignment_value() {
             0 => Ok(Self { size, alignment }),

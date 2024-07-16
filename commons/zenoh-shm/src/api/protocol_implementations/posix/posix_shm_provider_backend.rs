@@ -88,11 +88,7 @@ impl PosixShmProviderBackendBuilder {
         size: usize,
         alignment: AllocAlignment,
     ) -> Result<LayoutedPosixShmProviderBackendBuilder<MemoryLayout>, ZLayoutError> {
-        let layout = MemoryLayout::new(
-            size.try_into()
-                .map_err(|_| ZLayoutError::IncorrectLayoutArgs)?,
-            alignment,
-        )?;
+        let layout = MemoryLayout::new(size, alignment)?;
         Ok(LayoutedPosixShmProviderBackendBuilder { layout })
     }
 
@@ -102,11 +98,7 @@ impl PosixShmProviderBackendBuilder {
         self,
         size: usize,
     ) -> Result<LayoutedPosixShmProviderBackendBuilder<MemoryLayout>, ZLayoutError> {
-        let layout = MemoryLayout::new(
-            size.try_into()
-                .map_err(|_| ZLayoutError::IncorrectLayoutArgs)?,
-            AllocAlignment::default(),
-        )?;
+        let layout = MemoryLayout::new(size, AllocAlignment::default())?;
         Ok(LayoutedPosixShmProviderBackendBuilder { layout })
     }
 }
