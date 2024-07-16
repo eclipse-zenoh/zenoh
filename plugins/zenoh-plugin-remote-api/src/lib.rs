@@ -81,15 +81,26 @@ impl Plugin for RemoteApiPlugin {
         // But cannot be done twice in case of static link.
         zenoh_util::try_init_log_from_env();
         tracing::info!("Starting {name}");
-        // TODO Should i store a WeakRuntime or a normal Runtime ?
         let weak_runtime = Runtime::downgrade(runtime);
         if let Some(runtime) = weak_runtime.upgrade() {
+            // Create Map Of Websocket State
+            let hm: HashMap<SocketAddr, RemoteState> = HashMap::new();
+            let state_map = Arc::new(RwLock::new(hm));
+
             // Run WebServer
+            let runtime_cl = runtime.clone();
+            let state_map_cl = state_map.clone();
             let join_handle = task::spawn(async {
-                run_websocket_server(runtime).await;
+                run_websocket_server(runtime_cl, state_map_cl).await;
             });
+
             // Return WebServer And State
-            Ok(Box::new(RunningPlugin(join_handle)))
+            let running_plugin = RunningPluginInner {
+                runtime,
+                websocket_server: join_handle,
+                state_map,
+            };
+            Ok(Box::new(RunningPlugin(running_plugin)))
         } else {
             bail!("Cannot Get Instance of Runtime !")
         }
@@ -99,39 +110,49 @@ impl Plugin for RemoteApiPlugin {
 // TODO: Bring Config Back
 // struct RunningPlugin(Config);
 
-// TODO
-// struct RunningPluginInner{};
-struct RunningPlugin(JoinHandle<()>);
+type StateMap = Arc<RwLock<HashMap<SocketAddr, RemoteState>>>;
+
+struct RunningPluginInner {
+    runtime: Runtime,
+    websocket_server: JoinHandle<()>,
+    state_map: StateMap,
+}
+
+struct RunningPlugin(RunningPluginInner);
 
 impl PluginControl for RunningPlugin {}
 
-impl RunningPluginTrait for RunningPlugin {}
+impl RunningPluginTrait for RunningPlugin {
+    // TODO: Do we want to support changing of config ?
+    fn config_checker(
+        &self,
+        _path: &str,
+        _current: &serde_json::Map<String, serde_json::Value>,
+        _new: &serde_json::Map<String, serde_json::Value>,
+    ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
+        bail!("Runtime configuration change not supported");
+    }
+}
 
-type StateMap = Arc<RwLock<HashMap<SocketAddr, RemoteState>>>;
-
-// sender
+// Sender
 struct RemoteState {
     channel_tx: Sender<RemoteAPIMsg>,
     session_id: Uuid,
-    // session: Session,
     session: Arc<Session>,
     key_expr: HashSet<KeyExpr<'static>>,
     subscribers: HashMap<Uuid, Subscriber<'static, ()>>,
     publishers: HashMap<Uuid, Publisher<'static>>,
 }
 
-// TODO:
-// What we want for this function achieve is to start a Zenoh session
 // Listen on the Zenoh Session
-pub async fn run_websocket_server(runtime: Runtime) {
+async fn run_websocket_server(runtime: Runtime, state_map: StateMap) {
     // runtime.
     async_std::task::spawn(async move {
         let addr = "127.0.0.1:10000".to_string();
         println!("Spawning Remote API Plugin on {:?}", addr);
         // Server
         let server = TcpListener::bind(addr).await.unwrap();
-        let hm: HashMap<SocketAddr, RemoteState> = HashMap::new();
-        let state_map = Arc::new(RwLock::new(hm));
+
         // let state_map
         while let Some(res) = futures::StreamExt::next(&mut server.incoming()).await {
             let raw_stream = res.unwrap();
@@ -143,11 +164,13 @@ pub async fn run_websocket_server(runtime: Runtime) {
 
             match raw_stream.peer_addr() {
                 Ok(sock_addr) => {
+                    //
                     let mut write_guard = state_map.write().await;
-                    let config = zenoh::config::default();
-                    // TODO Change this for a zenoh let session = zenoh::session::init(runtime).await.unwrap();
-                    let session = zenoh::open(config).await.unwrap().into_arc();
-                    // let session = zenoh::open(config).await.unwrap();
+
+                    let session = zenoh::session::init(runtime.clone())
+                        .await
+                        .unwrap()
+                        .into_arc();
 
                     let state: RemoteState = RemoteState {
                         channel_tx: ch_tx.clone(),
@@ -198,7 +221,7 @@ pub async fn run_websocket_server(runtime: Runtime) {
                     if let Some(response) =
                         handle_message(msg, *sock_adress_ref, state_map_cl.clone()).await
                     {
-                        ch_tx.send(response).unwrap(); // TODO: Remove Unwrap
+                        ch_tx.send(response).unwrap();
                     };
                 }
             });
@@ -294,20 +317,24 @@ async fn handle_control_message(
             }
             // None
         }
-        ControlMsg::CreateKeyExpr(key_expr_str) => {
-            let mut state_writer = state_map.write().await;
-            if let Some(remote_state) = state_writer.get_mut(&sock_addr) {
-                let key_expr = KeyExpr::new(key_expr_str).unwrap();
-                remote_state.key_expr.insert(key_expr.clone());
-                Some(ControlMsg::KeyExpr(key_expr.to_string()))
-            } else {
-                println!("State Map Does not contain SocketAddr");
-                None
-            }
-        }
-        ControlMsg::DeleteKeyExpr(_) => todo!(),
-        //
-        ControlMsg::DeclareSubscriber(key_expr_str, subscriber_uuid) => {
+        // ControlMsg::CreateKeyExpr(key_expr_str) => {
+        //     let mut state_writer = state_map.write().await;
+        //     if let Some(remote_state) = state_writer.get_mut(&sock_addr) {
+        //         let key_expr = KeyExpr::new(key_expr_str).unwrap();
+        //         remote_state.key_expr.insert(key_expr.clone());
+        //         Some(ControlMsg::KeyExpr(key_expr.to_string()))
+        //     } else {
+        //         println!("State Map Does not contain SocketAddr");
+        //         None
+        //     }
+        // }
+        // ControlMsg::DeleteKeyExpr(_) => todo!(),
+
+        // SUBSCRIBER
+        ControlMsg::DeclareSubscriber {
+            key_expr: key_expr_str,
+            id: subscriber_uuid,
+        } => {
             let mut state_writer = state_map.write().await;
             println!("{}, {}", key_expr_str, subscriber_uuid);
 
@@ -363,7 +390,7 @@ async fn handle_control_message(
             None
         }
         // Publisher
-        ControlMsg::DeclarePublisher(key_expr, uuid) => {
+        ControlMsg::DeclarePublisher { key_expr, id: uuid } => {
             println!("Declare Publisher {}  {}", key_expr, uuid);
             //
             let mut state_reader = state_map.write().await;
@@ -384,11 +411,23 @@ async fn handle_control_message(
             }
             None
         }
-        ControlMsg::UndeclarePublisher(_) => todo!(),
+        ControlMsg::UndeclarePublisher(uuid) => {
+            let mut state_reader = state_map.write().await;
+            if let Some(state) = state_reader.get_mut(&sock_addr) {
+                if let Some(publisher) = state.publishers.remove(&uuid) {
+                    if let Err(err) = publisher.undeclare().await {
+                        error!("UndeclarePublisher Error: {err}");
+                    };
+                } else {
+                    warn!("UndeclarePublisher: No Publisher with UUID {uuid}");
+                }
+            }
+            None
+        }
         //
 
         // Backend should not receive this, make it unrepresentable
-        ControlMsg::Session(_) | ControlMsg::KeyExpr(_) | ControlMsg::Subscriber(_) => {
+        ControlMsg::Session(_) | ControlMsg::Subscriber(_) => {
             // TODO: Move these into own type
             // make server recieving these types unrepresentable
             println!("Backend should not get these types");
@@ -399,6 +438,9 @@ async fn handle_control_message(
             error!("Client sent error {}", client_err);
             None
         }
+
+        ControlMsg::Queryable { key_expr, id } => todo!(),
+        ControlMsg::UndeclareQueryable(_) => todo!(),
     }
 }
 
@@ -410,22 +452,50 @@ async fn handle_data_message(
     match data_msg {
         DataMsg::Sample(sample, publisher_uuid) => {
             warn!("Server has Recieved A Sample");
+            None
         }
         DataMsg::PublisherPut(payload, publisher_uuid) => {
             let state_reader = state_map.read().await;
             if let Some(state) = state_reader.get(&sock_addr) {
                 if let Some(publisher) = state.publishers.get(&publisher_uuid) {
                     if let Err(err) = publisher.put(payload).await {
-                        err.to_string();
+                        tracing::error!("PublisherPut {publisher_uuid}, {err}");
                     }
                 } else {
                     tracing::warn!("Publisher {publisher_uuid}, does not exist in State");
                 }
             } else {
-                tracing::warn!("No state in map for Socket Addres {sock_addr}");
+                tracing::warn!("No state in map for Socket Address {sock_addr}");
                 println!("No state in map for Socket Addres {sock_addr}");
             }
+            None
+        }
+        DataMsg::Put { key_expr, payload } => {
+            let mut state_reader = state_map.write().await;
+            if let Some(state) = state_reader.get_mut(&sock_addr) {
+                if let Err(err) = state.session.put(key_expr, payload).await {
+                    error!("Session Put Failed ! {}", err)
+                };
+            }
+            None
+        }
+        // DataMsg::Get { key_expr, id } => {
+        //     let mut state_reader = state_map.write().await;
+        //     if let Some(state) = state_reader.get_mut(&sock_addr) {
+        //         if let Err(err) = state.session.get(key_expr, payload).await {
+        //             error!("Session Put Failed ! {}", err)
+        //         };
+        //     }
+        //     None
+        // },
+        DataMsg::Delete { key_expr } => {
+            let mut state_reader = state_map.write().await;
+            if let Some(state) = state_reader.get_mut(&sock_addr) {
+                if let Err(err) = state.session.delete(key_expr).await {
+                    error!("Session Delete Failed ! {}", err)
+                };
+            }
+            None
         }
     }
-    None
 }

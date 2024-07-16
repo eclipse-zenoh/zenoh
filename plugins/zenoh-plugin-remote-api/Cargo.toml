@@ -46,7 +46,7 @@ flume = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
 lazy_static = { workspace = true }
-ts-rs = { version = "9.0", features = ["uuid-impl"] }
+ts-rs = { version = "9.0", features = ["serde-compat","uuid-impl", "serde-json-impl"] }
 tracing = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["default"] }

@@ -1,9 +1,13 @@
-use std::convert::Infallible;
+use std::{convert::Infallible, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
-use zenoh::sample::{Sample, SampleKind};
+use zenoh::{
+    key_expr::{KeyExpr, OwnedKeyExpr},
+    query::Selector,
+    sample::{Sample, SampleKind},
+};
 
 #[derive(TS)]
 #[ts(export)]
@@ -19,34 +23,68 @@ pub enum RemoteAPIMsg {
 pub enum DataMsg {
     Sample(SampleWS, Uuid),
     PublisherPut(Vec<u8>, Uuid),
+    Put {
+        #[ts(as = "OwnedKeyExprWrapper")]
+        key_expr: OwnedKeyExpr,
+        payload: Vec<u8>,
+    },
+    // TODO Discuss This Further
+    // Get {
+    //     #[ts(as = "OwnedKeyExprWrapper")]
+    //     key_expr: OwnedKeyExpr,
+    //     id: Uuid,
+    // },
+    Delete {
+        #[ts(as = "OwnedKeyExprWrapper")]
+        key_expr: OwnedKeyExpr,
+    },
 }
 
-type KeyExpr = String;
+// Wrapper to get OwnerKeyExpr to play with TS
+#[derive(Debug, Deserialize, TS)]
+#[serde(from = "String")]
+pub struct OwnedKeyExprWrapper(Arc<str>);
 
-#[derive(TS)]
+impl From<String> for OwnedKeyExprWrapper {
+    fn from(s: String) -> Self {
+        OwnedKeyExprWrapper(s.into())
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, TS)]
 #[ts(export)]
-#[derive(Debug, Serialize, Deserialize)]
 pub enum ControlMsg {
     // Session
     OpenSession,
     CloseSession,
-
-    // TODO: Session Related
     Session(Uuid),
 
     // KeyExpr
-    CreateKeyExpr(String), // TODO do i need this ?
-    KeyExpr(String),       // TODO do i need this ?
-    DeleteKeyExpr(String),
 
     // Subscriber
-    DeclareSubscriber(KeyExpr, Uuid),
+    DeclareSubscriber {
+        #[ts(as = "OwnedKeyExprWrapper")]
+        key_expr: OwnedKeyExpr,
+        id: Uuid,
+    },
     Subscriber(Uuid),
     UndeclareSubscriber(Uuid),
 
-    //Publisher
-    DeclarePublisher(KeyExpr, Uuid),
+    // Publisher
+    DeclarePublisher {
+        #[ts(as = "OwnedKeyExprWrapper")]
+        key_expr: OwnedKeyExpr,
+        id: Uuid,
+    },
     UndeclarePublisher(Uuid),
+
+    // Queryable
+    Queryable {
+        #[ts(as = "OwnedKeyExprWrapper")]
+        key_expr: OwnedKeyExpr,
+        id: Uuid,
+    },
+    UndeclareQueryable(Uuid),
 
     // Error string
     Error(String),
@@ -59,11 +97,10 @@ enum ErrorMsg {}
 #[derive(Debug, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct SampleWS {
-    // key_expr: KeyExpr<'static>,
-    pub(crate) key_expr: String,
+    #[ts(as = "OwnedKeyExprWrapper")]
+    key_expr: OwnedKeyExpr,
     pub(crate) value: Vec<u8>,
     pub(crate) kind: SampleKindWS,
-    // timestamp: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, TS)]
@@ -90,7 +127,7 @@ impl TryFrom<Sample> for SampleWS {
         // let timestamp = s.timestamp().to;
 
         Ok(SampleWS {
-            key_expr: s.key_expr().to_string(),
+            key_expr: s.key_expr().to_owned().into(),
             value: z_bytes,
             kind: s.kind().into(),
         })
@@ -126,21 +163,10 @@ mod tests {
             serde_json::to_string(&RemoteAPIMsg::Control(ControlMsg::CloseSession)).unwrap();
         assert_eq!(json, r#"{"Control":"CloseSession"}"#);
 
-        let json: String = serde_json::to_string(&RemoteAPIMsg::Control(
-            ControlMsg::CreateKeyExpr("demo/tech".into()),
-        ))
-        .unwrap();
-        assert_eq!(json, r#"{"Control":{"CreateKeyExpr":"demo/tech"}}"#);
-
-        let key_expr = KeyExpr::new("demo/test").unwrap();
-        let json: String = serde_json::to_string(&RemoteAPIMsg::Control(ControlMsg::KeyExpr(
-            key_expr.clone().to_string(),
-        )))
-        .unwrap();
-        assert_eq!(json, r#"{"Control":{"KeyExpr":"demo/test"}}"#);
+        let key_expr = KeyExpr::new("demo/test").unwrap().to_owned().into();
 
         let sampe_ws = SampleWS {
-            key_expr: key_expr.to_string(),
+            key_expr,
             value: vec![1, 2, 3],
             kind: SampleKindWS::Put,
         };
