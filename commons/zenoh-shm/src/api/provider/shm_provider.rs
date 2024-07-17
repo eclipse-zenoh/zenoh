@@ -183,15 +183,10 @@ where
         // NOTE: Depending on internal implementation, provider's backend might relayout
         // the allocations for bigger alignment (ex. 4-byte aligned allocation to 8-bytes aligned)
 
-        // Obtain nonzero size
-        let nonzero_size = data
-            .size
-            .try_into()
-            .map_err(|_| ZLayoutError::IncorrectLayoutArgs)?;
-
         // Create layout for specified arguments
-        let layout = MemoryLayout::new(nonzero_size, data.alignment)
+        let layout = MemoryLayout::new(data.size, data.alignment)
             .map_err(|_| ZLayoutError::IncorrectLayoutArgs)?;
+        let size = layout.size();
 
         // Obtain provider's layout for our layout
         let provider_layout = data
@@ -201,7 +196,7 @@ where
             .map_err(|_| ZLayoutError::ProviderIncompatibleLayout)?;
 
         Ok(Self {
-            size: nonzero_size,
+            size,
             provider_layout,
             provider: data.provider,
         })
