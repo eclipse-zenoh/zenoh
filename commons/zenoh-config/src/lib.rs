@@ -115,12 +115,21 @@ pub struct AclConfigRule {
 #[derive(Serialize, Debug, Deserialize, Clone)]
 pub struct AclConfigSubjects {
     pub id: String,
-    pub interfaces: Option<Vec<String>>,
-    pub cert_common_names: Option<Vec<String>>,
-    pub usernames: Option<Vec<String>>,
+    pub interfaces: Option<Vec<Interface>>,
+    pub cert_common_names: Option<Vec<CertCommonName>>,
+    pub usernames: Option<Vec<Username>>,
 }
 
-#[derive(Serialize, Debug, Deserialize, Clone)]
+#[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
+pub struct Interface(pub String);
+
+#[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
+pub struct CertCommonName(pub String);
+
+#[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
+pub struct Username(pub String);
+
+#[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub struct AclConfigPolicyEntry {
     pub rules: Vec<String>,
     pub subjects: Vec<String>,
@@ -133,25 +142,6 @@ pub struct PolicyRule {
     pub action: Action,
     pub permission: Permission,
     pub flow: InterceptorFlow,
-}
-
-#[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone, PartialOrd, Ord)]
-#[serde(untagged)]
-#[serde(rename_all = "snake_case")]
-pub enum Subject {
-    Interface(String),
-    CertCommonName(String),
-    Username(String),
-}
-
-impl std::fmt::Display for Subject {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Subject::Interface(s) => write!(f, "Interface({s})"),
-            Subject::CertCommonName(s) => write!(f, "CertCommonName({s})"),
-            Subject::Username(s) => write!(f, "Username({s})"),
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]

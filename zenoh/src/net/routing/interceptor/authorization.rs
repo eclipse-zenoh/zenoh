@@ -17,96 +17,123 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use std::{collections::HashMap, net::Ipv4Addr};
+use std::collections::HashMap;
 
 use ahash::RandomState;
 use itertools::Itertools;
-use trie_rs::map::{Trie as TrieMap, TrieBuilder as TrieMapBuilder};
 use zenoh_config::{
-    AclConfig, AclConfigPolicyEntry, AclConfigRule, AclConfigSubjects, Action, InterceptorFlow,
-    Permission, PolicyRule, Subject,
+    AclConfig, AclConfigPolicyEntry, AclConfigRule, AclConfigSubjects, Action, CertCommonName,
+    InterceptorFlow, Interface, Permission, PolicyRule, Username,
 };
 use zenoh_keyexpr::{
     keyexpr,
     keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, KeBoxTree},
 };
 use zenoh_result::ZResult;
-use zenoh_util::net::get_interface_names_by_addr;
 type PolicyForSubject = FlowPolicy;
 
 type PolicyMap = HashMap<usize, PolicyForSubject, RandomState>;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct Subject {
+    pub(crate) interface: SubjectProperty<Interface>,
+    pub(crate) cert_common_name: SubjectProperty<CertCommonName>,
+    pub(crate) username: SubjectProperty<Username>,
+}
+
+impl Subject {
+    fn matches(&self, query: &SubjectQuery) -> bool {
+        self.interface.matches(query.interface.as_ref())
+            && self
+                .cert_common_name
+                .matches(query.cert_common_name.as_ref())
+            && self.username.matches(query.username.as_ref())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) enum SubjectProperty<T> {
+    Wildcard,
+    Exactly(T),
+}
+
+impl<T: PartialEq + Eq> SubjectProperty<T> {
+    fn matches(&self, other: Option<&T>) -> bool {
+        match (self, other) {
+            (SubjectProperty::Wildcard, None) => true,
+            // NOTE: This match arm is the reason why `SubjectProperty` cannot simply be `Option`
+            (SubjectProperty::Wildcard, Some(_)) => true,
+            (SubjectProperty::Exactly(_), None) => false,
+            (SubjectProperty::Exactly(lhs), Some(rhs)) => lhs == rhs,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct SubjectQuery {
+    pub(crate) interface: Option<Interface>,
+    pub(crate) cert_common_name: Option<CertCommonName>,
+    pub(crate) username: Option<Username>,
+}
+
 #[derive(Debug, Clone)]
-pub(crate) struct SubjectMap {
-    inner: TrieMap<Subject, usize>,
+pub(crate) struct SubjectEntry {
+    pub(crate) subject: Subject,
+    pub(crate) id: usize,
 }
 
-impl SubjectMap {
-    pub(crate) fn builder() -> SubjectMapBuilder {
-        SubjectMapBuilder::new()
-    }
+#[derive(Debug, Clone)]
+pub(crate) struct SubjectStore {
+    // FIXME: This is suboptimal, use `hashbrown::HashTable`
+    inner: Vec<SubjectEntry>,
+}
 
-    pub(crate) fn get(&self, subjects: &[Subject]) -> Vec<(Vec<Subject>, &usize)> {
-        let mut subjects = subjects.to_owned();
-        subjects.sort_unstable();
-        let mut res: Vec<(Vec<Subject>, &usize)> = vec![];
-        for subject in subjects {
-            let map_query: Vec<(Vec<Subject>, &usize)> =
-                self.inner.predictive_search([subject]).collect();
-            for (subject, id) in map_query {
-                if subject.len() > 1 {
-                    for s in &subject {
-                        if subject.binary_search(s).is_err() {
-                            continue;
-                        }
-                    }
-                }
-                res.push((subject, id))
-            }
-        }
-        res
+impl SubjectStore {
+    pub(crate) fn query(&self, query: &SubjectQuery) -> Option<&SubjectEntry> {
+        self.inner.iter().find(|entry| entry.subject.matches(query))
     }
 }
 
-impl Default for SubjectMap {
+impl Default for SubjectStore {
     fn default() -> Self {
-        Self {
-            inner: SubjectMapBuilder::new().builder.build(),
-        }
+        SubjectMapBuilder::new().build()
     }
 }
 
 pub(crate) struct SubjectMapBuilder {
-    builder: TrieMapBuilder<Subject, usize>,
-    hashmap: HashMap<Vec<Subject>, usize, RandomState>, // builder does not provide "insert_or_get" function, so we must use a hashmap during construction
+    builder: HashMap<Subject, usize>,
     id_counter: usize,
 }
 
 impl SubjectMapBuilder {
     pub(crate) fn new() -> Self {
         Self {
-            builder: TrieMapBuilder::new(),
-            hashmap: HashMap::with_hasher(RandomState::default()),
+            // FIXME: Capacity can be calculated from the length of subject properties in configuration
+            builder: HashMap::new(),
             id_counter: 0,
         }
     }
 
-    pub(crate) fn build(self) -> SubjectMap {
-        SubjectMap {
-            inner: self.builder.build(),
+    pub(crate) fn build(self) -> SubjectStore {
+        SubjectStore {
+            inner: self
+                .builder
+                .into_iter()
+                .map(|(subject, id)| SubjectEntry { subject, id })
+                .collect(),
         }
     }
 
     /// Assumes subject contains at most one instance of each Subject variant
-    pub(crate) fn insert_or_get(&mut self, subject: Vec<Subject>) -> usize {
-        let mut subject = subject.clone();
-        subject.sort_unstable();
-        let id = self.hashmap.entry(subject.clone()).or_insert_with(|| {
-            self.id_counter += 1;
-            self.builder.insert(subject, self.id_counter);
-            self.id_counter
-        });
-        *id
+    pub(crate) fn insert_or_get(&mut self, subject: Subject) -> usize {
+        match self.builder.get(&subject).copied() {
+            Some(id) => id,
+            None => {
+                self.id_counter += 1;
+                self.builder.insert(subject, self.id_counter);
+                self.id_counter
+            }
+        }
     }
 }
 
@@ -190,14 +217,14 @@ pub struct InterfaceEnabled {
 pub struct PolicyEnforcer {
     pub(crate) acl_enabled: bool,
     pub(crate) default_permission: Permission,
-    pub(crate) subject_map: SubjectMap,
+    pub(crate) subject_store: SubjectStore,
     pub(crate) policy_map: PolicyMap,
     pub(crate) interface_enabled: InterfaceEnabled,
 }
 
 #[derive(Debug, Clone)]
 pub struct PolicyInformation {
-    subject_map: SubjectMap,
+    subject_map: SubjectStore,
     policy_rules: Vec<PolicyRule>,
 }
 
@@ -206,7 +233,7 @@ impl PolicyEnforcer {
         PolicyEnforcer {
             acl_enabled: true,
             default_permission: Permission::Deny,
-            subject_map: SubjectMap::default(),
+            subject_store: SubjectStore::default(),
             policy_map: PolicyMap::default(),
             interface_enabled: InterfaceEnabled::default(),
         }
@@ -228,7 +255,7 @@ impl PolicyEnforcer {
                 if rules.is_empty() || subjects.is_empty() || policy.is_empty() {
                     tracing::warn!("Access control rules/subjects/policy is empty in config file");
                     self.policy_map = PolicyMap::default();
-                    self.subject_map = SubjectMap::default();
+                    self.subject_store = SubjectStore::default();
                     if self.default_permission == Permission::Deny {
                         self.interface_enabled = InterfaceEnabled {
                             ingress: true,
@@ -252,24 +279,21 @@ impl PolicyEnforcer {
                         if subject.id.trim().is_empty() {
                             bail!("Found empty subject id in subjects list");
                         }
-                        if subject.interfaces.is_none() {
-                            if subject.cert_common_names.is_none() && subject.usernames.is_none() {
-                                tracing::warn!(
-                                    "Subject '{}' is empty. Setting it to wildcard (all network interfaces)",
-                                    subject.id
-                                );
-                                subject.interfaces = Some(get_interface_names_by_addr(
-                                    Ipv4Addr::UNSPECIFIED.into(),
-                                )?);
-                            } else {
-                                subject.interfaces = Some(vec![]);
-                            }
+
+                        if subject
+                            .cert_common_names
+                            .as_ref()
+                            .is_some_and(Vec::is_empty)
+                        {
+                            bail!("Subject property `cert_common_names` cannot be empty");
                         }
-                        if subject.usernames.is_none() {
-                            subject.usernames = Some(Vec::new());
+
+                        if subject.usernames.as_ref().is_some_and(Vec::is_empty) {
+                            bail!("Subject property `usernames` cannot be empty");
                         }
-                        if subject.cert_common_names.is_none() {
-                            subject.cert_common_names = Some(Vec::new());
+
+                        if subject.interfaces.as_ref().is_some_and(Vec::is_empty) {
+                            bail!("Subject property `interfaces` cannot be empty");
                         }
                     }
                     let policy_information =
@@ -301,7 +325,7 @@ impl PolicyEnforcer {
                         }
                     }
                     self.policy_map = main_policy;
-                    self.subject_map = policy_information.subject_map;
+                    self.subject_store = policy_information.subject_map;
                 }
             } else {
                 bail!("All ACL rules/subjects/policy config lists must be provided");
@@ -315,7 +339,7 @@ impl PolicyEnforcer {
     */
     pub fn policy_information_point(
         &self,
-        mut subjects: Vec<AclConfigSubjects>,
+        subjects: Vec<AclConfigSubjects>,
         rules: Vec<AclConfigRule>,
         policy: Vec<AclConfigPolicyEntry>,
     ) -> ZResult<PolicyInformation> {
@@ -324,7 +348,7 @@ impl PolicyEnforcer {
             HashMap::with_hasher(RandomState::default());
         let mut subject_id_map: HashMap<String, Vec<usize>, RandomState> =
             HashMap::with_hasher(RandomState::default());
-        let mut subject_map_builder = SubjectMap::builder();
+        let mut subject_map_builder = SubjectMapBuilder::new();
 
         // validate rules config and insert them in hashmaps
         for config_rule in rules {
@@ -356,7 +380,7 @@ impl PolicyEnforcer {
             rule_map.insert(config_rule.id.clone(), config_rule);
         }
 
-        for config_subject in subjects.iter_mut() {
+        for config_subject in subjects.into_iter() {
             if subject_id_map.contains_key(&config_subject.id) {
                 bail!(
                     "Subject id must be unique: id '{}' is repeated",
@@ -364,73 +388,54 @@ impl PolicyEnforcer {
                 );
             }
             // validate subject config fields
-            let interfaces = config_subject.interfaces.as_ref().unwrap();
-            let cert_common_names = config_subject.cert_common_names.as_ref().unwrap();
-            let usernames = config_subject.usernames.as_ref().unwrap();
-            if interfaces.is_empty() && cert_common_names.is_empty() && usernames.is_empty() {
-                bail!("Subject '{}' is malformed: one of interfaces, cert_common_names or usernames lists must be specified and not empty", config_subject.id)
-            }
-            // create ACL individual subjects
-            let mut subject_interfaces: Vec<Option<Subject>> = vec![];
-            let mut subject_ccns: Vec<Option<Subject>> = vec![];
-            let mut subject_usernames: Vec<Option<Subject>> = vec![];
-            if interfaces.is_empty() {
-                subject_interfaces.push(None);
-            } else {
-                for face in interfaces {
-                    if face.trim().is_empty() {
-                        bail!(
-                            "Found empty interface value in subject '{}'",
-                            config_subject.id
-                        );
-                    }
-                    subject_interfaces.push(Some(Subject::Interface(face.into())));
-                }
-            }
-            if cert_common_names.is_empty() {
-                subject_ccns.push(None);
-            } else {
-                for cert_common_name in cert_common_names {
-                    if cert_common_name.trim().is_empty() {
-                        bail!(
-                            "Found empty cert_common_name value in subject '{}'",
-                            config_subject.id
-                        );
-                    }
-                    subject_ccns.push(Some(Subject::CertCommonName(cert_common_name.into())));
-                }
-            }
-            if usernames.is_empty() {
-                subject_usernames.push(None);
-            } else {
-                for username in usernames {
-                    if username.trim().is_empty() {
-                        bail!(
-                            "Found empty username value in subject '{}'",
-                            config_subject.id
-                        );
-                    }
-                    subject_usernames.push(Some(Subject::Username(username.into())));
-                }
-            }
+            // FIXME: Unecessary .collect() because of different iterator types
+            let interfaces = config_subject
+                .interfaces
+                .map(|interfaces| {
+                    interfaces
+                        .into_iter()
+                        .map(SubjectProperty::Exactly)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or(vec![SubjectProperty::Wildcard]);
+
+            // FIXME: Unecessary .collect() because of different iterator types
+            let cert_common_names = config_subject
+                .cert_common_names
+                .map(|cert_common_names| {
+                    cert_common_names
+                        .into_iter()
+                        .map(SubjectProperty::Exactly)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or(vec![SubjectProperty::Wildcard]);
+
+            // FIXME: Unecessary .collect() because of different iterator types
+            let usernames = config_subject
+                .usernames
+                .map(|usernames| {
+                    usernames
+                        .into_iter()
+                        .map(SubjectProperty::Exactly)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or(vec![SubjectProperty::Wildcard]);
+
+            // FIXME: Check if subject properties are empty strings during deserialization
+
             // create ACL subject combinations
-            let subject_combination_ids = subject_interfaces
-                .iter()
-                .cartesian_product(&subject_ccns)
-                .cartesian_product(&subject_usernames)
-                .filter_map(|((face, ccn), usr)| {
-                    let mut combination: Vec<Subject> = vec![];
-                    // NOTE: order doesn't matter since the insert function will sort
-                    face.is_some()
-                        .then(|| combination.push(face.clone().unwrap()));
-                    ccn.is_some()
-                        .then(|| combination.push(ccn.clone().unwrap()));
-                    usr.is_some()
-                        .then(|| combination.push(usr.clone().unwrap()));
-                    if !combination.is_empty() {
-                        return Some(subject_map_builder.insert_or_get(combination));
-                    }
-                    None
+            let subject_combination_ids = interfaces
+                .into_iter()
+                .cartesian_product(cert_common_names)
+                .cartesian_product(usernames)
+                .map(|((interface, cert_common_name), username)| {
+                    let subject = Subject {
+                        interface,
+                        cert_common_name,
+                        username,
+                    };
+
+                    subject_map_builder.insert_or_get(subject)
                 })
                 .collect();
             subject_id_map.insert(config_subject.id.clone(), subject_combination_ids);

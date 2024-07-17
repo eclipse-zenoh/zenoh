@@ -18,10 +18,12 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 
-use std::{any::Any, collections::HashSet, sync::Arc};
+use std::{any::Any, collections::HashSet, iter, sync::Arc};
 
-use ahash::RandomState;
-use zenoh_config::{AclConfig, Action, InterceptorFlow, Permission, Subject};
+use itertools::Itertools;
+use zenoh_config::{
+    AclConfig, Action, CertCommonName, InterceptorFlow, Interface, Permission, Username,
+};
 use zenoh_protocol::{
     core::ZenohIdProto,
     network::{Declare, DeclareBody, NetworkBody, NetworkMessage, Push, Request},
@@ -37,7 +39,10 @@ use super::{
     authorization::PolicyEnforcer, EgressInterceptor, IngressInterceptor, InterceptorFactory,
     InterceptorFactoryTrait, InterceptorTrait,
 };
-use crate::{api::key_expr::KeyExpr, net::routing::RoutingContext};
+use crate::{
+    api::key_expr::KeyExpr,
+    net::routing::{interceptor::authorization::SubjectQuery, RoutingContext},
+};
 pub struct AclEnforcer {
     enforcer: Arc<PolicyEnforcer>,
 }
@@ -87,84 +92,110 @@ impl InterceptorFactoryTrait for AclEnforcer {
         &self,
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
-        let mut authn_ids = HashSet::with_hasher(RandomState::default());
-        let mut subjects = vec![];
-        // Assuming this would only return at most one instance of each AuthId
-        if let Ok(ids) = transport.get_auth_ids() {
-            for auth_id in ids {
-                match auth_id {
-                    AuthId::CertCommonName(name) => {
-                        subjects.push(Subject::CertCommonName(name.clone()));
-                    }
-                    AuthId::Username(name) => {
-                        subjects.push(Subject::Username(name.clone()));
-                    }
-                    AuthId::None => {}
-                }
+        let auth_ids = match transport.get_auth_ids() {
+            Ok(auth_ids) => auth_ids,
+            Err(err) => {
+                tracing::error!("Couldn't get Transport Auth IDs: {}", err);
+                return (None, None);
             }
-        }
-        match transport.get_zid() {
-            Ok(zid) => {
-                match transport.get_links() {
-                    Ok(links) => {
-                        for link in links {
-                            for face in link.interfaces {
-                                // combining each interface with remaining AuthId values to get existing combinations
-                                // NOTE: current ACL logic does not apply correctly when multiple interfaces are returned
-                                let face = Subject::Interface(face.clone());
-                                let mut subject_query = subjects.clone();
-                                subject_query.push(face);
-                                for subject_combination in
-                                    self.enforcer.subject_map.get(&subject_query)
-                                {
-                                    authn_ids.insert(AuthSubject {
-                                        id: *subject_combination.1,
-                                        name: format!(
-                                            "({})",
-                                            subject_combination
-                                                .0
-                                                .iter()
-                                                .map(|s| s.to_string())
-                                                .collect::<Vec<String>>()
-                                                .join("+")
-                                        ),
-                                    });
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        tracing::error!("Couldn't get interface list with error: {}", e);
+        };
+
+        let mut cert_common_names: Vec<_> = Vec::new();
+        let mut username = None;
+
+        for auth_id in auth_ids {
+            match auth_id {
+                AuthId::CertCommonName(value) => {
+                    cert_common_names.push(Some(CertCommonName(value)));
+                }
+                AuthId::Username(value) => {
+                    if username.is_some() {
+                        tracing::error!("Transport should not report more than one username");
                         return (None, None);
                     }
+                    username = Some(Username(value));
                 }
-                let authn_ids = authn_ids.into_iter().collect::<Vec<AuthSubject>>();
-                let ingress_interceptor = Box::new(IngressAclEnforcer {
-                    policy_enforcer: self.enforcer.clone(),
-                    zid,
-                    subject: authn_ids.clone(),
-                });
-                let egress_interceptor = Box::new(EgressAclEnforcer {
-                    policy_enforcer: self.enforcer.clone(),
-                    zid,
-                    subject: authn_ids,
-                });
-                (
-                    self.enforcer
-                        .interface_enabled
-                        .ingress
-                        .then_some(ingress_interceptor),
-                    self.enforcer
-                        .interface_enabled
-                        .egress
-                        .then_some(egress_interceptor),
-                )
-            }
-            Err(e) => {
-                tracing::error!("Failed to get zid with error :{}", e);
-                (None, None)
+                AuthId::None => {}
             }
         }
+        if cert_common_names.is_empty() {
+            cert_common_names.push(None);
+        }
+
+        let links = match transport.get_links() {
+            Ok(links) => links,
+            Err(err) => {
+                tracing::error!("Couldn't get Transport links: {}", err);
+                return (None, None);
+            }
+        };
+        let mut interfaces = links
+            .into_iter()
+            .flat_map(|link| {
+                link.interfaces
+                    .into_iter()
+                    .map(|interface| Some(Interface(interface)))
+            })
+            .collect::<Vec<_>>();
+        if interfaces.is_empty() {
+            interfaces.push(None);
+        }
+
+        let mut auth_subjects = HashSet::new();
+
+        for ((username, interface), cert_common_name) in iter::once(username)
+            .cartesian_product(interfaces.into_iter())
+            .cartesian_product(cert_common_names.into_iter())
+        {
+            let query = SubjectQuery {
+                interface,
+                cert_common_name,
+                username,
+            };
+
+            if let Some(entry) = self.enforcer.subject_store.query(&query) {
+                auth_subjects.insert(AuthSubject {
+                    id: entry.id,
+                    name: format!("{:?}", query),
+                });
+            }
+        }
+
+        let zid = match transport.get_zid() {
+            Ok(zid) => zid,
+            Err(err) => {
+                tracing::error!("Couldn't get Transport zid: {}", err);
+                return (None, None);
+            }
+        };
+        // FIXME: Investigate if `AuthSubject` can have duplicates above and try to avoid this conversion
+        let auth_subjects = auth_subjects.into_iter().collect::<Vec<AuthSubject>>();
+        if auth_subjects.is_empty() {
+            tracing::info!(
+                "{zid} did not match any access control. Default permission `{:?}` will be applied",
+                self.enforcer.default_permission
+            );
+        }
+        let ingress_interceptor = Box::new(IngressAclEnforcer {
+            policy_enforcer: self.enforcer.clone(),
+            zid,
+            subject: auth_subjects.clone(),
+        });
+        let egress_interceptor = Box::new(EgressAclEnforcer {
+            policy_enforcer: self.enforcer.clone(),
+            zid,
+            subject: auth_subjects,
+        });
+        (
+            self.enforcer
+                .interface_enabled
+                .ingress
+                .then_some(ingress_interceptor),
+            self.enforcer
+                .interface_enabled
+                .egress
+                .then_some(egress_interceptor),
+        )
     }
 
     fn new_transport_multicast(
