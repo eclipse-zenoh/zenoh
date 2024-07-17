@@ -130,7 +130,7 @@ impl MemoryLayout {
     ///
     /// # Errors
     ///
-    /// This function will return an error if zero size have passed or if the provided size is not the mutiply of the alignment.
+    /// This function will return an error if zero size have passed or if the provided size is not the multiply of the alignment.
     #[zenoh_macros::unstable_doc]
     pub fn new<T>(size: T, alignment: AllocAlignment) -> Result<Self, ZLayoutError>
     where
