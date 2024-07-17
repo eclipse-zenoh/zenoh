@@ -39,7 +39,10 @@ use zenoh_result::ZResult;
 /*            GENERAL                */
 /*************************************/
 
+// Common endpoint configuration options
 pub const BIND_INTERFACE: &str = "iface";
+pub const SO_SNDBUF: &str = "so_sndbuf";
+pub const SO_RCVBUF: &str = "so_rcvbuf";
 
 #[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
 pub struct Link {
