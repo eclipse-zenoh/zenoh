@@ -44,10 +44,10 @@ pub(crate) struct Subject {
 impl Subject {
     fn matches(&self, query: &SubjectQuery) -> bool {
         self.interface.matches(query.interface.as_ref())
+            && self.username.matches(query.username.as_ref())
             && self
                 .cert_common_name
                 .matches(query.cert_common_name.as_ref())
-            && self.username.matches(query.username.as_ref())
     }
 }
 
@@ -344,10 +344,8 @@ impl PolicyEnforcer {
         policy: Vec<AclConfigPolicyEntry>,
     ) -> ZResult<PolicyInformation> {
         let mut policy_rules: Vec<PolicyRule> = Vec::new();
-        let mut rule_map: HashMap<String, AclConfigRule, RandomState> =
-            HashMap::with_hasher(RandomState::default());
-        let mut subject_id_map: HashMap<String, Vec<usize>, RandomState> =
-            HashMap::with_hasher(RandomState::default());
+        let mut rule_map = HashMap::new();
+        let mut subject_id_map = HashMap::new();
         let mut subject_map_builder = SubjectMapBuilder::new();
 
         // validate rules config and insert them in hashmaps

@@ -156,7 +156,8 @@ impl InterceptorFactoryTrait for AclEnforcer {
             if let Some(entry) = self.enforcer.subject_store.query(&query) {
                 auth_subjects.insert(AuthSubject {
                     id: entry.id,
-                    name: format!("{:?}", query),
+                    // FIXME: This string can be computed and stored elsewhere
+                    name: format!("{query:?}"),
                 });
             }
         }
