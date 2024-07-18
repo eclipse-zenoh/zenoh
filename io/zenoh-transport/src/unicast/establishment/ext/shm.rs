@@ -418,7 +418,13 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         };
 
         // Read Alice's SHM Segment
-        let alice_segment = AuthSegment::open(init_syn.alice_segment)?;
+        let alice_segment = match AuthSegment::open(init_syn.alice_segment) {
+            Ok(buff) => buff,
+            Err(e) => {
+                tracing::trace!("{} {}", S, e);
+                return Ok(None);
+            }
+        };
 
         Ok(Some(alice_segment))
     }
