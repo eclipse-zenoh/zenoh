@@ -100,7 +100,7 @@ impl InterceptorFactoryTrait for AclEnforcer {
             }
         };
 
-        let mut cert_common_names: Vec<_> = Vec::new();
+        let mut cert_common_names = Vec::new();
         let mut username = None;
 
         for auth_id in auth_ids {

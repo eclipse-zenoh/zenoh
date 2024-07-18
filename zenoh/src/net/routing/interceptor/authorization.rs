@@ -84,12 +84,12 @@ pub(crate) struct SubjectEntry {
 
 #[derive(Debug, Clone)]
 pub(crate) struct SubjectStore {
-    // FIXME: This is suboptimal, use `hashbrown::HashTable`
     inner: Vec<SubjectEntry>,
 }
 
 impl SubjectStore {
     pub(crate) fn query(&self, query: &SubjectQuery) -> Option<&SubjectEntry> {
+        // FIXME: Can this search be better than linear?
         self.inner.iter().find(|entry| entry.subject.matches(query))
     }
 }
