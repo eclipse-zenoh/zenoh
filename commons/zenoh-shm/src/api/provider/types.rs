@@ -12,9 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::fmt::Display;
-
-use zenoh_result::{bail, ZResult};
+use std::{fmt::Display, num::NonZeroUsize};
 
 use super::chunk::AllocatedChunk;
 use crate::api::buffer::zshmmut::ZShmMut;
@@ -60,15 +58,24 @@ impl Default for AllocAlignment {
 }
 
 impl AllocAlignment {
+    /// Try to create a new AllocAlignment from alignment representation in powers of 2.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if provided alignment power cannot fit into usize.
     #[zenoh_macros::unstable_doc]
-    pub fn new(pow: u8) -> Self {
-        Self { pow }
+    pub const fn new(pow: u8) -> Result<Self, ZLayoutError> {
+        match pow {
+            pow if pow < usize::BITS as u8 => Ok(Self { pow }),
+            _ => Err(ZLayoutError::IncorrectLayoutArgs),
+        }
     }
 
     /// Get alignment in normal units (bytes)
     #[zenoh_macros::unstable_doc]
-    pub fn get_alignment_value(&self) -> usize {
-        1usize << self.pow
+    pub fn get_alignment_value(&self) -> NonZeroUsize {
+        // SAFETY: this is safe because we limit pow in new based on usize size
+        unsafe { NonZeroUsize::new_unchecked(1usize << self.pow) }
     }
 
     /// Align size according to inner alignment.
@@ -78,17 +85,25 @@ impl AllocAlignment {
     /// ```
     /// use zenoh_shm::api::provider::types::AllocAlignment;
     ///
-    /// let alignment = AllocAlignment::new(2); // 4-byte alignment
-    /// let initial_size: usize = 7;
+    /// let alignment = AllocAlignment::new(2).unwrap(); // 4-byte alignment
+    /// let initial_size = 7.try_into().unwrap();
     /// let aligned_size = alignment.align_size(initial_size);
-    /// assert_eq!(aligned_size, 8);
+    /// assert_eq!(aligned_size.get(), 8);
     /// ```
     #[zenoh_macros::unstable_doc]
-    pub fn align_size(&self, size: usize) -> usize {
+    pub fn align_size(&self, size: NonZeroUsize) -> NonZeroUsize {
         let alignment = self.get_alignment_value();
-        match size % alignment {
+        match size.get() % alignment {
             0 => size,
-            remainder => size + (alignment - remainder),
+            // SAFETY:
+            // This unsafe block is always safe:
+            // 1. 0 < remainder < alignment
+            // 2. because of 1, the value of (alignment.get() - remainder) is always > 0
+            // 3. because of 2, we add nonzero size to nonzero (alignment.get() - remainder) and it is always positive if no overflow
+            // 4. we make sure that there is no overflow condition in 3 by means of alignment limitation in `new` by limiting pow value
+            remainder => unsafe {
+                NonZeroUsize::new_unchecked(size.get() + (alignment.get() - remainder))
+            },
         }
     }
 }
@@ -97,7 +112,7 @@ impl AllocAlignment {
 #[zenoh_macros::unstable_doc]
 #[derive(Debug)]
 pub struct MemoryLayout {
-    size: usize,
+    size: NonZeroUsize,
     alignment: AllocAlignment,
 }
 
@@ -111,18 +126,29 @@ impl Display for MemoryLayout {
 }
 
 impl MemoryLayout {
-    /// Try to create a new memory layout
+    /// Try to create a new memory layout.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if zero size have passed or if the provided size is not the multiply of the alignment.
     #[zenoh_macros::unstable_doc]
-    pub fn new(size: usize, alignment: AllocAlignment) -> ZResult<Self> {
+    pub fn new<T>(size: T, alignment: AllocAlignment) -> Result<Self, ZLayoutError>
+    where
+        T: TryInto<NonZeroUsize>,
+    {
+        let Ok(size) = size.try_into() else {
+            return Err(ZLayoutError::IncorrectLayoutArgs);
+        };
+
         // size of an allocation must be a miltiple of it's alignment!
-        match size % alignment.get_alignment_value() {
+        match size.get() % alignment.get_alignment_value() {
             0 => Ok(Self { size, alignment }),
-            _ => bail!("size of an allocation must be a miltiple of it's alignment!"),
+            _ => Err(ZLayoutError::IncorrectLayoutArgs),
         }
     }
 
     #[zenoh_macros::unstable_doc]
-    pub fn size(&self) -> usize {
+    pub fn size(&self) -> NonZeroUsize {
         self.size
     }
 
@@ -139,27 +165,23 @@ impl MemoryLayout {
     /// use zenoh_shm::api::provider::types::MemoryLayout;
     ///
     /// // 8 bytes with 4-byte alignment
-    /// let layout4b = MemoryLayout::new(8, AllocAlignment::new(2)).unwrap();
+    /// let layout4b = MemoryLayout::new(8, AllocAlignment::new(2).unwrap()).unwrap();
     ///
     /// // Try to realign with 2-byte alignment
-    /// let layout2b = layout4b.extend(AllocAlignment::new(1));
+    /// let layout2b = layout4b.extend(AllocAlignment::new(1).unwrap());
     /// assert!(layout2b.is_err()); // fails because new alignment must be >= old
     ///
     /// // Try to realign with 8-byte alignment
-    /// let layout8b = layout4b.extend(AllocAlignment::new(3));
+    /// let layout8b = layout4b.extend(AllocAlignment::new(3).unwrap());
     /// assert!(layout8b.is_ok()); // ok
     /// ```
     #[zenoh_macros::unstable_doc]
-    pub fn extend(&self, new_alignment: AllocAlignment) -> ZResult<MemoryLayout> {
+    pub fn extend(&self, new_alignment: AllocAlignment) -> Result<MemoryLayout, ZLayoutError> {
         if self.alignment <= new_alignment {
             let new_size = new_alignment.align_size(self.size);
             return MemoryLayout::new(new_size, new_alignment);
         }
-        bail!(
-            "Cannot extend alignment form {} to {}: new alignment must be >= old!",
-            self.alignment,
-            new_alignment
-        )
+        Err(ZLayoutError::IncorrectLayoutArgs)
     }
 }
 

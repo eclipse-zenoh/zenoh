@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::sync::atomic::AtomicPtr;
+use std::{num::NonZeroUsize, sync::atomic::AtomicPtr};
 
 use zenoh_result::ZResult;
 
@@ -32,8 +32,8 @@ pub(crate) struct PosixShmSegment {
 }
 
 impl PosixShmSegment {
-    pub(crate) fn create(alloc_size: usize) -> ZResult<Self> {
-        let segment = ArrayInSHM::create(alloc_size, POSIX_SHM_SEGMENT_PREFIX)?;
+    pub(crate) fn create(alloc_size: NonZeroUsize) -> ZResult<Self> {
+        let segment = ArrayInSHM::create(alloc_size.get(), POSIX_SHM_SEGMENT_PREFIX)?;
         Ok(Self { segment })
     }
 
