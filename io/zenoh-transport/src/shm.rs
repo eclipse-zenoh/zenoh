@@ -334,8 +334,7 @@ pub fn map_zslice_to_shmbuf(zslice: &mut ZSlice, shmr: &ShmReader) -> ZResult<()
     let smb = shmr.read_shmbuf(&shmbinfo)?;
 
     // Replace the content of the slice
-    let zs: ZSlice = smb.into();
-    *zslice = zs;
+    *zslice = smb.into();
 
     Ok(())
 }
