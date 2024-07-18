@@ -13,6 +13,7 @@
 //
 use std::collections::HashSet;
 
+use tracing::error;
 use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZBuf, ZSlice, ZSliceKind};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_core::zerror;
@@ -330,12 +331,17 @@ pub fn map_zslice_to_shmbuf(zslice: &mut ZSlice, shmr: &ShmReader) -> ZResult<()
     // Deserialize the shminfo
     let shmbinfo: ShmBufInfo = codec.read(&mut reader).map_err(|e| zerror!("{:?}", e))?;
 
-    // Mount shmbuf
-    let smb = shmr.read_shmbuf(&shmbinfo)?;
-
-    // Replace the content of the slice
-    let zs: ZSlice = smb.into();
-    *zslice = zs;
+    // Try to mount shmbuf and replace the content of the slice with mounted buf
+    // NOTE: SHM buffer read error is not a hard error becuse we do not want to
+    // loose all the data in the whole ZBuf above. In case of error we just
+    // replace current ZSlice with an empty one
+    *zslice = match shmr.read_shmbuf(&shmbinfo) {
+        Ok(val) => val.into(),
+        Result::Err(e) => {
+            error!("{e}");
+            vec![].into()
+        }
+    };
 
     Ok(())
 }
