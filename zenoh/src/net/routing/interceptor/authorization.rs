@@ -386,7 +386,7 @@ impl PolicyEnforcer {
                 );
             }
             // validate subject config fields
-            // FIXME: Unecessary .collect() because of different iterator types
+            // FIXME: Unnecessary .collect() because of different iterator types
             let interfaces = config_subject
                 .interfaces
                 .map(|interfaces| {
@@ -397,7 +397,7 @@ impl PolicyEnforcer {
                 })
                 .unwrap_or(vec![SubjectProperty::Wildcard]);
 
-            // FIXME: Unecessary .collect() because of different iterator types
+            // FIXME: Unnecessary .collect() because of different iterator types
             let cert_common_names = config_subject
                 .cert_common_names
                 .map(|cert_common_names| {
@@ -408,7 +408,7 @@ impl PolicyEnforcer {
                 })
                 .unwrap_or(vec![SubjectProperty::Wildcard]);
 
-            // FIXME: Unecessary .collect() because of different iterator types
+            // FIXME: Unnecessary .collect() because of different iterator types
             let usernames = config_subject
                 .usernames
                 .map(|usernames| {
