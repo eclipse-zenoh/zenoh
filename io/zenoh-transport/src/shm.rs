@@ -332,7 +332,7 @@ pub fn map_zslice_to_shmbuf(zslice: &mut ZSlice, shmr: &ShmReader) -> ZResult<()
     let shmbinfo: ShmBufInfo = codec.read(&mut reader).map_err(|e| zerror!("{:?}", e))?;
 
     // Try to mount shmbuf and replace the content of the slice with mounted buf
-    // NOTE: SHM buffer read error is not a hard error becuse we do not want to
+    // NOTE: SHM buffer read error is not a hard error because we do not want to
     // loose all the data in the whole ZBuf above. In case of error we just
     // replace current ZSlice with an empty one
     *zslice = match shmr.read_shmbuf(&shmbinfo) {
