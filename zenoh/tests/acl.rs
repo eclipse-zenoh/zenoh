@@ -55,7 +55,7 @@ mod test {
         config
             .listen
             .endpoints
-            .set(vec!["tcp/127.0.0.1:{port}".parse().unwrap()])
+            .set(vec![format!("tcp/127.0.0.1:{port}").parse().unwrap()])
             .unwrap();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
