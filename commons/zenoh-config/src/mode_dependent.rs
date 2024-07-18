@@ -255,12 +255,12 @@ impl<'a> serde::Deserialize<'a> for ModeDependentValue<WhatAmIMatcher> {
                 formatter.write_str("WhatAmIMatcher or mode dependent WhatAmIMatcher")
             }
 
-            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
             where
-                E: de::Error,
+                A: de::SeqAccess<'de>,
             {
                 WhatAmIMatcherVisitor {}
-                    .visit_str(value)
+                    .visit_seq(seq)
                     .map(ModeDependentValue::Unique)
             }
 
