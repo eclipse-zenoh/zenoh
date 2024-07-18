@@ -255,11 +255,13 @@ impl fmt::Display for TransportMessage {
 pub mod ext {
     use crate::{common::ZExtZ64, core::Priority};
 
+    /// ```text
     ///  7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
     /// %0|  rsv  |prio %
     /// +---------------+
     /// - prio: Priority class
+    /// ```
     #[repr(transparent)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct QoSType<const ID: u8> {

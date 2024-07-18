@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
+#![cfg(feature = "test")]
 use std::{fmt::Display, slice};
 
 use zenoh_shm::posix_shm::segment::Segment;

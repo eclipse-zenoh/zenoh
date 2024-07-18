@@ -18,13 +18,16 @@ use std::{
     time::Duration,
 };
 
+#[cfg(feature = "unstable")]
 use zenoh_config::ZenohId;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_keyexpr::OwnedKeyExpr;
-use zenoh_protocol::core::{CongestionControl, Parameters, ZenohIdProto};
+#[cfg(feature = "unstable")]
+use zenoh_protocol::core::ZenohIdProto;
+use zenoh_protocol::core::{CongestionControl, Parameters};
 use zenoh_result::ZResult;
 
-#[zenoh_macros::unstable]
+#[cfg(feature = "unstable")]
 use super::{
     builders::sample::SampleBuilderTrait, bytes::OptionZBytes, sample::SourceInfo,
     selector::ZenohParameters,
@@ -42,7 +45,7 @@ use super::{
     value::Value,
 };
 
-/// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
+/// The [`Queryable`](crate::query::Queryable)s that should be target of a [`get`](Session::get).
 pub type QueryTarget = zenoh_protocol::network::request::ext::TargetType;
 
 /// The kind of consolidation.
@@ -118,6 +121,7 @@ impl From<Value> for ReplyError {
 #[derive(Clone, Debug)]
 pub struct Reply {
     pub(crate) result: Result<Sample, ReplyError>,
+    #[cfg(feature = "unstable")]
     pub(crate) replier_id: Option<ZenohIdProto>,
 }
 
@@ -137,6 +141,7 @@ impl Reply {
         self.result
     }
 
+    #[zenoh_macros::unstable]
     /// Gets the id of the zenoh instance that answered this Reply.
     pub fn replier_id(&self) -> Option<ZenohId> {
         self.replier_id.map(Into::into)
@@ -308,7 +313,7 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     /// Receive the replies for this query with a mutable callback.
     ///
     /// Using this guarantees that your callback will never be called concurrently.
-    /// If your callback is also accepted by the [`callback`](GetBuilder::callback) method, we suggest you use it instead of `callback_mut`
+    /// If your callback is also accepted by the [`callback`](crate::session::SessionGetBuilder::callback) method, we suggest you use it instead of `callback_mut`
     ///
     /// # Examples
     /// ```
@@ -336,7 +341,7 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the replies for this query with a [`Handler`](crate::prelude::IntoHandler).
+    /// Receive the replies for this query with a [`Handler`](crate::handlers::IntoHandler).
     ///
     /// # Examples
     /// ```

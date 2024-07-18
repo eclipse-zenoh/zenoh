@@ -197,10 +197,8 @@ pub fn peer() -> Config {
 pub fn client<I: IntoIterator<Item = T>, T: Into<EndPoint>>(peers: I) -> Config {
     let mut config = Config::default();
     config.set_mode(Some(WhatAmI::Client)).unwrap();
-    config
-        .connect
-        .endpoints
-        .extend(peers.into_iter().map(|t| t.into()));
+    config.connect.endpoints =
+        ModeDependentValue::Unique(peers.into_iter().map(|t| t.into()).collect());
     config
 }
 
@@ -239,21 +237,23 @@ validated_struct::validator! {
         /// The node's mode ("router" (default value in `zenohd`), "peer" or "client").
         mode: Option<whatami::WhatAmI>,
         /// Which zenoh nodes to connect to.
-        pub connect: #[derive(Default)]
+        pub connect:
         ConnectConfig {
             /// global timeout for full connect cycle
             pub timeout_ms: Option<ModeDependentValue<i64>>,
-            pub endpoints: Vec<EndPoint>,
+            /// The list of endpoints to connect to
+            pub endpoints: ModeDependentValue<Vec<EndPoint>>,
             /// if connection timeout exceed, exit from application
             pub exit_on_failure: Option<ModeDependentValue<bool>>,
             pub retry: Option<connection_retry::ConnectionRetryModeDependentConf>,
         },
-        /// Which endpoints to listen on. `zenohd` will add `tcp/[::]:7447` to these locators if left empty.
-        pub listen: #[derive(Default)]
+        /// Which endpoints to listen on.
+        pub listen:
         ListenConfig {
             /// global timeout for full listen cycle
             pub timeout_ms: Option<ModeDependentValue<i64>>,
-            pub endpoints: Vec<EndPoint>,
+            /// The list of endpoints to listen on
+            pub endpoints: ModeDependentValue<Vec<EndPoint>>,
             /// if connection timeout exceed, exit from application
             pub exit_on_failure: Option<ModeDependentValue<bool>>,
             pub retry: Option<connection_retry::ConnectionRetryModeDependentConf>,
@@ -396,8 +396,10 @@ validated_struct::validator! {
                     lease: u64,
                     /// Number of keep-alive messages in a link lease duration (default: 4)
                     keep_alive: usize,
-                    /// Zenoh's MTU equivalent (default: 2^16-1)
+                    /// Zenoh's MTU equivalent (default: 2^16-1) (max: 2^16-1)
                     batch_size: BatchSize,
+                    /// Perform batching of messages if they are smaller of the batch_size
+                    batching: bool,
                     pub queue: QueueConf {
                         /// The size of each priority queue indicates the number of batches a given queue can contain.
                         /// The amount of memory being allocated for each queue is then SIZE_XXX * BATCH_SIZE.

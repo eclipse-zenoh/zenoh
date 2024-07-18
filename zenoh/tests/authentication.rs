@@ -273,7 +273,11 @@ client2name:client2passwd";
         let cert_path = TESTFILES_PATH.to_string_lossy();
         let mut config = config::default();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
-        config.listen.endpoints = vec![format!("tls/127.0.0.1:{}", port).parse().unwrap()];
+        config
+            .listen
+            .endpoints
+            .set(vec![format!("tls/127.0.0.1:{}", port).parse().unwrap()])
+            .unwrap();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
             .insert_json5(
@@ -315,7 +319,11 @@ client2name:client2passwd";
         let cert_path = TESTFILES_PATH.to_string_lossy();
         let mut config = config::default();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
-        config.listen.endpoints = vec![format!("quic/127.0.0.1:{}", port).parse().unwrap()];
+        config
+            .listen
+            .endpoints
+            .set(vec![format!("quic/127.0.0.1:{}", port).parse().unwrap()])
+            .unwrap();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
             .insert_json5(
@@ -364,7 +372,11 @@ client2name:client2passwd";
     async fn get_basic_router_config_usrpswd(port: u16) -> Config {
         let mut config = config::default();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
-        config.listen.endpoints = vec![format!("tcp/127.0.0.1:{port}").parse().unwrap()];
+        config
+            .listen
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:{port}".parse().unwrap()])
+            .unwrap();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
             .insert_json5(

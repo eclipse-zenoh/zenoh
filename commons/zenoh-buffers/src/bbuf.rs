@@ -127,7 +127,7 @@ impl Writer for &mut BBuf {
         self.capacity() - self.len()
     }
 
-    fn with_slot<F>(&mut self, len: usize, f: F) -> Result<NonZeroUsize, DidntWrite>
+    unsafe fn with_slot<F>(&mut self, len: usize, write: F) -> Result<NonZeroUsize, DidntWrite>
     where
         F: FnOnce(&mut [u8]) -> usize,
     {
@@ -135,7 +135,8 @@ impl Writer for &mut BBuf {
             return Err(DidntWrite);
         }
 
-        let written = f(self.as_writable_slice());
+        // SAFETY: self.remaining() >= len
+        let written = write(unsafe { self.as_writable_slice().get_unchecked_mut(..len) });
         self.len += written;
 
         NonZeroUsize::new(written).ok_or(DidntWrite)

@@ -62,6 +62,7 @@ impl TransportLinkUnicastUniversal {
             },
             queue_size: transport.manager.config.queue_size,
             wait_before_drop: transport.manager.config.wait_before_drop,
+            batching: transport.manager.config.batching,
             backoff: transport.manager.config.queue_backoff,
         };
 
@@ -247,7 +248,7 @@ async fn rx_task(
     }
 
     // The pool of buffers
-    let mtu = link.batch.max_buffer_size();
+    let mtu = link.batch.mtu as usize;
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;

@@ -19,16 +19,14 @@ use std::{
 };
 
 use zenoh::{
-    core::{Error, Resolvable, Resolve, Result as ZResult},
     internal::{bail, runtime::ZRuntime, ResolveFuture, TerminatableTask},
     key_expr::{keyexpr, KeyExpr, OwnedKeyExpr},
     prelude::Wait,
-    query::Query,
-    queryable::Queryable,
+    pubsub::FlumeSubscriber,
+    query::{Query, Queryable, ZenohParameters},
     sample::{Locality, Sample},
-    selector::ZenohParameters,
     session::{SessionDeclarations, SessionRef},
-    subscriber::FlumeSubscriber,
+    Error, Resolvable, Resolve, Result as ZResult,
 };
 
 /// The builder of PublicationCache, allowing to configure it.
@@ -145,8 +143,8 @@ impl<'a> PublicationCache<'a> {
         if conf.session.hlc().is_none() {
             bail!(
                 "Failed requirement for PublicationCache on {}: \
-                     the Session is not configured with 'add_timestamp=true'",
-                key_expr
+                     the 'timestamping' setting must be enabled in the Zenoh configuration",
+                key_expr,
             )
         }
 

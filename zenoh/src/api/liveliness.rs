@@ -40,14 +40,12 @@ use super::{
 /// A [`LivelinessToken`](LivelinessToken) is a token which liveliness is tied
 /// to the Zenoh [`Session`](Session) and can be monitored by remote applications.
 ///
-/// A [`LivelinessToken`](LivelinessToken) with key `key/expression` can be
-/// queried or subscribed to on key `@/liveliness/key/expression`.
-///
 /// The `Liveliness` structure can be obtained with the
 /// [`Session::liveliness()`](Session::liveliness) function
 /// of the [`Session`] struct.
 ///
 /// # Examples
+/// ### Declaring a token
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
@@ -59,6 +57,39 @@ use super::{
 ///     .declare_token("key/expression")
 ///     .await
 ///     .unwrap();
+/// # }
+/// ```
+///
+/// ### Querying tokens
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::prelude::*;
+///
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let replies = session.liveliness().get("key/**").await.unwrap();
+/// while let Ok(reply) = replies.recv_async().await {
+///     if let Ok(sample) = reply.result() {
+///         println!(">> Liveliness token {}", sample.key_expr());
+///     }
+/// }
+/// # }
+/// ```
+///
+/// ### Subscribing to liveliness changes
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::{prelude::*, sample::SampleKind};
+///
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let subscriber = session.liveliness().declare_subscriber("key/**").await.unwrap();
+/// while let Ok(sample) = subscriber.recv_async().await {
+///     match sample.kind() {
+///         SampleKind::Put => println!("New liveliness: {}", sample.key_expr()),
+///         SampleKind::Delete => println!("Lost liveliness: {}", sample.key_expr()),
+///     }
+/// }
 /// # }
 /// ```
 #[zenoh_macros::unstable]
@@ -250,9 +281,6 @@ pub(crate) struct LivelinessTokenState {
 /// A token whose liveliness is tied to the Zenoh [`Session`](Session)
 /// and can be monitored by remote applications.
 ///
-/// A `LivelinessToken` with key `key/expression` can be queried or subscribed
-/// to on key `@/liveliness/key/expression`.
-///
 /// A declared liveliness token will be seen as alive by any other Zenoh
 /// application in the system that monitors it while the liveliness token
 /// is not undeclared or dropped, while the Zenoh application that declared
@@ -388,7 +416,7 @@ impl Drop for LivelinessToken<'_> {
     }
 }
 
-/// A builder for initializing a [`FlumeSubscriber`](FlumeSubscriber).
+/// A builder for initializing a liveliness [`FlumeSubscriber`](FlumeSubscriber).
 ///
 /// # Examples
 /// ```
@@ -398,8 +426,8 @@ impl Drop for LivelinessToken<'_> {
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let subscriber = session
+///     .liveliness()
 ///     .declare_subscriber("key/expression")
-///     .best_effort()
 ///     .await
 ///     .unwrap();
 /// # }
@@ -415,7 +443,7 @@ pub struct LivelinessSubscriberBuilder<'a, 'b, Handler> {
 
 #[zenoh_macros::unstable]
 impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
-    /// Receive the samples for this subscription with a callback.
+    /// Receive the samples for this liveliness subscription with a callback.
     ///
     /// # Examples
     /// ```
@@ -425,6 +453,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let subscriber = session
+    ///     .liveliness()
     ///     .declare_subscriber("key/expression")
     ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr(), sample.payload()); })
     ///     .await
@@ -452,10 +481,10 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
         }
     }
 
-    /// Receive the samples for this subscription with a mutable callback.
+    /// Receive the samples for this liveliness subscription with a mutable callback.
     ///
     /// Using this guarantees that your callback will never be called concurrently.
-    /// If your callback is also accepted by the [`callback`](SubscriberBuilder::callback) method, we suggest you use it instead of `callback_mut`
+    /// If your callback is also accepted by the [`callback`](LivelinessSubscriberBuilder::callback) method, we suggest you use it instead of `callback_mut`
     ///
     /// # Examples
     /// ```
@@ -466,6 +495,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let mut n = 0;
     /// let subscriber = session
+    ///     .liveliness()
     ///     .declare_subscriber("key/expression")
     ///     .callback_mut(move |_sample| { n += 1; })
     ///     .await
@@ -484,7 +514,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the samples for this subscription with a [`Handler`](crate::prelude::IntoHandler).
+    /// Receive the samples for this liveliness subscription with a [`Handler`](crate::prelude::IntoHandler).
     ///
     /// # Examples
     /// ```no_run
@@ -494,6 +524,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let subscriber = session
+    ///     .liveliness()
     ///     .declare_subscriber("key/expression")
     ///     .with(flume::bounded(32))
     ///     .await
@@ -642,7 +673,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
         }
     }
 
-    /// Receive the replies for this query with a mutable callback.
+    /// Receive the replies for this liveliness query with a mutable callback.
     ///
     /// Using this guarantees that your callback will never be called concurrently.
     /// If your callback is also accepted by the [`callback`](LivelinessGetBuilder::callback) method, we suggest you use it instead of `callback_mut`
@@ -674,7 +705,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the replies for this query with a [`Handler`](crate::prelude::IntoHandler).
+    /// Receive the replies for this liveliness query with a [`Handler`](crate::handlers::IntoHandler).
     ///
     /// # Examples
     /// ```

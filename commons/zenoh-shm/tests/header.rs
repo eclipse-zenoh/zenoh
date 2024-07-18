@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
+#![cfg(feature = "test")]
 use std::sync::atomic::Ordering::Relaxed;
 
 use rand::Rng;

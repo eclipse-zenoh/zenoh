@@ -51,8 +51,8 @@ mod tests {
 
     const MSG_COUNT: usize = 1_000;
     const MSG_SIZE_ALL: [usize; 2] = [1_024, 131_072];
-    const MSG_SIZE_LOWLATENCY: [usize; 2] = [1_024, 65000];
     const MSG_SIZE_NOFRAG: [usize; 1] = [1_024];
+    const MSG_SIZE_LOWLATENCY: [usize; 1] = MSG_SIZE_NOFRAG;
 
     // Transport Handler for the router
     struct SHRouter {

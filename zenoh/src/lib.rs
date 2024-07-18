@@ -111,33 +111,24 @@ pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
     ]
 );
 
+#[allow(deprecated)]
+pub use zenoh_core::{AsyncResolve, SyncResolve};
+pub use zenoh_core::{Resolvable, Resolve, Wait};
+/// A zenoh error.
+pub use zenoh_result::Error;
+/// A zenoh result.
+pub use zenoh_result::ZResult as Result;
 #[doc(inline)]
-pub use {
-    crate::{
-        config::Config,
-        core::{Error, Result},
-        scouting::scout,
-        session::{open, Session},
-    },
-    zenoh_util::{init_log_from_env_or, try_init_log_from_env},
+pub use zenoh_util::{init_log_from_env_or, try_init_log_from_env};
+
+#[doc(inline)]
+pub use crate::{
+    config::Config,
+    scouting::scout,
+    session::{open, Session},
 };
 
 pub mod prelude;
-
-/// Zenoh core types
-pub mod core {
-    #[allow(deprecated)]
-    pub use zenoh_core::{AsyncResolve, SyncResolve};
-    pub use zenoh_core::{Resolvable, Resolve, Wait};
-    pub use zenoh_result::ErrNo;
-    /// A zenoh error.
-    pub use zenoh_result::Error;
-    /// A zenoh result.
-    pub use zenoh_result::ZResult as Result;
-
-    /// Zenoh message priority
-    pub use crate::api::publisher::Priority;
-}
 
 /// [Key expression](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md) are Zenoh's address space.
 ///
@@ -148,27 +139,27 @@ pub mod core {
 ///
 /// # Storing Key Expressions
 /// This module provides 3 flavours to store strings that have been validated to respect the KE syntax:
-/// - [`keyexpr`] is the equivalent of a [`str`],
-/// - [`OwnedKeyExpr`] works like an [`std::sync::Arc<str>`],
-/// - [`KeyExpr`] works like a [`std::borrow::Cow<str>`], but also stores some additional context internal to Zenoh to optimize
+/// - [`keyexpr`](crate::key_expr::keyexpr) is the equivalent of a [`str`],
+/// - [`OwnedKeyExpr`](crate::key_expr::OwnedKeyExpr) works like an [`std::sync::Arc<str>`],
+/// - [`KeyExpr`](crate::key_expr::KeyExpr) works like a [`std::borrow::Cow<str>`], but also stores some additional context internal to Zenoh to optimize
 /// routing and network usage.
 ///
-/// All of these types [`Deref`](core::ops::Deref) to [`keyexpr`], which notably has methods to check whether a given [`keyexpr::intersects`] with another,
-/// or even if a [`keyexpr::includes`] another.
+/// All of these types [`Deref`](std::ops::Deref) to [`keyexpr`](crate::key_expr::keyexpr), which notably has methods to check whether a given [`intersects`](crate::key_expr::keyexpr::includes) with another,
+/// or even if a [`includes`](crate::key_expr::keyexpr::includes) another.
 ///
 /// # Tying values to Key Expressions
 /// When storing values tied to Key Expressions, you might want something more specialized than a [`HashMap`](std::collections::HashMap) if you want to respect
 /// the Key Expression semantics with high performance.
 ///
-/// Enter [KeTrees](keyexpr_tree). These are data-structures specially built to store KE-value pairs in a manner that supports the set-semantics of KEs.
+/// Enter [KeTrees](crate::key_expr::keyexpr_tree). These are data-structures specially built to store KE-value pairs in a manner that supports the set-semantics of KEs.
 ///
 /// # Building and parsing Key Expressions
 /// A common issue in REST API is the association of meaning to sections of the URL, and respecting that API in a convenient manner.
-/// The same issue arises naturally when designing a KE space, and [`KeFormat`](format::KeFormat) was designed to help you with this,
+/// The same issue arises naturally when designing a KE space, and [`KeFormat`](crate::key_expr::format::KeFormat) was designed to help you with this,
 /// both in constructing and in parsing KEs that fit the formats you've defined.
 ///
-/// [`kedefine`] also allows you to define formats at compile time, allowing a more performant, but more importantly safer and more convenient use of said formats,
-/// as the [`keformat`] and [`kewrite`] macros will be able to tell you if you're attempting to set fields of the format that do not exist.
+/// [`kedefine`](crate::key_expr::format::kedefine) also allows you to define formats at compile time, allowing a more performant, but more importantly safer and more convenient use of said formats,
+/// as the [`keformat`](crate::key_expr::format::keformat) and [`kewrite`](crate::key_expr::format::kewrite) macros will be able to tell you if you're attempting to set fields of the format that do not exist.
 pub mod key_expr {
     #[zenoh_macros::unstable]
     pub mod keyexpr_tree {
@@ -180,7 +171,7 @@ pub mod key_expr {
     }
     #[zenoh_macros::unstable]
     pub use zenoh_keyexpr::SetIntersectionLevel;
-    pub use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
+    pub use zenoh_keyexpr::{canon::Canonize, keyexpr, OwnedKeyExpr};
 
     pub use crate::api::key_expr::{KeyExpr, KeyExprUndeclaration};
     // keyexpr format macro support
@@ -194,24 +185,19 @@ pub mod key_expr {
     }
 }
 
-/// Zenoh [`Session`](crate::session::Session) and associated types
+/// Zenoh [`Session`] and associated types
 pub mod session {
+    #[zenoh_macros::unstable]
+    pub use zenoh_config::wrappers::{EntityGlobalId, ZenohId};
+    pub use zenoh_protocol::core::EntityId;
+
     #[zenoh_macros::internal]
     pub use crate::api::session::{init, InitBuilder};
     pub use crate::api::{
         builders::publisher::{SessionDeleteBuilder, SessionPutBuilder},
+        info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, SessionInfo, ZenohIdBuilder},
         query::SessionGetBuilder,
         session::{open, OpenBuilder, Session, SessionDeclarations, SessionRef, Undeclarable},
-    };
-}
-
-/// Tools to access information about the current zenoh [`Session`](crate::Session).
-pub mod info {
-    pub use zenoh_config::wrappers::{EntityGlobalId, ZenohId};
-    pub use zenoh_protocol::core::EntityId;
-
-    pub use crate::api::info::{
-        PeersZenohIdBuilder, RoutersZenohIdBuilder, SessionInfo, ZenohIdBuilder,
     };
 }
 
@@ -223,91 +209,62 @@ pub mod sample {
     pub use crate::api::sample::SourceInfo;
     pub use crate::api::{
         builders::sample::{
-            EncodingBuilderTrait, QoSBuilderTrait, SampleBuilder, SampleBuilderAny,
-            SampleBuilderDelete, SampleBuilderPut, SampleBuilderTrait, TimestampBuilderTrait,
+            SampleBuilder, SampleBuilderAny, SampleBuilderDelete, SampleBuilderPut,
+            SampleBuilderTrait, TimestampBuilderTrait,
         },
         sample::{Sample, SampleFields, SampleKind, SourceSn},
     };
 }
 
-/// Encoding support
-pub mod encoding {
-    pub use crate::api::encoding::Encoding;
-}
-
 /// Payload primitives
 pub mod bytes {
-    pub use crate::api::bytes::{
-        Deserialize, OptionZBytes, Serialize, ZBytes, ZBytesIterator, ZBytesReader, ZBytesWriter,
-        ZDeserializeError, ZSerde,
+    pub use crate::api::{
+        builders::sample::EncodingBuilderTrait,
+        bytes::{
+            Deserialize, OptionZBytes, Serialize, ZBytes, ZBytesIterator, ZBytesReader,
+            ZBytesWriter, ZDeserializeError, ZSerde,
+        },
+        encoding::Encoding,
     };
 }
 
-/// [Selector](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) to issue queries
-pub mod selector {
-    pub use zenoh_protocol::core::Parameters;
-    #[zenoh_macros::unstable]
-    pub use zenoh_util::time_range::{TimeBound, TimeExpr, TimeRange};
-
-    pub use crate::api::selector::Selector;
-    #[zenoh_macros::unstable]
-    pub use crate::api::selector::ZenohParameters;
-}
-
-/// Subscribing primitives
-pub mod subscriber {
-    /// The kind of reliability.
+/// Pub/sub primitives
+pub mod pubsub {
     pub use zenoh_protocol::core::Reliability;
 
-    pub use crate::api::subscriber::{FlumeSubscriber, Subscriber, SubscriberBuilder};
-}
-
-/// Publishing primitives
-pub mod publisher {
-    pub use zenoh_protocol::core::CongestionControl;
-
     #[zenoh_macros::unstable]
-    pub use crate::api::publisher::MatchingListener;
-    #[zenoh_macros::unstable]
-    pub use crate::api::publisher::MatchingListenerBuilder;
-    #[zenoh_macros::unstable]
-    pub use crate::api::publisher::MatchingListenerUndeclaration;
-    #[zenoh_macros::unstable]
-    pub use crate::api::publisher::MatchingStatus;
-    #[zenoh_macros::unstable]
-    pub use crate::api::publisher::PublisherDeclarations;
-    #[zenoh_macros::unstable]
-    pub use crate::api::publisher::PublisherRef;
+    pub use crate::api::publisher::{
+        MatchingListener, MatchingListenerBuilder, MatchingListenerUndeclaration, MatchingStatus,
+        PublisherDeclarations, PublisherRef,
+    };
     pub use crate::api::{
         builders::publisher::{
             PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
             PublisherDeleteBuilder, PublisherPutBuilder,
         },
         publisher::{Publisher, PublisherUndeclaration},
+        subscriber::{FlumeSubscriber, Subscriber, SubscriberBuilder},
     };
 }
 
-/// Get operation primitives
-pub mod querier {
-    // Later the `Querier` with `get`` operation will be added here, in addition to `Session::get`,
-    // similarly to the `Publisher` with `put` operation and `Session::put`
-}
-
-/// Query and Reply primitives
+/// Query/reply primitives
 pub mod query {
+    pub use zenoh_protocol::core::Parameters;
     #[zenoh_macros::unstable]
-    pub use crate::api::query::ReplyKeyExpr;
+    pub use zenoh_util::time_range::{TimeBound, TimeExpr, TimeRange};
+
     #[zenoh_macros::internal]
     pub use crate::api::queryable::ReplySample;
+    #[zenoh_macros::unstable]
+    pub use crate::api::{query::ReplyKeyExpr, selector::ZenohParameters};
     pub use crate::api::{
         query::{ConsolidationMode, QueryConsolidation, QueryTarget, Reply, ReplyError},
-        queryable::{Query, ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
+        queryable::{
+            Query, Queryable, QueryableBuilder, QueryableUndeclaration, ReplyBuilder,
+            ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder,
+        },
+        selector::Selector,
     };
-}
-
-/// Queryable primitives
-pub mod queryable {
-    pub use crate::api::queryable::{Queryable, QueryableBuilder, QueryableUndeclaration};
 }
 
 /// Callback handler trait
@@ -318,6 +275,13 @@ pub mod handlers {
     };
 }
 
+/// Quality of service primitives
+pub mod qos {
+    pub use zenoh_protocol::core::CongestionControl;
+
+    pub use crate::api::{builders::sample::QoSBuilderTrait, publisher::Priority};
+}
+
 /// Scouting primitives
 pub mod scouting {
     pub use zenoh_config::wrappers::Hello;
@@ -326,6 +290,58 @@ pub mod scouting {
 }
 
 /// Liveliness primitives
+///
+/// A [`LivelinessToken`](liveliness::LivelinessToken) is a token which liveliness is tied
+/// to the Zenoh [`Session`](Session) and can be monitored by remote applications.
+///
+/// # Examples
+/// ### Declaring a token
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::prelude::*;
+///
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let liveliness = session
+///     .liveliness()
+///     .declare_token("key/expression")
+///     .await
+///     .unwrap();
+/// # }
+/// ```
+///
+/// ### Querying tokens
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::prelude::*;
+///
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let replies = session.liveliness().get("key/**").await.unwrap();
+/// while let Ok(reply) = replies.recv_async().await {
+///     if let Ok(sample) = reply.result() {
+///         println!(">> Liveliness token {}", sample.key_expr());
+///     }
+/// }
+/// # }
+/// ```
+///
+/// ### Subscribing to liveliness changes
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::{prelude::*, sample::SampleKind};
+///
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let subscriber = session.liveliness().declare_subscriber("key/**").await.unwrap();
+/// while let Ok(sample) = subscriber.recv_async().await {
+///     match sample.kind() {
+///         SampleKind::Put => println!("New liveliness: {}", sample.key_expr()),
+///         SampleKind::Delete => println!("Lost liveliness: {}", sample.key_expr()),
+///     }
+/// }
+/// # }
+/// ```
 #[zenoh_macros::unstable]
 pub mod liveliness {
     pub use crate::api::liveliness::{
@@ -337,11 +353,9 @@ pub mod liveliness {
 /// Timestamp support
 pub mod time {
     pub use zenoh_protocol::core::{Timestamp, TimestampId, NTP64};
-
-    pub use crate::api::time::new_timestamp;
 }
 
-/// Configuration to pass to [`open`](crate::session::open) and [`scout`](crate::scouting::scout) functions and associated constants
+/// Configuration to pass to [`open`] and [`scout`] functions and associated constants
 pub mod config {
     // pub use zenoh_config::{
     //     client, default, peer, Config, EndPoint, Locator, ModeDependentValue, PermissionsConf,
@@ -402,6 +416,8 @@ pub mod internal {
             PluginsManager, Response, RunningPlugin, RunningPluginTrait, ZenohPlugin, PLUGIN_PREFIX,
         };
     }
+
+    pub use zenoh_result::ErrNo;
 
     pub use crate::api::value::Value;
 }

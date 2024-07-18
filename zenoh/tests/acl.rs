@@ -52,7 +52,11 @@ mod test {
     async fn get_basic_router_config(port: u16) -> Config {
         let mut config = config::default();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
-        config.listen.endpoints = vec![format!("tcp/127.0.0.1:{port}").parse().unwrap()];
+        config
+            .listen
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:{port}".parse().unwrap()])
+            .unwrap();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
     }

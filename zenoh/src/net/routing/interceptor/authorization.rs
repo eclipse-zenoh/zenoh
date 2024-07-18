@@ -345,7 +345,7 @@ impl PolicyEnforcer {
     ) -> ZResult<PolicyInformation> {
         let mut policy_rules: Vec<PolicyRule> = Vec::new();
         let mut rule_map = HashMap::new();
-        let mut subject_id_map = HashMap::new();
+        let mut subject_id_map = HashMap::<String, Vec<usize>>::new();
         let mut subject_map_builder = SubjectMapBuilder::new();
 
         // validate rules config and insert them in hashmaps

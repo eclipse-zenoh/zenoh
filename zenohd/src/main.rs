@@ -19,7 +19,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 use url::Url;
 use zenoh::{
     config::{Config, EndPoint, ModeDependentValue, PermissionsConf, ValidatedMap, WhatAmI},
-    core::Result,
+    Result,
 };
 
 #[cfg(feature = "loki")]
@@ -36,8 +36,6 @@ const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 lazy_static::lazy_static!(
     static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
 );
-
-const DEFAULT_LISTENER: &str = "tcp/[::]:7447";
 
 #[derive(Debug, Parser)]
 #[command(version=GIT_VERSION, long_version=LONG_VERSION.as_str(), about="The zenoh router")]
@@ -56,7 +54,7 @@ struct Args {
     /// WARNING: this identifier must be unique in the system and must be 16 bytes maximum (32 chars)!
     #[arg(short, long)]
     id: Option<String>,
-    /// A plugin that MUST be loaded. You can give just the name of the plugin, zenohd will search for a library named 'libzenoh_plugin_<name>.so' (exact name depending the OS). Or you can give such a string: "<plugin_name>:<library_path>
+    /// A plugin that MUST be loaded. You can give just the name of the plugin, zenohd will search for a library named 'libzenoh_plugin_\<name\>.so' (exact name depending the OS). Or you can give such a string: "\<plugin_name\>:\<library_path\>"
     /// Repeat this option to load several plugins. If loading failed, zenohd will exit.
     #[arg(short = 'P', long)]
     plugin: Vec<String>,
@@ -168,7 +166,8 @@ fn config_from_args(args: &Args) -> Config {
     if !args.connect.is_empty() {
         config
             .connect
-            .set_endpoints(
+            .endpoints
+            .set(
                 args.connect
                     .iter()
                     .map(|v| match v.parse::<EndPoint>() {
@@ -184,7 +183,8 @@ fn config_from_args(args: &Args) -> Config {
     if !args.listen.is_empty() {
         config
             .listen
-            .set_endpoints(
+            .endpoints
+            .set(
                 args.listen
                     .iter()
                     .map(|v| match v.parse::<EndPoint>() {
@@ -196,12 +196,6 @@ fn config_from_args(args: &Args) -> Config {
                     .collect(),
             )
             .unwrap();
-    }
-    if config.listen.endpoints.is_empty() {
-        config
-            .listen
-            .endpoints
-            .push(DEFAULT_LISTENER.parse().unwrap())
     }
     if args.no_timestamp {
         config

@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#![cfg(unix)]
+
 use std::{
     collections::HashMap,
     sync::{
@@ -54,8 +56,16 @@ fn build_config(
         .set_enabled(Some(false))
         .unwrap();
 
-    sub_config.listen.endpoints = vec![locator.parse().unwrap()];
-    pub_config.connect.endpoints = vec![locator.parse().unwrap()];
+    sub_config
+        .listen
+        .endpoints
+        .set(vec![locator.parse().unwrap()])
+        .unwrap();
+    pub_config
+        .connect
+        .endpoints
+        .set(vec![locator.parse().unwrap()])
+        .unwrap();
 
     match flow {
         InterceptorFlow::Egress => pub_config.set_downsampling(ds_config).unwrap(),
@@ -180,7 +190,6 @@ fn downsampling_by_keyexpr_impl(flow: InterceptorFlow) {
     downsampling_test(pub_config, sub_config, ke_prefix, ke_of_rates, rate_check);
 }
 
-#[cfg(unix)]
 #[test]
 fn downsampling_by_keyexpr() {
     zenoh::try_init_log_from_env();

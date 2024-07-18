@@ -22,7 +22,7 @@ use async_trait::async_trait;
 use flume::{Receiver, Sender};
 use futures::select;
 use zenoh::{
-    core::Result as ZResult,
+    bytes::EncodingBuilderTrait,
     internal::{
         bail,
         buffers::{SplitBuffer, ZBuf},
@@ -35,9 +35,10 @@ use zenoh::{
         KeyExpr, OwnedKeyExpr,
     },
     query::{ConsolidationMode, QueryTarget},
-    sample::{EncodingBuilderTrait, Sample, SampleBuilder, SampleKind, TimestampBuilderTrait},
+    sample::{Sample, SampleBuilder, SampleKind, TimestampBuilderTrait},
     session::{Session, SessionDeclarations},
-    time::{new_timestamp, Timestamp, NTP64},
+    time::{Timestamp, NTP64},
+    Result as ZResult,
 };
 use zenoh_backend_traits::{
     config::{GarbageCollectionConfig, StorageConfig},
@@ -147,9 +148,6 @@ impl StorageService {
         );
         t.add_async(gc).await;
 
-        // get session id for timestamp generation
-        let zid = self.session.info().zid().await;
-
         // subscribe on key_expr
         let storage_sub = match self.session.declare_subscriber(&self.key_expr).await {
             Ok(storage_sub) => storage_sub,
@@ -239,7 +237,7 @@ impl StorageService {
                                 continue;
                             }
                         };
-                        let timestamp = sample.timestamp().cloned().unwrap_or(new_timestamp(zid));
+                        let timestamp = sample.timestamp().cloned().unwrap_or(self.session.new_timestamp());
                         let sample = SampleBuilder::from(sample).timestamp(timestamp).into();
                         self.process_sample(sample).await;
                     },
@@ -273,6 +271,17 @@ impl StorageService {
     // the trimming during PUT and GET should be handled by the plugin
     async fn process_sample(&self, sample: Sample) {
         tracing::trace!("[STORAGE] Processing sample: {:?}", sample);
+
+        // A Sample, in theory, will not arrive to a Storage without a Timestamp. This check (which, again, should
+        // never enter the `None` branch) ensures that the Storage Manager does not panic even if it ever happens.
+        let sample_timestamp = match sample.timestamp() {
+            Some(timestamp) => timestamp,
+            None => {
+                tracing::error!("Discarding Sample that has no Timestamp: {:?}", sample);
+                return;
+            }
+        };
+
         // if wildcard, update wildcard_updates
         if sample.key_expr().is_wild() {
             self.register_wildcard_update(sample.clone()).await;
@@ -290,12 +299,10 @@ impl StorageService {
         );
 
         for k in matching_keys {
-            if !self
-                .is_deleted(&k.clone(), sample.timestamp().unwrap())
-                .await
+            if !self.is_deleted(&k.clone(), sample_timestamp).await
                 && (self.capability.history.eq(&History::All)
                     || (self.capability.history.eq(&History::Latest)
-                        && self.is_latest(&k, sample.timestamp().unwrap()).await))
+                        && self.is_latest(&k, sample_timestamp).await))
             {
                 tracing::trace!(
                     "Sample `{:?}` identified as needed processing for key {}",
@@ -304,9 +311,8 @@ impl StorageService {
                 );
                 // there might be the case that the actual update was outdated due to a wild card update, but not stored yet in the storage.
                 // get the relevant wild card entry and use that value and timestamp to update the storage
-                let sample_to_store: Sample = if let Some(update) = self
-                    .ovderriding_wild_update(&k, sample.timestamp().unwrap())
-                    .await
+                let sample_to_store: Sample = if let Some(update) =
+                    self.ovderriding_wild_update(&k, sample_timestamp).await
                 {
                     match update.kind {
                         SampleKind::Put => {
@@ -323,6 +329,16 @@ impl StorageService {
                     SampleBuilder::from(sample.clone())
                         .keyexpr(k.clone())
                         .into()
+                };
+
+                // A Sample that is to be stored **must** have a Timestamp. In theory, the Sample generated should have
+                // a Timestamp and, in theory, this check is unneeded.
+                let sample_to_store_timestamp = match sample_to_store.timestamp() {
+                    Some(timestamp) => *timestamp,
+                    None => {
+                        tracing::error!("Discarding `Sample` generated through `SampleBuilder` that has no Timestamp: {:?}", sample_to_store);
+                        continue;
+                    }
                 };
 
                 let stripped_key = match self.strip_prefix(sample_to_store.key_expr()) {
@@ -342,16 +358,15 @@ impl StorageService {
                                     sample_to_store.payload().clone(),
                                     sample_to_store.encoding().clone(),
                                 ),
-                                *sample_to_store.timestamp().unwrap(),
+                                sample_to_store_timestamp,
                             )
                             .await
                     }
                     SampleKind::Delete => {
                         // register a tombstone
-                        self.mark_tombstone(&k, *sample_to_store.timestamp().unwrap())
-                            .await;
+                        self.mark_tombstone(&k, sample_to_store_timestamp).await;
                         storage
-                            .delete(stripped_key, *sample_to_store.timestamp().unwrap())
+                            .delete(stripped_key, sample_to_store_timestamp)
                             .await
                     }
                 };
@@ -365,7 +380,7 @@ impl StorageService {
                         .as_ref()
                         .unwrap()
                         .log_propagation
-                        .send((k.clone(), *sample_to_store.timestamp().unwrap()));
+                        .send((k.clone(), sample_to_store_timestamp));
                     match sending {
                         Ok(_) => (),
                         Err(e) => {

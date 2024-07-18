@@ -112,11 +112,10 @@ impl Replica {
         };
 
         // Zid of session for generating timestamps
-        let zid = session.zid();
 
         let replica = Replica {
             name: name.to_string(),
-            session,
+            session: session.clone(),
             key_expr: storage_config.key_expr.clone(),
             replica_config: storage_config.replica_config.clone().unwrap(),
             digests_published: RwLock::new(HashSet::new()),
@@ -131,7 +130,8 @@ impl Replica {
 
         let config = replica.replica_config.clone();
         // snapshotter
-        let snapshotter = Arc::new(Snapshotter::new(zid, rx_log, &startup_entries, &config).await);
+        let snapshotter =
+            Arc::new(Snapshotter::new(session, rx_log, &startup_entries, &config).await);
         // digest sub
         let digest_sub = replica.start_digest_sub(tx_digest).fuse();
         // queryable for alignment

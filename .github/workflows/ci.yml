@@ -67,10 +67,10 @@ jobs:
         run: cargo +stable clippy -p zenoh --all-targets --features unstable,shared-memory -- --deny warnings
 
       - name: Clippy workspace
-        run: cargo +stable clippy --all-targets -- --deny warnings
+        run: cargo +stable clippy --all-targets --features test -- --deny warnings
 
       - name: Clippy workspace unstable
-        run: cargo +stable clippy --all-targets --features unstable -- --deny warnings
+        run: cargo +stable clippy --all-targets --features unstable,test -- --deny warnings
 
       - name: Clippy all features
         if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest' }}
@@ -85,6 +85,11 @@ jobs:
 
       - name: Run doctests
         run: cargo test --doc
+
+      - name: Build doc
+        run: cargo doc --no-deps --features unstable
+        env:
+          RUSTDOCFLAGS: -Dwarnings
 
       - name: Check licenses
         run: cargo deny check licenses
@@ -118,15 +123,15 @@ jobs:
         uses: taiki-e/install-action@nextest
 
       - name: Run tests
-        run: cargo nextest run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+        run: cargo nextest run -F test --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Run tests with SHM
         if: ${{ matrix.os == 'macOS-latest' || matrix.os == 'windows-latest' }}
-        run: cargo nextest run -F shared-memory -F unstable -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+        run: cargo nextest run -F test -F shared-memory -F unstable -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Run tests with SHM + unixpipe
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: cargo nextest run -F shared-memory -F unstable -F transport_unixpipe -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+        run: cargo nextest run -F test -F shared-memory -F unstable -F transport_unixpipe -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Check for feature leaks
         if: ${{ matrix.os == 'ubuntu-latest' }}
@@ -156,7 +161,7 @@ jobs:
     name: Typos Check
     runs-on: ubuntu-latest
     steps:
-      - name: Clone this repository 
+      - name: Clone this repository
         uses: actions/checkout@v4
 
       - name: Check spelling

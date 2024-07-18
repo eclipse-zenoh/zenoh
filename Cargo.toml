@@ -56,7 +56,7 @@ members = [
 exclude = ["ci/nostd-check", "ci/valgrind-check"]
 
 [workspace.package]
-rust-version = "1.72.0"
+rust-version = "1.75.0"
 version = "0.11.0-dev" # Zenoh version
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
@@ -172,7 +172,7 @@ tokio-rustls = { version = "0.26.0", default-features = false }
 # tokio-vsock = see: io/zenoh-links/zenoh-link-vsock/Cargo.toml (workspaces does not support platform dependent dependencies)
 thread-priority = "1.1.0"
 typenum = "1.16.0"
-uhlc = { version = "0.7.0", default-features = false } # Default features are disabled due to usage in no_std crates
+uhlc = { version = "0.8.0", default-features = false } # Default features are disabled due to usage in no_std crates
 unwrap-infallible = "0.1.5"
 unzip-n = "0.1.2"
 url = "2.3.1"

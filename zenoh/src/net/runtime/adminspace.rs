@@ -50,14 +50,13 @@ use crate::{
         queryable::{Query, QueryInner},
         value::Value,
     },
-    encoding::Encoding,
+    bytes::Encoding,
     net::primitives::Primitives,
 };
 
 pub struct AdminContext {
     runtime: Runtime,
     version: String,
-    metadata: serde_json::Value,
 }
 
 type Handler = Arc<dyn Fn(&AdminContext, Query) + Send + Sync>;
@@ -153,7 +152,6 @@ impl AdminSpace {
         let zid_str = runtime.state.zid.to_string();
         let whatami_str = runtime.state.whatami.to_str();
         let mut config = runtime.config().lock();
-        let metadata = runtime.state.metadata.clone();
         let root_key: OwnedKeyExpr = format!("@/{whatami_str}/{zid_str}").try_into().unwrap();
 
         let mut handlers: HashMap<_, Handler> = HashMap::new();
@@ -221,7 +219,6 @@ impl AdminSpace {
         let context = Arc::new(AdminContext {
             runtime: runtime.clone(),
             version,
-            metadata,
         });
         let admin = Arc::new(AdminSpace {
             zid: runtime.zid(),
@@ -601,7 +598,7 @@ fn local_data(context: &AdminContext, query: Query) {
     let mut json = json!({
         "zid": context.runtime.state.zid,
         "version": context.version,
-        "metadata": context.metadata,
+        "metadata": context.runtime.config().lock().metadata(),
         "locators": locators,
         "sessions": transports,
         "plugins": plugins,
@@ -664,7 +661,11 @@ zenoh_build{{version="{}"}} 1
             .openmetrics_text(),
     );
 
-    if let Err(e) = query.reply(reply_key, metrics).wait() {
+    if let Err(e) = query
+        .reply(reply_key, metrics)
+        .encoding(Encoding::TEXT_PLAIN)
+        .wait()
+    {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
 }
@@ -681,6 +682,7 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
 
     if let Err(e) = query
         .reply(reply_key, tables.hat_code.info(&tables, WhatAmI::Router))
+        .encoding(Encoding::TEXT_PLAIN)
         .wait()
     {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
@@ -699,6 +701,7 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
 
     if let Err(e) = query
         .reply(reply_key, tables.hat_code.info(&tables, WhatAmI::Peer))
+        .encoding(Encoding::TEXT_PLAIN)
         .wait()
     {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
@@ -770,7 +773,11 @@ fn plugins_data(context: &AdminContext, query: Query) {
             let status = serde_json::to_value(status).unwrap();
             match ZBytes::try_from(status) {
                 Ok(zbuf) => {
-                    if let Err(e) = query.reply(key, zbuf).wait() {
+                    if let Err(e) = query
+                        .reply(key, zbuf)
+                        .encoding(Encoding::APPLICATION_JSON)
+                        .wait()
+                    {
                         tracing::error!("Error sending AdminSpace reply: {:?}", e);
                     }
                 }
@@ -782,8 +789,6 @@ fn plugins_data(context: &AdminContext, query: Query) {
 
 #[cfg(feature = "plugins")]
 fn plugins_status(context: &AdminContext, query: Query) {
-    use crate::bytes::{Serialize, ZSerde};
-
     let key_expr = query.key_expr();
     let guard = context.runtime.plugins_manager();
     let mut root_key = format!(
@@ -798,7 +803,8 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 if let Ok(key_expr) = KeyExpr::try_from(plugin_path_key.clone()) {
                     if query.key_expr().intersects(&key_expr) {
                         if let Err(e) = query
-                            .reply(key_expr, ZSerde.serialize(plugin.path()))
+                            .reply(key_expr, plugin.path())
+                            .encoding(Encoding::TEXT_PLAIN)
                             .wait()
                         {
                             tracing::error!("Error sending AdminSpace reply: {:?}", e);
@@ -824,7 +830,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
                         if let Ok(key_expr) = KeyExpr::try_from(response.key) {
                             match ZBytes::try_from(response.value) {
                                 Ok(zbuf) => {
-                                    if let Err(e) = query.reply(key_expr, zbuf).wait() {
+                                    if let Err(e) = query.reply(key_expr, zbuf).encoding(Encoding::APPLICATION_JSON).wait() {
                                         tracing::error!("Error sending AdminSpace reply: {:?}", e);
                                     }
                                 },
