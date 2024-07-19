@@ -126,15 +126,15 @@ Zenoh's router is built as `target/release/zenohd`. All the examples are built i
   * run the Zenoh router with permission to perform config changes via the admin space, and with a memory storage:
     `./target/release/zenohd --adminspace-permissions=rw --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'`
   * in another shell, get info of the zenoh router via the zenoh admin space:
-    `curl http://localhost:8000/@/router/local`
+    `curl http://localhost:8000/@/local/router`
   * get the volumes of the router (only memory by default):
-    `curl 'http://localhost:8000/@/router/local/**/volumes/*'`
+    `curl 'http://localhost:8000/@/local/router/**/volumes/*'`
   * get the storages of the local router (the memory storage configured at startup on '/demo/example/**' should be present):
-    `curl 'http://localhost:8000/@/router/local/**/storages/*'`
+    `curl 'http://localhost:8000/@/local/router/**/storages/*'`
   * add another memory storage on `/demo/mystore/**`:
-    `curl -X PUT -H 'content-type:application/json' -d '{"key_expr":"demo/mystore/**","volume":"memory"}' http://localhost:8000/@/router/local/config/plugins/storage_manager/storages/mystore`
+    `curl -X PUT -H 'content-type:application/json' -d '{"key_expr":"demo/mystore/**","volume":"memory"}' http://localhost:8000/@/local/router/config/plugins/storage_manager/storages/mystore`
   * check it has been created:
-    `curl 'http://localhost:8000/@/router/local/**/storages/*'`
+    `curl 'http://localhost:8000/@/local/router/**/storages/*'`
 
 ### Configuration options
 
