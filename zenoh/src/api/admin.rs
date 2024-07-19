@@ -34,18 +34,12 @@ use super::{
     subscriber::SubscriberKind,
 };
 
-macro_rules! ke_for_sure {
-    ($val:expr) => {
-        unsafe { keyexpr::from_str_unchecked($val) }
-    };
-}
-
 lazy_static::lazy_static!(
-    static ref KE_STARSTAR: &'static keyexpr = ke_for_sure!("**");
-    static ref KE_PREFIX: &'static keyexpr = ke_for_sure!("@");
-    static ref KE_SESSION: &'static keyexpr = ke_for_sure!("session");
-    static ref KE_TRANSPORT_UNICAST: &'static keyexpr = ke_for_sure!("transport/unicast");
-    static ref KE_LINK: &'static keyexpr = ke_for_sure!("link");
+    static ref KE_STARSTAR: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("**") };
+    static ref KE_PREFIX: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("@") };
+    static ref KE_SESSION: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("session") };
+    static ref KE_TRANSPORT_UNICAST: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("transport/unicast") };
+    static ref KE_LINK: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("link") };
 );
 
 pub(crate) fn init(session: &Session) {

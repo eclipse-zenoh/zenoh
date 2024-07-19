@@ -51,14 +51,8 @@ const CONTENTS: &str = "contents";
 pub const EPOCH_START: SystemTime = SystemTime::UNIX_EPOCH;
 pub const SUBINTERVAL_CHUNKS: usize = 10;
 
-macro_rules! ke_for_sure {
-    ($val:expr) => {
-        unsafe { keyexpr::from_str_unchecked($val) }
-    };
-}
-
 lazy_static::lazy_static!(
-    static ref KE_PREFIX_DIGEST: &'static keyexpr = ke_for_sure!("@-digest");
+    static ref KE_PREFIX_DIGEST: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("@-digest") };
 );
 
 // A replica consists of a storage service and services required for anti-entropy
