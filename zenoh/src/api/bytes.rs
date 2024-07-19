@@ -1930,6 +1930,40 @@ impl TryFrom<&mut ZBytes> for serde_yaml::Value {
     }
 }
 
+// Bytes
+impl Serialize<bytes::Bytes> for ZSerde {
+    type Output = ZBytes;
+
+    fn serialize(self, t: bytes::Bytes) -> Self::Output {
+        Self.serialize(&t)
+    }
+}
+
+impl Serialize<&bytes::Bytes> for ZSerde {
+    type Output = ZBytes;
+
+    fn serialize(self, t: &bytes::Bytes) -> Self::Output {
+        ZBytes::from(t.as_ref())
+    }
+}
+
+impl Serialize<&mut bytes::Bytes> for ZSerde {
+    type Output = ZBytes;
+
+    fn serialize(self, t: &mut bytes::Bytes) -> Self::Output {
+        ZBytes::from(t.as_ref())
+    }
+}
+
+impl Deserialize<bytes::Bytes> for ZSerde {
+    type Input<'a> = &'a ZBytes;
+    type Error = Infallible;
+
+    fn deserialize(self, v: Self::Input<'_>) -> Result<bytes::Bytes, Self::Error> {
+        Ok(bytes::Bytes::from(v.into::<Vec<u8>>()))
+    }
+}
+
 // CBOR
 impl Serialize<serde_cbor::Value> for ZSerde {
     type Output = Result<ZBytes, serde_cbor::Error>;
@@ -3167,6 +3201,10 @@ mod tests {
         // Parameters
         serialize_deserialize!(Parameters, Parameters::from(""));
         serialize_deserialize!(Parameters, Parameters::from("a=1;b=2;c3"));
+
+        // Bytes
+        serialize_deserialize!(bytes::Bytes, bytes::Bytes::from(vec![1, 2, 3, 4]));
+        serialize_deserialize!(bytes::Bytes, bytes::Bytes::from("Hello World"));
 
         // Tuple
         serialize_deserialize!((usize, usize), (0, 1));

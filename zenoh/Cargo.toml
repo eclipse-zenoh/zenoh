@@ -71,6 +71,7 @@ tokio-util = { workspace = true }
 ahash = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
+bytes = { workspace = true }
 event-listener = { workspace = true }
 flume = { workspace = true }
 form_urlencoded = { workspace = true }
