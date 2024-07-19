@@ -4,8 +4,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
 use zenoh::{
-    key_expr::{KeyExpr, OwnedKeyExpr},
-    query::Selector,
+    key_expr::OwnedKeyExpr,
     sample::{Sample, SampleKind},
 };
 
@@ -20,9 +19,23 @@ pub enum RemoteAPIMsg {
 #[derive(TS)]
 #[ts(export)]
 #[derive(Debug, Serialize, Deserialize)]
+pub enum QueryableMsg {
+    // UUID of original queryable
+    Query { uuid: Uuid, query: QueryWS },
+    Reply {},
+}
+
+#[derive(TS)]
+#[ts(export)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum DataMsg {
+    // Subscriber
     Sample(SampleWS, Uuid),
+    // Client -> SVR
     PublisherPut(Vec<u8>, Uuid),
+    // Bidirectional
+    Queryable(QueryableMsg),
+    // SVR -> Client
     Put {
         #[ts(as = "OwnedKeyExprWrapper")]
         key_expr: OwnedKeyExpr,
@@ -40,16 +53,11 @@ pub enum DataMsg {
     },
 }
 
-// Wrapper to get OwnerKeyExpr to play with TS
-#[derive(Debug, Deserialize, TS)]
-#[serde(from = "String")]
-pub struct OwnedKeyExprWrapper(Arc<str>);
-
-impl From<String> for OwnedKeyExprWrapper {
-    fn from(s: String) -> Self {
-        OwnedKeyExprWrapper(s.into())
-    }
-}
+//  ██████  ██████  ███    ██ ████████ ██████   ██████  ██          ███    ███ ███████ ███████ ███████  █████   ██████  ███████
+// ██      ██    ██ ████   ██    ██    ██   ██ ██    ██ ██          ████  ████ ██      ██      ██      ██   ██ ██       ██
+// ██      ██    ██ ██ ██  ██    ██    ██████  ██    ██ ██          ██ ████ ██ █████   ███████ ███████ ███████ ██   ███ █████
+// ██      ██    ██ ██  ██ ██    ██    ██   ██ ██    ██ ██          ██  ██  ██ ██           ██      ██ ██   ██ ██    ██ ██
+//  ██████  ██████  ██   ████    ██    ██   ██  ██████  ███████     ██      ██ ███████ ███████ ███████ ██   ██  ██████  ███████
 
 #[derive(Debug, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -79,15 +87,61 @@ pub enum ControlMsg {
     UndeclarePublisher(Uuid),
 
     // Queryable
-    Queryable {
+    DeclareQueryable {
         #[ts(as = "OwnedKeyExprWrapper")]
         key_expr: OwnedKeyExpr,
+        complete: bool,
         id: Uuid,
     },
     UndeclareQueryable(Uuid),
 
     // Error string
     Error(String),
+}
+
+// ██     ██ ██████   █████  ██████  ██████  ███████ ██████  ███████
+// ██     ██ ██   ██ ██   ██ ██   ██ ██   ██ ██      ██   ██ ██
+// ██  █  ██ ██████  ███████ ██████  ██████  █████   ██████  ███████
+// ██ ███ ██ ██   ██ ██   ██ ██      ██      ██      ██   ██      ██
+//  ███ ███  ██   ██ ██   ██ ██      ██      ███████ ██   ██ ███████
+
+// Wrapper to get OwnerKeyExpr to play with TS
+#[derive(Debug, Deserialize, TS)]
+#[serde(from = "String")]
+pub struct OwnedKeyExprWrapper(Arc<str>);
+
+impl From<String> for OwnedKeyExprWrapper {
+    fn from(s: String) -> Self {
+        OwnedKeyExprWrapper(s.into())
+    }
+}
+
+#[derive(TS)]
+#[ts(export)]
+#[derive(Debug, Serialize, Deserialize)]
+pub struct QueryWS {
+    #[ts(as = "OwnedKeyExprWrapper")]
+    key_expr: OwnedKeyExpr,
+    parameters: String,
+    //
+    encoding: Option<String>,
+    attachment: Option<Vec<u8>>,
+    payload: Option<Vec<u8>>,
+}
+
+#[derive(TS)]
+#[ts(export)]
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReplyWS {
+    result: Result<SampleWS, ReplyErrorWS>,
+}
+
+#[derive(TS)]
+#[ts(export)]
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReplyErrorWS {
+    pub(crate) payload: Vec<u8>,
+    pub(crate) encoding: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, TS)]
@@ -171,8 +225,10 @@ mod tests {
             kind: SampleKindWS::Put,
         };
 
-        let json: String = serde_json::to_string(&DataMsg::Sample(sampe_ws, uuid)).unwrap();
+        let json: String = serde_json::to_string(&QueryableMsg::Reply {}).unwrap();
+        assert_eq!(json, r#"{"Reply":{}}"#);
 
+        let json: String = serde_json::to_string(&DataMsg::Sample(sampe_ws, uuid)).unwrap();
         assert_eq!(
             json,
             r#"{"Sample":[{"key_expr":"demo/test","value":[1,2,3],"kind":"Put"},"a2663bb1-128c-4dd3-a42b-d1d3337e2e51"]}"#

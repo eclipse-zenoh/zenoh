@@ -43,6 +43,7 @@ use zenoh::{
     key_expr::KeyExpr,
     prelude::*,
     pubsub::{Publisher, Subscriber},
+    query::{Query, Queryable},
     Session,
 };
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
@@ -51,7 +52,9 @@ use zenoh_result::{bail, ZResult};
 mod config;
 pub use config::Config;
 
+mod handle_data_message;
 mod interface;
+use crate::handle_data_message::handle_data_message;
 
 const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 lazy_static::lazy_static! {
@@ -142,6 +145,8 @@ struct RemoteState {
     key_expr: HashSet<KeyExpr<'static>>,
     subscribers: HashMap<Uuid, Subscriber<'static, ()>>,
     publishers: HashMap<Uuid, Publisher<'static>>,
+    //
+    queryables: HashMap<Uuid, Queryable<'static, flume::Receiver<Query>>>,
 }
 
 // Listen on the Zenoh Session
@@ -179,6 +184,7 @@ async fn run_websocket_server(runtime: Runtime, state_map: StateMap) {
                         key_expr: HashSet::new(),
                         subscribers: HashMap::new(),
                         publishers: HashMap::new(),
+                        queryables: HashMap::new(),
                     };
 
                     sock_adress = Arc::new(sock_addr);
@@ -438,64 +444,36 @@ async fn handle_control_message(
             error!("Client sent error {}", client_err);
             None
         }
+        ControlMsg::DeclareQueryable {
+            key_expr,
+            complete,
+            id: uuid,
+        } => {
+            println!("Declare Queryable {}  {}", key_expr, uuid);
+            let mut state_reader = state_map.write().await;
+            if let Some(state) = state_reader.get_mut(&sock_addr) {
+                match state
+                    .session
+                    .declare_queryable(&key_expr)
+                    .complete(complete)
+                    .await
+                {
+                    Ok(queryable) => {
+                        let ch_tx = state.channel_tx.clone();
+                        todo!("Pass off Queries to frontend,");
+                        todo!("Recieve Reply from frontend");
 
-        ControlMsg::Queryable { key_expr, id } => todo!(),
-        ControlMsg::UndeclareQueryable(_) => todo!(),
-    }
-}
-
-async fn handle_data_message(
-    data_msg: DataMsg,
-    sock_addr: SocketAddr,
-    state_map: StateMap,
-) -> Option<RemoteAPIMsg> {
-    match data_msg {
-        DataMsg::Sample(sample, publisher_uuid) => {
-            warn!("Server has Recieved A Sample");
-            None
-        }
-        DataMsg::PublisherPut(payload, publisher_uuid) => {
-            let state_reader = state_map.read().await;
-            if let Some(state) = state_reader.get(&sock_addr) {
-                if let Some(publisher) = state.publishers.get(&publisher_uuid) {
-                    if let Err(err) = publisher.put(payload).await {
-                        tracing::error!("PublisherPut {publisher_uuid}, {err}");
+                        state.queryables.insert(uuid, queryable);
                     }
-                } else {
-                    tracing::warn!("Publisher {publisher_uuid}, does not exist in State");
+                    Err(err) => {
+                        tracing::error!("Could not Create Publisher {err}");
+                        println!("Could not Create Publisher {err}");
+                        return Some(ControlMsg::Error(err.to_string()));
+                    }
                 }
-            } else {
-                tracing::warn!("No state in map for Socket Address {sock_addr}");
-                println!("No state in map for Socket Addres {sock_addr}");
             }
             None
         }
-        DataMsg::Put { key_expr, payload } => {
-            let mut state_reader = state_map.write().await;
-            if let Some(state) = state_reader.get_mut(&sock_addr) {
-                if let Err(err) = state.session.put(key_expr, payload).await {
-                    error!("Session Put Failed ! {}", err)
-                };
-            }
-            None
-        }
-        // DataMsg::Get { key_expr, id } => {
-        //     let mut state_reader = state_map.write().await;
-        //     if let Some(state) = state_reader.get_mut(&sock_addr) {
-        //         if let Err(err) = state.session.get(key_expr, payload).await {
-        //             error!("Session Put Failed ! {}", err)
-        //         };
-        //     }
-        //     None
-        // },
-        DataMsg::Delete { key_expr } => {
-            let mut state_reader = state_map.write().await;
-            if let Some(state) = state_reader.get_mut(&sock_addr) {
-                if let Err(err) = state.session.delete(key_expr).await {
-                    error!("Session Delete Failed ! {}", err)
-                };
-            }
-            None
-        }
+        ControlMsg::UndeclareQueryable(_) => todo!(),
     }
 }
