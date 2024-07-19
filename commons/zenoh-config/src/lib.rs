@@ -197,15 +197,6 @@ fn config_keys() {
     dbg!(c.keys());
 }
 
-fn treat_error_as_none<'a, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
-where
-    T: serde::de::Deserialize<'a>,
-    D: serde::de::Deserializer<'a>,
-{
-    let value: Value = serde::de::Deserialize::deserialize(deserializer)?;
-    Ok(T::deserialize(value).ok())
-}
-
 validated_struct::validator! {
     /// The main configuration structure for Zenoh.
     ///
@@ -264,7 +255,6 @@ validated_struct::validator! {
                 /// The time-to-live on multicast scouting packets. (default: 1)
                 pub ttl: Option<u32>,
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through UDP multicast.
-                #[serde(deserialize_with = "treat_error_as_none")]
                 autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
                 /// Whether or not to listen for scout messages on UDP multicast and reply to them.
                 listen: Option<ModeDependentValue<bool>>,
@@ -281,7 +271,6 @@ validated_struct::validator! {
                 /// direct connectivity with each other.
                 multihop: Option<bool>,
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through gossip.
-                #[serde(deserialize_with = "treat_error_as_none")]
                 autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
             },
         },
@@ -571,7 +560,7 @@ fn config_deser() {
         scouting: {
           multicast: {
             enabled: false,
-            autoconnect: "peer|router"
+            autoconnect: ["peer", "router"]
           }
         }
       }"#,
@@ -598,7 +587,7 @@ fn config_deser() {
         scouting: {
           multicast: {
             enabled: false,
-            autoconnect: {router: "", peer: "peer|router"}
+            autoconnect: {router: [], peer: ["peer", "router"]}
           }
         }
       }"#,
