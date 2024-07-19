@@ -13,8 +13,6 @@
 //
 use std::sync::MutexGuard;
 
-#[cfg(feature = "shared-memory")]
-use tracing::error;
 use zenoh_core::{zlock, zread};
 use zenoh_link::Link;
 use zenoh_protocol::{
@@ -48,7 +46,7 @@ impl TransportUnicastUniversal {
         {
             if self.config.shm.is_some() {
                 if let Err(e) = crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shmr) {
-                    error!("Error receiving SHM buffer: {e}");
+                    tracing::debug!("Error receiving SHM buffer: {e}");
                     return Ok(());
                 }
             }
