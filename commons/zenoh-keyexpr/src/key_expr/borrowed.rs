@@ -27,7 +27,7 @@ use core::{
 
 use zenoh_result::{bail, Error as ZError, ZResult};
 
-use super::{canon::Canonizable, OwnedKeyExpr, FORBIDDEN_CHARS};
+use super::{canon::Canonize, OwnedKeyExpr, FORBIDDEN_CHARS};
 
 /// A [`str`] newtype that is statically known to be a valid key expression.
 ///
@@ -72,7 +72,7 @@ impl keyexpr {
     pub fn autocanonize<'a, T, E>(t: &'a mut T) -> Result<&'a Self, E>
     where
         &'a Self: TryFrom<&'a T, Error = E>,
-        T: Canonizable + ?Sized,
+        T: Canonize + ?Sized,
     {
         t.canonize();
         Self::new(t)

@@ -14,7 +14,7 @@
 use std::time::Duration;
 
 use clap::Parser;
-use zenoh::{encoding::Encoding, key_expr::KeyExpr, prelude::*, Config};
+use zenoh::{bytes::Encoding, key_expr::KeyExpr, prelude::*, Config};
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
@@ -35,6 +35,7 @@ async fn main() {
         tokio::time::sleep(Duration::from_secs(1)).await;
         let buf = format!("[{idx:4}] {payload}");
         println!("Putting Data ('{}': '{}')...", &key_expr, buf);
+        // Refer to z_bytes.rs to see how to serialize different types of message
         publisher
             .put(buf)
             .encoding(Encoding::TEXT_PLAIN) // Optionally set the encoding metadata 

@@ -30,8 +30,8 @@ use flume::Sender;
 use memory_backend::MemoryBackend;
 use storages_mgt::StorageMessage;
 use zenoh::{
-    core::Result as ZResult,
     internal::{
+        bail,
         plugins::{Response, RunningPlugin, RunningPluginTrait, ZenohPlugin},
         runtime::Runtime,
         zlock, LibLoader,
@@ -39,6 +39,7 @@ use zenoh::{
     key_expr::{keyexpr, KeyExpr},
     prelude::Wait,
     session::Session,
+    Result as ZResult,
 };
 use zenoh_backend_traits::{
     config::{ConfigDiff, PluginConfig, StorageConfig, VolumeConfig},
@@ -120,6 +121,22 @@ impl StorageRuntimeInner {
                 .declare_static_plugin::<MemoryBackend, &str>(MEMORY_BACKEND_NAME, true);
 
         let session = Arc::new(zenoh::session::init(runtime.clone()).wait()?);
+
+        // NOTE: All storage **must** have a timestamp associated with a Sample. Considering that it is possible to make
+        //       a publication without associating a timestamp, that means that the node managing the storage (be it a
+        //       Zenoh client / peer / router) has to add it.
+        //
+        //       If the `timestamping` configuration setting is disabled then there is no HLC associated with the
+        //       Session. That eventually means that no timestamp can be generated which goes against the previous
+        //       requirement.
+        //
+        //       Hence, in that scenario, we refuse to start the storage manager and any storage.
+        if session.hlc().is_none() {
+            tracing::error!(
+                "Cannot start storage manager (and thus any storage) without the 'timestamping' setting enabled in the Zenoh configuration"
+            );
+            bail!("Cannot start storage manager, 'timestamping' is disabled in the configuration");
+        }
 
         // After this moment result should be only Ok. Failure of loading of one voulme or storage should not affect others.
 

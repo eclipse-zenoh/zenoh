@@ -50,13 +50,13 @@ pub struct PublicationBuilderPut {
 pub struct PublicationBuilderDelete;
 
 /// A builder for initializing  [`Session::put`](crate::session::Session::put), [`Session::delete`](crate::session::Session::delete),
-/// [`Publisher::put`](crate::publisher::Publisher::put), and [`Publisher::delete`](crate::publisher::Publisher::delete) operations.
+/// [`Publisher::put`](crate::pubsub::Publisher::put), and [`Publisher::delete`](crate::pubsub::Publisher::delete) operations.
 ///
 /// # Examples
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::{encoding::Encoding, prelude::*, publisher::CongestionControl};
+/// use zenoh::{bytes::Encoding, prelude::*, qos::CongestionControl};
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// session
@@ -220,7 +220,7 @@ impl IntoFuture for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuil
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::{prelude::*, publisher::CongestionControl};
+/// use zenoh::{prelude::*, qos::CongestionControl};
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let publisher = session

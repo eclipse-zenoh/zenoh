@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::sync::atomic::AtomicPtr;
+use std::{num::NonZeroUsize, sync::atomic::AtomicPtr};
 
 use crate::api::common::types::{ChunkID, SegmentID};
 
@@ -22,13 +22,13 @@ use crate::api::common::types::{ChunkID, SegmentID};
 pub struct ChunkDescriptor {
     pub segment: SegmentID,
     pub chunk: ChunkID,
-    pub len: usize,
+    pub len: NonZeroUsize,
 }
 
 impl ChunkDescriptor {
     /// Create a new Chunk Descriptor
     #[zenoh_macros::unstable_doc]
-    pub fn new(segment: SegmentID, chunk: ChunkID, len: usize) -> Self {
+    pub fn new(segment: SegmentID, chunk: ChunkID, len: NonZeroUsize) -> Self {
         Self {
             segment,
             chunk,

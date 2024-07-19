@@ -152,11 +152,7 @@ impl TransportUnicastLowlatency {
 
             // The pool of buffers
             let pool = {
-                let mtu = if is_streamed {
-                    link_rx.batch.mtu as usize
-                } else {
-                    link_rx.batch.max_buffer_size()
-                };
+                let mtu = link_rx.batch.mtu as usize;
                 let mut n = rx_buffer_size / mtu;
                 if rx_buffer_size % mtu != 0 {
                     n += 1;

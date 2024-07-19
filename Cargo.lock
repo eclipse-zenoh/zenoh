@@ -2200,8 +2200,8 @@ version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f56d36f573486ba7f462b62cbae597fef7d5d93665e7047956b457531b8a1ced"
 dependencies = [
- "prost",
- "prost-types",
+ "prost 0.11.9",
+ "prost-types 0.11.9",
 ]
 
 [[package]]
@@ -2972,7 +2972,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b82eaa1d779e9a4bc1c3217db8ffbeabaae1dca241bf70183242128d48681cd"
 dependencies = [
  "bytes",
- "prost-derive",
+ "prost-derive 0.11.9",
+]
+
+[[package]]
+name = "prost"
+version = "0.12.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "deb1435c188b76130da55f17a466d252ff7b1418b2ad3e037d127b94e3411f29"
+dependencies = [
+ "bytes",
+ "prost-derive 0.12.6",
 ]
 
 [[package]]
@@ -2989,12 +2999,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "prost-derive"
+version = "0.12.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
+dependencies = [
+ "anyhow",
+ "itertools",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.52",
+]
+
+[[package]]
 name = "prost-types"
 version = "0.11.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "213622a1460818959ac1181aaeb2dc9c7f63df720db7d788b3e24eacd1983e13"
 dependencies = [
- "prost",
+ "prost 0.11.9",
+]
+
+[[package]]
+name = "prost-types"
+version = "0.12.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9091c90b0a32608e984ff2fa4091273cbdd755d54935c51d520887f4a1dbd5b0"
+dependencies = [
+ "prost 0.12.6",
 ]
 
 [[package]]
@@ -4683,9 +4715,9 @@ checksum = "ed646292ffc8188ef8ea4d1e0e0150fb15a5c2e12ad9b8fc191ae7a8a7f3c4b9"
 
 [[package]]
 name = "uhlc"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99b6df3f3e948b40e20c38a6d1fd6d8f91b3573922fc164e068ad3331560487e"
+checksum = "79ac3c37bd9506595768f0387bd39d644525728b4a1d783218acabfb56356db7"
 dependencies = [
  "humantime",
  "lazy_static",
@@ -5497,8 +5529,12 @@ dependencies = [
  "futures",
  "git-version",
  "json5",
+ "prost 0.12.6",
+ "prost-types 0.12.6",
  "rand 0.8.5",
  "rustc_version 0.4.0",
+ "serde_json",
+ "serde_yaml",
  "tokio",
  "tracing",
  "zenoh",
@@ -5659,6 +5695,7 @@ name = "zenoh-link-tcp"
 version = "0.11.0-dev"
 dependencies = [
  "async-trait",
+ "socket2 0.5.6",
  "tokio",
  "tokio-util",
  "tracing",
@@ -5683,6 +5720,7 @@ dependencies = [
  "rustls-pki-types",
  "rustls-webpki",
  "secrecy",
+ "socket2 0.5.6",
  "tokio",
  "tokio-rustls",
  "tokio-util",

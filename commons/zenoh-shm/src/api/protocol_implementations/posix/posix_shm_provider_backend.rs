@@ -16,6 +16,7 @@ use std::{
     borrow::Borrow,
     cmp,
     collections::BinaryHeap,
+    num::NonZeroUsize,
     sync::{
         atomic::{AtomicPtr, AtomicUsize, Ordering},
         Mutex,
@@ -31,7 +32,7 @@ use crate::api::{
     provider::{
         chunk::{AllocatedChunk, ChunkDescriptor},
         shm_provider_backend::ShmProviderBackend,
-        types::{AllocAlignment, ChunkAllocResult, MemoryLayout, ZAllocError},
+        types::{AllocAlignment, ChunkAllocResult, MemoryLayout, ZAllocError, ZLayoutError},
     },
 };
 
@@ -45,7 +46,7 @@ const MIN_FREE_CHUNK_SIZE: usize = 1_024;
 #[derive(Eq, Copy, Clone, Debug)]
 struct Chunk {
     offset: ChunkID,
-    size: usize,
+    size: NonZeroUsize,
 }
 
 impl Ord for Chunk {
@@ -86,7 +87,7 @@ impl PosixShmProviderBackendBuilder {
         self,
         size: usize,
         alignment: AllocAlignment,
-    ) -> ZResult<LayoutedPosixShmProviderBackendBuilder<MemoryLayout>> {
+    ) -> Result<LayoutedPosixShmProviderBackendBuilder<MemoryLayout>, ZLayoutError> {
         let layout = MemoryLayout::new(size, alignment)?;
         Ok(LayoutedPosixShmProviderBackendBuilder { layout })
     }
@@ -96,7 +97,7 @@ impl PosixShmProviderBackendBuilder {
     pub fn with_size(
         self,
         size: usize,
-    ) -> ZResult<LayoutedPosixShmProviderBackendBuilder<MemoryLayout>> {
+    ) -> Result<LayoutedPosixShmProviderBackendBuilder<MemoryLayout>, ZLayoutError> {
         let layout = MemoryLayout::new(size, AllocAlignment::default())?;
         Ok(LayoutedPosixShmProviderBackendBuilder { layout })
     }
@@ -149,7 +150,7 @@ impl PosixShmProviderBackend {
         );
 
         Ok(Self {
-            available: AtomicUsize::new(layout.size()),
+            available: AtomicUsize::new(layout.size().get()),
             segment,
             free_list: Mutex::new(free_list),
             alignment: layout.alignment(),
@@ -163,7 +164,7 @@ impl ShmProviderBackend for PosixShmProviderBackend {
 
         let required_len = layout.size();
 
-        if self.available.load(Ordering::Relaxed) < required_len {
+        if self.available.load(Ordering::Relaxed) < required_len.get() {
             tracing::trace!( "PosixShmProviderBackend does not have sufficient free memory to allocate {:?}, try de-fragmenting!", layout);
             return Err(ZAllocError::OutOfMemory);
         }
@@ -176,16 +177,20 @@ impl ShmProviderBackend for PosixShmProviderBackend {
             Some(mut chunk) if chunk.size >= required_len => {
                 // NOTE: don't loose any chunks here, as it will lead to memory leak
                 tracing::trace!("Allocator selected Chunk ({:?})", &chunk);
-                if chunk.size - required_len >= MIN_FREE_CHUNK_SIZE {
+                if chunk.size.get() - required_len.get() >= MIN_FREE_CHUNK_SIZE {
                     let free_chunk = Chunk {
-                        offset: chunk.offset + required_len as ChunkID,
-                        size: chunk.size - required_len,
+                        offset: chunk.offset + required_len.get() as ChunkID,
+                        // SAFETY: this is safe because we always operate on a leftover, which is checked above!
+                        size: unsafe {
+                            NonZeroUsize::new_unchecked(chunk.size.get() - required_len.get())
+                        },
                     };
                     tracing::trace!("The allocation will leave a Free Chunk: {:?}", &free_chunk);
                     guard.push(free_chunk);
                     chunk.size = required_len;
                 }
-                self.available.fetch_sub(chunk.size, Ordering::Relaxed);
+                self.available
+                    .fetch_sub(chunk.size.get(), Ordering::Relaxed);
 
                 let descriptor =
                     ChunkDescriptor::new(self.segment.segment.id(), chunk.offset, chunk.size);
@@ -219,16 +224,18 @@ impl ShmProviderBackend for PosixShmProviderBackend {
             offset: chunk.chunk,
             size: chunk.len,
         };
-        self.available.fetch_add(free_chunk.size, Ordering::Relaxed);
+        self.available
+            .fetch_add(free_chunk.size.get(), Ordering::Relaxed);
         zlock!(self.free_list).push(free_chunk);
     }
 
     fn defragment(&self) -> usize {
         fn try_merge_adjacent_chunks(a: &Chunk, b: &Chunk) -> Option<Chunk> {
-            let end_offset = a.offset as usize + a.size;
+            let end_offset = a.offset as usize + a.size.get();
             if end_offset == b.offset as usize {
                 Some(Chunk {
-                    size: a.size + b.size,
+                    // SAFETY: this is safe because we operate on non-zero sizes and it will never overflow
+                    size: unsafe { NonZeroUsize::new_unchecked(a.size.get() + b.size.get()) },
                     offset: a.offset,
                 })
             } else {
@@ -256,7 +263,7 @@ impl ShmProviderBackend for PosixShmProviderBackend {
                 match try_merge_adjacent_chunks(&current, &next) {
                     Some(c) => {
                         current = c;
-                        largest = largest.max(current.size);
+                        largest = largest.max(current.size.get());
                         if i == n {
                             guard.push(current)
                         }
@@ -279,7 +286,7 @@ impl ShmProviderBackend for PosixShmProviderBackend {
         self.available.load(Ordering::Relaxed)
     }
 
-    fn layout_for(&self, layout: MemoryLayout) -> ZResult<MemoryLayout> {
+    fn layout_for(&self, layout: MemoryLayout) -> Result<MemoryLayout, ZLayoutError> {
         layout.extend(self.alignment)
     }
 }

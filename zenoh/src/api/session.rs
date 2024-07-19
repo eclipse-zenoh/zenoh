@@ -515,8 +515,8 @@ impl Session {
     /// pointer to it (`Arc<Session>`). This is equivalent to `Arc::new(session)`.
     ///
     /// This is useful to share ownership of the `Session` between several threads
-    /// and tasks. It also allows to create [`Subscriber`](crate::subscriber::Subscriber) and
-    /// [`Queryable`](crate::queryable::Queryable) with static lifetime that can be moved to several
+    /// and tasks. It also allows to create [`Subscriber`](crate::pubsub::Subscriber) and
+    /// [`Queryable`](crate::query::Queryable) with static lifetime that can be moved to several
     /// threads and tasks
     ///
     /// Note: the given zenoh `Session` will be closed when the last reference to
@@ -548,7 +548,7 @@ impl Session {
     /// the program's life. Dropping the returned reference will cause a memory
     /// leak.
     ///
-    /// This is useful to move entities (like [`Subscriber`](crate::subscriber::Subscriber)) which
+    /// This is useful to move entities (like [`Subscriber`](crate::pubsub::Subscriber)) which
     /// lifetimes are bound to the session lifetime in several threads or tasks.
     ///
     /// Note: the given zenoh `Session` cannot be closed any more. At process
@@ -675,9 +675,15 @@ impl Session {
     /// # }
     /// ```
     pub fn new_timestamp(&self) -> Timestamp {
-        let id = self.runtime.zid();
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into(); // UNIX_EPOCH is Returns a Timespec::zero(), Unwrap Should be permissable here
-        Timestamp::new(now, id.into())
+        match self.hlc() {
+            Some(hlc) => hlc.new_timestamp(),
+            None => {
+                // Called in the case that the runtime is not initialized with an hlc
+                // UNIX_EPOCH is Returns a Timespec::zero(), Unwrap Should be permissable here
+                let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into();
+                Timestamp::new(now, self.runtime.zid().into())
+            }
+        }
     }
 }
 
@@ -793,7 +799,7 @@ impl Session {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::{encoding::Encoding, prelude::*};
+    /// use zenoh::{bytes::Encoding, prelude::*};
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// session
@@ -1754,6 +1760,7 @@ impl Session {
         self.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
                 let state = self.state.clone();
+                #[cfg(feature = "unstable")]
                 let zid = self.runtime.zid();
                 async move {
                     tokio::select! {
@@ -1769,6 +1776,7 @@ impl Session {
                                 }
                                 (query.callback)(Reply {
                                     result: Err(Value::new("Timeout", Encoding::ZENOH_STRING).into()),
+                                    #[cfg(feature = "unstable")]
                                     replier_id: Some(zid.into()),
                                 });
                             }
@@ -1868,6 +1876,7 @@ impl Session {
                                 tracing::debug!("Timeout on liveliness query {}! Send error and close.", id);
                                 (query.callback)(Reply {
                                     result: Err(Value::new("Timeout", Encoding::ZENOH_STRING).into()),
+                                    #[cfg(feature = "unstable")]
                                     replier_id: Some(zid.into()),
                                 });
                             }
@@ -1979,7 +1988,7 @@ impl Session {
 }
 
 impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
-    /// Create a [`Subscriber`](crate::subscriber::Subscriber) for the given key expression.
+    /// Create a [`Subscriber`](crate::pubsub::Subscriber) for the given key expression.
     ///
     /// # Arguments
     ///
@@ -2019,12 +2028,12 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
         }
     }
 
-    /// Create a [`Queryable`](crate::queryable::Queryable) for the given key expression.
+    /// Create a [`Queryable`](crate::query::Queryable) for the given key expression.
     ///
     /// # Arguments
     ///
     /// * `key_expr` - The key expression matching the queries the
-    /// [`Queryable`](crate::queryable::Queryable) will reply to
+    /// [`Queryable`](crate::query::Queryable) will reply to
     ///
     /// # Examples
     /// ```no_run
@@ -2063,7 +2072,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
         }
     }
 
-    /// Create a [`Publisher`](crate::publisher::Publisher) for the given key expression.
+    /// Create a [`Publisher`](crate::pubsub::Publisher) for the given key expression.
     ///
     /// # Arguments
     ///
@@ -2232,6 +2241,7 @@ impl Primitives for Session {
                                             #[cfg(feature = "unstable")]
                                             attachment: None,
                                         }),
+                                        #[cfg(feature = "unstable")]
                                         replier_id: None,
                                     };
 
@@ -2398,8 +2408,9 @@ impl Primitives for Session {
                             encoding: e.encoding.into(),
                         };
                         let new_reply = Reply {
-                            replier_id: e.ext_sinfo.map(|info| info.id.zid),
                             result: Err(value.into()),
+                            #[cfg(feature = "unstable")]
+                            replier_id: e.ext_sinfo.map(|info| info.id.zid),
                         };
                         callback(new_reply);
                     }
@@ -2481,6 +2492,7 @@ impl Primitives for Session {
                         let sample = info.into_sample(key_expr.into_owned(), payload, attachment);
                         let new_reply = Reply {
                             result: Ok(sample),
+                            #[cfg(feature = "unstable")]
                             replier_id: None,
                         };
                         let callback =
@@ -2620,8 +2632,8 @@ impl fmt::Debug for Session {
 /// Functions to create zenoh entities
 ///
 /// This trait contains functions to create zenoh entities like
-/// [`Subscriber`](crate::subscriber::Subscriber), and
-/// [`Queryable`](crate::queryable::Queryable)
+/// [`Subscriber`](crate::pubsub::Subscriber), and
+/// [`Queryable`](crate::query::Queryable)
 ///
 /// This trait is implemented by [`Session`](crate::session::Session) itself and
 /// by wrappers [`SessionRef`](crate::session::SessionRef) and [`Arc<Session>`](std::sync::Arc)
@@ -2644,7 +2656,7 @@ impl fmt::Debug for Session {
 /// # }
 /// ```
 pub trait SessionDeclarations<'s, 'a> {
-    /// Create a [`Subscriber`](crate::subscriber::Subscriber) for the given key expression.
+    /// Create a [`Subscriber`](crate::pubsub::Subscriber) for the given key expression.
     ///
     /// # Arguments
     ///
@@ -2675,12 +2687,12 @@ pub trait SessionDeclarations<'s, 'a> {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>;
 
-    /// Create a [`Queryable`](crate::queryable::Queryable) for the given key expression.
+    /// Create a [`Queryable`](crate::query::Queryable) for the given key expression.
     ///
     /// # Arguments
     ///
     /// * `key_expr` - The key expression matching the queries the
-    /// [`Queryable`](crate::queryable::Queryable) will reply to
+    /// [`Queryable`](crate::query::Queryable) will reply to
     ///
     /// # Examples
     /// ```no_run
@@ -2710,7 +2722,7 @@ pub trait SessionDeclarations<'s, 'a> {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>;
 
-    /// Create a [`Publisher`](crate::publisher::Publisher) for the given key expression.
+    /// Create a [`Publisher`](crate::pubsub::Publisher) for the given key expression.
     ///
     /// # Arguments
     ///
@@ -2826,11 +2838,12 @@ impl crate::net::primitives::EPrimitives for Session {
 /// # #[tokio::main]
 /// # async fn main() {
 /// use std::str::FromStr;
-/// use zenoh::{info::ZenohId, prelude::*};
+/// use zenoh::{session::ZenohId, prelude::*};
 ///
 /// let mut config = zenoh::config::peer();
 /// config.set_id(ZenohId::from_str("221b72df20924c15b8794c6bdb471150").unwrap());
-/// config.connect.endpoints.extend("tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".split(',').map(|s|s.parse().unwrap()));
+/// config.connect.endpoints.set(
+///     ["tcp/10.10.10.10:7447", "tcp/11.11.11.11:7447"].iter().map(|s|s.parse().unwrap()).collect());
 ///
 /// let session = zenoh::open(config).await.unwrap();
 /// # }

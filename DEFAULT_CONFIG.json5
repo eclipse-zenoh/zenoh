@@ -14,7 +14,7 @@
   /// The node's metadata (name, location, DNS name, etc.) Arbitrary JSON data not interpreted by zenoh and available in admin space @/<zid>/router, @/<zid>/peer or @/<zid>/client
   metadata: {
     name: "strawberry",
-    location: "Penny Lane"
+    location: "Penny Lane",
   },
 
   /// Which endpoints to connect to. E.g. tcp/localhost:7447.
@@ -23,9 +23,13 @@
   /// E.g. tcp/192.168.0.1:7447#iface=eth0, for connect only if the IP address is reachable via the interface eth0
   connect: {
     /// timeout waiting for all endpoints connected (0: no retry, -1: infinite timeout)
-    /// Accepts a single value or different values for router, peer and client.
+    /// Accepts a single value (e.g. timeout_ms: 0)
+    /// or different values for router, peer and client (e.g. timeout_ms: { router: -1, peer: -1, client: 0 }).
     timeout_ms: { router: -1, peer: -1, client: 0 },
 
+    /// The list of endpoints to connect to.
+    /// Accepts a single list (e.g. endpoints: ["tcp/10.10.10.10:7447", "tcp/11.11.11.11:7447"])
+    /// or different lists for router, peer and client (e.g. endpoints: { router: ["tcp/10.10.10.10:7447"], peer: ["tcp/11.11.11.11:7447"] }).
     endpoints: [
       // "<proto>/<address>"
     ],
@@ -49,19 +53,21 @@
     },
   },
 
-  /// Which endpoints to listen on. E.g. tcp/localhost:7447.
+  /// Which endpoints to listen on. E.g. tcp/0.0.0.0:7447.
   /// By configuring the endpoints, it is possible to tell zenoh which are the endpoints that other routers,
   /// peers, or client can use to establish a zenoh session.
   /// For TCP/UDP on Linux, it is possible additionally specify the interface to be listened to:
   /// E.g. tcp/0.0.0.0:7447#iface=eth0, for listen connection only on eth0
   listen: {
     /// timeout waiting for all listen endpoints (0: no retry, -1: infinite timeout)
-    /// Accepts a single value or different values for router, peer and client.
+    /// Accepts a single value (e.g. timeout_ms: 0)
+    /// or different values for router, peer and client (e.g. timeout_ms: { router: -1, peer: -1, client: 0 }).
     timeout_ms: 0,
 
-    endpoints: [
-      // "<proto>/<address>"
-    ],
+    /// The list of endpoints to listen on.
+    /// Accepts a single list (e.g. endpoints: ["tcp/[::]:7447", "udp/[::]:7447"])
+    /// or different lists for router, peer and client (e.g. endpoints: { router: ["tcp/[::]:7447"], peer: ["tcp/[::]:0"] }).
+    endpoints: { router: ["tcp/[::]:7447"], peer: ["tcp/[::]:0"] },
 
     /// Global listen configuration,
     /// Accepts a single value or different values for router, peer and client.
@@ -98,9 +104,10 @@
       /// The time-to-live on multicast scouting packets
       ttl: 1,
       /// Which type of Zenoh instances to automatically establish sessions with upon discovery on UDP multicast.
-      /// Accepts a single value or different values for router, peer and client.
+      /// Accepts a single value (e.g. autoconnect: ["router", "peer"])
+      /// or different values for router, peer and client (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
       /// Each value is bit-or-like combinations of "peer", "router" and "client".
-      autoconnect: { router: "", peer: "router|peer" },
+      autoconnect: { router: [], peer: ["router", "peer"] },
       /// Whether or not to listen for scout messages on UDP multicast and reply to them.
       listen: true,
     },
@@ -115,9 +122,10 @@
       /// direct connectivity with each other.
       multihop: false,
       /// Which type of Zenoh instances to automatically establish sessions with upon discovery on gossip.
-      /// Accepts a single value or different values for router, peer and client.
+      /// Accepts a single value (e.g. autoconnect: ["router", "peer"])
+      /// or different values for router, peer and client (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
       /// Each value is bit-or-like combinations of "peer", "router" and "client".
-      autoconnect: { router: "", peer: "router|peer" },
+      autoconnect: { router: [], peer: ["router", "peer"] },
     },
   },
 
@@ -200,7 +208,7 @@
   //       "interfaces": [
   //         "lo0"
   //       ],
-  //       /// Subjects can be cert_common_names when using TLS or Quic 
+  //       /// Subjects can be cert_common_names when using TLS or Quic
   //       "cert_common_names": [
   //         "example.zenoh.io"
   //       ],
@@ -230,7 +238,7 @@
       /// NOTE: Currently, the LowLatency transport doesn't preserve QoS prioritization.
       /// NOTE: Due to the note above, 'lowlatency' is incompatible with 'qos' option, so in order to
       ///       enable 'lowlatency' you need to explicitly disable 'qos'.
-      /// NOTE: LowLatency transport does not support the fragmentation, so the message size should be 
+      /// NOTE: LowLatency transport does not support the fragmentation, so the message size should be
       ///       smaller than the tx batch_size.
       lowlatency: false,
       /// Enables QoS on unicast communications.
@@ -309,7 +317,7 @@
           /// Using CongestionControl::Drop the message might be dropped, depending on conditions configured here.
           congestion_control: {
             /// The maximum time in microseconds to wait for an available batch before dropping the message if still no batch is available.
-            wait_before_drop: 1000
+            wait_before_drop: 1000,
           },
           /// The initial exponential backoff time in nanoseconds to allow the batching to eventually progress.
           /// Higher values lead to a more aggressive batching but it will introduce additional latency.
@@ -531,5 +539,4 @@
   //     __config__: "./plugins/zenoh-plugin-storage-manager/config.json5",
   //   }
   // },
-
 }

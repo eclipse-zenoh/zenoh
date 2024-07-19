@@ -21,7 +21,7 @@ use std::{
 use zenoh_core::{Resolvable, Wait};
 use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
 use zenoh_protocol::{
-    core::{key_expr::canon::Canonizable, ExprId, WireExpr},
+    core::{key_expr::canon::Canonize, ExprId, WireExpr},
     network::{declare, DeclareBody, Mapping, UndeclareKeyExpr},
 };
 use zenoh_result::ZResult;
@@ -145,7 +145,7 @@ impl<'a> KeyExpr<'a> {
     pub fn autocanonize<T, E>(mut t: T) -> Result<Self, E>
     where
         Self: TryFrom<T, Error = E>,
-        T: Canonizable,
+        T: Canonize,
     {
         t.canonize();
         Self::new(t)

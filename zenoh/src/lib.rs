@@ -111,33 +111,24 @@ pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
     ]
 );
 
+#[allow(deprecated)]
+pub use zenoh_core::{AsyncResolve, SyncResolve};
+pub use zenoh_core::{Resolvable, Resolve, Wait};
+/// A zenoh error.
+pub use zenoh_result::Error;
+/// A zenoh result.
+pub use zenoh_result::ZResult as Result;
 #[doc(inline)]
-pub use {
-    crate::{
-        config::Config,
-        core::{Error, Result},
-        scouting::scout,
-        session::{open, Session},
-    },
-    zenoh_util::{init_log_from_env_or, try_init_log_from_env},
+pub use zenoh_util::{init_log_from_env_or, try_init_log_from_env};
+
+#[doc(inline)]
+pub use crate::{
+    config::Config,
+    scouting::scout,
+    session::{open, Session},
 };
 
 pub mod prelude;
-
-/// Zenoh core types
-pub mod core {
-    #[allow(deprecated)]
-    pub use zenoh_core::{AsyncResolve, SyncResolve};
-    pub use zenoh_core::{Resolvable, Resolve, Wait};
-    pub use zenoh_result::ErrNo;
-    /// A zenoh error.
-    pub use zenoh_result::Error;
-    /// A zenoh result.
-    pub use zenoh_result::ZResult as Result;
-
-    /// Zenoh message priority
-    pub use crate::api::publisher::Priority;
-}
 
 /// [Key expression](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md) are Zenoh's address space.
 ///
@@ -180,7 +171,7 @@ pub mod key_expr {
     }
     #[zenoh_macros::unstable]
     pub use zenoh_keyexpr::SetIntersectionLevel;
-    pub use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
+    pub use zenoh_keyexpr::{canon::Canonize, keyexpr, OwnedKeyExpr};
 
     pub use crate::api::key_expr::{KeyExpr, KeyExprUndeclaration};
     // keyexpr format macro support
@@ -196,22 +187,17 @@ pub mod key_expr {
 
 /// Zenoh [`Session`] and associated types
 pub mod session {
+    #[zenoh_macros::unstable]
+    pub use zenoh_config::wrappers::{EntityGlobalId, ZenohId};
+    pub use zenoh_protocol::core::EntityId;
+
     #[zenoh_macros::internal]
     pub use crate::api::session::{init, InitBuilder};
     pub use crate::api::{
         builders::publisher::{SessionDeleteBuilder, SessionPutBuilder},
+        info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, SessionInfo, ZenohIdBuilder},
         query::SessionGetBuilder,
         session::{open, OpenBuilder, Session, SessionDeclarations, SessionRef, Undeclarable},
-    };
-}
-
-/// Tools to access information about the current zenoh [`Session`].
-pub mod info {
-    pub use zenoh_config::wrappers::{EntityGlobalId, ZenohId};
-    pub use zenoh_protocol::core::EntityId;
-
-    pub use crate::api::info::{
-        PeersZenohIdBuilder, RoutersZenohIdBuilder, SessionInfo, ZenohIdBuilder,
     };
 }
 
@@ -223,91 +209,62 @@ pub mod sample {
     pub use crate::api::sample::SourceInfo;
     pub use crate::api::{
         builders::sample::{
-            EncodingBuilderTrait, QoSBuilderTrait, SampleBuilder, SampleBuilderAny,
-            SampleBuilderDelete, SampleBuilderPut, SampleBuilderTrait, TimestampBuilderTrait,
+            SampleBuilder, SampleBuilderAny, SampleBuilderDelete, SampleBuilderPut,
+            SampleBuilderTrait, TimestampBuilderTrait,
         },
         sample::{Sample, SampleFields, SampleKind, SourceSn},
     };
 }
 
-/// Encoding support
-pub mod encoding {
-    pub use crate::api::encoding::Encoding;
-}
-
 /// Payload primitives
 pub mod bytes {
-    pub use crate::api::bytes::{
-        Deserialize, OptionZBytes, Serialize, ZBytes, ZBytesIterator, ZBytesReader, ZBytesWriter,
-        ZDeserializeError, ZSerde,
+    pub use crate::api::{
+        builders::sample::EncodingBuilderTrait,
+        bytes::{
+            Deserialize, OptionZBytes, Serialize, ZBytes, ZBytesIterator, ZBytesReader,
+            ZBytesWriter, ZDeserializeError, ZSerde,
+        },
+        encoding::Encoding,
     };
 }
 
-/// [Selector](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) to issue queries
-pub mod selector {
-    pub use zenoh_protocol::core::Parameters;
-    #[zenoh_macros::unstable]
-    pub use zenoh_util::time_range::{TimeBound, TimeExpr, TimeRange};
-
-    pub use crate::api::selector::Selector;
-    #[zenoh_macros::unstable]
-    pub use crate::api::selector::ZenohParameters;
-}
-
-/// Subscribing primitives
-pub mod subscriber {
-    /// The kind of reliability.
+/// Pub/sub primitives
+pub mod pubsub {
     pub use zenoh_protocol::core::Reliability;
 
-    pub use crate::api::subscriber::{FlumeSubscriber, Subscriber, SubscriberBuilder};
-}
-
-/// Publishing primitives
-pub mod publisher {
-    pub use zenoh_protocol::core::CongestionControl;
-
     #[zenoh_macros::unstable]
-    pub use crate::api::publisher::MatchingListener;
-    #[zenoh_macros::unstable]
-    pub use crate::api::publisher::MatchingListenerBuilder;
-    #[zenoh_macros::unstable]
-    pub use crate::api::publisher::MatchingListenerUndeclaration;
-    #[zenoh_macros::unstable]
-    pub use crate::api::publisher::MatchingStatus;
-    #[zenoh_macros::unstable]
-    pub use crate::api::publisher::PublisherDeclarations;
-    #[zenoh_macros::unstable]
-    pub use crate::api::publisher::PublisherRef;
+    pub use crate::api::publisher::{
+        MatchingListener, MatchingListenerBuilder, MatchingListenerUndeclaration, MatchingStatus,
+        PublisherDeclarations, PublisherRef,
+    };
     pub use crate::api::{
         builders::publisher::{
             PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
             PublisherDeleteBuilder, PublisherPutBuilder,
         },
         publisher::{Publisher, PublisherUndeclaration},
+        subscriber::{FlumeSubscriber, Subscriber, SubscriberBuilder},
     };
 }
 
-/// Get operation primitives
-pub mod querier {
-    // Later the `Querier` with `get`` operation will be added here, in addition to `Session::get`,
-    // similarly to the `Publisher` with `put` operation and `Session::put`
-}
-
-/// Query and Reply primitives
+/// Query/reply primitives
 pub mod query {
+    pub use zenoh_protocol::core::Parameters;
     #[zenoh_macros::unstable]
-    pub use crate::api::query::ReplyKeyExpr;
+    pub use zenoh_util::time_range::{TimeBound, TimeExpr, TimeRange};
+
     #[zenoh_macros::internal]
     pub use crate::api::queryable::ReplySample;
+    #[zenoh_macros::unstable]
+    pub use crate::api::{query::ReplyKeyExpr, selector::ZenohParameters};
     pub use crate::api::{
         query::{ConsolidationMode, QueryConsolidation, QueryTarget, Reply, ReplyError},
-        queryable::{Query, ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
+        queryable::{
+            Query, Queryable, QueryableBuilder, QueryableUndeclaration, ReplyBuilder,
+            ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder,
+        },
+        selector::Selector,
     };
-}
-
-/// Queryable primitives
-pub mod queryable {
-    pub use crate::api::queryable::{Queryable, QueryableBuilder, QueryableUndeclaration};
 }
 
 /// Callback handler trait
@@ -316,6 +273,13 @@ pub mod handlers {
         locked, Callback, CallbackDrop, DefaultHandler, FifoChannel, IntoHandler, RingChannel,
         RingChannelHandler,
     };
+}
+
+/// Quality of service primitives
+pub mod qos {
+    pub use zenoh_protocol::core::CongestionControl;
+
+    pub use crate::api::{builders::sample::QoSBuilderTrait, publisher::Priority};
 }
 
 /// Scouting primitives
@@ -389,8 +353,6 @@ pub mod liveliness {
 /// Timestamp support
 pub mod time {
     pub use zenoh_protocol::core::{Timestamp, TimestampId, NTP64};
-
-    pub use crate::api::time::new_timestamp;
 }
 
 /// Configuration to pass to [`open`] and [`scout`] functions and associated constants
@@ -454,6 +416,8 @@ pub mod internal {
             PluginsManager, Response, RunningPlugin, RunningPluginTrait, ZenohPlugin, PLUGIN_PREFIX,
         };
     }
+
+    pub use zenoh_result::ErrNo;
 
     pub use crate::api::value::Value;
 }

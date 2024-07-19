@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::num::NonZeroUsize;
+
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -62,6 +64,18 @@ where
     }
 }
 
+impl<W> WCodec<NonZeroUsize, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: NonZeroUsize) -> Self::Output {
+        self.write(&mut *writer, x.get())?;
+        Ok(())
+    }
+}
+
 impl<W> WCodec<&ShmBufInfo, &mut W> for Zenoh080
 where
     W: Writer,
@@ -80,7 +94,7 @@ where
 
         self.write(&mut *writer, data_descriptor)?;
         self.write(&mut *writer, shm_protocol)?;
-        self.write(&mut *writer, data_len)?;
+        self.write(&mut *writer, *data_len)?;
         self.write(&mut *writer, watchdog_descriptor)?;
         self.write(&mut *writer, header_descriptor)?;
         self.write(&mut *writer, generation)?;
@@ -135,6 +149,19 @@ where
             chunk,
             len,
         })
+    }
+}
+
+impl<R> RCodec<NonZeroUsize, &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<NonZeroUsize, Self::Error> {
+        let size: usize = self.read(&mut *reader)?;
+        let size = NonZeroUsize::new(size).ok_or(DidntRead)?;
+        Ok(size)
     }
 }
 
