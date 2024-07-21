@@ -47,7 +47,7 @@ impl TransportMulticastInner {
         {
             if self.manager.config.multicast.is_shm {
                 if let Err(e) = crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shmr) {
-                    error!("Error receiving SHM buffer: {e}");
+                    tracing::debug!("Error receiving SHM buffer: {e}");
                     return Ok(());
                 }
             }

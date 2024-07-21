@@ -16,7 +16,7 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    str::{self, FromStr},
+    str,
     time::{Duration, SystemTime},
 };
 
@@ -26,8 +26,7 @@ use async_std::{
 };
 use flume::{Receiver, Sender};
 use futures::{pin_mut, select, FutureExt};
-use urlencoding::encode;
-use zenoh::prelude::*;
+use zenoh::{key_expr::keyexpr, prelude::*};
 use zenoh_backend_traits::config::{ReplicaConfig, StorageConfig};
 
 use crate::{backends_mgt::StoreIntercept, storages_mgt::StorageMessage};
@@ -50,9 +49,11 @@ const INTERVALS: &str = "intervals";
 const SUBINTERVALS: &str = "subintervals";
 const CONTENTS: &str = "contents";
 pub const EPOCH_START: SystemTime = SystemTime::UNIX_EPOCH;
-
-pub const ALIGN_PREFIX: &str = "@-digest";
 pub const SUBINTERVAL_CHUNKS: usize = 10;
+
+lazy_static::lazy_static!(
+    static ref KE_PREFIX_DIGEST: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("@-digest") };
+);
 
 // A replica consists of a storage service and services required for anti-entropy
 // To perform anti-entropy, we need a `Digest` that contains the state of the datastore
@@ -135,7 +136,7 @@ impl Replica {
         // digest sub
         let digest_sub = replica.start_digest_sub(tx_digest).fuse();
         // queryable for alignment
-        let digest_key = Replica::get_digest_key(&replica.key_expr, ALIGN_PREFIX);
+        let digest_key = Replica::get_digest_key(&replica.key_expr);
         let align_q = AlignQueryable::start_align_queryable(
             replica.session.clone(),
             digest_key.clone(),
@@ -199,9 +200,7 @@ impl Replica {
     pub async fn start_digest_sub(&self, tx: Sender<(String, Digest)>) {
         let mut received = HashMap::<String, Timestamp>::new();
 
-        let digest_key = Replica::get_digest_key(&self.key_expr, ALIGN_PREFIX)
-            .join("**")
-            .unwrap();
+        let digest_key = Replica::get_digest_key(&self.key_expr).join("**").unwrap();
 
         tracing::debug!(
             "[DIGEST_SUB] Declaring Subscriber named {} on '{}'",
@@ -222,8 +221,8 @@ impl Replica {
                     continue;
                 }
             };
-            let from = &sample.key_expr().as_str()
-                [Replica::get_digest_key(&self.key_expr, ALIGN_PREFIX).len() + 1..];
+            let from =
+                &sample.key_expr().as_str()[Replica::get_digest_key(&self.key_expr).len() + 1..];
 
             let digest: Digest = match serde_json::from_reader(sample.payload().reader()) {
                 Ok(digest) => digest,
@@ -267,7 +266,7 @@ impl Replica {
     // Create a publisher to periodically publish digests from the snapshotter
     // Publish on <align_prefix>/<encoded_key_expr>/<replica_name>
     pub async fn start_digest_pub(&self, snapshotter: Arc<Snapshotter>) {
-        let digest_key = Replica::get_digest_key(&self.key_expr, ALIGN_PREFIX)
+        let digest_key = Replica::get_digest_key(&self.key_expr)
             .join(&self.name)
             .unwrap();
 
@@ -333,12 +332,8 @@ impl Replica {
         true
     }
 
-    fn get_digest_key(key_expr: &OwnedKeyExpr, align_prefix: &str) -> OwnedKeyExpr {
-        let key_expr = encode(key_expr).to_string();
-        OwnedKeyExpr::from_str(align_prefix)
-            .unwrap()
-            .join(&key_expr)
-            .unwrap()
+    fn get_digest_key(key_expr: &keyexpr) -> OwnedKeyExpr {
+        *KE_PREFIX_DIGEST / key_expr
     }
 
     pub fn get_hot_interval_number(publication_interval: Duration, delta: Duration) -> usize {
