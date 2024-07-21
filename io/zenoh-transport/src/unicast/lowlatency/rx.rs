@@ -11,8 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "shared-memory")]
-use tracing::error;
 use zenoh_buffers::{
     reader::{HasReader, Reader},
     ZSlice,

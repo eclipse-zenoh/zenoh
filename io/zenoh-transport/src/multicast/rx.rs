@@ -13,8 +13,6 @@
 //
 use std::sync::MutexGuard;
 
-#[cfg(feature = "shared-memory")]
-use tracing::error;
 use zenoh_core::{zlock, zread};
 use zenoh_protocol::{
     core::{Locator, Priority, Reliability},
