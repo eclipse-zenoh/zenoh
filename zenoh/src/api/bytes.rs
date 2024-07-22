@@ -24,7 +24,7 @@ use zenoh_buffers::{
     buffer::{Buffer, SplitBuffer},
     reader::{DidntRead, HasReader, Reader},
     writer::HasWriter,
-    ZBuf, ZBufReader, ZBufWriter, ZSlice,
+    ZBuf, ZBufReader, ZBufWriter, ZSlice, ZSliceBuffer,
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_protocol::{
@@ -1930,40 +1930,6 @@ impl TryFrom<&mut ZBytes> for serde_yaml::Value {
     }
 }
 
-// Bytes
-impl Serialize<bytes::Bytes> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: bytes::Bytes) -> Self::Output {
-        Self.serialize(&t)
-    }
-}
-
-impl Serialize<&bytes::Bytes> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: &bytes::Bytes) -> Self::Output {
-        ZBytes::from(t.as_ref())
-    }
-}
-
-impl Serialize<&mut bytes::Bytes> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: &mut bytes::Bytes) -> Self::Output {
-        ZBytes::from(t.as_ref())
-    }
-}
-
-impl Deserialize<bytes::Bytes> for ZSerde {
-    type Input<'a> = &'a ZBytes;
-    type Error = Infallible;
-
-    fn deserialize(self, v: Self::Input<'_>) -> Result<bytes::Bytes, Self::Error> {
-        Ok(bytes::Bytes::from(v.into::<Vec<u8>>()))
-    }
-}
-
 // CBOR
 impl Serialize<serde_cbor::Value> for ZSerde {
     type Output = Result<ZBytes, serde_cbor::Error>;
@@ -2130,6 +2096,81 @@ impl TryFrom<&ZBytes> for serde_pickle::Value {
 
 impl TryFrom<&mut ZBytes> for serde_pickle::Value {
     type Error = serde_pickle::Error;
+
+    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&*value)
+    }
+}
+
+// bytes::Bytes
+
+// Define a transparent wrapper type to get around Rust's orphan rule.
+// This allows to use bytes::Bytes directly as supporting buffer of a
+// ZSlice resulting in zero-copy and zero-alloc bytes::Bytes serialization.
+#[repr(transparent)]
+#[derive(Debug)]
+struct BytesWrap(bytes::Bytes);
+
+impl ZSliceBuffer for BytesWrap {
+    fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
+
+impl Serialize<bytes::Bytes> for ZSerde {
+    type Output = ZBytes;
+
+    fn serialize(self, s: bytes::Bytes) -> Self::Output {
+        ZBytes::new(BytesWrap(s))
+    }
+}
+
+impl From<bytes::Bytes> for ZBytes {
+    fn from(t: bytes::Bytes) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl Deserialize<bytes::Bytes> for ZSerde {
+    type Input<'a> = &'a ZBytes;
+    type Error = Infallible;
+
+    fn deserialize(self, v: Self::Input<'_>) -> Result<bytes::Bytes, Self::Error> {
+        // bytes::Bytes can be constructed only by passing ownership to the constructor.
+        // Thereofore, here we are forced to allocate a vector and copy the whole ZBytes
+        // content since bytes::Bytes does not support anything else than Box<u8> (and its
+        // variants like Vec<u8> and String).
+        let v: Vec<u8> = ZSerde.deserialize(v).unwrap_infallible();
+        Ok(bytes::Bytes::from(v))
+    }
+}
+
+impl TryFrom<ZBytes> for bytes::Bytes {
+    type Error = Infallible;
+
+    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&value)
+    }
+}
+
+impl TryFrom<&ZBytes> for bytes::Bytes {
+    type Error = Infallible;
+
+    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(value)
+    }
+}
+
+impl TryFrom<&mut ZBytes> for bytes::Bytes {
+    type Error = Infallible;
 
     fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(&*value)
