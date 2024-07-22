@@ -211,9 +211,8 @@ pub struct SessionGetBuilder<'a, 'b, Handler> {
     pub(crate) source_info: SourceInfo,
 }
 
-#[zenoh_macros::unstable]
 impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
-    #[cfg(feature = "unstable")]
+    #[zenoh_macros::unstable]
     fn source_info(self, source_info: SourceInfo) -> Self {
         Self {
             source_info,
