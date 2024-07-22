@@ -139,6 +139,8 @@ impl InterceptorFactoryTrait for AclEnforcer {
             .collect::<Vec<_>>();
         if interfaces.is_empty() {
             interfaces.push(None);
+        } else if interfaces.len() > 1 {
+            tracing::warn!("Transport returned multiple network interfaces, current ACL logic might incorrectly apply filters in this case!");
         }
 
         let mut auth_subjects = HashSet::new();
