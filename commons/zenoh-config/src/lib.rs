@@ -107,7 +107,7 @@ pub struct DownsamplingItemConf {
 pub struct AclConfigRule {
     pub id: String,
     pub key_exprs: Vec<String>,
-    pub actions: Vec<Action>,
+    pub messages: Vec<AclMessage>,
     pub flows: Option<Vec<InterceptorFlow>>,
     pub permission: Permission,
 }
@@ -139,14 +139,14 @@ pub struct AclConfigPolicyEntry {
 pub struct PolicyRule {
     pub subject_id: usize,
     pub key_expr: String,
-    pub action: Action,
+    pub message: AclMessage,
     pub permission: Permission,
     pub flow: InterceptorFlow,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub enum Action {
+pub enum AclMessage {
     Put,
     DeclareSubscriber,
     Get,

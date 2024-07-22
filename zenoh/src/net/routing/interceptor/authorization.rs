@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use ahash::RandomState;
 use itertools::Itertools;
 use zenoh_config::{
-    AclConfig, AclConfigPolicyEntry, AclConfigRule, AclConfigSubjects, Action, CertCommonName,
+    AclConfig, AclConfigPolicyEntry, AclConfigRule, AclConfigSubjects, AclMessage, CertCommonName,
     InterceptorFlow, Interface, Permission, PolicyRule, Username,
 };
 use zenoh_keyexpr::{
@@ -169,20 +169,20 @@ struct ActionPolicy {
 }
 
 impl ActionPolicy {
-    fn action(&self, action: Action) -> &PermissionPolicy {
+    fn action(&self, action: AclMessage) -> &PermissionPolicy {
         match action {
-            Action::Get => &self.get,
-            Action::Put => &self.put,
-            Action::DeclareSubscriber => &self.declare_subscriber,
-            Action::DeclareQueryable => &self.declare_queryable,
+            AclMessage::Get => &self.get,
+            AclMessage::Put => &self.put,
+            AclMessage::DeclareSubscriber => &self.declare_subscriber,
+            AclMessage::DeclareQueryable => &self.declare_queryable,
         }
     }
-    fn action_mut(&mut self, action: Action) -> &mut PermissionPolicy {
+    fn action_mut(&mut self, action: AclMessage) -> &mut PermissionPolicy {
         match action {
-            Action::Get => &mut self.get,
-            Action::Put => &mut self.put,
-            Action::DeclareSubscriber => &mut self.declare_subscriber,
-            Action::DeclareQueryable => &mut self.declare_queryable,
+            AclMessage::Get => &mut self.get,
+            AclMessage::Put => &mut self.put,
+            AclMessage::DeclareSubscriber => &mut self.declare_subscriber,
+            AclMessage::DeclareQueryable => &mut self.declare_queryable,
         }
     }
 }
@@ -304,7 +304,7 @@ impl PolicyEnforcer {
                         let subject_policy = main_policy.entry(rule.subject_id).or_default();
                         subject_policy
                             .flow_mut(rule.flow)
-                            .action_mut(rule.action)
+                            .action_mut(rule.message)
                             .permission_mut(rule.permission)
                             .insert(keyexpr::new(&rule.key_expr)?, true);
 
@@ -358,8 +358,8 @@ impl PolicyEnforcer {
             }
             // Config validation
             let mut validation_err = String::new();
-            if config_rule.actions.is_empty() {
-                validation_err.push_str("ACL config actions list is empty. ");
+            if config_rule.messages.is_empty() {
+                validation_err.push_str("ACL config messages list is empty. ");
             }
             if config_rule.flows.as_ref().unwrap().is_empty() {
                 validation_err.push_str("ACL config flows list is empty. ");
@@ -503,12 +503,12 @@ impl PolicyEnforcer {
                     let subject_combination_ids = subject_id_map.get(subject_config_id).unwrap();
                     for subject_id in subject_combination_ids {
                         for flow in rule.flows.as_ref().unwrap() {
-                            for action in &rule.actions {
+                            for message in &rule.messages {
                                 for key_expr in &rule.key_exprs {
                                     policy_rules.push(PolicyRule {
                                         subject_id: *subject_id,
                                         key_expr: key_expr.clone(),
-                                        action: *action,
+                                        message: *message,
                                         permission: rule.permission,
                                         flow: *flow,
                                     });
@@ -532,7 +532,7 @@ impl PolicyEnforcer {
         &self,
         subject: usize,
         flow: InterceptorFlow,
-        action: Action,
+        message: AclMessage,
         key_expr: &str,
     ) -> ZResult<Permission> {
         let policy_map = &self.policy_map;
@@ -543,7 +543,7 @@ impl PolicyEnforcer {
             Some(single_policy) => {
                 let deny_result = single_policy
                     .flow(flow)
-                    .action(action)
+                    .action(message)
                     .deny
                     .nodes_including(keyexpr::new(&key_expr)?)
                     .count();
@@ -555,7 +555,7 @@ impl PolicyEnforcer {
                 } else {
                     let allow_result = single_policy
                         .flow(flow)
-                        .action(action)
+                        .action(message)
                         .allow
                         .nodes_including(keyexpr::new(&key_expr)?)
                         .count();

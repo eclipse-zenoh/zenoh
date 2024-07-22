@@ -22,7 +22,7 @@ use std::{any::Any, collections::HashSet, iter, sync::Arc};
 
 use itertools::Itertools;
 use zenoh_config::{
-    AclConfig, Action, CertCommonName, InterceptorFlow, Interface, Permission, Username,
+    AclConfig, AclMessage, CertCommonName, InterceptorFlow, Interface, Permission, Username,
 };
 use zenoh_protocol::{
     core::ZenohIdProto,
@@ -238,7 +238,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                 payload: PushBody::Put(_),
                 ..
             }) => {
-                if self.action(Action::Put, "Put (ingress)", key_expr?) == Permission::Deny {
+                if self.action(AclMessage::Put, "Put (ingress)", key_expr?) == Permission::Deny {
                     return None;
                 }
             }
@@ -246,7 +246,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                 payload: RequestBody::Query(_),
                 ..
             }) => {
-                if self.action(Action::Get, "Get (ingress)", key_expr?) == Permission::Deny {
+                if self.action(AclMessage::Get, "Get (ingress)", key_expr?) == Permission::Deny {
                     return None;
                 }
             }
@@ -255,7 +255,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                 ..
             }) => {
                 if self.action(
-                    Action::DeclareSubscriber,
+                    AclMessage::DeclareSubscriber,
                     "Declare Subscriber (ingress)",
                     key_expr?,
                 ) == Permission::Deny
@@ -268,7 +268,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                 ..
             }) => {
                 if self.action(
-                    Action::DeclareQueryable,
+                    AclMessage::DeclareQueryable,
                     "Declare Queryable (ingress)",
                     key_expr?,
                 ) == Permission::Deny
@@ -307,7 +307,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                 payload: PushBody::Put(_),
                 ..
             }) => {
-                if self.action(Action::Put, "Put (egress)", key_expr?) == Permission::Deny {
+                if self.action(AclMessage::Put, "Put (egress)", key_expr?) == Permission::Deny {
                     return None;
                 }
             }
@@ -315,7 +315,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                 payload: RequestBody::Query(_),
                 ..
             }) => {
-                if self.action(Action::Get, "Get (egress)", key_expr?) == Permission::Deny {
+                if self.action(AclMessage::Get, "Get (egress)", key_expr?) == Permission::Deny {
                     return None;
                 }
             }
@@ -324,7 +324,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                 ..
             }) => {
                 if self.action(
-                    Action::DeclareSubscriber,
+                    AclMessage::DeclareSubscriber,
                     "Declare Subscriber (egress)",
                     key_expr?,
                 ) == Permission::Deny
@@ -337,7 +337,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                 ..
             }) => {
                 if self.action(
-                    Action::DeclareQueryable,
+                    AclMessage::DeclareQueryable,
                     "Declare Queryable (egress)",
                     key_expr?,
                 ) == Permission::Deny
@@ -355,7 +355,7 @@ pub trait AclActionMethods {
     fn zid(&self) -> ZenohIdProto;
     fn flow(&self) -> InterceptorFlow;
     fn authn_ids(&self) -> Vec<AuthSubject>;
-    fn action(&self, action: Action, log_msg: &str, key_expr: &str) -> Permission {
+    fn action(&self, action: AclMessage, log_msg: &str, key_expr: &str) -> Permission {
         let policy_enforcer = self.policy_enforcer();
         let authn_ids: Vec<AuthSubject> = self.authn_ids();
         let zid = self.zid();
