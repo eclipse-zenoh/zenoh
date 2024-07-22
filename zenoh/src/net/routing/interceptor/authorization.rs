@@ -76,6 +76,26 @@ pub(crate) struct SubjectQuery {
     pub(crate) username: Option<Username>,
 }
 
+impl std::fmt::Display for SubjectQuery {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let subject_names = [
+            self.interface.as_ref().map(|face| format!("{face}")),
+            self.cert_common_name.as_ref().map(|ccn| format!("{ccn}")),
+            self.username.as_ref().map(|username| format!("{username}")),
+        ];
+        write!(
+            f,
+            "{}",
+            subject_names
+                .iter()
+                .filter_map(|v| v.as_ref())
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("+")
+        )
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct SubjectEntry {
     pub(crate) subject: Subject,

@@ -123,11 +123,29 @@ pub struct AclConfigSubjects {
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub struct Interface(pub String);
 
+impl std::fmt::Display for Interface {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Interface({})", self.0)
+    }
+}
+
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub struct CertCommonName(pub String);
 
+impl std::fmt::Display for CertCommonName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "CertCommonName({})", self.0)
+    }
+}
+
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub struct Username(pub String);
+
+impl std::fmt::Display for Username {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Username({})", self.0)
+    }
+}
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub struct AclConfigPolicyEntry {
