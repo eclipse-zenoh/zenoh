@@ -528,9 +528,15 @@ impl PolicyEnforcer {
                     entry_id
                 ))?;
                 for subject_config_id in &entry.subjects {
-                    let subject_combination_ids = subject_id_map.get(subject_config_id).unwrap();
+                    let subject_combination_ids = subject_id_map
+                        .get(subject_config_id)
+                        .expect("config subject id should exist in subject_id_map");
                     for subject_id in subject_combination_ids {
-                        for flow in rule.flows.as_ref().unwrap() {
+                        for flow in rule
+                            .flows
+                            .as_ref()
+                            .expect("flows list should be defined in rule")
+                        {
                             for message in &rule.messages {
                                 for key_expr in &rule.key_exprs {
                                     policy_rules.push(PolicyRule {
