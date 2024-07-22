@@ -93,7 +93,7 @@ mod test {
                     "default_permission": "deny",
                     "rules": [],
                     "subjects": [],
-                    "policy": [],
+                    "policies": [],
                 }"#,
             )
             .unwrap();
@@ -136,7 +136,7 @@ mod test {
                     "default_permission": "allow",
                     "rules": [],
                     "subjects": [],
-                    "policy": [],
+                    "policies": [],
                 }"#,
             )
             .unwrap();
@@ -185,7 +185,7 @@ mod test {
                             "id": "r1",
                             "permission": "deny",
                             "flows": ["egress"],
-                            "actions": [
+                            "messages": [
                                 "put",
                                 "declare_subscriber"
                             ],
@@ -202,7 +202,7 @@ mod test {
                             ],
                         }
                     ],
-                    "policy": [
+                    "policies": [
                         {
                             "rules": ["r1"],
                             "subjects": ["s1"],
@@ -255,7 +255,7 @@ mod test {
                             "id": "r1",
                             "permission": "allow",
                             "flows": ["egress", "ingress"],
-                            "actions": [
+                            "messages": [
                                 "put",
                                 "declare_subscriber"
                             ],
@@ -272,7 +272,7 @@ mod test {
                             ],
                         }
                     ],
-                    "policy": [
+                    "policies": [
                         {
                             "rules": ["r1"],
                             "subjects": ["s1"],
@@ -322,7 +322,7 @@ mod test {
                     "default_permission": "deny",
                     "rules": [],
                     "subjects": [],
-                    "policy": [],
+                    "policies": [],
                 }"#,
             )
             .unwrap();
@@ -376,7 +376,7 @@ mod test {
                     "default_permission": "allow",
                     "rules": [],
                     "subjects": [],
-                    "policy": [],
+                    "policies": [],
                 }"#,
             )
             .unwrap();
@@ -433,7 +433,7 @@ mod test {
                             "id": "r1",
                             "permission": "allow",
                             "flows": ["egress", "ingress"],
-                            "actions": [
+                            "messages": [
                                 "get",
                                 "declare_queryable"
                             ],
@@ -450,7 +450,7 @@ mod test {
                             ],
                         }
                     ],
-                    "policy": [
+                    "policies": [
                         {
                             "rules": ["r1"],
                             "subjects": ["s1"],
@@ -513,7 +513,7 @@ mod test {
                             "id": "r1",
                             "permission": "deny",
                             "flows": ["egress"],
-                            "actions": [
+                            "messages": [
                                 "get",
                                 "declare_queryable"
                             ],
@@ -530,7 +530,7 @@ mod test {
                             ],
                         }
                     ],
-                    "policy": [
+                    "policies": [
                         {
                             "rules": ["r1"],
                             "subjects": ["s1"],

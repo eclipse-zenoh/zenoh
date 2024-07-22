@@ -805,7 +805,7 @@ client2name:client2passwd";
                             "id": "r1",
                             "permission": "allow",
                             "flows": ["ingress","egress"],
-                            "actions": [
+                            "messages": [
                                 "put",
                                 "declare_subscriber"
                             ],
@@ -822,7 +822,7 @@ client2name:client2passwd";
                             ]
                         }
                     ],
-                    "policy": [
+                    "policies": [
                         {
                             "rules": ["r1"],
                             "subjects": ["s1"],
@@ -873,7 +873,7 @@ client2name:client2passwd";
                             "id": "r1",
                             "permission": "deny",
                             "flows": ["egress"],
-                            "actions": [
+                            "messages": [
                                 "put",
                                 "declare_subscriber"
                             ],
@@ -890,7 +890,7 @@ client2name:client2passwd";
                             ]
                         }
                     ],
-                    "policy": [
+                    "policies": [
                         {
                             "rules": ["r1"],
                             "subjects": ["s1"],
@@ -943,7 +943,7 @@ client2name:client2passwd";
                             "id": "r1",
                             "permission": "allow",
                             "flows": ["egress", "ingress"],
-                            "actions": [
+                            "messages": [
                                 "get",
                                 "declare_queryable"
                             ],
@@ -960,7 +960,7 @@ client2name:client2passwd";
                             ]
                         }
                     ],
-                    "policy": [
+                    "policies": [
                         {
                             "rules": ["r1"],
                             "subjects": ["s1"],
@@ -1028,7 +1028,7 @@ client2name:client2passwd";
                             "id": "r1",
                             "permission": "deny",
                             "flows": ["egress"],
-                            "actions": [
+                            "messages": [
                                 "get",
                                 "declare_queryable"
                             ],
@@ -1045,7 +1045,7 @@ client2name:client2passwd";
                             ]
                         }
                     ],
-                    "policy": [
+                    "policies": [
                         {
                             "rules": ["r1"],
                             "subjects": ["s1"],
@@ -1113,7 +1113,7 @@ client2name:client2passwd";
                             "id": "r1",
                             "permission": "allow",
                             "flows": ["egress", "ingress"],
-                            "actions": [
+                            "messages": [
                                 "put",
                                 "declare_subscriber"
                             ],
@@ -1130,7 +1130,7 @@ client2name:client2passwd";
                             ]
                         }
                     ],
-                    "policy": [
+                    "policies": [
                         {
                             "rules": ["r1"],
                             "subjects": ["s1"],
@@ -1183,7 +1183,7 @@ client2name:client2passwd";
                             "id": "r1",
                             "permission": "deny",
                             "flows": ["egress"],
-                            "actions": [
+                            "messages": [
                                 "put",
                                 "declare_subscriber"
                             ],
@@ -1200,7 +1200,7 @@ client2name:client2passwd";
                             ]
                         }
                     ],
-                    "policy": [
+                    "policies": [
                         {
                             "rules": ["r1"],
                             "subjects": ["s1"],
@@ -1254,7 +1254,7 @@ client2name:client2passwd";
                             "id": "r1",
                             "permission": "allow",
                             "flows": ["egress", "ingress"],
-                            "actions": [
+                            "messages": [
                                 "get",
                                 "declare_queryable"
                             ],
@@ -1271,7 +1271,7 @@ client2name:client2passwd";
                             ]
                         }
                     ],
-                    "policy": [
+                    "policies": [
                         {
                             "rules": ["r1"],
                             "subjects": ["s1"],
@@ -1340,7 +1340,7 @@ client2name:client2passwd";
                             "id": "r1",
                             "permission": "deny",
                             "flows": ["egress"],
-                            "actions": [
+                            "messages": [
                                 "get",
                                 "declare_queryable"
                             ],
@@ -1357,7 +1357,7 @@ client2name:client2passwd";
                             ]
                         }
                     ],
-                    "policy": [
+                    "policies": [
                         {
                             "rules": ["r1"],
                             "subjects": ["s1"],
@@ -1425,7 +1425,7 @@ client2name:client2passwd";
                             "id": "r1",
                             "permission": "allow",
                             "flows": ["ingress", "egress"],
-                            "actions": [
+                            "messages": [
                                 "put",
                                 "declare_subscriber"
                             ],
@@ -1443,7 +1443,7 @@ client2name:client2passwd";
                             ]
                         }
                     ],
-                    "policy": [
+                    "policies": [
                         {
                             "rules": ["r1"],
                             "subjects": ["s1"],
@@ -1495,7 +1495,7 @@ client2name:client2passwd";
                             "id": "r1",
                             "permission": "deny",
                             "flows": ["egress"],
-                            "actions": [
+                            "messages": [
                                 "put",
                                 "declare_subscriber"
                             ],
@@ -1513,7 +1513,7 @@ client2name:client2passwd";
                             ]
                         }
                     ],
-                    "policy": [
+                    "policies": [
                         {
                             "rules": ["r1"],
                             "subjects": ["s1"],
@@ -1566,7 +1566,7 @@ client2name:client2passwd";
                             "id": "r1",
                             "permission": "allow",
                             "flows": ["ingress", "egress"],
-                            "actions": [
+                            "messages": [
                                 "get",
                                 "declare_queryable"
                             ],
@@ -1584,7 +1584,7 @@ client2name:client2passwd";
                             ]
                         }
                     ],
-                    "policy": [
+                    "policies": [
                         {
                             "rules": ["r1"],
                             "subjects": ["s1"],
@@ -1652,7 +1652,7 @@ client2name:client2passwd";
                             "id": "r1",
                             "permission": "deny",
                             "flows": ["egress"],
-                            "actions": [
+                            "messages": [
                                 "get",
                                 "declare_queryable"
                             ],
@@ -1670,7 +1670,7 @@ client2name:client2passwd";
                             ]
                         }
                     ],
-                    "policy": [
+                    "policies": [
                         {
                             "rules": ["r1"],
                             "subjects": ["s1"],
@@ -1737,7 +1737,7 @@ client2name:client2passwd";
                             "id": "r1",
                             "permission": "allow",
                             "flows": ["ingress", "egress"],
-                            "actions": [
+                            "messages": [
                                 "put",
                                 "declare_subscriber"
                             ],
@@ -1758,7 +1758,7 @@ client2name:client2passwd";
                             ]
                         }
                     ],
-                    "policy": [
+                    "policies": [
                         {
                             "rules": ["r1"],
                             "subjects": ["s1"],
@@ -1833,7 +1833,7 @@ client2name:client2passwd";
                             "id": "r1",
                             "permission": "deny",
                             "flows": ["egress"],
-                            "actions": [
+                            "messages": [
                                 "put",
                                 "declare_subscriber"
                             ],
@@ -1854,7 +1854,7 @@ client2name:client2passwd";
                             ]
                         }
                     ],
-                    "policy": [
+                    "policies": [
                         {
                             "rules": ["r1"],
                             "subjects": ["s1"],
