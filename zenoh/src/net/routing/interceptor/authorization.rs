@@ -273,9 +273,15 @@ impl PolicyEnforcer {
                 mut_acl_config.policies,
             ) {
                 if rules.is_empty() || subjects.is_empty() || policies.is_empty() {
-                    tracing::warn!(
-                        "Access control rules/subjects/policies is empty in config file"
-                    );
+                    rules.is_empty().then(|| {
+                        tracing::warn!("Access control rules list is empty in config file")
+                    });
+                    subjects.is_empty().then(|| {
+                        tracing::warn!("Access control subjects list is empty in config file")
+                    });
+                    policies.is_empty().then(|| {
+                        tracing::warn!("Access control policies list is empty in config file")
+                    });
                     self.policy_map = PolicyMap::default();
                     self.subject_store = SubjectStore::default();
                     if self.default_permission == Permission::Deny {
