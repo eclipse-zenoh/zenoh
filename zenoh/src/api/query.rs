@@ -27,11 +27,6 @@ use zenoh_protocol::core::ZenohIdProto;
 use zenoh_protocol::core::{CongestionControl, Parameters};
 use zenoh_result::ZResult;
 
-#[cfg(feature = "unstable")]
-use super::{
-    builders::sample::SampleBuilderTrait, bytes::OptionZBytes, sample::SourceInfo,
-    selector::ZenohParameters,
-};
 use super::{
     builders::sample::{EncodingBuilderTrait, QoSBuilderTrait},
     bytes::ZBytes,
@@ -44,6 +39,9 @@ use super::{
     session::Session,
     value::Value,
 };
+#[cfg(feature = "unstable")]
+use super::{sample::SourceInfo, selector::ZenohParameters};
+use crate::{bytes::OptionZBytes, sample::SampleBuilderTrait};
 
 /// The [`Queryable`](crate::query::Queryable)s that should be target of a [`get`](Session::get).
 pub type QueryTarget = zenoh_protocol::network::request::ext::TargetType;
@@ -211,9 +209,8 @@ pub struct SessionGetBuilder<'a, 'b, Handler> {
     pub(crate) source_info: SourceInfo,
 }
 
-#[zenoh_macros::unstable]
 impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
-    #[cfg(feature = "unstable")]
+    #[zenoh_macros::unstable]
     fn source_info(self, source_info: SourceInfo) -> Self {
         Self {
             source_info,
