@@ -174,7 +174,7 @@ impl InterceptorFactoryTrait for AclEnforcer {
         let auth_subjects = auth_subjects.into_iter().collect::<Vec<AuthSubject>>();
         if auth_subjects.is_empty() {
             tracing::info!(
-                "{zid} did not match any access control. Default permission `{:?}` will be applied",
+                "{zid} did not match any configured ACL subject. Default permission `{:?}` will be applied on all messages",
                 self.enforcer.default_permission
             );
         }
