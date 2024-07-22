@@ -198,7 +198,7 @@
   //     {
   //       /// Id has to be unique within the rule set
   //       "id": "rule1",
-  //       "actions": [
+  //       "messages": [
   //         "put", "get", "declare_subscriber", "declare_queryable"
   //       ],
   //       "flows":["egress","ingress"],
@@ -209,7 +209,7 @@
   //     },
   //     {
   //       "id": "rule2",
-  //       "actions": [
+  //       "messages": [
   //         "put", "get", "declare_subscriber", "declare_queryable"
   //       ],
   //       "flows":["ingress"],
@@ -263,10 +263,10 @@
   //       /// An empty subject combination is a wildcard
   //     },
   //   ],
-  //   /// The policy list contains policy entries
-  //   "policy":
+  //   /// The policies list associates rules to subjects
+  //   "policies":
   //   [
-  //      /// Each policy entry associates one or multiple rules to one or multiple subject combinations
+  //      /// Each policy associates one or multiple rules to one or multiple subject combinations
   //      {
   //         /// Rules and Subjects are identified with their unique IDs declared above
   //         "rules": ["rule1"],
