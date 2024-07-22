@@ -436,15 +436,13 @@ impl PolicyEnforcer {
                     config_subject.id
                 );
             }
-            if config_subject
-                .cert_common_names
-                .as_ref()
-                .is_some_and(|cert_common_names| {
-                    cert_common_names.iter().any(|ccn| ccn.0.trim().is_empty())
-                })
-            {
+            if config_subject.usernames.as_ref().is_some_and(|usernames| {
+                usernames
+                    .iter()
+                    .any(|username| username.0.trim().is_empty())
+            }) {
                 bail!(
-                    "Found empty cert_common_name value in subject '{}'",
+                    "Found empty username value in subject '{}'",
                     config_subject.id
                 );
             }
