@@ -27,8 +27,6 @@ use zenoh_protocol::core::ZenohIdProto;
 use zenoh_protocol::core::{CongestionControl, Parameters};
 use zenoh_result::ZResult;
 
-use crate::sample::SampleBuilderTrait;
-
 use super::{
     builders::sample::{EncodingBuilderTrait, QoSBuilderTrait},
     bytes::ZBytes,
@@ -43,6 +41,7 @@ use super::{
 };
 #[cfg(feature = "unstable")]
 use super::{bytes::OptionZBytes, sample::SourceInfo, selector::ZenohParameters};
+use crate::sample::SampleBuilderTrait;
 
 /// The [`Queryable`](crate::query::Queryable)s that should be target of a [`get`](Session::get).
 pub type QueryTarget = zenoh_protocol::network::request::ext::TargetType;
