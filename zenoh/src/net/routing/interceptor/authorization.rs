@@ -386,6 +386,41 @@ impl PolicyEnforcer {
                 );
             }
             // validate subject config fields
+            if config_subject
+                .interfaces
+                .as_ref()
+                .is_some_and(|interfaces| interfaces.iter().any(|face| face.0.trim().is_empty()))
+            {
+                bail!(
+                    "Found empty interface value in subject '{}'",
+                    config_subject.id
+                );
+            }
+            if config_subject
+                .cert_common_names
+                .as_ref()
+                .is_some_and(|cert_common_names| {
+                    cert_common_names.iter().any(|ccn| ccn.0.trim().is_empty())
+                })
+            {
+                bail!(
+                    "Found empty cert_common_name value in subject '{}'",
+                    config_subject.id
+                );
+            }
+            if config_subject
+                .cert_common_names
+                .as_ref()
+                .is_some_and(|cert_common_names| {
+                    cert_common_names.iter().any(|ccn| ccn.0.trim().is_empty())
+                })
+            {
+                bail!(
+                    "Found empty cert_common_name value in subject '{}'",
+                    config_subject.id
+                );
+            }
+            // Map properties to SubjectProperty type
             // FIXME: Unnecessary .collect() because of different iterator types
             let interfaces = config_subject
                 .interfaces
@@ -396,7 +431,6 @@ impl PolicyEnforcer {
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or(vec![SubjectProperty::Wildcard]);
-
             // FIXME: Unnecessary .collect() because of different iterator types
             let cert_common_names = config_subject
                 .cert_common_names
@@ -407,7 +441,6 @@ impl PolicyEnforcer {
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or(vec![SubjectProperty::Wildcard]);
-
             // FIXME: Unnecessary .collect() because of different iterator types
             let usernames = config_subject
                 .usernames
@@ -418,8 +451,6 @@ impl PolicyEnforcer {
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or(vec![SubjectProperty::Wildcard]);
-
-            // FIXME: Check if subject properties are empty strings during deserialization
 
             // create ACL subject combinations
             let subject_combination_ids = interfaces
@@ -432,7 +463,6 @@ impl PolicyEnforcer {
                         cert_common_name,
                         username,
                     };
-
                     subject_map_builder.insert_or_get(subject)
                 })
                 .collect();
