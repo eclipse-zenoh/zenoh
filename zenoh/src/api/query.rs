@@ -40,8 +40,8 @@ use super::{
     value::Value,
 };
 #[cfg(feature = "unstable")]
-use super::{bytes::OptionZBytes, sample::SourceInfo, selector::ZenohParameters};
-use crate::sample::SampleBuilderTrait;
+use super::{sample::SourceInfo, selector::ZenohParameters};
+use crate::{bytes::OptionZBytes, sample::SampleBuilderTrait};
 
 /// The [`Queryable`](crate::query::Queryable)s that should be target of a [`get`](Session::get).
 pub type QueryTarget = zenoh_protocol::network::request::ext::TargetType;
