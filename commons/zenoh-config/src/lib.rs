@@ -530,7 +530,7 @@ validated_struct::validator! {
             pub default_permission: Permission,
             pub rules: Option<Vec<AclConfigRule>>,
             pub subjects: Option<Vec<AclConfigSubjects>>,
-            pub policy: Option<Vec<AclConfigPolicyEntry>>,
+            pub policies: Option<Vec<AclConfigPolicyEntry>>,
         },
 
         /// A list of directories where plugins may be searched for if no `__path__` was specified for them.

@@ -258,7 +258,7 @@ impl Default for AclConfig {
             default_permission: Permission::Deny,
             rules: None,
             subjects: None,
-            policy: None,
+            policies: None,
         }
     }
 }

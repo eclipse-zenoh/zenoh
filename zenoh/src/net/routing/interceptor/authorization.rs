@@ -247,13 +247,15 @@ impl PolicyEnforcer {
         self.acl_enabled = mut_acl_config.enabled;
         self.default_permission = mut_acl_config.default_permission;
         if self.acl_enabled {
-            if let (Some(mut rules), Some(mut subjects), Some(policy)) = (
+            if let (Some(mut rules), Some(mut subjects), Some(policies)) = (
                 mut_acl_config.rules,
                 mut_acl_config.subjects,
-                mut_acl_config.policy,
+                mut_acl_config.policies,
             ) {
-                if rules.is_empty() || subjects.is_empty() || policy.is_empty() {
-                    tracing::warn!("Access control rules/subjects/policy is empty in config file");
+                if rules.is_empty() || subjects.is_empty() || policies.is_empty() {
+                    tracing::warn!(
+                        "Access control rules/subjects/policies is empty in config file"
+                    );
                     self.policy_map = PolicyMap::default();
                     self.subject_store = SubjectStore::default();
                     if self.default_permission == Permission::Deny {
@@ -297,7 +299,7 @@ impl PolicyEnforcer {
                         }
                     }
                     let policy_information =
-                        self.policy_information_point(subjects, rules, policy)?;
+                        self.policy_information_point(subjects, rules, policies)?;
 
                     let mut main_policy: PolicyMap = PolicyMap::default();
                     for rule in policy_information.policy_rules {
@@ -328,7 +330,7 @@ impl PolicyEnforcer {
                     self.subject_store = policy_information.subject_map;
                 }
             } else {
-                bail!("All ACL rules/subjects/policy config lists must be provided");
+                bail!("All ACL rules/subjects/policies config lists must be provided");
             }
         }
         Ok(())
@@ -341,7 +343,7 @@ impl PolicyEnforcer {
         &self,
         subjects: Vec<AclConfigSubjects>,
         rules: Vec<AclConfigRule>,
-        policy: Vec<AclConfigPolicyEntry>,
+        policies: Vec<AclConfigPolicyEntry>,
     ) -> ZResult<PolicyInformation> {
         let mut policy_rules: Vec<PolicyRule> = Vec::new();
         let mut rule_map = HashMap::new();
@@ -469,21 +471,21 @@ impl PolicyEnforcer {
             subject_id_map.insert(config_subject.id.clone(), subject_combination_ids);
         }
         // finally, handle policy content
-        for (entry_id, entry) in policy.iter().enumerate() {
+        for (entry_id, entry) in policies.iter().enumerate() {
             // validate policy config lists
             if entry.rules.is_empty() || entry.subjects.is_empty() {
                 bail!(
-                    "Policy entry #{} is malformed: empty subjects or rules list",
+                    "Policy #{} is malformed: empty subjects or rules list",
                     entry_id
                 );
             }
             for subject_config_id in &entry.subjects {
                 if subject_config_id.trim().is_empty() {
-                    bail!("Found empty subject id in policy entry #{}", entry_id)
+                    bail!("Found empty subject id in policy #{}", entry_id)
                 }
                 if !subject_id_map.contains_key(subject_config_id) {
                     bail!(
-                        "Subject '{}' in policy entry #{} does not exist in subjects list",
+                        "Subject '{}' in policy #{} does not exist in subjects list",
                         subject_config_id,
                         entry_id
                     )
@@ -492,10 +494,10 @@ impl PolicyEnforcer {
             // Create PolicyRules
             for rule_id in &entry.rules {
                 if rule_id.trim().is_empty() {
-                    bail!("Found empty rule id in policy entry #{}", entry_id)
+                    bail!("Found empty rule id in policy #{}", entry_id)
                 }
                 let rule = rule_map.get(rule_id).ok_or(zerror!(
-                    "Rule '{}' in policy entry #{} does not exist in rules list",
+                    "Rule '{}' in policy #{} does not exist in rules list",
                     rule_id,
                     entry_id
                 ))?;
