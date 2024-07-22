@@ -364,10 +364,6 @@ pub mod config {
     pub use zenoh_config::*;
 }
 
-#[cfg(all(feature = "internal", not(feature = "unstable")))]
-compile_error!(
-    "All internal functionality is unstable. The `unstable` feature must be enabled to use `internal`."
-);
 #[cfg(all(
     feature = "plugins",
     not(all(feature = "unstable", feature = "internal"))
