@@ -98,6 +98,7 @@ impl Canonize for &mut str {
         let bytes = unsafe { self.as_bytes_mut() };
         let length = canonize(bytes);
         bytes[length..].fill(b'\0');
+        *self = &mut core::mem::take(self)[..length];
     }
 }
 
@@ -166,6 +167,8 @@ fn canonizer() {
 
     // &mut str remaining part is zeroed
     let mut s = String::from("$*$*$*/hello/$*$*/bye/$*$*");
-    s.as_mut_str().canonize();
+    let mut s_mut = s.as_mut_str();
+    s_mut.canonize();
+    assert_eq!(s_mut, "*/hello/*/bye/*");
     assert_eq!(s, "*/hello/*/bye/*\0\0\0\0\0\0\0\0\0\0\0");
 }
