@@ -199,7 +199,7 @@
   //       /// Id has to be unique within the rule set
   //       "id": "rule1",
   //       "messages": [
-  //         "put", "get", "declare_subscriber", "declare_queryable"
+  //         "put", "query", "declare_subscriber", "declare_queryable"
   //       ],
   //       "flows":["egress","ingress"],
   //       "permission": "allow",
@@ -210,7 +210,7 @@
   //     {
   //       "id": "rule2",
   //       "messages": [
-  //         "put", "get", "declare_subscriber", "declare_queryable"
+  //         "put", "query", "declare_subscriber", "declare_queryable"
   //       ],
   //       "flows":["ingress"],
   //       "permission": "allow",
