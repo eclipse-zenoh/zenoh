@@ -100,10 +100,10 @@ impl AllocAlignment {
         // - alignment value A = 2^P
         // - return R = min{x | x ≥ S, x % A = 0}
         //
-        // Example 1: A = 4 = 0b00100, S = 4 = 0b00100 ⇒ R = 4  = 0b00100
-        // Example 2: A = 4 = 0b00100, S = 7 = 0b00111 ⇒ R = 8  = 0b01000
-        // Example 3: A = 4 = 0b00100, S = 8 = 0b01000 ⇒ R = 8  = 0b01000
-        // Example 4: A = 4 = 0b00100, S = 9 = 0b01001 ⇒ R = 12 = 0b01100
+        // Example 1: A = 4 = (00100)₂, S = 4 = (00100)₂ ⇒ R = 4  = (00100)₂
+        // Example 2: A = 4 = (00100)₂, S = 7 = (00111)₂ ⇒ R = 8  = (01000)₂
+        // Example 3: A = 4 = (00100)₂, S = 8 = (01000)₂ ⇒ R = 8  = (01000)₂
+        // Example 4: A = 4 = (00100)₂, S = 9 = (01001)₂ ⇒ R = 12 = (01100)₂
         //
         // Algorithm: For any x = (bₙ, ⋯, b₂, b₁)₂ in binary representation,
         // 1. x % A = 0 ⇔ ∀i < P, bᵢ = 0
