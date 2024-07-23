@@ -434,7 +434,7 @@ mod test {
                             "permission": "allow",
                             "flows": ["egress", "ingress"],
                             "messages": [
-                                "get",
+                                "query",
                                 "declare_queryable"
                             ],
                             "key_exprs": [
@@ -514,7 +514,7 @@ mod test {
                             "permission": "deny",
                             "flows": ["egress"],
                             "messages": [
-                                "get",
+                                "query",
                                 "declare_queryable"
                             ],
                             "key_exprs": [

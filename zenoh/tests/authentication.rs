@@ -944,7 +944,7 @@ client2name:client2passwd";
                             "permission": "allow",
                             "flows": ["egress", "ingress"],
                             "messages": [
-                                "get",
+                                "query",
                                 "declare_queryable"
                             ],
                             "key_exprs": [
@@ -1029,7 +1029,7 @@ client2name:client2passwd";
                             "permission": "deny",
                             "flows": ["egress"],
                             "messages": [
-                                "get",
+                                "query",
                                 "declare_queryable"
                             ],
                             "key_exprs": [
@@ -1255,7 +1255,7 @@ client2name:client2passwd";
                             "permission": "allow",
                             "flows": ["egress", "ingress"],
                             "messages": [
-                                "get",
+                                "query",
                                 "declare_queryable"
                             ],
                             "key_exprs": [
@@ -1341,7 +1341,7 @@ client2name:client2passwd";
                             "permission": "deny",
                             "flows": ["egress"],
                             "messages": [
-                                "get",
+                                "query",
                                 "declare_queryable"
                             ],
                             "key_exprs": [
@@ -1567,7 +1567,7 @@ client2name:client2passwd";
                             "permission": "allow",
                             "flows": ["ingress", "egress"],
                             "messages": [
-                                "get",
+                                "query",
                                 "declare_queryable"
                             ],
                             "key_exprs": [
@@ -1653,7 +1653,7 @@ client2name:client2passwd";
                             "permission": "deny",
                             "flows": ["egress"],
                             "messages": [
-                                "get",
+                                "query",
                                 "declare_queryable"
                             ],
                             "key_exprs": [
