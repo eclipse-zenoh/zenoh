@@ -104,40 +104,70 @@ pub struct DownsamplingItemConf {
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
-pub struct AclConfigRules {
-    pub interfaces: Option<Vec<String>>,
-    pub cert_common_names: Option<Vec<String>>,
-    pub usernames: Option<Vec<String>>,
+pub struct AclConfigRule {
+    pub id: String,
     pub key_exprs: Vec<String>,
-    pub actions: Vec<Action>,
+    pub messages: Vec<AclMessage>,
     pub flows: Option<Vec<InterceptorFlow>>,
     pub permission: Permission,
 }
 
+#[derive(Serialize, Debug, Deserialize, Clone)]
+pub struct AclConfigSubjects {
+    pub id: String,
+    pub interfaces: Option<Vec<Interface>>,
+    pub cert_common_names: Option<Vec<CertCommonName>>,
+    pub usernames: Option<Vec<Username>>,
+}
+
+#[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
+pub struct Interface(pub String);
+
+impl std::fmt::Display for Interface {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Interface({})", self.0)
+    }
+}
+
+#[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
+pub struct CertCommonName(pub String);
+
+impl std::fmt::Display for CertCommonName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "CertCommonName({})", self.0)
+    }
+}
+
+#[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
+pub struct Username(pub String);
+
+impl std::fmt::Display for Username {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Username({})", self.0)
+    }
+}
+
+#[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
+pub struct AclConfigPolicyEntry {
+    pub rules: Vec<String>,
+    pub subjects: Vec<String>,
+}
+
 #[derive(Clone, Serialize, Debug, Deserialize)]
 pub struct PolicyRule {
-    pub subject: Subject,
+    pub subject_id: usize,
     pub key_expr: String,
-    pub action: Action,
+    pub message: AclMessage,
     pub permission: Permission,
     pub flow: InterceptorFlow,
 }
 
-#[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone)]
-#[serde(untagged)]
-#[serde(rename_all = "snake_case")]
-pub enum Subject {
-    Interface(String),
-    CertCommonName(String),
-    Username(String),
-}
-
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub enum Action {
+pub enum AclMessage {
     Put,
     DeclareSubscriber,
-    Get,
+    Query,
     DeclareQueryable,
 }
 
@@ -505,7 +535,9 @@ validated_struct::validator! {
         pub access_control: AclConfig {
             pub enabled: bool,
             pub default_permission: Permission,
-            pub rules: Option<Vec<AclConfigRules>>
+            pub rules: Option<Vec<AclConfigRule>>,
+            pub subjects: Option<Vec<AclConfigSubjects>>,
+            pub policies: Option<Vec<AclConfigPolicyEntry>>,
         },
 
         /// A list of directories where plugins may be searched for if no `__path__` was specified for them.

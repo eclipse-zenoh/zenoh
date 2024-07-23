@@ -24,7 +24,7 @@ use zenoh_buffers::{
     buffer::{Buffer, SplitBuffer},
     reader::{DidntRead, HasReader, Reader},
     writer::HasWriter,
-    ZBuf, ZBufReader, ZBufWriter, ZSlice,
+    ZBuf, ZBufReader, ZBufWriter, ZSlice, ZSliceBuffer,
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_protocol::{
@@ -2102,6 +2102,81 @@ impl TryFrom<&mut ZBytes> for serde_pickle::Value {
     }
 }
 
+// bytes::Bytes
+
+// Define a transparent wrapper type to get around Rust's orphan rule.
+// This allows to use bytes::Bytes directly as supporting buffer of a
+// ZSlice resulting in zero-copy and zero-alloc bytes::Bytes serialization.
+#[repr(transparent)]
+#[derive(Debug)]
+struct BytesWrap(bytes::Bytes);
+
+impl ZSliceBuffer for BytesWrap {
+    fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
+
+impl Serialize<bytes::Bytes> for ZSerde {
+    type Output = ZBytes;
+
+    fn serialize(self, s: bytes::Bytes) -> Self::Output {
+        ZBytes::new(BytesWrap(s))
+    }
+}
+
+impl From<bytes::Bytes> for ZBytes {
+    fn from(t: bytes::Bytes) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl Deserialize<bytes::Bytes> for ZSerde {
+    type Input<'a> = &'a ZBytes;
+    type Error = Infallible;
+
+    fn deserialize(self, v: Self::Input<'_>) -> Result<bytes::Bytes, Self::Error> {
+        // bytes::Bytes can be constructed only by passing ownership to the constructor.
+        // Thereofore, here we are forced to allocate a vector and copy the whole ZBytes
+        // content since bytes::Bytes does not support anything else than Box<u8> (and its
+        // variants like Vec<u8> and String).
+        let v: Vec<u8> = ZSerde.deserialize(v).unwrap_infallible();
+        Ok(bytes::Bytes::from(v))
+    }
+}
+
+impl TryFrom<ZBytes> for bytes::Bytes {
+    type Error = Infallible;
+
+    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&value)
+    }
+}
+
+impl TryFrom<&ZBytes> for bytes::Bytes {
+    type Error = Infallible;
+
+    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(value)
+    }
+}
+
+impl TryFrom<&mut ZBytes> for bytes::Bytes {
+    type Error = Infallible;
+
+    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&*value)
+    }
+}
+
 // Shared memory conversion
 #[cfg(feature = "shared-memory")]
 impl Serialize<ZShm> for ZSerde {
@@ -3167,6 +3242,10 @@ mod tests {
         // Parameters
         serialize_deserialize!(Parameters, Parameters::from(""));
         serialize_deserialize!(Parameters, Parameters::from("a=1;b=2;c3"));
+
+        // Bytes
+        serialize_deserialize!(bytes::Bytes, bytes::Bytes::from(vec![1, 2, 3, 4]));
+        serialize_deserialize!(bytes::Bytes, bytes::Bytes::from("Hello World"));
 
         // Tuple
         serialize_deserialize!((usize, usize), (0, 1));
