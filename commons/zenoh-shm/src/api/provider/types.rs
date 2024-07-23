@@ -52,7 +52,7 @@ impl Display for AllocAlignment {
 impl Default for AllocAlignment {
     fn default() -> Self {
         Self {
-            pow: (std::mem::align_of::<u32>() as f64).log2().round() as u8,
+            pow: std::mem::align_of::<u32>().ilog2() as _,
         }
     }
 }
@@ -65,9 +65,10 @@ impl AllocAlignment {
     /// This function will return an error if provided alignment power cannot fit into usize.
     #[zenoh_macros::unstable_doc]
     pub const fn new(pow: u8) -> Result<Self, ZLayoutError> {
-        match pow {
-            pow if pow < usize::BITS as u8 => Ok(Self { pow }),
-            _ => Err(ZLayoutError::IncorrectLayoutArgs),
+        if pow < usize::BITS as u8 {
+            Ok(Self { pow })
+        } else {
+            Err(ZLayoutError::IncorrectLayoutArgs)
         }
     }
 
@@ -93,22 +94,43 @@ impl AllocAlignment {
     #[zenoh_macros::unstable_doc]
     pub fn align_size(&self, size: NonZeroUsize) -> NonZeroUsize {
         // Notations:
-        //     size: S, alignment value: A, Output: O
-        // Assumption: A is power of 2
-        // Return the smallest multiple of A that is greater than or equal to S
+        // - size to align S
+        // - usize::BITS B
+        // - pow P where 0 ≤ P < B
+        // - alignment value A = 2^P
+        // - return R = min{x | x ≥ S, x % A = 0}
         //
-        // Example 1: A = 4 = 0b00100, S = 4 = 0b00100 => O = 4  = 0b00100
-        // Example 2: A = 4 = 0b00100, S = 7 = 0b00111 => O = 8  = 0b01000
-        // Example 3: A = 4 = 0b00100, S = 8 = 0b01000 => O = 8  = 0b01000
-        // Example 4: A = 4 = 0b00100, S = 9 = 0b01001 => O = 12 = 0b01100
+        // Example 1: A = 4 = 0b00100, S = 4 = 0b00100 ⇒ R = 4  = 0b00100
+        // Example 2: A = 4 = 0b00100, S = 7 = 0b00111 ⇒ R = 8  = 0b01000
+        // Example 3: A = 4 = 0b00100, S = 8 = 0b01000 ⇒ R = 8  = 0b01000
+        // Example 4: A = 4 = 0b00100, S = 9 = 0b01001 ⇒ R = 12 = 0b01100
         //
-        // The properties are
-        // 1. All bits after the alignment bit should be zero to be a valid multiple
-        // 2. For any x, (x & !(A - 1)) % A = 0 since it wipes out all digits after the alignment bit.
-        // 3. S + (A-1) doesn't carry if S % A = 0, otherwise it carries one bit to the alignment bit.
-        // Hence (S+(A-1)) & !(A-1) is min({x | x >= S, x % A = 0})
-        let a = self.get_alignment_value().get() - 1;
-        (size.get() + a) & !a
+        // Algorithm: For any x = (bₙ, ⋯, b₂, b₁)₂ in binary representation,
+        // 1. x % A = 0 ⇔ ∀i < P, bᵢ = 0
+        // 2. f(x) ≜ x & !(A-1) leads to ∀i < P, bᵢ = 0, hence f(x) % A = 0
+        // (i.e. f zeros all bits before the P-th bit)
+        // 3. R = min{x | x ≥ S, x % A = 0} is equivlent to find the unique R where S ≤ R < S+A and R % A = 0
+        // 4. x-A < f(x) ≤ x ⇒ S-1 < f(S+A-1) ≤ S+A-1 ⇒ S ≤ f(S+A-1) < S+A
+        //
+        // Hence R = f(S+A-1) = (S+(A-1)) & !(A-1) is the desired value
+
+        // Overflow check: ensure S ≤ 2^B - 2^P so that R < S+A ≤ 2^B and hence it's a valid usize
+        let bound = usize::MAX - (1 << self.pow) + 1;
+        assert!(
+            size.get() <= bound,
+            "The given size {} exceeded the maximum {}",
+            size.get(),
+            bound
+        );
+
+        // Compute A-1
+        let a_minus_1 = self.get_alignment_value().get() - 1;
+
+        // Overflow never occurs due to the check above
+        let r = (size.get() + a_minus_1) & !a_minus_1;
+
+        // SAFETY: R ≥ 0 since R ≥ S ≥ 0
+        unsafe { NonZeroUsize::new_unchecked(r) }
     }
 }
 
