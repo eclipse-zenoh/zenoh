@@ -109,7 +109,7 @@ impl AllocAlignment {
         // 1. x % A = 0 ⇔ ∀i < P, bᵢ = 0
         // 2. f(x) ≜ x & !(A-1) leads to ∀i < P, bᵢ = 0, hence f(x) % A = 0
         // (i.e. f zeros all bits before the P-th bit)
-        // 3. R = min{x | x ≥ S, x % A = 0} is equivlent to find the unique R where S ≤ R < S+A and R % A = 0
+        // 3. R = min{x | x ≥ S, x % A = 0} is equivalent to find the unique R where S ≤ R < S+A and R % A = 0
         // 4. x-A < f(x) ≤ x ⇒ S-1 < f(S+A-1) ≤ S+A-1 ⇒ S ≤ f(S+A-1) < S+A
         //
         // Hence R = f(S+A-1) = (S+(A-1)) & !(A-1) is the desired value
