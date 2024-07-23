@@ -26,7 +26,7 @@ use zenoh_config::{
 };
 use zenoh_protocol::{
     core::ZenohIdProto,
-    network::{Declare, DeclareBody, NetworkBody, NetworkMessage, Push, Request},
+    network::{Declare, DeclareBody, NetworkBody, NetworkMessage, Push, Request, Response},
     zenoh::{PushBody, RequestBody},
 };
 use zenoh_result::ZResult;
@@ -284,7 +284,43 @@ impl InterceptorTrait for IngressAclEnforcer {
                     return None;
                 }
             }
-            _ => {}
+            // Unfiltered Delete messages
+            NetworkBody::Push(Push {
+                payload: PushBody::Del(_),
+                ..
+            }) => {}
+            // Unfiltered Declare messages
+            NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareKeyExpr(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareFinal(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareToken(_),
+                ..
+            }) => {}
+            // Unfiltered Undeclare messages
+            NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareKeyExpr(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareToken(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareQueryable(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareSubscriber(_),
+                ..
+            }) => {}
+            // Unfiltered remaining message types
+            NetworkBody::Interest(_) | NetworkBody::OAM(_) | NetworkBody::ResponseFinal(_) => {}
         }
         Some(ctx)
     }
@@ -358,7 +394,43 @@ impl InterceptorTrait for EgressAclEnforcer {
                     return None;
                 }
             }
-            _ => {}
+            // Unfiltered Delete messages
+            NetworkBody::Push(Push {
+                payload: PushBody::Del(_),
+                ..
+            }) => {}
+            // Unfiltered Declare messages
+            NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareKeyExpr(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareFinal(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareToken(_),
+                ..
+            }) => {}
+            // Unfiltered Undeclare messages
+            NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareKeyExpr(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareToken(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareQueryable(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareSubscriber(_),
+                ..
+            }) => {}
+            // Unfiltered remaining message types
+            NetworkBody::Interest(_) | NetworkBody::OAM(_) | NetworkBody::ResponseFinal(_) => {}
         }
         Some(ctx)
     }
