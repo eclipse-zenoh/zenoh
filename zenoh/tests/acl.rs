@@ -43,10 +43,19 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_acl_get_queryable() {
+        zenoh::try_init_log_from_env();
         test_get_qbl_deny(27448).await;
         test_get_qbl_allow(27448).await;
         test_get_qbl_allow_then_deny(27448).await;
         test_get_qbl_deny_then_allow(27448).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_acl_queryable_reply() {
+        zenoh::try_init_log_from_env();
+        // Only test cases not covered by `test_acl_get_queryable`
+        test_reply_deny(27449).await;
+        test_reply_allow_then_deny(27449).await;
     }
 
     async fn get_basic_router_config(port: u16) -> Config {
@@ -184,7 +193,7 @@ mod test {
                         {
                             "id": "r1",
                             "permission": "deny",
-                            "flows": ["egress"],
+                            "flows": ["egress", "ingress"],
                             "messages": [
                                 "put",
                                 "declare_subscriber"
@@ -320,9 +329,24 @@ mod test {
                 r#"{
                     "enabled": true,
                     "default_permission": "deny",
-                    "rules": [],
-                    "subjects": [],
-                    "policies": [],
+                    "rules": [
+                        {
+                            "id": "allow reply",
+                            "permission": "allow",
+                            "messages": ["reply"],
+                            "flows": ["egress", "ingress"],
+                            "key_exprs": ["test/demo"],
+                        }
+                    ],
+                    "subjects": [
+                        { "id": "all" }
+                    ],
+                    "policies": [
+                        {
+                            "rules": ["allow reply"],
+                            "subjects": ["all"],
+                        }
+                    ],
                 }"#,
             )
             .unwrap();
@@ -435,7 +459,8 @@ mod test {
                             "flows": ["egress", "ingress"],
                             "messages": [
                                 "query",
-                                "declare_queryable"
+                                "declare_queryable",
+                                "reply"
                             ],
                             "key_exprs": [
                                 "test/demo"
@@ -512,7 +537,7 @@ mod test {
                         {
                             "id": "r1",
                             "permission": "deny",
-                            "flows": ["egress"],
+                            "flows": ["egress", "ingress"],
                             "messages": [
                                 "query",
                                 "declare_queryable"
@@ -537,6 +562,148 @@ mod test {
                         }
                     ]
                 }"#,
+            )
+            .unwrap();
+        println!("Opening router session");
+
+        let session = ztimeout!(zenoh::open(config_router)).unwrap();
+
+        let (get_session, qbl_session) = get_client_sessions(port).await;
+        {
+            let mut received_value = String::new();
+
+            let qbl = ztimeout!(qbl_session
+                .declare_queryable(KEY_EXPR)
+                .callback(move |sample| {
+                    tokio::task::block_in_place(move || {
+                        Handle::current().block_on(async move {
+                            ztimeout!(sample.reply(KEY_EXPR, VALUE)).unwrap()
+                        });
+                    });
+                }))
+            .unwrap();
+
+            tokio::time::sleep(SLEEP).await;
+            let recv_reply = ztimeout!(get_session.get(KEY_EXPR)).unwrap();
+            while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
+                match reply.result() {
+                    Ok(sample) => {
+                        received_value = sample.payload().deserialize::<String>().unwrap();
+                        break;
+                    }
+                    Err(e) => println!("Error : {:?}", e),
+                }
+            }
+            tokio::time::sleep(SLEEP).await;
+            assert_ne!(received_value, VALUE);
+            ztimeout!(qbl.undeclare()).unwrap();
+        }
+        close_sessions(get_session, qbl_session).await;
+        close_router_session(session).await;
+    }
+
+    async fn test_reply_deny(port: u16) {
+        println!("test_reply_deny");
+
+        let mut config_router = get_basic_router_config(port).await;
+        config_router
+            .insert_json5(
+                "access_control",
+                r#"{
+                    "enabled": true,
+                    "default_permission": "deny",
+                    "rules": [
+                        {
+                            "id": "allow get/declare qbl",
+                            "permission": "allow",
+                            "messages": ["query", "declare_queryable"],
+                            "key_exprs": ["test/demo"],
+                        }
+                    ],
+                    "subjects": [
+                        { "id": "all" }
+                    ],
+                    "policies": [
+                        {
+                            "rules": ["allow get/declare qbl"],
+                            "subjects": ["all"],
+                        }
+                    ],
+                }"#,
+            )
+            .unwrap();
+        println!("Opening router session");
+
+        let session = ztimeout!(zenoh::open(config_router)).unwrap();
+
+        let (get_session, qbl_session) = get_client_sessions(port).await;
+        {
+            let mut received_value = String::new();
+
+            let qbl = ztimeout!(qbl_session
+                .declare_queryable(KEY_EXPR)
+                .callback(move |sample| {
+                    tokio::task::block_in_place(move || {
+                        Handle::current().block_on(async move {
+                            ztimeout!(sample.reply(KEY_EXPR, VALUE)).unwrap()
+                        });
+                    });
+                }))
+            .unwrap();
+
+            tokio::time::sleep(SLEEP).await;
+            let recv_reply = ztimeout!(get_session.get(KEY_EXPR)).unwrap();
+            while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
+                match reply.result() {
+                    Ok(sample) => {
+                        received_value = sample.payload().deserialize::<String>().unwrap();
+                        break;
+                    }
+                    Err(e) => println!("Error : {:?}", e),
+                }
+            }
+            tokio::time::sleep(SLEEP).await;
+            assert_ne!(received_value, VALUE);
+            ztimeout!(qbl.undeclare()).unwrap();
+        }
+        close_sessions(get_session, qbl_session).await;
+        close_router_session(session).await;
+    }
+
+    async fn test_reply_allow_then_deny(port: u16) {
+        println!("test_reply_allow_then_deny");
+
+        let mut config_router = get_basic_router_config(port).await;
+        config_router
+            .insert_json5(
+                "access_control",
+                r#"{
+                "enabled": true,
+                "default_permission": "allow",
+                "rules": [
+                    {
+                        "id": "r1",
+                        "permission": "deny",
+                        "messages": ["reply"],
+                        "flows": ["egress", "ingress"],
+                        "key_exprs": ["test/demo"],
+                    },
+                ],
+                "subjects": [
+                    {
+                        "id": "s1",
+                        "interfaces": [
+                            "lo", "lo0"
+                        ],
+                    }
+                ],
+                "policies": [
+                    {
+                        "rules": ["r1"],
+                        "subjects": ["s1"],
+                    }
+                ]
+            }"#,
             )
             .unwrap();
         println!("Opening router session");
