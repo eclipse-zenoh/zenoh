@@ -247,7 +247,8 @@ impl InterceptorTrait for IngressAclEnforcer {
                 payload: RequestBody::Query(_),
                 ..
             }) => {
-                if self.action(AclMessage::Get, "Get (ingress)", key_expr?) == Permission::Deny {
+                if self.action(AclMessage::Query, "Query (ingress)", key_expr?) == Permission::Deny
+                {
                     return None;
                 }
             }
@@ -316,7 +317,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                 payload: RequestBody::Query(_),
                 ..
             }) => {
-                if self.action(AclMessage::Get, "Get (egress)", key_expr?) == Permission::Deny {
+                if self.action(AclMessage::Query, "Query (egress)", key_expr?) == Permission::Deny {
                     return None;
                 }
             }

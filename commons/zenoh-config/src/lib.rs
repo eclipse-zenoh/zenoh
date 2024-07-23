@@ -167,7 +167,7 @@ pub struct PolicyRule {
 pub enum AclMessage {
     Put,
     DeclareSubscriber,
-    Get,
+    Query,
     DeclareQueryable,
 }
 

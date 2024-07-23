@@ -182,7 +182,7 @@ impl PermissionPolicy {
 }
 #[derive(Default)]
 struct ActionPolicy {
-    get: PermissionPolicy,
+    query: PermissionPolicy,
     put: PermissionPolicy,
     declare_subscriber: PermissionPolicy,
     declare_queryable: PermissionPolicy,
@@ -191,7 +191,7 @@ struct ActionPolicy {
 impl ActionPolicy {
     fn action(&self, action: AclMessage) -> &PermissionPolicy {
         match action {
-            AclMessage::Get => &self.get,
+            AclMessage::Query => &self.query,
             AclMessage::Put => &self.put,
             AclMessage::DeclareSubscriber => &self.declare_subscriber,
             AclMessage::DeclareQueryable => &self.declare_queryable,
@@ -199,7 +199,7 @@ impl ActionPolicy {
     }
     fn action_mut(&mut self, action: AclMessage) -> &mut PermissionPolicy {
         match action {
-            AclMessage::Get => &mut self.get,
+            AclMessage::Query => &mut self.query,
             AclMessage::Put => &mut self.put,
             AclMessage::DeclareSubscriber => &mut self.declare_subscriber,
             AclMessage::DeclareQueryable => &mut self.declare_queryable,
