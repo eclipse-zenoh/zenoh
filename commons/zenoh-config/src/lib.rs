@@ -169,6 +169,7 @@ pub enum AclMessage {
     DeclareSubscriber,
     Query,
     DeclareQueryable,
+    Reply,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]

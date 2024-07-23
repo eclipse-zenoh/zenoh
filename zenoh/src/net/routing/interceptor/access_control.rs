@@ -278,6 +278,12 @@ impl InterceptorTrait for IngressAclEnforcer {
                     return None;
                 }
             }
+            NetworkBody::Response(_) => {
+                if self.action(AclMessage::Reply, "Reply (ingress)", key_expr?) == Permission::Deny
+                {
+                    return None;
+                }
+            }
             _ => {}
         }
         Some(ctx)
@@ -344,6 +350,11 @@ impl InterceptorTrait for EgressAclEnforcer {
                     key_expr?,
                 ) == Permission::Deny
                 {
+                    return None;
+                }
+            }
+            NetworkBody::Response(_) => {
+                if self.action(AclMessage::Reply, "Reply (egress)", key_expr?) == Permission::Deny {
                     return None;
                 }
             }
