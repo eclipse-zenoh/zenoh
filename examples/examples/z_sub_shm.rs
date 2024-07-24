@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
 use zenoh::shm::zshm;
 use zenoh::{bytes::ZBytes, config::Config, key_expr::KeyExpr, prelude::*};
