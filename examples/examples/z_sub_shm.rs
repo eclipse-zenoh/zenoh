@@ -12,11 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::{bytes::ZBytes, config::Config, key_expr::KeyExpr, prelude::*};
-use zenoh_examples::CommonArgs;
 
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
 use zenoh::shm::zshm;
+use zenoh::{bytes::ZBytes, config::Config, key_expr::KeyExpr, prelude::*};
+use zenoh_examples::CommonArgs;
 
 #[tokio::main]
 async fn main() {
