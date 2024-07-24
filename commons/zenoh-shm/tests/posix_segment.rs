@@ -61,7 +61,7 @@ where
     validate_segment(&created_segment, &opened_segment_instance_2, elem_count);
 
     drop(opened_segment_instance_1);
-    validate_segment(&created_segment, &opened_segment_instance_2);
+    validate_segment(&created_segment, &opened_segment_instance_2, elem_count);
 }
 
 /// UNSIGNED ///
