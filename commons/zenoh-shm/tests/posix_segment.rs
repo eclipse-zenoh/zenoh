@@ -44,19 +44,21 @@ where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
     ID: Copy + Clone + Display,
 {
+    let elem_count = 900;
+
     let created_segment: Segment<ID> =
-        Segment::create(900, TEST_SEGMENT_PREFIX).expect("error creating new segment");
+        Segment::create(elem_count, TEST_SEGMENT_PREFIX).expect("error creating new segment");
 
     let opened_segment_instance_1 = Segment::open(created_segment.id(), TEST_SEGMENT_PREFIX)
         .expect("error opening existing segment!");
 
-    validate_segment(&created_segment, &opened_segment_instance_1);
+    validate_segment(&created_segment, &opened_segment_instance_1, elem_count);
 
     let opened_segment_instance_2 = Segment::open(created_segment.id(), TEST_SEGMENT_PREFIX)
         .expect("error opening existing segment!");
 
-    validate_segment(&created_segment, &opened_segment_instance_1);
-    validate_segment(&created_segment, &opened_segment_instance_2);
+    validate_segment(&created_segment, &opened_segment_instance_1, elem_count);
+    validate_segment(&created_segment, &opened_segment_instance_2, elem_count);
 
     drop(opened_segment_instance_1);
     validate_segment(&created_segment, &opened_segment_instance_2);
