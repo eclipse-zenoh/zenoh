@@ -36,6 +36,10 @@ const AUTH_SEGMENT_PREFIX: &str = "auth";
 pub(crate) type AuthSegmentID = u32;
 pub(crate) type AuthChallenge = u64;
 
+const LEN_INDEX: usize = 0;
+const CHALLENGE_INDEX: usize = 1;
+const ID_START_INDEX: usize = 2;
+
 #[derive(Debug)]
 pub struct AuthSegment {
     array: ArrayInSHM<AuthSegmentID, AuthChallenge, usize>,
@@ -44,13 +48,14 @@ pub struct AuthSegment {
 impl AuthSegment {
     pub fn create(challenge: AuthChallenge, shm_protocols: &[ProtocolID]) -> ZResult<Self> {
         let array = ArrayInSHM::<AuthSegmentID, AuthChallenge, usize>::create(
-            1 + shm_protocols.len(),
+            ID_START_INDEX + shm_protocols.len(),
             AUTH_SEGMENT_PREFIX,
         )?;
         unsafe {
-            (*array.elem_mut(0)) = challenge;
-            for elem in 1..array.elem_count() {
-                (*array.elem_mut(elem)) = shm_protocols[elem - 1] as u64;
+            (*array.elem_mut(LEN_INDEX)) = shm_protocols.len() as AuthChallenge;
+            (*array.elem_mut(CHALLENGE_INDEX)) = challenge;
+            for elem in ID_START_INDEX..array.elem_count() {
+                (*array.elem_mut(elem)) = shm_protocols[elem - ID_START_INDEX] as u64;
             }
         };
         Ok(Self { array })
@@ -62,12 +67,12 @@ impl AuthSegment {
     }
 
     pub fn challenge(&self) -> AuthChallenge {
-        unsafe { *self.array.elem(0) }
+        unsafe { *self.array.elem(CHALLENGE_INDEX) }
     }
 
     pub fn protocols(&self) -> Vec<ProtocolID> {
         let mut result = vec![];
-        for elem in 1..self.array.elem_count() {
+        for elem in ID_START_INDEX..self.array.elem_count() {
             result.push(unsafe { *self.array.elem(elem) as u32 });
         }
         result

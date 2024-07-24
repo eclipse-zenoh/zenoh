@@ -23,7 +23,8 @@ use crate::{LCodec, RCodec, WCodec, Zenoh080};
 
 impl LCodec<&Timestamp> for Zenoh080 {
     fn w_len(self, x: &Timestamp) -> usize {
-        self.w_len(x.get_time().as_u64()) + self.w_len(x.get_id().size())
+        let id = x.get_id();
+        self.w_len(x.get_time().as_u64()) + self.w_len(&id.to_le_bytes()[..id.size()])
     }
 }
 
