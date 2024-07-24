@@ -235,6 +235,21 @@ impl InterceptorTrait for IngressAclEnforcer {
             .or_else(|| ctx.full_expr());
 
         match &ctx.msg.body {
+            NetworkBody::Request(Request {
+                payload: RequestBody::Query(_),
+                ..
+            }) => {
+                if self.action(AclMessage::Query, "Query (ingress)", key_expr?) == Permission::Deny
+                {
+                    return None;
+                }
+            }
+            NetworkBody::Response(Response { .. }) => {
+                if self.action(AclMessage::Reply, "Reply (ingress)", key_expr?) == Permission::Deny
+                {
+                    return None;
+                }
+            }
             NetworkBody::Push(Push {
                 payload: PushBody::Put(_),
                 ..
@@ -249,15 +264,6 @@ impl InterceptorTrait for IngressAclEnforcer {
             }) => {
                 if self.action(AclMessage::Delete, "Delete (ingress)", key_expr?)
                     == Permission::Deny
-                {
-                    return None;
-                }
-            }
-            NetworkBody::Request(Request {
-                payload: RequestBody::Query(_),
-                ..
-            }) => {
-                if self.action(AclMessage::Query, "Query (ingress)", key_expr?) == Permission::Deny
                 {
                     return None;
                 }
@@ -284,12 +290,6 @@ impl InterceptorTrait for IngressAclEnforcer {
                     "Declare Queryable (ingress)",
                     key_expr?,
                 ) == Permission::Deny
-                {
-                    return None;
-                }
-            }
-            NetworkBody::Response(Response { .. }) => {
-                if self.action(AclMessage::Reply, "Reply (ingress)", key_expr?) == Permission::Deny
                 {
                     return None;
                 }
@@ -352,6 +352,19 @@ impl InterceptorTrait for EgressAclEnforcer {
             .or_else(|| ctx.full_expr());
 
         match &ctx.msg.body {
+            NetworkBody::Request(Request {
+                payload: RequestBody::Query(_),
+                ..
+            }) => {
+                if self.action(AclMessage::Query, "Query (egress)", key_expr?) == Permission::Deny {
+                    return None;
+                }
+            }
+            NetworkBody::Response(Response { .. }) => {
+                if self.action(AclMessage::Reply, "Reply (egress)", key_expr?) == Permission::Deny {
+                    return None;
+                }
+            }
             NetworkBody::Push(Push {
                 payload: PushBody::Put(_),
                 ..
@@ -366,14 +379,6 @@ impl InterceptorTrait for EgressAclEnforcer {
             }) => {
                 if self.action(AclMessage::Delete, "Delete (egress)", key_expr?) == Permission::Deny
                 {
-                    return None;
-                }
-            }
-            NetworkBody::Request(Request {
-                payload: RequestBody::Query(_),
-                ..
-            }) => {
-                if self.action(AclMessage::Query, "Query (egress)", key_expr?) == Permission::Deny {
                     return None;
                 }
             }
@@ -400,11 +405,6 @@ impl InterceptorTrait for EgressAclEnforcer {
                     key_expr?,
                 ) == Permission::Deny
                 {
-                    return None;
-                }
-            }
-            NetworkBody::Response(Response { .. }) => {
-                if self.action(AclMessage::Reply, "Reply (egress)", key_expr?) == Permission::Deny {
                     return None;
                 }
             }
