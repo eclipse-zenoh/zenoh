@@ -718,7 +718,7 @@ pub(crate) fn route_send_response(
                         ext_tstamp,
                         ext_respid,
                     },
-                    "".to_string(), // @TODO provide the proper key expression of the response for interceptors
+                    key_expr.to_string(),
                 ));
         }
         None => tracing::warn!(
