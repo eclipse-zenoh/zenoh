@@ -13,7 +13,7 @@
 //
 use clap::Parser;
 use zenoh::{key_expr::KeyExpr, prelude::*, Config};
-use zenoh_examples::CommonArgs;
+use zenoh_examples::{receive_sample, CommonArgs};
 
 #[tokio::main]
 async fn main() {
@@ -35,25 +35,7 @@ async fn main() {
 
     println!("Press CTRL-C to quit...");
     while let Ok(sample) = subscriber.recv_async().await {
-        // Refer to z_bytes.rs to see how to deserialize different types of message
-        let payload = sample
-            .payload()
-            .deserialize::<String>()
-            .unwrap_or_else(|e| format!("{}", e));
-
-        print!(
-            ">> [Subscriber] Received {} ('{}': '{}')",
-            sample.kind(),
-            sample.key_expr().as_str(),
-            payload
-        );
-        if let Some(att) = sample.attachment() {
-            let att = att
-                .deserialize::<String>()
-                .unwrap_or_else(|e| format!("{}", e));
-            print!(" ({})", att);
-        }
-        println!();
+        receive_sample(&sample, "Subscriber");
     }
 }
 

@@ -16,12 +16,11 @@ use zenoh::{
     key_expr::KeyExpr,
     prelude::*,
     shm::{
-        zshm, BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder,
-        POSIX_PROTOCOL_ID,
+        BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID,
     },
     Config,
 };
-use zenoh_examples::CommonArgs;
+use zenoh_examples::{receive_query, CommonArgs};
 
 const N: usize = 10;
 
@@ -63,18 +62,7 @@ async fn main() {
 
     println!("Press CTRL-C to quit...");
     while let Ok(query) = queryable.recv_async().await {
-        print!(
-            ">> [Queryable] Received Query '{}' ('{}'",
-            query.selector(),
-            query.key_expr().as_str(),
-        );
-        if let Some(query_payload) = query.payload() {
-            match query_payload.deserialize::<&zshm>() {
-                Ok(p) => print!(": '{}'", String::from_utf8_lossy(p)),
-                Err(e) => print!(": 'Not a ShmBufInner: {:?}'", e),
-            }
-        }
-        println!(")");
+        receive_query(&query, "Queryable");
 
         // Allocate an SHM buffer
         // NOTE: For allocation API please check z_alloc_shm.rs example

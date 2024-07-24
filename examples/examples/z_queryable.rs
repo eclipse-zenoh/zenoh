@@ -13,7 +13,7 @@
 //
 use clap::Parser;
 use zenoh::{key_expr::KeyExpr, prelude::*, Config};
-use zenoh_examples::CommonArgs;
+use zenoh_examples::{receive_query, CommonArgs};
 
 #[tokio::main]
 async fn main() {
@@ -22,7 +22,7 @@ async fn main() {
 
     let (mut config, key_expr, payload, complete) = parse_args();
 
-    // A probing procedure for shared memory is performed upon session opening. To enable `z_get_shm` to operate
+    // A probing procedure for shared memory is performed upon session opening. To enable `z_queryable` to operate
     // over shared memory (and to not fallback on network mode), shared memory needs to be enabled also on the
     // subscriber side. By doing so, the probing procedure will succeed and shared memory will operate as expected.
     config.transport.shared_memory.set_enabled(true).unwrap();
@@ -43,20 +43,8 @@ async fn main() {
 
     println!("Press CTRL-C to quit...");
     while let Ok(query) = queryable.recv_async().await {
-        match query.payload() {
-            None => println!(">> [Queryable ] Received Query '{}'", query.selector()),
-            Some(query_payload) => {
-                // Refer to z_bytes.rs to see how to deserialize different types of message
-                let deserialized_payload = query_payload
-                    .deserialize::<String>()
-                    .unwrap_or_else(|e| format!("{}", e));
-                println!(
-                    ">> [Queryable ] Received Query '{}' with payload '{}'",
-                    query.selector(),
-                    deserialized_payload
-                )
-            }
-        }
+        receive_query(&query, "Queryable");
+
         println!(
             ">> [Queryable ] Responding ('{}': '{}')",
             key_expr.as_str(),

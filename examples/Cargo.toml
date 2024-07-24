@@ -92,11 +92,6 @@ name = "z_sub"
 path = "examples/z_sub.rs"
 
 [[example]]
-name = "z_sub_shm"
-path = "examples/z_sub_shm.rs"
-required-features = ["unstable", "shared-memory"]
-
-[[example]]
 name = "z_pull"
 path = "examples/z_pull.rs"
 
