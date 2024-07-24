@@ -50,82 +50,27 @@ use crate::net::routing::{
     },
     hat::{CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
     router::RoutesIndexes,
+    utils::{iter_if, merge_queryable_infos},
     RoutingContext,
 };
 
-#[inline]
-fn merge_qabl_infos(mut this: QueryableInfoType, info: &QueryableInfoType) -> QueryableInfoType {
-    this.complete = this.complete || info.complete;
-    this.distance = std::cmp::min(this.distance, info.distance);
-    this
-}
-
 fn local_router_qabl_info(tables: &Tables, res: &Arc<Resource>) -> QueryableInfoType {
-    let info = if hat!(tables).full_net(WhatAmI::Peer) {
-        res.context.as_ref().and_then(|_| {
-            res_hat!(res)
-                .linkstatepeer_qabls
-                .iter()
-                .fold(None, |accu, (zid, info)| {
-                    if *zid != tables.zid {
-                        Some(match accu {
-                            Some(accu) => merge_qabl_infos(accu, info),
-                            None => *info,
-                        })
-                    } else {
-                        accu
-                    }
-                })
-        })
-    } else {
-        None
-    };
-    res.session_ctxs
-        .values()
-        .fold(info, |accu, ctx| {
-            if let Some(info) = ctx.qabl.as_ref() {
-                Some(match accu {
-                    Some(accu) => merge_qabl_infos(accu, info),
-                    None => *info,
-                })
-            } else {
-                accu
-            }
-        })
-        .unwrap_or(QueryableInfoType::DEFAULT)
+    let router_infos = iter_if(
+        res.context.is_some() && hat!(tables).full_net(WhatAmI::Peer),
+        || &res_hat!(res).linkstatepeer_qabls,
+    )
+    .filter(|(zid, _)| **zid != tables.zid)
+    .map(|(_, info)| *info);
+    let sessions_infos = res.session_ctxs.values().filter_map(|ctx| ctx.qabl);
+    merge_queryable_infos(router_infos.chain(sessions_infos)).unwrap_or_default()
 }
 
 fn local_peer_qabl_info(tables: &Tables, res: &Arc<Resource>) -> QueryableInfoType {
-    let info = if res.context.is_some() {
-        res_hat!(res)
-            .router_qabls
-            .iter()
-            .fold(None, |accu, (zid, info)| {
-                if *zid != tables.zid {
-                    Some(match accu {
-                        Some(accu) => merge_qabl_infos(accu, info),
-                        None => *info,
-                    })
-                } else {
-                    accu
-                }
-            })
-    } else {
-        None
-    };
-    res.session_ctxs
-        .values()
-        .fold(info, |accu, ctx| {
-            if let Some(info) = ctx.qabl.as_ref() {
-                Some(match accu {
-                    Some(accu) => merge_qabl_infos(accu, info),
-                    None => *info,
-                })
-            } else {
-                accu
-            }
-        })
-        .unwrap_or(QueryableInfoType::DEFAULT)
+    let peer_infos = iter_if(res.context.is_some(), || &res_hat!(res).router_qabls)
+        .filter(|(zid, _)| **zid != tables.zid)
+        .map(|(_, info)| *info);
+    let sessions_infos = res.session_ctxs.values().filter_map(|ctx| ctx.qabl);
+    merge_queryable_infos(peer_infos.chain(sessions_infos)).unwrap_or_default()
 }
 
 fn local_qabl_info(
@@ -133,58 +78,25 @@ fn local_qabl_info(
     res: &Arc<Resource>,
     face: &Arc<FaceState>,
 ) -> QueryableInfoType {
-    let mut info = if res.context.is_some() {
-        res_hat!(res)
-            .router_qabls
-            .iter()
-            .fold(None, |accu, (zid, info)| {
-                if *zid != tables.zid {
-                    Some(match accu {
-                        Some(accu) => merge_qabl_infos(accu, info),
-                        None => *info,
-                    })
-                } else {
-                    accu
-                }
-            })
-    } else {
-        None
-    };
-    if res.context.is_some() && hat!(tables).full_net(WhatAmI::Peer) {
-        info = res_hat!(res)
-            .linkstatepeer_qabls
-            .iter()
-            .fold(info, |accu, (zid, info)| {
-                if *zid != tables.zid {
-                    Some(match accu {
-                        Some(accu) => merge_qabl_infos(accu, info),
-                        None => *info,
-                    })
-                } else {
-                    accu
-                }
-            })
-    }
-    res.session_ctxs
+    let peer_infos = iter_if(res.context.is_some(), || &res_hat!(res).router_qabls)
+        .filter(|(zid, _)| **zid != tables.zid)
+        .map(|(_, info)| *info);
+    let router_infos = iter_if(
+        res.context.is_some() && hat!(tables).full_net(WhatAmI::Peer),
+        || &res_hat!(res).linkstatepeer_qabls,
+    )
+    .filter(|(zid, _)| **zid != tables.zid)
+    .map(|(_, info)| *info);
+    let sessions_infos = res
+        .session_ctxs
         .values()
-        .fold(info, |accu, ctx| {
-            if ctx.face.id != face.id && ctx.face.whatami != WhatAmI::Peer
+        .filter(|ctx| {
+            ctx.face.id != face.id && ctx.face.whatami != WhatAmI::Peer
                 || face.whatami != WhatAmI::Peer
                 || hat!(tables).failover_brokering(ctx.face.zid, face.zid)
-            {
-                if let Some(info) = ctx.qabl.as_ref() {
-                    Some(match accu {
-                        Some(accu) => merge_qabl_infos(accu, info),
-                        None => *info,
-                    })
-                } else {
-                    accu
-                }
-            } else {
-                accu
-            }
         })
-        .unwrap_or(QueryableInfoType::DEFAULT)
+        .filter_map(|ctx| ctx.qabl);
+    merge_queryable_infos(peer_infos.chain(router_infos).chain(sessions_infos)).unwrap_or_default()
 }
 
 #[inline]
