@@ -340,8 +340,7 @@ fn register_router_queryable(
     router: ZenohIdProto,
     send_declare: &mut SendDeclare,
 ) {
-    let current_info = res_hat!(res).router_qabls.get(&router);
-    if current_info.is_none() || current_info.unwrap() != qabl_info {
+    if res_hat!(res).router_qabls.get(&router) != Some(qabl_info) {
         // Register router queryable
         {
             res_hat_mut!(res).router_qabls.insert(router, *qabl_info);
@@ -395,8 +394,7 @@ fn register_linkstatepeer_queryable(
     qabl_info: &QueryableInfoType,
     peer: ZenohIdProto,
 ) {
-    let current_info = res_hat!(res).linkstatepeer_qabls.get(&peer);
-    if current_info.is_none() || current_info.unwrap() != qabl_info {
+    if res_hat!(res).linkstatepeer_qabls.get(&peer) != Some(qabl_info) {
         // Register peer queryable
         {
             res_hat_mut!(res)

@@ -224,8 +224,7 @@ fn register_router_subscription(
     router: ZenohIdProto,
     send_declare: &mut SendDeclare,
 ) {
-    // TODO manage sub update
-    if !res_hat!(res).router_subs.contains_key(&router) {
+    if res_hat!(res).router_subs.get(&router) != Some(sub_info) {
         // Register router subscription
         {
             res_hat_mut!(res).router_subs.insert(router, *sub_info);
@@ -262,8 +261,7 @@ fn register_linkstatepeer_subscription(
     sub_info: &SubscriberInfo,
     peer: ZenohIdProto,
 ) {
-    // TODO manage sub update
-    if !res_hat!(res).linkstatepeer_subs.contains_key(&peer) {
+    if res_hat!(res).linkstatepeer_subs.get(&peer) != Some(sub_info) {
         // Register peer subscription
         {
             res_hat_mut!(res).linkstatepeer_subs.insert(peer, *sub_info);
