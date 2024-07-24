@@ -166,6 +166,7 @@ pub struct PolicyRule {
 #[serde(rename_all = "snake_case")]
 pub enum AclMessage {
     Put,
+    Delete,
     DeclareSubscriber,
     Query,
     DeclareQueryable,

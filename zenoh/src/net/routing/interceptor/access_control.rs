@@ -243,6 +243,16 @@ impl InterceptorTrait for IngressAclEnforcer {
                     return None;
                 }
             }
+            NetworkBody::Push(Push {
+                payload: PushBody::Del(_),
+                ..
+            }) => {
+                if self.action(AclMessage::Delete, "Delete (ingress)", key_expr?)
+                    == Permission::Deny
+                {
+                    return None;
+                }
+            }
             NetworkBody::Request(Request {
                 payload: RequestBody::Query(_),
                 ..
@@ -284,11 +294,6 @@ impl InterceptorTrait for IngressAclEnforcer {
                     return None;
                 }
             }
-            // Unfiltered Delete messages
-            NetworkBody::Push(Push {
-                payload: PushBody::Del(_),
-                ..
-            }) => {}
             // Unfiltered Declare messages
             NetworkBody::Declare(Declare {
                 body: DeclareBody::DeclareKeyExpr(_),
@@ -355,6 +360,15 @@ impl InterceptorTrait for EgressAclEnforcer {
                     return None;
                 }
             }
+            NetworkBody::Push(Push {
+                payload: PushBody::Del(_),
+                ..
+            }) => {
+                if self.action(AclMessage::Delete, "Delete (egress)", key_expr?) == Permission::Deny
+                {
+                    return None;
+                }
+            }
             NetworkBody::Request(Request {
                 payload: RequestBody::Query(_),
                 ..
@@ -394,11 +408,6 @@ impl InterceptorTrait for EgressAclEnforcer {
                     return None;
                 }
             }
-            // Unfiltered Delete messages
-            NetworkBody::Push(Push {
-                payload: PushBody::Del(_),
-                ..
-            }) => {}
             // Unfiltered Declare messages
             NetworkBody::Declare(Declare {
                 body: DeclareBody::DeclareKeyExpr(_),
