@@ -140,7 +140,7 @@ mod test {
 
             publisher.delete().await.unwrap();
             tokio::time::sleep(SLEEP).await;
-            assert_ne!(*zlock!(deleted), true);
+            assert!(!(*zlock!(deleted)));
             ztimeout!(subscriber.undeclare()).unwrap();
         }
         close_sessions(sub_session, pub_session).await;
@@ -194,7 +194,7 @@ mod test {
 
             publisher.delete().await.unwrap();
             tokio::time::sleep(SLEEP).await;
-            assert_eq!(*zlock!(deleted), true);
+            assert!(*zlock!(deleted));
             ztimeout!(subscriber.undeclare()).unwrap();
         }
 
@@ -276,7 +276,7 @@ mod test {
 
             publisher.delete().await.unwrap();
             tokio::time::sleep(SLEEP).await;
-            assert_ne!(*zlock!(deleted), true);
+            assert!(!(*zlock!(deleted)));
             ztimeout!(subscriber.undeclare()).unwrap();
         }
         close_sessions(sub_session, pub_session).await;
@@ -357,7 +357,7 @@ mod test {
 
             publisher.delete().await.unwrap();
             tokio::time::sleep(SLEEP).await;
-            assert_eq!(*zlock!(deleted), true);
+            assert!(*zlock!(deleted));
             ztimeout!(subscriber.undeclare()).unwrap();
         }
         close_sessions(sub_session, pub_session).await;
