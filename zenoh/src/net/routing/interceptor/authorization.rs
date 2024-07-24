@@ -184,15 +184,19 @@ impl PermissionPolicy {
 struct ActionPolicy {
     query: PermissionPolicy,
     put: PermissionPolicy,
+    delete: PermissionPolicy,
     declare_subscriber: PermissionPolicy,
     declare_queryable: PermissionPolicy,
+    reply: PermissionPolicy,
 }
 
 impl ActionPolicy {
     fn action(&self, action: AclMessage) -> &PermissionPolicy {
         match action {
             AclMessage::Query => &self.query,
+            AclMessage::Reply => &self.reply,
             AclMessage::Put => &self.put,
+            AclMessage::Delete => &self.delete,
             AclMessage::DeclareSubscriber => &self.declare_subscriber,
             AclMessage::DeclareQueryable => &self.declare_queryable,
         }
@@ -200,7 +204,9 @@ impl ActionPolicy {
     fn action_mut(&mut self, action: AclMessage) -> &mut PermissionPolicy {
         match action {
             AclMessage::Query => &mut self.query,
+            AclMessage::Reply => &mut self.reply,
             AclMessage::Put => &mut self.put,
+            AclMessage::Delete => &mut self.delete,
             AclMessage::DeclareSubscriber => &mut self.declare_subscriber,
             AclMessage::DeclareQueryable => &mut self.declare_queryable,
         }

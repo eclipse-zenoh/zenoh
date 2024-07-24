@@ -26,7 +26,7 @@ use zenoh_config::{
 };
 use zenoh_protocol::{
     core::ZenohIdProto,
-    network::{Declare, DeclareBody, NetworkBody, NetworkMessage, Push, Request},
+    network::{Declare, DeclareBody, NetworkBody, NetworkMessage, Push, Request, Response},
     zenoh::{PushBody, RequestBody},
 };
 use zenoh_result::ZResult;
@@ -235,6 +235,21 @@ impl InterceptorTrait for IngressAclEnforcer {
             .or_else(|| ctx.full_expr());
 
         match &ctx.msg.body {
+            NetworkBody::Request(Request {
+                payload: RequestBody::Query(_),
+                ..
+            }) => {
+                if self.action(AclMessage::Query, "Query (ingress)", key_expr?) == Permission::Deny
+                {
+                    return None;
+                }
+            }
+            NetworkBody::Response(Response { .. }) => {
+                if self.action(AclMessage::Reply, "Reply (ingress)", key_expr?) == Permission::Deny
+                {
+                    return None;
+                }
+            }
             NetworkBody::Push(Push {
                 payload: PushBody::Put(_),
                 ..
@@ -243,11 +258,12 @@ impl InterceptorTrait for IngressAclEnforcer {
                     return None;
                 }
             }
-            NetworkBody::Request(Request {
-                payload: RequestBody::Query(_),
+            NetworkBody::Push(Push {
+                payload: PushBody::Del(_),
                 ..
             }) => {
-                if self.action(AclMessage::Query, "Query (ingress)", key_expr?) == Permission::Deny
+                if self.action(AclMessage::Delete, "Delete (ingress)", key_expr?)
+                    == Permission::Deny
                 {
                     return None;
                 }
@@ -278,7 +294,38 @@ impl InterceptorTrait for IngressAclEnforcer {
                     return None;
                 }
             }
-            _ => {}
+            // Unfiltered Declare messages
+            NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareKeyExpr(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareFinal(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareToken(_),
+                ..
+            }) => {}
+            // Unfiltered Undeclare messages
+            NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareKeyExpr(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareToken(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareQueryable(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareSubscriber(_),
+                ..
+            }) => {}
+            // Unfiltered remaining message types
+            NetworkBody::Interest(_) | NetworkBody::OAM(_) | NetworkBody::ResponseFinal(_) => {}
         }
         Some(ctx)
     }
@@ -305,6 +352,22 @@ impl InterceptorTrait for EgressAclEnforcer {
             .or_else(|| ctx.full_expr());
 
         match &ctx.msg.body {
+            NetworkBody::Request(Request {
+                payload: RequestBody::Query(_),
+                ..
+            }) => {
+                if self.action(AclMessage::Query, "Query (egress)", key_expr?) == Permission::Deny {
+                    return None;
+                }
+            }
+            NetworkBody::Response(Response { wire_expr, .. }) => {
+                // @TODO: Remove wire_expr usage when issue #1255 is implemented
+                if self.action(AclMessage::Reply, "Reply (egress)", wire_expr.as_str())
+                    == Permission::Deny
+                {
+                    return None;
+                }
+            }
             NetworkBody::Push(Push {
                 payload: PushBody::Put(_),
                 ..
@@ -313,11 +376,12 @@ impl InterceptorTrait for EgressAclEnforcer {
                     return None;
                 }
             }
-            NetworkBody::Request(Request {
-                payload: RequestBody::Query(_),
+            NetworkBody::Push(Push {
+                payload: PushBody::Del(_),
                 ..
             }) => {
-                if self.action(AclMessage::Query, "Query (egress)", key_expr?) == Permission::Deny {
+                if self.action(AclMessage::Delete, "Delete (egress)", key_expr?) == Permission::Deny
+                {
                     return None;
                 }
             }
@@ -347,7 +411,38 @@ impl InterceptorTrait for EgressAclEnforcer {
                     return None;
                 }
             }
-            _ => {}
+            // Unfiltered Declare messages
+            NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareKeyExpr(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareFinal(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareToken(_),
+                ..
+            }) => {}
+            // Unfiltered Undeclare messages
+            NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareKeyExpr(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareToken(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareQueryable(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareSubscriber(_),
+                ..
+            }) => {}
+            // Unfiltered remaining message types
+            NetworkBody::Interest(_) | NetworkBody::OAM(_) | NetworkBody::ResponseFinal(_) => {}
         }
         Some(ctx)
     }

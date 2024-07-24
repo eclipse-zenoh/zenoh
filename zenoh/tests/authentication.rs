@@ -945,7 +945,8 @@ client2name:client2passwd";
                             "flows": ["egress", "ingress"],
                             "messages": [
                                 "query",
-                                "declare_queryable"
+                                "declare_queryable",
+                                "reply",
                             ],
                             "key_exprs": [
                                 "test/demo"
@@ -1030,7 +1031,8 @@ client2name:client2passwd";
                             "flows": ["egress"],
                             "messages": [
                                 "query",
-                                "declare_queryable"
+                                "declare_queryable",
+                                "reply"
                             ],
                             "key_exprs": [
                                 "test/demo"
@@ -1256,7 +1258,8 @@ client2name:client2passwd";
                             "flows": ["egress", "ingress"],
                             "messages": [
                                 "query",
-                                "declare_queryable"
+                                "declare_queryable",
+                                "reply"
                             ],
                             "key_exprs": [
                                 "test/demo"
@@ -1342,7 +1345,8 @@ client2name:client2passwd";
                             "flows": ["egress"],
                             "messages": [
                                 "query",
-                                "declare_queryable"
+                                "declare_queryable",
+                                "reply"
                             ],
                             "key_exprs": [
                                 "test/demo"
@@ -1568,7 +1572,8 @@ client2name:client2passwd";
                             "flows": ["ingress", "egress"],
                             "messages": [
                                 "query",
-                                "declare_queryable"
+                                "declare_queryable",
+                                "reply"
                             ],
                             "key_exprs": [
                                 "test/demo"
@@ -1654,7 +1659,8 @@ client2name:client2passwd";
                             "flows": ["egress"],
                             "messages": [
                                 "query",
-                                "declare_queryable"
+                                "declare_queryable",
+                                "reply"
                             ],
                             "key_exprs": [
                                 "test/demo"
