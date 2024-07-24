@@ -2,10 +2,9 @@
 //! See the code in ../examples/
 //! Check ../README.md for usage.
 //!
-use zenoh::{bytes::ZBytes, config::Config, query::Query, sample::Sample};
-
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
 use zenoh::shm::zshm;
+use zenoh::{bytes::ZBytes, config::Config, query::Query, sample::Sample};
 
 #[derive(clap::ValueEnum, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Wai {
