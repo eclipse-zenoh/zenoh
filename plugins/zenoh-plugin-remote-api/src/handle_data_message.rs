@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 
 use tracing::{error, warn};
+use zenoh::query::Query;
 
 use crate::{
     interface::{DataMsg, QueryableMsg, RemoteAPIMsg},
@@ -13,10 +14,6 @@ pub async fn handle_data_message(
     state_map: StateMap,
 ) -> Option<RemoteAPIMsg> {
     match data_msg {
-        DataMsg::Sample(sample, publisher_uuid) => {
-            warn!("Server has Should not recieved A Sample from client");
-            None
-        }
         DataMsg::PublisherPut(payload, publisher_uuid) => {
             let state_reader = state_map.read().await;
             if let Some(state) = state_reader.get(&sock_addr) {
@@ -29,7 +26,6 @@ pub async fn handle_data_message(
                 }
             } else {
                 warn!("No state in map for Socket Address {sock_addr}");
-                println!("No state in map for Socket Addres {sock_addr}");
             }
             None
         }
@@ -65,10 +61,44 @@ pub async fn handle_data_message(
                 warn!("Plugin should not receive Query from Client");
                 None
             }
-            QueryableMsg::Reply {} => {
-                todo!();
+            QueryableMsg::Reply { uuid, reply } => {
+                let mut state_reader = state_map.write().await;
+                if let Some(state) = state_reader.get_mut(&sock_addr) {
+                    let query: Option<Query>;
+
+                    match state.unanswered_queries.write() {
+                        Ok(mut wr) => {
+                            query = wr.remove(&uuid);
+                        }
+                        Err(err) => {
+                            tracing::error!("unanswered Queries RwLock Poinsened {err}");
+                            return None;
+                        }
+                    }
+
+                    if let Some(q) = query {
+                        match reply.result {
+                            Ok(ok) => {
+                                if let Err(err) = q.reply(q.key_expr(), ok.value).await {
+                                    tracing::error!("Query Could not Send Reply {}", err);
+                                };
+                            }
+                            Err(err) => {
+                                if let Err(err) = q.reply_err(err.payload).await {
+                                    tracing::error!("Query Could not Send Reply {}", err);
+                                };
+                            }
+                        }
+                    } else {
+                        tracing::error!("Query id not found in map {uuid}");
+                    };
+                }
                 None
             }
         },
+        DataMsg::Sample(sample, publisher_uuid) => {
+            warn!("Server has Should not recieved A Sample from client");
+            None
+        }
     }
 }

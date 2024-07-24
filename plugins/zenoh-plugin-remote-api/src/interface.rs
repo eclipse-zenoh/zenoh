@@ -5,6 +5,7 @@ use ts_rs::TS;
 use uuid::Uuid;
 use zenoh::{
     key_expr::OwnedKeyExpr,
+    query::Query,
     sample::{Sample, SampleKind},
 };
 
@@ -22,7 +23,7 @@ pub enum RemoteAPIMsg {
 pub enum QueryableMsg {
     // UUID of original queryable
     Query { uuid: Uuid, query: QueryWS },
-    Reply {},
+    Reply { uuid: Uuid, reply: ReplyWS },
 }
 
 #[derive(TS)]
@@ -123,17 +124,45 @@ pub struct QueryWS {
     #[ts(as = "OwnedKeyExprWrapper")]
     key_expr: OwnedKeyExpr,
     parameters: String,
-    //
     encoding: Option<String>,
     attachment: Option<Vec<u8>>,
     payload: Option<Vec<u8>>,
+}
+
+impl From<&Query> for QueryWS {
+    fn from(q: &Query) -> Self {
+        let payload: Option<Vec<u8>> = match q.payload().map(|x| x.try_into()) {
+            Some(Ok(x)) => Some(x),
+            Some(Err(err)) => {
+                tracing::error!("Failed to get convert ZBytes, Query->QueryWS");
+                None
+            }
+            None => None,
+        };
+        let attachment: Option<Vec<u8>> = match q.attachment().map(|x| x.try_into()) {
+            Some(Ok(x)) => Some(x),
+            Some(Err(err)) => {
+                tracing::error!("Failed to get convert ZBytes, Query->QueryWS");
+                None
+            }
+            None => None,
+        };
+
+        QueryWS {
+            key_expr: q.key_expr().to_owned().into(),
+            parameters: q.parameters().to_string(),
+            encoding: q.encoding().map(|x| x.to_string()),
+            attachment,
+            payload,
+        }
+    }
 }
 
 #[derive(TS)]
 #[ts(export)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ReplyWS {
-    result: Result<SampleWS, ReplyErrorWS>,
+    pub result: Result<SampleWS, ReplyErrorWS>,
 }
 
 #[derive(TS)]
@@ -141,7 +170,6 @@ pub struct ReplyWS {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ReplyErrorWS {
     pub(crate) payload: Vec<u8>,
-    pub(crate) encoding: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, TS)]
@@ -178,7 +206,6 @@ impl TryFrom<Sample> for SampleWS {
 
     fn try_from(s: Sample) -> Result<Self, Self::Error> {
         let z_bytes: Vec<u8> = s.payload().try_into()?;
-        // let timestamp = s.timestamp().to;
 
         Ok(SampleWS {
             key_expr: s.key_expr().to_owned().into(),
@@ -225,7 +252,11 @@ mod tests {
             kind: SampleKindWS::Put,
         };
 
-        let json: String = serde_json::to_string(&QueryableMsg::Reply {}).unwrap();
+        let json: String = serde_json::to_string(&QueryableMsg::Reply {
+            uuid,
+            reply: todo!(),
+        })
+        .unwrap();
         assert_eq!(json, r#"{"Reply":{}}"#);
 
         let json: String = serde_json::to_string(&DataMsg::Sample(sampe_ws, uuid)).unwrap();
