@@ -94,13 +94,13 @@ pub trait RunningPluginTrait: Send + Sync + PluginControl {
     /// Thus the plugin can reply its contribution to the global admin space of this zenohd.
     /// Parameters:
     /// * `key_expr`: the key_expr selector of the query. This key_expr is
-    /// exactly the same as it was requested by user, for example "@/ROUTER_ID/router/plugins/PLUGIN_NAME/some/plugin/info" or "@/*/router/plugins/*/foo/bar".
-    /// But the plugin's [RunningPluginTrait::adminspace_getter] is called only if the key_expr matches the `plugin_status_key`
+    ///   exactly the same as it was requested by user, for example "@/ROUTER_ID/router/plugins/PLUGIN_NAME/some/plugin/info" or "@/*/router/plugins/*/foo/bar".
+    ///   But the plugin's [RunningPluginTrait::adminspace_getter] is called only if the key_expr matches the `plugin_status_key`
     /// * `plugin_status_key`: the actual path to plugin's status in the admin space. For example "@/ROUTER_ID/router/plugins/PLUGIN_NAME"
-    /// Returns value:
+    ///   Returns value:
     /// * `Ok(Vec<Response>)`: the list of responses to the query. For example if plugins can return information on subleys "foo", "bar", "foo/buzz" and "bar/buzz"
-    /// and it's requested with the query "@/ROUTER_ID/router/plugins/PLUGIN_NAME/*", it should return only information on "foo" and "bar" subkeys, but not on "foo/buzz" and "bar/buzz"
-    /// as they doesn't match the query.
+    ///   and it's requested with the query "@/ROUTER_ID/router/plugins/PLUGIN_NAME/*", it should return only information on "foo" and "bar" subkeys, but not on "foo/buzz" and "bar/buzz"
+    ///   as they doesn't match the query.
     /// * `Err(ZError)`: Problem occurred when processing the query.
     ///
     /// If plugin implements subplugins (as the storage plugin), then it should also reply with information about its subplugins with the same rules.
