@@ -96,7 +96,7 @@ struct Args {
     #[arg(short, long, default_value = "demo/example/zenoh-rs-pub")]
     /// The key expression to publish onto.
     key: KeyExpr<'static>,
-    #[arg(short, long, default_value = "Pub from SHM Rust!")]
+    #[arg(short, long, default_value = "Pub from Rust SHM!")]
     /// The payload of to publish.
     payload: String,
     #[command(flatten)]
