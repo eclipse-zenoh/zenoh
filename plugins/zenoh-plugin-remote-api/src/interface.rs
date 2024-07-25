@@ -9,21 +9,18 @@ use zenoh::{
     sample::{Sample, SampleKind},
 };
 
+// ██████  ███████ ███    ███  ██████  ████████ ███████      █████  ██████  ██     ███    ███ ███████ ███████ ███████  █████   ██████  ███████
+// ██   ██ ██      ████  ████ ██    ██    ██    ██          ██   ██ ██   ██ ██     ████  ████ ██      ██      ██      ██   ██ ██       ██
+// ██████  █████   ██ ████ ██ ██    ██    ██    █████       ███████ ██████  ██     ██ ████ ██ █████   ███████ ███████ ███████ ██   ███ █████
+// ██   ██ ██      ██  ██  ██ ██    ██    ██    ██          ██   ██ ██      ██     ██  ██  ██ ██           ██      ██ ██   ██ ██    ██ ██
+// ██   ██ ███████ ██      ██  ██████     ██    ███████     ██   ██ ██      ██     ██      ██ ███████ ███████ ███████ ██   ██  ██████  ███████
+
 #[derive(TS)]
 #[ts(export)]
 #[derive(Debug, Serialize, Deserialize)]
 pub enum RemoteAPIMsg {
     Data(DataMsg),
     Control(ControlMsg),
-}
-
-#[derive(TS)]
-#[ts(export)]
-#[derive(Debug, Serialize, Deserialize)]
-pub enum QueryableMsg {
-    // UUID of original queryable
-    Query { uuid: Uuid, query: QueryWS },
-    Reply { uuid: Uuid, reply: ReplyWS },
 }
 
 #[derive(TS)]
@@ -51,6 +48,20 @@ pub enum DataMsg {
     Delete {
         #[ts(as = "OwnedKeyExprWrapper")]
         key_expr: OwnedKeyExpr,
+    },
+}
+
+#[derive(TS)]
+#[ts(export)]
+#[derive(Debug, Serialize, Deserialize)]
+pub enum QueryableMsg {
+    // UUID of original queryable
+    Query {
+        queryable_uuid: Uuid,
+        query: QueryWS,
+    },
+    Reply {
+        reply: ReplyWS,
     },
 }
 
@@ -121,6 +132,7 @@ impl From<String> for OwnedKeyExprWrapper {
 #[ts(export)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct QueryWS {
+    query_uuid: Uuid,
     #[ts(as = "OwnedKeyExprWrapper")]
     key_expr: OwnedKeyExpr,
     parameters: String,
@@ -129,8 +141,8 @@ pub struct QueryWS {
     payload: Option<Vec<u8>>,
 }
 
-impl From<&Query> for QueryWS {
-    fn from(q: &Query) -> Self {
+impl From<(&Query, Uuid)> for QueryWS {
+    fn from((q, uuid): (&Query, Uuid)) -> Self {
         let payload: Option<Vec<u8>> = match q.payload().map(|x| x.try_into()) {
             Some(Ok(x)) => Some(x),
             Some(Err(err)) => {
@@ -149,6 +161,7 @@ impl From<&Query> for QueryWS {
         };
 
         QueryWS {
+            query_uuid: uuid,
             key_expr: q.key_expr().to_owned().into(),
             parameters: q.parameters().to_string(),
             encoding: q.encoding().map(|x| x.to_string()),
@@ -162,6 +175,7 @@ impl From<&Query> for QueryWS {
 #[ts(export)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ReplyWS {
+    pub query_uuid: Uuid,
     pub result: Result<SampleWS, ReplyErrorWS>,
 }
 
@@ -244,22 +258,29 @@ mod tests {
             serde_json::to_string(&RemoteAPIMsg::Control(ControlMsg::CloseSession)).unwrap();
         assert_eq!(json, r#"{"Control":"CloseSession"}"#);
 
-        let key_expr = KeyExpr::new("demo/test").unwrap().to_owned().into();
+        let key_expr: OwnedKeyExpr = KeyExpr::new("demo/test").unwrap().to_owned().into();
 
-        let sampe_ws = SampleWS {
-            key_expr,
+        let sample_ws = SampleWS {
+            key_expr: key_expr.clone(),
             value: vec![1, 2, 3],
             kind: SampleKindWS::Put,
         };
 
         let json: String = serde_json::to_string(&QueryableMsg::Reply {
-            uuid,
-            reply: todo!(),
+            reply: ReplyWS {
+                query_uuid: uuid,
+                result: Ok(sample_ws),
+            },
         })
         .unwrap();
         assert_eq!(json, r#"{"Reply":{}}"#);
 
-        let json: String = serde_json::to_string(&DataMsg::Sample(sampe_ws, uuid)).unwrap();
+        let sample_ws = SampleWS {
+            key_expr,
+            value: vec![1, 2, 3],
+            kind: SampleKindWS::Put,
+        };
+        let json: String = serde_json::to_string(&DataMsg::Sample(sample_ws, uuid)).unwrap();
         assert_eq!(
             json,
             r#"{"Sample":[{"key_expr":"demo/test","value":[1,2,3],"kind":"Put"},"a2663bb1-128c-4dd3-a42b-d1d3337e2e51"]}"#

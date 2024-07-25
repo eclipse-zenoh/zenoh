@@ -57,18 +57,21 @@ pub async fn handle_data_message(
             None
         }
         DataMsg::Queryable(queryable_msg) => match queryable_msg {
-            QueryableMsg::Query { uuid: _, query: _ } => {
+            QueryableMsg::Query {
+                queryable_uuid: _,
+                query: _,
+            } => {
                 warn!("Plugin should not receive Query from Client");
                 None
             }
-            QueryableMsg::Reply { uuid, reply } => {
+            QueryableMsg::Reply { reply } => {
                 let mut state_reader = state_map.write().await;
                 if let Some(state) = state_reader.get_mut(&sock_addr) {
                     let query: Option<Query>;
 
                     match state.unanswered_queries.write() {
                         Ok(mut wr) => {
-                            query = wr.remove(&uuid);
+                            query = wr.remove(&reply.query_uuid);
                         }
                         Err(err) => {
                             tracing::error!("unanswered Queries RwLock Poinsened {err}");
@@ -90,7 +93,7 @@ pub async fn handle_data_message(
                             }
                         }
                     } else {
-                        tracing::error!("Query id not found in map {uuid}");
+                        tracing::error!("Query id not found in map {}", reply.query_uuid);
                     };
                 }
                 None

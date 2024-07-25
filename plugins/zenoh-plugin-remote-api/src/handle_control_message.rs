@@ -174,9 +174,9 @@ pub async fn handle_control_message(
         ControlMsg::DeclareQueryable {
             key_expr,
             complete,
-            id: uuid,
+            id: queryable_uuid,
         } => {
-            println!("Declare Queryable {}  {}", key_expr, uuid);
+            println!("Declare Queryable {}  {}", key_expr, queryable_uuid);
             let mut state_reader = state_map.write().await;
             if let Some(state) = state_reader.get_mut(&sock_addr) {
                 let unanswered_queries = state.unanswered_queries.clone();
@@ -189,12 +189,13 @@ pub async fn handle_control_message(
                     .callback(move |query| {
                         println!("Query Received {}", query);
 
-                        let query_ws: QueryWS = QueryWS::from(&query);
-                        let id = Uuid::new_v4();
+                        let query_uuid = Uuid::new_v4();
+                        let query_ws: QueryWS = QueryWS::from((&query, query_uuid));
                         let queryable_msg = QueryableMsg::Query {
-                            uuid: id,
+                            queryable_uuid,
                             query: query_ws,
                         };
+
                         let remote_msg = RemoteAPIMsg::Data(DataMsg::Queryable(queryable_msg));
                         if let Err(err) = ch_tx.send(remote_msg) {
                             tracing::error!("Could not send Queryable Message on WS {}", err);
@@ -202,7 +203,7 @@ pub async fn handle_control_message(
 
                         match unanswered_queries.write() {
                             Ok(mut rw_lock) => {
-                                rw_lock.insert(id, query);
+                                rw_lock.insert(query_uuid, query);
                             }
                             Err(err) => tracing::error!("Query RwLock has been poisoned {err:?}"),
                         }
@@ -211,7 +212,7 @@ pub async fn handle_control_message(
 
                 match queryable_res {
                     Ok(queryable) => {
-                        state.queryables.insert(uuid, queryable);
+                        state.queryables.insert(queryable_uuid, queryable);
                     }
                     Err(err) => {
                         tracing::error!("Could not Create Publisher {err}");
