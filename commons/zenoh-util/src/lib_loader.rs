@@ -20,7 +20,7 @@ use std::{
 
 use libloading::Library;
 use tracing::{debug, warn};
-use zenoh_core::zconfigurable;
+use zenoh_core::{zconfigurable, zerror};
 use zenoh_result::{bail, ZResult};
 
 zconfigurable! {
@@ -35,15 +35,13 @@ zconfigurable! {
 /// LibLoader allows search for libraries and to load them.
 #[derive(Clone, Debug)]
 pub struct LibLoader {
-    search_paths: Vec<PathBuf>,
+    search_paths: Option<Vec<PathBuf>>,
 }
 
 impl LibLoader {
     /// Return an empty `LibLoader`.
     pub fn empty() -> LibLoader {
-        LibLoader {
-            search_paths: Vec::new(),
-        }
+        LibLoader { search_paths: None }
     }
 
     /// Returns the list of search paths used by `LibLoader::default()`
@@ -83,12 +81,14 @@ impl LibLoader {
             }
         }
 
-        LibLoader { search_paths }
+        LibLoader {
+            search_paths: Some(search_paths),
+        }
     }
 
     /// Return the list of search paths used by this [LibLoader]
-    pub fn search_paths(&self) -> &[PathBuf] {
-        &self.search_paths
+    pub fn search_paths(&self) -> Option<&[PathBuf]> {
+        self.search_paths.as_deref()
     }
 
     /// Load a library from the specified path.
@@ -118,7 +118,7 @@ impl LibLoader {
     ///
     /// This function calls [libloading::Library::new()](https://docs.rs/libloading/0.7.0/libloading/struct.Library.html#method.new)
     /// which is unsafe.
-    pub unsafe fn search_and_load(&self, name: &str) -> ZResult<(Library, PathBuf)> {
+    pub unsafe fn search_and_load(&self, name: &str) -> ZResult<Option<(Library, PathBuf)>> {
         let filename = format!("{}{}{}", *LIB_PREFIX, name, *LIB_SUFFIX);
         let filename_ostr = OsString::from(&filename);
         tracing::debug!(
@@ -126,13 +126,16 @@ impl LibLoader {
             filename,
             self.search_paths
         );
-        for dir in &self.search_paths {
+        let Some(search_paths) = self.search_paths() else {
+            return Ok(None);
+        };
+        for dir in search_paths {
             match dir.read_dir() {
                 Ok(read_dir) => {
                     for entry in read_dir.flatten() {
                         if entry.file_name() == filename_ostr {
                             let path = entry.path();
-                            return Ok((Library::new(path.clone())?, path));
+                            return Ok(Some((Library::new(path.clone())?, path)));
                         }
                     }
                 }
@@ -142,7 +145,7 @@ impl LibLoader {
                 ),
             }
         }
-        bail!("Library file '{}' not found", filename)
+        Err(zerror!("Library file '{}' not found", filename).into())
     }
 
     /// Search and load all libraries with filename starting with [struct@LIB_PREFIX]+`prefix` and ending with [struct@LIB_SUFFIX].
@@ -158,7 +161,7 @@ impl LibLoader {
     pub unsafe fn load_all_with_prefix(
         &self,
         prefix: Option<&str>,
-    ) -> Vec<(Library, PathBuf, String)> {
+    ) -> Option<Vec<(Library, PathBuf, String)>> {
         let lib_prefix = format!("{}{}", *LIB_PREFIX, prefix.unwrap_or(""));
         tracing::debug!(
             "Search for libraries {}*{} to load in {:?}",
@@ -166,9 +169,8 @@ impl LibLoader {
             *LIB_SUFFIX,
             self.search_paths
         );
-
         let mut result = vec![];
-        for dir in &self.search_paths {
+        for dir in self.search_paths()? {
             match dir.read_dir() {
                 Ok(read_dir) => {
                     for entry in read_dir.flatten() {
@@ -199,7 +201,7 @@ impl LibLoader {
                 ),
             }
         }
-        result
+        Some(result)
     }
 
     pub fn _plugin_name(path: &std::path::Path) -> Option<&str> {
