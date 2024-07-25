@@ -160,7 +160,6 @@ impl<T: InterceptorTrait> InterceptorTrait for ComputeOnMiss<T> {
 }
 
 #[allow(dead_code)]
-
 pub(crate) struct IngressMsgLogger {}
 
 impl InterceptorTrait for IngressMsgLogger {
