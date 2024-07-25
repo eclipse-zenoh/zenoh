@@ -54,7 +54,7 @@ mod test {
         create_new_files(TESTFILES_PATH.to_path_buf())
             .await
             .unwrap();
-        test_pub_sub_deny_then_allow_tls(37448).await;
+        test_pub_sub_deny_then_allow_tls(37448, false).await;
         test_pub_sub_allow_then_deny_tls(37449).await;
         test_get_qbl_allow_then_deny_tls(37450).await;
         test_get_qbl_deny_then_allow_tls(37451).await;
@@ -66,7 +66,7 @@ mod test {
         create_new_files(TESTFILES_PATH.to_path_buf())
             .await
             .unwrap();
-        test_pub_sub_deny_then_allow_quic(37452, false).await;
+        test_pub_sub_deny_then_allow_quic(37452).await;
         test_pub_sub_allow_then_deny_quic(37453).await;
         test_get_qbl_deny_then_allow_quic(37454).await;
         test_get_qbl_allow_then_deny_quic(37455).await;
@@ -79,7 +79,7 @@ mod test {
         create_new_files(TESTFILES_PATH.to_path_buf())
             .await
             .unwrap();
-        test_pub_sub_deny_then_allow_quic(37456, true).await;
+        test_pub_sub_deny_then_allow_tls(37456, true).await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -269,7 +269,7 @@ client2name:client2passwd";
         Ok(())
     }
 
-    async fn get_basic_router_config_tls(port: u16) -> Config {
+    async fn get_basic_router_config_tls(port: u16, lowlatency: bool) -> Config {
         let cert_path = TESTFILES_PATH.to_string_lossy();
         let mut config = config::default();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
@@ -313,9 +313,16 @@ client2name:client2passwd";
             .tls
             .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
             .unwrap();
+        config.transport.unicast.set_lowlatency(lowlatency).unwrap();
+        config
+            .transport
+            .unicast
+            .qos
+            .set_enabled(!lowlatency)
+            .unwrap();
         config
     }
-    async fn get_basic_router_config_quic(port: u16, lowlatency: bool) -> Config {
+    async fn get_basic_router_config_quic(port: u16) -> Config {
         let cert_path = TESTFILES_PATH.to_string_lossy();
         let mut config = config::default();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
@@ -358,13 +365,6 @@ client2name:client2passwd";
             .link
             .tls
             .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
-            .unwrap();
-        config.transport.unicast.set_lowlatency(lowlatency).unwrap();
-        config
-            .transport
-            .unicast
-            .qos
-            .set_enabled(!lowlatency)
             .unwrap();
         config
     }
@@ -472,7 +472,7 @@ client2name:client2passwd";
         config
     }
 
-    async fn get_client_sessions_tls(port: u16) -> (Session, Session) {
+    async fn get_client_sessions_tls(port: u16, lowlatency: bool) -> (Session, Session) {
         let cert_path = TESTFILES_PATH.to_string_lossy();
         println!("Opening client sessions");
         let mut config = config::client([format!("tls/127.0.0.1:{}", port)
@@ -512,6 +512,13 @@ client2name:client2passwd";
             .tls
             .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
             .unwrap();
+        config.transport.unicast.set_lowlatency(lowlatency).unwrap();
+        config
+            .transport
+            .unicast
+            .qos
+            .set_enabled(!lowlatency)
+            .unwrap();
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
 
         let mut config = config::client([format!("tls/127.0.0.1:{}", port)
@@ -550,12 +557,19 @@ client2name:client2passwd";
             .link
             .tls
             .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
+            .unwrap();
+        config.transport.unicast.set_lowlatency(lowlatency).unwrap();
+        config
+            .transport
+            .unicast
+            .qos
+            .set_enabled(!lowlatency)
             .unwrap();
         let s02 = ztimeout!(zenoh::open(config)).unwrap();
         (s01, s02)
     }
 
-    async fn get_client_sessions_quic(port: u16, lowlatency: bool) -> (Session, Session) {
+    async fn get_client_sessions_quic(port: u16) -> (Session, Session) {
         let cert_path = TESTFILES_PATH.to_string_lossy();
         println!("Opening client sessions");
         let mut config = config::client([format!("quic/127.0.0.1:{}", port)
@@ -595,13 +609,6 @@ client2name:client2passwd";
             .tls
             .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
             .unwrap();
-        config.transport.unicast.set_lowlatency(lowlatency).unwrap();
-        config
-            .transport
-            .unicast
-            .qos
-            .set_enabled(!lowlatency)
-            .unwrap();
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
         let mut config = config::client([format!("quic/127.0.0.1:{}", port)
             .parse::<EndPoint>()
@@ -639,13 +646,6 @@ client2name:client2passwd";
             .link
             .tls
             .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
-            .unwrap();
-        config.transport.unicast.set_lowlatency(lowlatency).unwrap();
-        config
-            .transport
-            .unicast
-            .qos
-            .set_enabled(!lowlatency)
             .unwrap();
         let s02 = ztimeout!(zenoh::open(config)).unwrap();
         (s01, s02)
@@ -789,10 +789,10 @@ client2name:client2passwd";
         ztimeout!(s02.close()).unwrap();
     }
 
-    async fn test_pub_sub_deny_then_allow_tls(port: u16) {
+    async fn test_pub_sub_deny_then_allow_tls(port: u16, lowlatency: bool) {
         println!("test_pub_sub_deny_then_allow_tls");
 
-        let mut config_router = get_basic_router_config_tls(port).await;
+        let mut config_router = get_basic_router_config_tls(port, lowlatency).await;
 
         config_router
             .insert_json5(
@@ -835,7 +835,7 @@ client2name:client2passwd";
 
         let session = ztimeout!(zenoh::open(config_router)).unwrap();
 
-        let (sub_session, pub_session) = get_client_sessions_tls(port).await;
+        let (sub_session, pub_session) = get_client_sessions_tls(port, lowlatency).await;
         {
             let publisher = pub_session.declare_publisher(KEY_EXPR).await.unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
@@ -861,7 +861,7 @@ client2name:client2passwd";
 
     async fn test_pub_sub_allow_then_deny_tls(port: u16) {
         println!("test_pub_sub_allow_then_deny_tls");
-        let mut config_router = get_basic_router_config_tls(port).await;
+        let mut config_router = get_basic_router_config_tls(port, false).await;
         config_router
             .insert_json5(
                 "access_control",
@@ -902,7 +902,7 @@ client2name:client2passwd";
         println!("Opening router session");
 
         let session = ztimeout!(zenoh::open(config_router)).unwrap();
-        let (sub_session, pub_session) = get_client_sessions_tls(port).await;
+        let (sub_session, pub_session) = get_client_sessions_tls(port, false).await;
         {
             let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
@@ -931,7 +931,7 @@ client2name:client2passwd";
     async fn test_get_qbl_deny_then_allow_tls(port: u16) {
         println!("test_get_qbl_deny_then_allow_tls");
 
-        let mut config_router = get_basic_router_config_tls(port).await;
+        let mut config_router = get_basic_router_config_tls(port, false).await;
         config_router
             .insert_json5(
                 "access_control",
@@ -975,7 +975,7 @@ client2name:client2passwd";
 
         let session = ztimeout!(zenoh::open(config_router)).unwrap();
 
-        let (get_session, qbl_session) = get_client_sessions_tls(port).await;
+        let (get_session, qbl_session) = get_client_sessions_tls(port, false).await;
         {
             let mut received_value = String::new();
 
@@ -1017,7 +1017,7 @@ client2name:client2passwd";
     async fn test_get_qbl_allow_then_deny_tls(port: u16) {
         println!("test_get_qbl_allow_then_deny_tls");
 
-        let mut config_router = get_basic_router_config_tls(port).await;
+        let mut config_router = get_basic_router_config_tls(port, false).await;
         config_router
             .insert_json5(
                 "access_control",
@@ -1060,7 +1060,7 @@ client2name:client2passwd";
 
         let session = ztimeout!(zenoh::open(config_router)).unwrap();
 
-        let (get_session, qbl_session) = get_client_sessions_tls(port).await;
+        let (get_session, qbl_session) = get_client_sessions_tls(port, false).await;
         {
             let mut received_value = String::new();
 
@@ -1099,10 +1099,10 @@ client2name:client2passwd";
         close_router_session(session).await;
     }
 
-    async fn test_pub_sub_deny_then_allow_quic(port: u16, lowlatency: bool) {
+    async fn test_pub_sub_deny_then_allow_quic(port: u16) {
         println!("test_pub_sub_deny_then_allow_quic");
 
-        let mut config_router = get_basic_router_config_quic(port, lowlatency).await;
+        let mut config_router = get_basic_router_config_quic(port).await;
 
         config_router
             .insert_json5(
@@ -1145,7 +1145,7 @@ client2name:client2passwd";
 
         let session = ztimeout!(zenoh::open(config_router)).unwrap();
 
-        let (sub_session, pub_session) = get_client_sessions_quic(port, lowlatency).await;
+        let (sub_session, pub_session) = get_client_sessions_quic(port).await;
         {
             let publisher = pub_session.declare_publisher(KEY_EXPR).await.unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
@@ -1173,7 +1173,7 @@ client2name:client2passwd";
     async fn test_pub_sub_allow_then_deny_quic(port: u16) {
         println!("test_pub_sub_allow_then_deny_quic");
 
-        let mut config_router = get_basic_router_config_quic(port, false).await;
+        let mut config_router = get_basic_router_config_quic(port).await;
         config_router
             .insert_json5(
                 "access_control",
@@ -1214,7 +1214,7 @@ client2name:client2passwd";
         println!("Opening router session");
 
         let session = ztimeout!(zenoh::open(config_router)).unwrap();
-        let (sub_session, pub_session) = get_client_sessions_quic(port, false).await;
+        let (sub_session, pub_session) = get_client_sessions_quic(port).await;
         {
             let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
@@ -1244,7 +1244,7 @@ client2name:client2passwd";
     async fn test_get_qbl_deny_then_allow_quic(port: u16) {
         println!("test_get_qbl_deny_then_allow_quic");
 
-        let mut config_router = get_basic_router_config_quic(port, false).await;
+        let mut config_router = get_basic_router_config_quic(port).await;
         config_router
             .insert_json5(
                 "access_control",
@@ -1288,7 +1288,7 @@ client2name:client2passwd";
 
         let session = ztimeout!(zenoh::open(config_router)).unwrap();
 
-        let (get_session, qbl_session) = get_client_sessions_quic(port, false).await;
+        let (get_session, qbl_session) = get_client_sessions_quic(port).await;
         {
             let mut received_value = String::new();
 
@@ -1331,7 +1331,7 @@ client2name:client2passwd";
     async fn test_get_qbl_allow_then_deny_quic(port: u16) {
         println!("test_get_qbl_allow_then_deny_quic");
 
-        let mut config_router = get_basic_router_config_quic(port, false).await;
+        let mut config_router = get_basic_router_config_quic(port).await;
         config_router
             .insert_json5(
                 "access_control",
@@ -1374,7 +1374,7 @@ client2name:client2passwd";
 
         let session = ztimeout!(zenoh::open(config_router)).unwrap();
 
-        let (get_session, qbl_session) = get_client_sessions_quic(port, false).await;
+        let (get_session, qbl_session) = get_client_sessions_quic(port).await;
         {
             let mut received_value = String::new();
 
