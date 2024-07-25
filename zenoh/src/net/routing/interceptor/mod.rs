@@ -159,6 +159,8 @@ impl<T: InterceptorTrait> InterceptorTrait for ComputeOnMiss<T> {
     }
 }
 
+#[allow(dead_code)]
+
 pub(crate) struct IngressMsgLogger {}
 
 impl InterceptorTrait for IngressMsgLogger {
@@ -186,6 +188,8 @@ impl InterceptorTrait for IngressMsgLogger {
         Some(ctx)
     }
 }
+
+#[allow(dead_code)]
 pub(crate) struct EgressMsgLogger {}
 
 impl InterceptorTrait for EgressMsgLogger {
@@ -213,6 +217,7 @@ impl InterceptorTrait for EgressMsgLogger {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) struct LoggerInterceptor {}
 
 impl InterceptorFactoryTrait for LoggerInterceptor {
