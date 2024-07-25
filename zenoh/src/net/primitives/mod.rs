@@ -82,9 +82,9 @@ impl EPrimitives for DummyPrimitives {
 
     fn send_push(&self, _msg: Push) {}
 
-    fn send_request(&self, _ctx: Request) {}
+    fn send_request(&self, _msg: Request) {}
 
-    fn send_response(&self, _ctx: Response) {}
+    fn send_response(&self, _msg: Response) {}
 
     fn send_response_final(&self, _ctx: RoutingContext<ResponseFinal>) {}
 
