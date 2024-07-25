@@ -229,7 +229,9 @@ impl StorageRuntimeInner {
             self.plugins_manager
                 .declare_dynamic_plugin_by_name(volume_id, backend_name, true)?
         };
-        let loaded = declared.load()?;
+        let loaded = declared
+            .load()?
+            .expect("Volumes should not loaded if if the storage-manager plugin is not loaded");
         loaded.start(config)?;
 
         Ok(())
