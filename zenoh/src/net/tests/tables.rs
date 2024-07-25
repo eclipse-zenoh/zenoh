@@ -567,9 +567,13 @@ impl EPrimitives for ClientPrimitives {
         *zlock!(self.data) = Some(msg.wire_expr.to_owned());
     }
 
-    fn send_request(&self, _ctx: RoutingContext<zenoh_protocol::network::Request>) {}
+    fn send_request(&self, msg: zenoh_protocol::network::Request) {
+        *zlock!(self.data) = Some(msg.wire_expr.to_owned());
+    }
 
-    fn send_response(&self, _ctx: RoutingContext<zenoh_protocol::network::Response>) {}
+    fn send_response(&self, msg: zenoh_protocol::network::Response) {
+        *zlock!(self.data) = Some(msg.wire_expr.to_owned());
+    }
 
     fn send_response_final(&self, _ctx: RoutingContext<zenoh_protocol::network::ResponseFinal>) {}
 

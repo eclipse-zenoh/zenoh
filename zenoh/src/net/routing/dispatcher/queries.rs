@@ -621,20 +621,17 @@ pub fn route_query(
                         }
 
                         tracing::trace!("Propagate query {}:{} to {}", face, qid, outface);
-                        outface.primitives.send_request(RoutingContext::with_expr(
-                            Request {
-                                id: *qid,
-                                wire_expr: key_expr.into(),
-                                ext_qos,
-                                ext_tstamp,
-                                ext_nodeid: ext::NodeIdType { node_id: *context },
-                                ext_target,
-                                ext_budget,
-                                ext_timeout,
-                                payload: body.clone(),
-                            },
-                            expr.full_expr().to_string(),
-                        ));
+                        outface.primitives.send_request(Request {
+                            id: *qid,
+                            wire_expr: key_expr.into(),
+                            ext_qos,
+                            ext_tstamp,
+                            ext_nodeid: ext::NodeIdType { node_id: *context },
+                            ext_target,
+                            ext_budget,
+                            ext_timeout,
+                            payload: body.clone(),
+                        });
                     }
                 }
             } else {
@@ -705,21 +702,14 @@ pub(crate) fn route_send_response(
                 inc_res_stats!(query.src_face, tx, admin, body)
             }
 
-            query
-                .src_face
-                .primitives
-                .clone()
-                .send_response(RoutingContext::with_expr(
-                    Response {
-                        rid: query.src_qid,
-                        wire_expr: key_expr.to_owned(),
-                        payload: body,
-                        ext_qos,
-                        ext_tstamp,
-                        ext_respid,
-                    },
-                    "".to_string(), // @TODO provide the proper key expression of the response for interceptors
-                ));
+            query.src_face.primitives.send_response(Response {
+                rid: query.src_qid,
+                wire_expr: key_expr.to_owned(),
+                payload: body,
+                ext_qos,
+                ext_tstamp,
+                ext_respid,
+            });
         }
         None => tracing::warn!(
             "Route reply {}:{} from {}: Query not found!",

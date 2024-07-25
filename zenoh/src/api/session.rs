@@ -2799,13 +2799,13 @@ impl crate::net::primitives::EPrimitives for Session {
     }
 
     #[inline]
-    fn send_request(&self, ctx: crate::net::routing::RoutingContext<Request>) {
-        (self as &dyn Primitives).send_request(ctx.msg)
+    fn send_request(&self, msg: Request) {
+        (self as &dyn Primitives).send_request(msg)
     }
 
     #[inline]
-    fn send_response(&self, ctx: crate::net::routing::RoutingContext<Response>) {
-        (self as &dyn Primitives).send_response(ctx.msg)
+    fn send_response(&self, msg: Response) {
+        (self as &dyn Primitives).send_response(msg)
     }
 
     #[inline]
