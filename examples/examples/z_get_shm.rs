@@ -67,7 +67,7 @@ async fn main() {
 
     let content = payload
         .take()
-        .unwrap_or_else(|| "Get from SHM Rust!".to_string());
+        .unwrap_or_else(|| "Get from Rust SHM!".to_string());
     sbuf[0..content.len()].copy_from_slice(content.as_bytes());
 
     println!("Sending Query '{selector}'...");
