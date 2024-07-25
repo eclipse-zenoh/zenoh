@@ -40,11 +40,11 @@ async fn main() {
         // Print overall payload information
         let (payload_type, payload) = handle_bytes(sample.payload());
         print!(
-            ">> [Subscriber] Received [{}] {} ('{}': '{}')",
-            payload_type,
+            ">> [Subscriber] Received {} ('{}': '{}') [{}] ",
             sample.kind(),
             sample.key_expr().as_str(),
-            payload
+            payload,
+            payload_type,
         );
 
         // Print attachment information
