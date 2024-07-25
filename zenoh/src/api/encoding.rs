@@ -901,16 +901,12 @@ impl EncodingMapping for u128 {
 }
 
 impl EncodingMapping for usize {
-    #[cfg(target_pointer_width = "8")]
-    const ENCODING: Encoding = Encoding::ZENOH_UINT8;
     #[cfg(target_pointer_width = "16")]
     const ENCODING: Encoding = Encoding::ZENOH_UINT16;
     #[cfg(target_pointer_width = "32")]
     const ENCODING: Encoding = Encoding::ZENOH_UINT32;
     #[cfg(target_pointer_width = "64")]
     const ENCODING: Encoding = Encoding::ZENOH_UINT64;
-    #[cfg(target_pointer_width = "128")]
-    const ENCODING: Encoding = Encoding::ZENOH_UINT128;
 }
 
 // Zenoh signed integers
