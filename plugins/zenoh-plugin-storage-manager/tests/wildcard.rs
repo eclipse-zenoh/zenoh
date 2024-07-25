@@ -19,7 +19,7 @@
 use std::{borrow::Cow, str::FromStr, thread::sleep};
 
 // use std::collections::HashMap;
-use async_std::task;
+use tokio::runtime::Runtime;
 use zenoh::{
     internal::zasync_executor_init, prelude::*, query::Reply, sample::Sample, time::Timestamp,
     Config, Session,
@@ -52,9 +52,7 @@ async fn get_data(session: &Session, key_expr: &str) -> Vec<Sample> {
 }
 
 async fn test_wild_card_in_order() {
-    task::block_on(async {
-        zasync_executor_init!();
-    });
+    zasync_executor_init!();
     let mut config = Config::default();
     config
         .insert_json5(
@@ -195,6 +193,7 @@ async fn test_wild_card_in_order() {
 
 #[test]
 fn wildcard_test() {
-    task::block_on(async { test_wild_card_in_order().await });
-    // task::block_on(async { test_wild_card_out_of_order() });
+    let rt = Runtime::new().unwrap();
+    rt.block_on(async { test_wild_card_in_order().await });
+    // rt.block_on(async { test_wild_card_out_of_order() });
 }

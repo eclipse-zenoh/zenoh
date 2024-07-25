@@ -39,6 +39,18 @@ use zenoh::{
 };
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 
+const WORKER_THREAD_NUM: usize = 2;
+const MAX_BLOCK_THREAD_NUM: usize = 50;
+lazy_static::lazy_static! {
+    // The global runtime is used in the zenohd case, which we can't get the current runtime
+    static ref TOKIO_RUNTIME: tokio::runtime::Runtime = tokio::runtime::Builder::new_multi_thread()
+               .worker_threads(WORKER_THREAD_NUM)
+               .max_blocking_threads(MAX_BLOCK_THREAD_NUM)
+               .enable_all()
+               .build()
+               .expect("Unable to create runtime");
+}
+
 // The struct implementing the ZenohPlugin and ZenohPlugin traits
 pub struct ExamplePlugin {}
 
@@ -79,7 +91,7 @@ impl Plugin for ExamplePlugin {
         // a flag to end the plugin's loop when the plugin is removed from the config
         let flag = Arc::new(AtomicBool::new(true));
         // spawn the task running the plugin's loop
-        async_std::task::spawn(run(runtime.clone(), selector, flag.clone()));
+        TOKIO_RUNTIME.spawn(run(runtime.clone(), selector, flag.clone()));
         // return a RunningPlugin to zenohd
         Ok(Box::new(RunningPlugin(Arc::new(Mutex::new(
             RunningPluginInner {
@@ -122,7 +134,7 @@ impl RunningPluginTrait for RunningPlugin {
                     match KeyExpr::try_from(selector.clone()) {
                         Err(e) => tracing::error!("{}", e),
                         Ok(selector) => {
-                            async_std::task::spawn(run(
+                            TOKIO_RUNTIME.spawn(run(
                                 guard.runtime.clone(),
                                 selector,
                                 guard.flag.clone(),

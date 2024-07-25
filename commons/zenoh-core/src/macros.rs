@@ -157,7 +157,7 @@ macro_rules! to_u64 {
 }
 
 // This macro allows to spawn the right amount of threads in the
-// async_std executor
+// tokio executor
 #[macro_export]
 macro_rules! zasync_executor_init {
     () => {

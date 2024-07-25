@@ -19,12 +19,12 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use std::{borrow::Cow, convert::TryFrom, str::FromStr, sync::Arc};
 
-use async_std::prelude::FutureExt;
 use base64::Engine;
 use futures::StreamExt;
 use http_types::Method;
 use serde::{Deserialize, Serialize};
 use tide::{http::Mime, sse::Sender, Request, Response, Server, StatusCode};
+use tokio::time::timeout;
 use zenoh::{
     bytes::{Encoding, ZBytes},
     internal::{
@@ -50,6 +50,18 @@ lazy_static::lazy_static! {
     static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
 }
 const RAW_KEY: &str = "_raw";
+
+const WORKER_THREAD_NUM: usize = 2;
+const MAX_BLOCK_THREAD_NUM: usize = 50;
+lazy_static::lazy_static! {
+    // The global runtime is used in the zenohd case, which we can't get the current runtime
+    static ref TOKIO_RUNTIME: tokio::runtime::Runtime = tokio::runtime::Builder::new_multi_thread()
+               .worker_threads(WORKER_THREAD_NUM)
+               .max_blocking_threads(MAX_BLOCK_THREAD_NUM)
+               .enable_all()
+               .build()
+               .expect("Unable to create runtime");
+}
 
 #[derive(Serialize, Deserialize)]
 struct JSONSample {
@@ -246,8 +258,9 @@ impl Plugin for RestPlugin {
 
         let conf: Config = serde_json::from_value(plugin_conf.clone())
             .map_err(|e| zerror!("Plugin `{}` configuration error: {}", name, e))?;
-        let task = async_std::task::spawn(run(runtime.clone(), conf.clone()));
-        let task = async_std::task::block_on(task.timeout(std::time::Duration::from_millis(1)));
+        let task = TOKIO_RUNTIME.spawn(run(runtime.clone(), conf.clone()));
+        let task = TOKIO_RUNTIME
+            .block_on(async { timeout(std::time::Duration::from_millis(1), task).await });
         if let Ok(Err(e)) = task {
             bail!("REST server failed within 1ms: {e}")
         }
@@ -332,12 +345,8 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                         ))
                     }
                 };
-                async_std::task::spawn(async move {
-                    tracing::debug!(
-                        "Subscribe to {} for SSE stream (task {})",
-                        key_expr,
-                        async_std::task::current().id()
-                    );
+                TOKIO_RUNTIME.spawn(async move {
+                    tracing::debug!("Subscribe to {} for SSE stream", key_expr);
                     let sender = &sender;
                     let sub = req.state().0.declare_subscriber(&key_expr).await.unwrap();
                     loop {
@@ -345,28 +354,22 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                         let json_sample =
                             serde_json::to_string(&sample_to_json(&sample)).unwrap_or("{}".into());
 
-                        match sender
-                            .send(&sample.kind().to_string(), json_sample, None)
-                            .timeout(std::time::Duration::new(10, 0))
-                            .await
+                        match timeout(
+                            std::time::Duration::new(10, 0),
+                            sender.send(&sample.kind().to_string(), json_sample, None),
+                        )
+                        .await
                         {
                             Ok(Ok(_)) => {}
                             Ok(Err(e)) => {
-                                tracing::debug!(
-                                    "SSE error ({})! Unsubscribe and terminate (task {})",
-                                    e,
-                                    async_std::task::current().id()
-                                );
+                                tracing::debug!("SSE error ({})! Unsubscribe and terminate", e);
                                 if let Err(e) = sub.undeclare().await {
                                     tracing::error!("Error undeclaring subscriber: {}", e);
                                 }
                                 break;
                             }
                             Err(_) => {
-                                tracing::debug!(
-                                    "SSE timeout! Unsubscribe and terminate (task {})",
-                                    async_std::task::current().id()
-                                );
+                                tracing::debug!("SSE timeout! Unsubscribe and terminate",);
                                 if let Err(e) = sub.undeclare().await {
                                     tracing::error!("Error undeclaring subscriber: {}", e);
                                 }

@@ -18,7 +18,7 @@
 
 use std::{borrow::Cow, str::FromStr, thread::sleep};
 
-use async_std::task;
+use tokio::runtime::Runtime;
 use zenoh::{
     internal::zasync_executor_init, prelude::*, query::Reply, sample::Sample, time::Timestamp,
     Config, Session,
@@ -51,9 +51,10 @@ async fn get_data(session: &Session, key_expr: &str) -> Vec<Sample> {
 }
 
 async fn test_updates_in_order() {
-    task::block_on(async {
+    async {
         zasync_executor_init!();
-    });
+    }
+    .await;
     let mut config = Config::default();
     config
         .insert_json5(
@@ -148,5 +149,6 @@ async fn test_updates_in_order() {
 
 #[test]
 fn updates_test() {
-    task::block_on(async { test_updates_in_order().await });
+    let rt = Runtime::new().unwrap();
+    rt.block_on(async { test_updates_in_order().await });
 }
