@@ -43,10 +43,7 @@ use super::{
     resource::{QueryRoute, QueryRoutes, QueryTargetQablSet, Resource},
     tables::{NodeId, RoutingExpr, Tables, TablesLock},
 };
-use crate::net::routing::{
-    hat::{HatTrait, SendDeclare},
-    RoutingContext,
-};
+use crate::net::routing::hat::{HatTrait, SendDeclare};
 
 pub(crate) struct Query {
     src_face: Arc<FaceState>,
@@ -600,16 +597,11 @@ pub fn route_query(
                         face,
                         qid
                     );
-                    face.primitives
-                        .clone()
-                        .send_response_final(RoutingContext::with_expr(
-                            ResponseFinal {
-                                rid: qid,
-                                ext_qos: response::ext::QoSType::RESPONSE_FINAL,
-                                ext_tstamp: None,
-                            },
-                            expr.full_expr().to_string(),
-                        ));
+                    face.primitives.clone().send_response_final(ResponseFinal {
+                        rid: qid,
+                        ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+                        ext_tstamp: None,
+                    });
                 } else {
                     for ((outface, key_expr, context), qid) in route.values() {
                         QueryCleanup::spawn_query_clean_up_task(outface, tables_ref, *qid, timeout);
@@ -637,16 +629,11 @@ pub fn route_query(
             } else {
                 tracing::debug!("Send final reply {}:{} (not master)", face, qid);
                 drop(rtables);
-                face.primitives
-                    .clone()
-                    .send_response_final(RoutingContext::with_expr(
-                        ResponseFinal {
-                            rid: qid,
-                            ext_qos: response::ext::QoSType::RESPONSE_FINAL,
-                            ext_tstamp: None,
-                        },
-                        expr.full_expr().to_string(),
-                    ));
+                face.primitives.clone().send_response_final(ResponseFinal {
+                    rid: qid,
+                    ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+                    ext_tstamp: None,
+                });
             }
         }
         None => {
@@ -656,16 +643,11 @@ pub fn route_query(
                 expr.scope,
             );
             drop(rtables);
-            face.primitives
-                .clone()
-                .send_response_final(RoutingContext::with_expr(
-                    ResponseFinal {
-                        rid: qid,
-                        ext_qos: response::ext::QoSType::RESPONSE_FINAL,
-                        ext_tstamp: None,
-                    },
-                    "".to_string(),
-                ));
+            face.primitives.clone().send_response_final(ResponseFinal {
+                rid: qid,
+                ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+                ext_tstamp: None,
+            });
         }
     }
 }
@@ -763,13 +745,10 @@ pub(crate) fn finalize_pending_query(query: (Arc<Query>, CancellationToken)) {
             .src_face
             .primitives
             .clone()
-            .send_response_final(RoutingContext::with_expr(
-                ResponseFinal {
-                    rid: query.src_qid,
-                    ext_qos: response::ext::QoSType::RESPONSE_FINAL,
-                    ext_tstamp: None,
-                },
-                "".to_string(),
-            ));
+            .send_response_final(ResponseFinal {
+                rid: query.src_qid,
+                ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+                ext_tstamp: None,
+            });
     }
 }

@@ -531,8 +531,8 @@ impl crate::net::primitives::EPrimitives for AdminSpace {
     }
 
     #[inline]
-    fn send_response_final(&self, ctx: crate::net::routing::RoutingContext<ResponseFinal>) {
-        (self as &dyn Primitives).send_response_final(ctx.msg)
+    fn send_response_final(&self, msg: ResponseFinal) {
+        (self as &dyn Primitives).send_response_final(msg)
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

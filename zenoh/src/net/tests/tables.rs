@@ -575,7 +575,7 @@ impl EPrimitives for ClientPrimitives {
         *zlock!(self.data) = Some(msg.wire_expr.to_owned());
     }
 
-    fn send_response_final(&self, _ctx: RoutingContext<zenoh_protocol::network::ResponseFinal>) {}
+    fn send_response_final(&self, _msg: zenoh_protocol::network::ResponseFinal) {}
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
