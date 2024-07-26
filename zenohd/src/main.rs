@@ -77,9 +77,10 @@ struct Args {
     /// Allows arbitrary configuration changes as column-separated KEY:VALUE pairs, where:
     ///   - KEY must be a valid config path.
     ///   - VALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.
+    ///
     /// Examples:
-    /// --cfg='startup/subscribe:["demo/**"]'
-    /// --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'
+    /// - `--cfg='startup/subscribe:["demo/**"]'`
+    /// - `--cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'`
     #[arg(long)]
     cfg: Vec<String>,
     /// Configure the read and/or write permissions on the admin space. Default is read only.

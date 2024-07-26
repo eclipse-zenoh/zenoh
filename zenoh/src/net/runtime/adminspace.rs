@@ -131,7 +131,16 @@ impl AdminSpace {
             );
             loaded
         } else {
-            declared.load()?
+            match declared.load()? {
+                Some(loaded) => loaded,
+                None => {
+                    tracing::warn!(
+                        "Plugin `{}` will not be loaded as plugin loading is disabled",
+                        config.name
+                    );
+                    return Ok(());
+                }
+            }
         };
 
         if let Some(started) = loaded.started_mut() {

@@ -69,10 +69,10 @@ async fn main() {
             Some(payload) => {
                 let (payload_type, payload) = handle_bytes(payload);
                 print!(
-                    ">> [Queryable] Received Query [{}] ('{}': '{}')",
-                    payload_type,
+                    ">> [Queryable] Received Query ('{}': '{}') [{}]",
                     query.selector(),
-                    payload
+                    payload,
+                    payload_type,
                 );
             }
             None => {
@@ -117,7 +117,7 @@ struct Args {
     #[arg(short, long, default_value = "demo/example/zenoh-rs-queryable")]
     /// The key expression matching queries to reply to.
     key: KeyExpr<'static>,
-    #[arg(short, long, default_value = "Queryable from SHM Rust!")]
+    #[arg(short, long, default_value = "Queryable from Rust SHM!")]
     /// The payload to reply to queries.
     payload: String,
     #[arg(long)]
