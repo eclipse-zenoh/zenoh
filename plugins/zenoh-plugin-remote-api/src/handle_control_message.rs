@@ -2,10 +2,10 @@ use std::net::SocketAddr;
 
 use tracing::{error, warn};
 use uuid::Uuid;
-use zenoh::{key_expr::KeyExpr, session::SessionDeclarations};
+use zenoh::{key_expr::KeyExpr, query::Selector, session::SessionDeclarations};
 
 use crate::{
-    interface::{ControlMsg, DataMsg, QueryWS, QueryableMsg, RemoteAPIMsg, SampleWS},
+    interface::{ControlMsg, DataMsg, QueryWS, QueryableMsg, RemoteAPIMsg, ReplyWS, SampleWS},
     StateMap,
 };
 
@@ -20,7 +20,7 @@ pub async fn handle_control_message(
             if let Some(state_map) = state_reader.get(&sock_addr) {
                 Some(ControlMsg::Session(state_map.session_id))
             } else {
-                println!("State Map Does not contain SocketAddr");
+                tracing::error!("State Map Does not contain SocketAddr");
                 None
             }
         }
@@ -58,6 +58,7 @@ pub async fn handle_control_message(
             }
             // None
         }
+        //
         // ControlMsg::CreateKeyExpr(key_expr_str) => {
         //     let mut state_writer = state_map.write().await;
         //     if let Some(remote_state) = state_writer.get_mut(&sock_addr) {
@@ -69,23 +70,79 @@ pub async fn handle_control_message(
         //         None
         //     }
         // }
-        // ControlMsg::DeleteKeyExpr(_) => todo!(),
+        //
+        ControlMsg::Get {
+            key_expr,
+            parameters,
+            id,
+        } => {
+            println!("key_expr {:?}", key_expr);
+            println!("parameters {:?}", parameters);
+            println!("id {:?}", id);
 
+            let mut state_reader = state_map.write().await;
+            if let Some(state) = state_reader.get_mut(&sock_addr) {
+                let selector = Selector::owned(key_expr, parameters.unwrap_or_default());
+
+                match state.session.get(selector).await {
+                    Ok(receiver) => {
+                        let mut receiving = true;
+                        while receiving {
+                            match receiver.recv_async().await {
+                                Ok(reply) => {
+                                    println!("Reply Receieved {:?}", reply);
+                                    let reply_ws = ReplyWS::from((reply, id));
+                                    let remote_api_msg =
+                                        RemoteAPIMsg::Data(DataMsg::GetReply(reply_ws));
+                                    if let Err(err) = state.websocket_tx.send(remote_api_msg) {
+                                        tracing::error!("{}", err);
+                                    }
+                                }
+                                Err(_) => receiving = false,
+                            }
+                        }
+
+                        let remote_api_msg = RemoteAPIMsg::Control(ControlMsg::GetFinished { id });
+                        if let Err(err) = state.websocket_tx.send(remote_api_msg) {
+                            tracing::error!("{}", err);
+                        };
+                        println!("End End Reply");
+                    }
+                    Err(err) => {
+                        error!("Session err Failed ! {}", err)
+                    }
+                };
+            }
+            None
+        }
+        ControlMsg::Put { key_expr, payload } => {
+            let mut state_reader = state_map.write().await;
+            if let Some(state) = state_reader.get_mut(&sock_addr) {
+                if let Err(err) = state.session.put(key_expr, payload).await {
+                    error!("Session Put Failed ! {}", err)
+                };
+            }
+            None
+        }
+        ControlMsg::Delete { key_expr } => {
+            let mut state_reader = state_map.write().await;
+            if let Some(state) = state_reader.get_mut(&sock_addr) {
+                if let Err(err) = state.session.delete(key_expr).await {
+                    error!("Session Delete Failed ! {}", err)
+                };
+            }
+            None
+        }
         // SUBSCRIBER
         ControlMsg::DeclareSubscriber {
             key_expr: key_expr_str,
             id: subscriber_uuid,
         } => {
             let mut state_writer = state_map.write().await;
-            println!("{}, {}", key_expr_str, subscriber_uuid);
-
             if let Some(remote_state) = state_writer.get_mut(&sock_addr) {
                 let key_expr = KeyExpr::new(key_expr_str).unwrap();
                 let ch_tx = remote_state.websocket_tx.clone();
-
-                println!("Key Expression {key_expr}");
                 let subscriber_uuid_cl = subscriber_uuid.clone();
-
                 let res_subscriber = remote_state
                     .session
                     .declare_subscriber(key_expr)
@@ -138,11 +195,8 @@ pub async fn handle_control_message(
         // Publisher
         ControlMsg::DeclarePublisher { key_expr, id: uuid } => {
             println!("Declare Publisher {}  {}", key_expr, uuid);
-            //
             let mut state_reader = state_map.write().await;
-            //
             if let Some(state) = state_reader.get_mut(&sock_addr) {
-                //
                 match state.session.declare_publisher(key_expr.clone()).await {
                     Ok(publisher) => {
                         state.publishers.insert(uuid, publisher);
@@ -150,8 +204,6 @@ pub async fn handle_control_message(
                     }
                     Err(err) => {
                         tracing::error!("Could not Create Publisher {err}");
-                        println!("Could not Create Publisher {err}");
-                        return Some(ControlMsg::Error(err.to_string()));
                     }
                 };
             }
@@ -216,23 +268,25 @@ pub async fn handle_control_message(
                     }
                     Err(err) => {
                         tracing::error!("Could not Create Publisher {err}");
-                        println!("Could not Create Publisher {err}");
-                        return Some(ControlMsg::Error(err.to_string()));
                     }
                 }
             }
             None
         }
-        ControlMsg::UndeclareQueryable(_) => todo!(),
-        ControlMsg::Session(_) | ControlMsg::Subscriber(_) => {
-            // TODO: Move these into own type
-            // make server recieving these types unrepresentable
-            println!("Backend should not get these types");
-            error!("Backend should not get these types");
+        ControlMsg::UndeclareQueryable(uuid) => {
+            let mut state_reader = state_map.write().await;
+            if let Some(state) = state_reader.get_mut(&sock_addr) {
+                if let Some(queryable) = state.queryables.remove(&uuid) {
+                    let x = queryable.undeclare().await;
+                };
+            }
             None
         }
-        ControlMsg::Error(client_err) => {
-            error!("Client sent error {}", client_err);
+        msg @ (ControlMsg::GetFinished { id: _ }
+        | ControlMsg::Session(_)
+        | ControlMsg::Subscriber(_)) => {
+            // make server recieving these types unrepresentable
+            error!("Backend should not recieve this message Type: {msg:?}");
             None
         }
     }

@@ -29,33 +29,6 @@ pub async fn handle_data_message(
             }
             None
         }
-        DataMsg::Put { key_expr, payload } => {
-            let mut state_reader = state_map.write().await;
-            if let Some(state) = state_reader.get_mut(&sock_addr) {
-                if let Err(err) = state.session.put(key_expr, payload).await {
-                    error!("Session Put Failed ! {}", err)
-                };
-            }
-            None
-        }
-        // DataMsg::Get { key_expr, id } => {
-        //     let mut state_reader = state_map.write().await;
-        //     if let Some(state) = state_reader.get_mut(&sock_addr) {
-        //         if let Err(err) = state.session.get(key_expr, payload).await {
-        //             error!("Session Put Failed ! {}", err)
-        //         };
-        //     }
-        //     None
-        // },
-        DataMsg::Delete { key_expr } => {
-            let mut state_reader = state_map.write().await;
-            if let Some(state) = state_reader.get_mut(&sock_addr) {
-                if let Err(err) = state.session.delete(key_expr).await {
-                    error!("Session Delete Failed ! {}", err)
-                };
-            }
-            None
-        }
         DataMsg::Queryable(queryable_msg) => match queryable_msg {
             QueryableMsg::Query {
                 queryable_uuid: _,
@@ -99,8 +72,8 @@ pub async fn handle_data_message(
                 None
             }
         },
-        DataMsg::Sample(sample, publisher_uuid) => {
-            warn!("Server has Should not recieved A Sample from client");
+        data_msg => {
+            warn!("Server Should not recieved A {data_msg:?} from client");
             None
         }
     }

@@ -1,11 +1,11 @@
-use std::{convert::Infallible, sync::Arc};
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
 use zenoh::{
     key_expr::OwnedKeyExpr,
-    query::Query,
+    query::{Query, Reply, ReplyError},
     sample::{Sample, SampleKind},
 };
 
@@ -27,39 +27,28 @@ pub enum RemoteAPIMsg {
 #[ts(export)]
 #[derive(Debug, Serialize, Deserialize)]
 pub enum DataMsg {
-    // Subscriber
-    Sample(SampleWS, Uuid),
     // Client -> SVR
     PublisherPut(Vec<u8>, Uuid),
+    // SVR -> Client
+    // Subscriber
+    Sample(SampleWS, Uuid),
+    // GetReply
+    GetReply(ReplyWS),
     // Bidirectional
     Queryable(QueryableMsg),
-    // SVR -> Client
-    Put {
-        #[ts(as = "OwnedKeyExprWrapper")]
-        key_expr: OwnedKeyExpr,
-        payload: Vec<u8>,
-    },
-    // TODO Discuss This Further
-    // Get {
-    //     #[ts(as = "OwnedKeyExprWrapper")]
-    //     key_expr: OwnedKeyExpr,
-    //     id: Uuid,
-    // },
-    Delete {
-        #[ts(as = "OwnedKeyExprWrapper")]
-        key_expr: OwnedKeyExpr,
-    },
 }
 
 #[derive(TS)]
 #[ts(export)]
 #[derive(Debug, Serialize, Deserialize)]
 pub enum QueryableMsg {
+    // SVR -> Client
     // UUID of original queryable
     Query {
         queryable_uuid: Uuid,
         query: QueryWS,
     },
+    // Client -> SVR
     Reply {
         reply: ReplyWS,
     },
@@ -79,7 +68,27 @@ pub enum ControlMsg {
     CloseSession,
     Session(Uuid),
 
-    // KeyExpr
+    // Session Action Messages
+    // TODO Replace parameters String with Parameters
+    Get {
+        #[ts(as = "OwnedKeyExprWrapper")]
+        key_expr: OwnedKeyExpr,
+        parameters: Option<String>,
+        id: Uuid,
+    },
+    GetFinished {
+        id: Uuid,
+    },
+    Put {
+        #[ts(as = "OwnedKeyExprWrapper")]
+        key_expr: OwnedKeyExpr,
+        payload: Vec<u8>,
+    },
+    Delete {
+        #[ts(as = "OwnedKeyExprWrapper")]
+        key_expr: OwnedKeyExpr,
+    },
+    //
 
     // Subscriber
     DeclareSubscriber {
@@ -106,9 +115,6 @@ pub enum ControlMsg {
         id: Uuid,
     },
     UndeclareQueryable(Uuid),
-
-    // Error string
-    Error(String),
 }
 
 // ██     ██ ██████   █████  ██████  ██████  ███████ ██████  ███████
@@ -143,23 +149,14 @@ pub struct QueryWS {
 
 impl From<(&Query, Uuid)> for QueryWS {
     fn from((q, uuid): (&Query, Uuid)) -> Self {
-        let payload: Option<Vec<u8>> = match q.payload().map(|x| x.try_into()) {
-            Some(Ok(x)) => Some(x),
-            Some(Err(err)) => {
-                tracing::error!("Failed to get convert ZBytes, Query->QueryWS");
-                None
-            }
+        let payload: Option<Vec<u8>> = match q.payload().map(|x| Vec::<u8>::from(x)) {
+            Some(x) => Some(x),
             None => None,
         };
-        let attachment: Option<Vec<u8>> = match q.attachment().map(|x| x.try_into()) {
-            Some(Ok(x)) => Some(x),
-            Some(Err(err)) => {
-                tracing::error!("Failed to get convert ZBytes, Query->QueryWS");
-                None
-            }
+        let attachment: Option<Vec<u8>> = match q.attachment().map(|x| Vec::<u8>::from(x)) {
+            Some(x) => Some(x),
             None => None,
         };
-
         QueryWS {
             query_uuid: uuid,
             key_expr: q.key_expr().to_owned().into(),
@@ -179,16 +176,57 @@ pub struct ReplyWS {
     pub result: Result<SampleWS, ReplyErrorWS>,
 }
 
+impl From<(Reply, Uuid)> for ReplyWS {
+    fn from((reply, uuid): (Reply, Uuid)) -> Self {
+        match reply.result() {
+            Ok(sample) => {
+                let sample_ws = SampleWS::from(sample);
+                ReplyWS {
+                    query_uuid: uuid,
+                    result: Ok(sample_ws),
+                }
+            }
+            Err(err) => {
+                let error_ws = ReplyErrorWS::from(err);
+
+                ReplyWS {
+                    query_uuid: uuid,
+                    result: Err(error_ws),
+                }
+            }
+        }
+    }
+}
+
 #[derive(TS)]
 #[ts(export)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ReplyErrorWS {
     pub(crate) payload: Vec<u8>,
+    pub(crate) encoding: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, TS)]
-#[ts(export)]
-enum ErrorMsg {}
+impl From<ReplyError> for ReplyErrorWS {
+    fn from(r_e: ReplyError) -> Self {
+        let z_bytes: Vec<u8> = Vec::<u8>::from(r_e.payload());
+
+        ReplyErrorWS {
+            payload: z_bytes,
+            encoding: r_e.encoding().to_string(),
+        }
+    }
+}
+
+impl From<&ReplyError> for ReplyErrorWS {
+    fn from(r_e: &ReplyError) -> Self {
+        let z_bytes: Vec<u8> = Vec::<u8>::from(r_e.payload());
+
+        ReplyErrorWS {
+            payload: z_bytes,
+            encoding: r_e.encoding().to_string(),
+        }
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -215,17 +253,27 @@ impl From<SampleKind> for SampleKindWS {
     }
 }
 
-impl TryFrom<Sample> for SampleWS {
-    type Error = Infallible;
+impl From<&Sample> for SampleWS {
+    fn from(s: &Sample) -> Self {
+        let z_bytes: Vec<u8> = Vec::<u8>::from(s.payload());
 
-    fn try_from(s: Sample) -> Result<Self, Self::Error> {
-        let z_bytes: Vec<u8> = s.payload().try_into()?;
-
-        Ok(SampleWS {
+        SampleWS {
             key_expr: s.key_expr().to_owned().into(),
             value: z_bytes,
             kind: s.kind().into(),
-        })
+        }
+    }
+}
+
+impl From<Sample> for SampleWS {
+    fn from(s: Sample) -> Self {
+        let z_bytes: Vec<u8> = Vec::<u8>::from(s.payload());
+
+        SampleWS {
+            key_expr: s.key_expr().to_owned().into(),
+            value: z_bytes,
+            kind: s.kind().into(),
+        }
     }
 }
 
