@@ -45,6 +45,7 @@ use crate::net::routing::{
     },
     hat::{CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources},
     router::RoutesIndexes,
+    utils::{iter_if, merge_subscriber_infos},
     RoutingContext,
 };
 
@@ -330,67 +331,37 @@ fn declare_simple_subscription(
 
 #[inline]
 fn remote_router_subs(tables: &Tables, res: &Arc<Resource>) -> Option<SubscriberInfo> {
-    let mut sub_info = None;
-    if res.context.is_some() {
-        for (router, info) in &res_hat!(res).router_subs {
-            if router != &tables.zid {
-                if info.reliability == Reliability::Reliable {
-                    return Some(*info);
-                } else {
-                    sub_info = Some(*info);
-                }
-            }
-        }
-    }
-    sub_info
+    let infos = iter_if(res.context.is_some(), || &res_hat!(res).router_subs)
+        .filter(|(peer, _)| **peer != tables.zid)
+        .map(|(_, info)| *info);
+    merge_subscriber_infos(infos)
 }
 
 #[inline]
 fn remote_linkstatepeer_subs(tables: &Tables, res: &Arc<Resource>) -> Option<SubscriberInfo> {
-    let mut sub_info = None;
-    if res.context.is_some() {
-        for (peer, info) in &res_hat!(res).linkstatepeer_subs {
-            if peer != &tables.zid {
-                if info.reliability == Reliability::Reliable {
-                    return Some(*info);
-                } else {
-                    sub_info = Some(*info);
-                }
-            }
-        }
-    }
-    sub_info
+    let infos = iter_if(res.context.is_some(), || &res_hat!(res).linkstatepeer_subs)
+        .filter(|(peer, _)| **peer != tables.zid)
+        .map(|(_, info)| *info);
+    merge_subscriber_infos(infos)
 }
 
 #[inline]
 fn simple_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
     res.session_ctxs
         .values()
-        .filter_map(|ctx| {
-            if ctx.subs.is_some() {
-                Some(ctx.face.clone())
-            } else {
-                None
-            }
-        })
+        .filter(|ctx| ctx.subs.is_some())
+        .map(|ctx| ctx.face.clone())
         .collect()
 }
 
 #[inline]
 fn remote_simple_subs(res: &Arc<Resource>, face: &Arc<FaceState>) -> Option<SubscriberInfo> {
-    let mut sub_info = None;
-    for ctx in res.session_ctxs.values() {
-        if ctx.face.id != face.id {
-            if let Some(info) = ctx.subs {
-                if info.reliability == Reliability::Reliable {
-                    return Some(info);
-                } else {
-                    sub_info = Some(info);
-                }
-            }
-        }
-    }
-    sub_info
+    let infos = res
+        .session_ctxs
+        .values()
+        .filter(|ctx| ctx.face.id != face.id)
+        .filter_map(|ctx| ctx.subs);
+    merge_subscriber_infos(infos)
 }
 
 #[inline]
@@ -658,7 +629,7 @@ fn forget_linkstatepeer_subscription(
 ) {
     undeclare_linkstatepeer_subscription(tables, Some(face), res, peer);
     let simple_subs = res.session_ctxs.values().any(|ctx| ctx.subs.is_some());
-    let linkstatepeer_subs = remote_linkstatepeer_subs(tables, res);
+    let linkstatepeer_subs = remote_linkstatepeer_subs(tables, res).is_some();
     let zid = tables.zid;
     if !simple_subs && linkstatepeer_subs.is_none() {
         undeclare_router_subscription(tables, None, res, &zid, send_declare);
@@ -836,18 +807,15 @@ pub(super) fn pubsub_tree_change(
                         WhatAmI::Router => &res_hat!(res).router_subs,
                         _ => &res_hat!(res).linkstatepeer_subs,
                     };
-                    for sub in subs.keys() {
+                    for (sub, sub_info) in subs {
                         if *sub == tree_id {
-                            let sub_info = SubscriberInfo {
-                                reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
-                            };
                             send_sourced_subscription_to_net_children(
                                 tables,
                                 net,
                                 tree_children,
                                 res,
                                 None,
-                                &sub_info,
+                                sub_info,
                                 tree_sid as NodeId,
                             );
                         }

@@ -13,7 +13,7 @@
 //
 use std::{
     borrow::Cow,
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     sync::{atomic::Ordering, Arc},
 };
 
@@ -45,6 +45,7 @@ use crate::net::routing::{
     },
     hat::{CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources},
     router::RoutesIndexes,
+    utils::{iter_if, merge_subscriber_infos},
     RoutingContext,
 };
 
@@ -238,10 +239,10 @@ fn register_linkstatepeer_subscription(
     peer: ZenohIdProto,
     send_declare: &mut SendDeclare,
 ) {
-    if !res_hat!(res).linkstatepeer_subs.contains(&peer) {
+    if res_hat!(res).linkstatepeer_subs.get(&peer) != Some(sub_info) {
         // Register peer subscription
         {
-            res_hat_mut!(res).linkstatepeer_subs.insert(peer);
+            res_hat_mut!(res).linkstatepeer_subs.insert(peer, *sub_info);
             hat_mut!(tables).linkstatepeer_subs.insert(res.clone());
         }
 
@@ -306,33 +307,30 @@ fn declare_simple_subscription(
 }
 
 #[inline]
-fn remote_linkstatepeer_subs(tables: &Tables, res: &Arc<Resource>) -> bool {
-    res.context.is_some()
-        && res_hat!(res)
-            .linkstatepeer_subs
-            .iter()
-            .any(|peer| peer != &tables.zid)
+fn remote_linkstatepeer_subs(tables: &Tables, res: &Arc<Resource>) -> Option<SubscriberInfo> {
+    let infos = iter_if(res.context.is_some(), || &res_hat!(res).linkstatepeer_subs)
+        .filter(|(peer, _)| **peer != tables.zid)
+        .map(|(_, info)| *info);
+    merge_subscriber_infos(infos)
 }
 
 #[inline]
 fn simple_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
     res.session_ctxs
         .values()
-        .filter_map(|ctx| {
-            if ctx.subs.is_some() {
-                Some(ctx.face.clone())
-            } else {
-                None
-            }
-        })
+        .filter(|ctx| ctx.subs.is_some())
+        .map(|ctx| ctx.face.clone())
         .collect()
 }
 
 #[inline]
-fn remote_simple_subs(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
-    res.session_ctxs
+fn remote_simple_subs(res: &Arc<Resource>, face: &Arc<FaceState>) -> Option<SubscriberInfo> {
+    let infos = res
+        .session_ctxs
         .values()
-        .any(|ctx| ctx.face.id != face.id && ctx.subs.is_some())
+        .filter(|ctx| ctx.face.id != face.id)
+        .filter_map(|ctx| ctx.subs);
+    merge_subscriber_infos(infos)
 }
 
 #[inline]
@@ -410,7 +408,8 @@ fn propagate_forget_simple_subscription(
             if !res.context().matches.iter().any(|m| {
                 m.upgrade().is_some_and(|m| {
                     m.context.is_some()
-                        && (remote_simple_subs(&m, &face) || remote_linkstatepeer_subs(tables, &m))
+                        && (remote_simple_subs(&m, &face).is_some()
+                            || remote_linkstatepeer_subs(tables, &m).is_some())
                 })
             }) {
                 if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
@@ -479,7 +478,7 @@ fn unregister_peer_subscription(
 ) {
     res_hat_mut!(res)
         .linkstatepeer_subs
-        .retain(|sub| sub != peer);
+        .retain(|sub, _| sub != peer);
 
     if res_hat!(res).linkstatepeer_subs.is_empty() {
         hat_mut!(tables)
@@ -497,7 +496,7 @@ fn undeclare_linkstatepeer_subscription(
     peer: &ZenohIdProto,
     send_declare: &mut SendDeclare,
 ) {
-    if res_hat!(res).linkstatepeer_subs.contains(peer) {
+    if res_hat!(res).linkstatepeer_subs.contains_key(peer) {
         unregister_peer_subscription(tables, res, peer, send_declare);
         propagate_forget_sourced_subscription(tables, res, face, peer);
     }
@@ -525,7 +524,7 @@ pub(super) fn undeclare_simple_subscription(
         }
 
         let mut simple_subs = simple_subs(res);
-        let linkstatepeer_subs = remote_linkstatepeer_subs(tables, res);
+        let linkstatepeer_subs = remote_linkstatepeer_subs(tables, res).is_some();
         if simple_subs.is_empty() {
             undeclare_linkstatepeer_subscription(
                 tables,
@@ -566,8 +565,8 @@ pub(super) fn undeclare_simple_subscription(
                     if !res.context().matches.iter().any(|m| {
                         m.upgrade().is_some_and(|m| {
                             m.context.is_some()
-                                && (remote_simple_subs(&m, face)
-                                    || remote_linkstatepeer_subs(tables, &m))
+                                && (remote_simple_subs(&m, face).is_some()
+                                    || remote_linkstatepeer_subs(tables, &m).is_some())
                         })
                     }) {
                         if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
@@ -619,7 +618,7 @@ pub(super) fn pubsub_remove_node(
     for mut res in hat!(tables)
         .linkstatepeer_subs
         .iter()
-        .filter(|res| res_hat!(res).linkstatepeer_subs.contains(node))
+        .filter(|res| res_hat!(res).linkstatepeer_subs.contains_key(node))
         .cloned()
         .collect::<Vec<Arc<Resource>>>()
     {
@@ -649,18 +648,15 @@ pub(super) fn pubsub_tree_change(tables: &mut Tables, new_children: &[Vec<NodeIn
 
                 for res in subs_res {
                     let subs = &res_hat!(res).linkstatepeer_subs;
-                    for sub in subs {
+                    for (sub, sub_info) in subs {
                         if *sub == tree_id {
-                            let sub_info = SubscriberInfo {
-                                reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
-                            };
                             send_sourced_subscription_to_net_children(
                                 tables,
                                 net,
                                 tree_children,
                                 res,
                                 None,
-                                &sub_info,
+                                sub_info,
                                 tree_sid as NodeId,
                             );
                         }
@@ -693,7 +689,8 @@ pub(super) fn declare_sub_interest(
                 if hat!(tables).linkstatepeer_subs.iter().any(|sub| {
                     sub.context.is_some()
                         && sub.matches(res)
-                        && (remote_simple_subs(sub, face) || remote_linkstatepeer_subs(tables, sub))
+                        && (remote_simple_subs(sub, face).is_some()
+                            || remote_linkstatepeer_subs(tables, sub).is_some())
                 }) {
                     let id = if mode.future() {
                         let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
@@ -725,7 +722,8 @@ pub(super) fn declare_sub_interest(
                 for sub in &hat!(tables).linkstatepeer_subs {
                     if sub.context.is_some()
                         && sub.matches(res)
-                        && (remote_simple_subs(sub, face) || remote_linkstatepeer_subs(tables, sub))
+                        && (remote_simple_subs(sub, face).is_some()
+                            || remote_linkstatepeer_subs(tables, sub).is_some())
                     {
                         let id = if mode.future() {
                             let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
@@ -758,7 +756,8 @@ pub(super) fn declare_sub_interest(
         } else {
             for sub in &hat!(tables).linkstatepeer_subs {
                 if sub.context.is_some()
-                    && (remote_simple_subs(sub, face) || remote_linkstatepeer_subs(tables, sub))
+                    && (remote_simple_subs(sub, face).is_some()
+                        || remote_linkstatepeer_subs(tables, sub).is_some())
                 {
                     let id = if mode.future() {
                         let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
@@ -848,7 +847,7 @@ impl HatPubSubTrait for HatCode {
                     // sources of those subscriptions
                     Sources {
                         routers: vec![],
-                        peers: Vec::from_iter(res_hat!(s).linkstatepeer_subs.iter().cloned()),
+                        peers: res_hat!(s).linkstatepeer_subs.keys().cloned().collect(),
                         clients: s
                             .session_ctxs
                             .values()
@@ -871,13 +870,13 @@ impl HatPubSubTrait for HatCode {
         source_type: WhatAmI,
     ) -> Arc<Route> {
         #[inline]
-        fn insert_faces_for_subs(
+        fn insert_faces_for_subs<'a>(
             route: &mut Route,
             expr: &RoutingExpr,
             tables: &Tables,
             net: &Network,
             source: NodeId,
-            subs: &HashSet<ZenohIdProto>,
+            subs: impl IntoIterator<Item = &'a ZenohIdProto>,
         ) {
             if net.trees.len() > source as usize {
                 for sub in subs {
@@ -946,7 +945,7 @@ impl HatPubSubTrait for HatCode {
                 tables,
                 net,
                 peer_source,
-                &res_hat!(mres).linkstatepeer_subs,
+                res_hat!(mres).linkstatepeer_subs.keys(),
             );
 
             for (sid, context) in &mres.session_ctxs {
@@ -984,12 +983,12 @@ impl HatPubSubTrait for HatCode {
         key_expr: &KeyExpr<'_>,
     ) -> HashMap<usize, Arc<FaceState>> {
         #[inline]
-        fn insert_faces_for_subs(
+        fn insert_faces_for_subs<'a>(
             route: &mut HashMap<usize, Arc<FaceState>>,
             tables: &Tables,
             net: &Network,
             source: usize,
-            subs: &HashSet<ZenohIdProto>,
+            subs: impl IntoIterator<Item = &'a ZenohIdProto>,
         ) {
             if net.trees.len() > source {
                 for sub in subs {
@@ -1032,7 +1031,7 @@ impl HatPubSubTrait for HatCode {
                 tables,
                 net,
                 net.idx.index(),
-                &res_hat!(mres).linkstatepeer_subs,
+                res_hat!(mres).linkstatepeer_subs.keys(),
             );
 
             for (sid, context) in &mres.session_ctxs {

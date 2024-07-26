@@ -1,4 +1,8 @@
-use zenoh_protocol::network::declare::queryable::ext::QueryableInfoType;
+use itertools::Itertools;
+use zenoh_protocol::{
+    core::Reliability,
+    network::declare::{queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo},
+};
 
 pub(crate) fn iter_if<I: IntoIterator>(
     cond: bool,
@@ -17,4 +21,13 @@ pub(crate) fn merge_queryable_infos(
         }),
         None => Some(info),
     })
+}
+
+pub(crate) fn merge_subscriber_infos(
+    infos: impl IntoIterator<Item = SubscriberInfo>,
+) -> Option<SubscriberInfo> {
+    infos
+        .into_iter()
+        .take_while_inclusive(|info| info.reliability != Reliability::Reliable)
+        .last()
 }
