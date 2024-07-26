@@ -176,6 +176,7 @@ impl keyexpr {
     /// For instance, if `self` is `"a/**/c/*" and `prefix` is `a/b/c` then:  
     ///   - the `prefix` matches `"a/**/c"` leading to a result of `"*"` when stripped from `self`
     ///   - the `prefix` matches `"a/**"` leading to a result of `"**/c/*"` when stripped from `self`
+    /// 
     /// So the result is `["*", "**/c/*"]`.  
     /// If `prefix` cannot match the beginning of `self`, an empty list is reuturned.
     ///

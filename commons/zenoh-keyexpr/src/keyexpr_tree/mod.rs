@@ -36,7 +36,7 @@
 //! KeTrees come in two flavours:
 //! - [`KeBoxTree`] is the easier flavour. Much like a HashMap, it uniquely owns all of its nodes and data.
 //! - [`KeArcTree`] allows the shared ownership of nodes, allowing you to store subsections of the tree elsewhere
-//! without worrying about lifetimes.
+//!   without worrying about lifetimes.
 //!
 //! # Usage
 //! KeTrees were designed to maximize code reuse. As such, their core properties are reflected through the [`IKeyExprTree`] and [`IKeyExprTreeMut`] traits.

@@ -81,6 +81,7 @@ pub mod ext {
     pub type NodeIdType = crate::network::ext::NodeIdType<{ NodeId::ID }>;
 
     pub type Target = zextz64!(0x4, true);
+    /// ```text
     /// - Target (0x03)
     ///  7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
@@ -88,6 +89,7 @@ pub mod ext {
     /// +---------------+
     ///
     /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
+    /// ```
     pub type TargetType = QueryTarget;
 
     impl TargetType {
