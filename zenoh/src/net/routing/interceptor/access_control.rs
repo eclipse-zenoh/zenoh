@@ -360,11 +360,8 @@ impl InterceptorTrait for EgressAclEnforcer {
                     return None;
                 }
             }
-            NetworkBody::Response(Response { wire_expr, .. }) => {
-                // @TODO: Remove wire_expr usage when issue #1255 is implemented
-                if self.action(AclMessage::Reply, "Reply (egress)", wire_expr.as_str())
-                    == Permission::Deny
-                {
+            NetworkBody::Response(Response { .. }) => {
+                if self.action(AclMessage::Reply, "Reply (egress)", key_expr?) == Permission::Deny {
                     return None;
                 }
             }

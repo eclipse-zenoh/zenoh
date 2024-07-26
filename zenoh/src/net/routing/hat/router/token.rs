@@ -386,6 +386,7 @@ fn send_forget_sourced_token_to_net_clildren(
 fn propagate_forget_simple_token(
     tables: &mut Tables,
     res: &Arc<Resource>,
+    src_face: Option<&Arc<FaceState>>,
     send_declare: &mut SendDeclare,
 ) {
     for mut face in tables.faces.values().cloned() {
@@ -406,9 +407,15 @@ fn propagate_forget_simple_token(
                     res.expr(),
                 ),
             );
-        } else if face_hat!(face).remote_interests.values().any(|(r, o)| {
-            o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true) && !o.aggregate()
-        }) {
+        // NOTE(fuzzypixelz): We need to check that `face` is not the source Face of the token
+        // undeclaration, otherwise the undeclaration would be duplicated at the source Face. In
+        // cases where we don't have access to a Face as we didnt't receive an undeclaration and we
+        // default to true.
+        } else if src_face.map_or(true, |src_face| src_face.id != face.id)
+            && face_hat!(face).remote_interests.values().any(|(r, o)| {
+                o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true) && !o.aggregate()
+            })
+        {
             // Token has never been declared on this face.
             // Send an Undeclare with a one shot generated id and a WireExpr ext.
             send_declare(
@@ -578,6 +585,7 @@ fn propagate_forget_sourced_token(
 
 fn unregister_router_token(
     tables: &mut Tables,
+    face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
     router: &ZenohIdProto,
     send_declare: &mut SendDeclare,
@@ -594,7 +602,7 @@ fn unregister_router_token(
         if hat_mut!(tables).full_net(WhatAmI::Peer) {
             undeclare_peer_token(tables, None, res, &tables.zid.clone());
         }
-        propagate_forget_simple_token(tables, res, send_declare);
+        propagate_forget_simple_token(tables, res, face, send_declare);
     }
 
     propagate_forget_simple_token_to_peers(tables, res, send_declare);
@@ -608,7 +616,7 @@ fn undeclare_router_token(
     send_declare: &mut SendDeclare,
 ) {
     if res_hat!(res).router_tokens.contains(router) {
-        unregister_router_token(tables, res, router, send_declare);
+        unregister_router_token(tables, face, res, router, send_declare);
         propagate_forget_sourced_token(tables, res, face, router, WhatAmI::Router);
     }
 }
@@ -680,7 +688,7 @@ pub(super) fn undeclare_client_token(
         let router_tokens = remote_router_tokens(tables, res);
         let peer_tokens = remote_peer_tokens(tables, res);
         if client_tokens.is_empty() && !peer_tokens {
-            undeclare_router_token(tables, None, res, &tables.zid.clone(), send_declare);
+            undeclare_router_token(tables, Some(face), res, &tables.zid.clone(), send_declare);
         } else {
             propagate_forget_simple_token_to_peers(tables, res, send_declare);
         }
@@ -774,7 +782,7 @@ pub(super) fn token_remove_node(
                 .cloned()
                 .collect::<Vec<Arc<Resource>>>()
             {
-                unregister_router_token(tables, &mut res, node, send_declare);
+                unregister_router_token(tables, None, &mut res, node, send_declare);
                 Resource::clean(&mut res)
             }
         }
