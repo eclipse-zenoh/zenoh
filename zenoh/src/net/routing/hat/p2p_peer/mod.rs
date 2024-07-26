@@ -23,7 +23,7 @@ use std::{
     sync::{atomic::AtomicU32, Arc},
 };
 
-use token::{token_new_face, undeclare_client_token};
+use token::{token_new_face, undeclare_simple_token};
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher};
 use zenoh_protocol::{
     common::ZExtBody,
@@ -45,8 +45,8 @@ use zenoh_transport::unicast::TransportUnicast;
 use self::{
     gossip::Network,
     interests::interests_new_face,
-    pubsub::{pubsub_new_face, undeclare_client_subscription},
-    queries::{queries_new_face, undeclare_client_queryable},
+    pubsub::{pubsub_new_face, undeclare_simple_subscription},
+    queries::{queries_new_face, undeclare_simple_queryable},
 };
 use super::{
     super::dispatcher::{
@@ -237,7 +237,7 @@ impl HatBaseTrait for HatCode {
         let mut subs_matches = vec![];
         for (_id, mut res) in hat_face.remote_subs.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_client_subscription(&mut wtables, &mut face_clone, &mut res, send_declare);
+            undeclare_simple_subscription(&mut wtables, &mut face_clone, &mut res, send_declare);
 
             if res.context.is_some() {
                 for match_ in &res.context().matches {
@@ -259,7 +259,7 @@ impl HatBaseTrait for HatCode {
         let mut qabls_matches = vec![];
         for (_id, mut res) in hat_face.remote_qabls.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_client_queryable(&mut wtables, &mut face_clone, &mut res, send_declare);
+            undeclare_simple_queryable(&mut wtables, &mut face_clone, &mut res, send_declare);
 
             if res.context.is_some() {
                 for match_ in &res.context().matches {
@@ -280,7 +280,7 @@ impl HatBaseTrait for HatCode {
 
         for (_id, mut res) in hat_face.remote_tokens.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_client_token(&mut wtables, &mut face_clone, &mut res, send_declare);
+            undeclare_simple_token(&mut wtables, &mut face_clone, &mut res, send_declare);
         }
         drop(wtables);
 
