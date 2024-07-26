@@ -411,7 +411,7 @@ fn propagate_forget_simple_token(
         // undeclaration, otherwise the undeclaration would be duplicated at the source Face. In
         // cases where we don't have access to a Face as we didnt't receive an undeclaration and we
         // default to true.
-        } else if dbg!(src_face.map_or(true, |src_face| src_face.id != face.id))
+        } else if src_face.map_or(true, |src_face| src_face.id != face.id)
             && face_hat!(face).remote_interests.values().any(|(r, o)| {
                 o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true) && !o.aggregate()
             })
