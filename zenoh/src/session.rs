@@ -2003,7 +2003,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     /// # Arguments
     ///
     /// * `key_expr` - The key expression matching the queries the
-    /// [`Queryable`](Queryable) will reply to
+    ///   [`Queryable`](Queryable) will reply to
     ///
     /// # Examples
     /// ```no_run
@@ -2602,7 +2602,7 @@ pub trait SessionDeclarations<'s, 'a> {
     /// # Arguments
     ///
     /// * `key_expr` - The key expression matching the queries the
-    /// [`Queryable`](crate::queryable::Queryable) will reply to
+    ///   [`Queryable`](crate::queryable::Queryable) will reply to
     ///
     /// # Examples
     /// ```no_run

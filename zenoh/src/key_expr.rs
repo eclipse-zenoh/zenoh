@@ -24,7 +24,7 @@
 //! - [`keyexpr`] is the equivalent of a [`str`],
 //! - [`OwnedKeyExpr`] works like an [`std::sync::Arc<str>`],
 //! - [`KeyExpr`] works like a [`std::borrow::Cow<str>`], but also stores some additional context internal to Zenoh to optimize
-//! routing and network usage.
+//!   routing and network usage.
 //!
 //! All of these types [`Deref`](core::ops::Deref) to [`keyexpr`], which notably has methods to check whether a given [`keyexpr::intersects`] with another,
 //! or even if a [`keyexpr::includes`] another.

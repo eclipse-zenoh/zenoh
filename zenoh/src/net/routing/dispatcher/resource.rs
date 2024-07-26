@@ -185,6 +185,10 @@ impl PartialEq for Resource {
 }
 impl Eq for Resource {}
 
+// NOTE: The `clippy::mutable_key_type` lint takes issue with the fact that `Resource` contains
+// interior mutable data. A configuration option is used to assert that the accessed fields are
+// not interior mutable in clippy.toml. Thus care should be taken to ensure soundness of this impl
+// as Clippy will not warn about its usage in sets/maps.
 impl Hash for Resource {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.expr().hash(state);

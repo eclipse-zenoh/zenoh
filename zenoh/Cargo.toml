@@ -130,3 +130,6 @@ license-file = ["../LICENSE", "0"]
 depends = "zenohd (=0.11.0-dev-1), zenoh-plugin-rest (=0.11.0-dev-1), zenoh-plugin-storage-manager (=0.11.0-dev-1)"
 maintainer-scripts = ".deb"
 assets = [["../README.md", "README.md", "644"]]
+
+[lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = ['cfg(doc_auto_cfg)'] }
