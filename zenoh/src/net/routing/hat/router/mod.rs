@@ -232,8 +232,9 @@ impl HatTables {
                 .as_ref()
                 .map(|net| {
                     let links = net.get_links(peer1);
-                    tracing::debug!("failover_brokering {} {} ({:?})", peer1, peer2, links);
-                    HatTables::failover_brokering_to(links, peer2)
+                    let res = HatTables::failover_brokering_to(links, peer2);
+                    tracing::trace!("failover_brokering {} {} : {}", peer1, peer2, res);
+                    res
                 })
                 .unwrap_or(false)
     }
