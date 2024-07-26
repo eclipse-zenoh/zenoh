@@ -389,11 +389,6 @@ fn propagate_forget_simple_token(
     src_face: Option<&Arc<FaceState>>,
     send_declare: &mut SendDeclare,
 ) {
-    dbg!(src_face.as_ref().map(|f| f.to_string()));
-    // FIXME(fuzzypixelz): This function should be split to accommodate for the divergent code paths
-    // (the ones coming from `HatTokenTrait::undeclare_token` vs
-    // `HatBaseTrait::closing`/`HatBaseTrait::handle_oam` vs `undeclare_client_token`). This way we
-    // can either pass `src_face` or not, rather than using an optional.
     for mut face in tables.faces.values().cloned() {
         if let Some(id) = face_hat_mut!(&mut face).local_tokens.remove(res) {
             send_declare(
@@ -413,21 +408,10 @@ fn propagate_forget_simple_token(
                 ),
             );
         // NOTE(fuzzypixelz): We need to check that `face` is not the source Face of the token
-        // undeclaration, otherwise the undeclaration would be duplicated at the source Face.
-        //
-        // The code path that leads to `src_face` being `None` originate in:
-        //   - `HatBaseTrait::closing`
-        //   - `HatBaseTrait::handle_oam`
-        //   - `undeclare_client_token`: when a peer/client undeclares a token and no other
-        //     peer/client has declared it (or has undeclared it) then **this** router's propagation
-        //     of the token is undeclared. In this case we don't have a source Face (there is no
-        //     "self" face).
-        //
-        // In these cases we don't have access to a Face as we don't received an undeclaration and
-        // we default to true.
-        //
-        // TODO: Could we use ZIDs instead of Faces?
-        } else if src_face.map_or(true, |src_face| src_face.id != face.id)
+        // undeclaration, otherwise the undeclaration would be duplicated at the source Face. In
+        // cases where we don't have access to a Face as we didnt't receive an undeclaration and we
+        // default to true.
+        } else if dbg!(src_face.map_or(true, |src_face| src_face.id != face.id))
             && face_hat!(face).remote_interests.values().any(|(r, o)| {
                 o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true) && !o.aggregate()
             })
@@ -704,7 +688,7 @@ pub(super) fn undeclare_client_token(
         let router_tokens = remote_router_tokens(tables, res);
         let peer_tokens = remote_peer_tokens(tables, res);
         if client_tokens.is_empty() && !peer_tokens {
-            undeclare_router_token(tables, None, res, &tables.zid.clone(), send_declare);
+            undeclare_router_token(tables, Some(face), res, &tables.zid.clone(), send_declare);
         } else {
             propagate_forget_simple_token_to_peers(tables, res, send_declare);
         }
