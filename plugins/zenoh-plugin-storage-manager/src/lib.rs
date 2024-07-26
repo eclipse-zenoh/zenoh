@@ -112,9 +112,7 @@ impl StorageRuntimeInner {
             storages,
             ..
         } = config;
-        let lib_loader = backend_search_dirs
-            .map(|search_dirs| LibLoader::new(&search_dirs, false))
-            .unwrap_or_default();
+        let lib_loader = LibLoader::new(backend_search_dirs);
 
         let plugins_manager =
             PluginsManager::dynamic(lib_loader.clone(), BACKEND_LIB_PREFIX)

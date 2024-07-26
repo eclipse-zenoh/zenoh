@@ -148,7 +148,7 @@ rustls-native-certs = "0.7.0"
 rustls-pemfile = "2.0.0"
 rustls-webpki = "0.102.0"
 rustls-pki-types = "1.1.0"
-schemars = "0.8.12"
+schemars = { version = "0.8.12", features = ["either"] }
 secrecy = { version = "0.8.0", features = ["serde", "alloc"] }
 serde = { version = "1.0.154", default-features = false, features = [
   "derive",
@@ -187,6 +187,7 @@ webpki-roots = "0.26.0"
 winapi = { version = "0.3.9", features = ["iphlpapi"] }
 x509-parser = "0.16.0"
 z-serial = "0.2.3"
+either = "1.13.0"
 zenoh-ext = { version = "0.11.0-dev", path = "zenoh-ext" }
 zenoh-shm = { version = "0.11.0-dev", path = "commons/zenoh-shm" }
 zenoh-result = { version = "0.11.0-dev", path = "commons/zenoh-result", default-features = false }

@@ -23,13 +23,22 @@ use tracing::{debug, warn};
 use zenoh_core::{zconfigurable, zerror};
 use zenoh_result::{bail, ZResult};
 
+use crate::LibSearchDirs;
+
 zconfigurable! {
     /// The libraries prefix for the current platform (usually: `"lib"`)
     pub static ref LIB_PREFIX: String = DLL_PREFIX.to_string();
     /// The libraries suffix for the current platform (`".dll"` or `".so"` or `".dylib"`...)
     pub static ref LIB_SUFFIX: String = DLL_SUFFIX.to_string();
     /// The default list of paths where to search for libraries to load
-    pub static ref LIB_DEFAULT_SEARCH_PATHS: String = ".:~/.zenoh/lib:/opt/homebrew/lib:/usr/local/lib:/usr/lib".to_string();
+    pub static ref LIB_DEFAULT_SEARCH_PATHS: String = r#"[
+        { "kind": "current_exe_parent" },
+        ".",
+        "~/.zenoh/lib",
+        "/opt/homebrew/lib",
+        "/usr/local/lib",
+        "/usr/lib"
+    ]"#.to_string();
 }
 
 /// LibLoader allows search for libraries and to load them.
@@ -44,40 +53,16 @@ impl LibLoader {
         LibLoader { search_paths: None }
     }
 
-    /// Returns the list of search paths used by `LibLoader::default()`
-    pub fn default_search_paths() -> &'static str {
-        &LIB_DEFAULT_SEARCH_PATHS
-    }
-
     /// Creates a new [LibLoader] with a set of paths where the libraries will be searched for.
     /// If `exe_parent_dir`is true, the parent directory of the current executable is also added
     /// to the set of paths for search.
-    pub fn new<S>(search_dirs: &[S], exe_parent_dir: bool) -> LibLoader
-    where
-        S: AsRef<str>,
-    {
-        let mut search_paths: Vec<PathBuf> = vec![];
-        for s in search_dirs {
-            match shellexpand::full(s) {
-                Ok(cow_str) => match PathBuf::from(&*cow_str).canonicalize() {
-                    Ok(path) => search_paths.push(path),
-                    Err(err) => debug!("Cannot search for libraries in {}: {}", cow_str, err),
-                },
-                Err(err) => warn!("Cannot search for libraries in '{}': {} ", s.as_ref(), err),
-            }
-        }
-        Self::_new(search_paths, exe_parent_dir)
-    }
-    fn _new(mut search_paths: Vec<PathBuf>, exe_parent_dir: bool) -> Self {
-        if exe_parent_dir {
-            match std::env::current_exe() {
-                Ok(path) => match path.parent() {
-                    Some(p) => if p.is_dir() {
-                        search_paths.push(p.canonicalize().unwrap())
-                    },
-                    None => warn!("Can't search for plugins in executable parent directory: no parent directory for {}.", path.to_string_lossy()),
-                },
-                Err(e) => warn!("Can't search for plugins in executable parent directory: {}.", e),
+    pub fn new(dirs: LibSearchDirs) -> LibLoader {
+        let mut search_paths = Vec::new();
+
+        for path in dirs.into_iter() {
+            match path {
+                Ok(path) => search_paths.push(path),
+                Err(err) => tracing::error!("{err}"),
             }
         }
 
@@ -237,7 +222,6 @@ impl LibLoader {
 
 impl Default for LibLoader {
     fn default() -> Self {
-        let paths: Vec<&str> = (*LIB_DEFAULT_SEARCH_PATHS).split(':').collect();
-        LibLoader::new(&paths, true)
+        LibLoader::new(LibSearchDirs::default())
     }
 }

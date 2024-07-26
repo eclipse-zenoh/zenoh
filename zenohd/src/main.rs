@@ -21,6 +21,7 @@ use zenoh::{
     config::{Config, EndPoint, ModeDependentValue, PermissionsConf, ValidatedMap, WhatAmI},
     Result,
 };
+use zenoh_util::LibSearchDirs;
 
 #[cfg(feature = "loki")]
 const LOKI_ENDPOINT_VAR: &str = "LOKI_ENDPOINT";
@@ -146,7 +147,11 @@ fn config_from_args(args: &Args) -> Config {
     if !args.plugin_search_dir.is_empty() {
         config
             .plugins_loading
-            .set_search_dirs(Some(args.plugin_search_dir.clone()))
+            // REVIEW: Should this append to search_dirs instead? As there is no way to pass the new
+            // `current_exe_parent` unless we change the format of the argument and this overrides
+            // the one set from the default config. 
+            // Also, --cfg plugins_loading/search_dirs=[...] makes this argument superfluous.
+            .set_search_dirs(LibSearchDirs::from_paths(&args.plugin_search_dir))
             .unwrap();
     }
     for plugin in &args.plugin {

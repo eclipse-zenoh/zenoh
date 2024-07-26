@@ -199,7 +199,7 @@
   //       /// Id has to be unique within the rule set
   //       "id": "rule1",
   //       "messages": [
-  //         "put", "delete", "declare_subscriber", 
+  //         "put", "delete", "declare_subscriber",
   //         "query", "reply", "declare_queryable",
   //       ],
   //       "flows":["egress","ingress"],
@@ -211,7 +211,7 @@
   //     {
   //       "id": "rule2",
   //       "messages": [
-  //         "put", "delete", "declare_subscriber", 
+  //         "put", "delete", "declare_subscriber",
   //         "query", "reply", "declare_queryable",
   //       ],
   //       "flows":["ingress"],
@@ -462,11 +462,14 @@
   ///
   //
   //  plugins_loading: {
-  //    // Enable plugins loading.
+  //    /// Enable plugins loading.
   //    enabled: false,
   //    /// Directories where plugins configured by name should be looked for. Plugins configured by __path__ are not subject to lookup.
-  //    /// If `enabled: true` and `search_dirs` is not specified then `search_dirs` falls back to the default value: ".:~/.zenoh/lib:/opt/homebrew/lib:/usr/local/lib:/usr/lib"
-  //    search_dirs: [],
+  //    /// Directories are specified as object with fields `kind` and `value` is accepted.
+  //    ///   1. If `kind` is `current_exe_parent`, then the parent of the current executable's directory is searched and `value` should be `null`.
+  //    ///   2. If `kind` is `path`, then `value` is interpreted as a filesystem path. Simply supplying a string instead of a object is equivalent to this.
+  //    /// If `enabled: true` and `search_dirs` is not specified then `search_dirs` falls back to the default value:
+  //    search_dirs: [{ "kind": "current_exe_parent" }, ".", "~/.zenoh/lib", "/opt/homebrew/lib", "/usr/local/lib", "/usr/lib"],
   //  },
   //  /// Plugins are only loaded if `plugins_loading: { enabled: true }` and present in the configuration when starting.
   //  /// Once loaded, they may react to changes in the configuration made through the zenoh instance's adminspace.

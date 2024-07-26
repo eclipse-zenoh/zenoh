@@ -37,6 +37,7 @@ zenoh-util = { workspace = true }
 schemars = { workspace = true }
 zenoh-plugin-trait = { workspace = true }
 const_format = { workspace = true }
+either = { workspace = true }
 
 [features]
 default = []
