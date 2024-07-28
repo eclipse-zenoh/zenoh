@@ -18,11 +18,7 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 
-use std::{
-    collections::{HashMap, HashSet},
-    net::SocketAddr,
-    sync::Arc,
-};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
 use async_std::{
     net::TcpListener,
@@ -40,7 +36,6 @@ use zenoh::{
         plugins::{RunningPluginTrait, ZenohPlugin},
         runtime::Runtime,
     },
-    key_expr::KeyExpr,
     pubsub::{Publisher, Subscriber},
     query::{Query, Queryable},
     Session,
@@ -144,7 +139,7 @@ struct RemoteState {
     websocket_tx: Sender<RemoteAPIMsg>,
     session_id: Uuid,
     session: Arc<Session>,
-    key_expr: HashSet<KeyExpr<'static>>,
+    // key_expr: HashSet<KeyExpr<'static>>,
     // PubSub
     subscribers: HashMap<Uuid, Subscriber<'static, ()>>,
     publishers: HashMap<Uuid, Publisher<'static>>,
@@ -187,7 +182,7 @@ async fn run_websocket_server(runtime: Runtime, state_map: StateMap) {
                         websocket_tx: ws_ch_tx.clone(),
                         session_id: Uuid::new_v4(),
                         session,
-                        key_expr: HashSet::new(),
+                        // key_expr: HashSet::new(),
                         subscribers: HashMap::new(),
                         publishers: HashMap::new(),
                         queryables: HashMap::new(),
@@ -195,13 +190,8 @@ async fn run_websocket_server(runtime: Runtime, state_map: StateMap) {
                     };
 
                     sock_adress = Arc::new(sock_addr);
-                    if let Some(remote_state) = write_guard.insert(sock_addr, state) {
-                        error!(
-                            "remote State existed in Map already {:?}",
-                            remote_state.session_id
-                        );
-                        println!("TODO: remote State existed in Map already, Error in Logic?");
-                    }
+                    // if remote state exists in map already. Ignore it and reinitialize
+                    let _ = write_guard.insert(sock_addr, state);
                 }
                 Err(err) => {
                     error!("Could not Get Peer Address {err}");
@@ -223,6 +213,7 @@ async fn run_websocket_server(runtime: Runtime, state_map: StateMap) {
                 .forward(ws_tx);
 
             let sock_adress_cl = sock_adress.clone();
+
             let state_map_cl_outer = state_map.clone();
 
             //  Incomming message from Websocket
@@ -234,7 +225,9 @@ async fn run_websocket_server(runtime: Runtime, state_map: StateMap) {
                     if let Some(response) =
                         handle_message(msg, *sock_adress_ref, state_map_cl.clone()).await
                     {
-                        ws_ch_tx.send(response).unwrap();
+                        if let Err(err) = ws_ch_tx.send(response) {
+                            error!("WS Send Error: {err:?}");
+                        };
                     };
                 }
             });
@@ -243,7 +236,7 @@ async fn run_websocket_server(runtime: Runtime, state_map: StateMap) {
             future::select(ch_rx_stream, incoming_ws).await;
 
             state_map.write().await.remove(sock_adress.as_ref());
-            println!("disconnected");
+            tracing::info!("Disconnected {}", sock_adress.as_ref());
         }
     });
 }
@@ -253,20 +246,26 @@ async fn handle_message(
     sock_addr: SocketAddr,
     state_map: StateMap,
 ) -> Option<RemoteAPIMsg> {
-    match msg.clone() {
+    match msg {
         tungstenite::Message::Text(text) => match serde_json::from_str::<RemoteAPIMsg>(&text) {
             Ok(msg) => match msg {
                 RemoteAPIMsg::Control(ctrl_msg) => {
-                    handle_control_message(ctrl_msg, sock_addr, state_map)
-                        .await
-                        .map(RemoteAPIMsg::Control)
+                    match handle_control_message(ctrl_msg, sock_addr, state_map).await {
+                        Ok(ok) => ok.map(RemoteAPIMsg::Control),
+                        Err(err) => {
+                            tracing::error!(err);
+                            None
+                        }
+                    }
                 }
                 RemoteAPIMsg::Data(data_msg) => {
-                    handle_data_message(data_msg, sock_addr, state_map).await
+                    if let Err(err) = handle_data_message(data_msg, sock_addr, state_map).await {
+                        tracing::error!(err);
+                    }
+                    None
                 }
             },
             Err(err) => {
-                println!("{} \n {}", err, text);
                 error!(
                     "RemoteAPI: WS Message Cannot be Deserialized to RemoteAPIMsg {}",
                     err

@@ -149,14 +149,8 @@ pub struct QueryWS {
 
 impl From<(&Query, Uuid)> for QueryWS {
     fn from((q, uuid): (&Query, Uuid)) -> Self {
-        let payload: Option<Vec<u8>> = match q.payload().map(|x| Vec::<u8>::from(x)) {
-            Some(x) => Some(x),
-            None => None,
-        };
-        let attachment: Option<Vec<u8>> = match q.attachment().map(|x| Vec::<u8>::from(x)) {
-            Some(x) => Some(x),
-            None => None,
-        };
+        let payload: Option<Vec<u8>> = q.payload().map(Vec::<u8>::from);
+        let attachment: Option<Vec<u8>> = q.attachment().map(Vec::<u8>::from);
         QueryWS {
             query_uuid: uuid,
             key_expr: q.key_expr().to_owned().into(),
