@@ -145,7 +145,7 @@ fn propagate_simple_subscription(
     }
 }
 
-fn register_client_subscription(
+fn register_simple_subscription(
     _tables: &mut Tables,
     face: &mut Arc<FaceState>,
     id: SubscriberId,
@@ -173,7 +173,7 @@ fn register_client_subscription(
     face_hat_mut!(face).remote_subs.insert(id, res.clone());
 }
 
-fn declare_client_subscription(
+fn declare_simple_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     id: SubscriberId,
@@ -181,7 +181,7 @@ fn declare_client_subscription(
     sub_info: &SubscriberInfo,
     send_declare: &mut SendDeclare,
 ) {
-    register_client_subscription(tables, face, id, res, sub_info);
+    register_simple_subscription(tables, face, id, res, sub_info);
 
     propagate_simple_subscription(tables, res, sub_info, face, send_declare);
     // This introduced a buffer overflow on windows
@@ -285,7 +285,7 @@ fn propagate_forget_simple_subscription(
     }
 }
 
-pub(super) fn undeclare_client_subscription(
+pub(super) fn undeclare_simple_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -355,14 +355,14 @@ pub(super) fn undeclare_client_subscription(
     }
 }
 
-fn forget_client_subscription(
+fn forget_simple_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     id: SubscriberId,
     send_declare: &mut SendDeclare,
 ) -> Option<Arc<Resource>> {
     if let Some(mut res) = face_hat_mut!(face).remote_subs.remove(&id) {
-        undeclare_client_subscription(tables, face, &mut res, send_declare);
+        undeclare_simple_subscription(tables, face, &mut res, send_declare);
         Some(res)
     } else {
         None
@@ -545,7 +545,7 @@ impl HatPubSubTrait for HatCode {
         _node_id: NodeId,
         send_declare: &mut SendDeclare,
     ) {
-        declare_client_subscription(tables, face, id, res, sub_info, send_declare);
+        declare_simple_subscription(tables, face, id, res, sub_info, send_declare);
     }
 
     fn undeclare_subscription(
@@ -557,7 +557,7 @@ impl HatPubSubTrait for HatCode {
         _node_id: NodeId,
         send_declare: &mut SendDeclare,
     ) -> Option<Arc<Resource>> {
-        forget_client_subscription(tables, face, id, send_declare)
+        forget_simple_subscription(tables, face, id, send_declare)
     }
 
     fn get_subscriptions(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {

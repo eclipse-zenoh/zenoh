@@ -25,7 +25,7 @@ use std::{
     time::Duration,
 };
 
-use token::{token_linkstate_change, token_remove_node, undeclare_client_token};
+use token::{token_linkstate_change, token_remove_node, undeclare_simple_token};
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher};
 use zenoh_protocol::{
     common::ZExtBody,
@@ -44,8 +44,8 @@ use zenoh_transport::unicast::TransportUnicast;
 
 use self::{
     network::{shared_nodes, Network},
-    pubsub::{pubsub_linkstate_change, pubsub_remove_node, undeclare_client_subscription},
-    queries::{queries_linkstate_change, queries_remove_node, undeclare_client_queryable},
+    pubsub::{pubsub_linkstate_change, pubsub_remove_node, undeclare_simple_subscription},
+    queries::{queries_linkstate_change, queries_remove_node, undeclare_simple_queryable},
 };
 use super::{
     super::dispatcher::{
@@ -119,23 +119,23 @@ use face_hat_mut;
 
 struct HatTables {
     router_subs: HashSet<Arc<Resource>>,
-    peer_subs: HashSet<Arc<Resource>>,
+    linkstatepeer_subs: HashSet<Arc<Resource>>,
     router_tokens: HashSet<Arc<Resource>>,
-    peer_tokens: HashSet<Arc<Resource>>,
+    linkstatepeer_tokens: HashSet<Arc<Resource>>,
     router_qabls: HashSet<Arc<Resource>>,
-    peer_qabls: HashSet<Arc<Resource>>,
+    linkstatepeer_qabls: HashSet<Arc<Resource>>,
     routers_net: Option<Network>,
-    peers_net: Option<Network>,
+    linkstatepeers_net: Option<Network>,
     shared_nodes: Vec<ZenohIdProto>,
     routers_trees_task: Option<TerminatableTask>,
-    peers_trees_task: Option<TerminatableTask>,
+    linkstatepeers_trees_task: Option<TerminatableTask>,
     router_peers_failover_brokering: bool,
 }
 
 impl Drop for HatTables {
     fn drop(&mut self) {
-        if self.peers_trees_task.is_some() {
-            let task = self.peers_trees_task.take().unwrap();
+        if self.linkstatepeers_trees_task.is_some() {
+            let task = self.linkstatepeers_trees_task.take().unwrap();
             task.terminate(Duration::from_secs(10));
         }
         if self.routers_trees_task.is_some() {
@@ -149,16 +149,16 @@ impl HatTables {
     fn new(router_peers_failover_brokering: bool) -> Self {
         Self {
             router_subs: HashSet::new(),
-            peer_subs: HashSet::new(),
+            linkstatepeer_subs: HashSet::new(),
             router_qabls: HashSet::new(),
-            peer_qabls: HashSet::new(),
+            linkstatepeer_qabls: HashSet::new(),
             router_tokens: HashSet::new(),
-            peer_tokens: HashSet::new(),
+            linkstatepeer_tokens: HashSet::new(),
             routers_net: None,
-            peers_net: None,
+            linkstatepeers_net: None,
             shared_nodes: vec![],
             routers_trees_task: None,
-            peers_trees_task: None,
+            linkstatepeers_trees_task: None,
             router_peers_failover_brokering,
         }
     }
@@ -167,7 +167,7 @@ impl HatTables {
     fn get_net(&self, net_type: WhatAmI) -> Option<&Network> {
         match net_type {
             WhatAmI::Router => self.routers_net.as_ref(),
-            WhatAmI::Peer => self.peers_net.as_ref(),
+            WhatAmI::Peer => self.linkstatepeers_net.as_ref(),
             _ => None,
         }
     }
@@ -181,7 +181,7 @@ impl HatTables {
                 .map(|net| net.full_linkstate)
                 .unwrap_or(false),
             WhatAmI::Peer => self
-                .peers_net
+                .linkstatepeers_net
                 .as_ref()
                 .map(|net| net.full_linkstate)
                 .unwrap_or(false),
@@ -191,7 +191,7 @@ impl HatTables {
 
     #[inline]
     fn get_router_links(&self, peer: ZenohIdProto) -> impl Iterator<Item = &ZenohIdProto> + '_ {
-        self.peers_net
+        self.linkstatepeers_net
             .as_ref()
             .unwrap()
             .get_links(peer)
@@ -249,7 +249,7 @@ impl HatTables {
     fn failover_brokering(&self, peer1: ZenohIdProto, peer2: ZenohIdProto) -> bool {
         self.router_peers_failover_brokering
             && self
-                .peers_net
+                .linkstatepeers_net
                 .as_ref()
                 .map(|net| {
                     let links = net.get_links(peer1);
@@ -260,7 +260,7 @@ impl HatTables {
 
     fn schedule_compute_trees(&mut self, tables_ref: Arc<TablesLock>, net_type: WhatAmI) {
         if (net_type == WhatAmI::Router && self.routers_trees_task.is_none())
-            || (net_type == WhatAmI::Peer && self.peers_trees_task.is_none())
+            || (net_type == WhatAmI::Peer && self.linkstatepeers_trees_task.is_none())
         {
             let task = TerminatableTask::spawn(
                 zenoh_runtime::ZRuntime::Net,
@@ -278,7 +278,11 @@ impl HatTables {
                             .as_mut()
                             .unwrap()
                             .compute_trees(),
-                        _ => hat_mut!(tables).peers_net.as_mut().unwrap().compute_trees(),
+                        _ => hat_mut!(tables)
+                            .linkstatepeers_net
+                            .as_mut()
+                            .unwrap()
+                            .compute_trees(),
                     };
 
                     tracing::trace!("Compute routes");
@@ -289,14 +293,14 @@ impl HatTables {
                     tracing::trace!("Computations completed");
                     match net_type {
                         WhatAmI::Router => hat_mut!(tables).routers_trees_task = None,
-                        _ => hat_mut!(tables).peers_trees_task = None,
+                        _ => hat_mut!(tables).linkstatepeers_trees_task = None,
                     };
                 },
                 TerminatableTask::create_cancellation_token(),
             );
             match net_type {
                 WhatAmI::Router => self.routers_trees_task = Some(task),
-                _ => self.peers_trees_task = Some(task),
+                _ => self.linkstatepeers_trees_task = Some(task),
             };
         }
     }
@@ -336,7 +340,7 @@ impl HatBaseTrait for HatCode {
             ));
         }
         if peer_full_linkstate | gossip {
-            hat_mut!(tables).peers_net = Some(Network::new(
+            hat_mut!(tables).linkstatepeers_net = Some(Network::new(
                 "[Peers network]".to_string(),
                 tables.zid,
                 runtime,
@@ -350,7 +354,7 @@ impl HatBaseTrait for HatCode {
         if router_full_linkstate && peer_full_linkstate {
             hat_mut!(tables).shared_nodes = shared_nodes(
                 hat!(tables).routers_net.as_ref().unwrap(),
-                hat!(tables).peers_net.as_ref().unwrap(),
+                hat!(tables).linkstatepeers_net.as_ref().unwrap(),
             );
         }
     }
@@ -393,7 +397,7 @@ impl HatBaseTrait for HatCode {
                 .unwrap()
                 .add_link(transport.clone()),
             WhatAmI::Peer => {
-                if let Some(net) = hat_mut!(tables).peers_net.as_mut() {
+                if let Some(net) = hat_mut!(tables).linkstatepeers_net.as_mut() {
                     net.add_link(transport.clone())
                 } else {
                     0
@@ -405,7 +409,7 @@ impl HatBaseTrait for HatCode {
         if hat!(tables).full_net(WhatAmI::Router) && hat!(tables).full_net(WhatAmI::Peer) {
             hat_mut!(tables).shared_nodes = shared_nodes(
                 hat!(tables).routers_net.as_ref().unwrap(),
-                hat!(tables).peers_net.as_ref().unwrap(),
+                hat!(tables).linkstatepeers_net.as_ref().unwrap(),
             );
         }
 
@@ -461,7 +465,7 @@ impl HatBaseTrait for HatCode {
         let mut subs_matches = vec![];
         for (_id, mut res) in hat_face.remote_subs.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_client_subscription(&mut wtables, &mut face_clone, &mut res, send_declare);
+            undeclare_simple_subscription(&mut wtables, &mut face_clone, &mut res, send_declare);
 
             if res.context.is_some() {
                 for match_ in &res.context().matches {
@@ -483,7 +487,7 @@ impl HatBaseTrait for HatCode {
         let mut qabls_matches = vec![];
         for (_, mut res) in hat_face.remote_qabls.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_client_queryable(&mut wtables, &mut face_clone, &mut res, send_declare);
+            undeclare_simple_queryable(&mut wtables, &mut face_clone, &mut res, send_declare);
 
             if res.context.is_some() {
                 for match_ in &res.context().matches {
@@ -504,7 +508,7 @@ impl HatBaseTrait for HatCode {
 
         for (_id, mut res) in hat_face.remote_tokens.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_client_token(&mut wtables, &mut face_clone, &mut res, send_declare);
+            undeclare_simple_token(&mut wtables, &mut face_clone, &mut res, send_declare);
         }
         drop(wtables);
 
@@ -587,7 +591,7 @@ impl HatBaseTrait for HatCode {
                             if hat!(tables).full_net(WhatAmI::Peer) {
                                 hat_mut!(tables).shared_nodes = shared_nodes(
                                     hat!(tables).routers_net.as_ref().unwrap(),
-                                    hat!(tables).peers_net.as_ref().unwrap(),
+                                    hat!(tables).linkstatepeers_net.as_ref().unwrap(),
                                 );
                             }
 
@@ -595,7 +599,7 @@ impl HatBaseTrait for HatCode {
                                 .schedule_compute_trees(tables_ref.clone(), WhatAmI::Router);
                         }
                         WhatAmI::Peer => {
-                            if let Some(net) = hat_mut!(tables).peers_net.as_mut() {
+                            if let Some(net) = hat_mut!(tables).linkstatepeers_net.as_mut() {
                                 let changes = net.link_states(list.link_states, zid);
                                 if hat!(tables).full_net(WhatAmI::Peer) {
                                     for (_, removed_node) in changes.removed_nodes {
@@ -621,7 +625,7 @@ impl HatBaseTrait for HatCode {
 
                                     hat_mut!(tables).shared_nodes = shared_nodes(
                                         hat!(tables).routers_net.as_ref().unwrap(),
-                                        hat!(tables).peers_net.as_ref().unwrap(),
+                                        hat!(tables).linkstatepeers_net.as_ref().unwrap(),
                                     );
 
                                     hat_mut!(tables)
@@ -675,7 +679,7 @@ impl HatBaseTrait for HatCode {
             WhatAmI::Peer => {
                 if hat!(tables).full_net(WhatAmI::Peer) {
                     hat!(tables)
-                        .peers_net
+                        .linkstatepeers_net
                         .as_ref()
                         .unwrap()
                         .get_local_context(routing_context, face_hat!(face).link_id)
@@ -727,7 +731,7 @@ impl HatBaseTrait for HatCode {
                         if hat!(tables).full_net(WhatAmI::Peer) {
                             hat_mut!(tables).shared_nodes = shared_nodes(
                                 hat!(tables).routers_net.as_ref().unwrap(),
-                                hat!(tables).peers_net.as_ref().unwrap(),
+                                hat!(tables).linkstatepeers_net.as_ref().unwrap(),
                             );
                         }
 
@@ -737,7 +741,7 @@ impl HatBaseTrait for HatCode {
                     WhatAmI::Peer => {
                         if hat!(tables).full_net(WhatAmI::Peer) {
                             for (_, removed_node) in hat_mut!(tables)
-                                .peers_net
+                                .linkstatepeers_net
                                 .as_mut()
                                 .unwrap()
                                 .remove_link(&zid)
@@ -764,12 +768,12 @@ impl HatBaseTrait for HatCode {
 
                             hat_mut!(tables).shared_nodes = shared_nodes(
                                 hat!(tables).routers_net.as_ref().unwrap(),
-                                hat!(tables).peers_net.as_ref().unwrap(),
+                                hat!(tables).linkstatepeers_net.as_ref().unwrap(),
                             );
 
                             hat_mut!(tables)
                                 .schedule_compute_trees(tables_ref.clone(), WhatAmI::Peer);
-                        } else if let Some(net) = hat_mut!(tables).peers_net.as_mut() {
+                        } else if let Some(net) = hat_mut!(tables).linkstatepeers_net.as_mut() {
                             net.remove_link(&zid);
                         }
                     }
@@ -784,7 +788,7 @@ impl HatBaseTrait for HatCode {
     #[inline]
     fn ingress_filter(&self, tables: &Tables, face: &FaceState, expr: &mut RoutingExpr) -> bool {
         face.whatami != WhatAmI::Peer
-            || hat!(tables).peers_net.is_none()
+            || hat!(tables).linkstatepeers_net.is_none()
             || tables.zid
                 == *hat!(tables).elect_router(
                     &tables.zid,
@@ -808,7 +812,7 @@ impl HatBaseTrait for HatCode {
             }
         {
             let dst_master = out_face.whatami != WhatAmI::Peer
-                || hat!(tables).peers_net.is_none()
+                || hat!(tables).linkstatepeers_net.is_none()
                 || tables.zid
                     == *hat!(tables).elect_router(
                         &tables.zid,
@@ -833,7 +837,7 @@ impl HatBaseTrait for HatCode {
                 .map(|net| net.dot())
                 .unwrap_or_else(|| "graph {}".to_string()),
             WhatAmI::Peer => hat!(tables)
-                .peers_net
+                .linkstatepeers_net
                 .as_ref()
                 .map(|net| net.dot())
                 .unwrap_or_else(|| "graph {}".to_string()),
@@ -844,22 +848,22 @@ impl HatBaseTrait for HatCode {
 
 struct HatContext {
     router_subs: HashSet<ZenohIdProto>,
-    peer_subs: HashSet<ZenohIdProto>,
+    linkstatepeer_subs: HashSet<ZenohIdProto>,
     router_qabls: HashMap<ZenohIdProto, QueryableInfoType>,
-    peer_qabls: HashMap<ZenohIdProto, QueryableInfoType>,
+    linkstatepeer_qabls: HashMap<ZenohIdProto, QueryableInfoType>,
     router_tokens: HashSet<ZenohIdProto>,
-    peer_tokens: HashSet<ZenohIdProto>,
+    linkstatepeer_tokens: HashSet<ZenohIdProto>,
 }
 
 impl HatContext {
     fn new() -> Self {
         Self {
             router_subs: HashSet::new(),
-            peer_subs: HashSet::new(),
+            linkstatepeer_subs: HashSet::new(),
             router_qabls: HashMap::new(),
-            peer_qabls: HashMap::new(),
+            linkstatepeer_qabls: HashMap::new(),
             router_tokens: HashSet::new(),
-            peer_tokens: HashSet::new(),
+            linkstatepeer_tokens: HashSet::new(),
         }
     }
 }
@@ -921,7 +925,7 @@ fn get_router(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<
 
 fn get_peer(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<ZenohIdProto> {
     match hat!(tables)
-        .peers_net
+        .linkstatepeers_net
         .as_ref()
         .unwrap()
         .get_link(face_hat!(face).link_id)
@@ -960,7 +964,7 @@ fn get_routes_entries(tables: &Tables) -> RoutesIndexes {
         .collect::<Vec<NodeId>>();
     let peers_indexes = if hat!(tables).full_net(WhatAmI::Peer) {
         hat!(tables)
-            .peers_net
+            .linkstatepeers_net
             .as_ref()
             .unwrap()
             .graph

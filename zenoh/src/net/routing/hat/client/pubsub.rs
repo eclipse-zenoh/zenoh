@@ -101,7 +101,7 @@ fn propagate_simple_subscription(
     }
 }
 
-fn register_client_subscription(
+fn register_simple_subscription(
     _tables: &mut Tables,
     face: &mut Arc<FaceState>,
     id: SubscriberId,
@@ -129,7 +129,7 @@ fn register_client_subscription(
     face_hat_mut!(face).remote_subs.insert(id, res.clone());
 }
 
-fn declare_client_subscription(
+fn declare_simple_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     id: SubscriberId,
@@ -137,7 +137,7 @@ fn declare_client_subscription(
     sub_info: &SubscriberInfo,
     send_declare: &mut SendDeclare,
 ) {
-    register_client_subscription(tables, face, id, res, sub_info);
+    register_simple_subscription(tables, face, id, res, sub_info);
 
     propagate_simple_subscription(tables, res, sub_info, face, send_declare);
     // This introduced a buffer overflow on windows
@@ -164,7 +164,7 @@ fn declare_client_subscription(
 }
 
 #[inline]
-fn client_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
+fn simple_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
     res.session_ctxs
         .values()
         .filter_map(|ctx| {
@@ -204,7 +204,7 @@ fn propagate_forget_simple_subscription(
     }
 }
 
-pub(super) fn undeclare_client_subscription(
+pub(super) fn undeclare_simple_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -215,12 +215,12 @@ pub(super) fn undeclare_client_subscription(
             get_mut_unchecked(ctx).subs = None;
         }
 
-        let mut client_subs = client_subs(res);
-        if client_subs.is_empty() {
+        let mut simple_subs = simple_subs(res);
+        if simple_subs.is_empty() {
             propagate_forget_simple_subscription(tables, res, send_declare);
         }
-        if client_subs.len() == 1 {
-            let face = &mut client_subs[0];
+        if simple_subs.len() == 1 {
+            let face = &mut simple_subs[0];
             if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
                 send_declare(
                     &face.primitives,
@@ -243,14 +243,14 @@ pub(super) fn undeclare_client_subscription(
     }
 }
 
-fn forget_client_subscription(
+fn forget_simple_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     id: SubscriberId,
     send_declare: &mut SendDeclare,
 ) -> Option<Arc<Resource>> {
     if let Some(mut res) = face_hat_mut!(face).remote_subs.remove(&id) {
-        undeclare_client_subscription(tables, face, &mut res, send_declare);
+        undeclare_simple_subscription(tables, face, &mut res, send_declare);
         Some(res)
     } else {
         None
@@ -297,7 +297,7 @@ impl HatPubSubTrait for HatCode {
         _node_id: NodeId,
         send_declare: &mut SendDeclare,
     ) {
-        declare_client_subscription(tables, face, id, res, sub_info, send_declare);
+        declare_simple_subscription(tables, face, id, res, sub_info, send_declare);
     }
 
     fn undeclare_subscription(
@@ -309,7 +309,7 @@ impl HatPubSubTrait for HatCode {
         _node_id: NodeId,
         send_declare: &mut SendDeclare,
     ) -> Option<Arc<Resource>> {
-        forget_client_subscription(tables, face, id, send_declare)
+        forget_simple_subscription(tables, face, id, send_declare)
     }
 
     fn get_subscriptions(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
