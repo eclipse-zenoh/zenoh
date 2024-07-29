@@ -33,7 +33,7 @@ pub struct CommonArgs {
     /// Disable the multicast-based scouting mechanism.
     no_multicast_scouting: bool,
     #[arg(long)]
-    /// Disable the multicast-based scouting mechanism.
+    /// Enable shared-memory feature.
     enable_shm: bool,
 }
 
