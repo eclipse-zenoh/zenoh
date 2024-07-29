@@ -81,7 +81,7 @@ fn propagate_simple_token(
     }
 }
 
-fn register_client_token(
+fn register_simple_token(
     _tables: &mut Tables,
     face: &mut Arc<FaceState>,
     id: TokenId,
@@ -108,7 +108,7 @@ fn register_client_token(
     face_hat_mut!(face).remote_tokens.insert(id, res.clone());
 }
 
-fn declare_client_token(
+fn declare_simple_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     id: TokenId,
@@ -116,7 +116,7 @@ fn declare_client_token(
     interest_id: Option<InterestId>,
     send_declare: &mut SendDeclare,
 ) {
-    register_client_token(tables, face, id, res);
+    register_simple_token(tables, face, id, res);
 
     propagate_simple_token(tables, res, face, send_declare);
 
@@ -141,7 +141,7 @@ fn declare_client_token(
 }
 
 #[inline]
-fn client_tokens(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
+fn simple_tokens(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
     res.session_ctxs
         .values()
         .filter_map(|ctx| {
@@ -206,7 +206,7 @@ fn propagate_forget_simple_token(
     }
 }
 
-pub(super) fn undeclare_client_token(
+pub(super) fn undeclare_simple_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -221,12 +221,12 @@ pub(super) fn undeclare_client_token(
             get_mut_unchecked(ctx).token = false;
         }
 
-        let mut client_tokens = client_tokens(res);
-        if client_tokens.is_empty() {
+        let mut simple_tokens = simple_tokens(res);
+        if simple_tokens.is_empty() {
             propagate_forget_simple_token(tables, res, send_declare);
         }
-        if client_tokens.len() == 1 {
-            let face = &mut client_tokens[0];
+        if simple_tokens.len() == 1 {
+            let face = &mut simple_tokens[0];
             if face.whatami != WhatAmI::Client {
                 if let Some(id) = face_hat_mut!(face).local_tokens.remove(res) {
                     send_declare(
@@ -251,7 +251,7 @@ pub(super) fn undeclare_client_token(
     }
 }
 
-fn forget_client_token(
+fn forget_simple_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     id: TokenId,
@@ -259,10 +259,10 @@ fn forget_client_token(
     send_declare: &mut SendDeclare,
 ) -> Option<Arc<Resource>> {
     if let Some(mut res) = face_hat_mut!(face).remote_tokens.remove(&id) {
-        undeclare_client_token(tables, face, &mut res, send_declare);
+        undeclare_simple_token(tables, face, &mut res, send_declare);
         Some(res)
     } else if let Some(mut res) = res {
-        undeclare_client_token(tables, face, &mut res, send_declare);
+        undeclare_simple_token(tables, face, &mut res, send_declare);
         Some(res)
     } else {
         None
@@ -410,7 +410,7 @@ impl HatTokenTrait for HatCode {
         interest_id: Option<InterestId>,
         send_declare: &mut SendDeclare,
     ) {
-        declare_client_token(tables, face, id, res, interest_id, send_declare);
+        declare_simple_token(tables, face, id, res, interest_id, send_declare);
     }
 
     fn undeclare_token(
@@ -422,6 +422,6 @@ impl HatTokenTrait for HatCode {
         _node_id: NodeId,
         send_declare: &mut SendDeclare,
     ) -> Option<Arc<Resource>> {
-        forget_client_token(tables, face, id, res, send_declare)
+        forget_simple_token(tables, face, id, res, send_declare)
     }
 }
