@@ -134,12 +134,10 @@ struct HatTables {
 
 impl Drop for HatTables {
     fn drop(&mut self) {
-        if self.linkstatepeers_trees_task.is_some() {
-            let task = self.linkstatepeers_trees_task.take().unwrap();
+        if let Some(mut task) = self.linkstatepeers_trees_task.take() {
             task.terminate(Duration::from_secs(10));
         }
-        if self.routers_trees_task.is_some() {
-            let task = self.routers_trees_task.take().unwrap();
+        if let Some(mut task) = self.routers_trees_task.take() {
             task.terminate(Duration::from_secs(10));
         }
     }
@@ -253,7 +251,9 @@ impl HatTables {
                 .as_ref()
                 .map(|net| {
                     let links = net.get_links(peer1);
-                    HatTables::failover_brokering_to(links, peer2)
+                    let res = HatTables::failover_brokering_to(links, peer2);
+                    tracing::trace!("failover_brokering {} {} : {}", peer1, peer2, res);
+                    res
                 })
                 .unwrap_or(false)
     }

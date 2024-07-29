@@ -70,7 +70,7 @@ authors = [
 edition = "2021"
 license = "EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
-description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
+description = "Zenoh: The Zero Overhead Pub/Sub/Query Protocol."
 
 # DEFAULT-FEATURES NOTE: Be careful with default-features and additivity!
 #                        (https://github.com/rust-lang/cargo/issues/11329)

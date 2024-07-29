@@ -161,7 +161,11 @@ jobs:
     name: Typos Check
     runs-on: ubuntu-latest
     steps:
+<<<<<<< HEAD
       - name: Clone this repository
+=======
+      - name: Clone this repository 
+>>>>>>> main
         uses: actions/checkout@v4
 
       - name: Check spelling

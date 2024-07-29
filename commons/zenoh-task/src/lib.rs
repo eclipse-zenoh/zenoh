@@ -129,8 +129,14 @@ impl TaskController {
 }
 
 pub struct TerminatableTask {
-    handle: JoinHandle<()>,
+    handle: Option<JoinHandle<()>>,
     token: CancellationToken,
+}
+
+impl Drop for TerminatableTask {
+    fn drop(&mut self) {
+        self.terminate(std::time::Duration::from_secs(10));
+    }
 }
 
 impl TerminatableTask {
@@ -146,7 +152,7 @@ impl TerminatableTask {
         T: Send + 'static,
     {
         TerminatableTask {
-            handle: rt.spawn(future.map(|_f| ())),
+            handle: Some(rt.spawn(future.map(|_f| ()))),
             token,
         }
     }
@@ -167,24 +173,26 @@ impl TerminatableTask {
         };
 
         TerminatableTask {
-            handle: rt.spawn(task),
+            handle: Some(rt.spawn(task)),
             token,
         }
     }
 
     /// Attempts to terminate the task.
     /// Returns true if task completed / aborted within timeout duration, false otherwise.
-    pub fn terminate(self, timeout: Duration) -> bool {
+    pub fn terminate(&mut self, timeout: Duration) -> bool {
         ResolveFuture::new(async move { self.terminate_async(timeout).await }).wait()
     }
 
     /// Async version of [`TerminatableTask::terminate()`].
-    pub async fn terminate_async(self, timeout: Duration) -> bool {
+    pub async fn terminate_async(&mut self, timeout: Duration) -> bool {
         self.token.cancel();
-        if tokio::time::timeout(timeout, self.handle).await.is_err() {
-            tracing::error!("Failed to terminate the task");
-            return false;
-        };
+        if let Some(handle) = self.handle.take() {
+            if tokio::time::timeout(timeout, handle).await.is_err() {
+                tracing::error!("Failed to terminate the task");
+                return false;
+            };
+        }
         true
     }
 }

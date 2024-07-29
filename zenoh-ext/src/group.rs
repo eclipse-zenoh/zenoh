@@ -13,7 +13,6 @@
 //
 
 //! To manage groups and group memberships
-
 use std::{
     collections::HashMap,
     convert::TryInto,
