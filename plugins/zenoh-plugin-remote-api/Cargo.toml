@@ -36,11 +36,13 @@ name = "zenoh_plugin_remote_api"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-
 anyhow = { workspace = true, features = ["default"] }
-async-std = { workspace = true, features = ["default", "attributes"] }
-async-tungstenite = { version = "0.25.1", features = ["async-std"] }
-async-trait = "0.1.60"
+tokio = { version = "1.39.2", features = ["full"] }
+tokio-tungstenite = "0.23.1"
+tokio-rustls = "0.26.0"
+futures-util = "0.3.30"
+rustls-pemfile = "2.1.2"
+
 base64 = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }

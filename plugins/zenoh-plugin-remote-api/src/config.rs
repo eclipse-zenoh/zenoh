@@ -27,6 +27,10 @@ const DEFAULT_HTTP_INTERFACE: &str = "[::]";
 pub struct Config {
     #[serde(deserialize_with = "deserialize_ws_port")]
     pub websocket_port: String,
+
+    pub certificate_path: Option<String>,
+    pub private_key_path: Option<String>,
+
     // TODO: Add flag for ws / wss
     #[serde(default, deserialize_with = "deserialize_path")]
     __path__: Option<Vec<String>>,
