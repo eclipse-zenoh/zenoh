@@ -21,7 +21,7 @@ use std::{
 
 use zenoh_config::WhatAmI;
 use zenoh_protocol::{
-    core::{key_expr::keyexpr, ExprId, WireExpr},
+    core::{key_expr::keyexpr, ExprId, Reliability, WireExpr},
     network::{
         declare::{
             ext, queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, Declare,
@@ -42,7 +42,7 @@ use crate::net::routing::{dispatcher::face::Face, RoutingContext};
 pub(crate) type NodeId = u16;
 
 pub(crate) type Direction = (Arc<FaceState>, WireExpr<'static>, NodeId);
-pub(crate) type Route = HashMap<usize, Direction>;
+pub(crate) type DataRoute = HashMap<usize, (Direction, Reliability)>;
 pub(crate) type QueryRoute = HashMap<usize, (Direction, RequestId)>;
 pub(crate) struct QueryTargetQabl {
     pub(crate) direction: Direction,
@@ -86,14 +86,14 @@ pub(crate) struct RoutesIndexes {
 
 #[derive(Default)]
 pub(crate) struct DataRoutes {
-    pub(crate) routers: Vec<Arc<Route>>,
-    pub(crate) peers: Vec<Arc<Route>>,
-    pub(crate) clients: Vec<Arc<Route>>,
+    pub(crate) routers: Vec<Arc<DataRoute>>,
+    pub(crate) peers: Vec<Arc<DataRoute>>,
+    pub(crate) clients: Vec<Arc<DataRoute>>,
 }
 
 impl DataRoutes {
     #[inline]
-    pub(crate) fn get_route(&self, whatami: WhatAmI, context: NodeId) -> Option<Arc<Route>> {
+    pub(crate) fn get_route(&self, whatami: WhatAmI, context: NodeId) -> Option<Arc<DataRoute>> {
         match whatami {
             WhatAmI::Router => (self.routers.len() > context as usize)
                 .then(|| self.routers[context as usize].clone()),
@@ -262,7 +262,7 @@ impl Resource {
     }
 
     #[inline]
-    pub(crate) fn data_route(&self, whatami: WhatAmI, context: NodeId) -> Option<Arc<Route>> {
+    pub(crate) fn data_route(&self, whatami: WhatAmI, context: NodeId) -> Option<Arc<DataRoute>> {
         match &self.context {
             Some(ctx) => {
                 if ctx.valid_data_routes {

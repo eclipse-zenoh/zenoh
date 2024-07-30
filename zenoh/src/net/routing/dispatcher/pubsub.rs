@@ -26,8 +26,8 @@ use zenoh_sync::get_mut_unchecked;
 
 use super::{
     face::FaceState,
-    resource::{DataRoutes, Direction, Resource},
-    tables::{NodeId, Route, RoutingExpr, Tables, TablesLock},
+    resource::{DataRoutes, Resource},
+    tables::{DataRoute, NodeId, RoutingExpr, Tables, TablesLock},
 };
 #[zenoh_macros::unstable]
 use crate::key_expr::KeyExpr;
@@ -329,7 +329,7 @@ fn get_data_route(
     res: &Option<Arc<Resource>>,
     expr: &mut RoutingExpr,
     routing_context: NodeId,
-) -> Arc<Route> {
+) -> Arc<DataRoute> {
     let local_context = tables
         .hat_code
         .map_routing_context(tables, face, routing_context);
@@ -423,7 +423,8 @@ pub fn full_reentrant_route_data(
                     treat_timestamp!(&tables.hlc, payload, tables.drop_future_timestamp);
 
                     if route.len() == 1 {
-                        let (outface, key_expr, context) = route.values().next().unwrap();
+                        let ((outface, key_expr, context), reliability) =
+                            route.values().next().unwrap();
                         if tables
                             .hat_code
                             .egress_filter(&tables, face, outface, &mut expr)
@@ -442,21 +443,22 @@ pub fn full_reentrant_route_data(
                                 ext_tstamp,
                                 ext_nodeid: ext::NodeIdType { node_id: *context },
                                 payload,
+                                reliability: Some(*reliability),
                             })
                         }
                     } else if tables.whatami == WhatAmI::Router {
                         let route = route
                             .values()
-                            .filter(|(outface, _key_expr, _context)| {
+                            .filter(|((outface, _key_expr, _context), _reliability)| {
                                 tables
                                     .hat_code
                                     .egress_filter(&tables, face, outface, &mut expr)
                             })
                             .cloned()
-                            .collect::<Vec<Direction>>();
+                            .collect::<Vec<_>>();
 
                         drop(tables);
-                        for (outface, key_expr, context) in route {
+                        for ((outface, key_expr, context), reliability) in route {
                             #[cfg(feature = "stats")]
                             if !admin {
                                 inc_stats!(face, tx, user, payload)
@@ -470,11 +472,12 @@ pub fn full_reentrant_route_data(
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType { node_id: context },
                                 payload: payload.clone(),
+                                reliability: Some(reliability),
                             })
                         }
                     } else {
                         drop(tables);
-                        for (outface, key_expr, context) in route.values() {
+                        for ((outface, key_expr, context), reliability) in route.values() {
                             if face.id != outface.id
                                 && match (face.mcast_group.as_ref(), outface.mcast_group.as_ref()) {
                                     (Some(l), Some(r)) => l != r,
@@ -494,6 +497,7 @@ pub fn full_reentrant_route_data(
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType { node_id: *context },
                                     payload: payload.clone(),
+                                    reliability: Some(*reliability),
                                 })
                             }
                         }

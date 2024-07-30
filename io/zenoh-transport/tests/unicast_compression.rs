@@ -302,6 +302,7 @@ mod tests {
                 ext_unknown: vec![],
             }
             .into(),
+            reliability: None,
         }
         .into();
         for _ in 0..MSG_COUNT {

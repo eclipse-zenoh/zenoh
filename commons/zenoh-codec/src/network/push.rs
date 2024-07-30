@@ -41,6 +41,7 @@ where
             ext_tstamp,
             ext_nodeid,
             payload,
+            ..
         } = x;
 
         // Header
@@ -156,6 +157,7 @@ where
             ext_qos,
             ext_tstamp,
             ext_nodeid,
+            reliability: Default::default(),
         })
     }
 }

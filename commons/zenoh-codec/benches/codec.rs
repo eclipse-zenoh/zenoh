@@ -95,6 +95,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             ext_unknown: vec![],
             payload: ZBuf::from(vec![0u8; 8]),
         }),
+        reliability: None,
     };
 
     // Calculate the number of messages
@@ -141,6 +142,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             ext_unknown: vec![],
             payload: ZBuf::from(vec![0u8; 8]),
         }),
+        reliability: None,
     };
 
     let mut writer = buff.writer();
@@ -182,6 +184,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             ext_unknown: vec![],
             payload: ZBuf::from(vec![0u8; 8]),
         }),
+        reliability: None,
     };
 
     let mut writer = buff.writer();
@@ -223,6 +226,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             ext_unknown: vec![],
             payload: ZBuf::from(vec![0u8; 1_000_000]),
         }),
+        reliability: None,
     };
 
     c.bench_function("Fragmentation ZBuf Write", |b| {
@@ -251,6 +255,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             ext_unknown: vec![],
             payload: ZBuf::from(vec![0u8; 1_000_000]),
         }),
+        reliability: None,
     };
 
     let mut writer = buff.writer();
@@ -290,6 +295,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             ext_unknown: vec![],
             payload: ZBuf::from(vec![0u8; 1_000_000]),
         }),
+        reliability: None,
     };
 
     let mut writer = buff.writer();

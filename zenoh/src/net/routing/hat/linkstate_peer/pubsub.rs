@@ -41,7 +41,7 @@ use crate::net::routing::{
         face::FaceState,
         pubsub::*,
         resource::{NodeId, Resource, SessionContext},
-        tables::{Route, RoutingExpr, Tables},
+        tables::{DataRoute, RoutingExpr, Tables},
     },
     hat::{CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources},
     router::RoutesIndexes,
@@ -868,10 +868,10 @@ impl HatPubSubTrait for HatCode {
         expr: &mut RoutingExpr,
         source: NodeId,
         source_type: WhatAmI,
-    ) -> Arc<Route> {
+    ) -> Arc<DataRoute> {
         #[inline]
         fn insert_faces_for_subs<'a>(
-            route: &mut Route,
+            route: &mut DataRoute,
             expr: &RoutingExpr,
             tables: &Tables,
             net: &Network,
@@ -893,7 +893,10 @@ impl HatPubSubTrait for HatCode {
                                                 expr.suffix,
                                                 face.id,
                                             );
-                                            (face.clone(), key_expr.to_owned(), source)
+                                            (
+                                                (face.clone(), key_expr.to_owned(), source),
+                                                Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
+                                            )
                                         });
                                     }
                                 }
@@ -949,12 +952,15 @@ impl HatPubSubTrait for HatCode {
             );
 
             for (sid, context) in &mres.session_ctxs {
-                if context.subs.is_some()
-                    && (source_type == WhatAmI::Client || context.face.whatami == WhatAmI::Client)
-                {
+                if let Some(sub_info) = context.subs.filter(|_| {
+                    source_type == WhatAmI::Client || context.face.whatami == WhatAmI::Client
+                }) {
                     route.entry(*sid).or_insert_with(|| {
                         let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                        (context.face.clone(), key_expr.to_owned(), NodeId::default())
+                        (
+                            (context.face.clone(), key_expr.to_owned(), NodeId::default()),
+                            sub_info.reliability,
+                        )
                     });
                 }
             }
@@ -963,9 +969,12 @@ impl HatPubSubTrait for HatCode {
             route.insert(
                 mcast_group.id,
                 (
-                    mcast_group.clone(),
-                    expr.full_expr().to_string().into(),
-                    NodeId::default(),
+                    (
+                        mcast_group.clone(),
+                        expr.full_expr().to_string().into(),
+                        NodeId::default(),
+                    ),
+                    Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
                 ),
             );
         }

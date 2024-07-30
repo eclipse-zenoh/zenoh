@@ -275,6 +275,7 @@ mod tests {
                 ext_unknown: vec![],
             }
             .into(),
+            reliability: None,
         }
         .into();
 

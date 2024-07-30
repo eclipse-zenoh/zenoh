@@ -615,6 +615,7 @@ impl Publisher<'_> {
                         ext_unknown: vec![],
                     }),
                 },
+                reliability: None,
             });
         }
         if self.destination != Locality::Remote {

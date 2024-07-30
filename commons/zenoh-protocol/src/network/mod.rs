@@ -30,7 +30,7 @@ pub use push::Push;
 pub use request::{AtomicRequestId, Request, RequestId};
 pub use response::{Response, ResponseFinal};
 
-use crate::core::{CongestionControl, Priority};
+use crate::core::{CongestionControl, Priority, Reliability};
 
 pub mod id {
     // WARNING: it's crucial that these IDs do NOT collide with the IDs
@@ -109,8 +109,13 @@ impl NetworkMessage {
 
     #[inline]
     pub fn is_reliable(&self) -> bool {
-        // TODO
-        true
+        matches!(
+            self.body,
+            NetworkBody::Push(Push {
+                reliability: Some(Reliability::Reliable),
+                ..
+            })
+        )
     }
 
     #[inline]
