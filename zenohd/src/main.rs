@@ -264,6 +264,11 @@ fn config_from_args(args: &Args) -> Config {
                 }
                 Err(e) => tracing::warn!("Couldn't perform configuration {}: {}", json, e),
             }
+        } else {
+            panic!(
+                "--cfg accepts KEY:VALUE pairs. {} is not a valid KEY:VALUE pair.",
+                json
+            )
         }
     }
     tracing::debug!("Config: {:?}", &config);

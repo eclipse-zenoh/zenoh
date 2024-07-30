@@ -105,7 +105,6 @@ fn propagate_simple_queryable(
                 .local_qabls
                 .insert(res.clone(), (id, info));
             let key_expr = Resource::decl_key(res, &mut dst_face);
-            println!("Decled key = {key_expr:?}");
             send_declare(
                 &dst_face.primitives,
                 RoutingContext::with_expr(
