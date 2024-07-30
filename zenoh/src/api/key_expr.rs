@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
 use std::{
     convert::{TryFrom, TryInto},
     future::{IntoFuture, Ready},

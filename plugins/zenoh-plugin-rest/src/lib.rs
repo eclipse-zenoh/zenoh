@@ -402,7 +402,8 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
             .state()
             .0
             .get(Selector::borrowed(&key_expr, &parameters))
-            .consolidation(consolidation);
+            .consolidation(consolidation)
+            .with(flume::unbounded());
         if !body.is_empty() {
             let encoding: Encoding = req
                 .content_type()

@@ -126,8 +126,7 @@ struct HatTables {
 
 impl Drop for HatTables {
     fn drop(&mut self) {
-        if self.linkstatepeers_trees_task.is_some() {
-            let task = self.linkstatepeers_trees_task.take().unwrap();
+        if let Some(mut task) = self.linkstatepeers_trees_task.take() {
             task.terminate(Duration::from_secs(10));
         }
     }
