@@ -17,7 +17,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use lazy_static::lazy_static;
+use static_init::dynamic;
 use zenoh_result::{bail, ZResult};
 
 use crate::{
@@ -31,17 +31,16 @@ use crate::{
     reader::{ClientStorage, GlobalDataSegmentID},
 };
 
-lazy_static! {
-    /// A global lazily-initialized SHM client storage.
-    /// When initialized, contains default client set,
-    /// see ShmClientStorage::with_default_client_set
-    #[zenoh_macros::unstable_doc]
-    pub static ref GLOBAL_CLIENT_STORAGE: Arc<ShmClientStorage> = Arc::new(
-        ShmClientStorage::builder()
-            .with_default_client_set()
-            .build()
-    );
-}
+#[dynamic(lazy, drop)]
+/// A global lazily-initialized SHM client storage.
+/// When initialized, contains default client set,
+/// see ShmClientStorage::with_default_client_set
+#[zenoh_macros::unstable_doc]
+pub static mut GLOBAL_CLIENT_STORAGE: Arc<ShmClientStorage> = Arc::new(
+    ShmClientStorage::builder()
+        .with_default_client_set()
+        .build(),
+);
 
 /// Builder to create new client storages
 #[zenoh_macros::unstable_doc]

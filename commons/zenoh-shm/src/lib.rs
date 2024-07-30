@@ -46,6 +46,7 @@ macro_rules! tested_crate_module {
 }
 
 pub mod api;
+mod cleanup;
 pub mod header;
 pub mod posix_shm;
 pub mod reader;

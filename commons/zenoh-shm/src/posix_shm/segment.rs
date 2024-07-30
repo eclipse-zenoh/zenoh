@@ -18,6 +18,8 @@ use rand::Rng;
 use shared_memory::{Shmem, ShmemConf, ShmemError};
 use zenoh_result::{bail, zerror, ZResult};
 
+use crate::cleanup::{CleanupHandle, CLEANUP};
+
 const SEGMENT_DEDICATE_TRIES: usize = 100;
 const ECMA: crc::Crc<u64> = crc::Crc::<u64>::new(&crc::CRC_64_ECMA_182);
 
@@ -29,6 +31,7 @@ where
 {
     shmem: Shmem,
     id: ID,
+    _cleanup: Option<CleanupHandle>,
 }
 
 impl<ID> Debug for Segment<ID>
@@ -55,20 +58,30 @@ where
         for _ in 0..SEGMENT_DEDICATE_TRIES {
             // Generate random id
             let id: ID = rand::thread_rng().gen();
+            let os_id = Self::os_id(id.clone(), id_prefix);
+
+            // Register cleanup routine to make sure Segment will be unlinked on exit
+            let c_os_id = os_id.clone();
+            let cleanup = CLEANUP.read().register_cleanup(Box::new(move || {
+                if let Ok(mut shmem) = ShmemConf::new().os_id(c_os_id).open() {
+                    shmem.set_owner(true);
+                    drop(shmem);
+                }
+            }));
 
             // Try to create a new segment identified by prefix and generated id.
             // If creation fails because segment already exists for this id,
             // the creation attempt will be repeated with another id
-            match ShmemConf::new()
-                .size(alloc_size)
-                .os_id(Self::os_id(id.clone(), id_prefix))
-                .create()
-            {
+            match ShmemConf::new().size(alloc_size).os_id(os_id).create() {
                 Ok(shmem) => {
                     tracing::debug!(
                         "Created SHM segment, size: {alloc_size}, prefix: {id_prefix}, id: {id}"
                     );
-                    return Ok(Segment { shmem, id });
+                    return Ok(Segment {
+                        shmem,
+                        id,
+                        _cleanup: Some(cleanup),
+                    });
                 }
                 Err(ShmemError::LinkExists) => {}
                 Err(ShmemError::MappingIdExists) => {}
@@ -92,7 +105,11 @@ where
 
         tracing::debug!("Opened SHM segment, prefix: {id_prefix}, id: {id}");
 
-        Ok(Self { shmem, id })
+        Ok(Self {
+            shmem,
+            id,
+            _cleanup: None,
+        })
     }
 
     fn os_id(id: ID, id_prefix: &str) -> String {

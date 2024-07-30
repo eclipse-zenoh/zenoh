@@ -904,13 +904,15 @@ where
         ConfirmedDescriptor,
     )> {
         // allocate shared header
-        let allocated_header = GLOBAL_HEADER_STORAGE.allocate_header()?;
+        let allocated_header = GLOBAL_HEADER_STORAGE.read().allocate_header()?;
 
         // allocate watchdog
-        let allocated_watchdog = GLOBAL_STORAGE.allocate_watchdog()?;
+        let allocated_watchdog = GLOBAL_STORAGE.read().allocate_watchdog()?;
 
         // add watchdog to confirmator
-        let confirmed_watchdog = GLOBAL_CONFIRMATOR.add_owned(&allocated_watchdog.descriptor)?;
+        let confirmed_watchdog = GLOBAL_CONFIRMATOR
+            .read()
+            .add_owned(&allocated_watchdog.descriptor)?;
 
         Ok((allocated_header, allocated_watchdog, confirmed_watchdog))
     }
@@ -928,7 +930,7 @@ where
 
         // add watchdog to validator
         let c_header = header.clone();
-        GLOBAL_VALIDATOR.add(
+        GLOBAL_VALIDATOR.read().add(
             allocated_watchdog.descriptor.clone(),
             Box::new(move || {
                 c_header
