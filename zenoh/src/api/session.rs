@@ -1238,10 +1238,7 @@ impl Session {
 
     pub(crate) fn undeclare_subscriber_inner(&self, sid: Id, kind: SubscriberKind) -> ZResult<()> {
         let mut state = zwrite!(self.state);
-        if let Some(sub_state) = state
-            .subscribers_mut(SubscriberKind::Subscriber)
-            .remove(&sid)
-        {
+        if let Some(sub_state) = state.subscribers_mut(kind).remove(&sid) {
             trace!("undeclare_subscriber({:?})", sub_state);
             for res in state
                 .local_resources

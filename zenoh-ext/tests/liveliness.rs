@@ -70,7 +70,7 @@ async fn test_liveliness_querying_subscriber_clique() {
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    let _token2 = ztimeout!(peer2.liveliness().declare_token(LIVELINESS_KEYEXPR_2)).unwrap();
+    let token2 = ztimeout!(peer2.liveliness().declare_token(LIVELINESS_KEYEXPR_2)).unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let sample = ztimeout!(sub.recv_async()).unwrap();
@@ -81,12 +81,18 @@ async fn test_liveliness_querying_subscriber_clique() {
     assert_eq!(sample.kind(), SampleKind::Put);
     assert_eq!(sample.key_expr().as_str(), LIVELINESS_KEYEXPR_2);
 
-    drop(token1);
+    token1.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert_eq!(sample.kind(), SampleKind::Delete);
     assert_eq!(sample.key_expr().as_str(), LIVELINESS_KEYEXPR_1);
+
+    token2.undeclare().await.unwrap();
+    sub.close().await.unwrap();
+
+    peer1.close().await.unwrap();
+    peer2.close().await.unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -106,7 +112,7 @@ async fn test_liveliness_querying_subscriber_brokered() {
 
     zenoh_util::try_init_log_from_env();
 
-    let _router = {
+    let router = {
         let mut c = config::default();
         c.listen
             .endpoints
@@ -168,7 +174,7 @@ async fn test_liveliness_querying_subscriber_brokered() {
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    let _token2 = ztimeout!(client3.liveliness().declare_token(LIVELINESS_KEYEXPR_2)).unwrap();
+    let token2 = ztimeout!(client3.liveliness().declare_token(LIVELINESS_KEYEXPR_2)).unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let sample = ztimeout!(sub.recv_async()).unwrap();
@@ -179,12 +185,20 @@ async fn test_liveliness_querying_subscriber_brokered() {
     assert_eq!(sample.kind(), SampleKind::Put);
     assert_eq!(sample.key_expr().as_str(), LIVELINESS_KEYEXPR_2);
 
-    drop(token1);
+    token1.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert_eq!(sample.kind(), SampleKind::Delete);
     assert_eq!(sample.key_expr().as_str(), LIVELINESS_KEYEXPR_1);
+
+    token2.undeclare().await.unwrap();
+    sub.close().await.unwrap();
+
+    router.close().await.unwrap();
+    client1.close().await.unwrap();
+    client2.close().await.unwrap();
+    client3.close().await.unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -244,7 +258,7 @@ async fn test_liveliness_fetching_subscriber_clique() {
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    let _token2 = ztimeout!(peer2.liveliness().declare_token(LIVELINESS_KEYEXPR_2)).unwrap();
+    let token2 = ztimeout!(peer2.liveliness().declare_token(LIVELINESS_KEYEXPR_2)).unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let sample = ztimeout!(sub.recv_async()).unwrap();
@@ -255,12 +269,18 @@ async fn test_liveliness_fetching_subscriber_clique() {
     assert_eq!(sample.kind(), SampleKind::Put);
     assert_eq!(sample.key_expr().as_str(), LIVELINESS_KEYEXPR_2);
 
-    drop(token1);
+    token1.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert_eq!(sample.kind(), SampleKind::Delete);
     assert_eq!(sample.key_expr().as_str(), LIVELINESS_KEYEXPR_1);
+
+    token2.undeclare().await.unwrap();
+    sub.close().await.unwrap();
+
+    peer1.close().await.unwrap();
+    peer2.close().await.unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -280,7 +300,7 @@ async fn test_liveliness_fetching_subscriber_brokered() {
 
     zenoh_util::try_init_log_from_env();
 
-    let _router = {
+    let router = {
         let mut c = config::default();
         c.listen
             .endpoints
@@ -346,7 +366,7 @@ async fn test_liveliness_fetching_subscriber_brokered() {
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    let _token2 = ztimeout!(client3.liveliness().declare_token(LIVELINESS_KEYEXPR_2)).unwrap();
+    let token2 = ztimeout!(client3.liveliness().declare_token(LIVELINESS_KEYEXPR_2)).unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let sample = ztimeout!(sub.recv_async()).unwrap();
@@ -357,10 +377,18 @@ async fn test_liveliness_fetching_subscriber_brokered() {
     assert_eq!(sample.kind(), SampleKind::Put);
     assert_eq!(sample.key_expr().as_str(), LIVELINESS_KEYEXPR_2);
 
-    drop(token1);
+    token1.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert_eq!(sample.kind(), SampleKind::Delete);
     assert_eq!(sample.key_expr().as_str(), LIVELINESS_KEYEXPR_1);
+
+    token2.undeclare().await.unwrap();
+    sub.close().await.unwrap();
+
+    router.close().await.unwrap();
+    client1.close().await.unwrap();
+    client2.close().await.unwrap();
+    client3.close().await.unwrap();
 }

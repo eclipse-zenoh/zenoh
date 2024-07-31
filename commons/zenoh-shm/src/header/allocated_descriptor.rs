@@ -21,6 +21,8 @@ pub struct AllocatedHeaderDescriptor {
 
 impl Drop for AllocatedHeaderDescriptor {
     fn drop(&mut self) {
-        GLOBAL_HEADER_STORAGE.reclaim_header(self.descriptor.clone());
+        GLOBAL_HEADER_STORAGE
+            .read()
+            .reclaim_header(self.descriptor.clone());
     }
 }

@@ -51,11 +51,13 @@ impl ShmReader {
         // that the sender of this buffer has incremented it for us.
 
         // attach to the watchdog before doing other things
-        let watchdog = Arc::new(GLOBAL_CONFIRMATOR.add(&info.watchdog_descriptor)?);
+        let watchdog = Arc::new(GLOBAL_CONFIRMATOR.read().add(&info.watchdog_descriptor)?);
 
         let segment = self.ensure_segment(info)?;
         let shmb = ShmBufInner {
-            header: GLOBAL_HEADER_SUBSCRIPTION.link(&info.header_descriptor)?,
+            header: GLOBAL_HEADER_SUBSCRIPTION
+                .read()
+                .link(&info.header_descriptor)?,
             buf: segment.map(info.data_descriptor.chunk)?,
             info: info.clone(),
             watchdog,

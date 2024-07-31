@@ -16,7 +16,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use lazy_static::lazy_static;
+use static_init::dynamic;
 use zenoh_result::{zerror, ZResult};
 
 use super::{
@@ -25,9 +25,8 @@ use super::{
     segment::HeaderSegment,
 };
 
-lazy_static! {
-    pub static ref GLOBAL_HEADER_STORAGE: HeaderStorage = HeaderStorage::new(32768usize).unwrap();
-}
+#[dynamic(lazy,drop)]
+pub static mut GLOBAL_HEADER_STORAGE: HeaderStorage = HeaderStorage::new(32768usize).unwrap();
 
 pub struct HeaderStorage {
     available: Arc<Mutex<LinkedList<OwnedHeaderDescriptor>>>,

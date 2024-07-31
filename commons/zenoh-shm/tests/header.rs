@@ -26,7 +26,7 @@ use common::execute_concurrent;
 
 fn header_alloc_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
     |_task_index: usize, _iteration: usize| -> ZResult<()> {
-        let _allocated_header = GLOBAL_HEADER_STORAGE.allocate_header()?;
+        let _allocated_header = GLOBAL_HEADER_STORAGE.read().allocate_header()?;
         Ok(())
     }
 }
@@ -43,9 +43,9 @@ fn header_alloc_concurrent() {
 
 fn header_link_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
     |_task_index: usize, _iteration: usize| {
-        let allocated_header = GLOBAL_HEADER_STORAGE.allocate_header()?;
+        let allocated_header = GLOBAL_HEADER_STORAGE.read().allocate_header()?;
         let descr = HeaderDescriptor::from(&allocated_header.descriptor);
-        let _linked_header = GLOBAL_HEADER_SUBSCRIPTION.link(&descr)?;
+        let _linked_header = GLOBAL_HEADER_SUBSCRIPTION.read().link(&descr)?;
         Ok(())
     }
 }
@@ -63,7 +63,7 @@ fn header_link_concurrent() {
 fn header_link_failure_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static
 {
     |_task_index: usize, _iteration: usize| {
-        let allocated_header = GLOBAL_HEADER_STORAGE.allocate_header()?;
+        let allocated_header = GLOBAL_HEADER_STORAGE.read().allocate_header()?;
         let descr = HeaderDescriptor::from(&allocated_header.descriptor);
         drop(allocated_header);
 
@@ -73,7 +73,7 @@ fn header_link_failure_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Se
         // functionality is implemented on higher level by means of generation mechanism and protects from both header
         // and watchdog link-to-deallocated issues. This generation mechanism depends on the behaviour below, so
         // everything is fair :)
-        let _linked_header = GLOBAL_HEADER_SUBSCRIPTION.link(&descr)?;
+        let _linked_header = GLOBAL_HEADER_SUBSCRIPTION.read().link(&descr)?;
         Ok(())
     }
 }
@@ -90,9 +90,9 @@ fn header_link_failure_concurrent() {
 
 fn header_check_memory_fn(parallel_tasks: usize, iterations: usize) {
     let task_fun = |_task_index: usize, _iteration: usize| -> ZResult<()> {
-        let allocated_header = GLOBAL_HEADER_STORAGE.allocate_header()?;
+        let allocated_header = GLOBAL_HEADER_STORAGE.read().allocate_header()?;
         let descr = HeaderDescriptor::from(&allocated_header.descriptor);
-        let linked_header = GLOBAL_HEADER_SUBSCRIPTION.link(&descr)?;
+        let linked_header = GLOBAL_HEADER_SUBSCRIPTION.read().link(&descr)?;
 
         let mut rng = rand::thread_rng();
         let allocated = allocated_header.descriptor.header();

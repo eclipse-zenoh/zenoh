@@ -14,16 +14,15 @@
 
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
-use lazy_static::lazy_static;
+use static_init::dynamic;
 
 use super::{descriptor::OwnedDescriptor, periodic_task::PeriodicTask};
 
 pub(super) type InvalidateCallback = Box<dyn Fn() + Send>;
 
-lazy_static! {
-    pub static ref GLOBAL_VALIDATOR: WatchdogValidator =
-        WatchdogValidator::new(Duration::from_millis(100));
-}
+#[dynamic(lazy, drop)]
+pub static mut GLOBAL_VALIDATOR: WatchdogValidator =
+    WatchdogValidator::new(Duration::from_millis(100));
 
 enum Transaction {
     Add(InvalidateCallback),
