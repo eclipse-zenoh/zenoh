@@ -12,12 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use static_init::{dynamic, Finaly};
+use static_init::dynamic;
 
 /// A global cleanup, that is guaranteed to be dropped at normal program exit and that will
 /// execute all registered cleanup routines at this moment
-#[dynamic(lazy, finalize)]
-pub(crate) static CLEANUP: Cleanup = Cleanup::new();
+#[dynamic(lazy, drop)]
+pub(crate) static mut CLEANUP: Cleanup = Cleanup::new();
 
 /// An RAII object that calls all registered routines upon destruction
 pub(crate) struct Cleanup {
@@ -36,8 +36,8 @@ impl Cleanup {
     }
 }
 
-impl Finaly for Cleanup {
-    fn finaly(&self) {
+impl Drop for Cleanup {
+    fn drop(&mut self) {
         while let Some(cleanup) = self.cleanups.pop() {
             // SAFETY: this is safe as cleanup will never have None elements
             unsafe {

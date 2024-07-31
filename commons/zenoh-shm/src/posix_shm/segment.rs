@@ -61,7 +61,7 @@ where
 
             // Register cleanup routine to make sure Segment will be unlinked on exit
             let c_os_id = os_id.clone();
-            CLEANUP.register_cleanup(Box::new(move || {
+            CLEANUP.read().register_cleanup(Box::new(move || {
                 if let Ok(mut shmem) = ShmemConf::new().os_id(c_os_id).open() {
                     shmem.set_owner(true);
                     drop(shmem);
