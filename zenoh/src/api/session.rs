@@ -337,7 +337,7 @@ pub(crate) enum Resource {
 impl Resource {
     pub(crate) fn new(name: Box<str>) -> Self {
         if keyexpr::new(name.as_ref()).is_ok() {
-            Self::for_keyexpr(unsafe { OwnedKeyExpr::from_boxed_string_unchecked(name) })
+            Self::for_keyexpr(unsafe { OwnedKeyExpr::from_boxed_str_unchecked(name) })
         } else {
             Self::Prefix { prefix: name }
         }
