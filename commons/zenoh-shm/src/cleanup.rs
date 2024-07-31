@@ -39,9 +39,8 @@ impl Cleanup {
 impl Drop for Cleanup {
     fn drop(&mut self) {
         while let Some(cleanup) = self.cleanups.pop() {
-            // SAFETY: this is safe as cleanup will never have None elements
-            unsafe {
-                cleanup.unwrap_unchecked()();
+            if let Some(f) = cleanup {
+                f();
             }
         }
     }
