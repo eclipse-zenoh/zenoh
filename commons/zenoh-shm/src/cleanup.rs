@@ -12,16 +12,16 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use static_init::dynamic;
+use static_init::{dynamic, Finaly};
 
-/// A global cleanup, that is guaranted to be dropped at normal program exit and that will
+/// A global cleanup, that is guaranteed to be dropped at normal program exit and that will
 /// execute all registered cleanup routines at this moment
-#[dynamic(lazy, drop)]
-pub(crate) static mut CLEANUP: Cleanup = Cleanup::new();
+#[dynamic(lazy, finalize)]
+pub(crate) static CLEANUP: Cleanup = Cleanup::new();
 
 /// An RAII object that calls all registered routines upon destruction
 pub(crate) struct Cleanup {
-    cleanups: lockfree::map::Map<usize, Option<Box<dyn FnOnce() + Send>>>,
+    cleanups: lockfree::queue::Queue<Option<Box<dyn FnOnce() + Send>>>,
 }
 
 impl Cleanup {
@@ -31,39 +31,18 @@ impl Cleanup {
         }
     }
 
-    pub(crate) fn register_cleanup(&self, cleanup_fn: Box<dyn FnOnce() + Send>) -> CleanupHandle {
-        let handle = CleanupHandle::new(&cleanup_fn);
-        self.cleanups.insert(handle.0, Some(cleanup_fn));
-        handle
-    }
-
-    fn cancel_cleanup(&self, id: usize) {
-        self.cleanups.remove(&id);
+    pub(crate) fn register_cleanup(&self, cleanup_fn: Box<dyn FnOnce() + Send>) {
+        self.cleanups.push(Some(cleanup_fn));
     }
 }
 
-impl Drop for Cleanup {
-    fn drop(&mut self) {
-        for cleanup in self.cleanups.iter_mut() {
-            // SAFETY: this is always safe because Option is always Some
-            unsafe { cleanup.1.take().unwrap_unchecked()() };
+impl Finaly for Cleanup {
+    fn finaly(&self) {
+        while let Some(cleanup) = self.cleanups.pop() {
+            // SAFETY: this is safe as cleanup will never have None elements
+            unsafe {
+                cleanup.unwrap_unchecked()();
+            }
         }
-    }
-}
-
-/// Cleanup routine registartion handler. If dropped, the cleanup routine will be deregistered
-pub(crate) struct CleanupHandle(usize);
-
-impl CleanupHandle {
-    fn new(cleanup_fn: &dyn FnOnce()) -> Self {
-        let fn_ptr: *const dyn FnOnce() = cleanup_fn;
-        let key = fn_ptr as *const () as usize;
-        Self(key)
-    }
-}
-
-impl Drop for CleanupHandle {
-    fn drop(&mut self) {
-        CLEANUP.read().cancel_cleanup(self.0);
     }
 }

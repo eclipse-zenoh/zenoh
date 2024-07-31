@@ -18,7 +18,7 @@ use rand::Rng;
 use shared_memory::{Shmem, ShmemConf, ShmemError};
 use zenoh_result::{bail, zerror, ZResult};
 
-use crate::cleanup::{CleanupHandle, CLEANUP};
+use crate::cleanup::CLEANUP;
 
 const SEGMENT_DEDICATE_TRIES: usize = 100;
 const ECMA: crc::Crc<u64> = crc::Crc::<u64>::new(&crc::CRC_64_ECMA_182);
@@ -31,7 +31,6 @@ where
 {
     shmem: Shmem,
     id: ID,
-    _cleanup: Option<CleanupHandle>,
 }
 
 impl<ID> Debug for Segment<ID>
@@ -62,7 +61,7 @@ where
 
             // Register cleanup routine to make sure Segment will be unlinked on exit
             let c_os_id = os_id.clone();
-            let cleanup = CLEANUP.read().register_cleanup(Box::new(move || {
+            CLEANUP.register_cleanup(Box::new(move || {
                 if let Ok(mut shmem) = ShmemConf::new().os_id(c_os_id).open() {
                     shmem.set_owner(true);
                     drop(shmem);
@@ -77,11 +76,7 @@ where
                     tracing::debug!(
                         "Created SHM segment, size: {alloc_size}, prefix: {id_prefix}, id: {id}"
                     );
-                    return Ok(Segment {
-                        shmem,
-                        id,
-                        _cleanup: Some(cleanup),
-                    });
+                    return Ok(Segment { shmem, id });
                 }
                 Err(ShmemError::LinkExists) => {}
                 Err(ShmemError::MappingIdExists) => {}
@@ -105,11 +100,7 @@ where
 
         tracing::debug!("Opened SHM segment, prefix: {id_prefix}, id: {id}");
 
-        Ok(Self {
-            shmem,
-            id,
-            _cleanup: None,
-        })
+        Ok(Self { shmem, id })
     }
 
     fn os_id(id: ID, id_prefix: &str) -> String {
