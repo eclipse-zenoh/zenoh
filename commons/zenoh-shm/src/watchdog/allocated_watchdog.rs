@@ -29,7 +29,7 @@ impl AllocatedWatchdog {
 
 impl Drop for AllocatedWatchdog {
     fn drop(&mut self) {
-        GLOBAL_VALIDATOR.remove(self.descriptor.clone());
-        GLOBAL_STORAGE.free_watchdog(self.descriptor.clone());
+        GLOBAL_VALIDATOR.read().remove(self.descriptor.clone());
+        GLOBAL_STORAGE.read().free_watchdog(self.descriptor.clone());
     }
 }
