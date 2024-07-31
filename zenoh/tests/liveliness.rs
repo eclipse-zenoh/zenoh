@@ -65,17 +65,17 @@ async fn test_liveliness_subscriber_clique() {
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
 
-    assert!(token.undeclare().await.is_ok());
+    token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
 
-    assert!(sub.undeclare().await.is_ok());
+    sub.undeclare().await.unwrap();
 
-    assert!(peer1.close().await.is_ok());
-    assert!(peer2.close().await.is_ok());
+    peer1.close().await.unwrap();
+    peer2.close().await.unwrap();
 }
 
 #[cfg(feature = "unstable")]
@@ -129,10 +129,10 @@ async fn test_liveliness_query_clique() {
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
 
-    assert!(token.undeclare().await.is_ok());
+    token.undeclare().await.unwrap();
 
-    assert!(peer1.close().await.is_ok());
-    assert!(peer2.close().await.is_ok());
+    peer1.close().await.unwrap();
+    peer2.close().await.unwrap();
 }
 
 #[cfg(feature = "unstable")]
@@ -200,18 +200,18 @@ async fn test_liveliness_subscriber_brokered() {
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
 
-    assert!(token.undeclare().await.is_ok());
+    token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
 
-    assert!(sub.undeclare().await.is_ok());
+    sub.undeclare().await.unwrap();
 
-    assert!(router.close().await.is_ok());
-    assert!(client1.close().await.is_ok());
-    assert!(client2.close().await.is_ok());
+    router.close().await.unwrap();
+    client1.close().await.unwrap();
+    client2.close().await.unwrap();
 }
 
 #[cfg(feature = "unstable")]
@@ -278,11 +278,11 @@ async fn test_liveliness_query_brokered() {
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
 
-    assert!(token.undeclare().await.is_ok());
+    token.undeclare().await.unwrap();
 
-    assert!(router.close().await.is_ok());
-    assert!(client1.close().await.is_ok());
-    assert!(client2.close().await.is_ok());
+    router.close().await.unwrap();
+    client1.close().await.unwrap();
+    client2.close().await.unwrap();
 }
 
 #[cfg(feature = "unstable")]
@@ -317,15 +317,15 @@ async fn test_liveliness_subscriber_local() {
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
 
-    assert!(token.undeclare().await.is_ok());
+    token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
 
-    assert!(sub.undeclare().await.is_ok());
-    assert!(peer.close().await.is_ok());
+    sub.undeclare().await.unwrap();
+    peer.close().await.unwrap();
 }
 
 #[cfg(feature = "unstable")]
@@ -360,6 +360,6 @@ async fn test_liveliness_query_local() {
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
 
-    assert!(token.undeclare().await.is_ok());
-    assert!(peer.close().await.is_ok());
+    token.undeclare().await.unwrap();
+    peer.close().await.unwrap();
 }
