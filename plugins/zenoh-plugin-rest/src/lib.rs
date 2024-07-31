@@ -127,11 +127,7 @@ async fn to_json(results: flume::Receiver<Reply>) -> String {
 }
 
 async fn to_json_response(results: flume::Receiver<Reply>) -> Response {
-    response(
-        StatusCode::Ok,
-        Mime::from_str("application/json").unwrap(),
-        &to_json(results).await,
-    )
+    response(StatusCode::Ok, "application/json", &to_json(results).await)
 }
 
 fn sample_to_html(sample: &Sample) -> String {
@@ -203,12 +199,17 @@ fn method_to_kind(method: Method) -> SampleKind {
     }
 }
 
-fn response(status: StatusCode, content_type: impl TryInto<Mime>, body: &str) -> Response {
+fn response<'a, S: Into<&'a str> + std::fmt::Debug>(
+    status: StatusCode,
+    content_type: S,
+    body: &str,
+) -> Response {
+    tracing::trace!("Outgoing Response: {status} - {content_type:?} - body: {body}");
     let mut builder = Response::builder(status)
         .header("content-length", body.len().to_string())
         .header("Access-Control-Allow-Origin", "*")
         .body(body);
-    if let Ok(mime) = content_type.try_into() {
+    if let Ok(mime) = Mime::from_str(content_type.into()) {
         builder = builder.content_type(mime);
     }
     builder.build()
