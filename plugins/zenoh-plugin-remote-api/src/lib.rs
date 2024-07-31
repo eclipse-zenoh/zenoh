@@ -22,21 +22,26 @@ use std::{
     collections::HashMap,
     fs::File,
     io::{self, BufReader, ErrorKind},
-    net::SocketAddr,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
     path::Path,
     sync::Arc,
 };
 
 use flume::Sender;
-use futures::{future, pin_mut, prelude::*};
+use futures::{future, pin_mut, StreamExt, TryStreamExt};
 use interface::RemoteAPIMsg;
 use rustls_pemfile::{certs, private_key};
-use tokio::{net::TcpListener, sync::RwLock, task::JoinHandle};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    sync::RwLock,
+    task::JoinHandle,
+};
 use tokio_rustls::{
     rustls::{
         self,
         pki_types::{CertificateDer, PrivateKeyDer},
     },
+    server::TlsStream,
     TlsAcceptor,
 };
 use tokio_tungstenite::tungstenite::protocol::Message;
@@ -64,7 +69,10 @@ use crate::{
     handle_control_message::handle_control_message, handle_data_message::handle_data_message,
 };
 
+const WORKER_THREAD_NUM: usize = 2;
+const MAX_BLOCK_THREAD_NUM: usize = 50;
 const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
+
 lazy_static::lazy_static! {
     static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
 }
@@ -78,7 +86,7 @@ fn load_key(path: &Path) -> io::Result<PrivateKeyDer<'static>> {
         .unwrap()
         .ok_or(io::Error::new(
             ErrorKind::Other,
-            "no private key found".to_string(),
+            "No private key found".to_string(),
         ))?)
 }
 
@@ -115,16 +123,31 @@ impl Plugin for RemoteApiPlugin {
         let conf: Config = serde_json::from_value(plugin_conf.clone())
             .map_err(|e| zerror!("Plugin `{}` configuration error: {}", name, e))?;
 
-        let wss_config = match (conf.certificate_path, conf.private_key_path) {
-            (Some(cert_path), Some(key_path)) => Some((
-                load_certs(Path::new("./tests/end.cert")).unwrap(),
-                load_key(Path::new("./tests/end.rsa")).unwrap(),
-            )),
-            (None, None) => None,
-            _ => {
-                bail!("Either Cert or Private Key not defined in Configuration, please specify either both or neither !")
+        let wss_config = match conf.secure_websocket {
+            Some(wss_config) => {
+                tracing::info!("Loading certs from : {} ...", wss_config.certificate_path);
+                let certs = load_certs(Path::new(&wss_config.certificate_path))
+                    .map_err(|err| zerror!("Could not Load Cert `{}`", err))?;
+                tracing::info!(
+                    "Loading Private Key from : {} ...",
+                    wss_config.private_key_path
+                );
+                let key = load_key(Path::new(&wss_config.private_key_path))
+                    .map_err(|err| zerror!("Could not Load Private Key `{}`", err))?;
+                Some((certs, key))
+            }
+            None => {
+                tracing::info!("{name}");
+                None
             }
         };
+
+        let plugin_runtime: tokio::runtime::Runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(WORKER_THREAD_NUM)
+            .max_blocking_threads(MAX_BLOCK_THREAD_NUM)
+            .enable_all()
+            .build()
+            .expect("Unable to create tokio runtime");
 
         let weak_runtime = Runtime::downgrade(runtime);
         if let Some(runtime) = weak_runtime.upgrade() {
@@ -136,11 +159,18 @@ impl Plugin for RemoteApiPlugin {
             let runtime_cl = runtime.clone();
             let state_map_cl = state_map.clone();
 
-            let join_handle = run_websocket_server(runtime_cl, state_map_cl, wss_config);
+            let join_handle = run_websocket_server(
+                conf.websocket_port,
+                &plugin_runtime,
+                runtime_cl,
+                state_map_cl,
+                wss_config,
+            );
 
             // Return WebServer And State
             let running_plugin = RunningPluginInner {
-                runtime,
+                zenoh_runtime: runtime,
+                plugin_runtime,
                 websocket_server: join_handle,
                 state_map,
             };
@@ -151,13 +181,11 @@ impl Plugin for RemoteApiPlugin {
     }
 }
 
-// TODO: Bring Config Back
-// struct RunningPlugin(Config);
-
 type StateMap = Arc<RwLock<HashMap<SocketAddr, RemoteState>>>;
 
 struct RunningPluginInner {
-    runtime: Runtime,
+    zenoh_runtime: Runtime,
+    plugin_runtime: tokio::runtime::Runtime,
     websocket_server: JoinHandle<()>,
     state_map: StateMap,
 }
@@ -189,72 +217,66 @@ struct RemoteState {
     publishers: HashMap<Uuid, Publisher<'static>>,
     // Queryable
     queryables: HashMap<Uuid, Queryable<'static, ()>>,
-    // queryables: HashMap<Uuid, Queryable<'static, flume::Receiver<Query>>>,
     unanswered_queries: Arc<std::sync::RwLock<HashMap<Uuid, Query>>>,
 }
 
+pub trait Streamable:
+    tokio::io::AsyncRead + tokio::io::AsyncWrite + std::marker::Send + Unpin
+{
+}
+impl Streamable for TcpStream {}
+impl Streamable for TlsStream<TcpStream> {}
+
 // Listen on the Zenoh Session
 fn run_websocket_server(
-    runtime: Runtime,
+    ws_port: u16,
+    plugin_runtime: &tokio::runtime::Runtime,
+    zenoh_runtime: Runtime,
     state_map: StateMap,
     opt_certs: Option<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>)>,
 ) -> JoinHandle<()> {
-    let mut opt_acceptor: Option<TlsAcceptor> = None;
+    let mut opt_tls_acceptor: Option<TlsAcceptor> = None;
+
     if let Some((certs, key)) = opt_certs {
         let config = rustls::ServerConfig::builder()
             .with_no_client_auth()
             .with_single_cert(certs, key)
             .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))
             .expect("Could not build TLS Configuration from Certficiate/Key Combo :");
-        opt_acceptor = Some(TlsAcceptor::from(Arc::new(config)));
+        opt_tls_acceptor = Some(TlsAcceptor::from(Arc::new(config)));
     }
 
-    tokio::task::spawn(async move {
-        let addr = "127.0.0.1:10000".to_string();
-        println!("Spawning Remote API Plugin on {:?}", addr);
-        // Server
-        let server = TcpListener::bind(addr).await.unwrap();
+    let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), ws_port);
 
-        // let state_map
+    plugin_runtime.spawn(async move {
+        tracing::info!("Spawning Remote API Plugin on {:?}", socket_addr);
+
+        let server: TcpListener = match TcpListener::bind(socket_addr).await {
+            Ok(x) => x,
+            Err(err) => {
+                tracing::error!("Unable to start TcpListener {err}");
+                return;
+            }
+        };
+
         while let Ok((tcp_stream, sock_addr)) = server.accept().await {
-
-            // let ws_stream = tokio_tungstenite::accept_async(tcp_stream)
-            //     .await
-            //     .expect("Error during the websocket handshake occurred");
-
-            // TODO Allow WS stream to be either TLS stream or TCPStream
-            // Box<dyn AsyncRead + AsyncWrite + Unpin>
-            let ws_stream: tokio_tungstenite::WebSocketStream<_> = match opt_acceptor {
-                Some(acceptor) => {
-                    let tls_stream = acceptor.accept(tcp_stream).await.unwrap();
-                    tokio_tungstenite::accept_async(tls_stream)
-                        .await
-                        .expect("Error during the websocket handshake occurred")
-                }
-                None => tokio_tungstenite::accept_async(tcp_stream)
-                    .await
-                    .expect("Error during the websocket handshake occurred"),
-            };
-
-            println!("raw_stream {:?}", sock_addr);
-
             let sock_adress;
             let (ws_ch_tx, ws_ch_rx) = flume::unbounded::<RemoteAPIMsg>();
 
-            // let (q_r_tx, q_r_rx) = flume::unbounded::<QueryableMsg>();
-
             let mut write_guard = state_map.write().await;
 
-            let session = zenoh::session::init(runtime.clone())
-                .await
-                .unwrap()
-                .into_arc();
+            let session = match zenoh::session::init(zenoh_runtime.clone()).await {
+                Ok(session) => session.into_arc(),
+                Err(err) => {
+                    tracing::error!("Unable to get Zenoh session from Runtime {err}");
+                    continue;
+                }
+            };
 
             let state: RemoteState = RemoteState {
                 websocket_tx: ws_ch_tx.clone(),
                 session_id: Uuid::new_v4(),
                 session,
-                // key_expr: HashSet::new(),
                 subscribers: HashMap::new(),
                 publishers: HashMap::new(),
                 queryables: HashMap::new(),
@@ -265,11 +287,27 @@ fn run_websocket_server(
             // if remote state exists in map already. Ignore it and reinitialize
             let _ = write_guard.insert(sock_addr, state);
 
+            let streamable: Box<dyn Streamable> = match &opt_tls_acceptor {
+                Some(acceptor) => match acceptor.accept(tcp_stream).await {
+                    Ok(tls_stream) => Box::new(tls_stream),
+                    Err(err) => {
+                        error!("Could not secure TcpStream -> TlsStream {:?}", err);
+                        continue;
+                    }
+                },
+                None => Box::new(tcp_stream),
+            };
+
+            let ws_stream = tokio_tungstenite::accept_async(streamable)
+                .await
+                .expect("Error during the websocket handshake occurred");
+
             let (ws_tx, ws_rx) = ws_stream.split();
 
             let ch_rx_stream = ws_ch_rx
                 .into_stream()
                 .map(|remote_api_msg| {
+                    // TODO: Take Care of unwrap.
                     let val = serde_json::to_string(&remote_api_msg).unwrap();
                     Ok(Message::Text(val))
                 })

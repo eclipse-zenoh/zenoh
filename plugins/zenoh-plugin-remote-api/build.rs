@@ -27,9 +27,14 @@ fn main() {
     );
 
     let schema = serde_json::to_value(schema_for!(Config)).unwrap();
+    // println!("{schema:#?}");
     let schema = jsonschema::JSONSchema::compile(&schema).unwrap();
+    println!("{schema:#?}");
     let config = std::fs::read_to_string("config.json5").unwrap();
+    // println!("{config:?}");
     let config: serde_json::Value = serde_json::from_str(&config).unwrap();
+    // println!("{config:?}");
+
     if let Err(es) = schema.validate(&config) {
         let es = es.map(|e| format!("{}", e)).collect::<Vec<_>>().join("\n");
         panic!("config.json5 schema validation error: {}", es);

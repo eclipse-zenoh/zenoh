@@ -39,7 +39,7 @@ crate-type = ["cdylib", "rlib"]
 anyhow = { workspace = true, features = ["default"] }
 tokio = { version = "1.39.2", features = ["full"] }
 tokio-tungstenite = "0.23.1"
-tokio-rustls = "0.26.0"
+tokio-rustls = {version = "0.26.0", default-features = false}
 futures-util = "0.3.30"
 rustls-pemfile = "2.1.2"
 
