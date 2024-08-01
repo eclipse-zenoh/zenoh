@@ -30,15 +30,6 @@ zconfigurable! {
     pub static ref LIB_PREFIX: String = DLL_PREFIX.to_string();
     /// The libraries suffix for the current platform (`".dll"` or `".so"` or `".dylib"`...)
     pub static ref LIB_SUFFIX: String = DLL_SUFFIX.to_string();
-    /// The default list of paths where to search for libraries to load
-    pub static ref LIB_DEFAULT_SEARCH_PATHS: String = r#"[
-        { "kind": "current_exe_parent" },
-        ".",
-        "~/.zenoh/lib",
-        "/opt/homebrew/lib",
-        "/usr/local/lib",
-        "/usr/lib"
-    ]"#.to_string();
 }
 
 /// LibLoader allows search for libraries and to load them.

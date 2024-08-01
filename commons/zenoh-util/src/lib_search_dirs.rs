@@ -18,8 +18,6 @@ use serde::{
     Deserialize, Serialize,
 };
 
-use crate::lib_loader::LIB_DEFAULT_SEARCH_PATHS;
-
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 #[serde(default)]
 pub struct LibSearchDirs(Vec<LibSearchDir>);
@@ -91,9 +89,17 @@ impl IntoIterator for LibSearchDirs {
 
 impl Default for LibSearchDirs {
     fn default() -> Self {
-        let de = &mut serde_json::Deserializer::from_str(&LIB_DEFAULT_SEARCH_PATHS);
-        LibSearchDirs::deserialize(de)
-            .expect("`zenoh_util::lib_loader::LIB_DEFAULT_SEARCH_PATHS` should be deserializable")
+        LibSearchDirs(vec![
+            LibSearchDir::Spec(LibSearchSpec {
+                kind: LibSearchSpecKind::CurrentExeParent,
+                value: None,
+            }),
+            LibSearchDir::Path(".".to_string()),
+            LibSearchDir::Path("~/.zenoh/lib".to_string()),
+            LibSearchDir::Path("/opt/homebrew/lib".to_string()),
+            LibSearchDir::Path("/usr/local/lib".to_string()),
+            LibSearchDir::Path("/usr/lib".to_string()),
+        ])
     }
 }
 
