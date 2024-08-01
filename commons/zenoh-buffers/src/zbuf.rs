@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use alloc::{sync::Arc, vec::Vec};
-use core::{cmp, iter, mem, num::NonZeroUsize, ptr::NonNull};
+use core::{cmp, iter, num::NonZeroUsize, ptr::NonNull};
 #[cfg(feature = "std")]
 use std::io;
 
@@ -74,13 +74,9 @@ impl ZBuf {
         }
     }
 
-    fn zslice_writer(&mut self) -> ZSliceWriter {
-        if let Some(writer) = self.slices.last_mut().and_then(|s| s.writer()) {
-            // SAFETY: known Rust issue https://github.com/rust-lang/rust/issues/54663
-            return unsafe { mem::transmute::<ZSliceWriter, ZSliceWriter>(writer) };
-        }
-        self.slices.push(ZSlice::empty());
-        self.slices.last_mut().unwrap().writer().unwrap()
+    #[inline]
+    fn opt_zslice_writer(&mut self) -> Option<ZSliceWriter> {
+        self.slices.last_mut().and_then(|s| s.writer())
     }
 }
 
@@ -482,7 +478,22 @@ impl Iterator for ZBufSliceIterator<'_, '_> {
 #[derive(Debug)]
 pub struct ZBufWriter<'a> {
     inner: NonNull<ZBuf>,
-    writer: ZSliceWriter<'a>,
+    zslice_writer: Option<ZSliceWriter<'a>>,
+}
+
+impl<'a> ZBufWriter<'a> {
+    #[inline]
+    fn zslice_writer(&mut self) -> &mut ZSliceWriter<'a> {
+        // Cannot use `if let` because of  https://github.com/rust-lang/rust/issues/54663
+        if self.zslice_writer.is_some() {
+            return self.zslice_writer.as_mut().unwrap();
+        }
+        // SAFETY: `self.inner` is valid as guaranteed by `self.writer` borrow
+        let zbuf = unsafe { self.inner.as_mut() };
+        zbuf.slices.push(ZSlice::empty());
+        self.zslice_writer = zbuf.slices.last_mut().unwrap().writer();
+        self.zslice_writer.as_mut().unwrap()
+    }
 }
 
 impl<'a> HasWriter for &'a mut ZBuf {
@@ -491,30 +502,29 @@ impl<'a> HasWriter for &'a mut ZBuf {
     fn writer(self) -> Self::Writer {
         ZBufWriter {
             inner: NonNull::new(self).unwrap(),
-            writer: self.zslice_writer(),
+            zslice_writer: self.opt_zslice_writer(),
         }
     }
 }
 
 impl Writer for ZBufWriter<'_> {
     fn write(&mut self, bytes: &[u8]) -> Result<NonZeroUsize, DidntWrite> {
-        self.writer.write(bytes)
+        self.zslice_writer().write(bytes)
     }
 
     fn write_exact(&mut self, bytes: &[u8]) -> Result<(), DidntWrite> {
-        self.writer.write_exact(bytes)
+        self.zslice_writer().write_exact(bytes)
     }
 
     fn remaining(&self) -> usize {
-        self.writer.remaining()
+        usize::MAX
     }
 
     fn write_zslice(&mut self, slice: &ZSlice) -> Result<(), DidntWrite> {
+        self.zslice_writer = None;
         // SAFETY: `self.inner` is valid as guaranteed by `self.writer` borrow,
-        // and `self.writer` is reassigned after modification
-        let zbuf = unsafe { self.inner.as_mut() };
-        zbuf.push_zslice(slice.clone());
-        self.writer = zbuf.zslice_writer();
+        // and `self.writer` has been overwritten
+        unsafe { self.inner.as_mut() }.push_zslice(slice.clone());
         Ok(())
     }
 
@@ -523,7 +533,7 @@ impl Writer for ZBufWriter<'_> {
         F: FnOnce(&mut [u8]) -> usize,
     {
         // SAFETY: same precondition as the enclosing function
-        self.writer.with_slot(len, write)
+        self.zslice_writer().with_slot(len, write)
     }
 }
 
@@ -531,11 +541,14 @@ impl BacktrackableWriter for ZBufWriter<'_> {
     type Mark = ZBufPos;
 
     fn mark(&mut self) -> Self::Mark {
+        let byte = self.zslice_writer.as_mut().map(|w| w.mark());
         // SAFETY: `self.inner` is valid as guaranteed by `self.writer` borrow
-        let zbuf = unsafe { self.inner.as_ref() };
+        let zbuf = unsafe { self.inner.as_mut() };
         ZBufPos {
             slice: zbuf.slices.len(),
-            byte: self.writer.mark(),
+            byte: byte
+                .or_else(|| Some(zbuf.opt_zslice_writer()?.mark()))
+                .unwrap_or(0),
         }
     }
 
@@ -544,8 +557,11 @@ impl BacktrackableWriter for ZBufWriter<'_> {
         // and `self.writer` is reassigned after modification
         let zbuf = unsafe { self.inner.as_mut() };
         zbuf.slices.truncate(mark.slice);
-        self.writer = zbuf.zslice_writer();
-        self.writer.rewind(mark.byte)
+        self.zslice_writer = zbuf.opt_zslice_writer();
+        if let Some(writer) = &mut self.zslice_writer {
+            writer.rewind(mark.byte);
+        }
+        true
     }
 }
 
