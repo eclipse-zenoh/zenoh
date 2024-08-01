@@ -17,7 +17,7 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use std::{borrow::Cow, convert::TryFrom, str::FromStr, sync::Arc};
+use std::{borrow::Cow, convert::TryFrom, str::FromStr, sync::Arc, time::Duration};
 
 use base64::Engine;
 use futures::StreamExt;
@@ -51,8 +51,11 @@ lazy_static::lazy_static! {
 }
 const RAW_KEY: &str = "_raw";
 
+#[cfg(feature = "dynamic_plugin")]
 const WORKER_THREAD_NUM: usize = 2;
+#[cfg(feature = "dynamic_plugin")]
 const MAX_BLOCK_THREAD_NUM: usize = 50;
+#[cfg(feature = "dynamic_plugin")]
 lazy_static::lazy_static! {
     // The global runtime is used in the zenohd case, which we can't get the current runtime
     static ref TOKIO_RUNTIME: tokio::runtime::Runtime = tokio::runtime::Builder::new_multi_thread()
@@ -258,9 +261,19 @@ impl Plugin for RestPlugin {
 
         let conf: Config = serde_json::from_value(plugin_conf.clone())
             .map_err(|e| zerror!("Plugin `{}` configuration error: {}", name, e))?;
-        let task = TOKIO_RUNTIME.spawn(run(runtime.clone(), conf.clone()));
+        let task = run(runtime.clone(), conf.clone());
+
+        // Reuse the runtime when it comes to static linking or standalone binary
+        #[cfg(not(feature = "dynamic_plugin"))]
+        let task = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current()
+                .block_on(async { timeout(Duration::from_millis(1), tokio::spawn(task)).await })
+        });
+        // Use our own runtime since dynamic linking can't access the current runtime
+        #[cfg(feature = "dynamic_plugin")]
         let task = TOKIO_RUNTIME
-            .block_on(async { timeout(std::time::Duration::from_millis(1), task).await });
+            .block_on(async { timeout(Duration::from_millis(1), TOKIO_RUNTIME.spawn(task)).await });
+
         if let Ok(Err(e)) = task {
             bail!("REST server failed within 1ms: {e}")
         }
@@ -345,7 +358,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                         ))
                     }
                 };
-                TOKIO_RUNTIME.spawn(async move {
+                tokio::spawn(async move {
                     tracing::debug!("Subscribe to {} for SSE stream", key_expr);
                     let sender = &sender;
                     let sub = req.state().0.declare_subscriber(&key_expr).await.unwrap();

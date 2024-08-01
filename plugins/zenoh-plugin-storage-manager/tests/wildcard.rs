@@ -187,13 +187,8 @@ async fn test_wild_card_in_order() {
     drop(storage);
 }
 
-// fn test_wild_card_out_of_order() {
-//     assert_eq!(true, true);
-// }
-
 #[test]
 fn wildcard_test() {
     let rt = Runtime::new().unwrap();
     rt.block_on(async { test_wild_card_in_order().await });
-    // rt.block_on(async { test_wild_card_out_of_order() });
 }
