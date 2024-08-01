@@ -74,7 +74,6 @@ impl ZBuf {
         }
     }
 
-    // fn buffer(&mut self) -> GenericZSliceBufferPointer<Vec<u8>, true, false, false, true> {
     fn zslice_writer(&mut self) -> ZSliceWriter {
         if let Some(writer) = self.slices.last_mut().and_then(|s| s.writer()) {
             // SAFETY: known Rust issue https://github.com/rust-lang/rust/issues/54663
