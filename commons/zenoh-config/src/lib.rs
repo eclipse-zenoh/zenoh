@@ -45,7 +45,7 @@ use zenoh_protocol::{
     transport::{BatchSize, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
-use zenoh_util::LibLoader;
+use zenoh_util::{LibLoader, LibSearchDirs};
 
 pub mod mode_dependent;
 pub use mode_dependent::*;
@@ -547,7 +547,7 @@ validated_struct::validator! {
         pub plugins_loading: #[derive(Default)]
         PluginsLoading {
             pub enabled: bool,
-            pub search_dirs: Option<Vec<String>>, // TODO (low-prio): Switch this String to a PathBuf? (applies to other paths in the config as well)
+            pub search_dirs: LibSearchDirs,
         },
         #[validated(recursive_accessors)]
         /// The configuration for plugins.
@@ -571,19 +571,6 @@ fn set_true() -> bool {
 }
 fn set_false() -> bool {
     false
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PluginSearchDirs(Vec<String>);
-impl Default for PluginSearchDirs {
-    fn default() -> Self {
-        Self(
-            (*zenoh_util::LIB_DEFAULT_SEARCH_PATHS)
-                .split(':')
-                .map(|c| c.to_string())
-                .collect(),
-        )
-    }
 }
 
 #[test]
@@ -763,10 +750,7 @@ impl Config {
 
     pub fn libloader(&self) -> LibLoader {
         if self.plugins_loading.enabled {
-            match self.plugins_loading.search_dirs() {
-                Some(dirs) => LibLoader::new(dirs, true),
-                None => LibLoader::default(),
-            }
+            LibLoader::new(self.plugins_loading.search_dirs().clone())
         } else {
             LibLoader::empty()
         }
