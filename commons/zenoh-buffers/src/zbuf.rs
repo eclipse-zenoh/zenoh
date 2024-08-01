@@ -241,7 +241,7 @@ impl<'a> Reader for ZBufReader<'a> {
     fn read_u8(&mut self) -> Result<u8, DidntRead> {
         let slice = self.inner.slices.get(self.cursor.slice).ok_or(DidntRead)?;
 
-        let byte = slice[self.cursor.byte];
+        let byte = *slice.get(self.cursor.byte).ok_or(DidntRead)?;
         self.cursor.byte += 1;
         if self.cursor.byte == slice.len() {
             self.cursor.slice += 1;
