@@ -13,7 +13,7 @@
 //
 use std::collections::HashSet;
 
-use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZBuf, ZSlice, ZSliceKind};
+use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZBuf, ZSlice};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_core::zerror;
 use zenoh_protocol::{
@@ -26,7 +26,9 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::ZResult;
-use zenoh_shm::{api::common::types::ProtocolID, reader::ShmReader, ShmBufInfo, ShmBufInner};
+use zenoh_shm::{
+    api::common::types::ProtocolID, reader::ShmReader, ShmBufInfo, ShmBufInfoBuffer, ShmBufInner,
+};
 
 use crate::unicast::establishment::ext::shm::AuthSegment;
 
@@ -281,9 +283,7 @@ pub fn shmbuf_to_shminfo(shmb: &ShmBufInner) -> ZResult<ZSlice> {
     // Increase the reference count so to keep the ShmBufInner valid
     unsafe { shmb.inc_ref_count() };
     // Replace the content of the slice
-    let mut zslice: ZSlice = info.into();
-    zslice.kind = ZSliceKind::ShmPtr;
-    Ok(zslice)
+    Ok(ShmBufInfoBuffer(info).into())
 }
 
 fn to_shm_partner<ShmCfg: PartnerShmConfig>(
@@ -315,8 +315,10 @@ fn to_non_shm_partner(zbuf: &mut ZBuf) {
 }
 
 pub fn map_zbuf_to_shmbuf(zbuf: &mut ZBuf, shmr: &ShmReader) -> ZResult<()> {
-    for zs in zbuf.zslices_mut().filter(|x| x.kind == ZSliceKind::ShmPtr) {
-        map_zslice_to_shmbuf(zs, shmr)?;
+    for zs in zbuf.zslices_mut() {
+        if zs.downcast_ref::<ShmBufInfoBuffer>().is_some() {
+            map_zslice_to_shmbuf(zs, shmr)?;
+        }
     }
     Ok(())
 }

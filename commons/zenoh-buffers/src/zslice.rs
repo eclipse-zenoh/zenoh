@@ -79,22 +79,12 @@ impl<const N: usize> ZSliceBuffer for [u8; N] {
 /*************************************/
 /*               ZSLICE              */
 /*************************************/
-#[cfg(feature = "shared-memory")]
-#[derive(Copy, Clone, PartialEq, Eq)]
-#[repr(u8)]
-pub enum ZSliceKind {
-    Raw = 0,
-    ShmPtr = 1,
-}
-
 /// A clonable wrapper to a contiguous slice of bytes.
 #[derive(Clone)]
 pub struct ZSlice {
     buf: Arc<dyn ZSliceBuffer>,
     start: usize,
     end: usize,
-    #[cfg(feature = "shared-memory")]
-    pub kind: ZSliceKind,
 }
 
 impl ZSlice {
@@ -114,13 +104,7 @@ impl ZSlice {
         end: usize,
     ) -> Result<ZSlice, Arc<dyn ZSliceBuffer>> {
         if start <= end && end <= buf.as_slice().len() {
-            Ok(Self {
-                buf,
-                start,
-                end,
-                #[cfg(feature = "shared-memory")]
-                kind: ZSliceKind::Raw,
-            })
+            Ok(Self { buf, start, end })
         } else {
             Err(buf)
         }
@@ -196,8 +180,6 @@ impl ZSlice {
                 buf: self.buf.clone(),
                 start: self.start + start,
                 end: self.start + end,
-                #[cfg(feature = "shared-memory")]
-                kind: self.kind,
             })
         } else {
             None
@@ -246,13 +228,7 @@ where
 {
     fn from(buf: Arc<T>) -> Self {
         let end = buf.as_slice().len();
-        Self {
-            buf,
-            start: 0,
-            end,
-            #[cfg(feature = "shared-memory")]
-            kind: ZSliceKind::Raw,
-        }
+        Self { buf, start: 0, end }
     }
 }
 
