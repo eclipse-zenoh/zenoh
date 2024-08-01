@@ -147,7 +147,7 @@ impl ZSlice {
     }
 
     #[inline]
-    pub fn writer(&mut self) -> Option<ZSliceWriter> {
+    pub(crate) fn writer(&mut self) -> Option<ZSliceWriter> {
         let vec = Arc::get_mut(&mut self.buf)?
             .as_any_mut()
             .downcast_mut::<Vec<u8>>()?;
@@ -177,7 +177,7 @@ impl ZSlice {
     #[must_use]
     pub fn as_slice(&self) -> &[u8] {
         // SAFETY: bounds checks are performed at `ZSlice` construction via `make()` or `subslice()`.
-        unsafe { &self.buf.as_slice().get_unchecked(self.start..self.end) }
+        unsafe { self.buf.as_slice().get_unchecked(self.start..self.end) }
     }
 
     pub fn subslice(&self, range: impl RangeBounds<usize>) -> Option<Self> {
@@ -294,7 +294,7 @@ impl SplitBuffer for ZSlice {
 }
 
 #[derive(Debug)]
-pub struct ZSliceWriter<'a> {
+pub(crate) struct ZSliceWriter<'a> {
     vec: &'a mut Vec<u8>,
     end: &'a mut usize,
 }
