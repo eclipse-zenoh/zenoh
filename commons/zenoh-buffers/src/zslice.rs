@@ -146,6 +146,10 @@ impl ZSlice {
         Arc::get_mut(&mut self.buf)?.as_any_mut().downcast_mut()
     }
 
+    // This method is internal and is only meant to be used in `ZBufWriter`.
+    // It's implemented in this module because it plays with `ZSlice` invariant,
+    // so it should stay in the same module.
+    // See https://github.com/eclipse-zenoh/zenoh/pull/1289#discussion_r1701796640
     #[inline]
     pub(crate) fn writer(&mut self) -> Option<ZSliceWriter> {
         let vec = Arc::get_mut(&mut self.buf)?
