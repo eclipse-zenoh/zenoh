@@ -228,3 +228,20 @@ impl ZSliceBuffer for ShmBufInner {
         self
     }
 }
+
+#[derive(Debug)]
+pub struct ShmBufInfoBuffer(pub Vec<u8>);
+
+impl ZSliceBuffer for ShmBufInfoBuffer {
+    fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}

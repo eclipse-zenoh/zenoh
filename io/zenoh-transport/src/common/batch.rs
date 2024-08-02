@@ -443,7 +443,7 @@ impl RBatch {
 
         self.buffer = self
             .buffer
-            .subslice(l.len() + h.len(), self.buffer.len())
+            .subslice(l.len() + h.len()..self.buffer.len())
             .ok_or_else(|| zerror!("Invalid batch length"))?;
 
         Ok(())

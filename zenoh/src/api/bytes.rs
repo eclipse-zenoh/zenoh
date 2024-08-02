@@ -1157,7 +1157,7 @@ macro_rules! impl_int {
                 // SAFETY:
                 // - 0 is a valid start index because bs is guaranteed to always have a length greater or equal than 1
                 // - end is a valid end index because is bounded between 0 and bs.len()
-                ZBytes::new(unsafe { ZSlice::new_unchecked(Arc::new(bs), 0, end) })
+                ZBytes::new(unsafe { ZSlice::new(Arc::new(bs), 0, end).unwrap_unchecked() })
             }
         }
 
@@ -2257,7 +2257,8 @@ impl<'a> Deserialize<&'a mut zshm> for ZSerde {
         // A ZSliceShmBorrowMut is expected to have only one slice
         let mut zslices = v.0.zslices_mut();
         if let Some(zs) = zslices.next() {
-            if let Some(shmb) = zs.downcast_mut::<ShmBufInner>() {
+            // SAFETY: ShmBufInner cannot change the size of the slice
+            if let Some(shmb) = unsafe { zs.downcast_mut::<ShmBufInner>() } {
                 return Ok(shmb.into());
             }
         }
@@ -2274,7 +2275,8 @@ impl<'a> Deserialize<&'a mut zshmmut> for ZSerde {
         // A ZSliceShmBorrowMut is expected to have only one slice
         let mut zslices = v.0.zslices_mut();
         if let Some(zs) = zslices.next() {
-            if let Some(shmb) = zs.downcast_mut::<ShmBufInner>() {
+            // SAFETY: ShmBufInner cannot change the size of the slice
+            if let Some(shmb) = unsafe { zs.downcast_mut::<ShmBufInner>() } {
                 return shmb.try_into().map_err(|_| ZDeserializeError);
             }
         }
