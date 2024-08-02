@@ -631,7 +631,7 @@ fn forget_linkstatepeer_subscription(
     let simple_subs = res.session_ctxs.values().any(|ctx| ctx.subs.is_some());
     let linkstatepeer_subs = remote_linkstatepeer_subs(tables, res).is_some();
     let zid = tables.zid;
-    if !simple_subs && linkstatepeer_subs.is_none() {
+    if !simple_subs && !linkstatepeer_subs {
         undeclare_router_subscription(tables, None, res, &zid, send_declare);
     }
 }
@@ -656,7 +656,7 @@ pub(super) fn undeclare_simple_subscription(
             propagate_forget_simple_subscription_to_peers(tables, res, send_declare);
         }
 
-        if simple_subs.len() == 1 && !router_subs && linkstatepeer_subs.is_none() {
+        if simple_subs.len() == 1 && router_subs.is_none() && linkstatepeer_subs.is_none() {
             let mut face = &mut simple_subs[0];
             if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
                 send_declare(
