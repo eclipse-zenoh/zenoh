@@ -650,7 +650,7 @@ pub(super) fn undeclare_simple_subscription(
         let mut simple_subs = simple_subs(res);
         let router_subs = remote_router_subs(tables, res);
         let linkstatepeer_subs = remote_linkstatepeer_subs(tables, res);
-        if simple_subs.is_empty() && !linkstatepeer_subs.is_none() {
+        if simple_subs.is_empty() && linkstatepeer_subs.is_none() {
             undeclare_router_subscription(tables, None, res, &tables.zid.clone(), send_declare);
         } else {
             propagate_forget_simple_subscription_to_peers(tables, res, send_declare);
