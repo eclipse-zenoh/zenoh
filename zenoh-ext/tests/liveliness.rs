@@ -89,7 +89,7 @@ async fn test_liveliness_querying_subscriber_clique() {
     assert_eq!(sample.key_expr().as_str(), LIVELINESS_KEYEXPR_1);
 
     token2.undeclare().await.unwrap();
-    sub.close().await.unwrap();
+    sub.undeclare().await.unwrap();
 
     peer1.close().await.unwrap();
     peer2.close().await.unwrap();
@@ -193,7 +193,7 @@ async fn test_liveliness_querying_subscriber_brokered() {
     assert_eq!(sample.key_expr().as_str(), LIVELINESS_KEYEXPR_1);
 
     token2.undeclare().await.unwrap();
-    sub.close().await.unwrap();
+    sub.undeclare().await.unwrap();
 
     router.close().await.unwrap();
     client1.close().await.unwrap();
@@ -277,7 +277,7 @@ async fn test_liveliness_fetching_subscriber_clique() {
     assert_eq!(sample.key_expr().as_str(), LIVELINESS_KEYEXPR_1);
 
     token2.undeclare().await.unwrap();
-    sub.close().await.unwrap();
+    sub.undeclare().await.unwrap();
 
     peer1.close().await.unwrap();
     peer2.close().await.unwrap();
@@ -385,7 +385,7 @@ async fn test_liveliness_fetching_subscriber_brokered() {
     assert_eq!(sample.key_expr().as_str(), LIVELINESS_KEYEXPR_1);
 
     token2.undeclare().await.unwrap();
-    sub.close().await.unwrap();
+    sub.undeclare().await.unwrap();
 
     router.close().await.unwrap();
     client1.close().await.unwrap();
