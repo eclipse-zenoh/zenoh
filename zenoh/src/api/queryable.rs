@@ -47,7 +47,7 @@ use super::{
     publisher::Priority,
     sample::{Locality, QoSBuilder, Sample, SampleKind},
     selector::Selector,
-    session::{SessionRef, Undeclarable},
+    session::{SessionRef, UndeclarableInner},
     value::Value,
     Id,
 };
@@ -567,7 +567,7 @@ pub(crate) struct CallbackQueryable<'a> {
     undeclare_on_drop: bool,
 }
 
-impl<'a> Undeclarable<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> {
+impl<'a> UndeclarableInner<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> {
     fn undeclare_inner(self, _: ()) -> QueryableUndeclaration<'a> {
         QueryableUndeclaration { queryable: self }
     }
@@ -848,7 +848,7 @@ impl<'a, Handler> Queryable<'a, Handler> {
 
     #[inline]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
-        Undeclarable::undeclare_inner(self, ())
+        UndeclarableInner::undeclare_inner(self, ())
     }
 
     /// Make the queryable run in background, until the session is closed.
@@ -862,9 +862,9 @@ impl<'a, Handler> Queryable<'a, Handler> {
     }
 }
 
-impl<'a, T> Undeclarable<(), QueryableUndeclaration<'a>> for Queryable<'a, T> {
+impl<'a, T> UndeclarableInner<(), QueryableUndeclaration<'a>> for Queryable<'a, T> {
     fn undeclare_inner(self, _: ()) -> QueryableUndeclaration<'a> {
-        Undeclarable::undeclare_inner(self.queryable, ())
+        UndeclarableInner::undeclare_inner(self.queryable, ())
     }
 }
 
