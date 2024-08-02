@@ -114,17 +114,18 @@ impl AllocAlignment {
         //
         // Hence R = f(S+A-1) = (S+(A-1)) & !(A-1) is the desired value
 
-        // Overflow check: ensure S ≤ 2^B - 2^P so that R < S+A ≤ 2^B and hence it's a valid usize
-        let bound = usize::MAX - (1 << self.pow) + 1;
+        // Compute A - 1 = 2^P - 1
+        let a_minus_1 = self.get_alignment_value().get() - 1;
+
+        // Overflow check: ensure S ≤ 2^B - 2^P = (2^B - 1) - (A - 1)
+        // so that R < S+A ≤ 2^B and hence it's a valid usize
+        let bound = usize::MAX - a_minus_1;
         assert!(
             size.get() <= bound,
             "The given size {} exceeded the maximum {}",
             size.get(),
             bound
         );
-
-        // Compute A-1
-        let a_minus_1 = self.get_alignment_value().get() - 1;
 
         // Overflow never occurs due to the check above
         let r = (size.get() + a_minus_1) & !a_minus_1;
