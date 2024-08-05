@@ -17,6 +17,7 @@ use std::{
     borrow::Cow,
     collections::HashMap,
     convert::TryFrom,
+    future::Future,
     sync::{
         atomic::{AtomicBool, Ordering::Relaxed},
         Arc, Mutex,
@@ -42,13 +43,27 @@ use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginCont
 const WORKER_THREAD_NUM: usize = 2;
 const MAX_BLOCK_THREAD_NUM: usize = 50;
 lazy_static::lazy_static! {
-    // The global runtime is used in the zenohd case, which we can't get the current runtime
+    // The global runtime is used in the dynamic plugins, which we can't get the current runtime
     static ref TOKIO_RUNTIME: tokio::runtime::Runtime = tokio::runtime::Builder::new_multi_thread()
                .worker_threads(WORKER_THREAD_NUM)
                .max_blocking_threads(MAX_BLOCK_THREAD_NUM)
                .enable_all()
                .build()
                .expect("Unable to create runtime");
+}
+#[inline(always)]
+fn spawn_runtime(task: impl Future<Output = ()> + Send + 'static) {
+    // Check whether able to get the current runtime
+    match tokio::runtime::Handle::try_current() {
+        Ok(rt) => {
+            // Able to get the current runtime (standalone binary), spawn on the current runtime
+            rt.spawn(task);
+        }
+        Err(_) => {
+            // Unable to get the current runtime (dynamic plugins), spawn on the global runtime
+            TOKIO_RUNTIME.spawn(task);
+        }
+    }
 }
 
 // The struct implementing the ZenohPlugin and ZenohPlugin traits
@@ -90,8 +105,7 @@ impl Plugin for ExamplePlugin {
 
         // a flag to end the plugin's loop when the plugin is removed from the config
         let flag = Arc::new(AtomicBool::new(true));
-        // spawn the task running the plugin's loop
-        TOKIO_RUNTIME.spawn(run(runtime.clone(), selector, flag.clone()));
+        spawn_runtime(run(runtime.clone(), selector, flag.clone()));
         // return a RunningPlugin to zenohd
         Ok(Box::new(RunningPlugin(Arc::new(Mutex::new(
             RunningPluginInner {
@@ -134,11 +148,7 @@ impl RunningPluginTrait for RunningPlugin {
                     match KeyExpr::try_from(selector.clone()) {
                         Err(e) => tracing::error!("{}", e),
                         Ok(selector) => {
-                            TOKIO_RUNTIME.spawn(run(
-                                guard.runtime.clone(),
-                                selector,
-                                guard.flag.clone(),
-                            ));
+                            spawn_runtime(run(guard.runtime.clone(), selector, guard.flag.clone()));
                         }
                     }
                     return Ok(None);

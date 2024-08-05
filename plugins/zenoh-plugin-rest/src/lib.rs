@@ -17,7 +17,17 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use std::{borrow::Cow, convert::TryFrom, str::FromStr, sync::Arc, time::Duration};
+use std::{
+    borrow::Cow,
+    convert::TryFrom,
+    future::Future,
+    str::FromStr,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 
 use base64::Engine;
 use futures::StreamExt;
@@ -51,19 +61,30 @@ lazy_static::lazy_static! {
 }
 const RAW_KEY: &str = "_raw";
 
-#[cfg(feature = "dynamic_plugin")]
-const WORKER_THREAD_NUM: usize = 2;
-#[cfg(feature = "dynamic_plugin")]
-const MAX_BLOCK_THREAD_NUM: usize = 50;
-#[cfg(feature = "dynamic_plugin")]
 lazy_static::lazy_static! {
-    // The global runtime is used in the zenohd case, which we can't get the current runtime
+    static ref WORKER_THREAD_NUM: AtomicUsize = AtomicUsize::new(config::DEFAULT_WORK_THREAD_NUM);
+    static ref MAX_BLOCK_THREAD_NUM: AtomicUsize = AtomicUsize::new(config::DEFAULT_MAX_BLOCK_THREAD_NUM);
+    // The global runtime is used in the dynamic plugins, which we can't get the current runtime
     static ref TOKIO_RUNTIME: tokio::runtime::Runtime = tokio::runtime::Builder::new_multi_thread()
-               .worker_threads(WORKER_THREAD_NUM)
-               .max_blocking_threads(MAX_BLOCK_THREAD_NUM)
+               .worker_threads(WORKER_THREAD_NUM.load(Ordering::SeqCst))
+               .max_blocking_threads(MAX_BLOCK_THREAD_NUM.load(Ordering::SeqCst))
                .enable_all()
                .build()
                .expect("Unable to create runtime");
+}
+#[inline(always)]
+pub(crate) fn blockon_runtime<F: Future>(task: F) -> F::Output {
+    // Check whether able to get the current runtime
+    match tokio::runtime::Handle::try_current() {
+        Ok(rt) => {
+            // Able to get the current runtime (standalone binary), use the current runtime
+            tokio::task::block_in_place(|| rt.block_on(task))
+        }
+        Err(_) => {
+            // Unable to get the current runtime (dynamic plugins), reuse the global runtime
+            tokio::task::block_in_place(|| TOKIO_RUNTIME.block_on(task))
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -261,18 +282,13 @@ impl Plugin for RestPlugin {
 
         let conf: Config = serde_json::from_value(plugin_conf.clone())
             .map_err(|e| zerror!("Plugin `{}` configuration error: {}", name, e))?;
-        let task = run(runtime.clone(), conf.clone());
+        WORKER_THREAD_NUM.store(conf.work_thread_num, Ordering::SeqCst);
+        MAX_BLOCK_THREAD_NUM.store(conf.max_block_thread_num, Ordering::SeqCst);
 
-        // Reuse the runtime when it comes to static linking or standalone binary
-        #[cfg(not(feature = "dynamic_plugin"))]
-        let task = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current()
-                .block_on(async { timeout(Duration::from_millis(1), tokio::spawn(task)).await })
+        let task = run(runtime.clone(), conf.clone());
+        let task = blockon_runtime(async {
+            timeout(Duration::from_millis(1), TOKIO_RUNTIME.spawn(task)).await
         });
-        // Use our own runtime since dynamic linking can't access the current runtime
-        #[cfg(feature = "dynamic_plugin")]
-        let task = TOKIO_RUNTIME
-            .block_on(async { timeout(Duration::from_millis(1), TOKIO_RUNTIME.spawn(task)).await });
 
         if let Ok(Err(e)) = task {
             bail!("REST server failed within 1ms: {e}")
