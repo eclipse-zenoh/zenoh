@@ -307,7 +307,6 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
             destination: self.destination,
             #[cfg(feature = "unstable")]
             matching_listeners: Default::default(),
-            undeclare_on_drop: true,
         })
     }
 }
@@ -362,7 +361,6 @@ impl<'a, 'b> Wait for PublisherBuilder<'a, 'b> {
                 destination: self.destination,
                 #[cfg(feature = "unstable")]
                 matching_listeners: Default::default(),
-                undeclare_on_drop: true,
             })
     }
 }

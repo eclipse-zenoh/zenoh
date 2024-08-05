@@ -23,13 +23,16 @@ use zenoh_core::{Resolvable, Wait};
 use zenoh_protocol::{core::Reliability, network::declare::subscriber::ext::SubscriberInfo};
 use zenoh_result::ZResult;
 #[cfg(feature = "unstable")]
-use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
+use {
+    zenoh_config::wrappers::{EntityGlobalId, ZenohId},
+    zenoh_protocol::core::EntityGlobalIdProto,
+};
 
-use super::{
+use crate::api::{
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
     sample::{Locality, Sample},
-    session::{SessionRef, Undeclarable},
+    session::{SessionRef, Undeclarable, WeakSessionRef},
     Id,
 };
 
@@ -57,7 +60,8 @@ impl fmt::Debug for SubscriberState {
 /// and the [`callback`](SubscriberBuilder::callback) function
 /// of the resulting builder.
 ///
-/// Subscribers are automatically undeclared when dropped.
+/// Subscribers run in background until the session is closed.
+/// They can be manually undeclared, but will not be undeclared on drop.
 ///
 /// # Examples
 /// ```
@@ -75,10 +79,11 @@ impl fmt::Debug for SubscriberState {
 /// ```
 #[derive(Debug)]
 pub(crate) struct SubscriberInner<'a> {
-    pub(crate) session: SessionRef<'a>,
+    #[cfg(feature = "unstable")]
+    pub(crate) session_id: ZenohId,
+    pub(crate) session: WeakSessionRef<'a>,
     pub(crate) state: Arc<SubscriberState>,
     pub(crate) kind: SubscriberKind,
-    pub(crate) undeclare_on_drop: bool,
 }
 
 impl<'a> SubscriberInner<'a> {
@@ -141,12 +146,11 @@ impl Resolvable for SubscriberUndeclaration<'_> {
 }
 
 impl Wait for SubscriberUndeclaration<'_> {
-    fn wait(mut self) -> <Self as Resolvable>::To {
-        // set the flag first to avoid double panic if this function panic
-        self.subscriber.undeclare_on_drop = false;
-        self.subscriber
-            .session
-            .undeclare_subscriber_inner(self.subscriber.state.id, self.subscriber.kind)
+    fn wait(self) -> <Self as Resolvable>::To {
+        let Some(session) = self.subscriber.session.upgrade() else {
+            return Ok(());
+        };
+        session.undeclare_subscriber_inner(self.subscriber.state.id, self.subscriber.kind)
     }
 }
 
@@ -156,16 +160,6 @@ impl IntoFuture for SubscriberUndeclaration<'_> {
 
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
-    }
-}
-
-impl Drop for SubscriberInner<'_> {
-    fn drop(&mut self) {
-        if self.undeclare_on_drop {
-            let _ = self
-                .session
-                .undeclare_subscriber_inner(self.state.id, self.kind);
-        }
     }
 }
 
@@ -387,10 +381,11 @@ where
             )
             .map(|sub_state| Subscriber {
                 subscriber: SubscriberInner {
-                    session,
+                    #[cfg(feature = "unstable")]
+                    session_id: session.zid(),
+                    session: session.into(),
                     state: sub_state,
                     kind: SubscriberKind::Subscriber,
-                    undeclare_on_drop: true,
                 },
                 handler: receiver,
             })
@@ -462,7 +457,7 @@ impl<'a, Handler> Subscriber<'a, Handler> {
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
         EntityGlobalIdProto {
-            zid: self.subscriber.session.zid().into(),
+            zid: self.subscriber.session_id.into(),
             eid: self.subscriber.state.id,
         }
         .into()
@@ -508,16 +503,6 @@ impl<'a, Handler> Subscriber<'a, Handler> {
     #[inline]
     pub fn undeclare(self) -> SubscriberUndeclaration<'a> {
         self.subscriber.undeclare()
-    }
-
-    /// Make the subscriber run in background, until the session is closed.
-    #[inline]
-    #[zenoh_macros::unstable]
-    pub fn background(mut self) {
-        // It's not necessary to undeclare this resource when session close, as other sessions
-        // will clean all resources related to the closed one.
-        // So we can just never undeclare it.
-        self.subscriber.undeclare_on_drop = false;
     }
 }
 

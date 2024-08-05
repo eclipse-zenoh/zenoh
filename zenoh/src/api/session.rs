@@ -19,7 +19,7 @@ use std::{
     ops::Deref,
     sync::{
         atomic::{AtomicU16, Ordering},
-        Arc, RwLock,
+        Arc, RwLock, Weak,
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -449,6 +449,30 @@ impl fmt::Debug for SessionRef<'_> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub(crate) enum WeakSessionRef<'a> {
+    Borrow(&'a Session),
+    Shared(Weak<Session>),
+}
+
+impl<'a> WeakSessionRef<'a> {
+    pub(crate) fn upgrade(&self) -> Option<SessionRef<'a>> {
+        match self {
+            Self::Borrow(s) => Some(SessionRef::Borrow(s)),
+            Self::Shared(s) => s.upgrade().map(SessionRef::Shared),
+        }
+    }
+}
+
+impl<'a> From<SessionRef<'a>> for WeakSessionRef<'a> {
+    fn from(value: SessionRef<'a>) -> Self {
+        match value {
+            SessionRef::Borrow(s) => Self::Borrow(s),
+            SessionRef::Shared(s) => Self::Shared(Arc::downgrade(&s)),
+        }
+    }
+}
+
 /// A trait implemented by types that can be undeclared.
 pub trait Undeclarable<S, O, T = ZResult<()>>
 where
@@ -699,7 +723,14 @@ impl<'a> SessionDeclarations<'a, 'a> for Session {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        SessionRef::Borrow(self).declare_subscriber(key_expr)
+        let self1 = &SessionRef::Borrow(self);
+        SubscriberBuilder {
+            session: self1.clone(),
+            key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
+            reliability: Reliability::DEFAULT,
+            origin: Locality::default(),
+            handler: DefaultHandler::default(),
+        }
     }
     fn declare_queryable<'b, TryIntoKeyExpr>(
         &'a self,
@@ -752,13 +783,6 @@ impl Session {
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let key_expr: ZResult<KeyExpr> = key_expr.try_into().map_err(Into::into);
-        self._declare_keyexpr(key_expr)
-    }
-
-    fn _declare_keyexpr<'a, 'b: 'a>(
-        &'a self,
-        key_expr: ZResult<KeyExpr<'b>>,
-    ) -> impl Resolve<ZResult<KeyExpr<'b>>> + 'a {
         let sid = self.id;
         ResolveClosure::new(move || {
             let key_expr: KeyExpr = key_expr?;

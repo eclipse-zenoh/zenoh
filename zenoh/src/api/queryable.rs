@@ -28,30 +28,32 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 #[zenoh_macros::unstable]
 use {
-    super::{query::ReplyKeyExpr, sample::SourceInfo},
-    zenoh_config::wrappers::EntityGlobalId,
+    crate::api::{query::ReplyKeyExpr, sample::SourceInfo},
+    zenoh_config::wrappers::{EntityGlobalId, ZenohId},
     zenoh_protocol::core::EntityGlobalIdProto,
 };
 
 #[zenoh_macros::unstable]
-use super::selector::ZenohParameters;
-use super::{
-    builders::sample::{
-        EncodingBuilderTrait, QoSBuilderTrait, SampleBuilder, SampleBuilderTrait,
-        TimestampBuilderTrait,
+use crate::api::selector::ZenohParameters;
+use crate::{
+    api::{
+        builders::sample::{
+            EncodingBuilderTrait, QoSBuilderTrait, SampleBuilder, SampleBuilderTrait,
+            TimestampBuilderTrait,
+        },
+        bytes::{OptionZBytes, ZBytes},
+        encoding::Encoding,
+        handlers::{locked, DefaultHandler, IntoHandler},
+        key_expr::KeyExpr,
+        publisher::Priority,
+        sample::{Locality, QoSBuilder, Sample, SampleKind},
+        selector::Selector,
+        session::{SessionRef, Undeclarable, WeakSessionRef},
+        value::Value,
+        Id,
     },
-    bytes::{OptionZBytes, ZBytes},
-    encoding::Encoding,
-    handlers::{locked, DefaultHandler, IntoHandler},
-    key_expr::KeyExpr,
-    publisher::Priority,
-    sample::{Locality, QoSBuilder, Sample, SampleKind},
-    selector::Selector,
-    session::{SessionRef, Undeclarable},
-    value::Value,
-    Id,
+    net::primitives::Primitives,
 };
-use crate::net::primitives::Primitives;
 
 pub(crate) struct QueryInner {
     pub(crate) key_expr: KeyExpr<'static>,
@@ -562,9 +564,10 @@ impl fmt::Debug for QueryableState {
 /// ```
 #[derive(Debug)]
 pub(crate) struct CallbackQueryable<'a> {
-    pub(crate) session: SessionRef<'a>,
+    #[cfg(feature = "unstable")]
+    pub(crate) session_id: ZenohId,
+    pub(crate) session: WeakSessionRef<'a>,
     pub(crate) state: Arc<QueryableState>,
-    undeclare_on_drop: bool,
 }
 
 impl<'a> Undeclarable<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> {
@@ -596,12 +599,11 @@ impl Resolvable for QueryableUndeclaration<'_> {
 }
 
 impl Wait for QueryableUndeclaration<'_> {
-    fn wait(mut self) -> <Self as Resolvable>::To {
-        // set the flag first to avoid double panic if this function panic
-        self.queryable.undeclare_on_drop = false;
-        self.queryable
-            .session
-            .close_queryable(self.queryable.state.id)
+    fn wait(self) -> <Self as Resolvable>::To {
+        let Some(session) = self.queryable.session.upgrade() else {
+            return Ok(());
+        };
+        session.close_queryable(self.queryable.state.id)
     }
 }
 
@@ -611,14 +613,6 @@ impl<'a> IntoFuture for QueryableUndeclaration<'a> {
 
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
-    }
-}
-
-impl Drop for CallbackQueryable<'_> {
-    fn drop(&mut self) {
-        if self.undeclare_on_drop {
-            let _ = self.session.close_queryable(self.state.id);
-        }
     }
 }
 
@@ -778,7 +772,8 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 /// and the [`with`](QueryableBuilder::with) function
 /// of the resulting builder.
 ///
-/// Queryables are automatically undeclared when dropped.
+/// Queryables run in background until the session is closed.
+/// They can be manually undeclared, but will not be undeclared on drop.
 ///
 /// # Examples
 /// ```no_run
@@ -826,7 +821,7 @@ impl<'a, Handler> Queryable<'a, Handler> {
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
         EntityGlobalIdProto {
-            zid: self.queryable.session.zid().into(),
+            zid: self.queryable.session_id.into(),
             eid: self.queryable.state.id,
         }
         .into()
@@ -849,16 +844,6 @@ impl<'a, Handler> Queryable<'a, Handler> {
     #[inline]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())
-    }
-
-    /// Make the queryable run in background, until the session is closed.
-    #[inline]
-    #[zenoh_macros::unstable]
-    pub fn background(mut self) {
-        // It's not necessary to undeclare this resource when session close, as other sessions
-        // will clean all resources related to the closed one.
-        // So we can just never undeclare it.
-        self.queryable.undeclare_on_drop = false;
     }
 }
 
@@ -907,9 +892,10 @@ where
             )
             .map(|qable_state| Queryable {
                 queryable: CallbackQueryable {
-                    session,
+                    #[cfg(feature = "unstable")]
+                    session_id: session.zid(),
+                    session: session.into(),
                     state: qable_state,
-                    undeclare_on_drop: true,
                 },
                 handler: receiver,
             })
