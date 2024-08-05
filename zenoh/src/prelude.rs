@@ -34,7 +34,7 @@ mod _prelude {
             builders::sample::{
                 EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
             },
-            session::{SessionDeclarations, Undeclarable},
+            session::{SessionDeclarations, Undeclarable, UndeclarableExt},
         },
         config::ValidatedMap,
         Error as ZError, Resolvable, Resolve, Result as ZResult,

@@ -31,6 +31,7 @@ use super::{
     subscriber::{Subscriber, SubscriberInner},
     Id,
 };
+use crate::api::session::WeakSessionRef;
 
 /// A structure with functions to declare a
 /// [`LivelinessToken`](LivelinessToken), query
@@ -254,9 +255,8 @@ impl Wait for LivelinessTokenBuilder<'_, '_> {
         session
             .declare_liveliness_inner(&key_expr)
             .map(|tok_state| LivelinessToken {
-                session,
+                session: session.into(),
                 state: tok_state,
-                undeclare_on_drop: true,
             })
     }
 }
@@ -283,12 +283,10 @@ pub(crate) struct LivelinessTokenState {
 ///
 /// A declared liveliness token will be seen as alive by any other Zenoh
 /// application in the system that monitors it while the liveliness token
-/// is not undeclared or dropped, while the Zenoh application that declared
+/// is not undeclared, while the Zenoh application that declared
 /// it is alive (didn't stop or crashed) and while the Zenoh application
 /// that declared the token has Zenoh connectivity with the Zenoh application
 /// that monitors it.
-///
-/// `LivelinessTokens` are automatically undeclared when dropped.
 ///
 /// # Examples
 /// ```no_run
@@ -307,9 +305,8 @@ pub(crate) struct LivelinessTokenState {
 #[zenoh_macros::unstable]
 #[derive(Debug)]
 pub struct LivelinessToken<'a> {
-    pub(crate) session: SessionRef<'a>,
+    pub(crate) session: WeakSessionRef<'a>,
     pub(crate) state: Arc<LivelinessTokenState>,
-    undeclare_on_drop: bool,
 }
 
 /// A [`Resolvable`] returned when undeclaring a [`LivelinessToken`](LivelinessToken).
@@ -344,9 +341,10 @@ impl Resolvable for LivelinessTokenUndeclaration<'_> {
 #[zenoh_macros::unstable]
 impl Wait for LivelinessTokenUndeclaration<'_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        // set the flag first to avoid double panic if this function panic
-        self.token.undeclare_on_drop = false;
-        self.token.session.undeclare_liveliness(self.token.state.id)
+        let Some(session) = self.token.session.upgrade() else {
+            return Ok(());
+        };
+        session.undeclare_liveliness(self.token.state.id)
     }
 }
 
@@ -362,11 +360,7 @@ impl<'a> IntoFuture for LivelinessTokenUndeclaration<'a> {
 
 #[zenoh_macros::unstable]
 impl<'a> LivelinessToken<'a> {
-    /// Undeclare a [`LivelinessToken`].
-    ///
-    /// LivelinessTokens are automatically closed when dropped,
-    /// but you may want to use this function to handle errors or
-    /// undeclare the LivelinessToken asynchronously.
+    /// Undeclare the [`LivelinessToken`].
     ///
     /// # Examples
     /// ```
@@ -388,31 +382,14 @@ impl<'a> LivelinessToken<'a> {
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         UndeclarableSealed::undeclare_inner(self, ())
     }
-
-    /// Keep this liveliness token in background, until the session is closed.
-    #[inline]
-    #[zenoh_macros::unstable]
-    pub fn background(mut self) {
-        // It's not necessary to undeclare this resource when session close, as other sessions
-        // will clean all resources related to the closed one.
-        // So we can just never undeclare it.
-        self.undeclare_on_drop = false;
-    }
 }
 
 #[zenoh_macros::unstable]
-impl<'a> UndeclarableSealed<(), LivelinessTokenUndeclaration<'a>> for LivelinessToken<'a> {
-    fn undeclare_inner(self, _: ()) -> LivelinessTokenUndeclaration<'a> {
+impl<'a> UndeclarableSealed<()> for LivelinessToken<'a> {
+    type Res = LivelinessTokenUndeclaration<'a>;
+
+    fn undeclare_inner(self, _: ()) -> Self::Res {
         LivelinessTokenUndeclaration { token: self }
-    }
-}
-
-#[zenoh_macros::unstable]
-impl Drop for LivelinessToken<'_> {
-    fn drop(&mut self) {
-        if self.undeclare_on_drop {
-            let _ = self.session.undeclare_liveliness(self.state.id);
-        }
     }
 }
 
@@ -579,10 +556,11 @@ where
             .declare_liveliness_subscriber_inner(&key_expr, Locality::default(), callback)
             .map(|sub_state| Subscriber {
                 subscriber: SubscriberInner {
-                    session,
+                    #[cfg(feature = "unstable")]
+                    session_id: session.zid(),
+                    session: session.into(),
                     state: sub_state,
                     kind: SubscriberKind::LivelinessSubscriber,
-                    undeclare_on_drop: true,
                 },
                 handler,
             })

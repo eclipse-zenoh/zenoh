@@ -16,10 +16,11 @@ use std::{
     convert::TryInto,
     fmt,
     future::{IntoFuture, Ready},
-    ops::Deref,
+    mem::ManuallyDrop,
+    ops::{Deref, DerefMut},
     sync::{
         atomic::{AtomicU16, Ordering},
-        Arc, RwLock,
+        Arc, RwLock, Weak,
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -451,20 +452,84 @@ impl fmt::Debug for SessionRef<'_> {
     }
 }
 
-pub(crate) trait UndeclarableSealed<S, O, T = ZResult<()>>
-where
-    O: Resolve<T> + Send,
-{
-    fn undeclare_inner(self, session: S) -> O;
+#[derive(Debug, Clone)]
+pub(crate) enum WeakSessionRef<'a> {
+    Borrow(&'a Session),
+    Shared(Weak<Session>),
 }
 
-impl<'a, O, T, G> UndeclarableSealed<&'a Session, O, T> for G
+impl<'a> WeakSessionRef<'a> {
+    pub(crate) fn upgrade(&self) -> Option<SessionRef<'a>> {
+        match self {
+            Self::Borrow(s) => Some(SessionRef::Borrow(s)),
+            Self::Shared(s) => s.upgrade().map(SessionRef::Shared),
+        }
+    }
+}
+
+impl<'a> From<SessionRef<'a>> for WeakSessionRef<'a> {
+    fn from(value: SessionRef<'a>) -> Self {
+        match value {
+            SessionRef::Borrow(s) => Self::Borrow(s),
+            SessionRef::Shared(s) => Self::Shared(Arc::downgrade(&s)),
+        }
+    }
+}
+
+/// A trait implemented by types that can be undeclared.
+pub trait UndeclarableSealed<S> {
+    type Res: Resolve<ZResult<()>> + Send;
+    fn undeclare_inner(self, session: S) -> Self::Res;
+}
+
+impl<'a, T> UndeclarableSealed<&'a Session> for T
 where
-    O: Resolve<T> + Send,
-    G: UndeclarableSealed<(), O, T>,
+    T: UndeclarableSealed<()>,
 {
-    fn undeclare_inner(self, _: &'a Session) -> O {
+    type Res = <T as UndeclarableSealed<()>>::Res;
+
+    fn undeclare_inner(self, _: &'a Session) -> Self::Res {
         self.undeclare_inner(())
+    }
+}
+
+/// Wrapper around an undeclarable entity, undeclaring it on drop.
+#[derive(Debug, Clone)]
+pub struct UndeclareOnDrop<T: Undeclarable>(ManuallyDrop<T>);
+
+impl<T: Undeclarable> UndeclareOnDrop<T> {
+    /// Wrap an undeclarable entity, undeclaring it on drop.
+    pub fn new(obj: T) -> Self {
+        Self(ManuallyDrop::new(obj))
+    }
+
+    /// Undeclare the wrapped entity.
+    pub fn undeclare(self) -> impl Resolve<ZResult<()>> {
+        // SAFETY: field is never reused
+        let obj = unsafe { ManuallyDrop::take(&mut ManuallyDrop::new(self).0) };
+        obj.undeclare_inner(())
+    }
+}
+
+impl<T: Undeclarable> Deref for UndeclareOnDrop<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T: Undeclarable> DerefMut for UndeclareOnDrop<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<T: Undeclarable> Drop for UndeclareOnDrop<T> {
+    fn drop(&mut self) {
+        // SAFETY: field is never reused
+        let obj = unsafe { ManuallyDrop::take(&mut self.0) };
+        let _ = obj.undeclare_inner(()).wait();
     }
 }
 
@@ -472,18 +537,36 @@ where
 // care about the `private_bounds` lint in this particular case.
 #[allow(private_bounds)]
 /// A trait implemented by types that can be undeclared.
-pub trait Undeclarable<S, O, T>: UndeclarableSealed<S, O, T>
-where
-    O: Resolve<T> + Send,
-{
+pub trait Undeclarable<S = ()>: UndeclarableSealed<S> {}
+
+impl<S, T> Undeclarable<S> for T where T: UndeclarableSealed<S> {}
+
+/// Extension trait providing [`undeclare_on_drop`](Self::undeclare_on_drop) method
+pub trait UndeclarableExt: Undeclarable + Sized {
+    /// Wrap an entity into an `UndeclareOnDrop` instance, undeclaring it on drop.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use zenoh::prelude::*;
+    ///
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let publisher = session
+    ///     .declare_publisher("key/expression")
+    ///     .await
+    ///     .unwrap()
+    ///     .undeclare_on_drop();
+    /// // publisher is undeclared at the end of the scope
+    /// # }
+    /// ```
+    fn undeclare_on_drop(self) -> UndeclareOnDrop<Self> {
+        UndeclareOnDrop::new(self)
+    }
 }
 
-impl<S, O, T, U> Undeclarable<S, O, T> for U
-where
-    O: Resolve<T> + Send,
-    U: UndeclarableSealed<S, O, T>,
-{
-}
+impl<T: Undeclarable + Sized> UndeclarableExt for T {}
 
 /// A zenoh session.
 ///
@@ -636,10 +719,9 @@ impl Session {
         })
     }
 
-    pub fn undeclare<'a, T, O>(&'a self, decl: T) -> O
+    pub fn undeclare<'a, T>(&'a self, decl: T) -> impl Resolve<ZResult<()>> + 'a
     where
-        O: Resolve<ZResult<()>>,
-        T: Undeclarable<&'a Self, O, ZResult<()>>,
+        T: Undeclarable<&'a Self> + 'a,
     {
         UndeclarableSealed::undeclare_inner(decl, self)
     }
@@ -770,13 +852,6 @@ impl Session {
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let key_expr: ZResult<KeyExpr> = key_expr.try_into().map_err(Into::into);
-        self._declare_keyexpr(key_expr)
-    }
-
-    fn _declare_keyexpr<'a, 'b: 'a>(
-        &'a self,
-        key_expr: ZResult<KeyExpr<'b>>,
-    ) -> impl Resolve<ZResult<KeyExpr<'b>>> + 'a {
         let sid = self.id;
         ResolveClosure::new(move || {
             let key_expr: KeyExpr = key_expr?;

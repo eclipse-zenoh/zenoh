@@ -31,8 +31,6 @@ async fn main() {
     println!("Press CTRL-C to undeclare LivelinessToken and quit...");
     std::thread::park();
 
-    // LivelinessTokens are automatically closed when dropped
-    // Use the code below to manually undeclare it if needed
     token.undeclare().await.unwrap();
 }
 
