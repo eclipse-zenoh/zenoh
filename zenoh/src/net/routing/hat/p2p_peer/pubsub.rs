@@ -208,7 +208,7 @@ fn declare_simple_subscription(
 }
 
 #[inline]
-fn client_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
+fn simple_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
     res.session_ctxs
         .values()
         .filter_map(|ctx| {
@@ -222,7 +222,7 @@ fn client_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 }
 
 #[inline]
-fn remote_client_subs(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
+fn remote_simple_subs(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
     res.session_ctxs
         .values()
         .any(|ctx| ctx.face.id != face.id && ctx.subs.is_some())
@@ -260,7 +260,7 @@ fn propagate_forget_simple_subscription(
         {
             if !res.context().matches.iter().any(|m| {
                 m.upgrade()
-                    .is_some_and(|m| m.context.is_some() && remote_client_subs(&m, &face))
+                    .is_some_and(|m| m.context.is_some() && remote_simple_subs(&m, &face))
             }) {
                 if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
                     send_declare(
@@ -296,13 +296,13 @@ pub(super) fn undeclare_simple_subscription(
             get_mut_unchecked(ctx).subs = None;
         }
 
-        let mut client_subs = client_subs(res);
-        if client_subs.is_empty() {
+        let mut simple_subs = simple_subs(res);
+        if simple_subs.is_empty() {
             propagate_forget_simple_subscription(tables, res, send_declare);
         }
 
-        if client_subs.len() == 1 {
-            let mut face = &mut client_subs[0];
+        if simple_subs.len() == 1 {
+            let mut face = &mut simple_subs[0];
             if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
                 send_declare(
                     &face.primitives,
@@ -329,7 +329,7 @@ pub(super) fn undeclare_simple_subscription(
             {
                 if !res.context().matches.iter().any(|m| {
                     m.upgrade()
-                        .is_some_and(|m| m.context.is_some() && remote_client_subs(&m, face))
+                        .is_some_and(|m| m.context.is_some() && remote_simple_subs(&m, face))
                 }) {
                     if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
                         send_declare(
