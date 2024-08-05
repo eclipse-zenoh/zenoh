@@ -855,7 +855,7 @@ pub(super) fn pubsub_linkstate_change(
                         && !client_subs
                         && !res.session_ctxs.values().any(|ctx| {
                             ctx.face.whatami == WhatAmI::Peer
-                                && src_face.zid != ctx.face.zid
+                                && src_face.id != ctx.face.id
                                 && HatTables::failover_brokering_to(links, ctx.face.zid)
                         })
                 })
@@ -884,7 +884,9 @@ pub(super) fn pubsub_linkstate_change(
             }
 
             for dst_face in tables.faces.values_mut() {
-                if HatTables::failover_brokering_to(links, dst_face.zid) {
+                if src_face.id != dst_face.id
+                    && HatTables::failover_brokering_to(links, dst_face.zid)
+                {
                     for res in face_hat!(src_face).remote_subs.values() {
                         if !face_hat!(dst_face).local_subs.contains_key(res) {
                             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
