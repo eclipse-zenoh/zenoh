@@ -127,7 +127,7 @@ impl Runtime {
 
         self.connect_peers(&peers, false).await?;
 
-        if scouting {
+        if scouting && !autoconnect.is_empty() {
             self.start_scout(listen, autoconnect, addr, ifaces).await?;
         }
         tokio::time::sleep(delay).await;
@@ -170,7 +170,7 @@ impl Runtime {
 
         self.connect_peers(&peers, false).await?;
 
-        if scouting {
+        if scouting && !autoconnect.is_empty() {
             self.start_scout(listen, autoconnect, addr, ifaces).await?;
         }
 
