@@ -124,9 +124,9 @@ fn config_from_args(args: &Args) -> Config {
         .as_ref()
         .map_or_else(Config::default, |conf_file| {
             Config::from_file(conf_file).unwrap_or_else(|e| {
-                warn!("Warn: File {} not found! {}", conf_file, e.to_string());
+                tracing::warn!("Warn: File {} not found! {}", conf_file, e.to_string());
                 Config::default()
-            });
+            })
         });
 
     if config.mode().is_none() {
