@@ -946,86 +946,77 @@ pub(super) fn queries_linkstate_change(
     links: &[ZenohIdProto],
     send_declare: &mut SendDeclare,
 ) {
-    if let Some(src_face) = tables.get_face(zid) {
+    if let Some(mut src_face) = tables.get_face(zid).cloned() {
         if hat!(tables).router_peers_failover_brokering && src_face.whatami == WhatAmI::Peer {
-            for res in face_hat!(src_face).remote_qabls.values() {
-                let client_qabls = res
-                    .session_ctxs
-                    .values()
-                    .any(|ctx| ctx.face.whatami == WhatAmI::Client && ctx.qabl.is_some());
-                if !remote_router_qabls(tables, res) && !client_qabls {
-                    for ctx in get_mut_unchecked(&mut res.clone())
+            let to_forget = face_hat!(src_face)
+                .local_qabls
+                .keys()
+                .filter(|res| {
+                    let client_qabls = res
                         .session_ctxs
-                        .values_mut()
-                    {
-                        let dst_face = &mut get_mut_unchecked(ctx).face;
-                        if dst_face.whatami == WhatAmI::Peer && src_face.zid != dst_face.zid {
-                            if let Some((id, _)) = face_hat!(dst_face).local_qabls.get(res).cloned()
-                            {
-                                let forget = !HatTables::failover_brokering_to(links, dst_face.zid)
-                                    && {
-                                        let ctx_links = hat!(tables)
-                                            .linkstatepeers_net
-                                            .as_ref()
-                                            .map(|net| net.get_links(dst_face.zid))
-                                            .unwrap_or_else(|| &[]);
-                                        res.session_ctxs.values().any(|ctx2| {
-                                            ctx2.face.whatami == WhatAmI::Peer
-                                                && ctx2.qabl.is_some()
-                                                && HatTables::failover_brokering_to(
-                                                    ctx_links,
-                                                    ctx2.face.zid,
-                                                )
-                                        })
-                                    };
-                                if forget {
-                                    send_declare(
-                                        &dst_face.primitives,
-                                        RoutingContext::with_expr(
-                                            Declare {
-                                                interest_id: None,
-                                                ext_qos: ext::QoSType::DECLARE,
-                                                ext_tstamp: None,
-                                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                                body: DeclareBody::UndeclareQueryable(
-                                                    UndeclareQueryable {
-                                                        id,
-                                                        ext_wire_expr: WireExprType::null(),
-                                                    },
-                                                ),
-                                            },
-                                            res.expr(),
-                                        ),
-                                    );
+                        .values()
+                        .any(|ctx| ctx.face.whatami == WhatAmI::Client && ctx.qabl.is_some());
+                    !remote_router_qabls(tables, res)
+                        && !client_qabls
+                        && !res.session_ctxs.values().any(|ctx| {
+                            ctx.face.whatami == WhatAmI::Peer
+                                && src_face.id != ctx.face.id
+                                && HatTables::failover_brokering_to(links, ctx.face.zid)
+                        })
+                })
+                .cloned()
+                .collect::<Vec<Arc<Resource>>>();
+            for res in to_forget {
+                if let Some((id, _)) = face_hat_mut!(&mut src_face).local_qabls.remove(&res) {
+                    let wire_expr = Resource::get_best_key(&res, "", src_face.id);
+                    send_declare(
+                        &src_face.primitives,
+                        RoutingContext::with_expr(
+                            Declare {
+                                interest_id: None,
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::default(),
+                                body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                                    id,
+                                    ext_wire_expr: WireExprType { wire_expr },
+                                }),
+                            },
+                            res.expr(),
+                        ),
+                    );
+                }
+            }
 
-                                    face_hat_mut!(dst_face).local_qabls.remove(res);
-                                }
-                            } else if HatTables::failover_brokering_to(links, ctx.face.zid) {
-                                let dst_face = &mut get_mut_unchecked(ctx).face;
-                                let info = local_qabl_info(tables, res, dst_face);
-                                let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-                                face_hat_mut!(dst_face)
-                                    .local_qabls
-                                    .insert(res.clone(), (id, info));
-                                let key_expr = Resource::decl_key(res, dst_face);
-                                send_declare(
-                                    &dst_face.primitives,
-                                    RoutingContext::with_expr(
-                                        Declare {
-                                            interest_id: None,
-                                            ext_qos: ext::QoSType::DECLARE,
-                                            ext_tstamp: None,
-                                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                                            body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                                id,
-                                                wire_expr: key_expr,
-                                                ext_info: info,
-                                            }),
-                                        },
-                                        res.expr(),
-                                    ),
-                                );
-                            }
+            for mut dst_face in tables.faces.values().cloned() {
+                if src_face.id != dst_face.id
+                    && HatTables::failover_brokering_to(links, dst_face.zid)
+                {
+                    for res in face_hat!(src_face).remote_qabls.values() {
+                        if !face_hat!(dst_face).local_qabls.contains_key(res) {
+                            let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
+                            let info = local_qabl_info(tables, res, &dst_face);
+                            face_hat_mut!(&mut dst_face)
+                                .local_qabls
+                                .insert(res.clone(), (id, info));
+                            let key_expr = Resource::decl_key(res, &mut dst_face);
+                            send_declare(
+                                &dst_face.primitives,
+                                RoutingContext::with_expr(
+                                    Declare {
+                                        interest_id: None,
+                                        ext_qos: ext::QoSType::DECLARE,
+                                        ext_tstamp: None,
+                                        ext_nodeid: ext::NodeIdType::default(),
+                                        body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                            id,
+                                            wire_expr: key_expr,
+                                            ext_info: info,
+                                        }),
+                                    },
+                                    res.expr(),
+                                ),
+                            );
                         }
                     }
                 }

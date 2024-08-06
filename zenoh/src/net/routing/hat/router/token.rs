@@ -872,79 +872,73 @@ pub(super) fn token_linkstate_change(
     links: &[ZenohIdProto],
     send_declare: &mut SendDeclare,
 ) {
-    if let Some(src_face) = tables.get_face(zid).cloned() {
+    if let Some(mut src_face) = tables.get_face(zid).cloned() {
         if hat!(tables).router_peers_failover_brokering && src_face.whatami == WhatAmI::Peer {
-            for res in face_hat!(src_face).remote_tokens.values() {
-                let client_tokens = res
-                    .session_ctxs
-                    .values()
-                    .any(|ctx| ctx.face.whatami == WhatAmI::Client && ctx.token);
-                if !remote_router_tokens(tables, res) && !client_tokens {
-                    for ctx in get_mut_unchecked(&mut res.clone())
+            let to_forget = face_hat!(src_face)
+                .local_tokens
+                .keys()
+                .filter(|res| {
+                    let client_tokens = res
                         .session_ctxs
-                        .values_mut()
-                    {
-                        let dst_face = &mut get_mut_unchecked(ctx).face;
-                        if dst_face.whatami == WhatAmI::Peer && src_face.zid != dst_face.zid {
-                            if let Some(id) = face_hat!(dst_face).local_tokens.get(res).cloned() {
-                                let forget = !HatTables::failover_brokering_to(links, dst_face.zid)
-                                    && {
-                                        let ctx_links = hat!(tables)
-                                            .linkstatepeers_net
-                                            .as_ref()
-                                            .map(|net| net.get_links(dst_face.zid))
-                                            .unwrap_or_else(|| &[]);
-                                        res.session_ctxs.values().any(|ctx2| {
-                                            ctx2.face.whatami == WhatAmI::Peer
-                                                && ctx2.token
-                                                && HatTables::failover_brokering_to(
-                                                    ctx_links,
-                                                    ctx2.face.zid,
-                                                )
-                                        })
-                                    };
-                                if forget {
-                                    send_declare(
-                                        &dst_face.primitives,
-                                        RoutingContext::with_expr(
-                                            Declare {
-                                                interest_id: None,
-                                                ext_qos: ext::QoSType::DECLARE,
-                                                ext_tstamp: None,
-                                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                                body: DeclareBody::UndeclareToken(UndeclareToken {
-                                                    id,
-                                                    ext_wire_expr: WireExprType::null(),
-                                                }),
-                                            },
-                                            res.expr(),
-                                        ),
-                                    );
+                        .values()
+                        .any(|ctx| ctx.face.whatami == WhatAmI::Client && ctx.token);
+                    !remote_router_tokens(tables, res)
+                        && !client_tokens
+                        && !res.session_ctxs.values().any(|ctx| {
+                            ctx.face.whatami == WhatAmI::Peer
+                                && src_face.id != ctx.face.id
+                                && HatTables::failover_brokering_to(links, ctx.face.zid)
+                        })
+                })
+                .cloned()
+                .collect::<Vec<Arc<Resource>>>();
+            for res in to_forget {
+                if let Some(id) = face_hat_mut!(&mut src_face).local_tokens.remove(&res) {
+                    let wire_expr = Resource::get_best_key(&res, "", src_face.id);
+                    send_declare(
+                        &src_face.primitives,
+                        RoutingContext::with_expr(
+                            Declare {
+                                interest_id: None,
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::default(),
+                                body: DeclareBody::UndeclareToken(UndeclareToken {
+                                    id,
+                                    ext_wire_expr: WireExprType { wire_expr },
+                                }),
+                            },
+                            res.expr(),
+                        ),
+                    );
+                }
+            }
 
-                                    face_hat_mut!(dst_face).local_tokens.remove(res);
-                                }
-                            } else if HatTables::failover_brokering_to(links, ctx.face.zid) {
-                                let dst_face = &mut get_mut_unchecked(ctx).face;
-                                let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-                                face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
-                                let key_expr = Resource::decl_key(res, dst_face);
-                                send_declare(
-                                    &dst_face.primitives,
-                                    RoutingContext::with_expr(
-                                        Declare {
-                                            interest_id: None,
-                                            ext_qos: ext::QoSType::DECLARE,
-                                            ext_tstamp: None,
-                                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                                            body: DeclareBody::DeclareToken(DeclareToken {
-                                                id,
-                                                wire_expr: key_expr,
-                                            }),
-                                        },
-                                        res.expr(),
-                                    ),
-                                );
-                            }
+            for dst_face in tables.faces.values_mut() {
+                if src_face.id != dst_face.id
+                    && HatTables::failover_brokering_to(links, dst_face.zid)
+                {
+                    for res in face_hat!(src_face).remote_tokens.values() {
+                        if !face_hat!(dst_face).local_tokens.contains_key(res) {
+                            let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
+                            face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
+                            let key_expr = Resource::decl_key(res, dst_face);
+                            send_declare(
+                                &dst_face.primitives,
+                                RoutingContext::with_expr(
+                                    Declare {
+                                        interest_id: None,
+                                        ext_qos: ext::QoSType::DECLARE,
+                                        ext_tstamp: None,
+                                        ext_nodeid: ext::NodeIdType::default(),
+                                        body: DeclareBody::DeclareToken(DeclareToken {
+                                            id,
+                                            wire_expr: key_expr,
+                                        }),
+                                    },
+                                    res.expr(),
+                                ),
+                            );
                         }
                     }
                 }
