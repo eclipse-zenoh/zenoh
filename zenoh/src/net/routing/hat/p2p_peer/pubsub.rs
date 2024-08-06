@@ -604,62 +604,64 @@ impl HatPubSubTrait for HatCode {
             }
         };
 
-        for face in tables
-            .faces
-            .values()
-            .filter(|f| f.whatami == WhatAmI::Router)
-        {
-            if face.local_interests.values().any(|interest| {
-                interest.finalized
-                    && interest.options.subscribers()
-                    && interest
-                        .res
-                        .as_ref()
-                        .map(|res| {
-                            KeyExpr::try_from(res.expr())
-                                .and_then(|intres| {
-                                    KeyExpr::try_from(expr.full_expr())
-                                        .map(|putres| intres.includes(&putres))
-                                })
-                                .unwrap_or(false)
-                        })
-                        .unwrap_or(true)
-            }) {
-                if face_hat!(face).remote_subs.values().any(|sub| {
-                    KeyExpr::try_from(sub.expr())
-                        .and_then(|subres| {
-                            KeyExpr::try_from(expr.full_expr())
-                                .map(|putres| subres.intersects(&putres))
-                        })
-                        .unwrap_or(false)
+        if source_type == WhatAmI::Client {
+            for face in tables
+                .faces
+                .values()
+                .filter(|f| f.whatami == WhatAmI::Router)
+            {
+                if face.local_interests.values().any(|interest| {
+                    interest.finalized
+                        && interest.options.subscribers()
+                        && interest
+                            .res
+                            .as_ref()
+                            .map(|res| {
+                                KeyExpr::try_from(res.expr())
+                                    .and_then(|intres| {
+                                        KeyExpr::try_from(expr.full_expr())
+                                            .map(|putres| intres.includes(&putres))
+                                    })
+                                    .unwrap_or(false)
+                            })
+                            .unwrap_or(true)
                 }) {
+                    if face_hat!(face).remote_subs.values().any(|sub| {
+                        KeyExpr::try_from(sub.expr())
+                            .and_then(|subres| {
+                                KeyExpr::try_from(expr.full_expr())
+                                    .map(|putres| subres.intersects(&putres))
+                            })
+                            .unwrap_or(false)
+                    }) {
+                        let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+                        route.insert(
+                            face.id,
+                            (face.clone(), key_expr.to_owned(), NodeId::default()),
+                        );
+                    }
+                } else {
                     let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
                     route.insert(
                         face.id,
                         (face.clone(), key_expr.to_owned(), NodeId::default()),
                     );
                 }
-            } else {
-                let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-                route.insert(
-                    face.id,
-                    (face.clone(), key_expr.to_owned(), NodeId::default()),
-                );
             }
-        }
 
-        for face in tables.faces.values().filter(|f| {
-            f.whatami == WhatAmI::Peer
-                && !f
-                    .local_interests
-                    .get(&0)
-                    .map(|i| i.finalized)
-                    .unwrap_or(true)
-        }) {
-            route.entry(face.id).or_insert_with(|| {
-                let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-                (face.clone(), key_expr.to_owned(), NodeId::default())
-            });
+            for face in tables.faces.values().filter(|f| {
+                f.whatami == WhatAmI::Peer
+                    && !f
+                        .local_interests
+                        .get(&0)
+                        .map(|i| i.finalized)
+                        .unwrap_or(true)
+            }) {
+                route.entry(face.id).or_insert_with(|| {
+                    let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+                    (face.clone(), key_expr.to_owned(), NodeId::default())
+                });
+            }
         }
 
         let res = Resource::get_resource(expr.prefix, expr.suffix);
