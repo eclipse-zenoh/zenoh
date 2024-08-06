@@ -320,9 +320,9 @@ impl HatBaseTrait for HatCode {
             WhatAmIMatcher::empty()
         };
 
-        let router_full_linkstate = whatami == WhatAmI::Router;
-        let peer_full_linkstate = whatami != WhatAmI::Client
-            && unwrap_or_default!(config.routing().peer().mode()) == *"linkstate";
+        let router_full_linkstate = true;
+        let peer_full_linkstate =
+            unwrap_or_default!(config.routing().peer().mode()) == *"linkstate";
         let router_peers_failover_brokering =
             unwrap_or_default!(config.routing().router().peers_failover_brokering());
         drop(config);
