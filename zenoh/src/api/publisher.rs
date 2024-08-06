@@ -78,7 +78,7 @@ impl fmt::Debug for PublisherState {
 #[derive(Clone)]
 pub enum PublisherRef<'a> {
     Borrow(&'a Publisher<'a>),
-    Shared(std::sync::Arc<Publisher<'static>>),
+    Shared(Arc<Publisher<'static>>),
 }
 
 #[zenoh_macros::unstable]
@@ -104,8 +104,6 @@ impl std::fmt::Debug for PublisherRef<'_> {
 }
 
 /// A publisher that allows to send data through a stream.
-///
-/// Publishers are automatically undeclared when dropped.
 ///
 /// # Examples
 /// ```
@@ -146,7 +144,6 @@ pub struct Publisher<'a> {
     pub(crate) destination: Locality,
     #[cfg(feature = "unstable")]
     pub(crate) matching_listeners: Arc<Mutex<HashSet<Id>>>,
-    pub(crate) undeclare_on_drop: bool,
 }
 
 impl<'a> Publisher<'a> {
@@ -491,9 +488,7 @@ impl Resolvable for PublisherUndeclaration<'_> {
 }
 
 impl Wait for PublisherUndeclaration<'_> {
-    fn wait(mut self) -> <Self as Resolvable>::To {
-        // set the flag first to avoid double panic if this function panic
-        self.publisher.undeclare_on_drop = false;
+    fn wait(self) -> <Self as Resolvable>::To {
         #[cfg(feature = "unstable")]
         self.publisher.undeclare_matching_listeners()?;
         self.publisher
@@ -513,11 +508,8 @@ impl IntoFuture for PublisherUndeclaration<'_> {
 
 impl Drop for Publisher<'_> {
     fn drop(&mut self) {
-        if self.undeclare_on_drop {
-            #[cfg(feature = "unstable")]
-            let _ = self.undeclare_matching_listeners();
-            let _ = self.session.undeclare_publisher_inner(self.id);
-        }
+        #[cfg(feature = "unstable")]
+        let _ = self.undeclare_matching_listeners();
     }
 }
 
@@ -922,7 +914,6 @@ where
             listener: MatchingListenerInner {
                 publisher: self.publisher,
                 state,
-                undeclare_on_drop: true,
             },
             receiver,
         })
@@ -947,7 +938,7 @@ where
 #[zenoh_macros::unstable]
 pub(crate) struct MatchingListenerState {
     pub(crate) id: Id,
-    pub(crate) current: std::sync::Mutex<bool>,
+    pub(crate) current: Mutex<bool>,
     pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) destination: Locality,
     pub(crate) callback: Callback<'static, MatchingStatus>,
@@ -966,8 +957,7 @@ impl std::fmt::Debug for MatchingListenerState {
 #[zenoh_macros::unstable]
 pub(crate) struct MatchingListenerInner<'a> {
     pub(crate) publisher: PublisherRef<'a>,
-    pub(crate) state: std::sync::Arc<MatchingListenerState>,
-    undeclare_on_drop: bool,
+    pub(crate) state: Arc<MatchingListenerState>,
 }
 
 #[zenoh_macros::unstable]
@@ -987,6 +977,9 @@ impl<'a> Undeclarable<(), MatchingListenerUndeclaration<'a>> for MatchingListene
 
 /// A listener that sends notifications when the [`MatchingStatus`] of a
 /// publisher changes.
+///
+/// Matching litsteners run in background until the publisher is undeclared.
+/// They can be manually undeclared, but will not be undeclared on drop.
 ///
 /// # Examples
 /// ```no_run
@@ -1035,14 +1028,6 @@ impl<'a, Receiver> MatchingListener<'a, Receiver> {
     pub fn undeclare(self) -> MatchingListenerUndeclaration<'a> {
         self.listener.undeclare()
     }
-
-    /// Make the matching listener run in background, until the publisher is undeclared.
-    #[inline]
-    #[zenoh_macros::unstable]
-    pub fn background(mut self) {
-        // The matching listener will be undeclared as part of publisher undeclaration.
-        self.listener.undeclare_on_drop = false;
-    }
 }
 
 #[zenoh_macros::unstable]
@@ -1079,9 +1064,7 @@ impl Resolvable for MatchingListenerUndeclaration<'_> {
 
 #[zenoh_macros::unstable]
 impl Wait for MatchingListenerUndeclaration<'_> {
-    fn wait(mut self) -> <Self as Resolvable>::To {
-        // set the flag first to avoid double panic if this function panic
-        self.subscriber.undeclare_on_drop = false;
+    fn wait(self) -> <Self as Resolvable>::To {
         zlock!(self.subscriber.publisher.matching_listeners).remove(&self.subscriber.state.id);
         self.subscriber
             .publisher
@@ -1097,19 +1080,6 @@ impl IntoFuture for MatchingListenerUndeclaration<'_> {
 
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
-    }
-}
-
-#[zenoh_macros::unstable]
-impl Drop for MatchingListenerInner<'_> {
-    fn drop(&mut self) {
-        if self.undeclare_on_drop {
-            zlock!(self.publisher.matching_listeners).remove(&self.state.id);
-            let _ = self
-                .publisher
-                .session
-                .undeclare_matches_listener_inner(self.state.id);
-        }
     }
 }
 
