@@ -27,7 +27,7 @@ use tokio::{sync::RwLock, time::interval};
 use zenoh::key_expr::keyexpr;
 use zenoh_backend_traits::config::{ReplicaConfig, StorageConfig};
 
-use crate::{backends_mgt::StoreIntercept, storages_mgt::StorageMessage};
+use crate::storages_mgt::{StorageMessage, StoreIntercept};
 
 pub mod align_queryable;
 pub mod aligner;

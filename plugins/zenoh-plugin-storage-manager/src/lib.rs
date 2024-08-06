@@ -49,12 +49,10 @@ use zenoh_plugin_trait::{
     plugin_long_version, plugin_version, Plugin, PluginControl, PluginReport, PluginStatusRec,
 };
 
-mod backends_mgt;
-use backends_mgt::*;
-
 mod memory_backend;
 mod replica;
 mod storages_mgt;
+use storages_mgt::*;
 
 const WORKER_THREAD_NUM: usize = 2;
 const MAX_BLOCK_THREAD_NUM: usize = 50;
