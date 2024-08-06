@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
 use std::{
     collections::{HashMap, HashSet},
     str::{self, FromStr},
@@ -43,7 +44,7 @@ use zenoh_backend_traits::{
     Capability, History, Persistence, StorageInsertionResult, StoredData,
 };
 
-use crate::{backends_mgt::StoreIntercept, storages_mgt::StorageMessage};
+use crate::storages_mgt::{StorageMessage, StoreIntercept};
 
 pub const WILDCARD_UPDATES_FILENAME: &str = "wildcard_updates";
 pub const TOMBSTONE_FILENAME: &str = "tombstones";
@@ -83,7 +84,8 @@ impl StorageService {
         rx: Receiver<StorageMessage>,
         replication: Option<ReplicationService>,
     ) {
-        // @TODO: optimization: if read_cost is high for the storage, initialize a cache for the latest value
+        // @TODO: optimization: if read_cost is high for the storage, initialize a cache for the
+        // latest value
         let mut storage_service = StorageService {
             session,
             key_expr: config.key_expr,
@@ -268,13 +270,14 @@ impl StorageService {
         }
     }
 
-    // The storage should only simply save the key, sample pair while put and retrieve the same during get
-    // the trimming during PUT and GET should be handled by the plugin
+    // The storage should only simply save the key, sample pair while put and retrieve the same
+    // during get the trimming during PUT and GET should be handled by the plugin
     async fn process_sample(&self, sample: Sample) {
         tracing::trace!("[STORAGE] Processing sample: {:?}", sample);
 
-        // A Sample, in theory, will not arrive to a Storage without a Timestamp. This check (which, again, should
-        // never enter the `None` branch) ensures that the Storage Manager does not panic even if it ever happens.
+        // A Sample, in theory, will not arrive to a Storage without a Timestamp. This check (which,
+        // again, should never enter the `None` branch) ensures that the Storage Manager
+        // does not panic even if it ever happens.
         let sample_timestamp = match sample.timestamp() {
             Some(timestamp) => timestamp,
             None => {
@@ -310,8 +313,9 @@ impl StorageService {
                     sample,
                     k
                 );
-                // there might be the case that the actual update was outdated due to a wild card update, but not stored yet in the storage.
-                // get the relevant wild card entry and use that value and timestamp to update the storage
+                // there might be the case that the actual update was outdated due to a wild card
+                // update, but not stored yet in the storage. get the relevant wild
+                // card entry and use that value and timestamp to update the storage
                 let sample_to_store: Sample = if let Some(update) =
                     self.ovderriding_wild_update(&k, sample_timestamp).await
                 {
@@ -332,8 +336,9 @@ impl StorageService {
                         .into()
                 };
 
-                // A Sample that is to be stored **must** have a Timestamp. In theory, the Sample generated should have
-                // a Timestamp and, in theory, this check is unneeded.
+                // A Sample that is to be stored **must** have a Timestamp. In theory, the Sample
+                // generated should have a Timestamp and, in theory, this check is
+                // unneeded.
                 let sample_to_store_timestamp = match sample_to_store.timestamp() {
                     Some(timestamp) => *timestamp,
                     None => {
