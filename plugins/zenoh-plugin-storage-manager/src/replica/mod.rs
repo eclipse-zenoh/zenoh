@@ -27,19 +27,19 @@ use tokio::{sync::RwLock, time::interval};
 use zenoh::key_expr::keyexpr;
 use zenoh_backend_traits::config::{ReplicaConfig, StorageConfig};
 
-use crate::storages_mgt::{StorageMessage, StoreIntercept};
+use crate::storages_mgt::{StorageMessage, StorageService, StoreIntercept};
 
 pub mod align_queryable;
 pub mod aligner;
 pub mod digest;
+pub mod service;
 pub mod snapshotter;
-pub mod storage;
 
 pub use align_queryable::AlignQueryable;
 pub use aligner::Aligner;
 pub use digest::{Digest, DigestConfig, EraType, LogEntry};
+pub use service::ReplicationService;
 pub use snapshotter::Snapshotter;
-pub use storage::{ReplicationService, StorageService};
 use zenoh::{key_expr::OwnedKeyExpr, sample::Locality, time::Timestamp, Session};
 
 const ERA: &str = "era";
