@@ -18,7 +18,10 @@ use flume::Sender;
 use zenoh::{prelude::ZResult, session::Session};
 use zenoh_backend_traits::{config::StorageConfig, Capability, VolumeInstance};
 
-pub use super::replica::{Replica, StorageService};
+pub(crate) mod service;
+pub(crate) use service::StorageService;
+
+pub use super::replica::Replica;
 
 pub enum StorageMessage {
     Stop,

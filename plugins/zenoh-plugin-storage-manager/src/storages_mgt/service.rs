@@ -20,7 +20,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use flume::{Receiver, Sender};
+use flume::Receiver;
 use futures::select;
 use tokio::sync::{Mutex, RwLock};
 use zenoh::{
@@ -44,7 +44,10 @@ use zenoh_backend_traits::{
     Capability, History, Persistence, StorageInsertionResult, StoredData,
 };
 
-use crate::storages_mgt::{StorageMessage, StoreIntercept};
+use crate::{
+    replica::ReplicationService,
+    storages_mgt::{StorageMessage, StoreIntercept},
+};
 
 pub const WILDCARD_UPDATES_FILENAME: &str = "wildcard_updates";
 pub const TOMBSTONE_FILENAME: &str = "tombstones";
@@ -53,12 +56,6 @@ pub const TOMBSTONE_FILENAME: &str = "tombstones";
 struct Update {
     kind: SampleKind,
     data: StoredData,
-}
-
-pub struct ReplicationService {
-    pub empty_start: bool,
-    pub aligner_updates: Receiver<Sample>,
-    pub log_propagation: Sender<(OwnedKeyExpr, Timestamp)>,
 }
 
 pub struct StorageService {
