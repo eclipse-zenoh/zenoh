@@ -25,6 +25,7 @@ use futures::select;
 use tokio::sync::{Mutex, MutexGuard, RwLock};
 use zenoh::{
     internal::{
+        bail,
         buffers::{SplitBuffer, ZBuf},
         zenoh_home, Timed, TimedEvent, Timer, Value,
     },
@@ -37,6 +38,7 @@ use zenoh::{
     sample::{Sample, SampleBuilder, SampleKind},
     session::Session,
     time::{Timestamp, NTP64},
+    Result as ZResult,
 };
 use zenoh_backend_traits::{
     config::{GarbageCollectionConfig, StorageConfig},
@@ -54,6 +56,7 @@ struct Update {
     data: StoredData,
 }
 
+#[derive(Clone)]
 pub struct StorageService {
     session: Arc<Session>,
     key_expr: OwnedKeyExpr,
@@ -76,8 +79,8 @@ impl StorageService {
         capability: Capability,
         rx: Receiver<StorageMessage>,
         latest_updates: Arc<Mutex<HashMap<Option<OwnedKeyExpr>, Timestamp>>>,
-    ) {
-        let mut storage_service = StorageService {
+    ) -> Self {
+        let storage_service = StorageService {
             session,
             key_expr: config.key_expr,
             complete: config.complete,
@@ -117,12 +120,15 @@ impl StorageService {
             }
         }
         storage_service
+            .clone()
             .start_storage_queryable_subscriber(rx, config.garbage_collection_config)
-            .await
+            .await;
+
+        storage_service
     }
 
     async fn start_storage_queryable_subscriber(
-        &mut self,
+        self,
         rx: Receiver<StorageMessage>,
         gc_config: GarbageCollectionConfig,
     ) {
@@ -162,49 +168,53 @@ impl StorageService {
             }
         };
 
-        loop {
-            select!(
-                // on sample for key_expr
-                sample = storage_sub.recv_async() => {
-                    let sample = match sample {
-                        Ok(sample) => sample,
-                        Err(e) => {
-                            tracing::error!("Error in sample: {}", e);
-                            continue;
+        tokio::task::spawn(async move {
+            loop {
+                select!(
+                    // on sample for key_expr
+                    sample = storage_sub.recv_async() => {
+                        let sample = match sample {
+                            Ok(sample) => sample,
+                            Err(e) => {
+                                tracing::error!("Error in sample: {}", e);
+                                continue;
+                            }
+                        };
+                        let timestamp = sample.timestamp().cloned().unwrap_or(self.session.new_timestamp());
+                        let sample = SampleBuilder::from(sample).timestamp(timestamp).into();
+                        if let Err(e) = self.process_sample(sample).await {
+                            tracing::error!("{e:?}");
                         }
-                    };
-                    let timestamp = sample.timestamp().cloned().unwrap_or(self.session.new_timestamp());
-                    let sample = SampleBuilder::from(sample).timestamp(timestamp).into();
-                    self.process_sample(sample).await;
-                },
-                // on query on key_expr
-                query = storage_queryable.recv_async() => {
-                    self.reply_query(query).await;
-                },
-                // on storage handle drop
-                message = rx.recv_async() => {
-                    match message {
-                        Ok(StorageMessage::Stop) => {
-                            tracing::trace!("Dropping storage '{}'", self.name);
-                            return
-                        },
-                        Ok(StorageMessage::GetStatus(tx)) => {
-                            let storage = self.storage.lock().await;
-                            std::mem::drop(tx.send(storage.get_admin_status()).await);
-                            drop(storage);
-                        }
-                        Err(e) => {
-                            tracing::error!("Storage Message Channel Error: {}", e);
-                        },
-                    };
-                },
-            );
-        }
+                    },
+                    // on query on key_expr
+                    query = storage_queryable.recv_async() => {
+                        self.reply_query(query).await;
+                    },
+                    // on storage handle drop
+                    message = rx.recv_async() => {
+                        match message {
+                            Ok(StorageMessage::Stop) => {
+                                tracing::trace!("Dropping storage '{}'", self.name);
+                                return
+                            },
+                            Ok(StorageMessage::GetStatus(tx)) => {
+                                let storage = self.storage.lock().await;
+                                std::mem::drop(tx.send(storage.get_admin_status()).await);
+                                drop(storage);
+                            }
+                            Err(e) => {
+                                tracing::error!("Storage Message Channel Error: {}", e);
+                            },
+                        };
+                    },
+                );
+            }
+        });
     }
 
     // The storage should only simply save the key, sample pair while put and retrieve the same
     // during get the trimming during PUT and GET should be handled by the plugin
-    pub(crate) async fn process_sample(&self, sample: Sample) {
+    pub(crate) async fn process_sample(&self, sample: Sample) -> ZResult<()> {
         tracing::trace!("[STORAGE] Processing sample: {:?}", sample);
 
         // A Sample, in theory, will not arrive to a Storage without a Timestamp. This check (which,
@@ -213,8 +223,7 @@ impl StorageService {
         let sample_timestamp = match sample.timestamp() {
             Some(timestamp) => timestamp,
             None => {
-                tracing::error!("Discarding Sample that has no Timestamp: {:?}", sample);
-                return;
+                bail!("Discarding Sample without a Timestamp: {:?}", sample);
             }
         };
 
@@ -286,8 +295,7 @@ impl StorageService {
                 match crate::strip_prefix(self.strip_prefix.as_ref(), sample_to_store.key_expr()) {
                     Ok(stripped) => stripped,
                     Err(e) => {
-                        tracing::error!("{}", e);
-                        return;
+                        bail!("{e:?}");
                     }
                 };
 
@@ -344,10 +352,14 @@ impl StorageService {
                     }
                 }
                 Err(e) => {
+                    // TODO In case of a wildcard update, multiple keys can be updated. What should
+                    //      be the behaviour if one or more of these updates fail?
                     tracing::error!("`{}` on < {} > failed with: {e:?}", sample.kind(), k);
                 }
             }
         }
+
+        Ok(())
     }
 
     async fn mark_tombstone(&self, key_expr: &OwnedKeyExpr, timestamp: Timestamp) {

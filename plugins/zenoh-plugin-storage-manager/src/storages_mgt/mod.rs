@@ -17,10 +17,12 @@ use std::sync::Arc;
 use flume::Sender;
 use tokio::sync::Mutex;
 use zenoh::{internal::bail, session::Session, Result as ZResult};
-use zenoh_backend_traits::{config::StorageConfig, VolumeInstance};
+use zenoh_backend_traits::{config::StorageConfig, History, VolumeInstance};
 
-mod service;
-use service::StorageService;
+use crate::replication::ReplicationService;
+
+pub(crate) mod service;
+pub(crate) use service::StorageService;
 
 pub enum StorageMessage {
     Stop,
@@ -48,6 +50,18 @@ pub(crate) async fn create_and_start_storage(
 
     let (tx, rx) = flume::bounded(1);
 
+    // If the Replication is enabled but the Storage capability is not compatible with it (i.e. not
+    // `Latest`), we return an error early keeping in mind "containerised execution environment"
+    // where simply looking at the logs is not trivial.
+    if config.replication.is_some() && capability.history != History::Latest {
+        bail!(
+            "Replication was enabled for storage {name} but its history capability is not \
+             supported: found < {:?} >, expected < {:?} >",
+            capability.history,
+            History::Latest
+        );
+    }
+
     let latest_updates = match storage.get_all_entries().await {
         Ok(entries) => entries.into_iter().collect(),
         Err(e) => {
@@ -56,18 +70,43 @@ pub(crate) async fn create_and_start_storage(
     };
 
     let storage = Arc::new(Mutex::new(storage));
-    tokio::task::spawn(async move {
-        StorageService::start(
-            zenoh_session,
-            config,
-            &name,
-            storage,
-            capability,
-            rx,
-            Arc::new(Mutex::new(latest_updates)),
-        )
-        .await;
-    });
+    let storage_service = StorageService::start(
+        zenoh_session.clone(),
+        config.clone(),
+        &name,
+        storage,
+        capability,
+        rx,
+        Arc::new(Mutex::new(latest_updates)),
+    )
+    .await;
+
+    if config.replication.is_some() {
+        // NOTE Although the function `ReplicationService::spawn_start` spawns its own tasks, we
+        //      still need to call it within a dedicated task because the Zenoh routing tables are
+        //      populated only after the plugins have been loaded.
+        //
+        //      If we don't wait for the routing tables to be populated the initial alignment
+        //      (i.e. querying any Storage on the network handling the same key expression), will
+        //      never work.
+        //
+        // TODO Do we really want to perform such an initial alignment? Because this query will
+        //      target any Storage that matches the same key expression, regardless of if they have
+        //      been configured to be replicated.
+        tokio::task::spawn({
+            let storage_key_expr = config.key_expr.clone();
+            let zenoh_session = zenoh_session.clone();
+
+            async move {
+                tracing::debug!(
+                    "Starting replication of storage '{}' on keyexpr '{}'",
+                    name,
+                    storage_key_expr
+                );
+                ReplicationService::start(zenoh_session, storage_service, storage_key_expr).await;
+            }
+        });
+    }
 
     Ok(tx)
 }
