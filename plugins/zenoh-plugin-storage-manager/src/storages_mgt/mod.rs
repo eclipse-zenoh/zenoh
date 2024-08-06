@@ -15,6 +15,7 @@
 use std::sync::Arc;
 
 use flume::Sender;
+use tokio::sync::Mutex;
 use zenoh::{session::Session, Result as ZResult};
 use zenoh_backend_traits::{config::StorageConfig, VolumeInstance};
 
@@ -47,6 +48,7 @@ pub(crate) async fn create_and_start_storage(
 
     let (tx, rx) = flume::bounded(1);
 
+    let storage = Arc::new(Mutex::new(storage));
     tokio::task::spawn(async move {
         StorageService::start(zenoh.clone(), config, &name, storage, capability, rx).await;
     });
