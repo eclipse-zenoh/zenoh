@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use flume::Sender;
 use zenoh::{session::Session, Result as ZResult};
-use zenoh_backend_traits::{config::StorageConfig, Capability, VolumeInstance};
+use zenoh_backend_traits::{config::StorageConfig, VolumeInstance};
 
 mod service;
 use service::StorageService;
@@ -24,11 +24,6 @@ use service::StorageService;
 pub enum StorageMessage {
     Stop,
     GetStatus(tokio::sync::mpsc::Sender<serde_json::Value>),
-}
-
-pub struct StoreIntercept {
-    pub storage: Box<dyn zenoh_backend_traits::Storage>,
-    pub capability: Capability,
 }
 
 pub(crate) async fn create_and_start_storage(
@@ -40,10 +35,6 @@ pub(crate) async fn create_and_start_storage(
     tracing::trace!("Create storage '{}'", &admin_key);
     let capability = backend.get_capability();
     let storage = backend.create_storage(config.clone()).await?;
-    let store_intercept = StoreIntercept {
-        storage,
-        capability,
-    };
 
     // Ex: @/390CEC11A1E34977A1C609A35BC015E6/router/status/plugins/storage_manager/storages/demo1
     // -> 390CEC11A1E34977A1C609A35BC015E6/demo1 (/<type> needed????)
@@ -57,7 +48,7 @@ pub(crate) async fn create_and_start_storage(
     let (tx, rx) = flume::bounded(1);
 
     tokio::task::spawn(async move {
-        StorageService::start(zenoh.clone(), config, &name, store_intercept, rx).await;
+        StorageService::start(zenoh.clone(), config, &name, storage, capability, rx).await;
     });
 
     Ok(tx)

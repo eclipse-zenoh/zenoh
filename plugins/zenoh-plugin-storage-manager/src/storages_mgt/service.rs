@@ -43,7 +43,7 @@ use zenoh_backend_traits::{
     Capability, History, Persistence, StorageInsertionResult, StoredData,
 };
 
-use crate::storages_mgt::{StorageMessage, StoreIntercept};
+use crate::storages_mgt::StorageMessage;
 
 pub const WILDCARD_UPDATES_FILENAME: &str = "wildcard_updates";
 pub const TOMBSTONE_FILENAME: &str = "tombstones";
@@ -72,7 +72,8 @@ impl StorageService {
         session: Arc<Session>,
         config: StorageConfig,
         name: &str,
-        store_intercept: StoreIntercept,
+        storage: Box<dyn zenoh_backend_traits::Storage>,
+        capability: Capability,
         rx: Receiver<StorageMessage>,
     ) {
         // @TODO: optimization: if read_cost is high for the storage, initialize a cache for the
@@ -83,8 +84,8 @@ impl StorageService {
             complete: config.complete,
             name: name.to_string(),
             strip_prefix: config.strip_prefix,
-            storage: Mutex::new(store_intercept.storage),
-            capability: store_intercept.capability,
+            storage: Mutex::new(storage),
+            capability,
             tombstones: Arc::new(RwLock::new(KeBoxTree::default())),
             wildcard_updates: Arc::new(RwLock::new(KeBoxTree::default())),
             latest_updates: Arc::new(Mutex::new(HashMap::new())),
