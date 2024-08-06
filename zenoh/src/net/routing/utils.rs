@@ -4,6 +4,7 @@ use zenoh_protocol::{
     network::declare::{queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo},
 };
 
+#[inline]
 pub(crate) fn iter_if<I: IntoIterator>(
     cond: bool,
     iter: impl FnOnce() -> I,
@@ -11,6 +12,7 @@ pub(crate) fn iter_if<I: IntoIterator>(
     cond.then(iter).into_iter().flatten()
 }
 
+#[inline]
 pub(crate) fn merge_queryable_infos(
     infos: impl IntoIterator<Item = QueryableInfoType>,
 ) -> Option<QueryableInfoType> {
@@ -23,6 +25,7 @@ pub(crate) fn merge_queryable_infos(
     })
 }
 
+#[inline]
 pub(crate) fn merge_subscriber_infos(
     infos: impl IntoIterator<Item = SubscriberInfo>,
 ) -> Option<SubscriberInfo> {
