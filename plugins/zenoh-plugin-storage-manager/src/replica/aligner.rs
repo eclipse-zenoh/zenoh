@@ -16,10 +16,11 @@ use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
     str,
+    sync::Arc,
 };
 
-use async_std::sync::{Arc, RwLock};
 use flume::{Receiver, Sender};
+use tokio::sync::RwLock;
 use zenoh::{
     internal::Value,
     key_expr::{KeyExpr, OwnedKeyExpr},

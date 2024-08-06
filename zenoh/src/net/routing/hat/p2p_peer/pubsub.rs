@@ -208,7 +208,7 @@ fn declare_simple_subscription(
 }
 
 #[inline]
-fn client_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
+fn simple_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
     res.session_ctxs
         .values()
         .filter_map(|ctx| {
@@ -222,7 +222,7 @@ fn client_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 }
 
 #[inline]
-fn remote_client_subs(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
+fn remote_simple_subs(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
     res.session_ctxs
         .values()
         .any(|ctx| ctx.face.id != face.id && ctx.subs.is_some())
@@ -260,7 +260,7 @@ fn propagate_forget_simple_subscription(
         {
             if !res.context().matches.iter().any(|m| {
                 m.upgrade()
-                    .is_some_and(|m| m.context.is_some() && remote_client_subs(&m, &face))
+                    .is_some_and(|m| m.context.is_some() && remote_simple_subs(&m, &face))
             }) {
                 if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
                     send_declare(
@@ -296,13 +296,13 @@ pub(super) fn undeclare_simple_subscription(
             get_mut_unchecked(ctx).subs = None;
         }
 
-        let mut client_subs = client_subs(res);
-        if client_subs.is_empty() {
+        let mut simple_subs = simple_subs(res);
+        if simple_subs.is_empty() {
             propagate_forget_simple_subscription(tables, res, send_declare);
         }
 
-        if client_subs.len() == 1 {
-            let mut face = &mut client_subs[0];
+        if simple_subs.len() == 1 {
+            let mut face = &mut simple_subs[0];
             if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
                 send_declare(
                     &face.primitives,
@@ -329,7 +329,7 @@ pub(super) fn undeclare_simple_subscription(
             {
                 if !res.context().matches.iter().any(|m| {
                     m.upgrade()
-                        .is_some_and(|m| m.context.is_some() && remote_client_subs(&m, face))
+                        .is_some_and(|m| m.context.is_some() && remote_simple_subs(&m, face))
                 }) {
                     if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
                         send_declare(
@@ -604,35 +604,46 @@ impl HatPubSubTrait for HatCode {
             }
         };
 
-        for face in tables
-            .faces
-            .values()
-            .filter(|f| f.whatami == WhatAmI::Router)
-        {
-            if face.local_interests.values().any(|interest| {
-                interest.finalized
-                    && interest.options.subscribers()
-                    && interest
-                        .res
-                        .as_ref()
-                        .map(|res| {
-                            KeyExpr::try_from(res.expr())
-                                .and_then(|intres| {
-                                    KeyExpr::try_from(expr.full_expr())
-                                        .map(|putres| intres.includes(&putres))
-                                })
-                                .unwrap_or(false)
-                        })
-                        .unwrap_or(true)
-            }) {
-                if face_hat!(face).remote_subs.values().any(|sub| {
-                    KeyExpr::try_from(sub.expr())
-                        .and_then(|subres| {
-                            KeyExpr::try_from(expr.full_expr())
-                                .map(|putres| subres.intersects(&putres))
-                        })
-                        .unwrap_or(false)
+        if source_type == WhatAmI::Client {
+            for face in tables
+                .faces
+                .values()
+                .filter(|f| f.whatami == WhatAmI::Router)
+            {
+                if face.local_interests.values().any(|interest| {
+                    interest.finalized
+                        && interest.options.subscribers()
+                        && interest
+                            .res
+                            .as_ref()
+                            .map(|res| {
+                                KeyExpr::try_from(res.expr())
+                                    .and_then(|intres| {
+                                        KeyExpr::try_from(expr.full_expr())
+                                            .map(|putres| intres.includes(&putres))
+                                    })
+                                    .unwrap_or(false)
+                            })
+                            .unwrap_or(true)
                 }) {
+                    if face_hat!(face).remote_subs.values().any(|sub| {
+                        KeyExpr::try_from(sub.expr())
+                            .and_then(|subres| {
+                                KeyExpr::try_from(expr.full_expr())
+                                    .map(|putres| subres.intersects(&putres))
+                            })
+                            .unwrap_or(false)
+                    }) {
+                        let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+                        route.insert(
+                            face.id,
+                            (
+                                (face.clone(), key_expr.to_owned(), NodeId::default()),
+                                Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
+                            ),
+                        );
+                    }
+                } else {
                     let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
                     route.insert(
                         face.id,
@@ -642,33 +653,24 @@ impl HatPubSubTrait for HatCode {
                         ),
                     );
                 }
-            } else {
-                let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-                route.insert(
-                    face.id,
+            }
+
+            for face in tables.faces.values().filter(|f| {
+                f.whatami == WhatAmI::Peer
+                    && !f
+                        .local_interests
+                        .get(&0)
+                        .map(|i| i.finalized)
+                        .unwrap_or(true)
+            }) {
+                route.entry(face.id).or_insert_with(|| {
+                    let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
                     (
                         (face.clone(), key_expr.to_owned(), NodeId::default()),
                         Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
-                    ),
-                );
+                    )
+                });
             }
-        }
-
-        for face in tables.faces.values().filter(|f| {
-            f.whatami == WhatAmI::Peer
-                && !f
-                    .local_interests
-                    .get(&0)
-                    .map(|i| i.finalized)
-                    .unwrap_or(true)
-        }) {
-            route.entry(face.id).or_insert_with(|| {
-                let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-                (
-                    (face.clone(), key_expr.to_owned(), NodeId::default()),
-                    Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
-                )
-            });
         }
 
         let res = Resource::get_resource(expr.prefix, expr.suffix);

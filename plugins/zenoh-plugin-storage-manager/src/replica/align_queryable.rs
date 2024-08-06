@@ -17,9 +17,9 @@ use std::{
     collections::{BTreeSet, HashMap, HashSet},
     str,
     str::FromStr,
+    sync::Arc,
 };
 
-use async_std::sync::Arc;
 use zenoh::{
     internal::Value, key_expr::OwnedKeyExpr, prelude::*, query::Parameters, sample::Sample,
     time::Timestamp, Session,

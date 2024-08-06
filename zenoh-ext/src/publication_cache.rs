@@ -256,9 +256,9 @@ impl<'a> PublicationCache<'a> {
         })
     }
 
-    /// Close this PublicationCache
+    /// Undeclare this [`PublicationCache`]`.
     #[inline]
-    pub fn close(self) -> impl Resolve<ZResult<()>> + 'a {
+    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         ResolveFuture::new(async move {
             let PublicationCache {
                 _queryable,

@@ -14,16 +14,16 @@
 use std::{
     collections::{HashMap, HashSet},
     convert::TryFrom,
+    sync::Arc,
     time::Duration,
 };
 
-use async_std::{
-    stream::{interval, StreamExt},
-    sync::{Arc, RwLock},
-    task::sleep,
-};
 use flume::Receiver;
 use futures::join;
+use tokio::{
+    sync::RwLock,
+    time::{interval, sleep},
+};
 use zenoh::{key_expr::OwnedKeyExpr, time::Timestamp, Session};
 use zenoh_backend_traits::config::ReplicaConfig;
 
@@ -126,7 +126,7 @@ impl Snapshotter {
 
         let mut interval = interval(self.replica_config.delta);
         loop {
-            let _ = interval.next().await;
+            let _ = interval.tick().await;
 
             let mut last_snapshot_time = self.content.last_snapshot_time.write().await;
             let mut last_interval = self.content.last_interval.write().await;

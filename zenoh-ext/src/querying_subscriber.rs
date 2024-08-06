@@ -722,9 +722,9 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
         Ok(fetch_subscriber)
     }
 
-    /// Close this FetchingSubscriber
+    /// Undeclare this [`FetchingSubscriber`]`.
     #[inline]
-    pub fn close(self) -> impl Resolve<ZResult<()>> + 'a {
+    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         self.subscriber.undeclare()
     }
 

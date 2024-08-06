@@ -275,16 +275,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-attributes"
-version = "1.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3203e79f4dd9bdda415ed03cf14dae5a2bf775c683a00f94e9cd1faf0f596e5"
-dependencies = [
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "async-channel"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -439,7 +429,6 @@ version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62565bb4402e926b29953c785397c6dc0391b7b446e45008b0049eb43cec6f5d"
 dependencies = [
- "async-attributes",
  "async-channel",
  "async-global-executor",
  "async-io",
@@ -5523,12 +5512,12 @@ dependencies = [
 name = "zenoh-backend-example"
 version = "0.11.0-dev"
 dependencies = [
- "async-std",
  "async-trait",
  "const_format",
  "futures",
  "git-version",
  "serde_json",
+ "tokio",
  "tracing",
  "zenoh",
  "zenoh-plugin-trait",
@@ -5942,11 +5931,12 @@ dependencies = [
 name = "zenoh-plugin-example"
 version = "0.11.0-dev"
 dependencies = [
- "async-std",
  "const_format",
  "futures",
  "git-version",
+ "lazy_static",
  "serde_json",
+ "tokio",
  "tracing",
  "zenoh",
  "zenoh-plugin-trait",
@@ -5958,7 +5948,6 @@ name = "zenoh-plugin-rest"
 version = "0.11.0-dev"
 dependencies = [
  "anyhow",
- "async-std",
  "base64 0.22.1",
  "clap",
  "const_format",
@@ -5973,6 +5962,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tide",
+ "tokio",
  "tracing",
  "zenoh",
  "zenoh-plugin-trait",
@@ -5983,7 +5973,6 @@ name = "zenoh-plugin-storage-manager"
 version = "0.11.0-dev"
 dependencies = [
  "async-global-executor",
- "async-std",
  "async-trait",
  "const_format",
  "crc",
@@ -5998,6 +5987,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "tokio",
  "tracing",
  "urlencoding",
  "zenoh",
@@ -6146,7 +6136,6 @@ dependencies = [
 name = "zenoh-util"
 version = "0.11.0-dev"
 dependencies = [
- "async-std",
  "async-trait",
  "const_format",
  "flume",
@@ -6171,7 +6160,6 @@ dependencies = [
 name = "zenoh_backend_traits"
 version = "0.11.0-dev"
 dependencies = [
- "async-std",
  "async-trait",
  "const_format",
  "derive_more",

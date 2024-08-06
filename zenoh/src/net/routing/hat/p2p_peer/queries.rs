@@ -572,30 +572,32 @@ impl HatQueriesTrait for HatCode {
             }
         };
 
-        // TODO: BNestMatching: What if there is a local compete ?
-        if let Some(face) = tables.faces.values().find(|f| f.whatami == WhatAmI::Router) {
-            let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-            route.push(QueryTargetQabl {
-                direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
-                complete: 0,
-                distance: f64::MAX,
-            });
-        }
+        if source_type == WhatAmI::Client {
+            // TODO: BNestMatching: What if there is a local compete ?
+            if let Some(face) = tables.faces.values().find(|f| f.whatami == WhatAmI::Router) {
+                let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+                route.push(QueryTargetQabl {
+                    direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
+                    complete: 0,
+                    distance: f64::MAX,
+                });
+            }
 
-        for face in tables.faces.values().filter(|f| {
-            f.whatami == WhatAmI::Peer
-                && !f
-                    .local_interests
-                    .get(&0)
-                    .map(|i| i.finalized)
-                    .unwrap_or(true)
-        }) {
-            let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-            route.push(QueryTargetQabl {
-                direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
-                complete: 0,
-                distance: 0.5,
-            });
+            for face in tables.faces.values().filter(|f| {
+                f.whatami == WhatAmI::Peer
+                    && !f
+                        .local_interests
+                        .get(&0)
+                        .map(|i| i.finalized)
+                        .unwrap_or(true)
+            }) {
+                let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+                route.push(QueryTargetQabl {
+                    direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
+                    complete: 0,
+                    distance: 0.5,
+                });
+            }
         }
 
         let res = Resource::get_resource(expr.prefix, expr.suffix);
