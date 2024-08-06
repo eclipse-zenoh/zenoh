@@ -109,13 +109,10 @@ impl NetworkMessage {
 
     #[inline]
     pub fn is_reliable(&self) -> bool {
-        matches!(
-            self.body,
-            NetworkBody::Push(Push {
-                reliability: Some(Reliability::Reliable),
-                ..
-            })
-        )
+        match &self.body {
+            NetworkBody::Push(push) => push.reliability.is_some_and(|r| r == Reliability::Reliable),
+            _ => true,
+        }
     }
 
     #[inline]
