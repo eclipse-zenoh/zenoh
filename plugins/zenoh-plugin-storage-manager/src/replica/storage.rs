@@ -14,13 +14,14 @@
 use std::{
     collections::{HashMap, HashSet},
     str::{self, FromStr},
+    sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use async_std::sync::{Arc, Mutex, RwLock};
 use async_trait::async_trait;
 use flume::{Receiver, Sender};
 use futures::select;
+use tokio::sync::{Mutex, RwLock};
 use zenoh::{
     bytes::EncodingBuilderTrait,
     internal::{

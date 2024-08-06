@@ -13,8 +13,8 @@
 //
 use std::{collections::HashMap, sync::Arc};
 
-use async_std::sync::RwLock;
 use async_trait::async_trait;
+use tokio::sync::RwLock;
 use zenoh::{internal::Value, key_expr::OwnedKeyExpr, time::Timestamp, Result as ZResult};
 use zenoh_backend_traits::{
     config::{StorageConfig, VolumeConfig},

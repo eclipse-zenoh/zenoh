@@ -29,11 +29,11 @@ name = "zenoh_backend_example"
 crate-type = ["cdylib"]
 
 [dependencies]
-async-std = { workspace = true, features = ["default"] }
 const_format = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
 tracing = { workspace = true }
+tokio = { workspace = true }
 serde_json = { workspace = true }
 zenoh = { workspace = true, features = ["default"] }
 zenoh-plugin-trait = { workspace = true }
