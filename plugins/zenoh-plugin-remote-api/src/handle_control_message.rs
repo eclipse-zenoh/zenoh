@@ -98,11 +98,11 @@ pub async fn handle_control_message(
                         error!("Forward Sample Channel error: {e}");
                     };
                 })
-                .await;
+                .await?;
 
             state_map
                 .subscribers
-                .insert(subscriber_uuid, res_subscriber?);
+                .insert(subscriber_uuid, res_subscriber);
 
             return Ok(Some(ControlMsg::Subscriber(subscriber_uuid)));
         }

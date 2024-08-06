@@ -20,11 +20,13 @@ use serde::{
     Deserialize, Deserializer,
 };
 
+const DEFAULT_HTTP_INTERFACE: &str = "[::]";
+
 #[derive(JsonSchema, Deserialize, serde::Serialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(deserialize_with = "deserialize_ws_port")]
-    pub websocket_port: u16,
+    pub websocket_port: String,
 
     pub secure_websocket: Option<SecureWebsocket>,
 
@@ -47,7 +49,7 @@ impl From<&Config> for serde_json::Value {
     }
 }
 
-fn deserialize_ws_port<'de, D>(deserializer: D) -> Result<u16, D::Error>
+fn deserialize_ws_port<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -57,48 +59,36 @@ where
 struct WebsocketVisitor;
 
 impl<'de> Visitor<'de> for WebsocketVisitor {
-    type Value = u16;
+    type Value = String;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str(r#"either a port number as an integer or a string, either a string with format "<port_number>""#)
+        formatter.write_str(r#"either a port number as an integer or a string, either a string with format "<local_ip>:<port_number>""#)
     }
 
     fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
     where
         E: de::Error,
     {
-        match u16::try_from(value) {
-            Ok(port) => Ok(port as u16),
-            Err(err) => Err(E::custom(format!(
-                "{value} does not fit into u16 range 0:{}, {err}",
-                std::u16::MAX
-            ))),
-        }
-    }
-
-    fn visit_u16<E>(self, value: u16) -> Result<Self::Value, E>
-    where
-        E: de::Error,
-    {
-        Ok(value)
+        Ok(format!("{DEFAULT_HTTP_INTERFACE}:{value}"))
     }
 
     fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
     where
         E: de::Error,
     {
-        value
-            .parse::<u16>()
-            .map_err(|_| E::invalid_value(Unexpected::Str(value), &self))
-    }
-
-    fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
-    where
-        E: de::Error,
-    {
-        value
-            .parse::<u16>()
-            .map_err(|_| E::invalid_value(Unexpected::Str(&value), &self))
+        let parts: Vec<&str> = value.split(':').collect();
+        if parts.len() > 2 {
+            return Err(E::invalid_value(Unexpected::Str(value), &self));
+        }
+        let (interface, port) = if parts.len() == 1 {
+            (DEFAULT_HTTP_INTERFACE, parts[0])
+        } else {
+            (parts[0], parts[1])
+        };
+        if port.parse::<u32>().is_err() {
+            return Err(E::invalid_value(Unexpected::Str(port), &self));
+        }
+        Ok(format!("{interface}:{port}"))
     }
 }
 
@@ -164,7 +154,7 @@ impl<'de> serde::de::Visitor<'de> for PathVisitor {
 
 #[cfg(test)]
 mod tests {
-    use super::Config;
+    use super::{Config, DEFAULT_HTTP_INTERFACE};
 
     #[test]
     fn test_path_field() {
@@ -181,7 +171,7 @@ mod tests {
             ..
         } = config.unwrap();
 
-        assert_eq!(websocket_port, 8080);
+        assert_eq!(websocket_port, format!("{DEFAULT_HTTP_INTERFACE}:8080"));
         assert_eq!(__path__, Some(vec![String::from("/example/path")]));
         assert_eq!(__required__, None);
     }
@@ -199,7 +189,7 @@ mod tests {
             ..
         } = config.unwrap();
 
-        assert_eq!(websocket_port, 8080);
+        assert_eq!(websocket_port, format!("{DEFAULT_HTTP_INTERFACE}:8080"));
         assert_eq!(__path__, None);
         assert_eq!(__required__, Some(true));
     }
@@ -219,7 +209,7 @@ mod tests {
             ..
         } = config.unwrap();
 
-        assert_eq!(websocket_port, 8080);
+        assert_eq!(websocket_port, format!("{DEFAULT_HTTP_INTERFACE}:8080"));
         assert_eq!(__path__, Some(vec![String::from("/example/path")]));
         assert_eq!(__required__, Some(true));
     }
@@ -237,7 +227,7 @@ mod tests {
             ..
         } = config.unwrap();
 
-        assert_eq!(websocket_port, 8080);
+        assert_eq!(websocket_port, format!("{DEFAULT_HTTP_INTERFACE}:8080"));
         assert_eq!(__path__, None);
         assert_eq!(__required__, None);
     }

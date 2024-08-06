@@ -29,7 +29,7 @@
       ]
     },
     "websocket_port": {
-      "type": integer
+      "type": "string"
     }
   },
   "additionalProperties": false

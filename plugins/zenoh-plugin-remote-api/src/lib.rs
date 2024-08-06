@@ -82,12 +82,12 @@ fn load_certs(path: &Path) -> io::Result<Vec<CertificateDer<'static>>> {
 }
 
 fn load_key(path: &Path) -> io::Result<PrivateKeyDer<'static>> {
-    Ok(private_key(&mut BufReader::new(File::open(path)?))
+    private_key(&mut BufReader::new(File::open(path)?))
         .unwrap()
         .ok_or(io::Error::new(
             ErrorKind::Other,
             "No private key found".to_string(),
-        ))?)
+        ))
 }
 
 pub struct RemoteApiPlugin {}
@@ -136,18 +136,21 @@ impl Plugin for RemoteApiPlugin {
                     .map_err(|err| zerror!("Could not Load Private Key `{}`", err))?;
                 Some((certs, key))
             }
-            None => {
-                tracing::info!("{name}");
-                None
-            }
+            None => None,
         };
 
-        let plugin_runtime: tokio::runtime::Runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(WORKER_THREAD_NUM)
-            .max_blocking_threads(MAX_BLOCK_THREAD_NUM)
-            .enable_all()
-            .build()
-            .expect("Unable to create tokio runtime");
+        let plugin_runtime: tokio::runtime::Runtime =
+            match tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(WORKER_THREAD_NUM)
+                .max_blocking_threads(MAX_BLOCK_THREAD_NUM)
+                .enable_all()
+                .build()
+            {
+                Ok(runtime) => runtime,
+                Err(err) => {
+                    bail!("Unable to create tokio runtime, {err}");
+                }
+            };
 
         let weak_runtime = Runtime::downgrade(runtime);
         if let Some(runtime) = weak_runtime.upgrade() {
@@ -176,7 +179,7 @@ impl Plugin for RemoteApiPlugin {
             };
             Ok(Box::new(RunningPlugin(running_plugin)))
         } else {
-            bail!("Cannot Get Instance of Runtime !")
+            bail!("Cannot Get Zenoh Instance of Runtime !")
         }
     }
 }
@@ -229,7 +232,7 @@ impl Streamable for TlsStream<TcpStream> {}
 
 // Listen on the Zenoh Session
 fn run_websocket_server(
-    ws_port: u16,
+    ws_port: String,
     plugin_runtime: &tokio::runtime::Runtime,
     zenoh_runtime: Runtime,
     state_map: StateMap,
@@ -246,12 +249,15 @@ fn run_websocket_server(
         opt_tls_acceptor = Some(TlsAcceptor::from(Arc::new(config)));
     }
 
-    let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), ws_port);
-
     plugin_runtime.spawn(async move {
-        tracing::info!("Spawning Remote API Plugin on {:?}", socket_addr);
+        tracing::info!("Spawning Remote API Plugin on {:?}", ws_port);
 
-        let server: TcpListener = match TcpListener::bind(socket_addr).await {
+        // let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 10000);
+        // let tcp = TcpListener::bind(socket_addr).await;
+
+        let tcp = TcpListener::bind(ws_port).await;
+
+        let server: TcpListener = match tcp {
             Ok(x) => x,
             Err(err) => {
                 tracing::error!("Unable to start TcpListener {err}");
@@ -260,7 +266,8 @@ fn run_websocket_server(
         };
 
         while let Ok((tcp_stream, sock_addr)) = server.accept().await {
-            let sock_adress;
+            println!("raw {sock_addr:?}");
+            let sock_adress = Arc::new(sock_addr);
             let (ws_ch_tx, ws_ch_rx) = flume::unbounded::<RemoteAPIMsg>();
 
             let mut write_guard = state_map.write().await;
@@ -283,9 +290,9 @@ fn run_websocket_server(
                 unanswered_queries: Arc::new(std::sync::RwLock::new(HashMap::new())),
             };
 
-            sock_adress = Arc::new(sock_addr);
             // if remote state exists in map already. Ignore it and reinitialize
             let _ = write_guard.insert(sock_addr, state);
+            drop(write_guard);
 
             let streamable: Box<dyn Streamable> = match &opt_tls_acceptor {
                 Some(acceptor) => match acceptor.accept(tcp_stream).await {
@@ -352,10 +359,9 @@ async fn handle_message(
             Ok(msg) => match msg {
                 RemoteAPIMsg::Control(ctrl_msg) => {
                     match handle_control_message(ctrl_msg, sock_addr, state_map).await {
-                        Ok(ok) => ok.map(RemoteAPIMsg::Control),
+                        Ok(ok) => return ok.map(RemoteAPIMsg::Control),
                         Err(err) => {
                             tracing::error!(err);
-                            None
                         }
                     }
                 }
@@ -363,7 +369,6 @@ async fn handle_message(
                     if let Err(err) = handle_data_message(data_msg, sock_addr, state_map).await {
                         tracing::error!(err);
                     }
-                    None
                 }
             },
             Err(err) => {
@@ -371,12 +376,11 @@ async fn handle_message(
                     "RemoteAPI: WS Message Cannot be Deserialized to RemoteAPIMsg {}",
                     err
                 );
-                None
             }
         },
         _ => {
             debug!("RemoteAPI: WS Message Not Text");
-            None
         }
-    }
+    };
+    None
 }

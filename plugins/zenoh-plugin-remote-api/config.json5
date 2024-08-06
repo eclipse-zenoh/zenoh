@@ -1,5 +1,5 @@
 {
-      "websocket_port": 8080,
+      "websocket_port": "10000",
       "secure_websocket": {
             "certificate_path" : "/path/to/certificate",
             "private_key_path" : "/path/to/private_key"
