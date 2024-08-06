@@ -13,8 +13,8 @@
 //
 use std::collections::{hash_map::Entry, HashMap};
 
-use async_std::sync::RwLock;
 use async_trait::async_trait;
+use tokio::sync::RwLock;
 use zenoh::{internal::Value, key_expr::OwnedKeyExpr, prelude::*, time::Timestamp};
 use zenoh_backend_traits::{
     config::{StorageConfig, VolumeConfig},

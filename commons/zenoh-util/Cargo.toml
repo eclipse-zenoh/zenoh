@@ -35,7 +35,6 @@ maintenance = { status = "actively-developed" }
 test = []
 
 [dependencies]
-async-std = { workspace = true, features = ["default", "unstable"] }
 tokio = { workspace = true, features = ["time", "net"] }
 async-trait = { workspace = true }
 flume = { workspace = true }

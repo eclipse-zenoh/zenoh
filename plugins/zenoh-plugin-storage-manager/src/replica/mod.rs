@@ -17,15 +17,13 @@
 use std::{
     collections::{HashMap, HashSet},
     str,
+    sync::Arc,
     time::{Duration, SystemTime},
 };
 
-use async_std::{
-    stream::{interval, StreamExt},
-    sync::{Arc, RwLock},
-};
 use flume::{Receiver, Sender};
 use futures::{pin_mut, select, FutureExt};
+use tokio::{sync::RwLock, time::interval};
 use zenoh::{key_expr::keyexpr, prelude::*};
 use zenoh_backend_traits::config::{ReplicaConfig, StorageConfig};
 
@@ -277,7 +275,7 @@ impl Replica {
         // time it takes to publish.
         let mut interval = interval(self.replica_config.publication_interval);
         loop {
-            let _ = interval.next().await;
+            let _ = interval.tick().await;
 
             let digest = snapshotter.get_digest().await;
             let digest = digest.compress();

@@ -21,12 +21,18 @@ use serde::{
 };
 
 const DEFAULT_HTTP_INTERFACE: &str = "[::]";
+pub const DEFAULT_WORK_THREAD_NUM: usize = 2;
+pub const DEFAULT_MAX_BLOCK_THREAD_NUM: usize = 50;
 
 #[derive(JsonSchema, Deserialize, serde::Serialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(deserialize_with = "deserialize_http_port")]
     pub http_port: String,
+    #[serde(default = "default_work_thread_num")]
+    pub work_thread_num: usize,
+    #[serde(default = "default_max_block_thread_num")]
+    pub max_block_thread_num: usize,
     #[serde(default, deserialize_with = "deserialize_path")]
     __path__: Option<Vec<String>>,
     __required__: Option<bool>,
@@ -45,6 +51,14 @@ where
     D: Deserializer<'de>,
 {
     deserializer.deserialize_any(HttpPortVisitor)
+}
+
+fn default_work_thread_num() -> usize {
+    DEFAULT_WORK_THREAD_NUM
+}
+
+fn default_max_block_thread_num() -> usize {
+    DEFAULT_MAX_BLOCK_THREAD_NUM
 }
 
 struct HttpPortVisitor;
