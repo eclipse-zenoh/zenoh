@@ -31,7 +31,7 @@ pub(crate) async fn create_and_start_storage(
     admin_key: String,
     config: StorageConfig,
     backend: &VolumeInstance,
-    zenoh: Arc<Session>,
+    zenoh_session: Arc<Session>,
 ) -> ZResult<Sender<StorageMessage>> {
     tracing::trace!("Create storage '{}'", &admin_key);
     let capability = backend.get_capability();
@@ -50,7 +50,7 @@ pub(crate) async fn create_and_start_storage(
 
     let storage = Arc::new(Mutex::new(storage));
     tokio::task::spawn(async move {
-        StorageService::start(zenoh.clone(), config, &name, storage, capability, rx).await;
+        StorageService::start(zenoh_session, config, &name, storage, capability, rx).await;
     });
 
     Ok(tx)
