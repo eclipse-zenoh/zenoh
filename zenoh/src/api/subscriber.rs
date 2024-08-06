@@ -29,7 +29,7 @@ use super::{
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
     sample::{Locality, Sample},
-    session::{SessionRef, UndeclarableInner},
+    session::{SessionRef, UndeclarableSealed},
     Id,
 };
 
@@ -105,11 +105,11 @@ impl<'a> SubscriberInner<'a> {
     /// ```
     #[inline]
     pub fn undeclare(self) -> SubscriberUndeclaration<'a> {
-        UndeclarableInner::undeclare_inner(self, ())
+        UndeclarableSealed::undeclare_inner(self, ())
     }
 }
 
-impl<'a> UndeclarableInner<(), SubscriberUndeclaration<'a>> for SubscriberInner<'a> {
+impl<'a> UndeclarableSealed<(), SubscriberUndeclaration<'a>> for SubscriberInner<'a> {
     fn undeclare_inner(self, _: ()) -> SubscriberUndeclaration<'a> {
         SubscriberUndeclaration { subscriber: self }
     }
@@ -521,9 +521,9 @@ impl<'a, Handler> Subscriber<'a, Handler> {
     }
 }
 
-impl<'a, T> UndeclarableInner<(), SubscriberUndeclaration<'a>> for Subscriber<'a, T> {
+impl<'a, T> UndeclarableSealed<(), SubscriberUndeclaration<'a>> for Subscriber<'a, T> {
     fn undeclare_inner(self, _: ()) -> SubscriberUndeclaration<'a> {
-        UndeclarableInner::undeclare_inner(self.subscriber, ())
+        UndeclarableSealed::undeclare_inner(self.subscriber, ())
     }
 }
 
