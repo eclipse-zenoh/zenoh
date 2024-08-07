@@ -50,7 +50,7 @@ fn local_sub_info(_tables: &Tables, res: &Arc<Resource>, face: &Arc<FaceState>) 
     let infos = res
         .session_ctxs
         .values()
-        .filter(|ctx| ctx.face.id != face.id)
+        .filter(|ctx| ctx.face.whatami == WhatAmI::Client && ctx.face.id != face.id)
         .filter_map(|ctx| ctx.subs);
     merge_subscriber_infos(infos).unwrap_or_default()
 }
