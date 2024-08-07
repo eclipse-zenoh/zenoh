@@ -378,7 +378,8 @@ impl ZBytesReader<'_> {
         self.remaining() == 0
     }
 
-    /// Deserialize an object of type `T` from a [`Value`] using the [`ZSerde`].
+    /// Deserialize an object of type `T` from a [`ZBytesReader`] using the [`ZSerde`].
+    /// See [`ZBytesWriter::serialize`] for an example.
     pub fn deserialize<T>(&mut self) -> Result<T, <ZSerde as Deserialize<T>>::Error>
     where
         for<'a> ZSerde: Deserialize<T, Input<'a> = &'a ZBytes>,
@@ -419,6 +420,32 @@ impl ZBytesWriter<'_> {
         unsafe { codec.write(&mut self.0, bytes).unwrap_unchecked() };
     }
 
+    /// Serialize a type `T` on the [`ZBytes`]. For simmetricity, every serialization
+    /// operation preserves type boundaries by preprending the length of the serialized data.
+    /// This allows calling [`ZBytesReader::deserialize`] in the same order to retrieve the original type.
+    ///
+    /// Example:
+    /// ```
+    /// use zenoh::bytes::ZBytes;
+    ///
+    /// // serialization
+    /// let mut bytes = ZBytes::empty();
+    /// let mut writer = bytes.writer();
+    /// let i1 = 1234_u32;
+    /// let i2 = String::from("test");
+    /// let i3 = vec![1, 2, 3, 4];
+    /// writer.serialize(i1);
+    /// writer.serialize(&i2);
+    /// writer.serialize(&i3);
+    /// // deserialization
+    /// let mut reader = bytes.reader();
+    /// let o1: u32 = reader.deserialize().unwrap();
+    /// let o2: String = reader.deserialize().unwrap();
+    /// let o3: Vec<u8> = reader.deserialize().unwrap();
+    /// assert_eq!(i1, o1);
+    /// assert_eq!(i2, o2);
+    /// assert_eq!(i3, o3);
+    /// ```
     pub fn serialize<T>(&mut self, t: T)
     where
         ZSerde: Serialize<T, Output = ZBytes>,
@@ -427,6 +454,8 @@ impl ZBytesWriter<'_> {
         self.write(&tpld.0);
     }
 
+    /// Try to serialize a type `T` on the [`ZBytes`]. Serialization works
+    /// in the same way as [`ZBytesWriter::serialize`].
     pub fn try_serialize<T, E>(&mut self, t: T) -> Result<(), E>
     where
         ZSerde: Serialize<T, Output = Result<ZBytes, E>>,
@@ -434,6 +463,41 @@ impl ZBytesWriter<'_> {
         let tpld = ZSerde.serialize(t)?;
         self.write(&tpld.0);
         Ok(())
+    }
+
+    /// Append a [`ZBytes`] to this [`ZBytes`] by taking ownership.
+    /// This allows to compose a [`ZBytes`] out of multiple [`ZBytes`] that may point to different memory regions.
+    /// Said in other terms, it allows to create a linear view on different memory regions without copy.
+    /// Please note that `append` does not preserve any boundaries as done in [`ZBytesWriter::serialize`], meaning
+    /// that [`ZBytesReader::deserialize`] will not be able to deserialize the types in the same seriliazation order.
+    /// You will need to decide how to deserialize data yourself.
+    ///
+    /// Example:
+    /// ```
+    /// use zenoh::bytes::ZBytes;
+    ///
+    /// let one = ZBytes::from(vec![0, 1]);
+    /// let two = ZBytes::from(vec![2, 3, 4, 5]);
+    /// let three = ZBytes::from(vec![6, 7]);
+    ///
+    /// let mut bytes = ZBytes::empty();
+    /// let mut writer = bytes.writer();
+    /// // Append data without copying by passing ownership
+    /// writer.append(one);
+    /// writer.append(two);
+    /// writer.append(three);
+    ///
+    /// // deserialization
+    /// let mut out: Vec<u8> = bytes.into();
+    /// assert_eq!(out, vec![0u8, 1, 2, 3, 4, 5, 6, 7]);
+    /// ```
+    pub fn append(&mut self, b: ZBytes) {
+        use zenoh_buffers::writer::Writer;
+        for s in b.0.zslices() {
+            // SAFETY: we are writing a ZSlice on a ZBuf, this is infallible because we are just pushing a ZSlice to
+            //         the list of available ZSlices.
+            unsafe { self.0.write_zslice(s).unwrap_unchecked() }
+        }
     }
 }
 
