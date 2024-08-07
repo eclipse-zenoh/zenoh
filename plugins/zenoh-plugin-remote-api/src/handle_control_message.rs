@@ -2,7 +2,10 @@ use std::{error::Error, net::SocketAddr};
 
 use tracing::{error, warn};
 use uuid::Uuid;
-use zenoh::{key_expr::KeyExpr, query::Selector, session::SessionDeclarations};
+use zenoh::{
+    bytes::EncodingBuilderTrait, key_expr::KeyExpr, qos::QoSBuilderTrait, query::Selector,
+    session::SessionDeclarations,
+};
 
 use crate::{
     interface::{ControlMsg, DataMsg, QueryWS, QueryableMsg, RemoteAPIMsg, ReplyWS, SampleWS},
@@ -74,7 +77,6 @@ pub async fn handle_control_message(
                     Err(_) => receiving = false,
                 }
             }
-
             let remote_api_msg = RemoteAPIMsg::Control(ControlMsg::GetFinished { id });
             state_map.websocket_tx.send(remote_api_msg)?;
         }
@@ -114,18 +116,49 @@ pub async fn handle_control_message(
             }
         }
         // Publisher
-        ControlMsg::DeclarePublisher { key_expr, id: uuid } => {
-            let publisher = state_map.session.declare_publisher(key_expr).await?;
+        ControlMsg::DeclarePublisher {
+            key_expr,
+            id: uuid,
+            encoding,
+            congestion_control,
+            priority,
+            express,
+        } => {
+            let publisher = state_map
+                .session
+                .declare_publisher(key_expr)
+                .congestion_control(congestion_control)
+                .encoding(encoding)
+                .priority(priority)
+                .express(express)
+                .await?;
             state_map.publishers.insert(uuid, publisher);
         }
-        ControlMsg::UndeclarePublisher(uuid) => {
-            if let Some(publisher) = state_map.publishers.remove(&uuid) {
+        ControlMsg::PublisherSetCongestion {
+            id,
+            congestion_control,
+        } => {
+            if let Some(publisher) = state_map.publishers.get_mut(&id) {
+                publisher.congestion_control();
+            } else {
+                warn!("UndeclarePublisher: No Publisher with UUID {id}");
+            };
+        }
+        ControlMsg::PublisherSetPriority { id, priority } => {
+            if let Some(publisher) = state_map.publishers.get_mut(&id) {
+                publisher.priority();
+            } else {
+                warn!("UndeclarePublisher: No Publisher with UUID {id}");
+            };
+        }
+        ControlMsg::UndeclarePublisher(id) => {
+            if let Some(publisher) = state_map.publishers.remove(&id) {
                 publisher.undeclare().await?;
             } else {
-                warn!("UndeclarePublisher: No Publisher with UUID {uuid}");
+                warn!("UndeclarePublisher: No Publisher with UUID {id}");
             }
         }
-        // Backend should not receive this, make it unrepresentable
+        // Queryable
         ControlMsg::DeclareQueryable {
             key_expr,
             complete,

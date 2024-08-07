@@ -22,7 +22,7 @@ use std::{
     collections::HashMap,
     fs::File,
     io::{self, BufReader, ErrorKind},
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::SocketAddr,
     path::Path,
     sync::Arc,
 };

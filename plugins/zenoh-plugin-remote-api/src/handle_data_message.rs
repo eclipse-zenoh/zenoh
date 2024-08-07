@@ -1,10 +1,10 @@
 use std::{error::Error, net::SocketAddr};
 
 use tracing::{error, warn};
-use zenoh::query::Query;
+use zenoh::{bytes::EncodingBuilderTrait, query::Query, sample::SampleBuilderTrait};
 
 use crate::{
-    interface::{DataMsg, QueryableMsg},
+    interface::{DataMsg, QueryReplyVariant, QueryableMsg},
     StateMap,
 };
 
@@ -25,13 +25,25 @@ pub async fn handle_data_message(
 
     // Data Message
     match data_msg {
-        DataMsg::PublisherPut(payload, publisher_uuid) => {
-            if let Some(publisher) = state_map.publishers.get(&publisher_uuid) {
-                if let Err(err) = publisher.put(payload).await {
-                    error!("PublisherPut {publisher_uuid}, {err}");
+        DataMsg::PublisherPut {
+            id,
+            payload,
+            attachment,
+            encoding,
+        } => {
+            if let Some(publisher) = state_map.publishers.get(&id) {
+                let mut put_builder = publisher.put(payload);
+                if let Some(payload) = attachment {
+                    put_builder = put_builder.attachment(payload);
+                }
+                if let Some(encoding) = encoding {
+                    put_builder = put_builder.encoding(encoding);
+                }
+                if let Err(err) = put_builder.await {
+                    error!("PublisherPut {id}, {err}");
                 }
             } else {
-                warn!("Publisher {publisher_uuid}, does not exist in State");
+                warn!("Publisher {id}, does not exist in State");
             }
         }
         DataMsg::Queryable(queryable_msg) => match queryable_msg {
@@ -46,8 +58,13 @@ pub async fn handle_data_message(
 
                 if let Some(q) = query {
                     match reply.result {
-                        Ok(ok) => q.reply(q.key_expr(), ok.value).await?,
-                        Err(err) => q.reply_err(err.payload).await?,
+                        QueryReplyVariant::Reply { key_expr, payload } => {
+                            q.reply(key_expr, payload).await?
+                        }
+                        QueryReplyVariant::ReplyErr { payload } => q.reply_err(payload).await?,
+                        QueryReplyVariant::ReplyDelete { key_expr } => {
+                            q.reply_del(key_expr).await?
+                        }
                     }
                 } else {
                     tracing::error!("Query id not found in map {}", reply.query_uuid);
@@ -57,7 +74,7 @@ pub async fn handle_data_message(
                 queryable_uuid: _,
                 query: _,
             } => {
-                warn!("Plugin should not receive Query from Client");
+                warn!("Plugin should not receive Query from Client, This should go via Get API");
             }
         },
         data_msg => {
