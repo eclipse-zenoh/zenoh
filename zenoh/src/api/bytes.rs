@@ -421,7 +421,7 @@ impl ZBytesWriter<'_> {
     }
 
     /// Serialize a type `T` on the [`ZBytes`]. For simmetricity, every serialization
-    /// operation preserves type boundaries by preprending the lenght of the serialized data.
+    /// operation preserves type boundaries by preprending the length of the serialized data.
     /// This allows calling [`ZBytesReader::deserialize`] in the same order to retrieve the original type.
     ///
     /// Example:
