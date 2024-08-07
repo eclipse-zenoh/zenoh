@@ -25,7 +25,7 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 
-use super::session::{Session, Undeclarable};
+use super::session::{Session, UndeclarableSealed};
 use crate::net::primitives::Primitives;
 
 #[derive(Clone, Debug)]
@@ -549,7 +549,7 @@ impl<'a> KeyExpr<'a> {
     }
 }
 
-impl<'a> Undeclarable<&'a Session, KeyExprUndeclaration<'a>> for KeyExpr<'a> {
+impl<'a> UndeclarableSealed<&'a Session, KeyExprUndeclaration<'a>> for KeyExpr<'a> {
     fn undeclare_inner(self, session: &'a Session) -> KeyExprUndeclaration<'a> {
         KeyExprUndeclaration {
             session,

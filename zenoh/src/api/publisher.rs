@@ -51,7 +51,7 @@ use super::{
     encoding::Encoding,
     key_expr::KeyExpr,
     sample::{DataInfo, Locality, QoS, Sample, SampleFields, SampleKind},
-    session::{SessionRef, Undeclarable},
+    session::{SessionRef, UndeclarableSealed},
 };
 use crate::{
     api::{subscriber::SubscriberKind, Id},
@@ -361,7 +361,7 @@ impl<'a> Publisher<'a> {
     /// # }
     /// ```
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
-        Undeclarable::undeclare_inner(self, ())
+        UndeclarableSealed::undeclare_inner(self, ())
     }
 
     #[cfg(feature = "unstable")]
@@ -462,7 +462,7 @@ impl PublisherDeclarations for std::sync::Arc<Publisher<'static>> {
     }
 }
 
-impl<'a> Undeclarable<(), PublisherUndeclaration<'a>> for Publisher<'a> {
+impl<'a> UndeclarableSealed<(), PublisherUndeclaration<'a>> for Publisher<'a> {
     fn undeclare_inner(self, _: ()) -> PublisherUndeclaration<'a> {
         PublisherUndeclaration { publisher: self }
     }
@@ -974,12 +974,12 @@ pub(crate) struct MatchingListenerInner<'a> {
 impl<'a> MatchingListenerInner<'a> {
     #[inline]
     pub fn undeclare(self) -> MatchingListenerUndeclaration<'a> {
-        Undeclarable::undeclare_inner(self, ())
+        UndeclarableSealed::undeclare_inner(self, ())
     }
 }
 
 #[zenoh_macros::unstable]
-impl<'a> Undeclarable<(), MatchingListenerUndeclaration<'a>> for MatchingListenerInner<'a> {
+impl<'a> UndeclarableSealed<(), MatchingListenerUndeclaration<'a>> for MatchingListenerInner<'a> {
     fn undeclare_inner(self, _: ()) -> MatchingListenerUndeclaration<'a> {
         MatchingListenerUndeclaration { subscriber: self }
     }
@@ -1046,9 +1046,9 @@ impl<'a, Receiver> MatchingListener<'a, Receiver> {
 }
 
 #[zenoh_macros::unstable]
-impl<'a, T> Undeclarable<(), MatchingListenerUndeclaration<'a>> for MatchingListener<'a, T> {
+impl<'a, T> UndeclarableSealed<(), MatchingListenerUndeclaration<'a>> for MatchingListener<'a, T> {
     fn undeclare_inner(self, _: ()) -> MatchingListenerUndeclaration<'a> {
-        Undeclarable::undeclare_inner(self.listener, ())
+        UndeclarableSealed::undeclare_inner(self.listener, ())
     }
 }
 
