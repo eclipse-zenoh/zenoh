@@ -426,6 +426,8 @@ impl ZBytesWriter<'_> {
     ///
     /// Example:
     /// ```
+    /// use zenoh::bytes::ZBytes;
+    ///
     /// // serialization
     /// let mut bytes = ZBytes::empty();
     /// let mut writer = bytes.writer();
@@ -472,6 +474,8 @@ impl ZBytesWriter<'_> {
     ///
     /// Example:
     /// ```
+    /// use zenoh::bytes::ZBytes;
+    ///
     /// let one = ZBytes::from(vec![0, 1]);
     /// let two = ZBytes::from(vec![2, 3, 4, 5]);
     /// let three = ZBytes::from(vec![6, 7]);
@@ -484,7 +488,7 @@ impl ZBytesWriter<'_> {
     /// writer.append(three);
     ///
     /// // deserialization
-    /// let mut out = bytes.into::<Vec<[u8]>>();
+    /// let mut out: Vec<u8> = bytes.into();
     /// assert_eq!(out, vec![0u8, 1, 2, 3, 4, 5, 6, 7]);
     /// ```
     pub fn append(&mut self, b: ZBytes) {
