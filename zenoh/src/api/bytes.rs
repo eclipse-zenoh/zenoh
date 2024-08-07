@@ -464,7 +464,7 @@ impl ZBytesWriter<'_> {
     }
 
     /// Append a [`ZBytes`] to this [`ZBytes`] by taking ownership.
-    /// This allows to compose a [`ZBytes`] out of multiple [`ZBytes`], eventually pointing to different memory regions.
+    /// This allows to compose a [`ZBytes`] out of multiple [`ZBytes`] that may point to different memory regions.
     /// Said in other terms, it allows to create a linear view on different memory regions without copy.
     /// Please note that `append` does not preserve any boundaries as done in [`ZBytesWriter::serialize`], meaning
     /// that [`ZBytesReader::deserialize`] will not be able to deserialize the types in the same seriliazation order.
