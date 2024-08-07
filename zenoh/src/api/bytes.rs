@@ -1142,8 +1142,8 @@ impl<'a> TryFrom<&'a mut ZBytes> for Cow<'a, str> {
     }
 }
 
-// - Integers impl
-macro_rules! impl_int {
+// - Impl Serialize/Deserialize for numbers
+macro_rules! impl_num {
     ($t:ty) => {
         impl Serialize<$t> for ZSerde {
             type Output = ZBytes;
@@ -1241,24 +1241,24 @@ macro_rules! impl_int {
 }
 
 // Zenoh unsigned integers
-impl_int!(u8);
-impl_int!(u16);
-impl_int!(u32);
-impl_int!(u64);
-impl_int!(u128);
-impl_int!(usize);
+impl_num!(u8);
+impl_num!(u16);
+impl_num!(u32);
+impl_num!(u64);
+impl_num!(u128);
+impl_num!(usize);
 
 // Zenoh signed integers
-impl_int!(i8);
-impl_int!(i16);
-impl_int!(i32);
-impl_int!(i64);
-impl_int!(i128);
-impl_int!(isize);
+impl_num!(i8);
+impl_num!(i16);
+impl_num!(i32);
+impl_num!(i64);
+impl_num!(i128);
+impl_num!(isize);
 
 // Zenoh floats
-impl_int!(f32);
-impl_int!(f64);
+impl_num!(f32);
+impl_num!(f64);
 
 // Zenoh bool
 impl Serialize<bool> for ZSerde {
