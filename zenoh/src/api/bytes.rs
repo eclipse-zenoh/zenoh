@@ -378,7 +378,8 @@ impl ZBytesReader<'_> {
         self.remaining() == 0
     }
 
-    /// Deserialize an object of type `T` from a [`Value`] using the [`ZSerde`].
+    /// Deserialize an object of type `T` from a [`ZBytesReader`] using the [`ZSerde`].
+    /// See [`ZBytesWriter::serialize`] for an example.
     pub fn deserialize<T>(&mut self) -> Result<T, <ZSerde as Deserialize<T>>::Error>
     where
         for<'a> ZSerde: Deserialize<T, Input<'a> = &'a ZBytes>,
