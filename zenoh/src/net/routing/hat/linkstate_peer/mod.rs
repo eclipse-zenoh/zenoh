@@ -505,7 +505,7 @@ struct HatFace {
     link_id: usize,
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
     remote_interests: HashMap<InterestId, (Option<Arc<Resource>>, InterestOptions)>,
-    local_subs: HashMap<Arc<Resource>, SubscriberId>,
+    local_subs: HashMap<Arc<Resource>, (SubscriberId, SubscriberInfo)>,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
     local_tokens: HashMap<Arc<Resource>, SubscriberId>,
     remote_tokens: HashMap<SubscriberId, Arc<Resource>>,

@@ -50,6 +50,29 @@ use crate::net::routing::{
 };
 
 #[inline]
+fn local_sub_info(tables: &Tables, res: &Arc<Resource>, face: &Arc<FaceState>) -> SubscriberInfo {
+    let peer_infos = iter_if(res.context.is_some(), || &res_hat!(res).router_subs)
+        .filter(|(zid, _)| **zid != tables.zid)
+        .map(|(_, info)| *info);
+    let router_infos = iter_if(
+        res.context.is_some() && hat!(tables).full_net(WhatAmI::Peer),
+        || &res_hat!(res).linkstatepeer_subs,
+    )
+    .filter(|(zid, _)| **zid != tables.zid)
+    .map(|(_, info)| *info);
+    let sessions_infos = res
+        .session_ctxs
+        .values()
+        .filter(|ctx| {
+            ctx.face.id != face.id && ctx.face.whatami != WhatAmI::Peer
+                || face.whatami != WhatAmI::Peer
+                || hat!(tables).failover_brokering(ctx.face.zid, face.zid)
+        })
+        .filter_map(|ctx| ctx.subs);
+    merge_subscriber_infos(peer_infos.chain(router_infos).chain(sessions_infos)).unwrap_or_default()
+}
+
+#[inline]
 fn send_sourced_subscription_to_net_children(
     tables: &Tables,
     net: &Network,
@@ -98,13 +121,11 @@ fn propagate_simple_subscription_to(
     tables: &mut Tables,
     dst_face: &mut Arc<FaceState>,
     res: &Arc<Resource>,
-    sub_info: &SubscriberInfo,
     src_face: &mut Arc<FaceState>,
     full_peer_net: bool,
     send_declare: &mut SendDeclare,
 ) {
     if src_face.id != dst_face.id
-        && !face_hat!(dst_face).local_subs.contains_key(res)
         && if full_peer_net {
             dst_face.whatami == WhatAmI::Client
         } else {
@@ -127,9 +148,15 @@ fn propagate_simple_subscription_to(
             } else {
                 res
             };
-            if !face_hat!(dst_face).local_subs.contains_key(res) {
-                let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-                face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
+            let info = local_sub_info(tables, res, dst_face);
+            let current = face_hat!(dst_face).local_subs.get(res);
+            if current.is_none() || current.unwrap().1 != info {
+                let id = current
+                    .map(|c| c.0)
+                    .unwrap_or(face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst));
+                face_hat_mut!(dst_face)
+                    .local_subs
+                    .insert(res.clone(), (id, info));
                 let key_expr = Resource::decl_key(res, dst_face);
                 send_declare(
                     &dst_face.primitives,
@@ -142,7 +169,7 @@ fn propagate_simple_subscription_to(
                             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                 id,
                                 wire_expr: key_expr,
-                                ext_info: *sub_info,
+                                ext_info: info,
                             }),
                         },
                         res.expr(),
@@ -156,7 +183,6 @@ fn propagate_simple_subscription_to(
 fn propagate_simple_subscription(
     tables: &mut Tables,
     res: &Arc<Resource>,
-    sub_info: &SubscriberInfo,
     src_face: &mut Arc<FaceState>,
     send_declare: &mut SendDeclare,
 ) {
@@ -171,7 +197,6 @@ fn propagate_simple_subscription(
             tables,
             &mut dst_face,
             res,
-            sub_info,
             src_face,
             full_peer_net,
             send_declare,
@@ -241,7 +266,7 @@ fn register_router_subscription(
     }
 
     // Propagate subscription to clients
-    propagate_simple_subscription(tables, res, sub_info, face, send_declare);
+    propagate_simple_subscription(tables, res, face, send_declare);
 }
 
 fn declare_router_subscription(
@@ -412,7 +437,7 @@ fn propagate_forget_simple_subscription(
     send_declare: &mut SendDeclare,
 ) {
     for mut face in tables.faces.values().cloned() {
-        if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(res) {
+        if let Some((id, _)) = face_hat_mut!(&mut face).local_subs.remove(res) {
             send_declare(
                 &face.primitives,
                 RoutingContext::with_expr(
@@ -444,7 +469,7 @@ fn propagate_forget_simple_subscription(
                             || remote_router_subs(tables, &m).is_some())
                 })
             }) {
-                if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
+                if let Some((id, _)) = face_hat_mut!(&mut face).local_subs.remove(&res) {
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -492,7 +517,7 @@ fn propagate_forget_simple_subscription_to_peers(
                                 && hat!(tables).failover_brokering(s.face.zid, face.zid)))
                 })
             {
-                if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(res) {
+                if let Some((id, _)) = face_hat_mut!(&mut face).local_subs.remove(res) {
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -658,7 +683,7 @@ pub(super) fn undeclare_simple_subscription(
 
         if simple_subs.len() == 1 && router_subs.is_none() && linkstatepeer_subs.is_none() {
             let mut face = &mut simple_subs[0];
-            if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
+            if let Some((id, _)) = face_hat_mut!(face).local_subs.remove(res) {
                 send_declare(
                     &face.primitives,
                     RoutingContext::with_expr(
@@ -690,7 +715,7 @@ pub(super) fn undeclare_simple_subscription(
                                 || remote_router_subs(tables, &m).is_some())
                     })
                 }) {
-                    if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
+                    if let Some((id, _)) = face_hat_mut!(&mut face).local_subs.remove(&res) {
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(
@@ -856,7 +881,7 @@ pub(super) fn pubsub_linkstate_change(
                 .cloned()
                 .collect::<Vec<Arc<Resource>>>();
             for res in to_forget {
-                if let Some(id) = face_hat_mut!(&mut src_face).local_subs.remove(&res) {
+                if let Some((id, _)) = face_hat_mut!(&mut src_face).local_subs.remove(&res) {
                     let wire_expr = Resource::get_best_key(&res, "", src_face.id);
                     send_declare(
                         &src_face.primitives,
@@ -877,18 +902,18 @@ pub(super) fn pubsub_linkstate_change(
                 }
             }
 
-            for dst_face in tables.faces.values_mut() {
+            for mut dst_face in tables.faces.values().cloned() {
                 if src_face.id != dst_face.id
                     && HatTables::failover_brokering_to(links, dst_face.zid)
                 {
                     for res in face_hat!(src_face).remote_subs.values() {
                         if !face_hat!(dst_face).local_subs.contains_key(res) {
                             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-                            face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
-                            let key_expr = Resource::decl_key(res, dst_face);
-                            let sub_info = SubscriberInfo {
-                                reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
-                            };
+                            let info = local_sub_info(tables, res, &dst_face);
+                            face_hat_mut!(&mut dst_face)
+                                .local_subs
+                                .insert(res.clone(), (id, info));
+                            let key_expr = Resource::decl_key(res, &mut dst_face);
                             send_declare(
                                 &dst_face.primitives,
                                 RoutingContext::with_expr(
@@ -900,7 +925,7 @@ pub(super) fn pubsub_linkstate_change(
                                         body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                             id,
                                             wire_expr: key_expr,
-                                            ext_info: sub_info,
+                                            ext_info: info,
                                         }),
                                     },
                                     res.expr(),
@@ -925,9 +950,6 @@ pub(crate) fn declare_sub_interest(
 ) {
     if mode.current() {
         let interest_id = (!mode.future()).then_some(id);
-        let sub_info = SubscriberInfo {
-            reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
-        };
         if let Some(res) = res.as_ref() {
             if aggregate {
                 if hat!(tables).router_subs.iter().any(|sub| {
@@ -937,9 +959,12 @@ pub(crate) fn declare_sub_interest(
                             || remote_linkstatepeer_subs(tables, sub).is_some()
                             || remote_router_subs(tables, sub).is_some())
                 }) {
+                    let info = local_sub_info(tables, res, face);
                     let id = if mode.future() {
                         let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face).local_subs.insert((*res).clone(), id);
+                        face_hat_mut!(face)
+                            .local_subs
+                            .insert((*res).clone(), (id, info));
                         id
                     } else {
                         0
@@ -956,7 +981,7 @@ pub(crate) fn declare_sub_interest(
                                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                     id,
                                     wire_expr,
-                                    ext_info: sub_info,
+                                    ext_info: info,
                                 }),
                             },
                             res.expr(),
@@ -982,9 +1007,12 @@ pub(crate) fn declare_sub_interest(
                                                 .failover_brokering(s.face.zid, face.zid)))
                             }))
                     {
+                        let info = local_sub_info(tables, sub, face);
                         let id = if mode.future() {
                             let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                            face_hat_mut!(face).local_subs.insert(sub.clone(), id);
+                            face_hat_mut!(face)
+                                .local_subs
+                                .insert(sub.clone(), (id, info));
                             id
                         } else {
                             0
@@ -1001,7 +1029,7 @@ pub(crate) fn declare_sub_interest(
                                     body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                         id,
                                         wire_expr,
-                                        ext_info: sub_info,
+                                        ext_info: info,
                                     }),
                                 },
                                 sub.expr(),
@@ -1025,9 +1053,12 @@ pub(crate) fn declare_sub_interest(
                                     || hat!(tables).failover_brokering(s.face.zid, face.zid))
                         }))
                 {
+                    let info = local_sub_info(tables, sub, face);
                     let id = if mode.future() {
                         let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face).local_subs.insert(sub.clone(), id);
+                        face_hat_mut!(face)
+                            .local_subs
+                            .insert(sub.clone(), (id, info));
                         id
                     } else {
                         0
@@ -1044,7 +1075,7 @@ pub(crate) fn declare_sub_interest(
                                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                     id,
                                     wire_expr,
-                                    ext_info: sub_info,
+                                    ext_info: info,
                                 }),
                             },
                             sub.expr(),
@@ -1195,7 +1226,7 @@ impl HatPubSubTrait for HatCode {
             subs: &HashMap<ZenohIdProto, SubscriberInfo>,
         ) {
             if net.trees.len() > source as usize {
-                for sub in subs.keys() {
+                for (sub, info) in subs {
                     if let Some(sub_idx) = net.get_idx(sub) {
                         if net.trees[source as usize].directions.len() > sub_idx.index() {
                             if let Some(direction) =
@@ -1203,17 +1234,24 @@ impl HatPubSubTrait for HatCode {
                             {
                                 if net.graph.contains_node(direction) {
                                     if let Some(face) = tables.get_face(&net.graph[direction].zid) {
-                                        route.entry(face.id).or_insert_with(|| {
-                                            let key_expr = Resource::get_best_key(
-                                                expr.prefix,
-                                                expr.suffix,
-                                                face.id,
-                                            );
-                                            (
-                                                (face.clone(), key_expr.to_owned(), source),
-                                                Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
-                                            )
-                                        });
+                                        route
+                                            .entry(face.id)
+                                            .and_modify(|(_, reliability)| {
+                                                if info.reliability == Reliability::Reliable {
+                                                    *reliability = info.reliability;
+                                                }
+                                            })
+                                            .or_insert_with(|| {
+                                                let key_expr = Resource::get_best_key(
+                                                    expr.prefix,
+                                                    expr.suffix,
+                                                    face.id,
+                                                );
+                                                (
+                                                    (face.clone(), key_expr.to_owned(), source),
+                                                    info.reliability,
+                                                )
+                                            });
                                     }
                                 }
                             }
@@ -1315,7 +1353,7 @@ impl HatPubSubTrait for HatCode {
                         expr.full_expr().to_string().into(),
                         NodeId::default(),
                     ),
-                    Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
+                    Reliability::Reliable, // @TODO compute proper reliability to send data through multicast
                 ),
             );
         }
