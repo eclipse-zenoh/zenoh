@@ -11,12 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
-use zenoh_result::ZResult;
-
 use super::{
     chunk::ChunkDescriptor,
-    types::{ChunkAllocResult, MemoryLayout},
+    types::{ChunkAllocResult, MemoryLayout, ZLayoutError},
 };
 
 /// The provider backend trait
@@ -48,5 +45,5 @@ pub trait ShmProviderBackend {
     /// - validate, if the provided layout can be used with this backend
     /// - adopt the layout for backend capabilities
     #[zenoh_macros::unstable_doc]
-    fn layout_for(&self, layout: MemoryLayout) -> ZResult<MemoryLayout>;
+    fn layout_for(&self, layout: MemoryLayout) -> Result<MemoryLayout, ZLayoutError>;
 }

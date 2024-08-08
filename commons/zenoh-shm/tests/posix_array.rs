@@ -41,25 +41,25 @@ impl TestElem {
 }
 
 fn validate_array<ElemIndex>(
-    array1: &mut ArrayInSHM<TestSegmentID, TestElem, ElemIndex>,
-    array2: &ArrayInSHM<TestSegmentID, TestElem, ElemIndex>,
+    created_array: &mut ArrayInSHM<TestSegmentID, TestElem, ElemIndex>,
+    opened_array: &ArrayInSHM<TestSegmentID, TestElem, ElemIndex>,
     expected_elem_count: usize,
 ) where
     ElemIndex: Unsigned + PrimInt + 'static + AsPrimitive<usize>,
     isize: AsPrimitive<ElemIndex>,
     usize: AsPrimitive<ElemIndex>,
 {
-    assert!(array1.elem_count() == expected_elem_count);
-    assert!(array2.elem_count() == expected_elem_count);
+    assert!(created_array.elem_count() == expected_elem_count);
+    assert!(opened_array.elem_count() >= expected_elem_count);
 
     let mut fill_ctr = 0;
     let mut validate_ctr = 0;
 
     // first of all, fill and validate elements sequentially
-    for i in 0..array1.elem_count() {
+    for i in 0..expected_elem_count {
         unsafe {
-            let elem1 = &mut *array1.elem_mut(i.as_());
-            let elem2 = &*array2.elem(i.as_());
+            let elem1 = &mut *created_array.elem_mut(i.as_());
+            let elem2 = &*opened_array.elem(i.as_());
 
             elem1.fill(&mut fill_ctr);
             elem2.validate(&mut validate_ctr);
@@ -67,17 +67,17 @@ fn validate_array<ElemIndex>(
     }
 
     // then fill all the elements...
-    for i in 0..array1.elem_count() {
+    for i in 0..expected_elem_count {
         unsafe {
-            let elem1 = &mut *array1.elem_mut(i.as_());
+            let elem1 = &mut *created_array.elem_mut(i.as_());
             elem1.fill(&mut fill_ctr);
         }
     }
 
     // ...and validate all the elements
-    for i in 0..array2.elem_count() {
+    for i in 0..expected_elem_count {
         unsafe {
-            let elem2 = &*array2.elem(i.as_());
+            let elem2 = &*opened_array.elem(i.as_());
             elem2.validate(&mut validate_ctr);
         }
     }

@@ -13,6 +13,7 @@
 //
 use clap::Parser;
 use zenoh::{
+    bytes::ZBytes,
     key_expr::KeyExpr,
     prelude::*,
     shm::{
@@ -63,18 +64,29 @@ async fn main() {
 
     println!("Press CTRL-C to quit...");
     while let Ok(query) = queryable.recv_async().await {
-        print!(
-            ">> [Queryable] Received Query '{}' ('{}'",
-            query.selector(),
-            query.key_expr().as_str(),
-        );
-        if let Some(query_payload) = query.payload() {
-            match query_payload.deserialize::<&zshm>() {
-                Ok(p) => print!(": '{}'", String::from_utf8_lossy(p)),
-                Err(e) => print!(": 'Not a ShmBufInner: {:?}'", e),
+        // Print overall query payload information
+        match query.payload() {
+            Some(payload) => {
+                let (payload_type, payload) = handle_bytes(payload);
+                print!(
+                    ">> [Queryable] Received Query ('{}': '{}') [{}]",
+                    query.selector(),
+                    payload,
+                    payload_type,
+                );
             }
+            None => {
+                print!(">> Received Query '{}'", query.selector());
+            }
+        };
+
+        // Print attachment information
+        if let Some(att) = query.attachment() {
+            let (attachment_type, attachment) = handle_bytes(att);
+            print!(" ({}: {})", attachment_type, attachment);
         }
-        println!(")");
+
+        println!();
 
         // Allocate an SHM buffer
         // NOTE: For allocation API please check z_alloc_shm.rs example
@@ -105,7 +117,7 @@ struct Args {
     #[arg(short, long, default_value = "demo/example/zenoh-rs-queryable")]
     /// The key expression matching queries to reply to.
     key: KeyExpr<'static>,
-    #[arg(short, long, default_value = "Queryable from SHM Rust!")]
+    #[arg(short, long, default_value = "Queryable from Rust SHM!")]
     /// The payload to reply to queries.
     payload: String,
     #[arg(long)]
@@ -118,4 +130,41 @@ struct Args {
 fn parse_args() -> (Config, KeyExpr<'static>, String, bool) {
     let args = Args::parse();
     (args.common.into(), args.key, args.payload, args.complete)
+}
+
+fn handle_bytes(bytes: &ZBytes) -> (&str, String) {
+    // Determine buffer type for indication purpose
+    let bytes_type = {
+        // if Zenoh is built without SHM support, the only buffer type it can receive is RAW
+        #[cfg(not(feature = "shared-memory"))]
+        {
+            "RAW"
+        }
+
+        // if Zenoh is built with SHM support but without SHM API (that is unstable), it can
+        // receive buffers of any type, but there is no way to detect the buffer type
+        #[cfg(all(feature = "shared-memory", not(feature = "unstable")))]
+        {
+            "UNKNOWN"
+        }
+
+        // if Zenoh is built with SHM support and with SHM API  we can detect the exact buffer type
+        #[cfg(all(feature = "shared-memory", feature = "unstable"))]
+        match bytes.deserialize::<&zshm>() {
+            Ok(_) => "SHM",
+            Err(_) => "RAW",
+        }
+    };
+
+    // In order to indicate the real underlying buffer type the code above is written ^^^
+    // Sample is SHM-agnostic: Sample handling code works both with SHM and RAW data transparently.
+    // In other words, the common application compiled with "shared-memory" feature will be able to
+    // handle incoming SHM data without any changes in the application code.
+    //
+    // Refer to z_bytes.rs to see how to deserialize different types of message
+    let bytes_string = bytes
+        .deserialize::<String>()
+        .unwrap_or_else(|e| format!("{}", e));
+
+    (bytes_type, bytes_string)
 }

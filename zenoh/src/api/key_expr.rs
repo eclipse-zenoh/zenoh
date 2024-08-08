@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
 use std::{
     convert::{TryFrom, TryInto},
     future::{IntoFuture, Ready},
@@ -82,10 +81,10 @@ impl KeyExpr<'static> {
     /// # Safety
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
-    pub unsafe fn from_boxed_string_unchecked(s: Box<str>) -> Self {
-        Self(KeyExprInner::Owned(
-            OwnedKeyExpr::from_boxed_string_unchecked(s),
-        ))
+    pub unsafe fn from_boxed_str_unchecked(s: Box<str>) -> Self {
+        Self(KeyExprInner::Owned(OwnedKeyExpr::from_boxed_str_unchecked(
+            s,
+        )))
     }
 }
 impl<'a> KeyExpr<'a> {

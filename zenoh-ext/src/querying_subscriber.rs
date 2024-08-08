@@ -17,7 +17,7 @@ use std::{
     future::{IntoFuture, Ready},
     mem::swap,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use zenoh::{
@@ -29,7 +29,7 @@ use zenoh::{
     query::{QueryConsolidation, QueryTarget, ReplyKeyExpr, Selector},
     sample::{Locality, Sample, SampleBuilder, TimestampBuilderTrait},
     session::{SessionDeclarations, SessionRef},
-    time::{new_timestamp, Timestamp},
+    time::Timestamp,
     Error, Resolvable, Resolve, Result as ZResult,
 };
 
@@ -654,7 +654,8 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
         InputHandler: IntoHandler<'static, Sample, Handler = Handler> + Send,
         TryIntoSample: ExtractSample + Send + Sync,
     {
-        let zid = conf.session.zid();
+        let session_id = conf.session.zid();
+
         let state = Arc::new(Mutex::new(InnerState {
             pending_fetches: 0,
             merge_queue: MergeQueue::new(),
@@ -672,9 +673,14 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
                     tracing::trace!(
                         "Sample received while fetch in progress: push it to merge_queue"
                     );
+
                     // ensure the sample has a timestamp, thus it will always be sorted into the MergeQueue
                     // after any timestamped Sample possibly coming from a fetch reply.
-                    let timestamp = s.timestamp().cloned().unwrap_or(new_timestamp(zid));
+                    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into(); // UNIX_EPOCH is Returns a Timespec::zero(), Unwrap Should be permissable here
+                    let timestamp = s
+                        .timestamp()
+                        .cloned()
+                        .unwrap_or(Timestamp::new(now, session_id.into()));
                     state
                         .merge_queue
                         .push(SampleBuilder::from(s).timestamp(timestamp).into());
@@ -716,9 +722,9 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
         Ok(fetch_subscriber)
     }
 
-    /// Close this FetchingSubscriber
+    /// Undeclare this [`FetchingSubscriber`]`.
     #[inline]
-    pub fn close(self) -> impl Resolve<ZResult<()>> + 'a {
+    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         self.subscriber.undeclare()
     }
 

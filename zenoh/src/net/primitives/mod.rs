@@ -49,11 +49,11 @@ pub(crate) trait EPrimitives: Send + Sync {
 
     fn send_push(&self, msg: Push);
 
-    fn send_request(&self, ctx: RoutingContext<Request>);
+    fn send_request(&self, msg: Request);
 
-    fn send_response(&self, ctx: RoutingContext<Response>);
+    fn send_response(&self, msg: Response);
 
-    fn send_response_final(&self, ctx: RoutingContext<ResponseFinal>);
+    fn send_response_final(&self, msg: ResponseFinal);
 }
 
 #[derive(Default)]
@@ -82,11 +82,11 @@ impl EPrimitives for DummyPrimitives {
 
     fn send_push(&self, _msg: Push) {}
 
-    fn send_request(&self, _ctx: RoutingContext<Request>) {}
+    fn send_request(&self, _msg: Request) {}
 
-    fn send_response(&self, _ctx: RoutingContext<Response>) {}
+    fn send_response(&self, _msg: Response) {}
 
-    fn send_response_final(&self, _ctx: RoutingContext<ResponseFinal>) {}
+    fn send_response_final(&self, _msg: ResponseFinal) {}
 
     fn as_any(&self) -> &dyn Any {
         self

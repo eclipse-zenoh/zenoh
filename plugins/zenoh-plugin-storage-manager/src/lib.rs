@@ -25,12 +25,12 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use async_std::task;
 use flume::Sender;
 use memory_backend::MemoryBackend;
 use storages_mgt::StorageMessage;
 use zenoh::{
     internal::{
+        bail,
         plugins::{Response, RunningPlugin, RunningPluginTrait, ZenohPlugin},
         runtime::Runtime,
         zlock, LibLoader,
@@ -54,6 +54,18 @@ use backends_mgt::*;
 mod memory_backend;
 mod replica;
 mod storages_mgt;
+
+const WORKER_THREAD_NUM: usize = 2;
+const MAX_BLOCK_THREAD_NUM: usize = 50;
+lazy_static::lazy_static! {
+    // The global runtime is used in the zenohd case, which we can't get the current runtime
+    static ref TOKIO_RUNTIME: tokio::runtime::Runtime = tokio::runtime::Builder::new_multi_thread()
+               .worker_threads(WORKER_THREAD_NUM)
+               .max_blocking_threads(MAX_BLOCK_THREAD_NUM)
+               .enable_all()
+               .build()
+               .expect("Unable to create runtime");
+}
 
 #[cfg(feature = "dynamic_plugin")]
 zenoh_plugin_trait::declare_plugin!(StoragesPlugin);
@@ -93,8 +105,9 @@ struct StorageRuntimeInner {
 impl StorageRuntimeInner {
     fn status_key(&self) -> String {
         format!(
-            "@/router/{}/status/plugins/{}",
+            "@/{}/{}/status/plugins/{}",
             &self.runtime.zid(),
+            &self.runtime.whatami().to_str(),
             &self.name
         )
     }
@@ -110,15 +123,29 @@ impl StorageRuntimeInner {
             storages,
             ..
         } = config;
-        let lib_loader = backend_search_dirs
-            .map(|search_dirs| LibLoader::new(&search_dirs, false))
-            .unwrap_or_default();
+        let lib_loader = LibLoader::new(backend_search_dirs);
 
         let plugins_manager =
             PluginsManager::dynamic(lib_loader.clone(), BACKEND_LIB_PREFIX)
                 .declare_static_plugin::<MemoryBackend, &str>(MEMORY_BACKEND_NAME, true);
 
         let session = Arc::new(zenoh::session::init(runtime.clone()).wait()?);
+
+        // NOTE: All storage **must** have a timestamp associated with a Sample. Considering that it is possible to make
+        //       a publication without associating a timestamp, that means that the node managing the storage (be it a
+        //       Zenoh client / peer / router) has to add it.
+        //
+        //       If the `timestamping` configuration setting is disabled then there is no HLC associated with the
+        //       Session. That eventually means that no timestamp can be generated which goes against the previous
+        //       requirement.
+        //
+        //       Hence, in that scenario, we refuse to start the storage manager and any storage.
+        if session.hlc().is_none() {
+            tracing::error!(
+                "Cannot start storage manager (and thus any storage) without the 'timestamping' setting enabled in the Zenoh configuration"
+            );
+            bail!("Cannot start storage manager, 'timestamping' is disabled in the configuration");
+        }
 
         // After this moment result should be only Ok. Failure of loading of one voulme or storage should not affect others.
 
@@ -178,11 +205,13 @@ impl StorageRuntimeInner {
         let name = name.as_ref();
         tracing::info!("Killing volume '{}'", name);
         if let Some(storages) = self.storages.remove(name) {
-            async_std::task::block_on(futures::future::join_all(
-                storages
-                    .into_values()
-                    .map(|s| async move { s.send(StorageMessage::Stop) }),
-            ));
+            tokio::task::block_in_place(|| {
+                TOKIO_RUNTIME.block_on(futures::future::join_all(
+                    storages
+                        .into_values()
+                        .map(|s| async move { s.send(StorageMessage::Stop) }),
+                ))
+            });
         }
         self.plugins_manager
             .started_plugin_mut(name)
@@ -211,7 +240,9 @@ impl StorageRuntimeInner {
             self.plugins_manager
                 .declare_dynamic_plugin_by_name(volume_id, backend_name, true)?
         };
-        let loaded = declared.load()?;
+        let loaded = declared
+            .load()?
+            .expect("Volumes should not loaded if if the storage-manager plugin is not loaded");
         loaded.start(config)?;
 
         Ok(())
@@ -248,12 +279,14 @@ impl StorageRuntimeInner {
             volume_id,
             backend.name()
         );
-        let stopper = async_std::task::block_on(create_and_start_storage(
-            admin_key,
-            storage.clone(),
-            backend.instance(),
-            self.session.clone(),
-        ))?;
+        let stopper = tokio::task::block_in_place(|| {
+            TOKIO_RUNTIME.block_on(create_and_start_storage(
+                admin_key,
+                storage.clone(),
+                backend.instance(),
+                self.session.clone(),
+            ))
+        })?;
         self.storages
             .entry(volume_id)
             .or_default()
@@ -341,10 +374,12 @@ impl RunningPluginTrait for StorageRuntime {
                 for (storage, handle) in storages {
                     with_extended_string(key, &[storage], |key| {
                         if keyexpr::new(key.as_str()).unwrap().intersects(key_expr) {
-                            if let Ok(value) = task::block_on(async {
-                                let (tx, rx) = async_std::channel::bounded(1);
-                                let _ = handle.send(StorageMessage::GetStatus(tx));
-                                rx.recv().await
+                            if let Some(value) = tokio::task::block_in_place(|| {
+                                TOKIO_RUNTIME.block_on(async {
+                                    let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+                                    let _ = handle.send(StorageMessage::GetStatus(tx));
+                                    rx.recv().await
+                                })
                             }) {
                                 responses.push(Response::new(key.clone(), value))
                             }

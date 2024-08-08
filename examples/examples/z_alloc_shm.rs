@@ -54,7 +54,7 @@ async fn run() -> ZResult<()> {
         // OPTION: Allocation with custom alignment and alloc policy customization
         let _comprehensive = provider
             .alloc(512)
-            .with_alignment(AllocAlignment::new(2))
+            .with_alignment(AllocAlignment::new(2).unwrap())
             // for more examples on policies, please see allocation policy usage below (for layout allocation API)
             .with_policy::<GarbageCollect>()
             .wait()
@@ -63,7 +63,7 @@ async fn run() -> ZResult<()> {
         // OPTION: Allocation with custom alignment and async alloc policy
         let _async = provider
             .alloc(512)
-            .with_alignment(AllocAlignment::new(2))
+            .with_alignment(AllocAlignment::new(2).unwrap())
             // for more examples on policies, please see allocation policy usage below (for layout allocation API)
             .with_policy::<BlockOn<Defragment<GarbageCollect>>>()
             .await
@@ -83,7 +83,7 @@ async fn run() -> ZResult<()> {
         // OPTION: Comprehensive configuration:
         let _comprehensive_layout = provider
             .alloc(512)
-            .with_alignment(AllocAlignment::new(2))
+            .with_alignment(AllocAlignment::new(2).unwrap())
             .into_layout()
             .unwrap();
 

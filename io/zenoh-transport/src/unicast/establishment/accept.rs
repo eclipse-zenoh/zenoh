@@ -163,6 +163,12 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             .await
             .map_err(|e| (e, Some(close::reason::INVALID)))?;
 
+        tracing::trace!(
+            "Establishment Accept InitSyn: {}. Received: {:?}",
+            self.link,
+            msg
+        );
+
         let init_syn = match msg.body {
             TransportBody::InitSyn(init_syn) => init_syn,
             _ => {
@@ -362,7 +368,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         let cookie: ZSlice = encrypted.into();
 
         // Send the message on the link
-        let message: TransportMessage = InitAck {
+        let msg: TransportMessage = InitAck {
             version: input.mine_version,
             whatami: input.mine_whatami,
             zid: input.mine_zid,
@@ -381,9 +387,15 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
 
         let _ = self
             .link
-            .send(&message)
+            .send(&msg)
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
+        tracing::trace!(
+            "Establishment Accept InitAck: {}. Sent: {:?}",
+            self.link,
+            msg
+        );
 
         let output = SendInitAckOut {
             cookie_nonce,
@@ -404,6 +416,12 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             .recv()
             .await
             .map_err(|e| (e, Some(close::reason::INVALID)))?;
+
+        tracing::trace!(
+            "Establishment Accept OpenSyn: {}. Received: {:?}",
+            self.link,
+            msg
+        );
 
         let open_syn = match msg.body {
             TransportBody::OpenSyn(open_syn) => open_syn,
@@ -594,7 +612,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         // Build OpenAck message
         let mine_initial_sn =
             compute_sn(input.mine_zid, input.other_zid, state.transport.resolution);
-        let open_ack = OpenAck {
+        let msg = OpenAck {
             lease: input.mine_lease,
             initial_sn: mine_initial_sn,
             ext_qos,
@@ -607,8 +625,13 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         };
 
         // Do not send the OpenAck right now since we might still incur in MAX_LINKS error
+        tracing::trace!(
+            "Establishment Accept OpenAck: {}. Sent: {:?}",
+            self.link,
+            msg
+        );
 
-        let output = SendOpenAckOut { open_ack };
+        let output = SendOpenAckOut { open_ack: msg };
         Ok(output)
     }
 }
@@ -769,7 +792,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         .await?;
 
     tracing::debug!(
-        "New transport link accepted from {} to {}: {}.",
+        "New transport link accepted from {} to {}: {}",
         osyn_out.other_zid,
         manager.config.zid,
         s_link,

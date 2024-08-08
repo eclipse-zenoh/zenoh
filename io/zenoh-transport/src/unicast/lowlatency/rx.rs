@@ -37,7 +37,10 @@ impl TransportUnicastLowlatency {
             #[cfg(feature = "shared-memory")]
             {
                 if self.config.shm.is_some() {
-                    crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shmr)?;
+                    if let Err(e) = crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shmr) {
+                        tracing::debug!("Error receiving SHM buffer: {e}");
+                        return Ok(());
+                    }
                 }
             }
             callback.handle_message(msg)

@@ -18,7 +18,7 @@
 
 use std::{borrow::Cow, str::FromStr, thread::sleep};
 
-use async_std::task;
+use tokio::runtime::Runtime;
 use zenoh::{
     internal::zasync_executor_init, prelude::*, query::Reply, sample::Sample, time::Timestamp,
     Config, Session,
@@ -51,9 +51,10 @@ async fn get_data(session: &Session, key_expr: &str) -> Vec<Sample> {
 }
 
 async fn test_updates_in_order() {
-    task::block_on(async {
+    async {
         zasync_executor_init!();
-    });
+    }
+    .await;
     let mut config = Config::default();
     config
         .insert_json5(
@@ -66,6 +67,18 @@ async fn test_updates_in_order() {
                                 id: "memory"
                             }
                         }
+                    }
+                }"#,
+        )
+        .unwrap();
+    config
+        .insert_json5(
+            "timestamping",
+            r#"{
+                    enabled: {
+                        router: true,
+                        peer: true,
+                        client: true
                     }
                 }"#,
         )
@@ -86,8 +99,7 @@ async fn test_updates_in_order() {
         &session,
         "operation/test/a",
         "1",
-        Timestamp::from_str("2022-01-17T10:42:10.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
-            .unwrap(),
+        Timestamp::from_str("7054123566570568799/BC779A06D7E049BD88C3FF3DB0C17FCC").unwrap(),
     )
     .await;
 
@@ -102,8 +114,7 @@ async fn test_updates_in_order() {
         &session,
         "operation/test/b",
         "2",
-        Timestamp::from_str("2022-01-17T10:43:10.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
-            .unwrap(),
+        Timestamp::from_str("7054123824268606559/BC779A06D7E049BD88C3FF3DB0C17FCC").unwrap(),
     )
     .await;
 
@@ -117,8 +128,7 @@ async fn test_updates_in_order() {
     delete_data(
         &session,
         "operation/test/a",
-        Timestamp::from_str("2022-01-17T10:43:10.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
-            .unwrap(),
+        Timestamp::from_str("7054123824268606559/BC779A06D7E049BD88C3FF3DB0C17FCC").unwrap(),
     )
     .await;
 
@@ -139,5 +149,6 @@ async fn test_updates_in_order() {
 
 #[test]
 fn updates_test() {
-    task::block_on(async { test_updates_in_order().await });
+    let rt = Runtime::new().unwrap();
+    rt.block_on(async { test_updates_in_order().await });
 }

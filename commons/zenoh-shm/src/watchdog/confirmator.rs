@@ -18,7 +18,7 @@ use std::{
     time::Duration,
 };
 
-use lazy_static::lazy_static;
+use static_init::dynamic;
 use zenoh_result::{zerror, ZResult};
 
 use super::{
@@ -27,10 +27,10 @@ use super::{
     segment::Segment,
 };
 
-lazy_static! {
-    pub static ref GLOBAL_CONFIRMATOR: WatchdogConfirmator =
+#[dynamic(lazy,drop)]
+pub static mut GLOBAL_CONFIRMATOR: WatchdogConfirmator =
         WatchdogConfirmator::new(Duration::from_millis(50));
-}
+
 
 pub struct ConfirmedDescriptor {
     pub owned: OwnedDescriptor,

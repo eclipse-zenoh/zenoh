@@ -33,7 +33,7 @@ pub struct PeriodicTask {
 
 impl Drop for PeriodicTask {
     fn drop(&mut self) {
-        self.running.store(false, Ordering::Relaxed)
+        self.running.store(false, Ordering::Relaxed);
     }
 }
 

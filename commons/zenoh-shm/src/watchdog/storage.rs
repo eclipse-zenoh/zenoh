@@ -16,14 +16,13 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use lazy_static::lazy_static;
+use static_init::dynamic;
 use zenoh_result::{zerror, ZResult};
 
 use super::{allocated_watchdog::AllocatedWatchdog, descriptor::OwnedDescriptor, segment::Segment};
 
-lazy_static! {
-    pub static ref GLOBAL_STORAGE: WatchdogStorage = WatchdogStorage::new(32768usize).unwrap();
-}
+#[dynamic(lazy,drop)]
+pub static mut GLOBAL_STORAGE: WatchdogStorage = WatchdogStorage::new(32768usize).unwrap();
 
 pub struct WatchdogStorage {
     available: Arc<Mutex<BTreeSet<OwnedDescriptor>>>,

@@ -71,13 +71,13 @@ impl OwnedKeyExpr {
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
     pub unsafe fn from_string_unchecked(s: String) -> Self {
-        Self::from_boxed_string_unchecked(s.into_boxed_str())
+        Self::from_boxed_str_unchecked(s.into_boxed_str())
     }
     /// Constructs an OwnedKeyExpr without checking [`keyexpr`]'s invariants
     /// # Safety
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
-    pub unsafe fn from_boxed_string_unchecked(s: Box<str>) -> Self {
+    pub unsafe fn from_boxed_str_unchecked(s: Box<str>) -> Self {
         OwnedKeyExpr(s.into())
     }
 }

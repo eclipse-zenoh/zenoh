@@ -34,7 +34,7 @@ if(typeof(EventSource) !== "undefined") {
 }
 </script>"#;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     // initiate logging
     zenoh::try_init_log_from_env();
@@ -49,7 +49,7 @@ async fn main() {
     println!("Declaring Queryable on '{key}'...");
     let queryable = session.declare_queryable(key).await.unwrap();
 
-    async_std::task::spawn({
+    tokio::task::spawn({
         let receiver = queryable.handler().clone();
         async move {
             while let Ok(request) = receiver.recv_async().await {
@@ -75,7 +75,7 @@ async fn main() {
     println!("Data updates are accessible through HTML5 SSE at http://<hostname>:8000/{key}");
     loop {
         publisher.put(value).await.unwrap();
-        async_std::task::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
 }
 
@@ -110,13 +110,15 @@ fn parse_args() -> Config {
         config
             .connect
             .endpoints
-            .extend(values.into_iter().map(|v| v.parse().unwrap()))
+            .set(values.into_iter().map(|v| v.parse().unwrap()).collect())
+            .unwrap();
     }
     if let Some(values) = args.get_many::<&String>("listen") {
         config
             .listen
             .endpoints
-            .extend(values.into_iter().map(|v| v.parse().unwrap()))
+            .set(values.into_iter().map(|v| v.parse().unwrap()).collect())
+            .unwrap();
     }
     if args.get_flag("no-multicast-scouting") {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();

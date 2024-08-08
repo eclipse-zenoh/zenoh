@@ -19,7 +19,7 @@
 use std::{borrow::Cow, str::FromStr, thread::sleep};
 
 // use std::collections::HashMap;
-use async_std::task;
+use tokio::runtime::Runtime;
 use zenoh::{
     internal::zasync_executor_init, prelude::*, query::Reply, sample::Sample, time::Timestamp,
     Config, Session,
@@ -52,9 +52,7 @@ async fn get_data(session: &Session, key_expr: &str) -> Vec<Sample> {
 }
 
 async fn test_wild_card_in_order() {
-    task::block_on(async {
-        zasync_executor_init!();
-    });
+    zasync_executor_init!();
     let mut config = Config::default();
     config
         .insert_json5(
@@ -67,6 +65,18 @@ async fn test_wild_card_in_order() {
                                 id: "memory"
                             }
                         }
+                    }
+                }"#,
+        )
+        .unwrap();
+    config
+        .insert_json5(
+            "timestamping",
+            r#"{
+                    enabled: {
+                        router: true,
+                        peer: true,
+                        client: true
                     }
                 }"#,
         )
@@ -87,8 +97,7 @@ async fn test_wild_card_in_order() {
         &session,
         "wild/test/*",
         "1",
-        Timestamp::from_str("2022-01-17T10:42:10.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
-            .unwrap(),
+        Timestamp::from_str("7054123566570568799/BC779A06D7E049BD88C3FF3DB0C17FCC").unwrap(),
     )
     .await;
 
@@ -102,8 +111,7 @@ async fn test_wild_card_in_order() {
         &session,
         "wild/test/a",
         "2",
-        Timestamp::from_str("2022-01-17T10:42:11.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
-            .unwrap(),
+        Timestamp::from_str("7054123570865536095/BC779A06D7E049BD88C3FF3DB0C17FCC").unwrap(),
     )
     .await;
 
@@ -119,8 +127,7 @@ async fn test_wild_card_in_order() {
         &session,
         "wild/test/b",
         "3",
-        Timestamp::from_str("2022-01-17T10:42:11.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
-            .unwrap(),
+        Timestamp::from_str("7054123570865536095/BC779A06D7E049BD88C3FF3DB0C17FCC").unwrap(),
     )
     .await;
 
@@ -150,8 +157,7 @@ async fn test_wild_card_in_order() {
         &session,
         "wild/test/*",
         "4",
-        Timestamp::from_str("2022-01-17T10:43:12.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
-            .unwrap(),
+        Timestamp::from_str("7054123832858541151/BC779A06D7E049BD88C3FF3DB0C17FCC").unwrap(),
     )
     .await;
 
@@ -168,8 +174,7 @@ async fn test_wild_card_in_order() {
     delete_data(
         &session,
         "wild/test/*",
-        Timestamp::from_str("2022-01-17T13:43:10.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
-            .unwrap(),
+        Timestamp::from_str("7054170209915403359/BC779A06D7E049BD88C3FF3DB0C17FCC").unwrap(),
     )
     .await;
 
@@ -182,12 +187,8 @@ async fn test_wild_card_in_order() {
     drop(storage);
 }
 
-// fn test_wild_card_out_of_order() {
-//     assert_eq!(true, true);
-// }
-
 #[test]
 fn wildcard_test() {
-    task::block_on(async { test_wild_card_in_order().await });
-    // task::block_on(async { test_wild_card_out_of_order() });
+    let rt = Runtime::new().unwrap();
+    rt.block_on(async { test_wild_card_in_order().await });
 }

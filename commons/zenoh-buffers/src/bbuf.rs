@@ -185,13 +185,8 @@ impl<'a> HasReader for &'a BBuf {
 // From impls
 impl From<BBuf> for ZSlice {
     fn from(value: BBuf) -> Self {
-        ZSlice {
-            buf: Arc::new(value.buffer),
-            start: 0,
-            end: value.len,
-            #[cfg(feature = "shared-memory")]
-            kind: crate::ZSliceKind::Raw,
-        }
+        // SAFETY: buffer length is ensured to be lesser than its capacity
+        unsafe { ZSlice::new(Arc::new(value.buffer), 0, value.len).unwrap_unchecked() }
     }
 }
 

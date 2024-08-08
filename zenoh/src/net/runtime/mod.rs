@@ -70,7 +70,6 @@ pub(crate) struct RuntimeState {
     zid: ZenohId,
     whatami: WhatAmI,
     next_id: AtomicU32,
-    metadata: serde_json::Value,
     router: Arc<Router>,
     config: Notifier<Config>,
     manager: TransportManager,
@@ -138,7 +137,6 @@ impl RuntimeBuilder {
         tracing::info!("Using ZID: {}", zid);
 
         let whatami = unwrap_or_default!(config.mode());
-        let metadata = config.metadata().clone();
         let hlc = (*unwrap_or_default!(config.timestamping().enabled().get(whatami)))
             .then(|| Arc::new(HLCBuilder::new().with_id(uhlc::ID::from(&zid)).build()));
 
@@ -148,22 +146,17 @@ impl RuntimeBuilder {
             runtime: std::sync::RwLock::new(WeakRuntime { state: Weak::new() }),
         });
 
-        let transport_manager = TransportManager::builder()
+        let transport_manager_builder = TransportManager::builder()
             .from_config(&config)
             .await?
             .whatami(whatami)
             .zid(zid);
 
-        #[cfg(feature = "unstable")]
-        let transport_manager = zcondfeat!(
-            "shared-memory",
-            transport_manager.shm_reader(shm_clients.map(ShmReader::new)),
-            transport_manager
-        )
-        .build(handler.clone())?;
+        #[cfg(feature = "shared-memory")]
+        let transport_manager_builder =
+            transport_manager_builder.shm_reader(shm_clients.map(ShmReader::new));
 
-        #[cfg(not(feature = "unstable"))]
-        let transport_manager = transport_manager.build(handler.clone())?;
+        let transport_manager = transport_manager_builder.build(handler.clone())?;
 
         // Plugins manager
         #[cfg(feature = "plugins")]
@@ -179,7 +172,6 @@ impl RuntimeBuilder {
                 zid: zid.into(),
                 whatami,
                 next_id: AtomicU32::new(1), // 0 is reserved for routing core
-                metadata,
                 router,
                 config: config.clone(),
                 manager: transport_manager,

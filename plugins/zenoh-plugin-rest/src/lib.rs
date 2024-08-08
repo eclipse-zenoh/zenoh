@@ -17,14 +17,24 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use std::{borrow::Cow, convert::TryFrom, str::FromStr, sync::Arc};
+use std::{
+    borrow::Cow,
+    convert::TryFrom,
+    future::Future,
+    str::FromStr,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 
-use async_std::prelude::FutureExt;
 use base64::Engine;
 use futures::StreamExt;
 use http_types::Method;
 use serde::{Deserialize, Serialize};
 use tide::{http::Mime, sse::Sender, Request, Response, Server, StatusCode};
+use tokio::time::timeout;
 use zenoh::{
     bytes::{Encoding, ZBytes},
     internal::{
@@ -51,12 +61,38 @@ lazy_static::lazy_static! {
 }
 const RAW_KEY: &str = "_raw";
 
+lazy_static::lazy_static! {
+    static ref WORKER_THREAD_NUM: AtomicUsize = AtomicUsize::new(config::DEFAULT_WORK_THREAD_NUM);
+    static ref MAX_BLOCK_THREAD_NUM: AtomicUsize = AtomicUsize::new(config::DEFAULT_MAX_BLOCK_THREAD_NUM);
+    // The global runtime is used in the dynamic plugins, which we can't get the current runtime
+    static ref TOKIO_RUNTIME: tokio::runtime::Runtime = tokio::runtime::Builder::new_multi_thread()
+               .worker_threads(WORKER_THREAD_NUM.load(Ordering::SeqCst))
+               .max_blocking_threads(MAX_BLOCK_THREAD_NUM.load(Ordering::SeqCst))
+               .enable_all()
+               .build()
+               .expect("Unable to create runtime");
+}
+#[inline(always)]
+pub(crate) fn blockon_runtime<F: Future>(task: F) -> F::Output {
+    // Check whether able to get the current runtime
+    match tokio::runtime::Handle::try_current() {
+        Ok(rt) => {
+            // Able to get the current runtime (standalone binary), use the current runtime
+            tokio::task::block_in_place(|| rt.block_on(task))
+        }
+        Err(_) => {
+            // Unable to get the current runtime (dynamic plugins), reuse the global runtime
+            tokio::task::block_in_place(|| TOKIO_RUNTIME.block_on(task))
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 struct JSONSample {
     key: String,
     value: serde_json::Value,
     encoding: String,
-    time: Option<String>,
+    timestamp: Option<String>,
 }
 
 pub fn base64_encode(data: &[u8]) -> String {
@@ -100,7 +136,7 @@ fn sample_to_json(sample: &Sample) -> JSONSample {
         key: sample.key_expr().as_str().to_string(),
         value: payload_to_json(sample.payload(), sample.encoding()),
         encoding: sample.encoding().to_string(),
-        time: sample.timestamp().map(|ts| ts.to_string()),
+        timestamp: sample.timestamp().map(|ts| ts.to_string()),
     }
 }
 
@@ -111,7 +147,7 @@ fn result_to_json(sample: Result<&Sample, &ReplyError>) -> JSONSample {
             key: "ERROR".into(),
             value: payload_to_json(err.payload(), err.encoding()),
             encoding: err.encoding().to_string(),
-            time: None,
+            timestamp: None,
         },
     }
 }
@@ -127,11 +163,7 @@ async fn to_json(results: flume::Receiver<Reply>) -> String {
 }
 
 async fn to_json_response(results: flume::Receiver<Reply>) -> Response {
-    response(
-        StatusCode::Ok,
-        Mime::from_str("application/json").unwrap(),
-        &to_json(results).await,
-    )
+    response(StatusCode::Ok, "application/json", &to_json(results).await)
 }
 
 fn sample_to_html(sample: &Sample) -> String {
@@ -203,12 +235,17 @@ fn method_to_kind(method: Method) -> SampleKind {
     }
 }
 
-fn response(status: StatusCode, content_type: impl TryInto<Mime>, body: &str) -> Response {
+fn response<'a, S: Into<&'a str> + std::fmt::Debug>(
+    status: StatusCode,
+    content_type: S,
+    body: &str,
+) -> Response {
+    tracing::trace!("Outgoing Response: {status} - {content_type:?} - body: {body}");
     let mut builder = Response::builder(status)
         .header("content-length", body.len().to_string())
         .header("Access-Control-Allow-Origin", "*")
         .body(body);
-    if let Ok(mime) = content_type.try_into() {
+    if let Ok(mime) = Mime::from_str(content_type.into()) {
         builder = builder.content_type(mime);
     }
     builder.build()
@@ -245,8 +282,14 @@ impl Plugin for RestPlugin {
 
         let conf: Config = serde_json::from_value(plugin_conf.clone())
             .map_err(|e| zerror!("Plugin `{}` configuration error: {}", name, e))?;
-        let task = async_std::task::spawn(run(runtime.clone(), conf.clone()));
-        let task = async_std::task::block_on(task.timeout(std::time::Duration::from_millis(1)));
+        WORKER_THREAD_NUM.store(conf.work_thread_num, Ordering::SeqCst);
+        MAX_BLOCK_THREAD_NUM.store(conf.max_block_thread_num, Ordering::SeqCst);
+
+        let task = run(runtime.clone(), conf.clone());
+        let task = blockon_runtime(async {
+            timeout(Duration::from_millis(1), TOKIO_RUNTIME.spawn(task)).await
+        });
+
         if let Ok(Err(e)) = task {
             bail!("REST server failed within 1ms: {e}")
         }
@@ -331,12 +374,8 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                         ))
                     }
                 };
-                async_std::task::spawn(async move {
-                    tracing::debug!(
-                        "Subscribe to {} for SSE stream (task {})",
-                        key_expr,
-                        async_std::task::current().id()
-                    );
+                tokio::spawn(async move {
+                    tracing::debug!("Subscribe to {} for SSE stream", key_expr);
                     let sender = &sender;
                     let sub = req.state().0.declare_subscriber(&key_expr).await.unwrap();
                     loop {
@@ -344,28 +383,22 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                         let json_sample =
                             serde_json::to_string(&sample_to_json(&sample)).unwrap_or("{}".into());
 
-                        match sender
-                            .send(&sample.kind().to_string(), json_sample, None)
-                            .timeout(std::time::Duration::new(10, 0))
-                            .await
+                        match timeout(
+                            std::time::Duration::new(10, 0),
+                            sender.send(&sample.kind().to_string(), json_sample, None),
+                        )
+                        .await
                         {
                             Ok(Ok(_)) => {}
                             Ok(Err(e)) => {
-                                tracing::debug!(
-                                    "SSE error ({})! Unsubscribe and terminate (task {})",
-                                    e,
-                                    async_std::task::current().id()
-                                );
+                                tracing::debug!("SSE error ({})! Unsubscribe and terminate", e);
                                 if let Err(e) = sub.undeclare().await {
                                     tracing::error!("Error undeclaring subscriber: {}", e);
                                 }
                                 break;
                             }
                             Err(_) => {
-                                tracing::debug!(
-                                    "SSE timeout! Unsubscribe and terminate (task {})",
-                                    async_std::task::current().id()
-                                );
+                                tracing::debug!("SSE timeout! Unsubscribe and terminate",);
                                 if let Err(e) = sub.undeclare().await {
                                     tracing::error!("Error undeclaring subscriber: {}", e);
                                 }
@@ -402,7 +435,8 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
             .state()
             .0
             .get(Selector::borrowed(&key_expr, &parameters))
-            .consolidation(consolidation);
+            .consolidation(consolidation)
+            .with(flume::unbounded());
         if !body.is_empty() {
             let encoding: Encoding = req
                 .content_type()
@@ -515,10 +549,10 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
 
 fn path_to_key_expr<'a>(path: &'a str, zid: &str) -> ZResult<KeyExpr<'a>> {
     let path = path.strip_prefix('/').unwrap_or(path);
-    if path == "@/router/local" {
-        KeyExpr::try_from(format!("@/router/{zid}"))
-    } else if let Some(suffix) = path.strip_prefix("@/router/local/") {
-        KeyExpr::try_from(format!("@/router/{zid}/{suffix}"))
+    if path == "@/local" {
+        KeyExpr::try_from(format!("@/{zid}"))
+    } else if let Some(suffix) = path.strip_prefix("@/local/") {
+        KeyExpr::try_from(format!("@/{zid}/{suffix}"))
     } else {
         KeyExpr::try_from(path)
     }

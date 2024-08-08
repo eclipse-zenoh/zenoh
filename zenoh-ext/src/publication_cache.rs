@@ -143,8 +143,8 @@ impl<'a> PublicationCache<'a> {
         if conf.session.hlc().is_none() {
             bail!(
                 "Failed requirement for PublicationCache on {}: \
-                     the Session is not configured with 'add_timestamp=true'",
-                key_expr
+                     the 'timestamping' setting must be enabled in the Zenoh configuration",
+                key_expr,
             )
         }
 
@@ -256,14 +256,14 @@ impl<'a> PublicationCache<'a> {
         })
     }
 
-    /// Close this PublicationCache
+    /// Undeclare this [`PublicationCache`]`.
     #[inline]
-    pub fn close(self) -> impl Resolve<ZResult<()>> + 'a {
+    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         ResolveFuture::new(async move {
             let PublicationCache {
                 _queryable,
                 local_sub,
-                task,
+                mut task,
             } = self;
             _queryable.undeclare().await?;
             local_sub.undeclare().await?;

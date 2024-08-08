@@ -21,6 +21,7 @@ use lazy_static::lazy_static;
 
 pub mod ffi;
 mod lib_loader;
+pub mod lib_search_dirs;
 pub mod net;
 pub mod time_range;
 
@@ -28,6 +29,7 @@ pub use lib_loader::*;
 pub mod timer;
 pub use timer::*;
 pub mod log;
+pub use lib_search_dirs::*;
 pub use log::*;
 
 /// The "ZENOH_HOME" environment variable name

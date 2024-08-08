@@ -149,7 +149,7 @@ fn propagate_simple_queryable(
     }
 }
 
-fn register_client_queryable(
+fn register_simple_queryable(
     _tables: &mut Tables,
     face: &mut Arc<FaceState>,
     id: QueryableId,
@@ -169,7 +169,7 @@ fn register_client_queryable(
     face_hat_mut!(face).remote_qabls.insert(id, res.clone());
 }
 
-fn declare_client_queryable(
+fn declare_simple_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     id: QueryableId,
@@ -177,12 +177,12 @@ fn declare_client_queryable(
     qabl_info: &QueryableInfoType,
     send_declare: &mut SendDeclare,
 ) {
-    register_client_queryable(tables, face, id, res, qabl_info);
+    register_simple_queryable(tables, face, id, res, qabl_info);
     propagate_simple_queryable(tables, res, Some(face), send_declare);
 }
 
 #[inline]
-fn client_qabls(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
+fn simple_qabls(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
     res.session_ctxs
         .values()
         .filter_map(|ctx| {
@@ -196,7 +196,7 @@ fn client_qabls(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 }
 
 #[inline]
-fn remote_client_qabls(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
+fn remote_simple_qabls(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
     res.session_ctxs
         .values()
         .any(|ctx| ctx.face.id != face.id && ctx.qabl.is_some())
@@ -234,7 +234,7 @@ fn propagate_forget_simple_queryable(
         {
             if !res.context().matches.iter().any(|m| {
                 m.upgrade()
-                    .is_some_and(|m| m.context.is_some() && remote_client_qabls(&m, face))
+                    .is_some_and(|m| m.context.is_some() && remote_simple_qabls(&m, face))
             }) {
                 if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(&res) {
                     send_declare(
@@ -259,7 +259,7 @@ fn propagate_forget_simple_queryable(
     }
 }
 
-pub(super) fn undeclare_client_queryable(
+pub(super) fn undeclare_simple_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -274,14 +274,14 @@ pub(super) fn undeclare_client_queryable(
             get_mut_unchecked(ctx).qabl = None;
         }
 
-        let mut client_qabls = client_qabls(res);
-        if client_qabls.is_empty() {
+        let mut simple_qabls = simple_qabls(res);
+        if simple_qabls.is_empty() {
             propagate_forget_simple_queryable(tables, res, send_declare);
         } else {
             propagate_simple_queryable(tables, res, None, send_declare);
         }
-        if client_qabls.len() == 1 {
-            let mut face = &mut client_qabls[0];
+        if simple_qabls.len() == 1 {
+            let mut face = &mut simple_qabls[0];
             if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
                 send_declare(
                     &face.primitives,
@@ -308,7 +308,7 @@ pub(super) fn undeclare_client_queryable(
             {
                 if !res.context().matches.iter().any(|m| {
                     m.upgrade()
-                        .is_some_and(|m| m.context.is_some() && (remote_client_qabls(&m, face)))
+                        .is_some_and(|m| m.context.is_some() && (remote_simple_qabls(&m, face)))
                 }) {
                     if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
                         send_declare(
@@ -334,14 +334,14 @@ pub(super) fn undeclare_client_queryable(
     }
 }
 
-fn forget_client_queryable(
+fn forget_simple_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     id: QueryableId,
     send_declare: &mut SendDeclare,
 ) -> Option<Arc<Resource>> {
     if let Some(mut res) = face_hat_mut!(face).remote_qabls.remove(&id) {
-        undeclare_client_queryable(tables, face, &mut res, send_declare);
+        undeclare_simple_queryable(tables, face, &mut res, send_declare);
         Some(res)
     } else {
         None
@@ -530,7 +530,7 @@ impl HatQueriesTrait for HatCode {
         _node_id: NodeId,
         send_declare: &mut SendDeclare,
     ) {
-        declare_client_queryable(tables, face, id, res, qabl_info, send_declare);
+        declare_simple_queryable(tables, face, id, res, qabl_info, send_declare);
     }
 
     fn undeclare_queryable(
@@ -542,7 +542,7 @@ impl HatQueriesTrait for HatCode {
         _node_id: NodeId,
         send_declare: &mut SendDeclare,
     ) -> Option<Arc<Resource>> {
-        forget_client_queryable(tables, face, id, send_declare)
+        forget_simple_queryable(tables, face, id, send_declare)
     }
 
     fn get_queryables(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
@@ -589,30 +589,32 @@ impl HatQueriesTrait for HatCode {
             }
         };
 
-        // TODO: BNestMatching: What if there is a local compete ?
-        if let Some(face) = tables.faces.values().find(|f| f.whatami == WhatAmI::Router) {
-            let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-            route.push(QueryTargetQabl {
-                direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
-                complete: 0,
-                distance: f64::MAX,
-            });
-        }
+        if source_type == WhatAmI::Client {
+            // TODO: BNestMatching: What if there is a local compete ?
+            if let Some(face) = tables.faces.values().find(|f| f.whatami == WhatAmI::Router) {
+                let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+                route.push(QueryTargetQabl {
+                    direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
+                    complete: 0,
+                    distance: f64::MAX,
+                });
+            }
 
-        for face in tables.faces.values().filter(|f| {
-            f.whatami == WhatAmI::Peer
-                && !f
-                    .local_interests
-                    .get(&0)
-                    .map(|i| i.finalized)
-                    .unwrap_or(true)
-        }) {
-            let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-            route.push(QueryTargetQabl {
-                direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
-                complete: 0,
-                distance: 0.5,
-            });
+            for face in tables.faces.values().filter(|f| {
+                f.whatami == WhatAmI::Peer
+                    && !f
+                        .local_interests
+                        .get(&0)
+                        .map(|i| i.finalized)
+                        .unwrap_or(true)
+            }) {
+                let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+                route.push(QueryTargetQabl {
+                    direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
+                    complete: 0,
+                    distance: 0.5,
+                });
+            }
         }
 
         let res = Resource::get_resource(expr.prefix, expr.suffix);

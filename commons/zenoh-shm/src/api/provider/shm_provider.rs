@@ -16,6 +16,7 @@ use std::{
     collections::VecDeque,
     future::{Future, IntoFuture},
     marker::PhantomData,
+    num::NonZeroUsize,
     pin::Pin,
     sync::{atomic::Ordering, Arc, Mutex},
     time::Duration,
@@ -159,7 +160,7 @@ where
     IDSource: ProtocolIDSource,
     Backend: ShmProviderBackend,
 {
-    size: usize,
+    size: NonZeroUsize,
     provider_layout: MemoryLayout,
     provider: &'a ShmProvider<IDSource, Backend>,
 }
@@ -185,6 +186,7 @@ where
         // Create layout for specified arguments
         let layout = MemoryLayout::new(data.size, data.alignment)
             .map_err(|_| ZLayoutError::IncorrectLayoutArgs)?;
+        let size = layout.size();
 
         // Obtain provider's layout for our layout
         let provider_layout = data
@@ -194,7 +196,7 @@ where
             .map_err(|_| ZLayoutError::ProviderIncompatibleLayout)?;
 
         Ok(Self {
-            size: data.size,
+            size,
             provider_layout,
             provider: data.provider,
         })
@@ -320,7 +322,7 @@ where
         let result = InnerPolicy::alloc(layout, provider);
         if let Err(ZAllocError::OutOfMemory) = result {
             // try to alloc again only if GC managed to reclaim big enough chunk
-            if provider.garbage_collect() >= layout.size() {
+            if provider.garbage_collect() >= layout.size().get() {
                 return AltPolicy::alloc(layout, provider);
             }
         }
@@ -352,7 +354,7 @@ where
         let result = InnerPolicy::alloc(layout, provider);
         if let Err(ZAllocError::NeedDefragment) = result {
             // try to alloc again only if big enough chunk was defragmented
-            if provider.defragment() >= layout.size() {
+            if provider.defragment() >= layout.size().get() {
                 return AltPolicy::alloc(layout, provider);
             }
         }
@@ -803,6 +805,8 @@ where
     /// Remember that chunk's len may be >= len!
     #[zenoh_macros::unstable_doc]
     pub fn map(&self, chunk: AllocatedChunk, len: usize) -> ZResult<ZShmMut> {
+        let len = len.try_into()?;
+
         // allocate resources for SHM buffer
         let (allocated_header, allocated_watchdog, confirmed_watchdog) = Self::alloc_resources()?;
 
@@ -837,7 +841,7 @@ where
             if is_free_chunk(maybe_free) {
                 tracing::trace!("Garbage Collecting Chunk: {:?}", maybe_free);
                 self.backend.free(&maybe_free.descriptor);
-                largest = largest.max(maybe_free.descriptor.len);
+                largest = largest.max(maybe_free.descriptor.len.get());
                 return false;
             }
             true
@@ -868,7 +872,7 @@ where
         }
     }
 
-    fn alloc_inner<Policy>(&self, size: usize, layout: &MemoryLayout) -> BufAllocResult
+    fn alloc_inner<Policy>(&self, size: NonZeroUsize, layout: &MemoryLayout) -> BufAllocResult
     where
         Policy: AllocPolicy,
     {
@@ -900,13 +904,15 @@ where
         ConfirmedDescriptor,
     )> {
         // allocate shared header
-        let allocated_header = GLOBAL_HEADER_STORAGE.allocate_header()?;
+        let allocated_header = GLOBAL_HEADER_STORAGE.read().allocate_header()?;
 
         // allocate watchdog
-        let allocated_watchdog = GLOBAL_STORAGE.allocate_watchdog()?;
+        let allocated_watchdog = GLOBAL_STORAGE.read().allocate_watchdog()?;
 
         // add watchdog to confirmator
-        let confirmed_watchdog = GLOBAL_CONFIRMATOR.add_owned(&allocated_watchdog.descriptor)?;
+        let confirmed_watchdog = GLOBAL_CONFIRMATOR
+            .read()
+            .add_owned(&allocated_watchdog.descriptor)?;
 
         Ok((allocated_header, allocated_watchdog, confirmed_watchdog))
     }
@@ -914,7 +920,7 @@ where
     fn wrap(
         &self,
         chunk: AllocatedChunk,
-        len: usize,
+        len: NonZeroUsize,
         allocated_header: AllocatedHeaderDescriptor,
         allocated_watchdog: AllocatedWatchdog,
         confirmed_watchdog: ConfirmedDescriptor,
@@ -924,7 +930,7 @@ where
 
         // add watchdog to validator
         let c_header = header.clone();
-        GLOBAL_VALIDATOR.add(
+        GLOBAL_VALIDATOR.read().add(
             allocated_watchdog.descriptor.clone(),
             Box::new(move || {
                 c_header
@@ -971,7 +977,7 @@ where
 {
     async fn alloc_inner_async<Policy>(
         &self,
-        size: usize,
+        size: NonZeroUsize,
         backend_layout: &MemoryLayout,
     ) -> BufAllocResult
     where

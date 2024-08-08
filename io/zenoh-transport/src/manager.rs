@@ -276,7 +276,7 @@ impl TransportManagerBuilder {
         #[cfg(feature = "shared-memory")]
         let shm_reader = self
             .shm_reader
-            .unwrap_or_else(|| ShmReader::new(GLOBAL_CLIENT_STORAGE.clone()));
+            .unwrap_or_else(|| ShmReader::new((*GLOBAL_CLIENT_STORAGE.read()).clone()));
 
         let unicast = self.unicast.build(
             &mut prng,

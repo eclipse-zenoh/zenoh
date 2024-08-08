@@ -25,7 +25,7 @@ use crate::*;
 
 pub trait DeclaredPlugin<StartArgs, Instance>: PluginStatus {
     fn as_status(&self) -> &dyn PluginStatus;
-    fn load(&mut self) -> ZResult<&mut dyn LoadedPlugin<StartArgs, Instance>>;
+    fn load(&mut self) -> ZResult<Option<&mut dyn LoadedPlugin<StartArgs, Instance>>>;
     fn loaded(&self) -> Option<&dyn LoadedPlugin<StartArgs, Instance>>;
     fn loaded_mut(&mut self) -> Option<&mut dyn LoadedPlugin<StartArgs, Instance>>;
 }
@@ -88,7 +88,7 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> DeclaredPlugin<StartA
     fn as_status(&self) -> &dyn PluginStatus {
         self
     }
-    fn load(&mut self) -> ZResult<&mut dyn LoadedPlugin<StartArgs, Instance>> {
+    fn load(&mut self) -> ZResult<Option<&mut dyn LoadedPlugin<StartArgs, Instance>>> {
         self.0.load()
     }
     fn loaded(&self) -> Option<&dyn LoadedPlugin<StartArgs, Instance>> {

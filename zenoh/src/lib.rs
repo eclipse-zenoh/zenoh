@@ -142,7 +142,7 @@ pub mod prelude;
 /// - [`keyexpr`](crate::key_expr::keyexpr) is the equivalent of a [`str`],
 /// - [`OwnedKeyExpr`](crate::key_expr::OwnedKeyExpr) works like an [`std::sync::Arc<str>`],
 /// - [`KeyExpr`](crate::key_expr::KeyExpr) works like a [`std::borrow::Cow<str>`], but also stores some additional context internal to Zenoh to optimize
-/// routing and network usage.
+///   routing and network usage.
 ///
 /// All of these types [`Deref`](std::ops::Deref) to [`keyexpr`](crate::key_expr::keyexpr), which notably has methods to check whether a given [`intersects`](crate::key_expr::keyexpr::includes) with another,
 /// or even if a [`includes`](crate::key_expr::keyexpr::includes) another.
@@ -353,8 +353,6 @@ pub mod liveliness {
 /// Timestamp support
 pub mod time {
     pub use zenoh_protocol::core::{Timestamp, TimestampId, NTP64};
-
-    pub use crate::api::time::new_timestamp;
 }
 
 /// Configuration to pass to [`open`] and [`scout`] functions and associated constants
@@ -366,10 +364,6 @@ pub mod config {
     pub use zenoh_config::*;
 }
 
-#[cfg(all(feature = "internal", not(feature = "unstable")))]
-compile_error!(
-    "All internal functionality is unstable. The `unstable` feature must be enabled to use `internal`."
-);
 #[cfg(all(
     feature = "plugins",
     not(all(feature = "unstable", feature = "internal"))

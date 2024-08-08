@@ -18,17 +18,15 @@ use std::{
     time::Duration,
 };
 
+#[cfg(feature = "unstable")]
 use zenoh_config::ZenohId;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_keyexpr::OwnedKeyExpr;
-use zenoh_protocol::core::{CongestionControl, Parameters, ZenohIdProto};
+#[cfg(feature = "unstable")]
+use zenoh_protocol::core::ZenohIdProto;
+use zenoh_protocol::core::{CongestionControl, Parameters};
 use zenoh_result::ZResult;
 
-#[zenoh_macros::unstable]
-use super::{
-    builders::sample::SampleBuilderTrait, bytes::OptionZBytes, sample::SourceInfo,
-    selector::ZenohParameters,
-};
 use super::{
     builders::sample::{EncodingBuilderTrait, QoSBuilderTrait},
     bytes::ZBytes,
@@ -41,6 +39,9 @@ use super::{
     session::Session,
     value::Value,
 };
+#[cfg(feature = "unstable")]
+use super::{sample::SourceInfo, selector::ZenohParameters};
+use crate::{bytes::OptionZBytes, sample::SampleBuilderTrait};
 
 /// The [`Queryable`](crate::query::Queryable)s that should be target of a [`get`](Session::get).
 pub type QueryTarget = zenoh_protocol::network::request::ext::TargetType;
@@ -118,6 +119,7 @@ impl From<Value> for ReplyError {
 #[derive(Clone, Debug)]
 pub struct Reply {
     pub(crate) result: Result<Sample, ReplyError>,
+    #[cfg(feature = "unstable")]
     pub(crate) replier_id: Option<ZenohIdProto>,
 }
 
@@ -137,6 +139,7 @@ impl Reply {
         self.result
     }
 
+    #[zenoh_macros::unstable]
     /// Gets the id of the zenoh instance that answered this Reply.
     pub fn replier_id(&self) -> Option<ZenohId> {
         self.replier_id.map(Into::into)
@@ -206,9 +209,8 @@ pub struct SessionGetBuilder<'a, 'b, Handler> {
     pub(crate) source_info: SourceInfo,
 }
 
-#[zenoh_macros::unstable]
 impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
-    #[cfg(feature = "unstable")]
+    #[zenoh_macros::unstable]
     fn source_info(self, source_info: SourceInfo) -> Self {
         Self {
             source_info,

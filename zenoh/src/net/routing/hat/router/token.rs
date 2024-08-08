@@ -216,7 +216,7 @@ fn register_router_token(
     }
     // Propagate liveliness to peers
     if hat!(tables).full_net(WhatAmI::Peer) && face.whatami != WhatAmI::Peer {
-        register_peer_token(tables, face, res, tables.zid)
+        register_linkstatepeer_token(tables, face, res, tables.zid)
     }
 
     // Propagate liveliness to clients
@@ -233,17 +233,17 @@ fn declare_router_token(
     register_router_token(tables, face, res, router, send_declare);
 }
 
-fn register_peer_token(
+fn register_linkstatepeer_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     peer: ZenohIdProto,
 ) {
-    if !res_hat!(res).peer_tokens.contains(&peer) {
+    if !res_hat!(res).linkstatepeer_tokens.contains(&peer) {
         // Register peer liveliness
         {
-            res_hat_mut!(res).peer_tokens.insert(peer);
-            hat_mut!(tables).peer_tokens.insert(res.clone());
+            res_hat_mut!(res).linkstatepeer_tokens.insert(peer);
+            hat_mut!(tables).linkstatepeer_tokens.insert(res.clone());
         }
 
         // Propagate liveliness to peers
@@ -251,19 +251,19 @@ fn register_peer_token(
     }
 }
 
-fn declare_peer_token(
+fn declare_linkstatepeer_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     peer: ZenohIdProto,
     send_declare: &mut SendDeclare,
 ) {
-    register_peer_token(tables, face, res, peer);
+    register_linkstatepeer_token(tables, face, res, peer);
     let zid = tables.zid;
     register_router_token(tables, face, res, zid, send_declare);
 }
 
-fn register_client_token(
+fn register_simple_token(
     _tables: &mut Tables,
     face: &mut Arc<FaceState>,
     id: TokenId,
@@ -290,14 +290,14 @@ fn register_client_token(
     face_hat_mut!(face).remote_tokens.insert(id, res.clone());
 }
 
-fn declare_client_token(
+fn declare_simple_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     id: TokenId,
     res: &mut Arc<Resource>,
     send_declare: &mut SendDeclare,
 ) {
-    register_client_token(tables, face, id, res);
+    register_simple_token(tables, face, id, res);
     let zid = tables.zid;
     register_router_token(tables, face, res, zid, send_declare);
 }
@@ -312,16 +312,16 @@ fn remote_router_tokens(tables: &Tables, res: &Arc<Resource>) -> bool {
 }
 
 #[inline]
-fn remote_peer_tokens(tables: &Tables, res: &Arc<Resource>) -> bool {
+fn remote_linkstatepeer_tokens(tables: &Tables, res: &Arc<Resource>) -> bool {
     res.context.is_some()
         && res_hat!(res)
-            .peer_tokens
+            .linkstatepeer_tokens
             .iter()
             .any(|peer| peer != &tables.zid)
 }
 
 #[inline]
-fn client_tokens(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
+fn simple_tokens(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
     res.session_ctxs
         .values()
         .filter_map(|ctx| {
@@ -335,7 +335,7 @@ fn client_tokens(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 }
 
 #[inline]
-fn remote_client_tokens(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
+fn remote_simple_tokens(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
     res.session_ctxs
         .values()
         .any(|ctx| ctx.face.id != face.id && ctx.token)
@@ -386,6 +386,7 @@ fn send_forget_sourced_token_to_net_clildren(
 fn propagate_forget_simple_token(
     tables: &mut Tables,
     res: &Arc<Resource>,
+    src_face: Option<&Arc<FaceState>>,
     send_declare: &mut SendDeclare,
 ) {
     for mut face in tables.faces.values().cloned() {
@@ -406,9 +407,15 @@ fn propagate_forget_simple_token(
                     res.expr(),
                 ),
             );
-        } else if face_hat!(face).remote_interests.values().any(|(r, o)| {
-            o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true) && !o.aggregate()
-        }) {
+        // NOTE(fuzzypixelz): We need to check that `face` is not the source Face of the token
+        // undeclaration, otherwise the undeclaration would be duplicated at the source Face. In
+        // cases where we don't have access to a Face as we didnt't receive an undeclaration and we
+        // default to true.
+        } else if src_face.map_or(true, |src_face| src_face.id != face.id)
+            && face_hat!(face).remote_interests.values().any(|(r, o)| {
+                o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true) && !o.aggregate()
+            })
+        {
             // Token has never been declared on this face.
             // Send an Undeclare with a one shot generated id and a WireExpr ext.
             send_declare(
@@ -439,8 +446,8 @@ fn propagate_forget_simple_token(
             if !res.context().matches.iter().any(|m| {
                 m.upgrade().is_some_and(|m| {
                     m.context.is_some()
-                        && (remote_client_tokens(&m, &face)
-                            || remote_peer_tokens(tables, &m)
+                        && (remote_simple_tokens(&m, &face)
+                            || remote_linkstatepeer_tokens(tables, &m)
                             || remote_router_tokens(tables, &m))
                 })
             }) {
@@ -578,6 +585,7 @@ fn propagate_forget_sourced_token(
 
 fn unregister_router_token(
     tables: &mut Tables,
+    face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
     router: &ZenohIdProto,
     send_declare: &mut SendDeclare,
@@ -592,9 +600,9 @@ fn unregister_router_token(
             .retain(|token| !Arc::ptr_eq(token, res));
 
         if hat_mut!(tables).full_net(WhatAmI::Peer) {
-            undeclare_peer_token(tables, None, res, &tables.zid.clone());
+            undeclare_linkstatepeer_token(tables, None, res, &tables.zid.clone());
         }
-        propagate_forget_simple_token(tables, res, send_declare);
+        propagate_forget_simple_token(tables, res, face, send_declare);
     }
 
     propagate_forget_simple_token_to_peers(tables, res, send_declare);
@@ -608,7 +616,7 @@ fn undeclare_router_token(
     send_declare: &mut SendDeclare,
 ) {
     if res_hat!(res).router_tokens.contains(router) {
-        unregister_router_token(tables, res, router, send_declare);
+        unregister_router_token(tables, face, res, router, send_declare);
         propagate_forget_sourced_token(tables, res, face, router, WhatAmI::Router);
     }
 }
@@ -623,45 +631,51 @@ fn forget_router_token(
     undeclare_router_token(tables, Some(face), res, router, send_declare);
 }
 
-fn unregister_peer_token(tables: &mut Tables, res: &mut Arc<Resource>, peer: &ZenohIdProto) {
-    res_hat_mut!(res).peer_tokens.retain(|token| token != peer);
+fn unregister_linkstatepeer_token(
+    tables: &mut Tables,
+    res: &mut Arc<Resource>,
+    peer: &ZenohIdProto,
+) {
+    res_hat_mut!(res)
+        .linkstatepeer_tokens
+        .retain(|token| token != peer);
 
-    if res_hat!(res).peer_tokens.is_empty() {
+    if res_hat!(res).linkstatepeer_tokens.is_empty() {
         hat_mut!(tables)
-            .peer_tokens
+            .linkstatepeer_tokens
             .retain(|token| !Arc::ptr_eq(token, res));
     }
 }
 
-fn undeclare_peer_token(
+fn undeclare_linkstatepeer_token(
     tables: &mut Tables,
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
     peer: &ZenohIdProto,
 ) {
-    if res_hat!(res).peer_tokens.contains(peer) {
-        unregister_peer_token(tables, res, peer);
+    if res_hat!(res).linkstatepeer_tokens.contains(peer) {
+        unregister_linkstatepeer_token(tables, res, peer);
         propagate_forget_sourced_token(tables, res, face, peer, WhatAmI::Peer);
     }
 }
 
-fn forget_peer_token(
+fn forget_linkstatepeer_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     peer: &ZenohIdProto,
     send_declare: &mut SendDeclare,
 ) {
-    undeclare_peer_token(tables, Some(face), res, peer);
-    let client_tokens = res.session_ctxs.values().any(|ctx| ctx.token);
-    let peer_tokens = remote_peer_tokens(tables, res);
+    undeclare_linkstatepeer_token(tables, Some(face), res, peer);
+    let simple_tokens = res.session_ctxs.values().any(|ctx| ctx.token);
+    let linkstatepeer_tokens = remote_linkstatepeer_tokens(tables, res);
     let zid = tables.zid;
-    if !client_tokens && !peer_tokens {
+    if !simple_tokens && !linkstatepeer_tokens {
         undeclare_router_token(tables, None, res, &zid, send_declare);
     }
 }
 
-pub(super) fn undeclare_client_token(
+pub(super) fn undeclare_simple_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -676,17 +690,17 @@ pub(super) fn undeclare_client_token(
             get_mut_unchecked(ctx).token = false;
         }
 
-        let mut client_tokens = client_tokens(res);
+        let mut simple_tokens = simple_tokens(res);
         let router_tokens = remote_router_tokens(tables, res);
-        let peer_tokens = remote_peer_tokens(tables, res);
-        if client_tokens.is_empty() && !peer_tokens {
-            undeclare_router_token(tables, None, res, &tables.zid.clone(), send_declare);
+        let linkstatepeer_tokens = remote_linkstatepeer_tokens(tables, res);
+        if simple_tokens.is_empty() && !linkstatepeer_tokens {
+            undeclare_router_token(tables, Some(face), res, &tables.zid.clone(), send_declare);
         } else {
             propagate_forget_simple_token_to_peers(tables, res, send_declare);
         }
 
-        if client_tokens.len() == 1 && !router_tokens && !peer_tokens {
-            let mut face = &mut client_tokens[0];
+        if simple_tokens.len() == 1 && !router_tokens && !linkstatepeer_tokens {
+            let mut face = &mut simple_tokens[0];
             if face.whatami != WhatAmI::Client {
                 if let Some(id) = face_hat_mut!(face).local_tokens.remove(res) {
                     send_declare(
@@ -715,8 +729,8 @@ pub(super) fn undeclare_client_token(
                     if !res.context().matches.iter().any(|m| {
                         m.upgrade().is_some_and(|m| {
                             m.context.is_some()
-                                && (remote_client_tokens(&m, face)
-                                    || remote_peer_tokens(tables, &m)
+                                && (remote_simple_tokens(&m, face)
+                                    || remote_linkstatepeer_tokens(tables, &m)
                                     || remote_router_tokens(tables, &m))
                         })
                     }) {
@@ -745,14 +759,14 @@ pub(super) fn undeclare_client_token(
     }
 }
 
-fn forget_client_token(
+fn forget_simple_token(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     id: TokenId,
     send_declare: &mut SendDeclare,
 ) -> Option<Arc<Resource>> {
     if let Some(mut res) = face_hat_mut!(face).remote_tokens.remove(&id) {
-        undeclare_client_token(tables, face, &mut res, send_declare);
+        undeclare_simple_token(tables, face, &mut res, send_declare);
         Some(res)
     } else {
         None
@@ -774,22 +788,22 @@ pub(super) fn token_remove_node(
                 .cloned()
                 .collect::<Vec<Arc<Resource>>>()
             {
-                unregister_router_token(tables, &mut res, node, send_declare);
+                unregister_router_token(tables, None, &mut res, node, send_declare);
                 Resource::clean(&mut res)
             }
         }
         WhatAmI::Peer => {
             for mut res in hat!(tables)
-                .peer_tokens
+                .linkstatepeer_tokens
                 .iter()
-                .filter(|res| res_hat!(res).peer_tokens.contains(node))
+                .filter(|res| res_hat!(res).linkstatepeer_tokens.contains(node))
                 .cloned()
                 .collect::<Vec<Arc<Resource>>>()
             {
-                unregister_peer_token(tables, &mut res, node);
-                let client_tokens = res.session_ctxs.values().any(|ctx| ctx.token);
-                let peer_tokens = remote_peer_tokens(tables, &res);
-                if !client_tokens && !peer_tokens {
+                unregister_linkstatepeer_token(tables, &mut res, node);
+                let simple_tokens = res.session_ctxs.values().any(|ctx| ctx.token);
+                let linkstatepeer_tokens = remote_linkstatepeer_tokens(tables, &res);
+                if !simple_tokens && !linkstatepeer_tokens {
                     undeclare_router_token(
                         tables,
                         None,
@@ -826,13 +840,13 @@ pub(super) fn token_tree_change(
 
                 let tokens_res = match net_type {
                     WhatAmI::Router => &hat!(tables).router_tokens,
-                    _ => &hat!(tables).peer_tokens,
+                    _ => &hat!(tables).linkstatepeer_tokens,
                 };
 
                 for res in tokens_res {
                     let tokens = match net_type {
                         WhatAmI::Router => &res_hat!(res).router_tokens,
-                        _ => &res_hat!(res).peer_tokens,
+                        _ => &res_hat!(res).linkstatepeer_tokens,
                     };
                     for token in tokens {
                         if *token == tree_id {
@@ -858,79 +872,73 @@ pub(super) fn token_linkstate_change(
     links: &[ZenohIdProto],
     send_declare: &mut SendDeclare,
 ) {
-    if let Some(src_face) = tables.get_face(zid).cloned() {
+    if let Some(mut src_face) = tables.get_face(zid).cloned() {
         if hat!(tables).router_peers_failover_brokering && src_face.whatami == WhatAmI::Peer {
-            for res in face_hat!(src_face).remote_tokens.values() {
-                let client_tokens = res
-                    .session_ctxs
-                    .values()
-                    .any(|ctx| ctx.face.whatami == WhatAmI::Client && ctx.token);
-                if !remote_router_tokens(tables, res) && !client_tokens {
-                    for ctx in get_mut_unchecked(&mut res.clone())
+            let to_forget = face_hat!(src_face)
+                .local_tokens
+                .keys()
+                .filter(|res| {
+                    let client_tokens = res
                         .session_ctxs
-                        .values_mut()
-                    {
-                        let dst_face = &mut get_mut_unchecked(ctx).face;
-                        if dst_face.whatami == WhatAmI::Peer && src_face.zid != dst_face.zid {
-                            if let Some(id) = face_hat!(dst_face).local_tokens.get(res).cloned() {
-                                let forget = !HatTables::failover_brokering_to(links, dst_face.zid)
-                                    && {
-                                        let ctx_links = hat!(tables)
-                                            .peers_net
-                                            .as_ref()
-                                            .map(|net| net.get_links(dst_face.zid))
-                                            .unwrap_or_else(|| &[]);
-                                        res.session_ctxs.values().any(|ctx2| {
-                                            ctx2.face.whatami == WhatAmI::Peer
-                                                && ctx2.token
-                                                && HatTables::failover_brokering_to(
-                                                    ctx_links,
-                                                    ctx2.face.zid,
-                                                )
-                                        })
-                                    };
-                                if forget {
-                                    send_declare(
-                                        &dst_face.primitives,
-                                        RoutingContext::with_expr(
-                                            Declare {
-                                                interest_id: None,
-                                                ext_qos: ext::QoSType::DECLARE,
-                                                ext_tstamp: None,
-                                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                                body: DeclareBody::UndeclareToken(UndeclareToken {
-                                                    id,
-                                                    ext_wire_expr: WireExprType::null(),
-                                                }),
-                                            },
-                                            res.expr(),
-                                        ),
-                                    );
+                        .values()
+                        .any(|ctx| ctx.face.whatami == WhatAmI::Client && ctx.token);
+                    !remote_router_tokens(tables, res)
+                        && !client_tokens
+                        && !res.session_ctxs.values().any(|ctx| {
+                            ctx.face.whatami == WhatAmI::Peer
+                                && src_face.id != ctx.face.id
+                                && HatTables::failover_brokering_to(links, ctx.face.zid)
+                        })
+                })
+                .cloned()
+                .collect::<Vec<Arc<Resource>>>();
+            for res in to_forget {
+                if let Some(id) = face_hat_mut!(&mut src_face).local_tokens.remove(&res) {
+                    let wire_expr = Resource::get_best_key(&res, "", src_face.id);
+                    send_declare(
+                        &src_face.primitives,
+                        RoutingContext::with_expr(
+                            Declare {
+                                interest_id: None,
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::default(),
+                                body: DeclareBody::UndeclareToken(UndeclareToken {
+                                    id,
+                                    ext_wire_expr: WireExprType { wire_expr },
+                                }),
+                            },
+                            res.expr(),
+                        ),
+                    );
+                }
+            }
 
-                                    face_hat_mut!(dst_face).local_tokens.remove(res);
-                                }
-                            } else if HatTables::failover_brokering_to(links, ctx.face.zid) {
-                                let dst_face = &mut get_mut_unchecked(ctx).face;
-                                let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-                                face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
-                                let key_expr = Resource::decl_key(res, dst_face);
-                                send_declare(
-                                    &dst_face.primitives,
-                                    RoutingContext::with_expr(
-                                        Declare {
-                                            interest_id: None,
-                                            ext_qos: ext::QoSType::DECLARE,
-                                            ext_tstamp: None,
-                                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                                            body: DeclareBody::DeclareToken(DeclareToken {
-                                                id,
-                                                wire_expr: key_expr,
-                                            }),
-                                        },
-                                        res.expr(),
-                                    ),
-                                );
-                            }
+            for dst_face in tables.faces.values_mut() {
+                if src_face.id != dst_face.id
+                    && HatTables::failover_brokering_to(links, dst_face.zid)
+                {
+                    for res in face_hat!(src_face).remote_tokens.values() {
+                        if !face_hat!(dst_face).local_tokens.contains_key(res) {
+                            let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
+                            face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
+                            let key_expr = Resource::decl_key(res, dst_face);
+                            send_declare(
+                                &dst_face.primitives,
+                                RoutingContext::with_expr(
+                                    Declare {
+                                        interest_id: None,
+                                        ext_qos: ext::QoSType::DECLARE,
+                                        ext_tstamp: None,
+                                        ext_nodeid: ext::NodeIdType::default(),
+                                        body: DeclareBody::DeclareToken(DeclareToken {
+                                            id,
+                                            wire_expr: key_expr,
+                                        }),
+                                    },
+                                    res.expr(),
+                                ),
+                            );
                         }
                     }
                 }
@@ -948,15 +956,18 @@ pub(crate) fn declare_token_interest(
     aggregate: bool,
     send_declare: &mut SendDeclare,
 ) {
-    if mode.current() && face.whatami == WhatAmI::Client {
+    if mode.current()
+        && (face.whatami == WhatAmI::Client
+            || (face.whatami == WhatAmI::Peer && !hat!(tables).full_net(WhatAmI::Peer)))
+    {
         let interest_id = (!mode.future()).then_some(id);
         if let Some(res) = res.as_ref() {
             if aggregate {
                 if hat!(tables).router_tokens.iter().any(|token| {
                     token.context.is_some()
                         && token.matches(res)
-                        && (remote_client_tokens(token, face)
-                            || remote_peer_tokens(tables, token)
+                        && (remote_simple_tokens(token, face)
+                            || remote_linkstatepeer_tokens(tables, token)
                             || remote_router_tokens(tables, token))
                 }) {
                     let id = if mode.future() {
@@ -989,7 +1000,10 @@ pub(crate) fn declare_token_interest(
                             .router_tokens
                             .iter()
                             .any(|r| *r != tables.zid)
-                            || res_hat!(token).peer_tokens.iter().any(|r| *r != tables.zid)
+                            || res_hat!(token)
+                                .linkstatepeer_tokens
+                                .iter()
+                                .any(|r| *r != tables.zid)
                             || token.session_ctxs.values().any(|s| {
                                 s.face.id != face.id
                                     && s.token
@@ -1031,7 +1045,10 @@ pub(crate) fn declare_token_interest(
                         .router_tokens
                         .iter()
                         .any(|r| *r != tables.zid)
-                        || res_hat!(token).peer_tokens.iter().any(|r| *r != tables.zid)
+                        || res_hat!(token)
+                            .linkstatepeer_tokens
+                            .iter()
+                            .any(|r| *r != tables.zid)
                         || token.session_ctxs.values().any(|s| {
                             s.token
                                 && (s.face.whatami != WhatAmI::Peer
@@ -1086,13 +1103,13 @@ impl HatTokenTrait for HatCode {
             WhatAmI::Peer => {
                 if hat!(tables).full_net(WhatAmI::Peer) {
                     if let Some(peer) = get_peer(tables, face, node_id) {
-                        declare_peer_token(tables, face, res, peer, send_declare)
+                        declare_linkstatepeer_token(tables, face, res, peer, send_declare)
                     }
                 } else {
-                    declare_client_token(tables, face, id, res, send_declare)
+                    declare_simple_token(tables, face, id, res, send_declare)
                 }
             }
-            _ => declare_client_token(tables, face, id, res, send_declare),
+            _ => declare_simple_token(tables, face, id, res, send_declare),
         }
     }
 
@@ -1122,7 +1139,7 @@ impl HatTokenTrait for HatCode {
                 if hat!(tables).full_net(WhatAmI::Peer) {
                     if let Some(mut res) = res {
                         if let Some(peer) = get_peer(tables, face, node_id) {
-                            forget_peer_token(tables, face, &mut res, &peer, send_declare);
+                            forget_linkstatepeer_token(tables, face, &mut res, &peer, send_declare);
                             Some(res)
                         } else {
                             None
@@ -1131,10 +1148,10 @@ impl HatTokenTrait for HatCode {
                         None
                     }
                 } else {
-                    forget_client_token(tables, face, id, send_declare)
+                    forget_simple_token(tables, face, id, send_declare)
                 }
             }
-            _ => forget_client_token(tables, face, id, send_declare),
+            _ => forget_simple_token(tables, face, id, send_declare),
         }
     }
 }

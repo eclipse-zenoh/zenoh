@@ -16,7 +16,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use lazy_static::lazy_static;
+use static_init::dynamic;
 use zenoh_result::{zerror, ZResult};
 
 use super::{
@@ -24,9 +24,9 @@ use super::{
     segment::HeaderSegment,
 };
 
-lazy_static! {
-    pub static ref GLOBAL_HEADER_SUBSCRIPTION: Subscription = Subscription::new();
-}
+#[dynamic(lazy,drop)]
+    pub static mut GLOBAL_HEADER_SUBSCRIPTION: Subscription = Subscription::new();
+
 
 pub struct Subscription {
     linked_table: Mutex<BTreeMap<HeaderSegmentID, Arc<HeaderSegment>>>,

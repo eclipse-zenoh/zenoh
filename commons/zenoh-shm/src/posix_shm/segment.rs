@@ -12,14 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{
-    fmt::{Debug, Display},
-    mem::size_of,
-};
+use std::fmt::{Debug, Display};
 
 use rand::Rng;
 use shared_memory::{Shmem, ShmemConf, ShmemError};
 use zenoh_result::{bail, zerror, ZResult};
+
+use crate::cleanup::CLEANUP;
 
 const SEGMENT_DEDICATE_TRIES: usize = 100;
 const ECMA: crc::Crc<u64> = crc::Crc::<u64>::new(&crc::CRC_64_ECMA_182);
@@ -58,20 +57,25 @@ where
         for _ in 0..SEGMENT_DEDICATE_TRIES {
             // Generate random id
             let id: ID = rand::thread_rng().gen();
+            let os_id = Self::os_id(id.clone(), id_prefix);
+
+            // Register cleanup routine to make sure Segment will be unlinked on exit
+            let c_os_id = os_id.clone();
+            CLEANUP.read().register_cleanup(Box::new(move || {
+                if let Ok(mut shmem) = ShmemConf::new().os_id(c_os_id).open() {
+                    shmem.set_owner(true);
+                    drop(shmem);
+                }
+            }));
 
             // Try to create a new segment identified by prefix and generated id.
             // If creation fails because segment already exists for this id,
             // the creation attempt will be repeated with another id
-            match ShmemConf::new()
-                .size(alloc_size + size_of::<usize>())
-                .os_id(Self::os_id(id.clone(), id_prefix))
-                .create()
-            {
+            match ShmemConf::new().size(alloc_size).os_id(os_id).create() {
                 Ok(shmem) => {
                     tracing::debug!(
                         "Created SHM segment, size: {alloc_size}, prefix: {id_prefix}, id: {id}"
                     );
-                    unsafe { *(shmem.as_ptr() as *mut usize) = alloc_size };
                     return Ok(Segment { shmem, id });
                 }
                 Err(ShmemError::LinkExists) => {}
@@ -94,10 +98,6 @@ where
                 )
             })?;
 
-        if shmem.len() <= size_of::<usize>() {
-            bail!("SHM segment too small")
-        }
-
         tracing::debug!("Opened SHM segment, prefix: {id_prefix}, id: {id}");
 
         Ok(Self { shmem, id })
@@ -110,17 +110,21 @@ where
     }
 
     pub fn as_ptr(&self) -> *mut u8 {
-        unsafe { self.shmem.as_ptr().add(size_of::<usize>()) }
+        self.shmem.as_ptr()
     }
 
+    /// Returns the length of this [`Segment<ID>`].
+    /// NOTE: one some platforms (at least windows) the returned len will be the actual length of an shm segment
+    /// (a required len rounded up to the nearest multiply of page size), on other (at least linux and macos) this
+    /// returns a value requested upon segment creation
     pub fn len(&self) -> usize {
-        unsafe { *(self.shmem.as_ptr() as *mut usize) }
+        self.shmem.len()
     }
 
     // TODO: dead code warning occurs because of `tested_crate_module!()` macro when feature `test` is not enabled. Better to fix that
     #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
-        unsafe { *(self.shmem.as_ptr() as *mut usize) == 0 }
+        self.len() == 0
     }
 
     pub fn id(&self) -> ID {

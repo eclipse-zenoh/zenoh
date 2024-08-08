@@ -83,7 +83,7 @@ pub fn get_vsock_addr(address: Address<'_>) -> ZResult<VsockAddr> {
 }
 
 pub struct LinkUnicastVsock {
-    // The underlying socket as returned from the async-std library
+    // The underlying socket as returned from the tokio library
     socket: UnsafeCell<VsockStream>,
     // The source socket address of this link (address used on the local host)
     src_addr: VsockAddr,

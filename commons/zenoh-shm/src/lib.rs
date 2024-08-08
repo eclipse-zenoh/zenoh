@@ -13,6 +13,7 @@
 //
 use std::{
     any::Any,
+    num::NonZeroUsize,
     sync::{
         atomic::{AtomicPtr, Ordering},
         Arc,
@@ -45,6 +46,7 @@ macro_rules! tested_crate_module {
 }
 
 pub mod api;
+mod cleanup;
 pub mod header;
 pub mod posix_shm;
 pub mod reader;
@@ -62,7 +64,7 @@ pub struct ShmBufInfo {
     /// Actual data length
     /// NOTE: data_descriptor's len is >= of this len and describes the actual memory length
     /// dedicated in shared memory segment for this particular buffer.
-    pub data_len: usize,
+    pub data_len: NonZeroUsize,
 
     /// The watchdog descriptor
     pub watchdog_descriptor: Descriptor,
@@ -76,7 +78,7 @@ impl ShmBufInfo {
     pub fn new(
         data_descriptor: ChunkDescriptor,
         shm_protocol: ProtocolID,
-        data_len: usize,
+        data_len: NonZeroUsize,
         watchdog_descriptor: Descriptor,
         header_descriptor: HeaderDescriptor,
         generation: u32,
@@ -122,12 +124,8 @@ impl std::fmt::Debug for ShmBufInner {
 }
 
 impl ShmBufInner {
-    pub fn len(&self) -> usize {
+    pub fn len(&self) -> NonZeroUsize {
         self.info.data_len
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
     }
 
     fn is_valid(&self) -> bool {
@@ -156,7 +154,7 @@ impl ShmBufInner {
     fn as_slice(&self) -> &[u8] {
         tracing::trace!("ShmBufInner::as_slice() == len = {:?}", self.info.data_len);
         let bp = self.buf.load(Ordering::SeqCst);
-        unsafe { std::slice::from_raw_parts(bp, self.info.data_len) }
+        unsafe { std::slice::from_raw_parts(bp, self.info.data_len.get()) }
     }
 
     unsafe fn dec_ref_count(&self) {
@@ -176,7 +174,7 @@ impl ShmBufInner {
     /// guarantee that your in applications only one process at the time will actually write.
     unsafe fn as_mut_slice_inner(&mut self) -> &mut [u8] {
         let bp = self.buf.load(Ordering::SeqCst);
-        std::slice::from_raw_parts_mut(bp, self.info.data_len)
+        std::slice::from_raw_parts_mut(bp, self.info.data_len.get())
     }
 }
 

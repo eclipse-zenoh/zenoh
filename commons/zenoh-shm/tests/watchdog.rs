@@ -30,7 +30,7 @@ const CONFIRMATION_PERIOD: Duration = Duration::from_millis(50);
 
 fn watchdog_alloc_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
     |_task_index: usize, _iteration: usize| -> ZResult<()> {
-        let _allocated = GLOBAL_STORAGE.allocate_watchdog()?;
+        let _allocated = GLOBAL_STORAGE.read().allocate_watchdog()?;
         Ok(())
     }
 }
@@ -47,8 +47,8 @@ fn watchdog_alloc_concurrent() {
 
 fn watchdog_confirmed_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
     |_task_index: usize, _iteration: usize| -> ZResult<()> {
-        let allocated = GLOBAL_STORAGE.allocate_watchdog()?;
-        let confirmed = GLOBAL_CONFIRMATOR.add_owned(&allocated.descriptor)?;
+        let allocated = GLOBAL_STORAGE.read().allocate_watchdog()?;
+        let confirmed = GLOBAL_CONFIRMATOR.read().add_owned(&allocated.descriptor)?;
 
         // check that the confirmed watchdog stays valid
         for i in 0..10 {
@@ -81,9 +81,11 @@ fn watchdog_confirmed_concurrent() {
 #[ignore]
 fn watchdog_confirmed_dangling() {
     let allocated = GLOBAL_STORAGE
+        .read()
         .allocate_watchdog()
         .expect("error allocating watchdog!");
     let confirmed = GLOBAL_CONFIRMATOR
+        .read()
         .add_owned(&allocated.descriptor)
         .expect("error adding watchdog to confirmator!");
     drop(allocated);
@@ -97,13 +99,13 @@ fn watchdog_confirmed_dangling() {
 
 fn watchdog_validated_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
     |_task_index: usize, _iteration: usize| -> ZResult<()> {
-        let allocated = GLOBAL_STORAGE.allocate_watchdog()?;
-        let confirmed = GLOBAL_CONFIRMATOR.add_owned(&allocated.descriptor)?;
+        let allocated = GLOBAL_STORAGE.read().allocate_watchdog()?;
+        let confirmed = GLOBAL_CONFIRMATOR.read().add_owned(&allocated.descriptor)?;
 
         let valid = Arc::new(AtomicBool::new(true));
         {
             let c_valid = valid.clone();
-            GLOBAL_VALIDATOR.add(
+            GLOBAL_VALIDATOR.read().add(
                 allocated.descriptor.clone(),
                 Box::new(move || {
                     c_valid.store(false, std::sync::atomic::Ordering::SeqCst);
@@ -150,13 +152,14 @@ fn watchdog_validated_invalid_without_confirmator_fn(
 ) -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
     |_task_index: usize, _iteration: usize| -> ZResult<()> {
         let allocated = GLOBAL_STORAGE
+            .read()
             .allocate_watchdog()
             .expect("error allocating watchdog!");
 
         let valid = Arc::new(AtomicBool::new(true));
         {
             let c_valid = valid.clone();
-            GLOBAL_VALIDATOR.add(
+            GLOBAL_VALIDATOR.read().add(
                 allocated.descriptor.clone(),
                 Box::new(move || {
                     c_valid.store(false, std::sync::atomic::Ordering::SeqCst);
@@ -193,16 +196,18 @@ fn watchdog_validated_additional_confirmation_fn(
 ) -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
     |_task_index: usize, _iteration: usize| -> ZResult<()> {
         let allocated = GLOBAL_STORAGE
+            .read()
             .allocate_watchdog()
             .expect("error allocating watchdog!");
         let confirmed = GLOBAL_CONFIRMATOR
+            .read()
             .add_owned(&allocated.descriptor)
             .expect("error adding watchdog to confirmator!");
 
         let allow_invalid = Arc::new(AtomicBool::new(false));
         {
             let c_allow_invalid = allow_invalid.clone();
-            GLOBAL_VALIDATOR.add(
+            GLOBAL_VALIDATOR.read().add(
                 allocated.descriptor.clone(),
                 Box::new(move || {
                     assert!(c_allow_invalid.load(std::sync::atomic::Ordering::SeqCst));
@@ -252,16 +257,18 @@ fn watchdog_validated_overloaded_system_fn(
 ) -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
     |_task_index: usize, _iteration: usize| -> ZResult<()> {
         let allocated = GLOBAL_STORAGE
+            .read()
             .allocate_watchdog()
             .expect("error allocating watchdog!");
         let confirmed = GLOBAL_CONFIRMATOR
+            .read()
             .add_owned(&allocated.descriptor)
             .expect("error adding watchdog to confirmator!");
 
         let allow_invalid = Arc::new(AtomicBool::new(false));
         {
             let c_allow_invalid = allow_invalid.clone();
-            GLOBAL_VALIDATOR.add(
+            GLOBAL_VALIDATOR.read().add(
                 allocated.descriptor.clone(),
                 Box::new(move || {
                     assert!(c_allow_invalid.load(std::sync::atomic::Ordering::SeqCst));

@@ -34,22 +34,17 @@ use super::{
     subscriber::SubscriberKind,
 };
 
-macro_rules! ke_for_sure {
-    ($val:expr) => {
-        unsafe { keyexpr::from_str_unchecked($val) }
-    };
-}
-
 lazy_static::lazy_static!(
-    static ref KE_STARSTAR: &'static keyexpr = ke_for_sure!("**");
-    static ref KE_PREFIX: &'static keyexpr = ke_for_sure!("@/session");
-    static ref KE_TRANSPORT_UNICAST: &'static keyexpr = ke_for_sure!("transport/unicast");
-    static ref KE_LINK: &'static keyexpr = ke_for_sure!("link");
+    static ref KE_STARSTAR: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("**") };
+    static ref KE_PREFIX: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("@") };
+    static ref KE_SESSION: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("session") };
+    static ref KE_TRANSPORT_UNICAST: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("transport/unicast") };
+    static ref KE_LINK: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("link") };
 );
 
 pub(crate) fn init(session: &Session) {
     if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
-        let admin_key = KeyExpr::from(*KE_PREFIX / own_zid / *KE_STARSTAR)
+        let admin_key = KeyExpr::from(*KE_PREFIX / own_zid / *KE_SESSION / *KE_STARSTAR)
             .to_wire(session)
             .to_owned();
 
@@ -69,7 +64,7 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
     fn reply_peer(own_zid: &keyexpr, query: &Query, peer: TransportPeer) {
         let zid = peer.zid.to_string();
         if let Ok(zid) = keyexpr::new(&zid) {
-            let key_expr = *KE_PREFIX / own_zid / *KE_TRANSPORT_UNICAST / zid;
+            let key_expr = *KE_PREFIX / own_zid / *KE_SESSION / *KE_TRANSPORT_UNICAST / zid;
             if query.key_expr().intersects(&key_expr) {
                 if let Ok(value) = serde_json::value::to_value(peer.clone()) {
                     match ZBytes::try_from(value) {
@@ -85,8 +80,13 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
                 let mut s = DefaultHasher::new();
                 link.hash(&mut s);
                 if let Ok(lid) = keyexpr::new(&s.finish().to_string()) {
-                    let key_expr =
-                        *KE_PREFIX / own_zid / *KE_TRANSPORT_UNICAST / zid / *KE_LINK / lid;
+                    let key_expr = *KE_PREFIX
+                        / own_zid
+                        / *KE_SESSION
+                        / *KE_TRANSPORT_UNICAST
+                        / zid
+                        / *KE_LINK
+                        / lid;
                     if query.key_expr().intersects(&key_expr) {
                         if let Ok(value) = serde_json::value::to_value(link) {
                             match ZBytes::try_from(value) {
@@ -157,8 +157,10 @@ impl TransportMulticastEventHandler for Handler {
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         if let Ok(own_zid) = keyexpr::new(&self.session.zid().to_string()) {
             if let Ok(zid) = keyexpr::new(&peer.zid.to_string()) {
-                let expr = WireExpr::from(&(*KE_PREFIX / own_zid / *KE_TRANSPORT_UNICAST / zid))
-                    .to_owned();
+                let expr = WireExpr::from(
+                    &(*KE_PREFIX / own_zid / *KE_SESSION / *KE_TRANSPORT_UNICAST / zid),
+                )
+                .to_owned();
                 let info = DataInfo {
                     encoding: Some(Encoding::APPLICATION_JSON),
                     ..Default::default()

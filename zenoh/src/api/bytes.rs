@@ -24,7 +24,7 @@ use zenoh_buffers::{
     buffer::{Buffer, SplitBuffer},
     reader::{DidntRead, HasReader, Reader},
     writer::HasWriter,
-    ZBuf, ZBufReader, ZBufWriter, ZSlice,
+    ZBuf, ZBufReader, ZBufWriter, ZSlice, ZSliceBuffer,
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_protocol::{
@@ -378,7 +378,8 @@ impl ZBytesReader<'_> {
         self.remaining() == 0
     }
 
-    /// Deserialize an object of type `T` from a [`Value`] using the [`ZSerde`].
+    /// Deserialize an object of type `T` from a [`ZBytesReader`] using the [`ZSerde`].
+    /// See [`ZBytesWriter::serialize`] for an example.
     pub fn deserialize<T>(&mut self) -> Result<T, <ZSerde as Deserialize<T>>::Error>
     where
         for<'a> ZSerde: Deserialize<T, Input<'a> = &'a ZBytes>,
@@ -419,6 +420,32 @@ impl ZBytesWriter<'_> {
         unsafe { codec.write(&mut self.0, bytes).unwrap_unchecked() };
     }
 
+    /// Serialize a type `T` on the [`ZBytes`]. For simmetricity, every serialization
+    /// operation preserves type boundaries by preprending the length of the serialized data.
+    /// This allows calling [`ZBytesReader::deserialize`] in the same order to retrieve the original type.
+    ///
+    /// Example:
+    /// ```
+    /// use zenoh::bytes::ZBytes;
+    ///
+    /// // serialization
+    /// let mut bytes = ZBytes::empty();
+    /// let mut writer = bytes.writer();
+    /// let i1 = 1234_u32;
+    /// let i2 = String::from("test");
+    /// let i3 = vec![1, 2, 3, 4];
+    /// writer.serialize(i1);
+    /// writer.serialize(&i2);
+    /// writer.serialize(&i3);
+    /// // deserialization
+    /// let mut reader = bytes.reader();
+    /// let o1: u32 = reader.deserialize().unwrap();
+    /// let o2: String = reader.deserialize().unwrap();
+    /// let o3: Vec<u8> = reader.deserialize().unwrap();
+    /// assert_eq!(i1, o1);
+    /// assert_eq!(i2, o2);
+    /// assert_eq!(i3, o3);
+    /// ```
     pub fn serialize<T>(&mut self, t: T)
     where
         ZSerde: Serialize<T, Output = ZBytes>,
@@ -427,6 +454,8 @@ impl ZBytesWriter<'_> {
         self.write(&tpld.0);
     }
 
+    /// Try to serialize a type `T` on the [`ZBytes`]. Serialization works
+    /// in the same way as [`ZBytesWriter::serialize`].
     pub fn try_serialize<T, E>(&mut self, t: T) -> Result<(), E>
     where
         ZSerde: Serialize<T, Output = Result<ZBytes, E>>,
@@ -434,6 +463,41 @@ impl ZBytesWriter<'_> {
         let tpld = ZSerde.serialize(t)?;
         self.write(&tpld.0);
         Ok(())
+    }
+
+    /// Append a [`ZBytes`] to this [`ZBytes`] by taking ownership.
+    /// This allows to compose a [`ZBytes`] out of multiple [`ZBytes`] that may point to different memory regions.
+    /// Said in other terms, it allows to create a linear view on different memory regions without copy.
+    /// Please note that `append` does not preserve any boundaries as done in [`ZBytesWriter::serialize`], meaning
+    /// that [`ZBytesReader::deserialize`] will not be able to deserialize the types in the same seriliazation order.
+    /// You will need to decide how to deserialize data yourself.
+    ///
+    /// Example:
+    /// ```
+    /// use zenoh::bytes::ZBytes;
+    ///
+    /// let one = ZBytes::from(vec![0, 1]);
+    /// let two = ZBytes::from(vec![2, 3, 4, 5]);
+    /// let three = ZBytes::from(vec![6, 7]);
+    ///
+    /// let mut bytes = ZBytes::empty();
+    /// let mut writer = bytes.writer();
+    /// // Append data without copying by passing ownership
+    /// writer.append(one);
+    /// writer.append(two);
+    /// writer.append(three);
+    ///
+    /// // deserialization
+    /// let mut out: Vec<u8> = bytes.into();
+    /// assert_eq!(out, vec![0u8, 1, 2, 3, 4, 5, 6, 7]);
+    /// ```
+    pub fn append(&mut self, b: ZBytes) {
+        use zenoh_buffers::writer::Writer;
+        for s in b.0.zslices() {
+            // SAFETY: we are writing a ZSlice on a ZBuf, this is infallible because we are just pushing a ZSlice to
+            //         the list of available ZSlices.
+            unsafe { self.0.write_zslice(s).unwrap_unchecked() }
+        }
     }
 }
 
@@ -1142,8 +1206,8 @@ impl<'a> TryFrom<&'a mut ZBytes> for Cow<'a, str> {
     }
 }
 
-// - Integers impl
-macro_rules! impl_int {
+// - Impl Serialize/Deserialize for numbers
+macro_rules! impl_num {
     ($t:ty) => {
         impl Serialize<$t> for ZSerde {
             type Output = ZBytes;
@@ -1157,7 +1221,7 @@ macro_rules! impl_int {
                 // SAFETY:
                 // - 0 is a valid start index because bs is guaranteed to always have a length greater or equal than 1
                 // - end is a valid end index because is bounded between 0 and bs.len()
-                ZBytes::new(unsafe { ZSlice::new_unchecked(Arc::new(bs), 0, end) })
+                ZBytes::new(unsafe { ZSlice::new(Arc::new(bs), 0, end).unwrap_unchecked() })
             }
         }
 
@@ -1241,24 +1305,24 @@ macro_rules! impl_int {
 }
 
 // Zenoh unsigned integers
-impl_int!(u8);
-impl_int!(u16);
-impl_int!(u32);
-impl_int!(u64);
-impl_int!(u128);
-impl_int!(usize);
+impl_num!(u8);
+impl_num!(u16);
+impl_num!(u32);
+impl_num!(u64);
+impl_num!(u128);
+impl_num!(usize);
 
 // Zenoh signed integers
-impl_int!(i8);
-impl_int!(i16);
-impl_int!(i32);
-impl_int!(i64);
-impl_int!(i128);
-impl_int!(isize);
+impl_num!(i8);
+impl_num!(i16);
+impl_num!(i32);
+impl_num!(i64);
+impl_num!(i128);
+impl_num!(isize);
 
 // Zenoh floats
-impl_int!(f32);
-impl_int!(f64);
+impl_num!(f32);
+impl_num!(f64);
 
 // Zenoh bool
 impl Serialize<bool> for ZSerde {
@@ -2102,6 +2166,81 @@ impl TryFrom<&mut ZBytes> for serde_pickle::Value {
     }
 }
 
+// bytes::Bytes
+
+// Define a transparent wrapper type to get around Rust's orphan rule.
+// This allows to use bytes::Bytes directly as supporting buffer of a
+// ZSlice resulting in zero-copy and zero-alloc bytes::Bytes serialization.
+#[repr(transparent)]
+#[derive(Debug)]
+struct BytesWrap(bytes::Bytes);
+
+impl ZSliceBuffer for BytesWrap {
+    fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
+
+impl Serialize<bytes::Bytes> for ZSerde {
+    type Output = ZBytes;
+
+    fn serialize(self, s: bytes::Bytes) -> Self::Output {
+        ZBytes::new(BytesWrap(s))
+    }
+}
+
+impl From<bytes::Bytes> for ZBytes {
+    fn from(t: bytes::Bytes) -> Self {
+        ZSerde.serialize(t)
+    }
+}
+
+impl Deserialize<bytes::Bytes> for ZSerde {
+    type Input<'a> = &'a ZBytes;
+    type Error = Infallible;
+
+    fn deserialize(self, v: Self::Input<'_>) -> Result<bytes::Bytes, Self::Error> {
+        // bytes::Bytes can be constructed only by passing ownership to the constructor.
+        // Thereofore, here we are forced to allocate a vector and copy the whole ZBytes
+        // content since bytes::Bytes does not support anything else than Box<u8> (and its
+        // variants like Vec<u8> and String).
+        let v: Vec<u8> = ZSerde.deserialize(v).unwrap_infallible();
+        Ok(bytes::Bytes::from(v))
+    }
+}
+
+impl TryFrom<ZBytes> for bytes::Bytes {
+    type Error = Infallible;
+
+    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&value)
+    }
+}
+
+impl TryFrom<&ZBytes> for bytes::Bytes {
+    type Error = Infallible;
+
+    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(value)
+    }
+}
+
+impl TryFrom<&mut ZBytes> for bytes::Bytes {
+    type Error = Infallible;
+
+    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
+        ZSerde.deserialize(&*value)
+    }
+}
+
 // Shared memory conversion
 #[cfg(feature = "shared-memory")]
 impl Serialize<ZShm> for ZSerde {
@@ -2182,7 +2321,8 @@ impl<'a> Deserialize<&'a mut zshm> for ZSerde {
         // A ZSliceShmBorrowMut is expected to have only one slice
         let mut zslices = v.0.zslices_mut();
         if let Some(zs) = zslices.next() {
-            if let Some(shmb) = zs.downcast_mut::<ShmBufInner>() {
+            // SAFETY: ShmBufInner cannot change the size of the slice
+            if let Some(shmb) = unsafe { zs.downcast_mut::<ShmBufInner>() } {
                 return Ok(shmb.into());
             }
         }
@@ -2199,7 +2339,8 @@ impl<'a> Deserialize<&'a mut zshmmut> for ZSerde {
         // A ZSliceShmBorrowMut is expected to have only one slice
         let mut zslices = v.0.zslices_mut();
         if let Some(zs) = zslices.next() {
-            if let Some(shmb) = zs.downcast_mut::<ShmBufInner>() {
+            // SAFETY: ShmBufInner cannot change the size of the slice
+            if let Some(shmb) = unsafe { zs.downcast_mut::<ShmBufInner>() } {
                 return shmb.try_into().map_err(|_| ZDeserializeError);
             }
         }
@@ -3167,6 +3308,10 @@ mod tests {
         // Parameters
         serialize_deserialize!(Parameters, Parameters::from(""));
         serialize_deserialize!(Parameters, Parameters::from("a=1;b=2;c3"));
+
+        // Bytes
+        serialize_deserialize!(bytes::Bytes, bytes::Bytes::from(vec![1, 2, 3, 4]));
+        serialize_deserialize!(bytes::Bytes, bytes::Bytes::from("Hello World"));
 
         // Tuple
         serialize_deserialize!((usize, usize), (0, 1));

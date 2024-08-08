@@ -20,75 +20,51 @@ use std::{
 
 use libloading::Library;
 use tracing::{debug, warn};
-use zenoh_core::zconfigurable;
+use zenoh_core::{zconfigurable, zerror};
 use zenoh_result::{bail, ZResult};
+
+use crate::LibSearchDirs;
 
 zconfigurable! {
     /// The libraries prefix for the current platform (usually: `"lib"`)
     pub static ref LIB_PREFIX: String = DLL_PREFIX.to_string();
     /// The libraries suffix for the current platform (`".dll"` or `".so"` or `".dylib"`...)
     pub static ref LIB_SUFFIX: String = DLL_SUFFIX.to_string();
-    /// The default list of paths where to search for libraries to load
-    pub static ref LIB_DEFAULT_SEARCH_PATHS: String = ".:~/.zenoh/lib:/opt/homebrew/lib:/usr/local/lib:/usr/lib".to_string();
 }
 
 /// LibLoader allows search for libraries and to load them.
 #[derive(Clone, Debug)]
 pub struct LibLoader {
-    search_paths: Vec<PathBuf>,
+    search_paths: Option<Vec<PathBuf>>,
 }
 
 impl LibLoader {
     /// Return an empty `LibLoader`.
     pub fn empty() -> LibLoader {
-        LibLoader {
-            search_paths: Vec::new(),
-        }
-    }
-
-    /// Returns the list of search paths used by `LibLoader::default()`
-    pub fn default_search_paths() -> &'static str {
-        &LIB_DEFAULT_SEARCH_PATHS
+        LibLoader { search_paths: None }
     }
 
     /// Creates a new [LibLoader] with a set of paths where the libraries will be searched for.
     /// If `exe_parent_dir`is true, the parent directory of the current executable is also added
     /// to the set of paths for search.
-    pub fn new<S>(search_dirs: &[S], exe_parent_dir: bool) -> LibLoader
-    where
-        S: AsRef<str>,
-    {
-        let mut search_paths: Vec<PathBuf> = vec![];
-        for s in search_dirs {
-            match shellexpand::full(s) {
-                Ok(cow_str) => match PathBuf::from(&*cow_str).canonicalize() {
-                    Ok(path) => search_paths.push(path),
-                    Err(err) => debug!("Cannot search for libraries in {}: {}", cow_str, err),
-                },
-                Err(err) => warn!("Cannot search for libraries in '{}': {} ", s.as_ref(), err),
-            }
-        }
-        Self::_new(search_paths, exe_parent_dir)
-    }
-    fn _new(mut search_paths: Vec<PathBuf>, exe_parent_dir: bool) -> Self {
-        if exe_parent_dir {
-            match std::env::current_exe() {
-                Ok(path) => match path.parent() {
-                    Some(p) => if p.is_dir() {
-                        search_paths.push(p.canonicalize().unwrap())
-                    },
-                    None => warn!("Can't search for plugins in executable parent directory: no parent directory for {}.", path.to_string_lossy()),
-                },
-                Err(e) => warn!("Can't search for plugins in executable parent directory: {}.", e),
+    pub fn new(dirs: LibSearchDirs) -> LibLoader {
+        let mut search_paths = Vec::new();
+
+        for path in dirs.into_iter() {
+            match path {
+                Ok(path) => search_paths.push(path),
+                Err(err) => tracing::error!("{err}"),
             }
         }
 
-        LibLoader { search_paths }
+        LibLoader {
+            search_paths: Some(search_paths),
+        }
     }
 
     /// Return the list of search paths used by this [LibLoader]
-    pub fn search_paths(&self) -> &[PathBuf] {
-        &self.search_paths
+    pub fn search_paths(&self) -> Option<&[PathBuf]> {
+        self.search_paths.as_deref()
     }
 
     /// Load a library from the specified path.
@@ -118,7 +94,7 @@ impl LibLoader {
     ///
     /// This function calls [libloading::Library::new()](https://docs.rs/libloading/0.7.0/libloading/struct.Library.html#method.new)
     /// which is unsafe.
-    pub unsafe fn search_and_load(&self, name: &str) -> ZResult<(Library, PathBuf)> {
+    pub unsafe fn search_and_load(&self, name: &str) -> ZResult<Option<(Library, PathBuf)>> {
         let filename = format!("{}{}{}", *LIB_PREFIX, name, *LIB_SUFFIX);
         let filename_ostr = OsString::from(&filename);
         tracing::debug!(
@@ -126,13 +102,16 @@ impl LibLoader {
             filename,
             self.search_paths
         );
-        for dir in &self.search_paths {
+        let Some(search_paths) = self.search_paths() else {
+            return Ok(None);
+        };
+        for dir in search_paths {
             match dir.read_dir() {
                 Ok(read_dir) => {
                     for entry in read_dir.flatten() {
                         if entry.file_name() == filename_ostr {
                             let path = entry.path();
-                            return Ok((Library::new(path.clone())?, path));
+                            return Ok(Some((Library::new(path.clone())?, path)));
                         }
                     }
                 }
@@ -142,7 +121,7 @@ impl LibLoader {
                 ),
             }
         }
-        bail!("Library file '{}' not found", filename)
+        Err(zerror!("Library file '{}' not found", filename).into())
     }
 
     /// Search and load all libraries with filename starting with [struct@LIB_PREFIX]+`prefix` and ending with [struct@LIB_SUFFIX].
@@ -158,7 +137,7 @@ impl LibLoader {
     pub unsafe fn load_all_with_prefix(
         &self,
         prefix: Option<&str>,
-    ) -> Vec<(Library, PathBuf, String)> {
+    ) -> Option<Vec<(Library, PathBuf, String)>> {
         let lib_prefix = format!("{}{}", *LIB_PREFIX, prefix.unwrap_or(""));
         tracing::debug!(
             "Search for libraries {}*{} to load in {:?}",
@@ -166,9 +145,8 @@ impl LibLoader {
             *LIB_SUFFIX,
             self.search_paths
         );
-
         let mut result = vec![];
-        for dir in &self.search_paths {
+        for dir in self.search_paths()? {
             match dir.read_dir() {
                 Ok(read_dir) => {
                     for entry in read_dir.flatten() {
@@ -199,7 +177,7 @@ impl LibLoader {
                 ),
             }
         }
-        result
+        Some(result)
     }
 
     pub fn _plugin_name(path: &std::path::Path) -> Option<&str> {
@@ -235,7 +213,6 @@ impl LibLoader {
 
 impl Default for LibLoader {
     fn default() -> Self {
-        let paths: Vec<&str> = (*LIB_DEFAULT_SEARCH_PATHS).split(':').collect();
-        LibLoader::new(&paths, true)
+        LibLoader::new(LibSearchDirs::default())
     }
 }

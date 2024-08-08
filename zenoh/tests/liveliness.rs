@@ -32,7 +32,8 @@ async fn test_liveliness_subscriber_clique() {
     let peer1 = {
         let mut c = config::default();
         c.listen
-            .set_endpoints(vec![PEER1_ENDPOINT.parse::<config::EndPoint>().unwrap()])
+            .endpoints
+            .set(vec![PEER1_ENDPOINT.parse::<config::EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -44,7 +45,8 @@ async fn test_liveliness_subscriber_clique() {
     let peer2 = {
         let mut c = config::default();
         c.connect
-            .set_endpoints(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .endpoints
+            .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -63,12 +65,17 @@ async fn test_liveliness_subscriber_clique() {
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
 
-    drop(token);
+    token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+
+    sub.undeclare().await.unwrap();
+
+    peer1.close().await.unwrap();
+    peer2.close().await.unwrap();
 }
 
 #[cfg(feature = "unstable")]
@@ -89,7 +96,8 @@ async fn test_liveliness_query_clique() {
     let peer1 = {
         let mut c = config::default();
         c.listen
-            .set_endpoints(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .endpoints
+            .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -101,7 +109,8 @@ async fn test_liveliness_query_clique() {
     let peer2 = {
         let mut c = config::default();
         c.connect
-            .set_endpoints(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .endpoints
+            .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -110,7 +119,7 @@ async fn test_liveliness_query_clique() {
         s
     };
 
-    let _token = ztimeout!(peer1.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    let token = ztimeout!(peer1.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let get = ztimeout!(peer2.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
@@ -119,6 +128,11 @@ async fn test_liveliness_query_clique() {
     let sample = ztimeout!(get.recv_async()).unwrap().into_result().unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+
+    token.undeclare().await.unwrap();
+
+    peer1.close().await.unwrap();
+    peer2.close().await.unwrap();
 }
 
 #[cfg(feature = "unstable")]
@@ -137,10 +151,11 @@ async fn test_liveliness_subscriber_brokered() {
 
     zenoh_util::try_init_log_from_env();
 
-    let _router = {
+    let router = {
         let mut c = config::default();
         c.listen
-            .set_endpoints(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Router));
@@ -152,7 +167,8 @@ async fn test_liveliness_subscriber_brokered() {
     let client1 = {
         let mut c = config::default();
         c.connect
-            .set_endpoints(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
@@ -164,7 +180,8 @@ async fn test_liveliness_subscriber_brokered() {
     let client2 = {
         let mut c = config::default();
         c.connect
-            .set_endpoints(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
@@ -183,12 +200,18 @@ async fn test_liveliness_subscriber_brokered() {
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
 
-    drop(token);
+    token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+
+    sub.undeclare().await.unwrap();
+
+    router.close().await.unwrap();
+    client1.close().await.unwrap();
+    client2.close().await.unwrap();
 }
 
 #[cfg(feature = "unstable")]
@@ -206,10 +229,11 @@ async fn test_liveliness_query_brokered() {
 
     zenoh_util::try_init_log_from_env();
 
-    let _router = {
+    let router = {
         let mut c = config::default();
         c.listen
-            .set_endpoints(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Router));
@@ -221,7 +245,8 @@ async fn test_liveliness_query_brokered() {
     let client1 = {
         let mut c = config::default();
         c.connect
-            .set_endpoints(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
@@ -233,7 +258,8 @@ async fn test_liveliness_query_brokered() {
     let client2 = {
         let mut c = config::default();
         c.connect
-            .set_endpoints(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
@@ -242,7 +268,7 @@ async fn test_liveliness_query_brokered() {
         s
     };
 
-    let _token = ztimeout!(client1.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    let token = ztimeout!(client1.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let get = ztimeout!(client2.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
@@ -251,6 +277,12 @@ async fn test_liveliness_query_brokered() {
     let sample = ztimeout!(get.recv_async()).unwrap().into_result().unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+
+    token.undeclare().await.unwrap();
+
+    router.close().await.unwrap();
+    client1.close().await.unwrap();
+    client2.close().await.unwrap();
 }
 
 #[cfg(feature = "unstable")]
@@ -285,12 +317,15 @@ async fn test_liveliness_subscriber_local() {
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
 
-    drop(token);
+    token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+
+    sub.undeclare().await.unwrap();
+    peer.close().await.unwrap();
 }
 
 #[cfg(feature = "unstable")]
@@ -315,7 +350,7 @@ async fn test_liveliness_query_local() {
         s
     };
 
-    let _token = ztimeout!(peer.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    let token = ztimeout!(peer.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let get = ztimeout!(peer.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
@@ -324,4 +359,7 @@ async fn test_liveliness_query_local() {
     let sample = ztimeout!(get.recv_async()).unwrap().into_result().unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+
+    token.undeclare().await.unwrap();
+    peer.close().await.unwrap();
 }
