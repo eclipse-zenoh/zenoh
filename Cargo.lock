@@ -4529,7 +4529,7 @@ dependencies = [
  "bytes",
  "libc",
  "mio 1.0.1",
- "parking_lot",
+ "parking_lot 0.12.1",
  "pin-project-lite 0.2.13",
  "signal-hook-registry",
  "socket2 0.5.6",

@@ -601,7 +601,7 @@
   //    },
   //  },
 
-  /// Plugin configuration example using `__config__` property
+  // /// Plugin configuration example using `__config__` property
   // plugins: {
   //   rest: {
   //     __config__: "./plugins/zenoh-plugin-rest/config.json5",
