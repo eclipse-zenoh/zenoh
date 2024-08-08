@@ -125,24 +125,6 @@ pub enum ControlMsg {
         express: bool,
         id: Uuid,
     },
-    PublisherSetCongestion {
-        id: Uuid,
-        #[serde(
-            deserialize_with = "deserialize_congestion_control",
-            serialize_with = "serialize_congestion_control"
-        )]
-        #[ts(type = "number")]
-        congestion_control: CongestionControl,
-    },
-    PublisherSetPriority {
-        id: Uuid,
-        #[serde(
-            deserialize_with = "deserialize_priority",
-            serialize_with = "serialize_priority"
-        )]
-        #[ts(type = "number")]
-        priority: Priority,
-    },
     UndeclarePublisher(Uuid),
 
     // Queryable

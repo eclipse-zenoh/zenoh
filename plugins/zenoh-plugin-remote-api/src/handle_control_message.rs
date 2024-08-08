@@ -34,17 +34,7 @@ pub async fn handle_control_message(
         }
         ControlMsg::CloseSession => {
             if let Some(state_map) = state_writer.remove(&sock_addr) {
-                //  Undeclare Publishers and Subscribers
-                for (_, publisher) in state_map.publishers {
-                    if let Err(err) = publisher.undeclare().await {
-                        tracing::error!("Close Session, Error undeclaring Publisher {err}");
-                    };
-                }
-                for (_, subscriber) in state_map.subscribers {
-                    if let Err(err) = subscriber.undeclare().await {
-                        tracing::error!("Close Session, Error undeclaring Subscriber {err}");
-                    };
-                }
+                drop(state_map);
             } else {
                 warn!("State Map Does not contain SocketAddr");
             }
@@ -133,23 +123,6 @@ pub async fn handle_control_message(
                 .express(express)
                 .await?;
             state_map.publishers.insert(uuid, publisher);
-        }
-        ControlMsg::PublisherSetCongestion {
-            id,
-            congestion_control,
-        } => {
-            if let Some(publisher) = state_map.publishers.get_mut(&id) {
-                publisher.congestion_control();
-            } else {
-                warn!("UndeclarePublisher: No Publisher with UUID {id}");
-            };
-        }
-        ControlMsg::PublisherSetPriority { id, priority } => {
-            if let Some(publisher) = state_map.publishers.get_mut(&id) {
-                publisher.priority();
-            } else {
-                warn!("UndeclarePublisher: No Publisher with UUID {id}");
-            };
         }
         ControlMsg::UndeclarePublisher(id) => {
             if let Some(publisher) = state_map.publishers.remove(&id) {

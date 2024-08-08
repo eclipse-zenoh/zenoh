@@ -172,10 +172,10 @@ impl Plugin for RemoteApiPlugin {
 
             // Return WebServer And State
             let running_plugin = RunningPluginInner {
-                zenoh_runtime: runtime,
-                plugin_runtime,
-                websocket_server: join_handle,
-                state_map,
+                _zenoh_runtime: runtime,
+                _plugin_runtime: plugin_runtime,
+                _websocket_server: join_handle,
+                _state_map: state_map,
             };
             Ok(Box::new(RunningPlugin(running_plugin)))
         } else {
@@ -187,10 +187,10 @@ impl Plugin for RemoteApiPlugin {
 type StateMap = Arc<RwLock<HashMap<SocketAddr, RemoteState>>>;
 
 struct RunningPluginInner {
-    zenoh_runtime: Runtime,
-    plugin_runtime: tokio::runtime::Runtime,
-    websocket_server: JoinHandle<()>,
-    state_map: StateMap,
+    _zenoh_runtime: Runtime,
+    _plugin_runtime: tokio::runtime::Runtime,
+    _websocket_server: JoinHandle<()>,
+    _state_map: StateMap,
 }
 
 struct RunningPlugin(RunningPluginInner);
