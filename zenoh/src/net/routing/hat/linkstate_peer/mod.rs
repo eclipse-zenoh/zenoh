@@ -112,45 +112,51 @@ struct HatTables {
     peer_subs: HashSet<Arc<Resource>>,
     peer_qabls: HashSet<Arc<Resource>>,
     peers_net: Option<Network>,
-    peers_trees_task: Option<TerminatableTask>,
+    peers_trees_task: (TerminatableTask, flume::Sender<Arc<TablesLock>>),
 }
 
 impl HatTables {
     fn new() -> Self {
+        fn spawn_trees_worker() -> (TerminatableTask, flume::Sender<Arc<TablesLock>>) {
+            let (sender, receiver) = flume::bounded::<Arc<TablesLock>>(1);
+            let task = TerminatableTask::spawn(
+                zenoh_runtime::ZRuntime::Net,
+                async move {
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_millis(
+                            *TREES_COMPUTATION_DELAY_MS,
+                        ))
+                        .await;
+                        if let Ok(tables_ref) = receiver.recv_async().await {
+                            let mut tables = zwrite!(tables_ref.tables);
+
+                            tracing::trace!("Compute trees");
+                            let new_children =
+                                hat_mut!(tables).peers_net.as_mut().unwrap().compute_trees();
+
+                            tracing::trace!("Compute routes");
+                            pubsub::pubsub_tree_change(&mut tables, &new_children);
+                            queries::queries_tree_change(&mut tables, &new_children);
+                            drop(tables);
+                        }
+                    }
+                },
+                TerminatableTask::create_cancellation_token(),
+            );
+            (task, sender)
+        }
+
         Self {
             peer_subs: HashSet::new(),
             peer_qabls: HashSet::new(),
             peers_net: None,
-            peers_trees_task: None,
+            peers_trees_task: spawn_trees_worker(),
         }
     }
 
     fn schedule_compute_trees(&mut self, tables_ref: Arc<TablesLock>) {
-        tracing::trace!("Schedule computations");
-        if self.peers_trees_task.is_none() {
-            let task = TerminatableTask::spawn(
-                zenoh_runtime::ZRuntime::Net,
-                async move {
-                    tokio::time::sleep(std::time::Duration::from_millis(
-                        *TREES_COMPUTATION_DELAY_MS,
-                    ))
-                    .await;
-                    let mut tables = zwrite!(tables_ref.tables);
-
-                    tracing::trace!("Compute trees");
-                    let new_children = hat_mut!(tables).peers_net.as_mut().unwrap().compute_trees();
-
-                    tracing::trace!("Compute routes");
-                    pubsub::pubsub_tree_change(&mut tables, &new_children);
-                    queries::queries_tree_change(&mut tables, &new_children);
-
-                    tracing::trace!("Computations completed");
-                    hat_mut!(tables).peers_trees_task = None;
-                },
-                TerminatableTask::create_cancellation_token(),
-            );
-            self.peers_trees_task = Some(task);
-        }
+        tracing::trace!("Schedule trees computation");
+        let _ = self.peers_trees_task.1.try_send(tables_ref);
     }
 }
 

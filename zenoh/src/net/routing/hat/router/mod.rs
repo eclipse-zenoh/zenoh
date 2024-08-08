@@ -121,13 +121,50 @@ struct HatTables {
     routers_net: Option<Network>,
     peers_net: Option<Network>,
     shared_nodes: Vec<ZenohId>,
-    routers_trees_task: Option<TerminatableTask>,
-    peers_trees_task: Option<TerminatableTask>,
+    routers_trees_task: (TerminatableTask, flume::Sender<Arc<TablesLock>>),
+    peers_trees_task: (TerminatableTask, flume::Sender<Arc<TablesLock>>),
     router_peers_failover_brokering: bool,
 }
 
 impl HatTables {
     fn new(router_peers_failover_brokering: bool) -> Self {
+        fn spawn_trees_worker(
+            net_type: WhatAmI,
+        ) -> (TerminatableTask, flume::Sender<Arc<TablesLock>>) {
+            let (sender, receiver) = flume::bounded::<Arc<TablesLock>>(1);
+            let task = TerminatableTask::spawn(
+                zenoh_runtime::ZRuntime::Net,
+                async move {
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_millis(
+                            *TREES_COMPUTATION_DELAY_MS,
+                        ))
+                        .await;
+                        if let Ok(tables_ref) = receiver.recv_async().await {
+                            let mut tables = zwrite!(tables_ref.tables);
+
+                            tracing::trace!("Compute trees");
+                            let new_children = match net_type {
+                                WhatAmI::Router => hat_mut!(tables)
+                                    .routers_net
+                                    .as_mut()
+                                    .unwrap()
+                                    .compute_trees(),
+                                _ => hat_mut!(tables).peers_net.as_mut().unwrap().compute_trees(),
+                            };
+
+                            tracing::trace!("Compute routes");
+                            pubsub::pubsub_tree_change(&mut tables, &new_children, net_type);
+                            queries::queries_tree_change(&mut tables, &new_children, net_type);
+                            drop(tables);
+                        }
+                    }
+                },
+                TerminatableTask::create_cancellation_token(),
+            );
+            (task, sender)
+        }
+
         Self {
             router_subs: HashSet::new(),
             peer_subs: HashSet::new(),
@@ -136,8 +173,8 @@ impl HatTables {
             routers_net: None,
             peers_net: None,
             shared_nodes: vec![],
-            routers_trees_task: None,
-            peers_trees_task: None,
+            routers_trees_task: spawn_trees_worker(WhatAmI::Router),
+            peers_trees_task: spawn_trees_worker(WhatAmI::Peer),
             router_peers_failover_brokering,
         }
     }
@@ -240,45 +277,15 @@ impl HatTables {
     }
 
     fn schedule_compute_trees(&mut self, tables_ref: Arc<TablesLock>, net_type: WhatAmI) {
-        tracing::trace!("Schedule computations");
-        if (net_type == WhatAmI::Router && self.routers_trees_task.is_none())
-            || (net_type == WhatAmI::Peer && self.peers_trees_task.is_none())
-        {
-            let task = TerminatableTask::spawn(
-                zenoh_runtime::ZRuntime::Net,
-                async move {
-                    tokio::time::sleep(std::time::Duration::from_millis(
-                        *TREES_COMPUTATION_DELAY_MS,
-                    ))
-                    .await;
-                    let mut tables = zwrite!(tables_ref.tables);
-
-                    tracing::trace!("Compute trees");
-                    let new_children = match net_type {
-                        WhatAmI::Router => hat_mut!(tables)
-                            .routers_net
-                            .as_mut()
-                            .unwrap()
-                            .compute_trees(),
-                        _ => hat_mut!(tables).peers_net.as_mut().unwrap().compute_trees(),
-                    };
-
-                    tracing::trace!("Compute routes");
-                    pubsub::pubsub_tree_change(&mut tables, &new_children, net_type);
-                    queries::queries_tree_change(&mut tables, &new_children, net_type);
-
-                    tracing::trace!("Computations completed");
-                    match net_type {
-                        WhatAmI::Router => hat_mut!(tables).routers_trees_task = None,
-                        _ => hat_mut!(tables).peers_trees_task = None,
-                    };
-                },
-                TerminatableTask::create_cancellation_token(),
-            );
-            match net_type {
-                WhatAmI::Router => self.routers_trees_task = Some(task),
-                _ => self.peers_trees_task = Some(task),
-            };
+        tracing::trace!("Schedule trees computation");
+        match net_type {
+            WhatAmI::Router => {
+                let _ = self.routers_trees_task.1.try_send(tables_ref);
+            }
+            WhatAmI::Peer => {
+                let _ = self.peers_trees_task.1.try_send(tables_ref);
+            }
+            _ => (),
         }
     }
 }
