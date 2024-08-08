@@ -609,5 +609,8 @@
   //   storage_manager: {
   //     __config__: "./plugins/zenoh-plugin-storage-manager/config.json5",
   //   }
+  //   remote_api: {
+  //     __config__: "./plugins/zenoh-plugin-remote-api/config.json5",
+  //   },
   // },
 }
