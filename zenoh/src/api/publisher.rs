@@ -23,7 +23,7 @@ use std::{
 use futures::Sink;
 use zenoh_core::{zread, Resolvable, Resolve, Wait};
 use zenoh_protocol::{
-    core::CongestionControl,
+    core::{CongestionControl, Reliability},
     network::{push::ext, Push},
     zenoh::{Del, PushBody, Put},
 };
@@ -582,40 +582,43 @@ impl Publisher<'_> {
             timestamp
         };
         if self.destination != Locality::SessionLocal {
-            primitives.send_push(Push {
-                wire_expr: self.key_expr.to_wire(&self.session).to_owned(),
-                ext_qos: ext::QoSType::new(
-                    self.priority.into(),
-                    self.congestion_control,
-                    self.is_express,
-                ),
-                ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::DEFAULT,
-                payload: match kind {
-                    SampleKind::Put => PushBody::Put(Put {
-                        timestamp,
-                        encoding: encoding.clone().into(),
-                        #[cfg(feature = "unstable")]
-                        ext_sinfo: source_info.into(),
-                        #[cfg(not(feature = "unstable"))]
-                        ext_sinfo: None,
-                        #[cfg(feature = "shared-memory")]
-                        ext_shm: None,
-                        ext_attachment: attachment.clone().map(|a| a.into()),
-                        ext_unknown: vec![],
-                        payload: payload.clone().into(),
-                    }),
-                    SampleKind::Delete => PushBody::Del(Del {
-                        timestamp,
-                        #[cfg(feature = "unstable")]
-                        ext_sinfo: source_info.into(),
-                        #[cfg(not(feature = "unstable"))]
-                        ext_sinfo: None,
-                        ext_attachment: attachment.clone().map(|a| a.into()),
-                        ext_unknown: vec![],
-                    }),
+            primitives.send_push(
+                Push {
+                    wire_expr: self.key_expr.to_wire(&self.session).to_owned(),
+                    ext_qos: ext::QoSType::new(
+                        self.priority.into(),
+                        self.congestion_control,
+                        self.is_express,
+                    ),
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                    payload: match kind {
+                        SampleKind::Put => PushBody::Put(Put {
+                            timestamp,
+                            encoding: encoding.clone().into(),
+                            #[cfg(feature = "unstable")]
+                            ext_sinfo: source_info.into(),
+                            #[cfg(not(feature = "unstable"))]
+                            ext_sinfo: None,
+                            #[cfg(feature = "shared-memory")]
+                            ext_shm: None,
+                            ext_attachment: attachment.clone().map(|a| a.into()),
+                            ext_unknown: vec![],
+                            payload: payload.clone().into(),
+                        }),
+                        SampleKind::Delete => PushBody::Del(Del {
+                            timestamp,
+                            #[cfg(feature = "unstable")]
+                            ext_sinfo: source_info.into(),
+                            #[cfg(not(feature = "unstable"))]
+                            ext_sinfo: None,
+                            ext_attachment: attachment.clone().map(|a| a.into()),
+                            ext_unknown: vec![],
+                        }),
+                    },
                 },
-            });
+                Reliability::Reliable, // TODO
+            );
         }
         if self.destination != Locality::Remote {
             let data_info = DataInfo {

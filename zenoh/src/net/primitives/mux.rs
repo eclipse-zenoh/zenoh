@@ -100,10 +100,10 @@ impl Primitives for Mux {
         }
     }
 
-    fn send_push(&self, msg: Push) {
+    fn send_push(&self, msg: Push, reliability: Reliability) {
         let msg = NetworkMessage {
             body: NetworkBody::Push(msg),
-            reliability: Reliability::Reliable,
+            reliability,
             #[cfg(feature = "stats")]
             size: None,
         };
@@ -258,10 +258,10 @@ impl EPrimitives for Mux {
         }
     }
 
-    fn send_push(&self, msg: Push) {
+    fn send_push(&self, msg: Push, reliability: Reliability) {
         let msg = NetworkMessage {
             body: NetworkBody::Push(msg),
-            reliability: Reliability::Reliable,
+            reliability,
             #[cfg(feature = "stats")]
             size: None,
         };
@@ -430,10 +430,10 @@ impl Primitives for McastMux {
         }
     }
 
-    fn send_push(&self, msg: Push) {
+    fn send_push(&self, msg: Push, reliability: Reliability) {
         let msg = NetworkMessage {
             body: NetworkBody::Push(msg),
-            reliability: Reliability::Reliable,
+            reliability,
             #[cfg(feature = "stats")]
             size: None,
         };
@@ -588,10 +588,10 @@ impl EPrimitives for McastMux {
         }
     }
 
-    fn send_push(&self, msg: Push) {
+    fn send_push(&self, msg: Push, reliability: Reliability) {
         let msg = NetworkMessage {
             body: NetworkBody::Push(msg),
-            reliability: Reliability::Reliable,
+            reliability,
             #[cfg(feature = "stats")]
             size: None,
         };

@@ -2333,7 +2333,7 @@ impl Primitives for Session {
         }
     }
 
-    fn send_push(&self, msg: Push) {
+    fn send_push(&self, msg: Push, _reliability: Reliability) {
         trace!("recv Push {:?}", msg);
         match msg.payload {
             PushBody::Put(m) => {
@@ -2791,8 +2791,8 @@ impl crate::net::primitives::EPrimitives for Session {
     }
 
     #[inline]
-    fn send_push(&self, msg: Push) {
-        (self as &dyn Primitives).send_push(msg)
+    fn send_push(&self, msg: Push, reliability: Reliability) {
+        (self as &dyn Primitives).send_push(msg, reliability)
     }
 
     #[inline]
