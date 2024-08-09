@@ -13,9 +13,12 @@
 //
 use std::sync::OnceLock;
 
-use zenoh_protocol::network::{
-    interest::Interest, Declare, NetworkBody, NetworkMessage, Push, Request, Response,
-    ResponseFinal,
+use zenoh_protocol::{
+    core::Reliability,
+    network::{
+        interest::Interest, Declare, NetworkBody, NetworkMessage, Push, Request, Response,
+        ResponseFinal,
+    },
 };
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
@@ -46,6 +49,7 @@ impl Primitives for Mux {
     fn send_interest(&self, msg: Interest) {
         let msg = NetworkMessage {
             body: NetworkBody::Interest(msg),
+            reliability: Reliability::Reliable,
             #[cfg(feature = "stats")]
             size: None,
         };
@@ -74,6 +78,7 @@ impl Primitives for Mux {
     fn send_declare(&self, msg: Declare) {
         let msg = NetworkMessage {
             body: NetworkBody::Declare(msg),
+            reliability: Reliability::Reliable,
             #[cfg(feature = "stats")]
             size: None,
         };
@@ -98,6 +103,7 @@ impl Primitives for Mux {
     fn send_push(&self, msg: Push) {
         let msg = NetworkMessage {
             body: NetworkBody::Push(msg),
+            reliability: Reliability::Reliable,
             #[cfg(feature = "stats")]
             size: None,
         };
@@ -122,6 +128,7 @@ impl Primitives for Mux {
     fn send_request(&self, msg: Request) {
         let msg = NetworkMessage {
             body: NetworkBody::Request(msg),
+            reliability: Reliability::Reliable,
             #[cfg(feature = "stats")]
             size: None,
         };
@@ -146,6 +153,7 @@ impl Primitives for Mux {
     fn send_response(&self, msg: Response) {
         let msg = NetworkMessage {
             body: NetworkBody::Response(msg),
+            reliability: Reliability::Reliable,
             #[cfg(feature = "stats")]
             size: None,
         };
@@ -170,6 +178,7 @@ impl Primitives for Mux {
     fn send_response_final(&self, msg: ResponseFinal) {
         let msg = NetworkMessage {
             body: NetworkBody::ResponseFinal(msg),
+            reliability: Reliability::Reliable,
             #[cfg(feature = "stats")]
             size: None,
         };
@@ -201,6 +210,7 @@ impl EPrimitives for Mux {
         let ctx = RoutingContext {
             msg: NetworkMessage {
                 body: NetworkBody::Interest(ctx.msg),
+                reliability: Reliability::Reliable,
                 #[cfg(feature = "stats")]
                 size: None,
             },
@@ -226,6 +236,7 @@ impl EPrimitives for Mux {
         let ctx = RoutingContext {
             msg: NetworkMessage {
                 body: NetworkBody::Declare(ctx.msg),
+                reliability: Reliability::Reliable,
                 #[cfg(feature = "stats")]
                 size: None,
             },
@@ -250,6 +261,7 @@ impl EPrimitives for Mux {
     fn send_push(&self, msg: Push) {
         let msg = NetworkMessage {
             body: NetworkBody::Push(msg),
+            reliability: Reliability::Reliable,
             #[cfg(feature = "stats")]
             size: None,
         };
@@ -274,6 +286,7 @@ impl EPrimitives for Mux {
     fn send_request(&self, msg: Request) {
         let msg = NetworkMessage {
             body: NetworkBody::Request(msg),
+            reliability: Reliability::Reliable,
             #[cfg(feature = "stats")]
             size: None,
         };
@@ -298,6 +311,7 @@ impl EPrimitives for Mux {
     fn send_response(&self, msg: Response) {
         let msg = NetworkMessage {
             body: NetworkBody::Response(msg),
+            reliability: Reliability::Reliable,
             #[cfg(feature = "stats")]
             size: None,
         };
@@ -322,6 +336,7 @@ impl EPrimitives for Mux {
     fn send_response_final(&self, msg: ResponseFinal) {
         let msg = NetworkMessage {
             body: NetworkBody::ResponseFinal(msg),
+            reliability: Reliability::Reliable,
             #[cfg(feature = "stats")]
             size: None,
         };
@@ -368,6 +383,7 @@ impl Primitives for McastMux {
     fn send_interest(&self, msg: Interest) {
         let msg = NetworkMessage {
             body: NetworkBody::Interest(msg),
+            reliability: Reliability::Reliable,
             #[cfg(feature = "stats")]
             size: None,
         };
@@ -392,6 +408,7 @@ impl Primitives for McastMux {
     fn send_declare(&self, msg: Declare) {
         let msg = NetworkMessage {
             body: NetworkBody::Declare(msg),
+            reliability: Reliability::Reliable,
             #[cfg(feature = "stats")]
             size: None,
         };
@@ -416,6 +433,7 @@ impl Primitives for McastMux {
     fn send_push(&self, msg: Push) {
         let msg = NetworkMessage {
             body: NetworkBody::Push(msg),
+            reliability: Reliability::Reliable,
             #[cfg(feature = "stats")]
             size: None,
         };
@@ -440,6 +458,7 @@ impl Primitives for McastMux {
     fn send_request(&self, msg: Request) {
         let msg = NetworkMessage {
             body: NetworkBody::Request(msg),
+            reliability: Reliability::Reliable,
             #[cfg(feature = "stats")]
             size: None,
         };
@@ -464,6 +483,7 @@ impl Primitives for McastMux {
     fn send_response(&self, msg: Response) {
         let msg = NetworkMessage {
             body: NetworkBody::Response(msg),
+            reliability: Reliability::Reliable,
             #[cfg(feature = "stats")]
             size: None,
         };
@@ -488,6 +508,7 @@ impl Primitives for McastMux {
     fn send_response_final(&self, msg: ResponseFinal) {
         let msg = NetworkMessage {
             body: NetworkBody::ResponseFinal(msg),
+            reliability: Reliability::Reliable,
             #[cfg(feature = "stats")]
             size: None,
         };
@@ -519,6 +540,7 @@ impl EPrimitives for McastMux {
         let ctx = RoutingContext {
             msg: NetworkMessage {
                 body: NetworkBody::Interest(ctx.msg),
+                reliability: Reliability::Reliable,
                 #[cfg(feature = "stats")]
                 size: None,
             },
@@ -544,6 +566,7 @@ impl EPrimitives for McastMux {
         let ctx = RoutingContext {
             msg: NetworkMessage {
                 body: NetworkBody::Declare(ctx.msg),
+                reliability: Reliability::Reliable,
                 #[cfg(feature = "stats")]
                 size: None,
             },
@@ -568,6 +591,7 @@ impl EPrimitives for McastMux {
     fn send_push(&self, msg: Push) {
         let msg = NetworkMessage {
             body: NetworkBody::Push(msg),
+            reliability: Reliability::Reliable,
             #[cfg(feature = "stats")]
             size: None,
         };
@@ -592,6 +616,7 @@ impl EPrimitives for McastMux {
     fn send_request(&self, msg: Request) {
         let msg = NetworkMessage {
             body: NetworkBody::Request(msg),
+            reliability: Reliability::Reliable,
             #[cfg(feature = "stats")]
             size: None,
         };
@@ -616,6 +641,7 @@ impl EPrimitives for McastMux {
     fn send_response(&self, msg: Response) {
         let msg = NetworkMessage {
             body: NetworkBody::Response(msg),
+            reliability: Reliability::Reliable,
             #[cfg(feature = "stats")]
             size: None,
         };
@@ -640,6 +666,7 @@ impl EPrimitives for McastMux {
     fn send_response_final(&self, msg: ResponseFinal) {
         let msg = NetworkMessage {
             body: NetworkBody::ResponseFinal(msg),
+            reliability: Reliability::Reliable,
             #[cfg(feature = "stats")]
             size: None,
         };
