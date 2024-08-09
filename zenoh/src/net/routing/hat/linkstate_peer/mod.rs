@@ -116,7 +116,6 @@ struct TreesComputationWorker {
 impl TreesComputationWorker {
     fn new() -> Self {
         let (tx, rx) = flume::bounded::<Arc<TablesLock>>(1);
-        // NOTE: it seems that we don't care about the cancellation token, so we can use `spawn_abortable` here
         let task = TerminatableTask::spawn_abortable(zenoh_runtime::ZRuntime::Net, async move {
             loop {
                 tokio::time::sleep(std::time::Duration::from_millis(
