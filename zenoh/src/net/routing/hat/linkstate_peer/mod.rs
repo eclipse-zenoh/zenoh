@@ -21,7 +21,6 @@ use std::{
     any::Any,
     collections::{HashMap, HashSet},
     sync::{atomic::AtomicU32, Arc},
-    time::Duration,
 };
 
 use token::{token_remove_node, undeclare_simple_token};
@@ -116,42 +115,21 @@ macro_rules! face_hat_mut {
 }
 use face_hat_mut;
 
-struct HatTables {
-    linkstatepeer_subs: HashSet<Arc<Resource>>,
-    linkstatepeer_tokens: HashSet<Arc<Resource>>,
-    linkstatepeer_qabls: HashSet<Arc<Resource>>,
-    linkstatepeers_net: Option<Network>,
-    linkstatepeers_trees_task: Option<TerminatableTask>,
+struct TreesComputationWorker {
+    _task: TerminatableTask,
+    tx: flume::Sender<Arc<TablesLock>>,
 }
 
-impl Drop for HatTables {
-    fn drop(&mut self) {
-        if let Some(mut task) = self.linkstatepeers_trees_task.take() {
-            task.terminate(Duration::from_secs(10));
-        }
-    }
-}
-
-impl HatTables {
+impl TreesComputationWorker {
     fn new() -> Self {
-        Self {
-            linkstatepeer_subs: HashSet::new(),
-            linkstatepeer_tokens: HashSet::new(),
-            linkstatepeer_qabls: HashSet::new(),
-            linkstatepeers_net: None,
-            linkstatepeers_trees_task: None,
-        }
-    }
-
-    fn schedule_compute_trees(&mut self, tables_ref: Arc<TablesLock>) {
-        if self.linkstatepeers_trees_task.is_none() {
-            let task = TerminatableTask::spawn(
-                zenoh_runtime::ZRuntime::Net,
-                async move {
-                    tokio::time::sleep(std::time::Duration::from_millis(
-                        *TREES_COMPUTATION_DELAY_MS,
-                    ))
-                    .await;
+        let (tx, rx) = flume::bounded::<Arc<TablesLock>>(1);
+        let task = TerminatableTask::spawn_abortable(zenoh_runtime::ZRuntime::Net, async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_millis(
+                    *TREES_COMPUTATION_DELAY_MS,
+                ))
+                .await;
+                if let Ok(tables_ref) = rx.recv_async().await {
                     let mut tables = zwrite!(tables_ref.tables);
 
                     tracing::trace!("Compute trees");
@@ -165,14 +143,36 @@ impl HatTables {
                     pubsub::pubsub_tree_change(&mut tables, &new_children);
                     queries::queries_tree_change(&mut tables, &new_children);
                     token::token_tree_change(&mut tables, &new_children);
+                    drop(tables);
+                }
+            }
+        });
+        Self { _task: task, tx }
+    }
+}
 
-                    tracing::trace!("Computations completed");
-                    hat_mut!(tables).linkstatepeers_trees_task = None;
-                },
-                TerminatableTask::create_cancellation_token(),
-            );
-            self.linkstatepeers_trees_task = Some(task);
+struct HatTables {
+    linkstatepeer_subs: HashSet<Arc<Resource>>,
+    linkstatepeer_tokens: HashSet<Arc<Resource>>,
+    linkstatepeer_qabls: HashSet<Arc<Resource>>,
+    linkstatepeers_net: Option<Network>,
+    linkstatepeers_trees_worker: TreesComputationWorker,
+}
+
+impl HatTables {
+    fn new() -> Self {
+        Self {
+            linkstatepeer_subs: HashSet::new(),
+            linkstatepeer_tokens: HashSet::new(),
+            linkstatepeer_qabls: HashSet::new(),
+            linkstatepeers_net: None,
+            linkstatepeers_trees_worker: TreesComputationWorker::new(),
         }
+    }
+
+    fn schedule_compute_trees(&mut self, tables_ref: Arc<TablesLock>) {
+        tracing::trace!("Schedule trees computation");
+        let _ = self.linkstatepeers_trees_worker.tx.try_send(tables_ref);
     }
 }
 
