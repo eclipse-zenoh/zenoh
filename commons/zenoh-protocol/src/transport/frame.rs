@@ -95,7 +95,8 @@ impl Frame {
         let ext_qos = ext::QoSType::rand();
         let mut payload = vec![];
         for _ in 0..rng.gen_range(1..4) {
-            let m = NetworkMessage::rand();
+            let mut m = NetworkMessage::rand();
+            m.reliability = reliability;
             payload.push(m);
         }
 

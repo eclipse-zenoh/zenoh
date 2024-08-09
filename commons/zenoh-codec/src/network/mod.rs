@@ -76,7 +76,9 @@ where
         let header: u8 = self.codec.read(&mut *reader)?;
 
         let codec = Zenoh080Header::new(header);
-        codec.read(&mut *reader)
+        let mut msg: NetworkMessage = codec.read(&mut *reader)?;
+        msg.reliability = self.reliability;
+        Ok(msg)
     }
 }
 

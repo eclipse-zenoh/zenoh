@@ -16,6 +16,8 @@ use std::marker::PhantomData;
 use uhlc::Timestamp;
 use zenoh_core::zresult;
 use zenoh_protocol::core::CongestionControl;
+#[cfg(feature = "unstable")]
+use zenoh_protocol::core::Reliability;
 
 use crate::api::{
     bytes::{OptionZBytes, ZBytes},
@@ -87,6 +89,8 @@ impl SampleBuilder<SampleBuilderPut> {
                 timestamp: None,
                 qos: QoS::default(),
                 #[cfg(feature = "unstable")]
+                reliability: Reliability::DEFAULT,
+                #[cfg(feature = "unstable")]
                 source_info: SourceInfo::empty(),
                 attachment: None,
             },
@@ -117,6 +121,8 @@ impl SampleBuilder<SampleBuilderDelete> {
                 timestamp: None,
                 qos: QoS::default(),
                 #[cfg(feature = "unstable")]
+                reliability: Reliability::DEFAULT,
+                #[cfg(feature = "unstable")]
                 source_info: SourceInfo::empty(),
                 attachment: None,
             },
@@ -144,6 +150,17 @@ impl<T> SampleBuilder<T> {
     pub(crate) fn qos(self, qos: QoS) -> Self {
         Self {
             sample: Sample { qos, ..self.sample },
+            _t: PhantomData::<T>,
+        }
+    }
+
+    #[zenoh_macros::unstable]
+    pub fn reliability(self, reliability: Reliability) -> Self {
+        Self {
+            sample: Sample {
+                reliability,
+                ..self.sample
+            },
             _t: PhantomData::<T>,
         }
     }

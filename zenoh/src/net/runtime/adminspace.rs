@@ -26,7 +26,7 @@ use zenoh_plugin_trait::{PluginControl, PluginStatus};
 #[cfg(feature = "plugins")]
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, ExprId, WireExpr, EMPTY_EXPR_ID},
+    core::{key_expr::OwnedKeyExpr, ExprId, Reliability, WireExpr, EMPTY_EXPR_ID},
     network::{
         declare::{
             queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
@@ -375,7 +375,7 @@ impl Primitives for AdminSpace {
         }
     }
 
-    fn send_push(&self, msg: Push) {
+    fn send_push(&self, msg: Push, _reliability: Reliability) {
         trace!("recv Push {:?}", msg);
         {
             let conf = self.context.runtime.state.config.lock();
@@ -516,8 +516,8 @@ impl crate::net::primitives::EPrimitives for AdminSpace {
     }
 
     #[inline]
-    fn send_push(&self, msg: Push) {
-        (self as &dyn Primitives).send_push(msg)
+    fn send_push(&self, msg: Push, reliability: Reliability) {
+        (self as &dyn Primitives).send_push(msg, reliability)
     }
 
     #[inline]

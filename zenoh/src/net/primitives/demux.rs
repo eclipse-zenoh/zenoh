@@ -66,7 +66,7 @@ impl TransportPeerEventHandler for DeMux {
         }
 
         match msg.body {
-            NetworkBody::Push(m) => self.face.send_push(m),
+            NetworkBody::Push(m) => self.face.send_push(m, msg.reliability),
             NetworkBody::Declare(m) => self.face.send_declare(m),
             NetworkBody::Interest(m) => self.face.send_interest(m),
             NetworkBody::Request(m) => self.face.send_request(m),

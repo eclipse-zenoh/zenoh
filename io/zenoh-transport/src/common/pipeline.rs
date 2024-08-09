@@ -17,7 +17,7 @@ use zenoh_codec::{transport::batch::BatchError, WCodec, Zenoh080};
 use zenoh_config::QueueSizeConf;
 use zenoh_core::zlock;
 use zenoh_protocol::{
-    core::{Priority, Reliability},
+    core::Priority,
     network::NetworkMessage,
     transport::{
         fragment::FragmentHeader,
@@ -210,7 +210,7 @@ impl StageIn {
 
         // The Frame
         let frame = FrameHeader {
-            reliability: Reliability::Reliable, // TODO
+            reliability: msg.reliability,
             sn,
             ext_qos: frame::ext::QoSType::new(priority),
         };
