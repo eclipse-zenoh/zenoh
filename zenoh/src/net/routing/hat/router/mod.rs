@@ -113,6 +113,45 @@ macro_rules! face_hat_mut {
 }
 use face_hat_mut;
 
+struct TreesComputationWorker {
+    _task: TerminatableTask,
+    tx: flume::Sender<Arc<TablesLock>>,
+}
+
+impl TreesComputationWorker {
+    fn new(net_type: WhatAmI) -> Self {
+        let (tx, rx) = flume::bounded::<Arc<TablesLock>>(1);
+        // NOTE: it seems that we don't care about the cancellation token, so we can use `spawn_abortable` here
+        let task = TerminatableTask::spawn_abortable(zenoh_runtime::ZRuntime::Net, async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_millis(
+                    *TREES_COMPUTATION_DELAY_MS,
+                ))
+                .await;
+                if let Ok(tables_ref) = rx.recv_async().await {
+                    let mut tables = zwrite!(tables_ref.tables);
+
+                    tracing::trace!("Compute trees");
+                    let new_children = match net_type {
+                        WhatAmI::Router => hat_mut!(tables)
+                            .routers_net
+                            .as_mut()
+                            .unwrap()
+                            .compute_trees(),
+                        _ => hat_mut!(tables).peers_net.as_mut().unwrap().compute_trees(),
+                    };
+
+                    tracing::trace!("Compute routes");
+                    pubsub::pubsub_tree_change(&mut tables, &new_children, net_type);
+                    queries::queries_tree_change(&mut tables, &new_children, net_type);
+                    drop(tables);
+                }
+            }
+        });
+        Self { _task: task, tx }
+    }
+}
+
 struct HatTables {
     router_subs: HashSet<Arc<Resource>>,
     peer_subs: HashSet<Arc<Resource>>,
@@ -121,50 +160,13 @@ struct HatTables {
     routers_net: Option<Network>,
     peers_net: Option<Network>,
     shared_nodes: Vec<ZenohId>,
-    routers_trees_task: (TerminatableTask, flume::Sender<Arc<TablesLock>>),
-    peers_trees_task: (TerminatableTask, flume::Sender<Arc<TablesLock>>),
+    routers_trees_worker: TreesComputationWorker,
+    peers_trees_worker: TreesComputationWorker,
     router_peers_failover_brokering: bool,
 }
 
 impl HatTables {
     fn new(router_peers_failover_brokering: bool) -> Self {
-        fn spawn_trees_worker(
-            net_type: WhatAmI,
-        ) -> (TerminatableTask, flume::Sender<Arc<TablesLock>>) {
-            let (sender, receiver) = flume::bounded::<Arc<TablesLock>>(1);
-            let task = TerminatableTask::spawn(
-                zenoh_runtime::ZRuntime::Net,
-                async move {
-                    loop {
-                        tokio::time::sleep(std::time::Duration::from_millis(
-                            *TREES_COMPUTATION_DELAY_MS,
-                        ))
-                        .await;
-                        if let Ok(tables_ref) = receiver.recv_async().await {
-                            let mut tables = zwrite!(tables_ref.tables);
-
-                            tracing::trace!("Compute trees");
-                            let new_children = match net_type {
-                                WhatAmI::Router => hat_mut!(tables)
-                                    .routers_net
-                                    .as_mut()
-                                    .unwrap()
-                                    .compute_trees(),
-                                _ => hat_mut!(tables).peers_net.as_mut().unwrap().compute_trees(),
-                            };
-
-                            tracing::trace!("Compute routes");
-                            pubsub::pubsub_tree_change(&mut tables, &new_children, net_type);
-                            queries::queries_tree_change(&mut tables, &new_children, net_type);
-                            drop(tables);
-                        }
-                    }
-                },
-                TerminatableTask::create_cancellation_token(),
-            );
-            (task, sender)
-        }
-
         Self {
             router_subs: HashSet::new(),
             peer_subs: HashSet::new(),
@@ -173,8 +175,8 @@ impl HatTables {
             routers_net: None,
             peers_net: None,
             shared_nodes: vec![],
-            routers_trees_task: spawn_trees_worker(WhatAmI::Router),
-            peers_trees_task: spawn_trees_worker(WhatAmI::Peer),
+            routers_trees_worker: TreesComputationWorker::new(WhatAmI::Router),
+            peers_trees_worker: TreesComputationWorker::new(WhatAmI::Peer),
             router_peers_failover_brokering,
         }
     }
@@ -280,10 +282,10 @@ impl HatTables {
         tracing::trace!("Schedule trees computation");
         match net_type {
             WhatAmI::Router => {
-                let _ = self.routers_trees_task.1.try_send(tables_ref);
+                let _ = self.routers_trees_worker.tx.try_send(tables_ref);
             }
             WhatAmI::Peer => {
-                let _ = self.peers_trees_task.1.try_send(tables_ref);
+                let _ = self.peers_trees_worker.tx.try_send(tables_ref);
             }
             _ => (),
         }
