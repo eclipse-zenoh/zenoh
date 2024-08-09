@@ -29,7 +29,10 @@ use zenoh_protocol::{
     common::ZExtBody,
     core::ZenohIdProto,
     network::{
-        declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId},
+        declare::{
+            queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
+            SubscriberId,
+        },
         interest::{InterestId, InterestOptions},
         oam::id::OAM_LINKSTATE,
         Oam,
@@ -483,7 +486,7 @@ impl HatBaseTrait for HatCode {
 }
 
 struct HatContext {
-    linkstatepeer_subs: HashSet<ZenohIdProto>,
+    linkstatepeer_subs: HashMap<ZenohIdProto, SubscriberInfo>,
     linkstatepeer_qabls: HashMap<ZenohIdProto, QueryableInfoType>,
     linkstatepeer_tokens: HashSet<ZenohIdProto>,
 }
@@ -491,7 +494,7 @@ struct HatContext {
 impl HatContext {
     fn new() -> Self {
         Self {
-            linkstatepeer_subs: HashSet::new(),
+            linkstatepeer_subs: HashMap::new(),
             linkstatepeer_qabls: HashMap::new(),
             linkstatepeer_tokens: HashSet::new(),
         }
@@ -502,7 +505,7 @@ struct HatFace {
     link_id: usize,
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
     remote_interests: HashMap<InterestId, (Option<Arc<Resource>>, InterestOptions)>,
-    local_subs: HashMap<Arc<Resource>, SubscriberId>,
+    local_subs: HashMap<Arc<Resource>, (SubscriberId, SubscriberInfo)>,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
     local_tokens: HashMap<Arc<Resource>, SubscriberId>,
     remote_tokens: HashMap<SubscriberId, Arc<Resource>>,

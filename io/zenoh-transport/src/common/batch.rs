@@ -585,6 +585,7 @@ mod tests {
                 ext_unknown: vec![],
                 payload: ZBuf::from(vec![0u8; 8]),
             }),
+            reliability: None,
         }
         .into();
 

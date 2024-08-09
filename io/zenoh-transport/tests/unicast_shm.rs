@@ -263,6 +263,7 @@ mod tests {
                     ext_unknown: vec![],
                 }
                 .into(),
+                reliability: None,
             }
             .into();
 
@@ -304,6 +305,7 @@ mod tests {
                     ext_unknown: vec![],
                 }
                 .into(),
+                reliability: None,
             }
             .into();
 

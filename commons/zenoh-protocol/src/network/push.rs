@@ -11,7 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{core::WireExpr, zenoh::PushBody};
+use crate::{
+    core::{Reliability, WireExpr},
+    zenoh::PushBody,
+};
 
 pub mod flag {
     pub const N: u8 = 1 << 5; // 0x20 Named         if N==1 then the key expr has name/suffix
@@ -45,6 +48,7 @@ pub struct Push {
     pub ext_tstamp: Option<ext::TimestampType>,
     pub ext_nodeid: ext::NodeIdType,
     pub payload: PushBody,
+    pub reliability: Option<Reliability>,
 }
 
 pub mod ext {
@@ -74,6 +78,7 @@ impl Push {
         let ext_qos = ext::QoSType::rand();
         let ext_tstamp = rng.gen_bool(0.5).then(ext::TimestampType::rand);
         let ext_nodeid = ext::NodeIdType::rand();
+        let reliability = Some(Reliability::rand());
 
         Self {
             wire_expr,
@@ -81,6 +86,7 @@ impl Push {
             ext_tstamp,
             ext_qos,
             ext_nodeid,
+            reliability,
         }
     }
 }

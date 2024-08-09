@@ -85,6 +85,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
             ext_unknown: vec![],
         }
         .into(),
+        reliability: None,
     }
     .into();
 

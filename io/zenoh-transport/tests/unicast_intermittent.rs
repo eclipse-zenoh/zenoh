@@ -319,6 +319,7 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
                 ext_unknown: vec![],
             }
             .into(),
+            reliability: None,
         }
         .into();
 

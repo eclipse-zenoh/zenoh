@@ -39,7 +39,9 @@ use {crate::key_expr::KeyExpr, std::collections::HashMap};
 use super::{
     dispatcher::{
         face::{Face, FaceState},
-        tables::{NodeId, QueryTargetQablSet, Resource, Route, RoutingExpr, Tables, TablesLock},
+        tables::{
+            DataRoute, NodeId, QueryTargetQablSet, Resource, RoutingExpr, Tables, TablesLock,
+        },
     },
     router::RoutesIndexes,
     RoutingContext,
@@ -195,7 +197,7 @@ pub(crate) trait HatPubSubTrait {
         expr: &mut RoutingExpr,
         source: NodeId,
         source_type: WhatAmI,
-    ) -> Arc<Route>;
+    ) -> Arc<DataRoute>;
 
     fn get_data_routes_entries(&self, tables: &Tables) -> RoutesIndexes;
 

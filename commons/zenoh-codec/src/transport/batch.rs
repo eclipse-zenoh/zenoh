@@ -150,13 +150,12 @@ where
     fn write(self, writer: &mut W, x: (&NetworkMessage, &FrameHeader)) -> Self::Output {
         let (m, f) = x;
 
-        // @TODO: m.is_reliable() always return true for the time being
-        // if let (Reliability::Reliable, false) | (Reliability::BestEffort, true) =
-        //     (f.reliability, m.is_reliable())
-        // {
-        //     // We are not serializing on the right frame.
-        //     return Err(BatchError::NewFrame);
-        // }
+        if let (Reliability::Reliable, false) | (Reliability::BestEffort, true) =
+            (f.reliability, m.is_reliable())
+        {
+            // We are not serializing on the right frame.
+            return Err(BatchError::NewFrame);
+        }
 
         // Mark the write operation
         let mark = writer.mark();

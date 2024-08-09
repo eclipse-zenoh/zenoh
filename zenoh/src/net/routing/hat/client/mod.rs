@@ -26,7 +26,10 @@ use std::{
 use token::{token_new_face, undeclare_simple_token};
 use zenoh_config::WhatAmI;
 use zenoh_protocol::network::{
-    declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
+    declare::{
+        queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
+        SubscriberId, TokenId,
+    },
     interest::{InterestId, InterestOptions},
     Oam,
 };
@@ -306,7 +309,7 @@ impl HatContext {
 struct HatFace {
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
     remote_interests: HashMap<InterestId, (Option<Arc<Resource>>, InterestOptions)>,
-    local_subs: HashMap<Arc<Resource>, SubscriberId>,
+    local_subs: HashMap<Arc<Resource>, (SubscriberId, SubscriberInfo)>,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
     local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
     remote_qabls: HashMap<QueryableId, Arc<Resource>>,

@@ -45,38 +45,21 @@ use crate::net::routing::{
     },
     hat::{CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
     router::{update_query_routes_from, RoutesIndexes},
+    utils::merge_queryable_infos,
     RoutingContext,
 };
-
-#[inline]
-fn merge_qabl_infos(mut this: QueryableInfoType, info: &QueryableInfoType) -> QueryableInfoType {
-    this.complete = this.complete || info.complete;
-    this.distance = std::cmp::min(this.distance, info.distance);
-    this
-}
 
 fn local_qabl_info(
     _tables: &Tables,
     res: &Arc<Resource>,
     face: &Arc<FaceState>,
 ) -> QueryableInfoType {
-    res.session_ctxs
+    let infos = res
+        .session_ctxs
         .values()
-        .fold(None, |accu, ctx| {
-            if ctx.face.id != face.id {
-                if let Some(info) = ctx.qabl.as_ref() {
-                    Some(match accu {
-                        Some(accu) => merge_qabl_infos(accu, info),
-                        None => *info,
-                    })
-                } else {
-                    accu
-                }
-            } else {
-                accu
-            }
-        })
-        .unwrap_or(QueryableInfoType::DEFAULT)
+        .filter(|ctx| ctx.face.id != face.id)
+        .filter_map(|ctx| ctx.qabl);
+    merge_queryable_infos(infos).unwrap_or_default()
 }
 
 #[inline]

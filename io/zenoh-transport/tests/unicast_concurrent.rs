@@ -202,6 +202,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
                 ext_unknown: vec![],
             }
             .into(),
+            reliability: None,
         }
         .into();
 
@@ -304,6 +305,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
                 ext_unknown: vec![],
             }
             .into(),
+            reliability: None,
         }
         .into();
 

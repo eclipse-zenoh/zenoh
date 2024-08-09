@@ -302,6 +302,7 @@ async fn single_run(router_handler: Arc<SHRouter>, client_transport: TransportUn
                     ext_unknown: vec![],
                 }
                 .into(),
+                reliability: None,
             }
             .into();
 

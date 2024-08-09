@@ -814,6 +814,7 @@ mod tests {
                     ext_unknown: vec![],
                     payload,
                 }),
+                reliability: None,
             }
             .into();
 
@@ -942,6 +943,7 @@ mod tests {
                     ext_unknown: vec![],
                     payload,
                 }),
+                reliability: None,
             }
             .into();
 
@@ -1059,6 +1061,7 @@ mod tests {
                             ext_unknown: vec![],
                             payload,
                         }),
+                        reliability: None,
                     }
                     .into();
 

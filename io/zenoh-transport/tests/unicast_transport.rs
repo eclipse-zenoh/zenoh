@@ -486,6 +486,7 @@ async fn test_transport(
             ext_unknown: vec![],
         }
         .into(),
+        reliability: None,
     }
     .into();
 
