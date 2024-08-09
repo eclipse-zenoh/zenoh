@@ -108,33 +108,21 @@ macro_rules! face_hat_mut {
 }
 use face_hat_mut;
 
-struct HatTables {
-    peer_subs: HashSet<Arc<Resource>>,
-    peer_qabls: HashSet<Arc<Resource>>,
-    peers_net: Option<Network>,
-    peers_trees_task: Option<TerminatableTask>,
+struct TreesComputationWorker {
+    _task: TerminatableTask,
+    tx: flume::Sender<Arc<TablesLock>>,
 }
 
-impl HatTables {
+impl TreesComputationWorker {
     fn new() -> Self {
-        Self {
-            peer_subs: HashSet::new(),
-            peer_qabls: HashSet::new(),
-            peers_net: None,
-            peers_trees_task: None,
-        }
-    }
-
-    fn schedule_compute_trees(&mut self, tables_ref: Arc<TablesLock>) {
-        tracing::trace!("Schedule computations");
-        if self.peers_trees_task.is_none() {
-            let task = TerminatableTask::spawn(
-                zenoh_runtime::ZRuntime::Net,
-                async move {
-                    tokio::time::sleep(std::time::Duration::from_millis(
-                        *TREES_COMPUTATION_DELAY_MS,
-                    ))
-                    .await;
+        let (tx, rx) = flume::bounded::<Arc<TablesLock>>(1);
+        let task = TerminatableTask::spawn_abortable(zenoh_runtime::ZRuntime::Net, async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_millis(
+                    *TREES_COMPUTATION_DELAY_MS,
+                ))
+                .await;
+                if let Ok(tables_ref) = rx.recv_async().await {
                     let mut tables = zwrite!(tables_ref.tables);
 
                     tracing::trace!("Compute trees");
@@ -143,14 +131,34 @@ impl HatTables {
                     tracing::trace!("Compute routes");
                     pubsub::pubsub_tree_change(&mut tables, &new_children);
                     queries::queries_tree_change(&mut tables, &new_children);
+                    drop(tables);
+                }
+            }
+        });
+        Self { _task: task, tx }
+    }
+}
 
-                    tracing::trace!("Computations completed");
-                    hat_mut!(tables).peers_trees_task = None;
-                },
-                TerminatableTask::create_cancellation_token(),
-            );
-            self.peers_trees_task = Some(task);
+struct HatTables {
+    peer_subs: HashSet<Arc<Resource>>,
+    peer_qabls: HashSet<Arc<Resource>>,
+    peers_net: Option<Network>,
+    peers_trees_worker: TreesComputationWorker,
+}
+
+impl HatTables {
+    fn new() -> Self {
+        Self {
+            peer_subs: HashSet::new(),
+            peer_qabls: HashSet::new(),
+            peers_net: None,
+            peers_trees_worker: TreesComputationWorker::new(),
         }
+    }
+
+    fn schedule_compute_trees(&mut self, tables_ref: Arc<TablesLock>) {
+        tracing::trace!("Schedule trees computation");
+        let _ = self.peers_trees_worker.tx.try_send(tables_ref);
     }
 }
 
