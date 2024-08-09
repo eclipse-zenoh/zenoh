@@ -145,6 +145,8 @@ pub struct Publisher<'a> {
     pub(crate) is_express: bool,
     pub(crate) destination: Locality,
     #[cfg(feature = "unstable")]
+    pub(crate) reliability: Reliability,
+    #[cfg(feature = "unstable")]
     pub(crate) matching_listeners: Arc<Mutex<HashSet<Id>>>,
     pub(crate) undeclare_on_drop: bool,
 }
@@ -561,6 +563,7 @@ impl<'a> Sink<Sample> for Publisher<'a> {
 }
 
 impl Publisher<'_> {
+    #[allow(clippy::too_many_arguments)] // TODO fixme
     pub(crate) fn resolve_put(
         &self,
         payload: ZBytes,
@@ -617,7 +620,10 @@ impl Publisher<'_> {
                         }),
                     },
                 },
-                Reliability::Reliable, // TODO
+                #[cfg(feature = "unstable")]
+                self.reliability,
+                #[cfg(not(feature = "unstable"))]
+                Reliability::DEFAULT,
             );
         }
         if self.destination != Locality::Remote {
@@ -640,6 +646,8 @@ impl Publisher<'_> {
                 Some(data_info),
                 payload.into(),
                 SubscriberKind::Subscriber,
+                #[cfg(feature = "unstable")]
+                self.reliability,
                 attachment,
             );
         }
