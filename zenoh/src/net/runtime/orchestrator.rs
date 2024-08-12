@@ -964,11 +964,18 @@ impl Runtime {
             }
         }
 
-        tracing::warn!(
-            "Unable to connect to any locator of scouted peer {}: {:?}",
-            zid,
-            locators
-        );
+        if self.manager().get_transport_unicast(zid).await.is_none() {
+            tracing::warn!(
+                "Unable to connect to any locator of scouted peer {}: {:?}",
+                zid,
+                locators
+            );
+        } else {
+            tracing::trace!(
+                "Unable to connect to any locator of scouted peer {}: Already connected!",
+                zid
+            );
+        }
         false
     }
 
