@@ -629,6 +629,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "cdr-encoding"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "903031fe1dcde5c45c72aa55d255e75855292808f65f61dfc663256e5d262b59"
+dependencies = [
+ "byteorder",
+ "log",
+ "paste",
+ "serde",
+ "serde_repr",
+ "static_assertions",
+ "thiserror",
+]
+
+[[package]]
 name = "cesu8"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3418,6 +3433,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_repr"
+version = "0.1.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3081f5ffbb02284dda55132aa26daecedd7372a42417bbbab6f14ab7d6bb9145"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.33",
+]
+
+[[package]]
 name = "serde_urlencoded"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5046,6 +5072,8 @@ dependencies = [
 name = "zenoh-examples"
 version = "0.11.0-dev"
 dependencies = [
+ "byteorder",
+ "cdr-encoding",
  "clap",
  "flume",
  "futures",
@@ -5053,6 +5081,7 @@ dependencies = [
  "json5",
  "rand 0.8.5",
  "rustc_version 0.4.0",
+ "serde",
  "tokio",
  "tracing",
  "zenoh",
