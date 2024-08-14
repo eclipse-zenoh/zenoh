@@ -421,9 +421,14 @@
         server_name_verification: null,
       },
     },
-    /// Shared memory configuration
+    /// Shared memory configuration.
+    /// NOTE: shared memory can be used only if zenoh is compiled with "shared-memory" feature, otherwise
+    /// settings in this section have no effect.
     shared_memory: {
-      enabled: false,
+      /// A probing procedure for shared memory is performed upon session opening. To enable zenoh to operate
+      /// over shared memory (and to not fallback on network mode), shared memory needs to be enabled also on the
+      /// subscriber side. By doing so, the probing procedure will succeed and shared memory will operate as expected.
+      enabled: true,
     },
     auth: {
       /// The configuration of authentication.

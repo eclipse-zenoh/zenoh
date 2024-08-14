@@ -20,12 +20,7 @@ async fn main() {
     // Initiate logging
     zenoh::try_init_log_from_env();
 
-    let (mut config, key_expr) = parse_args();
-
-    // A probing procedure for shared memory is performed upon session opening. To enable `z_pub_shm` to operate
-    // over shared memory (and to not fallback on network mode), shared memory needs to be enabled also on the
-    // subscriber side. By doing so, the probing procedure will succeed and shared memory will operate as expected.
-    config.transport.shared_memory.set_enabled(true).unwrap();
+    let (config, key_expr) = parse_args();
 
     println!("Opening session...");
     let session = zenoh::open(config).await.unwrap();

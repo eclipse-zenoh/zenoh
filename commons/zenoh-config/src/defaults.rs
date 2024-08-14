@@ -247,7 +247,7 @@ impl Default for LinkRxConf {
 #[allow(clippy::derivable_impls)]
 impl Default for ShmConf {
     fn default() -> Self {
-        Self { enabled: false }
+        Self { enabled: true }
     }
 }
 
