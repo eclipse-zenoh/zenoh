@@ -12,7 +12,7 @@
 //   Juhana Helovuo <juhana.helovuo@atostek.com>
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-// This is derived from pre-existing Zenoh example progams by ZettaScale Technology,
+// This is derived from pre-existing Zenoh example programs by ZettaScale Technology,
 // and RustDDS source codes by Atostek Oy, according to their open-source licences.
 
 use clap::Parser;
@@ -108,10 +108,17 @@ async fn main() {
                         size: 32,
                     };
                     println!("Putting Data ('{}': {:?})...", &key_expr, &shape);
+                    // The bridge assumes that the Zenoh payload (a byte sequence) is a
+                    // RTPS SerializedPayload. See RTPS Spec v2.5 Section 10.
+                    //
+                    // To construct a SerializedPayload, we start with a
+                    // SerializedPayloadHeader. 0x00, 0x01, 0x00, 0x00 means
+                    // CDR Little-Endian encoding and
+                    // RepresenationOptions is all zeroes.
                     let mut payload_buffer = vec![0x00, 0x01, 0x00, 0x00];
-                    payload_buffer.append(
-                        &mut cdr_encoding::to_vec::<ShapeType, LittleEndian>(&shape).unwrap(),
-                    );
+                    // Then append encoded ShapeType
+                    payload_buffer
+                        .append(&mut cdr::to_vec::<ShapeType, LittleEndian>(&shape).unwrap());
                     publisher.put(payload_buffer).res().await.unwrap();
                     tokio::time::sleep(Duration::from_millis(200)).await;
                 }
