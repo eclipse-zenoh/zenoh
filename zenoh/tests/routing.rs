@@ -19,6 +19,7 @@ use std::{
     time::Duration,
 };
 
+use itertools::Itertools;
 use tokio_util::sync::CancellationToken;
 use zenoh::{
     config::{ModeDependentValue, WhatAmI, WhatAmIMatcher},
@@ -310,6 +311,12 @@ impl Default for Node {
     }
 }
 
+impl std::fmt::Display for Node {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}({:#?})", self.name, self.warmup)
+    }
+}
+
 // A recipe consists of several nodes (zenoh sessions) assigned with corresponding tasks
 #[derive(Debug, Clone)]
 struct Recipe {
@@ -320,7 +327,7 @@ struct Recipe {
 // Display the Recipe as [NodeName1, NodeName2, ...]
 impl std::fmt::Display for Recipe {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let names: Vec<_> = self.nodes.iter().map(|node| node.name.clone()).collect();
+        let mut names = self.nodes.iter().map(|node| node.to_string());
         write!(f, "[{}]", names.join(", "))
     }
 }
@@ -433,7 +440,7 @@ impl Recipe {
         loop {
             tokio::select! {
                 _ = tokio::time::sleep(TIMEOUT) => {
-                    dbg!("Timeout");
+                    println!("Recipe {} Timeout.", self);
 
                     // Termination
                     remaining_checkpoints.swap(0, Ordering::Relaxed);
@@ -453,6 +460,7 @@ impl Recipe {
             }
         }
 
+        println!("Recipe {} OK.", self);
         Ok(())
     }
 }
@@ -786,7 +794,7 @@ async fn two_node_combination() -> Result<()> {
     ];
 
     let mut idx = 0;
-    // Ports going to be used: 17500 to 17508
+    // Ports going to be used: 17501 to 17509
     let base_port = 17500;
     let recipe_list: Vec<_> = modes
         .into_iter()
@@ -920,6 +928,125 @@ async fn two_node_combination() -> Result<()> {
 
     println!("Two-node combination test passed.");
     Result::Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 9)]
+async fn three_node_combination_multicast() -> Result<()> {
+    zenoh::try_init_log_from_env();
+    let modes = [WhatAmI::Peer, WhatAmI::Client];
+    let delay_in_secs = [
+        (0, 1, 2),
+        (0, 2, 1),
+        (1, 2, 0),
+        (1, 0, 2),
+        (2, 0, 1),
+        (2, 1, 0),
+    ];
+
+    let mut idx = 0;
+    // Ports going to be used: 17511 .. 17535
+    let base_port = 17510;
+
+    let recipe_list: Vec<_> = modes
+        .map(|n1| modes.map(|n2| (n1, n2)))
+        .concat()
+        .into_iter()
+        .flat_map(|(n1, n2)| [256].map(|s| (n1, n2, s)))
+        .flat_map(|(n1, n2, s)| delay_in_secs.map(|d| (n1, n2, s, d)))
+        .map(
+            |(node1_mode, node2_mode, msg_size, (delay1, delay2, delay3))| {
+                idx += 1;
+                let unicast_locator = format!("tcp/127.0.0.1:{}", base_port + idx);
+                let multicast_locator = format!("udp/224.0.0.1:{}", base_port + idx);
+
+                let ke_pubsub = format!("three_node_combination_multicast_keyexpr_pubsub_{idx}");
+
+                use rand::Rng;
+                let mut rng = rand::thread_rng();
+
+                let router_node = Node {
+                    name: format!("Router {}", WhatAmI::Router),
+                    mode: WhatAmI::Router,
+                    listen: vec![unicast_locator.clone(), multicast_locator.clone()],
+                    con_task: ConcurrentTask::from([SequentialTask::from([Task::Wait])]),
+                    warmup: Duration::from_secs(delay1)
+                        + Duration::from_millis(rng.gen_range(0..500)),
+                    ..Default::default()
+                };
+
+                let pub_node = {
+                    let base = match node1_mode {
+                        WhatAmI::Client => Node {
+                            mode: node1_mode,
+                            connect: vec![unicast_locator.clone()],
+                            warmup: Duration::from_secs(delay2),
+                            ..Default::default()
+                        },
+                        _ => Node {
+                            mode: node1_mode,
+                            listen: vec![multicast_locator.clone()],
+                            warmup: Duration::from_secs(delay2),
+                            ..Default::default()
+                        },
+                    };
+
+                    let mut pub_node = base.clone();
+                    pub_node.name = format!("Pub {node1_mode}");
+                    pub_node.con_task = ConcurrentTask::from([SequentialTask::from([Task::Pub(
+                        ke_pubsub.clone(),
+                        msg_size,
+                    )])]);
+                    pub_node.warmup += Duration::from_millis(rng.gen_range(0..500));
+                    pub_node
+                };
+
+                let sub_node = {
+                    let base = match node2_mode {
+                        WhatAmI::Client => Node {
+                            mode: node2_mode,
+                            connect: vec![unicast_locator.clone()],
+                            warmup: Duration::from_secs(delay3),
+                            ..Default::default()
+                        },
+                        _ => Node {
+                            mode: node2_mode,
+                            listen: vec![multicast_locator.clone()],
+                            warmup: Duration::from_secs(delay3),
+                            ..Default::default()
+                        },
+                    };
+
+                    let mut sub_node = base.clone();
+                    sub_node.name = format!("Sub {node2_mode}");
+                    sub_node.con_task = ConcurrentTask::from([SequentialTask::from([
+                        Task::Sub(ke_pubsub, msg_size),
+                        Task::Checkpoint,
+                    ])]);
+                    sub_node.warmup += Duration::from_millis(rng.gen_range(0..500));
+                    sub_node
+                };
+
+                Recipe::new([router_node.clone(), pub_node, sub_node])
+            },
+        )
+        .collect();
+
+    for chunks in recipe_list.chunks(PARALLEL_RECIPES).map(|x| x.to_vec()) {
+        let mut join_set = tokio::task::JoinSet::new();
+        for pubsub in chunks {
+            join_set.spawn(async move {
+                pubsub.run().await?;
+                Result::Ok(())
+            });
+        }
+
+        while let Some(res) = join_set.join_next().await {
+            res??;
+        }
+    }
+
+    println!("Three-node combination test passed.");
+    Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 9)]
