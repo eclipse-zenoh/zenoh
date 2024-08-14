@@ -423,7 +423,7 @@
     },
     /// Shared memory configuration
     shared_memory: {
-      enabled: false,
+      enabled: true,
     },
     auth: {
       /// The configuration of authentication.

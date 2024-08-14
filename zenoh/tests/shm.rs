@@ -26,7 +26,8 @@ use zenoh::{
     pubsub::Reliability,
     qos::CongestionControl,
     shm::{
-        BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID,
+        zshm, BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder,
+        POSIX_PROTOCOL_ID,
     },
     Session,
 };
@@ -52,7 +53,6 @@ async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
         )
         .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    config.transport.shared_memory.set_enabled(true).unwrap();
     println!("[  ][01a] Opening peer01 session: {:?}", endpoints);
     let peer01 = ztimeout!(zenoh::open(config)).unwrap();
 
@@ -68,7 +68,6 @@ async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
         )
         .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    config.transport.shared_memory.set_enabled(true).unwrap();
     println!("[  ][02a] Opening peer02 session: {:?}", endpoints);
     let peer02 = ztimeout!(zenoh::open(config)).unwrap();
 
@@ -84,7 +83,6 @@ async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session,
         .set(vec![endpoint01.parse().unwrap()])
         .unwrap();
     config.scouting.multicast.set_enabled(Some(true)).unwrap();
-    config.transport.shared_memory.set_enabled(true).unwrap();
     println!("[  ][01a] Opening peer01 session: {}", endpoint01);
     let peer01 = ztimeout!(zenoh::open(config)).unwrap();
 
@@ -95,7 +93,6 @@ async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session,
         .set(vec![endpoint02.parse().unwrap()])
         .unwrap();
     config.scouting.multicast.set_enabled(Some(true)).unwrap();
-    config.transport.shared_memory.set_enabled(true).unwrap();
     println!("[  ][02a] Opening peer02 session: {}", endpoint02);
     let peer02 = ztimeout!(zenoh::open(config)).unwrap();
 
@@ -128,6 +125,7 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Re
             .declare_subscriber(&key_expr)
             .callback(move |sample| {
                 assert_eq!(sample.payload().len(), size);
+                assert!(sample.payload().deserialize::<&zshm>().is_ok());
                 c_msgs.fetch_add(1, Ordering::Relaxed);
             }))
         .unwrap();
