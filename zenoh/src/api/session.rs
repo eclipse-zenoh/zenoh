@@ -39,8 +39,7 @@ use zenoh_protocol::network::{
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
-        AtomicExprId, CongestionControl, EntityId, ExprId, Parameters, Reliability, WireExpr,
-        EMPTY_EXPR_ID,
+        AtomicExprId, CongestionControl, EntityId, ExprId, Parameters, WireExpr, EMPTY_EXPR_ID,
     },
     network::{
         self,
@@ -102,6 +101,8 @@ use crate::net::{
     routing::dispatcher::face::Face,
     runtime::{Runtime, RuntimeBuilder},
 };
+#[cfg(feature = "unstable")]
+use crate::pubsub::Reliability;
 
 zconfigurable! {
     pub(crate) static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;
@@ -377,6 +378,7 @@ impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
         SubscriberBuilder {
             session: self.clone(),
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
+            #[cfg(feature = "unstable")]
             reliability: Reliability::DEFAULT,
             origin: Locality::default(),
             handler: DefaultHandler::default(),
@@ -2035,6 +2037,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
         SubscriberBuilder {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.try_into().map_err(Into::into),
+            #[cfg(feature = "unstable")]
             reliability: Reliability::DEFAULT,
             origin: Locality::default(),
             handler: DefaultHandler::default(),
