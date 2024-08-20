@@ -27,7 +27,7 @@ use super::{
     key_expr::KeyExpr,
     query::Reply,
     sample::{Locality, Sample},
-    session::{Session, SessionRef, Undeclarable},
+    session::{Session, SessionRef, UndeclarableSealed},
     subscriber::{Subscriber, SubscriberInner},
     Id,
 };
@@ -386,7 +386,7 @@ impl<'a> LivelinessToken<'a> {
     /// ```
     #[inline]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
-        Undeclarable::undeclare_inner(self, ())
+        UndeclarableSealed::undeclare_inner(self, ())
     }
 
     /// Keep this liveliness token in background, until the session is closed.
@@ -401,7 +401,7 @@ impl<'a> LivelinessToken<'a> {
 }
 
 #[zenoh_macros::unstable]
-impl<'a> Undeclarable<(), LivelinessTokenUndeclaration<'a>> for LivelinessToken<'a> {
+impl<'a> UndeclarableSealed<(), LivelinessTokenUndeclaration<'a>> for LivelinessToken<'a> {
     fn undeclare_inner(self, _: ()) -> LivelinessTokenUndeclaration<'a> {
         LivelinessTokenUndeclaration { token: self }
     }

@@ -449,22 +449,38 @@ impl fmt::Debug for SessionRef<'_> {
     }
 }
 
-/// A trait implemented by types that can be undeclared.
-pub trait Undeclarable<S, O, T = ZResult<()>>
+pub(crate) trait UndeclarableSealed<S, O, T = ZResult<()>>
 where
     O: Resolve<T> + Send,
 {
     fn undeclare_inner(self, session: S) -> O;
 }
 
-impl<'a, O, T, G> Undeclarable<&'a Session, O, T> for G
+impl<'a, O, T, G> UndeclarableSealed<&'a Session, O, T> for G
 where
     O: Resolve<T> + Send,
-    G: Undeclarable<(), O, T>,
+    G: UndeclarableSealed<(), O, T>,
 {
     fn undeclare_inner(self, _: &'a Session) -> O {
         self.undeclare_inner(())
     }
+}
+
+// NOTE: `UndeclarableInner` is only pub(crate) to hide the `undeclare_inner` method. So we don't
+// care about the `private_bounds` lint in this particular case.
+#[allow(private_bounds)]
+/// A trait implemented by types that can be undeclared.
+pub trait Undeclarable<S, O, T>: UndeclarableSealed<S, O, T>
+where
+    O: Resolve<T> + Send,
+{
+}
+
+impl<S, O, T, U> Undeclarable<S, O, T> for U
+where
+    O: Resolve<T> + Send,
+    U: UndeclarableSealed<S, O, T>,
+{
 }
 
 /// A zenoh session.
@@ -623,7 +639,7 @@ impl Session {
         O: Resolve<ZResult<()>>,
         T: Undeclarable<&'a Self, O, ZResult<()>>,
     {
-        Undeclarable::undeclare_inner(decl, self)
+        UndeclarableSealed::undeclare_inner(decl, self)
     }
 
     /// Get the current configuration of the zenoh [`Session`](Session).
