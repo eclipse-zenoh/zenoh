@@ -78,7 +78,7 @@ fn main() {
     let key_expr = "test/thr";
 
     let mut stats = Stats::new(n);
-    let _sub = session
+    session
         .declare_subscriber(key_expr)
         .callback_mut(move |_sample| {
             stats.increment();
@@ -87,7 +87,9 @@ fn main() {
             }
         })
         .wait()
-        .unwrap();
+        .unwrap()
+        // Make the subscriber run in background, until the session is closed.
+        .background();
 
     println!("Press CTRL-C to quit...");
     std::thread::park();
