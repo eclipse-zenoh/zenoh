@@ -33,13 +33,13 @@ use crate::net::routing::{
 
 #[inline]
 fn propagate_simple_token_to(
-    _tables: &mut Tables,
+    tables: &mut Tables,
     dst_face: &mut Arc<FaceState>,
     res: &Arc<Resource>,
     src_face: &mut Arc<FaceState>,
     send_declare: &mut SendDeclare,
 ) {
-    if (src_face.id != dst_face.id || dst_face.whatami == WhatAmI::Client)
+    if (src_face.id != dst_face.id || dst_face.zid == tables.zid)
         && !face_hat!(dst_face).local_tokens.contains_key(res)
         && (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
     {
@@ -173,10 +173,10 @@ fn simple_tokens(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 }
 
 #[inline]
-fn remote_simple_tokens(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
+fn remote_simple_tokens(tables: &Tables, res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
     res.session_ctxs
         .values()
-        .any(|ctx| ctx.face.id != face.id && ctx.token)
+        .any(|ctx| (ctx.face.id != face.id || face.zid == tables.zid) && ctx.token)
 }
 
 fn propagate_forget_simple_token(
@@ -234,7 +234,7 @@ fn propagate_forget_simple_token(
         {
             if !res.context().matches.iter().any(|m| {
                 m.upgrade()
-                    .is_some_and(|m| m.context.is_some() && remote_simple_tokens(&m, &face))
+                    .is_some_and(|m| m.context.is_some() && remote_simple_tokens(tables, &m, &face))
             }) {
                 if let Some(id) = face_hat_mut!(&mut face).local_tokens.remove(&res) {
                     send_declare(
@@ -332,8 +332,9 @@ pub(super) fn undeclare_simple_token(
                     .collect::<Vec<Arc<Resource>>>()
                 {
                     if !res.context().matches.iter().any(|m| {
-                        m.upgrade()
-                            .is_some_and(|m| m.context.is_some() && remote_simple_tokens(&m, face))
+                        m.upgrade().is_some_and(|m| {
+                            m.context.is_some() && remote_simple_tokens(tables, &m, face)
+                        })
                     }) {
                         if let Some(id) = face_hat_mut!(&mut face).local_tokens.remove(&res) {
                             send_declare(

@@ -88,7 +88,7 @@ fn propagate_simple_token_to(
     full_peer_net: bool,
     send_declare: &mut SendDeclare,
 ) {
-    if (src_face.id != dst_face.id || dst_face.whatami == WhatAmI::Client)
+    if (src_face.id != dst_face.id || dst_face.zid == tables.zid)
         && !face_hat!(dst_face).local_tokens.contains_key(res)
         && if full_peer_net {
             dst_face.whatami == WhatAmI::Client
@@ -335,10 +335,10 @@ fn simple_tokens(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 }
 
 #[inline]
-fn remote_simple_tokens(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
+fn remote_simple_tokens(tables: &Tables, res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
     res.session_ctxs
         .values()
-        .any(|ctx| ctx.face.id != face.id && ctx.token)
+        .any(|ctx| (ctx.face.id != face.id || face.zid == tables.zid) && ctx.token)
 }
 
 #[inline]
@@ -446,7 +446,7 @@ fn propagate_forget_simple_token(
             if !res.context().matches.iter().any(|m| {
                 m.upgrade().is_some_and(|m| {
                     m.context.is_some()
-                        && (remote_simple_tokens(&m, &face)
+                        && (remote_simple_tokens(tables, &m, &face)
                             || remote_linkstatepeer_tokens(tables, &m)
                             || remote_router_tokens(tables, &m))
                 })
@@ -729,7 +729,7 @@ pub(super) fn undeclare_simple_token(
                     if !res.context().matches.iter().any(|m| {
                         m.upgrade().is_some_and(|m| {
                             m.context.is_some()
-                                && (remote_simple_tokens(&m, face)
+                                && (remote_simple_tokens(tables, &m, face)
                                     || remote_linkstatepeer_tokens(tables, &m)
                                     || remote_router_tokens(tables, &m))
                         })
@@ -966,7 +966,7 @@ pub(crate) fn declare_token_interest(
                 if hat!(tables).router_tokens.iter().any(|token| {
                     token.context.is_some()
                         && token.matches(res)
-                        && (remote_simple_tokens(token, face)
+                        && (remote_simple_tokens(tables, token, face)
                             || remote_linkstatepeer_tokens(tables, token)
                             || remote_router_tokens(tables, token))
                 }) {
