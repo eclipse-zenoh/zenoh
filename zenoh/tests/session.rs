@@ -21,11 +21,14 @@ use std::{
 
 #[cfg(feature = "internal")]
 use zenoh::internal::runtime::{Runtime, RuntimeBuilder};
+#[cfg(feature = "unstable")]
+use zenoh::pubsub::Reliability;
 use zenoh::{
-    config, key_expr::KeyExpr, prelude::*, pubsub::Reliability, qos::CongestionControl,
-    sample::SampleKind, Session,
+    config, key_expr::KeyExpr, prelude::*, qos::CongestionControl, sample::SampleKind, Session,
 };
 use zenoh_core::ztimeout;
+#[cfg(not(feature = "unstable"))]
+use zenoh_protocol::core::Reliability;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);

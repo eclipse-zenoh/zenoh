@@ -20,7 +20,7 @@ use std::{
 };
 
 use zenoh_core::{Resolvable, Wait};
-use zenoh_protocol::{core::Reliability, network::declare::subscriber::ext::SubscriberInfo};
+use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
 use zenoh_result::ZResult;
 #[cfg(feature = "unstable")]
 use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
@@ -32,6 +32,8 @@ use super::{
     session::{SessionRef, UndeclarableSealed},
     Id,
 };
+#[cfg(feature = "unstable")]
+use crate::pubsub::Reliability;
 
 pub(crate) struct SubscriberState {
     pub(crate) id: Id,
@@ -200,8 +202,6 @@ pub struct SubscriberBuilder<'a, 'b, Handler> {
 
     #[cfg(feature = "unstable")]
     pub reliability: Reliability,
-    #[cfg(not(feature = "unstable"))]
-    pub(crate) reliability: Reliability,
 
     #[cfg(feature = "unstable")]
     pub origin: Locality,
@@ -239,16 +239,16 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
         let SubscriberBuilder {
             session,
             key_expr,
+            #[cfg(feature = "unstable")]
             reliability,
-
             origin,
             handler: _,
         } = self;
         SubscriberBuilder {
             session,
             key_expr,
+            #[cfg(feature = "unstable")]
             reliability,
-
             origin,
             handler: callback,
         }
@@ -312,6 +312,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
         let SubscriberBuilder {
             session,
             key_expr,
+            #[cfg(feature = "unstable")]
             reliability,
             origin,
             handler: _,
@@ -319,6 +320,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
         SubscriberBuilder {
             session,
             key_expr,
+            #[cfg(feature = "unstable")]
             reliability,
             origin,
             handler,
@@ -329,6 +331,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
 impl<'a, 'b, Handler> SubscriberBuilder<'a, 'b, Handler> {
     /// Change the subscription reliability.
     #[inline]
+    #[zenoh_macros::unstable]
     pub fn reliability(mut self, reliability: Reliability) -> Self {
         self.reliability = reliability;
         self
@@ -336,6 +339,7 @@ impl<'a, 'b, Handler> SubscriberBuilder<'a, 'b, Handler> {
 
     /// Change the subscription reliability to `Reliable`.
     #[inline]
+    #[zenoh_macros::unstable]
     pub fn reliable(mut self) -> Self {
         self.reliability = Reliability::Reliable;
         self
@@ -343,6 +347,7 @@ impl<'a, 'b, Handler> SubscriberBuilder<'a, 'b, Handler> {
 
     /// Change the subscription reliability to `BestEffort`.
     #[inline]
+    #[zenoh_macros::unstable]
     pub fn best_effort(mut self) -> Self {
         self.reliability = Reliability::BestEffort;
         self
@@ -381,9 +386,12 @@ where
                 &key_expr,
                 self.origin,
                 callback,
+                #[cfg(feature = "unstable")]
                 &SubscriberInfo {
                     reliability: self.reliability,
                 },
+                #[cfg(not(feature = "unstable"))]
+                &SubscriberInfo::default(),
             )
             .map(|sub_state| Subscriber {
                 subscriber: SubscriberInner {
