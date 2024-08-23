@@ -52,6 +52,7 @@ default = ["test", "transport_multilink"]
 
 [dependencies]
 async-trait = { workspace = true }
+crossbeam-utils = { workspace = true }
 tokio = { workspace = true, features = [
   "sync",
   "fs",
@@ -61,6 +62,7 @@ tokio = { workspace = true, features = [
   "io-util",
   "net",
 ] }
+lazy_static = { workspace = true }
 tokio-util = { workspace = true, features = ["rt"]}
 flume = { workspace = true }
 tracing = {workspace = true}

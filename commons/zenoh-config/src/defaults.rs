@@ -201,7 +201,7 @@ impl Default for QueueConf {
         Self {
             size: QueueSizeConf::default(),
             congestion_control: CongestionControlConf::default(),
-            backoff: 100,
+            backoff: 1_000_000,
         }
     }
 }
