@@ -17,7 +17,6 @@ use std::{
         Arc, Mutex, MutexGuard,
     },
     time::{Duration, Instant},
-    u64,
 };
 
 use crossbeam_utils::CachePadded;
