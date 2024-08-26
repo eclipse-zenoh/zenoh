@@ -11,13 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::{
-    batch::{Encode, WBatch},
-    priority::{TransportChannelTx, TransportPriorityTx},
-};
-use crate::common::batch::BatchConfig;
-use crossbeam_utils::CachePadded;
-use ringbuffer_spsc::{RingBuffer, RingBufferReader, RingBufferWriter};
 use std::{
     sync::{
         atomic::{AtomicBool, AtomicU32, Ordering},
@@ -26,6 +19,9 @@ use std::{
     time::{Duration, Instant},
     u64,
 };
+
+use crossbeam_utils::CachePadded;
+use ringbuffer_spsc::{RingBuffer, RingBufferReader, RingBufferWriter};
 use zenoh_buffers::{
     reader::{HasReader, Reader},
     writer::HasWriter,
@@ -44,6 +40,12 @@ use zenoh_protocol::{
     },
 };
 use zenoh_sync::{event, Notifier, Waiter};
+
+use super::{
+    batch::{Encode, WBatch},
+    priority::{TransportChannelTx, TransportPriorityTx},
+};
+use crate::common::batch::BatchConfig;
 
 const RBLEN: usize = QueueSizeConf::MAX;
 

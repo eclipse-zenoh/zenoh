@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use event_listener::{Event as EventLib, Listener};
 use std::{
     sync::{
         atomic::{AtomicU16, AtomicU8, Ordering},
@@ -19,6 +18,8 @@ use std::{
     },
     time::{Duration, Instant},
 };
+
+use event_listener::{Event as EventLib, Listener};
 
 // Return types
 pub struct EventClosed;
