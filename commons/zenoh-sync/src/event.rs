@@ -11,7 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use event_listener::{Event as EventLib, Listener};
 use std::{
+    fmt,
     sync::{
         atomic::{AtomicU16, AtomicU8, Ordering},
         Arc,
@@ -19,19 +21,17 @@ use std::{
     time::{Duration, Instant},
 };
 
-use event_listener::{Event as EventLib, Listener};
-
 // Return types
 pub struct EventClosed;
 
-impl std::fmt::Display for EventClosed {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for EventClosed {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }
 
-impl std::fmt::Debug for EventClosed {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for EventClosed {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("Event Closed")
     }
 }
@@ -304,8 +304,10 @@ mod tests {
     #[test]
     fn event_steps() {
         use crate::{EventClosed, WaitTimeout};
-        use std::sync::{Arc, Barrier};
-        use std::time::Duration;
+        use std::{
+            sync::{Arc, Barrier},
+            time::Duration,
+        };
 
         let barrier = Arc::new(Barrier::new(2));
 
@@ -315,7 +317,7 @@ mod tests {
 
         let bs = barrier.clone();
         let s = std::thread::spawn(move || {
-            // 1
+            // 1 - Wait one notification
             match waiter.wait_timeout(tslot) {
                 Ok(WaitTimeout::Event) => {}
                 Ok(WaitTimeout::Timeout) => panic!("Timeout {:#?}", tslot),
@@ -324,8 +326,8 @@ mod tests {
 
             bs.wait();
 
-            // 2
-            std::thread::sleep(tslot);
+            // 2 - Being notified twice but waiting only once
+            bs.wait();
 
             match waiter.wait_timeout(tslot) {
                 Ok(WaitTimeout::Event) => {}
@@ -340,19 +342,33 @@ mod tests {
             }
 
             bs.wait();
+
+            // 3 - Notifier has been dropped
+            bs.wait();
+
+            waiter.wait().unwrap_err();
+
+            bs.wait();
         });
 
         let bp = barrier.clone();
         let p = std::thread::spawn(move || {
-            // 1
+            // 1 - Notify once
             notifier.notify().unwrap();
 
             bp.wait();
 
-            // 2
+            // 2 - Notify twice
             notifier.notify().unwrap();
             notifier.notify().unwrap();
 
+            bp.wait();
+            bp.wait();
+
+            // 3 - Drop notifier yielding an error in the waiter
+            drop(notifier);
+
+            bp.wait();
             bp.wait();
         });
 
@@ -362,8 +378,10 @@ mod tests {
 
     #[test]
     fn event_loop() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
-        use std::time::{Duration, Instant};
+        use std::{
+            sync::atomic::{AtomicUsize, Ordering},
+            time::{Duration, Instant},
+        };
 
         const N: usize = 1_000;
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
