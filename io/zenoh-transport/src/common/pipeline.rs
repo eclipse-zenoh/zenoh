@@ -423,14 +423,17 @@ impl StageOutIn {
         }
 
         // Verify that we have not been doing backoff for too long
-        let mut diff = 0;
-        let mut threshold = 0;
+        let mut backoff = 0;
         if !pull {
-            diff = LOCAL_EPOCH.elapsed().as_micros() as MicroSeconds
+            let diff = LOCAL_EPOCH.elapsed().as_micros() as MicroSeconds
                 - self.backoff.atomic.first_write.load(Ordering::Relaxed);
-            threshold = self.backoff.threshold.as_micros() as MicroSeconds;
+            let threshold = self.backoff.threshold.as_micros() as MicroSeconds;
 
-            pull = diff > threshold;
+            if diff >= threshold {
+                pull = true;
+            } else {
+                backoff = threshold - diff;
+            }
         }
 
         if pull {
@@ -460,7 +463,7 @@ impl StageOutIn {
         self.backoff.atomic.active.store(true, Ordering::Relaxed);
 
         // Do backoff
-        Pull::Backoff(threshold - diff)
+        Pull::Backoff(backoff)
     }
 }
 
