@@ -16,7 +16,10 @@ use std::{fmt, sync::Arc};
 use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
 use zenoh_core::zcondfeat;
 use zenoh_link::{Link, LinkUnicast};
-use zenoh_protocol::transport::{BatchSize, Close, OpenAck, TransportMessage};
+use zenoh_protocol::{
+    core::{PriorityRange, Reliability},
+    transport::{BatchSize, Close, OpenAck, TransportMessage},
+};
 use zenoh_result::{zerror, ZResult};
 
 use crate::common::batch::{BatchConfig, Decode, Encode, Finalize, RBatch, WBatch};
@@ -32,6 +35,8 @@ pub(crate) struct TransportLinkUnicastConfig {
     // Inbound / outbound
     pub(crate) direction: TransportLinkUnicastDirection,
     pub(crate) batch: BatchConfig,
+    pub(crate) priorities: Option<PriorityRange>,
+    pub(crate) reliability: Reliability,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -55,7 +60,7 @@ impl TransportLinkUnicast {
     }
 
     pub(crate) fn link(&self) -> Link {
-        (&self.link).into()
+        Link::new_unicast(&self.link, self.config.priorities, self.config.reliability)
     }
 
     pub(crate) fn tx(&self) -> TransportLinkUnicastTx {
@@ -77,7 +82,7 @@ impl TransportLinkUnicast {
     pub(crate) fn rx(&self) -> TransportLinkUnicastRx {
         TransportLinkUnicastRx {
             link: self.link.clone(),
-            batch: self.config.batch,
+            config: self.config.clone(),
         }
     }
 
@@ -118,18 +123,6 @@ impl fmt::Debug for TransportLinkUnicast {
             .field("link", &self.link)
             .field("config", &self.config)
             .finish()
-    }
-}
-
-impl From<&TransportLinkUnicast> for Link {
-    fn from(link: &TransportLinkUnicast) -> Self {
-        Link::from(&link.link)
-    }
-}
-
-impl From<TransportLinkUnicast> for Link {
-    fn from(link: TransportLinkUnicast) -> Self {
-        Link::from(&link.link)
     }
 }
 
@@ -201,7 +194,7 @@ impl fmt::Debug for TransportLinkUnicastTx {
 
 pub(crate) struct TransportLinkUnicastRx {
     pub(crate) link: LinkUnicast,
-    pub(crate) batch: BatchConfig,
+    pub(crate) config: TransportLinkUnicastConfig,
 }
 
 impl TransportLinkUnicastRx {
@@ -235,7 +228,7 @@ impl TransportLinkUnicastRx {
 
         let buffer = ZSlice::new(Arc::new(into), 0, end)
             .map_err(|_| zerror!("{ERR}{self}. ZSlice index(es) out of bounds"))?;
-        let mut batch = RBatch::new(self.batch, buffer);
+        let mut batch = RBatch::new(self.config.batch, buffer);
         batch
             .initialize(buff)
             .map_err(|e| zerror!("{ERR}{self}. {e}."))?;
@@ -246,7 +239,7 @@ impl TransportLinkUnicastRx {
     }
 
     pub async fn recv(&mut self) -> ZResult<TransportMessage> {
-        let mtu = self.batch.mtu as usize;
+        let mtu = self.config.batch.mtu as usize;
         let mut batch = self
             .recv_batch(|| zenoh_buffers::vec::uninit(mtu).into_boxed_slice())
             .await?;
@@ -259,7 +252,7 @@ impl TransportLinkUnicastRx {
 
 impl fmt::Display for TransportLinkUnicastRx {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{:?}", self.link, self.batch)
+        write!(f, "{}:{:?}", self.link, self.config)
     }
 }
 
@@ -267,7 +260,7 @@ impl fmt::Debug for TransportLinkUnicastRx {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TransportLinkUnicastRx")
             .field("link", &self.link)
-            .field("config", &self.batch)
+            .field("config", &self.config)
             .finish()
     }
 }

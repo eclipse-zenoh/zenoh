@@ -33,7 +33,10 @@ pub use listener::*;
 pub use multicast::*;
 use serde::Serialize;
 pub use unicast::*;
-use zenoh_protocol::{core::Locator, transport::BatchSize};
+use zenoh_protocol::{
+    core::{Locator, PriorityRange, Reliability},
+    transport::BatchSize,
+};
 use zenoh_result::ZResult;
 
 /*************************************/
@@ -48,10 +51,11 @@ pub struct Link {
     pub dst: Locator,
     pub group: Option<Locator>,
     pub mtu: BatchSize,
-    pub is_reliable: bool,
     pub is_streamed: bool,
     pub interfaces: Vec<String>,
     pub auth_identifier: LinkAuthId,
+    pub priorities: Option<PriorityRange>,
+    pub reliability: Reliability,
 }
 
 #[async_trait]
@@ -70,45 +74,37 @@ impl fmt::Display for Link {
     }
 }
 
-impl From<&LinkUnicast> for Link {
-    fn from(link: &LinkUnicast) -> Link {
+impl Link {
+    pub fn new_unicast(
+        link: &LinkUnicast,
+        priorities: Option<PriorityRange>,
+        reliability: Reliability,
+    ) -> Self {
         Link {
             src: link.get_src().to_owned(),
             dst: link.get_dst().to_owned(),
             group: None,
             mtu: link.get_mtu(),
-            is_reliable: link.is_reliable(),
             is_streamed: link.is_streamed(),
             interfaces: link.get_interface_names(),
             auth_identifier: link.get_auth_id().clone(),
+            priorities,
+            reliability,
         }
     }
-}
 
-impl From<LinkUnicast> for Link {
-    fn from(link: LinkUnicast) -> Link {
-        Link::from(&link)
-    }
-}
-
-impl From<&LinkMulticast> for Link {
-    fn from(link: &LinkMulticast) -> Link {
+    pub fn new_multicast(link: &LinkMulticast) -> Self {
         Link {
             src: link.get_src().to_owned(),
             dst: link.get_dst().to_owned(),
             group: Some(link.get_dst().to_owned()),
             mtu: link.get_mtu(),
-            is_reliable: link.is_reliable(),
             is_streamed: false,
             interfaces: vec![],
             auth_identifier: LinkAuthId::default(),
+            priorities: None,
+            reliability: Reliability::from(link.is_reliable()),
         }
-    }
-}
-
-impl From<LinkMulticast> for Link {
-    fn from(link: LinkMulticast) -> Link {
-        Link::from(&link)
     }
 }
 

@@ -615,7 +615,7 @@ impl TransportManager {
             },
             {
                 tracing::debug!(
-            "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {}, multilink: {}, lowlatency: {}",
+            "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {:?}, multilink: {}, lowlatency: {}",
             self.config.zid,
             config.zid,
             config.whatami,
@@ -707,9 +707,9 @@ impl TransportManager {
         };
 
         // Create a new link associated by calling the Link Manager
-        let link = manager.new_link(endpoint).await?;
+        let link = manager.new_link(endpoint.clone()).await?;
         // Open the link
-        super::establishment::open::open_link(link, self).await
+        super::establishment::open::open_link(endpoint, link, self).await
     }
 
     pub async fn get_transport_unicast(&self, peer: &ZenohIdProto) -> Option<TransportUnicast> {
@@ -736,7 +736,8 @@ impl TransportManager {
         Ok(())
     }
 
-    pub(crate) async fn handle_new_link_unicast(&self, link: LinkUnicast) {
+    pub(crate) async fn handle_new_link_unicast(&self, new_link: NewLinkUnicast) {
+        let NewLinkUnicast { link, endpoint } = new_link;
         let incoming_counter = self.state.unicast.incoming.clone();
         if incoming_counter.load(SeqCst) >= self.config.unicast.accept_pending {
             // We reached the limit of concurrent incoming transport, this means two things:
@@ -759,7 +760,7 @@ impl TransportManager {
             .spawn_with_rt(zenoh_runtime::ZRuntime::Acceptor, async move {
                 if tokio::time::timeout(
                     c_manager.config.unicast.accept_timeout,
-                    super::establishment::accept::accept_link(link, &c_manager),
+                    super::establishment::accept::accept_link(endpoint, link, &c_manager),
                 )
                 .await
                 .is_err()

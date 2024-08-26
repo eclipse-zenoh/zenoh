@@ -28,6 +28,7 @@ use uuid::Uuid;
 use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_link_commons::{
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
+    NewLinkUnicast,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -392,15 +393,18 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         let c_token = token.clone();
         let mut listeners = zasyncwrite!(self.listeners);
 
-        let c_manager = self.manager.clone();
-        let c_listeners = self.listeners.clone();
-        let c_path = local_path_str.to_owned();
+        let task = {
+            let manager = self.manager.clone();
+            let listeners = self.listeners.clone();
+            let path = local_path_str.to_owned();
+            let endpoint = endpoint.clone();
 
-        let task = async move {
-            // Wait for the accept loop to terminate
-            let res = accept_task(socket, c_token, c_manager).await;
-            zasyncwrite!(c_listeners).remove(&c_path);
-            res
+            async move {
+                // Wait for the accept loop to terminate
+                let res = accept_task(endpoint, socket, c_token, manager).await;
+                zasyncwrite!(listeners).remove(&path);
+                res
+            }
         };
         let handle = zenoh_runtime::ZRuntime::Acceptor.spawn(task);
 
@@ -459,6 +463,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
 }
 
 async fn accept_task(
+    endpoint: EndPoint,
     socket: UnixListener,
     token: CancellationToken,
     manager: NewLinkChannelSender,
@@ -515,7 +520,7 @@ async fn accept_task(
                         ));
 
                         // Communicate the new link to the initial transport manager
-                        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+                        if let Err(e) = manager.send_async(NewLinkUnicast { link: LinkUnicast(link), endpoint: endpoint.clone() }).await {
                             tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
 

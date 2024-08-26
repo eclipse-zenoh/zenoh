@@ -331,6 +331,11 @@
       /// The supported protocols are: ["tcp" , "udp", "tls", "quic", "ws", "unixsock-stream", "vsock"]
       /// For example, to only enable "tls" and "quic":
       //   protocols: ["tls", "quic"],
+      ///
+      /// Endpoints accept a "priorities" metadata value in the form of a Rust-style half-open range
+      /// (e.g. `2..4` signifies priorities 2 and 3). This value is used to select the link used
+      /// for transmission based on the priority of the message in question.
+      ///
       /// Configure the zenoh TX parameters of a link
       tx: {
         /// The resolution in bits to be used for the message sequence numbers.

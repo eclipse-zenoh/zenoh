@@ -18,9 +18,9 @@ use zenoh_buffers::ZSlice;
 #[cfg(feature = "transport_auth")]
 use zenoh_core::zasynclock;
 use zenoh_core::{zcondfeat, zerror};
-use zenoh_link::LinkUnicast;
+use zenoh_link::{EndPoint, LinkUnicast};
 use zenoh_protocol::{
-    core::{Field, Resolution, WhatAmI, ZenohIdProto},
+    core::{Field, Reliability, Resolution, WhatAmI, ZenohIdProto},
     transport::{
         batch_size, close, BatchSize, Close, InitSyn, OpenSyn, TransportBody, TransportMessage,
         TransportSn,
@@ -52,7 +52,7 @@ type OpenError = (zenoh_result::Error, Option<u8>);
 struct StateTransport {
     batch_size: BatchSize,
     resolution: Resolution,
-    ext_qos: ext::qos::StateOpen,
+    ext_qos: ext::qos::QoS,
     #[cfg(feature = "transport_multilink")]
     ext_mlink: ext::multilink::StateOpen,
     #[cfg(feature = "shared-memory")]
@@ -537,18 +537,22 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
 }
 
 pub(crate) async fn open_link(
+    endpoint: EndPoint,
     link: LinkUnicast,
     manager: &TransportManager,
 ) -> ZResult<TransportUnicast> {
+    let direction = TransportLinkUnicastDirection::Outbound;
     let is_streamed = link.is_streamed();
     let config = TransportLinkUnicastConfig {
-        direction: TransportLinkUnicastDirection::Outbound,
+        direction,
         batch: BatchConfig {
             mtu: link.get_mtu(),
             is_streamed,
             #[cfg(feature = "transport_compression")]
             is_compression: false, // Perform the exchange Init/Open exchange with no compression
         },
+        priorities: None,
+        reliability: Reliability::from(link.is_reliable()),
     };
     let mut link = TransportLinkUnicast::new(link, config);
     let mut fsm = OpenLink {
@@ -577,7 +581,7 @@ pub(crate) async fn open_link(
                 .min(batch_size::UNICAST)
                 .min(link.config.batch.mtu),
             resolution: manager.config.resolution,
-            ext_qos: ext::qos::StateOpen::new(manager.config.unicast.is_qos),
+            ext_qos: ext::qos::QoS::new(manager.config.unicast.is_qos, &endpoint)?,
             #[cfg(feature = "transport_multilink")]
             ext_mlink: manager
                 .state
@@ -645,7 +649,7 @@ pub(crate) async fn open_link(
         whatami: iack_out.other_whatami,
         sn_resolution: state.transport.resolution.get(Field::FrameSN),
         tx_initial_sn: osyn_out.mine_initial_sn,
-        is_qos: state.transport.ext_qos.is_qos(),
+        is_qos: state.transport.ext_qos.is_enabled(),
         #[cfg(feature = "transport_multilink")]
         multilink: state.transport.ext_mlink.multilink(),
         #[cfg(feature = "shared-memory")]
@@ -659,13 +663,15 @@ pub(crate) async fn open_link(
     };
 
     let o_config = TransportLinkUnicastConfig {
-        direction: TransportLinkUnicastDirection::Outbound,
+        direction,
         batch: BatchConfig {
             mtu: state.transport.batch_size,
             is_streamed,
             #[cfg(feature = "transport_compression")]
             is_compression: state.link.ext_compression.is_compression(),
         },
+        priorities: state.transport.ext_qos.priorities(),
+        reliability: Reliability::from(link.link.is_reliable()),
     };
     let o_link = link.reconfigure(o_config);
     let s_link = format!("{:?}", o_link);

@@ -419,8 +419,8 @@ impl TransportManager {
                     loop {
                         tokio::select! {
                                 res = new_unicast_link_receiver.recv_async() => {
-                                    if let Ok(link) = res {
-                                        this.handle_new_link_unicast(link).await;
+                                    if let Ok(new_link) = res {
+                                        this.handle_new_link_unicast(new_link).await;
                                     }
                                 }
                                 _ = cancellation_token.cancelled() => { break; }

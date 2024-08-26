@@ -92,7 +92,7 @@ impl TransportMulticast {
     #[inline(always)]
     pub fn get_link(&self) -> ZResult<Link> {
         let transport = self.get_transport()?;
-        Ok(transport.get_link().into())
+        Ok(Link::new_multicast(&transport.get_link().link))
     }
 
     #[inline(always)]

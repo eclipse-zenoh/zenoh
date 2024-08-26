@@ -333,7 +333,7 @@ impl TransportMulticastInner {
     /*               PEER                */
     /*************************************/
     pub(super) fn new_peer(&self, locator: &Locator, join: Join) -> ZResult<()> {
-        let mut link = Link::from(self.get_link());
+        let mut link = Link::new_multicast(&self.get_link().link);
         link.dst = locator.clone();
 
         let is_shm = zcondfeat!("shared-memory", join.ext_shm.is_some(), false);
@@ -452,7 +452,7 @@ impl TransportMulticastInner {
         zread!(self.peers)
             .values()
             .map(|p| {
-                let mut link = Link::from(self.get_link());
+                let mut link = Link::new_multicast(&self.get_link().link);
                 link.dst = p.locator.clone();
 
                 TransportPeer {
