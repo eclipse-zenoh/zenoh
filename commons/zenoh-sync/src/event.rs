@@ -426,11 +426,12 @@ mod tests {
 
     #[test]
     fn event_deadline() {
-        use crate::WaitDeadlineError;
         use std::{
             sync::{Arc, Barrier},
             time::{Duration, Instant},
         };
+
+        use crate::WaitDeadlineError;
 
         let barrier = Arc::new(Barrier::new(2));
         let (notifier, waiter) = super::new();
