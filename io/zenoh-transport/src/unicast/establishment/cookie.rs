@@ -34,7 +34,7 @@ pub(crate) struct Cookie {
     pub(crate) batch_size: BatchSize,
     pub(crate) nonce: u64,
     // Extensions
-    pub(crate) ext_qos: ext::qos::StateAccept,
+    pub(crate) ext_qos: ext::qos::QoS,
     #[cfg(feature = "transport_multilink")]
     pub(crate) ext_mlink: ext::multilink::StateAccept,
     #[cfg(feature = "shared-memory")]
@@ -90,7 +90,7 @@ where
         let batch_size: BatchSize = self.read(&mut *reader)?;
         let nonce: u64 = self.read(&mut *reader)?;
         // Extensions
-        let ext_qos: ext::qos::StateAccept = self.read(&mut *reader)?;
+        let ext_qos: ext::qos::QoS = self.read(&mut *reader)?;
         #[cfg(feature = "transport_multilink")]
         let ext_mlink: ext::multilink::StateAccept = self.read(&mut *reader)?;
         #[cfg(feature = "shared-memory")]
@@ -178,7 +178,7 @@ impl Cookie {
             resolution: Resolution::rand(),
             batch_size: rng.gen(),
             nonce: rng.gen(),
-            ext_qos: ext::qos::StateAccept::rand(),
+            ext_qos: ext::qos::QoS::rand(),
             #[cfg(feature = "transport_multilink")]
             ext_mlink: ext::multilink::StateAccept::rand(),
             #[cfg(feature = "shared-memory")]

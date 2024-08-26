@@ -36,7 +36,18 @@ pub trait LinkManagerUnicastTrait: Send + Sync {
     async fn get_listeners(&self) -> Vec<EndPoint>;
     async fn get_locators(&self) -> Vec<Locator>;
 }
-pub type NewLinkChannelSender = flume::Sender<LinkUnicast>;
+pub type NewLinkChannelSender = flume::Sender<NewLinkUnicast>;
+
+/// Notification of a new inbound connection.
+///
+/// Link implementations should preserve the metadata sections of [`NewLinkUnicast::endpoint`].
+pub struct NewLinkUnicast {
+    /// The link created in response to a new inbound connection.
+    pub link: LinkUnicast,
+    /// Endpoint of the listener.
+    pub endpoint: EndPoint,
+}
+
 pub trait ConstructibleLinkManagerUnicast<T>: Sized {
     fn new(new_link_sender: NewLinkChannelSender, config: T) -> ZResult<Self>;
 }

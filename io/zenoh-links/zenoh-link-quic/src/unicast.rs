@@ -27,7 +27,7 @@ use x509_parser::prelude::*;
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
     get_ip_interface_names, LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast,
-    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender,
+    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, NewLinkUnicast,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -332,11 +332,14 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
 
         // Spawn the accept loop for the listener
         let token = self.listeners.token.child_token();
-        let c_token = token.clone();
 
-        let c_manager = self.manager.clone();
+        let task = {
+            let token = token.clone();
+            let manager = self.manager.clone();
+            let endpoint = endpoint.clone();
 
-        let task = async move { accept_task(quic_endpoint, c_token, c_manager).await };
+            async move { accept_task(endpoint, quic_endpoint, token, manager).await }
+        };
 
         // Initialize the QuicAcceptor
         let locator = endpoint.to_locator();
@@ -364,7 +367,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
 }
 
 async fn accept_task(
-    endpoint: quinn::Endpoint,
+    endpoint: EndPoint,
+    quic_endpoint: quinn::Endpoint,
     token: CancellationToken,
     manager: NewLinkChannelSender,
 ) -> ZResult<()> {
@@ -382,7 +386,7 @@ async fn accept_task(
         Ok(conn)
     }
 
-    let src_addr = endpoint
+    let src_addr = quic_endpoint
         .local_addr()
         .map_err(|e| zerror!("Can not accept QUIC connections: {}", e))?;
 
@@ -393,7 +397,7 @@ async fn accept_task(
         tokio::select! {
             _ = token.cancelled() => break,
 
-            res = accept(endpoint.accept()) => {
+            res = accept(quic_endpoint.accept()) => {
                 match res {
                     Ok(quic_conn) => {
                         // Get the bideractional streams. Note that we don't allow unidirectional streams.
@@ -429,7 +433,7 @@ async fn accept_task(
                         ));
 
                         // Communicate the new link to the initial transport manager
-                        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+                        if let Err(e) = manager.send_async(NewLinkUnicast { link: LinkUnicast(link), endpoint: endpoint.clone() }).await {
                             tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
 

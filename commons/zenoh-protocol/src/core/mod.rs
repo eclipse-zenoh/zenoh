@@ -24,9 +24,10 @@ use core::{
     str::FromStr,
 };
 
+use serde::Serialize;
 pub use uhlc::{Timestamp, NTP64};
 use zenoh_keyexpr::OwnedKeyExpr;
-use zenoh_result::{bail, zerror};
+use zenoh_result::{bail, zerror, ZResult};
 
 /// The unique Id of the [`HLC`](uhlc::HLC) that generated the concerned [`Timestamp`].
 pub type TimestampId = uhlc::ID;
@@ -308,6 +309,52 @@ pub enum Priority {
     Background = 7,
 }
 
+#[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq, Serialize)]
+pub struct PriorityRange {
+    pub start: u8,
+    pub end: u8,
+}
+
+impl PriorityRange {
+    pub fn new(start: u8, end: u8) -> ZResult<Self> {
+        if start >= end || start < Priority::MAX as u8 || end > Priority::MIN as u8 + 1 {
+            bail!("Invalid priority range: {start}..{end}")
+        };
+
+        Ok(Self { start, end })
+    }
+
+    pub fn includes(&self, priority: Priority) -> bool {
+        self.start <= (priority as u8) && (priority as u8) < self.end
+    }
+
+    pub fn len(&self) -> usize {
+        (self.end - self.start) as usize
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.end == self.start
+    }
+
+    pub fn start(&self) -> u8 {
+        self.start
+    }
+
+    pub fn end(&self) -> u8 {
+        self.end
+    }
+
+    #[cfg(feature = "test")]
+    pub fn rand() -> Self {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let start = rng.gen_range(Priority::MAX as u8..Priority::MIN as u8);
+        let end = rng.gen_range((start + 1)..=Priority::MIN as u8);
+
+        Self { start, end }
+    }
+}
+
 impl Priority {
     /// Default
     pub const DEFAULT: Self = Self::Data;
@@ -342,7 +389,7 @@ impl TryFrom<u8> for Priority {
     }
 }
 
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Serialize)]
 #[repr(u8)]
 pub enum Reliability {
     #[default]
@@ -360,6 +407,16 @@ impl Reliability {
         let mut rng = rand::thread_rng();
 
         if rng.gen_bool(0.5) {
+            Reliability::Reliable
+        } else {
+            Reliability::BestEffort
+        }
+    }
+}
+
+impl From<bool> for Reliability {
+    fn from(value: bool) -> Self {
+        if value {
             Reliability::Reliable
         } else {
             Reliability::BestEffort

@@ -11,51 +11,81 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh_core::zread;
-use zenoh_protocol::network::NetworkMessage;
+use zenoh_protocol::{
+    core::{PriorityRange, Reliability},
+    network::NetworkMessage,
+};
 
 use super::transport::TransportUnicastUniversal;
 #[cfg(feature = "shared-memory")]
 use crate::shm::map_zmsg_to_partner;
+use crate::unicast::transport_unicast_inner::TransportUnicastTrait;
 
 impl TransportUnicastUniversal {
     fn schedule_on_link(&self, msg: NetworkMessage) -> bool {
-        macro_rules! zpush {
-            ($guard:expr, $pipeline:expr, $msg:expr) => {
-                // Drop the guard before the push_zenoh_message since
-                // the link could be congested and this operation could
-                // block for fairly long time
-                let pl = $pipeline.clone();
-                drop($guard);
-                tracing::trace!("Scheduled: {:?}", $msg);
-                return pl.push_network_message($msg);
-            };
-        }
+        let transport_links = self
+            .links
+            .read()
+            .expect("reading `TransportUnicastUniversal::links` should not fail");
 
-        let guard = zread!(self.links);
-        // First try to find the best match between msg and link reliability
-        if let Some(pl) = guard.iter().find_map(|tl| {
-            if msg.is_reliable() == tl.link.link.is_reliable() {
-                Some(&tl.pipeline)
-            } else {
-                None
-            }
-        }) {
-            zpush!(guard, pl, msg);
-        }
+        let msg_reliability = Reliability::from(msg.is_reliable());
 
-        // No best match found, take the first available link
-        if let Some(pl) = guard.iter().map(|tl| &tl.pipeline).next() {
-            zpush!(guard, pl, msg);
-        }
+        let (full_match, partial_match, any_match) = transport_links.iter().enumerate().fold(
+            (None::<(_, PriorityRange)>, None, None),
+            |(mut full_match, mut partial_match, mut any_match), (i, transport_link)| {
+                let reliability = transport_link.link.config.reliability == msg_reliability;
+                let priorities = transport_link
+                    .link
+                    .config
+                    .priorities
+                    .and_then(|range| range.includes(msg.priority()).then_some(range));
 
-        // No Link found
-        tracing::trace!(
-            "Message dropped because the transport has no links: {}",
-            msg
+                match (reliability, priorities) {
+                    (true, Some(priorities)) => {
+                        match full_match {
+                            Some((_, r)) if priorities.len() < r.len() => {
+                                full_match = Some((i, priorities))
+                            }
+                            None => full_match = Some((i, priorities)),
+                            _ => {}
+                        };
+                    }
+                    (true, None) if partial_match.is_none() => partial_match = Some(i),
+                    _ if any_match.is_none() => any_match = Some(i),
+                    _ => {}
+                };
+
+                (full_match, partial_match, any_match)
+            },
         );
 
-        false
+        let Some(transport_link_index) = full_match.map(|(i, _)| i).or(partial_match).or(any_match)
+        else {
+            tracing::trace!(
+                "Message dropped because the transport has no links: {}",
+                msg
+            );
+
+            // No Link found
+            return false;
+        };
+
+        let transport_link = transport_links
+            .get(transport_link_index)
+            .expect("transport link index should be valid");
+
+        let pipeline = transport_link.pipeline.clone();
+        tracing::trace!(
+            "Scheduled {:?} for transmission to {} ({})",
+            msg,
+            transport_link.link.link.get_dst(),
+            self.get_zid()
+        );
+        // Drop the guard before the push_zenoh_message since
+        // the link could be congested and this operation could
+        // block for fairly long time
+        drop(transport_links);
+        pipeline.push_network_message(msg)
     }
 
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled

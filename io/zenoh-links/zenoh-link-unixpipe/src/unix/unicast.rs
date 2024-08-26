@@ -37,7 +37,7 @@ use unix_named_pipe::{create, open_write};
 use zenoh_core::{zasyncread, zasyncwrite, ResolveFuture, Wait};
 use zenoh_link_commons::{
     ConstructibleLinkManagerUnicast, LinkAuthId, LinkManagerUnicastTrait, LinkUnicast,
-    LinkUnicastTrait, NewLinkChannelSender,
+    LinkUnicastTrait, NewLinkChannelSender, NewLinkUnicast,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -273,14 +273,19 @@ async fn handle_incoming_connections(
         endpoint.metadata(),
     )?;
 
+    let link = Arc::new(UnicastPipe {
+        r: UnsafeCell::new(dedicated_uplink),
+        w: UnsafeCell::new(dedicated_downlink),
+        local,
+        remote,
+    });
+
     // send newly established link to manager
     manager
-        .send_async(LinkUnicast(Arc::new(UnicastPipe {
-            r: UnsafeCell::new(dedicated_uplink),
-            w: UnsafeCell::new(dedicated_downlink),
-            local,
-            remote,
-        })))
+        .send_async(NewLinkUnicast {
+            link: LinkUnicast(link),
+            endpoint: endpoint.clone(),
+        })
         .await?;
 
     ZResult::Ok(())

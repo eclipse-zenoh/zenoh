@@ -25,7 +25,8 @@ use tokio_util::sync::CancellationToken;
 use zenoh_core::{zasynclock, zlock};
 use zenoh_link_commons::{
     get_ip_interface_names, ConstructibleLinkManagerUnicast, LinkAuthId, LinkManagerUnicastTrait,
-    LinkUnicast, LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
+    LinkUnicast, LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, NewLinkUnicast,
+    BIND_INTERFACE,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -402,10 +403,14 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
                     )?;
 
                     let token = self.listeners.token.child_token();
-                    let c_token = token.clone();
-                    let c_manager = self.manager.clone();
 
-                    let task = async move { accept_read_task(socket, c_token, c_manager).await };
+                    let task = {
+                        let token = token.clone();
+                        let manager = self.manager.clone();
+                        let endpoint = endpoint.clone();
+
+                        async move { accept_read_task(endpoint, socket, token, manager).await }
+                    };
 
                     let locator = endpoint.to_locator();
                     self.listeners
@@ -471,6 +476,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
 }
 
 async fn accept_read_task(
+    endpoint: EndPoint,
     socket: UdpSocket,
     token: CancellationToken,
     manager: NewLinkChannelSender,
@@ -544,7 +550,7 @@ async fn accept_read_task(
                                         LinkUnicastUdpVariant::Unconnected(unconnected),
                                     ));
                                     // Add the new link to the set of connected peers
-                                    if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+                                    if let Err(e) = manager.send_async(NewLinkUnicast { link: LinkUnicast(link), endpoint: endpoint.clone() }).await {
                                         tracing::error!("{}-{}: {}", file!(), line!(), e)
                                     }
                                 }

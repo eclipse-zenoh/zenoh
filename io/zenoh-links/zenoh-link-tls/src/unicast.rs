@@ -25,7 +25,7 @@ use x509_parser::prelude::*;
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
     get_ip_interface_names, LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast,
-    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender,
+    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, NewLinkUnicast,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -362,12 +362,16 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let local_port = local_addr.port();
 
         // Initialize the TlsAcceptor
-        let acceptor = TlsAcceptor::from(Arc::new(tls_server_config.server_config));
         let token = self.listeners.token.child_token();
-        let c_token = token.clone();
-        let c_manager = self.manager.clone();
 
-        let task = async move { accept_task(socket, acceptor, c_token, c_manager).await };
+        let task = {
+            let acceptor = TlsAcceptor::from(Arc::new(tls_server_config.server_config));
+            let token = token.clone();
+            let manager = self.manager.clone();
+            let endpoint = endpoint.clone();
+
+            async move { accept_task(endpoint, socket, acceptor, token, manager).await }
+        };
 
         // Update the endpoint locator address
         let locator = Locator::new(
@@ -399,6 +403,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
 }
 
 async fn accept_task(
+    endpoint: EndPoint,
     socket: TcpListener,
     acceptor: TlsAcceptor,
     token: CancellationToken,
@@ -456,7 +461,7 @@ async fn accept_task(
                         ));
 
                         // Communicate the new link to the initial transport manager
-                        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+                        if let Err(e) = manager.send_async(NewLinkUnicast {link: LinkUnicast(link), endpoint: endpoint.clone()}).await {
                             tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
                     }

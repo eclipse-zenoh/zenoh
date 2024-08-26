@@ -21,7 +21,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use zenoh_link_commons::{
     get_ip_interface_names, LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
-    ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
+    ListenersUnicastIP, NewLinkChannelSender, NewLinkUnicast, BIND_INTERFACE,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -354,10 +354,14 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
                     )?;
 
                     let token = self.listeners.token.child_token();
-                    let c_token = token.clone();
 
-                    let c_manager = self.manager.clone();
-                    let task = async move { accept_task(socket, c_token, c_manager).await };
+                    let task = {
+                        let token = token.clone();
+                        let manager = self.manager.clone();
+                        let endpoint = endpoint.clone();
+
+                        async move { accept_task(endpoint, socket, token, manager).await }
+                    };
 
                     let locator = endpoint.to_locator();
                     self.listeners
@@ -421,6 +425,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
 }
 
 async fn accept_task(
+    endpoint: EndPoint,
     socket: TcpListener,
     token: CancellationToken,
     manager: NewLinkChannelSender,
@@ -457,7 +462,7 @@ async fn accept_task(
                         let link = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));
 
                         // Communicate the new link to the initial transport manager
-                        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+                        if let Err(e) = manager.send_async(NewLinkUnicast{ link: LinkUnicast(link), endpoint: endpoint.clone() }).await {
                             tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
                     },

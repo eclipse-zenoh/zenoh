@@ -33,7 +33,7 @@ use z_serial::ZSerial;
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
 use zenoh_link_commons::{
     ConstructibleLinkManagerUnicast, LinkAuthId, LinkManagerUnicastTrait, LinkUnicast,
-    LinkUnicastTrait, NewLinkChannelSender,
+    LinkUnicastTrait, NewLinkChannelSender, NewLinkUnicast,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -332,19 +332,23 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
 
         // Spawn the accept loop for the listener
         let token = CancellationToken::new();
-        let c_token = token.clone();
         let mut listeners = zasyncwrite!(self.listeners);
 
-        let c_path = path.clone();
-        let c_manager = self.manager.clone();
-        let c_listeners = self.listeners.clone();
+        let task = {
+            let token = token.clone();
+            let path = path.clone();
+            let manager = self.manager.clone();
+            let listeners = self.listeners.clone();
+            let endpoint = endpoint.clone();
 
-        let task = async move {
-            // Wait for the accept loop to terminate
-            let res =
-                accept_read_task(link, c_token, c_manager, c_path.clone(), is_connected).await;
-            zasyncwrite!(c_listeners).remove(&c_path);
-            res
+            async move {
+                // Wait for the accept loop to terminate
+                let res =
+                    accept_read_task(endpoint, link, token, manager, path.clone(), is_connected)
+                        .await;
+                zasyncwrite!(listeners).remove(&path);
+                res
+            }
         };
         let handle = zenoh_runtime::ZRuntime::Acceptor.spawn(task);
 
@@ -390,6 +394,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
 }
 
 async fn accept_read_task(
+    endpoint: EndPoint,
     link: Arc<LinkUnicastSerial>,
     token: CancellationToken,
     manager: NewLinkChannelSender,
@@ -423,7 +428,7 @@ async fn accept_read_task(
                 match res {
                     Ok(link) => {
                         // Communicate the new link to the initial transport manager
-                        if let Err(e) = manager.send_async(LinkUnicast(link.clone())).await {
+                        if let Err(e) = manager.send_async(NewLinkUnicast{ link: LinkUnicast(link.clone()), endpoint: endpoint.clone() }).await {
                             tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
 

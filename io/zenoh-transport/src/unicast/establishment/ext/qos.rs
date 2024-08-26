@@ -14,13 +14,19 @@
 use core::marker::PhantomData;
 
 use async_trait::async_trait;
+use serde::Serialize;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_protocol::transport::{init, open};
-use zenoh_result::Error as ZError;
+use zenoh_core::{bail, zerror};
+use zenoh_link::EndPoint;
+use zenoh_protocol::{
+    core::PriorityRange,
+    transport::{init, open},
+};
+use zenoh_result::{Error as ZError, ZResult};
 
 use crate::unicast::establishment::{AcceptFsm, OpenFsm};
 
@@ -35,21 +41,148 @@ impl<'a> QoSFsm<'a> {
     }
 }
 
-/*************************************/
-/*              OPEN                 */
-/*************************************/
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct StateOpen {
-    is_qos: bool,
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) enum QoS {
+    Disabled,
+    Enabled { priorities: Option<PriorityRange> },
 }
 
-impl StateOpen {
-    pub(crate) const fn new(is_qos: bool) -> Self {
-        Self { is_qos }
+impl QoS {
+    pub(crate) fn new(is_qos: bool, endpoint: &EndPoint) -> ZResult<Self> {
+        if !is_qos {
+            Ok(Self::Disabled)
+        } else {
+            const PRIORITY_METADATA_KEY: &str = "priorities";
+
+            let endpoint_metadata = endpoint.metadata();
+
+            let Some(mut priorities) = endpoint_metadata
+                .get(PRIORITY_METADATA_KEY)
+                .map(|metadata| metadata.split(".."))
+            else {
+                return Ok(Self::Enabled { priorities: None });
+            };
+            let start = priorities
+                .next()
+                .ok_or(zerror!("Invalid priority range syntax"))?
+                .parse::<u8>()?;
+
+            let end = priorities
+                .next()
+                .ok_or(zerror!("Invalid priority range syntax"))?
+                .parse::<u8>()?;
+
+            if priorities.next().is_some() {
+                bail!("Invalid priority range syntax")
+            };
+
+            Ok(Self::Enabled {
+                priorities: Some(PriorityRange::new(start, end)?),
+            })
+        }
     }
 
-    pub(crate) const fn is_qos(&self) -> bool {
-        self.is_qos
+    fn try_from_u64(value: u64) -> ZResult<Self> {
+        match value {
+            0b00_u64 => Ok(QoS::Disabled),
+            0b01_u64 => Ok(QoS::Enabled { priorities: None }),
+            mut value if value & 0b10_u64 != 0 => {
+                value >>= 2;
+                let start = (value & 0xff) as u8;
+                let end = ((value & 0xff00) >> 8) as u8;
+
+                Ok(QoS::Enabled {
+                    priorities: Some(PriorityRange::new(start, end)?),
+                })
+            }
+            _ => Err(zerror!("invalid QoS").into()),
+        }
+    }
+
+    /// Encodes [`QoS`] as a [`u64`].
+    ///
+    /// The two least significant bits are used to discrimnate three states:
+    ///
+    /// 1. QoS is disabled
+    /// 2. QoS is enabled but no priority range is available
+    /// 3. QoS is enabled and priority information is range, in which case the next 16 least
+    ///    significant bits are used to encode the priority range.
+    fn to_u64(&self) -> u64 {
+        match self {
+            QoS::Disabled => 0b00_u64,
+            QoS::Enabled { priorities: None } => 0b01_u64,
+            QoS::Enabled {
+                priorities: Some(range),
+            } => ((range.end() as u64) << 10) | ((range.start() as u64) << 2) | 0b10_u64,
+        }
+    }
+
+    fn unify(&self, other: &Self) -> Self {
+        match (self, other) {
+            (QoS::Disabled, QoS::Disabled) => QoS::Disabled,
+            (QoS::Disabled, QoS::Enabled { priorities })
+            | (QoS::Enabled { priorities }, QoS::Disabled) => QoS::Enabled {
+                priorities: *priorities,
+            },
+            (QoS::Enabled { priorities: lhs }, QoS::Enabled { priorities: rhs }) => {
+                if lhs == rhs {
+                    QoS::Enabled { priorities: *rhs }
+                } else {
+                    QoS::Enabled { priorities: None }
+                }
+            }
+        }
+    }
+
+    pub(crate) fn is_enabled(&self) -> bool {
+        matches!(self, QoS::Enabled { .. })
+    }
+
+    pub(crate) fn priorities(&self) -> Option<PriorityRange> {
+        match self {
+            QoS::Disabled | QoS::Enabled { priorities: None } => None,
+            QoS::Enabled {
+                priorities: Some(priorities),
+            } => Some(*priorities),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn rand() -> Self {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        if rng.gen_bool(0.5) {
+            QoS::Disabled
+        } else if rng.gen_bool(0.5) {
+            QoS::Enabled { priorities: None }
+        } else {
+            QoS::Enabled {
+                priorities: Some(PriorityRange::rand()),
+            }
+        }
+    }
+}
+
+// Codec
+impl<W> WCodec<&QoS, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &QoS) -> Self::Output {
+        self.write(writer, &x.to_u64())
+    }
+}
+
+impl<R> RCodec<QoS, &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<QoS, Self::Error> {
+        QoS::try_from_u64(self.read(reader)?).map_err(|_| DidntRead)
     }
 }
 
@@ -57,28 +190,39 @@ impl StateOpen {
 impl<'a> OpenFsm for &'a QoSFsm<'a> {
     type Error = ZError;
 
-    type SendInitSynIn = &'a StateOpen;
+    type SendInitSynIn = &'a QoS;
     type SendInitSynOut = Option<init::ext::QoS>;
     async fn send_init_syn(
         self,
         state: Self::SendInitSynIn,
     ) -> Result<Self::SendInitSynOut, Self::Error> {
-        let output = state.is_qos.then_some(init::ext::QoS::new());
-        Ok(output)
+        if state.is_enabled() {
+            Ok(Some(init::ext::QoS::new(state.to_u64())))
+        } else {
+            Ok(None)
+        }
     }
 
-    type RecvInitAckIn = (&'a mut StateOpen, Option<init::ext::QoS>);
+    type RecvInitAckIn = (&'a mut QoS, Option<init::ext::QoS>);
     type RecvInitAckOut = ();
     async fn recv_init_ack(
         self,
         input: Self::RecvInitAckIn,
     ) -> Result<Self::RecvInitAckOut, Self::Error> {
-        let (state, other_ext) = input;
-        state.is_qos &= other_ext.is_some();
+        let (state_self, other_ext) = input;
+
+        let state_other = if let Some(other_ext) = other_ext {
+            QoS::try_from_u64(other_ext.value)?
+        } else {
+            QoS::Disabled
+        };
+
+        *state_self = state_self.unify(&state_other);
+
         Ok(())
     }
 
-    type SendOpenSynIn = &'a StateOpen;
+    type SendOpenSynIn = &'a QoS;
     type SendOpenSynOut = Option<open::ext::QoS>;
     async fn send_open_syn(
         self,
@@ -87,7 +231,7 @@ impl<'a> OpenFsm for &'a QoSFsm<'a> {
         Ok(None)
     }
 
-    type RecvOpenAckIn = (&'a mut StateOpen, Option<open::ext::QoS>);
+    type RecvOpenAckIn = (&'a mut QoS, Option<open::ext::QoS>);
     type RecvOpenAckOut = ();
     async fn recv_open_ack(
         self,
@@ -97,84 +241,43 @@ impl<'a> OpenFsm for &'a QoSFsm<'a> {
     }
 }
 
-/*************************************/
-/*            ACCEPT                 */
-/*************************************/
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct StateAccept {
-    is_qos: bool,
-}
-
-impl StateAccept {
-    pub(crate) const fn new(is_qos: bool) -> Self {
-        Self { is_qos }
-    }
-
-    pub(crate) const fn is_qos(&self) -> bool {
-        self.is_qos
-    }
-
-    #[cfg(test)]
-    pub(crate) fn rand() -> Self {
-        use rand::Rng;
-        let mut rng = rand::thread_rng();
-        Self::new(rng.gen_bool(0.5))
-    }
-}
-
-// Codec
-impl<W> WCodec<&StateAccept, &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, writer: &mut W, x: &StateAccept) -> Self::Output {
-        let is_qos = u8::from(x.is_qos);
-        self.write(&mut *writer, is_qos)?;
-        Ok(())
-    }
-}
-
-impl<R> RCodec<StateAccept, &mut R> for Zenoh080
-where
-    R: Reader,
-{
-    type Error = DidntRead;
-
-    fn read(self, reader: &mut R) -> Result<StateAccept, Self::Error> {
-        let is_qos: u8 = self.read(&mut *reader)?;
-        let is_qos = is_qos == 1;
-        Ok(StateAccept { is_qos })
-    }
-}
-
 #[async_trait]
 impl<'a> AcceptFsm for &'a QoSFsm<'a> {
     type Error = ZError;
 
-    type RecvInitSynIn = (&'a mut StateAccept, Option<init::ext::QoS>);
+    type RecvInitSynIn = (&'a mut QoS, Option<init::ext::QoS>);
     type RecvInitSynOut = ();
     async fn recv_init_syn(
         self,
         input: Self::RecvInitSynIn,
     ) -> Result<Self::RecvInitSynOut, Self::Error> {
-        let (state, other_ext) = input;
-        state.is_qos &= other_ext.is_some();
+        let (state_self, other_ext) = input;
+
+        let state_other = if let Some(other_ext) = other_ext {
+            QoS::try_from_u64(other_ext.value)?
+        } else {
+            QoS::Disabled
+        };
+
+        *state_self = state_self.unify(&state_other);
+
         Ok(())
     }
 
-    type SendInitAckIn = &'a StateAccept;
+    type SendInitAckIn = &'a QoS;
     type SendInitAckOut = Option<init::ext::QoS>;
     async fn send_init_ack(
         self,
         state: Self::SendInitAckIn,
     ) -> Result<Self::SendInitAckOut, Self::Error> {
-        let output = state.is_qos.then_some(init::ext::QoS::new());
-        Ok(output)
+        if state.is_enabled() {
+            Ok(Some(init::ext::QoS::new(state.to_u64())))
+        } else {
+            Ok(None)
+        }
     }
 
-    type RecvOpenSynIn = (&'a mut StateAccept, Option<open::ext::QoS>);
+    type RecvOpenSynIn = (&'a mut QoS, Option<open::ext::QoS>);
     type RecvOpenSynOut = ();
     async fn recv_open_syn(
         self,
@@ -183,7 +286,7 @@ impl<'a> AcceptFsm for &'a QoSFsm<'a> {
         Ok(())
     }
 
-    type SendOpenAckIn = &'a StateAccept;
+    type SendOpenAckIn = &'a QoS;
     type SendOpenAckOut = Option<open::ext::QoS>;
     async fn send_open_ack(
         self,

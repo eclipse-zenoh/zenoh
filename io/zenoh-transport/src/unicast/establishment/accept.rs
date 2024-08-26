@@ -20,9 +20,9 @@ use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZSlice};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_core::{zasynclock, zcondfeat, zerror};
 use zenoh_crypto::{BlockCipher, PseudoRng};
-use zenoh_link::LinkUnicast;
+use zenoh_link::{EndPoint, LinkUnicast};
 use zenoh_protocol::{
-    core::{Field, Resolution, WhatAmI, ZenohIdProto},
+    core::{Field, Reliability, Resolution, WhatAmI, ZenohIdProto},
     transport::{
         batch_size,
         close::{self, Close},
@@ -55,7 +55,7 @@ pub(super) type AcceptError = (zenoh_result::Error, Option<u8>);
 struct StateTransport {
     batch_size: BatchSize,
     resolution: Resolution,
-    ext_qos: ext::qos::StateAccept,
+    ext_qos: ext::qos::QoS,
     #[cfg(feature = "transport_multilink")]
     ext_mlink: ext::multilink::StateAccept,
     #[cfg(feature = "shared-memory")]
@@ -641,17 +641,24 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
     }
 }
 
-pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -> ZResult<()> {
+pub(crate) async fn accept_link(
+    endpoint: EndPoint,
+    link: LinkUnicast,
+    manager: &TransportManager,
+) -> ZResult<()> {
+    let direction = TransportLinkUnicastDirection::Inbound;
     let mtu = link.get_mtu();
     let is_streamed = link.is_streamed();
     let config = TransportLinkUnicastConfig {
-        direction: TransportLinkUnicastDirection::Inbound,
+        direction,
         batch: BatchConfig {
             mtu,
             is_streamed,
             #[cfg(feature = "transport_compression")]
             is_compression: false,
         },
+        priorities: None,
+        reliability: Reliability::from(link.is_reliable()),
     };
     let mut link = TransportLinkUnicast::new(link, config);
     let mut fsm = AcceptLink {
@@ -699,7 +706,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
             transport: StateTransport {
                 batch_size,
                 resolution: manager.config.resolution,
-                ext_qos: ext::qos::StateAccept::new(manager.config.unicast.is_qos),
+                ext_qos: ext::qos::QoS::new(manager.config.unicast.is_qos, &endpoint)?,
                 #[cfg(feature = "transport_multilink")]
                 ext_mlink: manager
                     .state
@@ -767,7 +774,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         whatami: osyn_out.other_whatami,
         sn_resolution: state.transport.resolution.get(Field::FrameSN),
         tx_initial_sn: oack_out.open_ack.initial_sn,
-        is_qos: state.transport.ext_qos.is_qos(),
+        is_qos: state.transport.ext_qos.is_enabled(),
         #[cfg(feature = "transport_multilink")]
         multilink: state.transport.ext_mlink.multilink(),
         #[cfg(feature = "shared-memory")]
@@ -781,13 +788,15 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
     };
 
     let a_config = TransportLinkUnicastConfig {
-        direction: TransportLinkUnicastDirection::Inbound,
+        direction,
         batch: BatchConfig {
             mtu: state.transport.batch_size,
             is_streamed,
             #[cfg(feature = "transport_compression")]
             is_compression: state.link.ext_compression.is_compression(),
         },
+        priorities: state.transport.ext_qos.priorities(),
+        reliability: Reliability::from(link.link.is_reliable()),
     };
     let a_link = link.reconfigure(a_config);
     let s_link = format!("{:?}", a_link);
