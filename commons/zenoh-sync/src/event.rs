@@ -267,7 +267,7 @@ impl Waiter {
         Ok(())
     }
 
-    /// Waits for the condition to be notified
+    /// Waits for the condition to be notified or returns an error when the deadline is reached
     #[inline]
     pub fn wait_deadline(&self, deadline: Instant) -> Result<(), WaitDeadlineError> {
         // Wait until the flag is set.
@@ -298,7 +298,7 @@ impl Waiter {
         Ok(())
     }
 
-    /// Waits for the condition to be notified
+    /// Waits for the condition to be notified or returns an error when the timeout is expired
     #[inline]
     pub fn wait_timeout(&self, timeout: Duration) -> Result<(), WaitTimeoutError> {
         // Wait until the flag is set.
@@ -351,7 +351,7 @@ impl Drop for Waiter {
 
 mod tests {
     #[test]
-    fn event_steps() {
+    fn event_timeout() {
         use std::{
             sync::{Arc, Barrier},
             time::Duration,
@@ -387,6 +387,79 @@ mod tests {
                 Ok(()) => panic!("Event Ok but it should be Timeout"),
                 Err(WaitTimeoutError::Timeout) => {}
                 Err(WaitTimeoutError::WaitError) => panic!("Event closed"),
+            }
+
+            bs.wait();
+
+            // 3 - Notifier has been dropped
+            bs.wait();
+
+            waiter.wait().unwrap_err();
+
+            bs.wait();
+        });
+
+        let bp = barrier.clone();
+        let p = std::thread::spawn(move || {
+            // 1 - Notify once
+            notifier.notify().unwrap();
+
+            bp.wait();
+
+            // 2 - Notify twice
+            notifier.notify().unwrap();
+            notifier.notify().unwrap();
+
+            bp.wait();
+            bp.wait();
+
+            // 3 - Drop notifier yielding an error in the waiter
+            drop(notifier);
+
+            bp.wait();
+            bp.wait();
+        });
+
+        s.join().unwrap();
+        p.join().unwrap();
+    }
+
+    #[test]
+    fn event_deadline() {
+        use crate::WaitDeadlineError;
+        use std::{
+            sync::{Arc, Barrier},
+            time::{Duration, Instant},
+        };
+
+        let barrier = Arc::new(Barrier::new(2));
+        let (notifier, waiter) = super::new();
+        let tslot = Duration::from_secs(1);
+
+        let bs = barrier.clone();
+        let s = std::thread::spawn(move || {
+            // 1 - Wait one notification
+            match waiter.wait_deadline(Instant::now() + tslot) {
+                Ok(()) => {}
+                Err(WaitDeadlineError::Deadline) => panic!("Timeout {:#?}", tslot),
+                Err(WaitDeadlineError::WaitError) => panic!("Event closed"),
+            }
+
+            bs.wait();
+
+            // 2 - Being notified twice but waiting only once
+            bs.wait();
+
+            match waiter.wait_deadline(Instant::now() + tslot) {
+                Ok(()) => {}
+                Err(WaitDeadlineError::Deadline) => panic!("Timeout {:#?}", tslot),
+                Err(WaitDeadlineError::WaitError) => panic!("Event closed"),
+            }
+
+            match waiter.wait_deadline(Instant::now() + tslot) {
+                Ok(()) => panic!("Event Ok but it should be Timeout"),
+                Err(WaitDeadlineError::Deadline) => {}
+                Err(WaitDeadlineError::WaitError) => panic!("Event closed"),
             }
 
             bs.wait();
