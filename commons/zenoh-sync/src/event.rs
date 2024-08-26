@@ -150,9 +150,9 @@ impl Drop for Waiter {
     }
 }
 
-/// Creates a new condition variable with a given capacity.
-/// The capacity indicates the maximum number of tasks that
-/// may be waiting on the condition.
+/// Creates a new lock-free event variable. Every time a [`Notifier`] calls ['Notifier::notify`], one [`Waiter`] will be waken-up.
+/// If no waiter is waiting when the `notify` is called, the notification will not be lost. That means the next waiter will return
+/// immediately when calling `wait`.
 pub fn new() -> (Notifier, Waiter) {
     let inner = Arc::new(EventInner {
         event: EventLib::new(),
@@ -172,8 +172,8 @@ impl Waiter {
             // Check the flag.
             match self.0.check() {
                 EventCheck::Ok => break,
-                EventCheck::Err => return Err(EventClosed),
                 EventCheck::Unset => {}
+                EventCheck::Err => return Err(EventClosed),
             }
 
             // Start listening for events.
@@ -182,8 +182,8 @@ impl Waiter {
             // Check the flag again after creating the listener.
             match self.0.check() {
                 EventCheck::Ok => break,
-                EventCheck::Err => return Err(EventClosed),
                 EventCheck::Unset => {}
+                EventCheck::Err => return Err(EventClosed),
             }
 
             // Wait for a notification and continue the loop.
@@ -201,8 +201,8 @@ impl Waiter {
             // Check the flag.
             match self.0.check() {
                 EventCheck::Ok => break,
-                EventCheck::Err => return Err(EventClosed),
                 EventCheck::Unset => {}
+                EventCheck::Err => return Err(EventClosed),
             }
 
             // Start listening for events.
@@ -211,8 +211,8 @@ impl Waiter {
             // Check the flag again after creating the listener.
             match self.0.check() {
                 EventCheck::Ok => break,
-                EventCheck::Err => return Err(EventClosed),
                 EventCheck::Unset => {}
+                EventCheck::Err => return Err(EventClosed),
             }
 
             // Wait for a notification and continue the loop.
@@ -230,8 +230,8 @@ impl Waiter {
             // Check the flag.
             match self.0.check() {
                 EventCheck::Ok => break,
-                EventCheck::Err => return Err(EventClosed),
                 EventCheck::Unset => {}
+                EventCheck::Err => return Err(EventClosed),
             }
 
             // Start listening for events.
@@ -240,8 +240,8 @@ impl Waiter {
             // Check the flag again after creating the listener.
             match self.0.check() {
                 EventCheck::Ok => break,
-                EventCheck::Err => return Err(EventClosed),
                 EventCheck::Unset => {}
+                EventCheck::Err => return Err(EventClosed),
             }
 
             // Wait for a notification and continue the loop.
@@ -261,8 +261,8 @@ impl Waiter {
             // Check the flag.
             match self.0.check() {
                 EventCheck::Ok => break,
-                EventCheck::Err => return Err(EventClosed),
                 EventCheck::Unset => {}
+                EventCheck::Err => return Err(EventClosed),
             }
 
             // Start listening for events.
@@ -271,8 +271,8 @@ impl Waiter {
             // Check the flag again after creating the listener.
             match self.0.check() {
                 EventCheck::Ok => break,
-                EventCheck::Err => return Err(EventClosed),
                 EventCheck::Unset => {}
+                EventCheck::Err => return Err(EventClosed),
             }
 
             // Wait for a notification and continue the loop.
@@ -297,5 +297,107 @@ impl Notifier {
             }
             EventSet::Err => Err(EventClosed),
         }
+    }
+}
+
+mod tests {
+    #[test]
+    fn event_steps() {
+        use crate::{EventClosed, WaitTimeout};
+        use std::sync::{Arc, Barrier};
+        use std::time::Duration;
+
+        let barrier = Arc::new(Barrier::new(2));
+
+        let (notifier, waiter) = super::new();
+
+        let tslot = Duration::from_secs(1);
+
+        let bs = barrier.clone();
+        let s = std::thread::spawn(move || {
+            // 1
+            match waiter.wait_timeout(tslot) {
+                Ok(WaitTimeout::Event) => {}
+                Ok(WaitTimeout::Timeout) => panic!("Timeout {:#?}", tslot),
+                Err(EventClosed) => panic!("Event closed"),
+            }
+
+            bs.wait();
+
+            // 2
+            std::thread::sleep(tslot);
+
+            match waiter.wait_timeout(tslot) {
+                Ok(WaitTimeout::Event) => {}
+                Ok(WaitTimeout::Timeout) => panic!("Timeout {:#?}", tslot),
+                Err(EventClosed) => panic!("Event closed"),
+            }
+
+            match waiter.wait_timeout(tslot) {
+                Ok(WaitTimeout::Event) => panic!("Event Ok but it should be Timeout"),
+                Ok(WaitTimeout::Timeout) => {}
+                Err(EventClosed) => panic!("Event closed"),
+            }
+
+            bs.wait();
+        });
+
+        let bp = barrier.clone();
+        let p = std::thread::spawn(move || {
+            // 1
+            notifier.notify().unwrap();
+
+            bp.wait();
+
+            // 2
+            notifier.notify().unwrap();
+            notifier.notify().unwrap();
+
+            bp.wait();
+        });
+
+        s.join().unwrap();
+        p.join().unwrap();
+    }
+
+    #[test]
+    fn event_loop() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::time::{Duration, Instant};
+
+        const N: usize = 1_000;
+        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+        let (notifier, waiter) = super::new();
+
+        let s = std::thread::spawn(move || {
+            for _ in 0..N {
+                waiter.wait().unwrap();
+                COUNTER.fetch_add(1, Ordering::Relaxed);
+            }
+        });
+        let p = std::thread::spawn(move || {
+            for _ in 0..N {
+                notifier.notify().unwrap();
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        });
+
+        let start = Instant::now();
+        let tout = Duration::from_secs(60);
+        loop {
+            let n = COUNTER.load(Ordering::Relaxed);
+            if n == N {
+                break;
+            }
+            if start.elapsed() > tout {
+                panic!("Timeout {:#?}. Counter: {n}/{N}", tout);
+            }
+
+            std::thread::sleep(Duration::from_secs(1));
+        }
+
+        s.join().unwrap();
+        p.join().unwrap();
     }
 }
