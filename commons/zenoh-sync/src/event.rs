@@ -103,12 +103,7 @@ impl fmt::Debug for NotifyError {
 
 impl std::error::Error for NotifyError {}
 
-/// This is a Event Variable similar to that provided by POSIX.
-/// As for POSIX condition variables, this assumes that a mutex is
-/// properly used to coordinate behaviour. In other terms there should
-/// not be race condition on [notify_one](Event::notify_one) or
-/// [notify_all](Event::notify_all).
-///
+// Inner
 struct EventInner {
     event: EventLib,
     flag: AtomicU8,
@@ -158,8 +153,37 @@ impl EventInner {
     }
 }
 
+/// Creates a new lock-free event variable. Every time a [`Notifier`] calls ['Notifier::notify`], one [`Waiter`] will be waken-up.
+/// If no waiter is waiting when the `notify` is called, the notification will not be lost. That means the next waiter will return
+/// immediately when calling `wait`.
+pub fn new() -> (Notifier, Waiter) {
+    let inner = Arc::new(EventInner {
+        event: EventLib::new(),
+        flag: AtomicU8::new(UNSET),
+        notifiers: AtomicU16::new(1),
+        waiters: AtomicU16::new(1),
+    });
+    (Notifier(inner.clone()), Waiter(inner))
+}
+
+/// A [`Notifier`] is used to notify and wake up one and only one [`Waiter`].
 #[repr(transparent)]
 pub struct Notifier(Arc<EventInner>);
+
+impl Notifier {
+    /// Notifies one pending listener
+    #[inline]
+    pub fn notify(&self) -> Result<(), NotifyError> {
+        // Set the flag.
+        match self.0.set() {
+            EventSet::Ok => {
+                self.0.event.notify_additional_relaxed(1);
+                Ok(())
+            }
+            EventSet::Err => Err(NotifyError),
+        }
+    }
+}
 
 impl Clone for Notifier {
     fn clone(&self) -> Self {
@@ -183,38 +207,6 @@ impl Drop for Notifier {
 
 #[repr(transparent)]
 pub struct Waiter(Arc<EventInner>);
-
-impl Clone for Waiter {
-    fn clone(&self) -> Self {
-        let n = self.0.waiters.fetch_add(1, Ordering::Relaxed);
-        // Panic on overflow
-        assert!(n != 0);
-        Self(self.0.clone())
-    }
-}
-
-impl Drop for Waiter {
-    fn drop(&mut self) {
-        let n = self.0.waiters.fetch_sub(1, Ordering::SeqCst);
-        if n == 1 {
-            // The last Waiter has been dropped, close the event
-            self.0.err();
-        }
-    }
-}
-
-/// Creates a new lock-free event variable. Every time a [`Notifier`] calls ['Notifier::notify`], one [`Waiter`] will be waken-up.
-/// If no waiter is waiting when the `notify` is called, the notification will not be lost. That means the next waiter will return
-/// immediately when calling `wait`.
-pub fn new() -> (Notifier, Waiter) {
-    let inner = Arc::new(EventInner {
-        event: EventLib::new(),
-        flag: AtomicU8::new(UNSET),
-        notifiers: AtomicU16::new(1),
-        waiters: AtomicU16::new(1),
-    });
-    (Notifier(inner.clone()), Waiter(inner))
-}
 
 impl Waiter {
     /// Waits for the condition to be notified
@@ -299,7 +291,7 @@ impl Waiter {
 
             // Wait for a notification and continue the loop.
             if listener.wait_deadline(deadline).is_none() {
-                return Ok(());
+                return Err(WaitDeadlineError::Deadline);
             }
         }
 
@@ -330,7 +322,7 @@ impl Waiter {
 
             // Wait for a notification and continue the loop.
             if listener.wait_timeout(timeout).is_none() {
-                return Ok(());
+                return Err(WaitTimeoutError::Timeout);
             }
         }
 
@@ -338,17 +330,21 @@ impl Waiter {
     }
 }
 
-impl Notifier {
-    /// Notifies one pending listener
-    #[inline]
-    pub fn notify(&self) -> Result<(), NotifyError> {
-        // Set the flag.
-        match self.0.set() {
-            EventSet::Ok => {
-                self.0.event.notify_additional_relaxed(1);
-                Ok(())
-            }
-            EventSet::Err => Err(NotifyError),
+impl Clone for Waiter {
+    fn clone(&self) -> Self {
+        let n = self.0.waiters.fetch_add(1, Ordering::Relaxed);
+        // Panic on overflow
+        assert!(n != 0);
+        Self(self.0.clone())
+    }
+}
+
+impl Drop for Waiter {
+    fn drop(&mut self) {
+        let n = self.0.waiters.fetch_sub(1, Ordering::SeqCst);
+        if n == 1 {
+            // The last Waiter has been dropped, close the event
+            self.0.err();
         }
     }
 }
