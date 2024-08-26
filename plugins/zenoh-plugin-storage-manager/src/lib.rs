@@ -22,6 +22,7 @@
 use std::{
     collections::HashMap,
     convert::TryFrom,
+    str::FromStr,
     sync::{Arc, Mutex},
 };
 
@@ -35,7 +36,7 @@ use zenoh::{
         runtime::Runtime,
         zlock, LibLoader,
     },
-    key_expr::{keyexpr, KeyExpr},
+    key_expr::{keyexpr, KeyExpr, OwnedKeyExpr},
     prelude::Wait,
     session::Session,
     Result as ZResult,
@@ -407,4 +408,66 @@ fn with_extended_string<R, F: FnMut(&mut String) -> R>(
     let result = closure(prefix);
     prefix.truncate(prefix_len);
     result
+}
+
+/// Returns the key expression stripped of the provided prefix.
+///
+/// If no prefix is provided this function returns the key expression untouched.
+///
+/// If `None` is returned, it indicates that the key expression is equal to the prefix.
+///
+/// This function will internally call [strip_prefix], see its documentation for possible outcomes.
+///
+/// # Errors
+///
+/// This function will return an error if:
+/// - The provided prefix contains a wildcard.
+///   NOTE: The configuration of a Storage is checked and will reject any prefix that contains a
+///   wildcard. In theory, this error should never occur.
+/// - The key expression is not prefixed by the provided prefix.
+/// - The resulting stripped key is not a valid key expression (this should, in theory, never
+///   happen).
+///
+/// [strip_prefix]: zenoh::key_expr::keyexpr::strip_prefix()
+pub fn strip_prefix(
+    maybe_prefix: Option<&OwnedKeyExpr>,
+    key_expr: &KeyExpr<'_>,
+) -> ZResult<Option<OwnedKeyExpr>> {
+    match maybe_prefix {
+        None => Ok(Some(key_expr.clone().into())),
+        Some(prefix) => {
+            if prefix.is_wild() {
+                bail!(
+                    "Prefix < {} > contains a wild character (\"**\" or \"*\")",
+                    prefix
+                );
+            }
+
+            match key_expr.strip_prefix(prefix).as_slice() {
+                [stripped_key_expr] => {
+                    if stripped_key_expr.is_empty() {
+                        return Ok(None);
+                    }
+
+                    OwnedKeyExpr::from_str(stripped_key_expr).map(Some)
+                }
+                _ => bail!("Failed to strip prefix < {} > from: {}", prefix, key_expr),
+            }
+        }
+    }
+}
+
+/// Returns the key with an additional prefix, if one was provided.
+///
+/// If no prefix is provided, this function returns `maybe_stripped_key`.
+///
+/// If a prefix is provided, this function returns the concatenation of both.
+pub fn prefix(
+    maybe_prefix: Option<&OwnedKeyExpr>,
+    maybe_stripped_key: &OwnedKeyExpr,
+) -> OwnedKeyExpr {
+    match maybe_prefix {
+        Some(prefix) => prefix / maybe_stripped_key,
+        None => maybe_stripped_key.clone(),
+    }
 }

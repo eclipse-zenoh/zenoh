@@ -25,7 +25,6 @@ use tokio::sync::{Mutex, RwLock};
 use zenoh::{
     bytes::EncodingBuilderTrait,
     internal::{
-        bail,
         buffers::{SplitBuffer, ZBuf},
         zenoh_home, Timed, TimedEvent, Timer, Value,
     },
@@ -39,7 +38,6 @@ use zenoh::{
     sample::{Sample, SampleBuilder, SampleKind, TimestampBuilderTrait},
     session::{Session, SessionDeclarations},
     time::{Timestamp, NTP64},
-    Result as ZResult,
 };
 use zenoh_backend_traits::{
     config::{GarbageCollectionConfig, StorageConfig},
@@ -342,7 +340,10 @@ impl StorageService {
                     }
                 };
 
-                let stripped_key = match self.strip_prefix(sample_to_store.key_expr()) {
+                let stripped_key = match crate::strip_prefix(
+                    self.strip_prefix.as_ref(),
+                    sample_to_store.key_expr(),
+                ) {
                     Ok(stripped) => stripped,
                     Err(e) => {
                         tracing::error!("{}", e);
@@ -463,13 +464,14 @@ impl StorageService {
             if weight.is_some() && weight.unwrap().data.timestamp > *ts {
                 // if the key matches a wild card update, check whether it was saved in storage
                 // remember that wild card updates change only existing keys
-                let stripped_key = match self.strip_prefix(&key_expr.into()) {
-                    Ok(stripped) => stripped,
-                    Err(e) => {
-                        tracing::error!("{}", e);
-                        break;
-                    }
-                };
+                let stripped_key =
+                    match crate::strip_prefix(self.strip_prefix.as_ref(), &key_expr.into()) {
+                        Ok(stripped) => stripped,
+                        Err(e) => {
+                            tracing::error!("{}", e);
+                            break;
+                        }
+                    };
                 let mut storage = self.storage.lock().await;
                 match storage.get(stripped_key, "").await {
                     Ok(stored_data) => {
@@ -498,7 +500,7 @@ impl StorageService {
     async fn is_latest(&self, key_expr: &OwnedKeyExpr, timestamp: &Timestamp) -> bool {
         // @TODO: if cache exists, read from there
         let mut storage = self.storage.lock().await;
-        let stripped_key = match self.strip_prefix(&key_expr.into()) {
+        let stripped_key = match crate::strip_prefix(self.strip_prefix.as_ref(), &key_expr.into()) {
             Ok(stripped) => stripped,
             Err(e) => {
                 tracing::error!("{}", e);
@@ -529,14 +531,15 @@ impl StorageService {
             let matching_keys = self.get_matching_keys(q.key_expr()).await;
             let mut storage = self.storage.lock().await;
             for key in matching_keys {
-                let stripped_key = match self.strip_prefix(&key.clone().into()) {
-                    Ok(k) => k,
-                    Err(e) => {
-                        tracing::error!("{}", e);
-                        // @TODO: return error when it is supported
-                        return;
-                    }
-                };
+                let stripped_key =
+                    match crate::strip_prefix(self.strip_prefix.as_ref(), &key.clone().into()) {
+                        Ok(k) => k,
+                        Err(e) => {
+                            tracing::error!("{}", e);
+                            // @TODO: return error when it is supported
+                            return;
+                        }
+                    };
                 match storage.get(stripped_key, q.parameters().as_str()).await {
                     Ok(stored_data) => {
                         for entry in stored_data {
@@ -561,7 +564,7 @@ impl StorageService {
             }
             drop(storage);
         } else {
-            let stripped_key = match self.strip_prefix(q.key_expr()) {
+            let stripped_key = match crate::strip_prefix(self.strip_prefix.as_ref(), q.key_expr()) {
                 Ok(k) => k,
                 Err(e) => {
                     tracing::error!("{}", e);
@@ -603,7 +606,7 @@ impl StorageService {
                 for (k, _ts) in entries {
                     // @TODO: optimize adding back the prefix (possible inspiration from https://github.com/eclipse-zenoh/zenoh/blob/0.5.0-beta.9/backends/traits/src/utils.rs#L79)
                     let full_key = match k {
-                        Some(key) => StorageService::get_prefixed(&self.strip_prefix, &key.into()),
+                        Some(key) => crate::prefix(self.strip_prefix.as_ref(), &key),
                         None => self.strip_prefix.clone().unwrap(),
                     };
                     if key_expr.intersects(&full_key.clone()) {
@@ -618,41 +621,6 @@ impl StorageService {
             ),
         }
         result
-    }
-
-    fn strip_prefix(&self, key_expr: &KeyExpr<'_>) -> ZResult<Option<OwnedKeyExpr>> {
-        let key = match &self.strip_prefix {
-            Some(prefix) => {
-                if key_expr.as_str().eq(prefix.as_str()) {
-                    ""
-                } else {
-                    match key_expr.strip_prefix(prefix).as_slice() {
-                        [ke] => ke.as_str(),
-                        _ => bail!(
-                            "Keyexpr doesn't start with prefix '{}': '{}'",
-                            prefix,
-                            key_expr
-                        ),
-                    }
-                }
-            }
-            None => key_expr.as_str(),
-        };
-        if key.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(OwnedKeyExpr::new(key.to_string()).unwrap()))
-        }
-    }
-
-    pub fn get_prefixed(
-        strip_prefix: &Option<OwnedKeyExpr>,
-        key_expr: &KeyExpr<'_>,
-    ) -> OwnedKeyExpr {
-        match strip_prefix {
-            Some(prefix) => prefix.join(key_expr.as_keyexpr()).unwrap(),
-            None => OwnedKeyExpr::from(key_expr.as_keyexpr()),
-        }
     }
 
     async fn initialize_if_empty(&mut self) {

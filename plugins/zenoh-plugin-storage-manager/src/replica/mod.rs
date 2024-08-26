@@ -94,10 +94,7 @@ impl Replica {
                         }
                     } else {
                         result.push((
-                            StorageService::get_prefixed(
-                                &storage_config.strip_prefix,
-                                &entry.0.unwrap().into(),
-                            ),
+                            crate::prefix(storage_config.strip_prefix.as_ref(), &entry.0.unwrap()),
                             entry.1,
                         ));
                     }
