@@ -21,34 +21,68 @@ use std::{
     time::{Duration, Instant},
 };
 
-// Return types
-pub struct EventClosed;
+// Error types
+pub struct WaitError;
 
-impl fmt::Display for EventClosed {
+impl fmt::Display for WaitError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }
 
-impl fmt::Debug for EventClosed {
+impl fmt::Debug for WaitError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("Event Closed")
     }
 }
 
-impl std::error::Error for EventClosed {}
+impl std::error::Error for WaitError {}
 
 #[repr(u8)]
-pub enum WaitDeadline {
-    Event,
+pub enum WaitDeadlineError {
     Deadline,
+    WaitError,
 }
 
-#[repr(u8)]
-pub enum WaitTimeout {
-    Event,
-    Timeout,
+impl fmt::Display for WaitDeadlineError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
+
+impl fmt::Debug for WaitDeadlineError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Deadline => f.write_str("Deadline reached"),
+            Self::WaitError => f.write_str("Event Closed"),
+        }
+    }
+}
+
+impl std::error::Error for WaitDeadlineError {}
+
+#[repr(u8)]
+pub enum WaitTimeoutError {
+    Timeout,
+    WaitError,
+}
+
+impl fmt::Display for WaitTimeoutError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl fmt::Debug for WaitTimeoutError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Timeout => f.write_str("Timeout expired"),
+            Self::WaitError => f.write_str("Event Closed"),
+        }
+    }
+}
+
+impl std::error::Error for WaitTimeoutError {}
 
 /// This is a Event Variable similar to that provided by POSIX.
 /// As for POSIX condition variables, this assumes that a mutex is
@@ -166,14 +200,14 @@ pub fn new() -> (Notifier, Waiter) {
 impl Waiter {
     /// Waits for the condition to be notified
     #[inline]
-    pub async fn wait_async(&self) -> Result<(), EventClosed> {
+    pub async fn wait_async(&self) -> Result<(), WaitError> {
         // Wait until the flag is set.
         loop {
             // Check the flag.
             match self.0.check() {
                 EventCheck::Ok => break,
                 EventCheck::Unset => {}
-                EventCheck::Err => return Err(EventClosed),
+                EventCheck::Err => return Err(WaitError),
             }
 
             // Start listening for events.
@@ -183,7 +217,7 @@ impl Waiter {
             match self.0.check() {
                 EventCheck::Ok => break,
                 EventCheck::Unset => {}
-                EventCheck::Err => return Err(EventClosed),
+                EventCheck::Err => return Err(WaitError),
             }
 
             // Wait for a notification and continue the loop.
@@ -195,14 +229,14 @@ impl Waiter {
 
     /// Waits for the condition to be notified
     #[inline]
-    pub fn wait(&self) -> Result<(), EventClosed> {
+    pub fn wait(&self) -> Result<(), WaitError> {
         // Wait until the flag is set.
         loop {
             // Check the flag.
             match self.0.check() {
                 EventCheck::Ok => break,
                 EventCheck::Unset => {}
-                EventCheck::Err => return Err(EventClosed),
+                EventCheck::Err => return Err(WaitError),
             }
 
             // Start listening for events.
@@ -212,7 +246,7 @@ impl Waiter {
             match self.0.check() {
                 EventCheck::Ok => break,
                 EventCheck::Unset => {}
-                EventCheck::Err => return Err(EventClosed),
+                EventCheck::Err => return Err(WaitError),
             }
 
             // Wait for a notification and continue the loop.
@@ -224,14 +258,14 @@ impl Waiter {
 
     /// Waits for the condition to be notified
     #[inline]
-    pub fn wait_deadline(&self, deadline: Instant) -> Result<WaitDeadline, EventClosed> {
+    pub fn wait_deadline(&self, deadline: Instant) -> Result<(), WaitDeadlineError> {
         // Wait until the flag is set.
         loop {
             // Check the flag.
             match self.0.check() {
                 EventCheck::Ok => break,
                 EventCheck::Unset => {}
-                EventCheck::Err => return Err(EventClosed),
+                EventCheck::Err => return Err(WaitDeadlineError::WaitError),
             }
 
             // Start listening for events.
@@ -241,28 +275,28 @@ impl Waiter {
             match self.0.check() {
                 EventCheck::Ok => break,
                 EventCheck::Unset => {}
-                EventCheck::Err => return Err(EventClosed),
+                EventCheck::Err => return Err(WaitDeadlineError::WaitError),
             }
 
             // Wait for a notification and continue the loop.
             if listener.wait_deadline(deadline).is_none() {
-                return Ok(WaitDeadline::Deadline);
+                return Ok(());
             }
         }
 
-        Ok(WaitDeadline::Event)
+        Ok(())
     }
 
     /// Waits for the condition to be notified
     #[inline]
-    pub fn wait_timeout(&self, timeout: Duration) -> Result<WaitTimeout, EventClosed> {
+    pub fn wait_timeout(&self, timeout: Duration) -> Result<(), WaitTimeoutError> {
         // Wait until the flag is set.
         loop {
             // Check the flag.
             match self.0.check() {
                 EventCheck::Ok => break,
                 EventCheck::Unset => {}
-                EventCheck::Err => return Err(EventClosed),
+                EventCheck::Err => return Err(WaitTimeoutError::WaitError),
             }
 
             // Start listening for events.
@@ -272,30 +306,30 @@ impl Waiter {
             match self.0.check() {
                 EventCheck::Ok => break,
                 EventCheck::Unset => {}
-                EventCheck::Err => return Err(EventClosed),
+                EventCheck::Err => return Err(WaitTimeoutError::WaitError),
             }
 
             // Wait for a notification and continue the loop.
             if listener.wait_timeout(timeout).is_none() {
-                return Ok(WaitTimeout::Timeout);
+                return Ok(());
             }
         }
 
-        Ok(WaitTimeout::Event)
+        Ok(())
     }
 }
 
 impl Notifier {
     /// Notifies one pending listener
     #[inline]
-    pub fn notify(&self) -> Result<(), EventClosed> {
+    pub fn notify(&self) -> Result<(), WaitError> {
         // Set the flag.
         match self.0.set() {
             EventSet::Ok => {
                 self.0.event.notify_additional_relaxed(1);
                 Ok(())
             }
-            EventSet::Err => Err(EventClosed),
+            EventSet::Err => Err(WaitError),
         }
     }
 }
@@ -303,7 +337,7 @@ impl Notifier {
 mod tests {
     #[test]
     fn event_steps() {
-        use crate::{EventClosed, WaitTimeout};
+        use crate::WaitTimeoutError;
         use std::{
             sync::{Arc, Barrier},
             time::Duration,
@@ -319,9 +353,9 @@ mod tests {
         let s = std::thread::spawn(move || {
             // 1 - Wait one notification
             match waiter.wait_timeout(tslot) {
-                Ok(WaitTimeout::Event) => {}
-                Ok(WaitTimeout::Timeout) => panic!("Timeout {:#?}", tslot),
-                Err(EventClosed) => panic!("Event closed"),
+                Ok(()) => {}
+                Err(WaitTimeoutError::Timeout) => panic!("Timeout {:#?}", tslot),
+                Err(WaitTimeoutError::WaitError) => panic!("Event closed"),
             }
 
             bs.wait();
@@ -330,15 +364,15 @@ mod tests {
             bs.wait();
 
             match waiter.wait_timeout(tslot) {
-                Ok(WaitTimeout::Event) => {}
-                Ok(WaitTimeout::Timeout) => panic!("Timeout {:#?}", tslot),
-                Err(EventClosed) => panic!("Event closed"),
+                Ok(()) => {}
+                Err(WaitTimeoutError::Timeout) => panic!("Timeout {:#?}", tslot),
+                Err(WaitTimeoutError::WaitError) => panic!("Event closed"),
             }
 
             match waiter.wait_timeout(tslot) {
-                Ok(WaitTimeout::Event) => panic!("Event Ok but it should be Timeout"),
-                Ok(WaitTimeout::Timeout) => {}
-                Err(EventClosed) => panic!("Event closed"),
+                Ok(()) => panic!("Event Ok but it should be Timeout"),
+                Err(WaitTimeoutError::Timeout) => {}
+                Err(WaitTimeoutError::WaitError) => panic!("Event closed"),
             }
 
             bs.wait();
