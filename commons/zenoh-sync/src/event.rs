@@ -22,6 +22,7 @@ use std::{
 };
 
 // Error types
+const WAIT_ERR_STR: &str = "No notifier available";
 pub struct WaitError;
 
 impl fmt::Display for WaitError {
@@ -32,7 +33,7 @@ impl fmt::Display for WaitError {
 
 impl fmt::Debug for WaitError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Event Closed")
+        f.write_str(WAIT_ERR_STR)
     }
 }
 
@@ -54,7 +55,7 @@ impl fmt::Debug for WaitDeadlineError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Deadline => f.write_str("Deadline reached"),
-            Self::WaitError => f.write_str("Event Closed"),
+            Self::WaitError => f.write_str(WAIT_ERR_STR),
         }
     }
 }
@@ -77,12 +78,29 @@ impl fmt::Debug for WaitTimeoutError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Timeout => f.write_str("Timeout expired"),
-            Self::WaitError => f.write_str("Event Closed"),
+            Self::WaitError => f.write_str(WAIT_ERR_STR),
         }
     }
 }
 
 impl std::error::Error for WaitTimeoutError {}
+
+const NOTIFY_ERR_STR: &str = "No waiter available";
+pub struct NotifyError;
+
+impl fmt::Display for NotifyError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl fmt::Debug for NotifyError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(NOTIFY_ERR_STR)
+    }
+}
+
+impl std::error::Error for NotifyError {}
 
 /// This is a Event Variable similar to that provided by POSIX.
 /// As for POSIX condition variables, this assumes that a mutex is
@@ -322,14 +340,14 @@ impl Waiter {
 impl Notifier {
     /// Notifies one pending listener
     #[inline]
-    pub fn notify(&self) -> Result<(), WaitError> {
+    pub fn notify(&self) -> Result<(), NotifyError> {
         // Set the flag.
         match self.0.set() {
             EventSet::Ok => {
                 self.0.event.notify_additional_relaxed(1);
                 Ok(())
             }
-            EventSet::Err => Err(WaitError),
+            EventSet::Err => Err(NotifyError),
         }
     }
 }
@@ -344,9 +362,7 @@ mod tests {
         };
 
         let barrier = Arc::new(Barrier::new(2));
-
         let (notifier, waiter) = super::new();
-
         let tslot = Duration::from_secs(1);
 
         let bs = barrier.clone();
@@ -413,7 +429,10 @@ mod tests {
     #[test]
     fn event_loop() {
         use std::{
-            sync::atomic::{AtomicUsize, Ordering},
+            sync::{
+                atomic::{AtomicUsize, Ordering},
+                Arc, Barrier,
+            },
             time::{Duration, Instant},
         };
 
@@ -421,17 +440,20 @@ mod tests {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
         let (notifier, waiter) = super::new();
+        let barrier = Arc::new(Barrier::new(2));
 
+        let bs = barrier.clone();
         let s = std::thread::spawn(move || {
             for _ in 0..N {
                 waiter.wait().unwrap();
                 COUNTER.fetch_add(1, Ordering::Relaxed);
+                bs.wait();
             }
         });
         let p = std::thread::spawn(move || {
             for _ in 0..N {
                 notifier.notify().unwrap();
-                std::thread::sleep(Duration::from_millis(1));
+                barrier.wait();
             }
         });
 
@@ -446,10 +468,83 @@ mod tests {
                 panic!("Timeout {:#?}. Counter: {n}/{N}", tout);
             }
 
-            std::thread::sleep(Duration::from_secs(1));
+            std::thread::sleep(Duration::from_millis(100));
         }
 
         s.join().unwrap();
         p.join().unwrap();
+    }
+
+    #[test]
+    fn event_multiple() {
+        use std::{
+            sync::atomic::{AtomicUsize, Ordering},
+            time::{Duration, Instant},
+        };
+
+        const N: usize = 1_000;
+        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+        let (notifier, waiter) = super::new();
+
+        let w1 = waiter.clone();
+        let s1 = std::thread::spawn(move || {
+            let mut n = 0;
+            while COUNTER.fetch_add(1, Ordering::Relaxed) < N - 2 {
+                w1.wait().unwrap();
+                n += 1;
+            }
+            println!("S1: {}", n);
+        });
+        let s2 = std::thread::spawn(move || {
+            let mut n = 0;
+            while COUNTER.fetch_add(1, Ordering::Relaxed) < N - 2 {
+                waiter.wait().unwrap();
+                n += 1;
+            }
+            println!("S2: {}", n);
+        });
+
+        let n1 = notifier.clone();
+        let p1 = std::thread::spawn(move || {
+            let mut n = 0;
+            while COUNTER.load(Ordering::Relaxed) < N {
+                n1.notify().unwrap();
+                n += 1;
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            println!("P1: {}", n);
+        });
+        let p2 = std::thread::spawn(move || {
+            let mut n = 0;
+            while COUNTER.load(Ordering::Relaxed) < N {
+                notifier.notify().unwrap();
+                n += 1;
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            println!("P2: {}", n);
+        });
+
+        std::thread::spawn(move || {
+            let start = Instant::now();
+            let tout = Duration::from_secs(60);
+            loop {
+                let n = COUNTER.load(Ordering::Relaxed);
+                if n == N {
+                    break;
+                }
+                if start.elapsed() > tout {
+                    panic!("Timeout {:#?}. Counter: {n}/{N}", tout);
+                }
+
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        });
+
+        p1.join().unwrap();
+        p2.join().unwrap();
+
+        s1.join().unwrap();
+        s2.join().unwrap();
     }
 }
