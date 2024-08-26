@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use event_listener::{Event as EventLib, Listener};
 use std::{
     fmt,
     sync::{
@@ -20,6 +19,8 @@ use std::{
     },
     time::{Duration, Instant},
 };
+
+use event_listener::{Event as EventLib, Listener};
 
 // Error types
 const WAIT_ERR_STR: &str = "No notifier available";
@@ -355,11 +356,12 @@ impl Notifier {
 mod tests {
     #[test]
     fn event_steps() {
-        use crate::WaitTimeoutError;
         use std::{
             sync::{Arc, Barrier},
             time::Duration,
         };
+
+        use crate::WaitTimeoutError;
 
         let barrier = Arc::new(Barrier::new(2));
         let (notifier, waiter) = super::new();
