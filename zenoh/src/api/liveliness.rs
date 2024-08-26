@@ -340,7 +340,7 @@ impl Resolvable for LivelinessTokenUndeclaration<'_> {
 
 #[zenoh_macros::unstable]
 impl Wait for LivelinessTokenUndeclaration<'_> {
-    fn wait(mut self) -> <Self as Resolvable>::To {
+    fn wait(self) -> <Self as Resolvable>::To {
         let Some(session) = self.token.session.upgrade() else {
             return Ok(());
         };
