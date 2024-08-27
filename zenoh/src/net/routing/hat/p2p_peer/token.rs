@@ -182,6 +182,7 @@ fn remote_simple_tokens(tables: &Tables, res: &Arc<Resource>, face: &Arc<FaceSta
 fn propagate_forget_simple_token(
     tables: &mut Tables,
     res: &Arc<Resource>,
+    src_face: &Arc<FaceState>,
     send_declare: &mut SendDeclare,
 ) {
     for mut face in tables.faces.values().cloned() {
@@ -202,9 +203,11 @@ fn propagate_forget_simple_token(
                     res.expr(),
                 ),
             );
-        } else if face_hat!(face).remote_interests.values().any(|(r, o)| {
-            o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true) && !o.aggregate()
-        }) {
+        } else if src_face.id != face.id
+            && face_hat!(face).remote_interests.values().any(|(r, o)| {
+                o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true) && !o.aggregate()
+            })
+        {
             // Token has never been declared on this face.
             // Send an Undeclare with a one shot generated id and a WireExpr ext.
             send_declare(
@@ -301,7 +304,7 @@ pub(super) fn undeclare_simple_token(
 
         let mut simple_tokens = simple_tokens(res);
         if simple_tokens.is_empty() {
-            propagate_forget_simple_token(tables, res, send_declare);
+            propagate_forget_simple_token(tables, res, face, send_declare);
         }
 
         if simple_tokens.len() == 1 {
