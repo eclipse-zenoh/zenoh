@@ -104,7 +104,7 @@ fn propagate_simple_queryable(
             face_hat_mut!(&mut dst_face)
                 .local_qabls
                 .insert(res.clone(), (id, info));
-            let key_expr = Resource::decl_key(res, &mut dst_face);
+            let key_expr = Resource::decl_key(res, &mut dst_face, true);
             send_declare(
                 &dst_face.primitives,
                 RoutingContext::with_expr(

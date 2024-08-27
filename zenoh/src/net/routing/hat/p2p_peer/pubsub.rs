@@ -55,12 +55,12 @@ fn propagate_simple_subscription_to(
 ) {
     if (src_face.id != dst_face.id)
         && !face_hat!(dst_face).local_subs.contains_key(res)
-        && (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
+        && (src_face.whatami == WhatAmI::Client || dst_face.whatami != WhatAmI::Client)
     {
         if dst_face.whatami != WhatAmI::Client {
             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
             face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
-            let key_expr = Resource::decl_key(res, dst_face);
+            let key_expr = Resource::decl_key(res, dst_face, dst_face.whatami != WhatAmI::Client);
             send_declare(
                 &dst_face.primitives,
                 RoutingContext::with_expr(
@@ -97,7 +97,8 @@ fn propagate_simple_subscription_to(
                 if !face_hat!(dst_face).local_subs.contains_key(res) {
                     let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
                     face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
-                    let key_expr = Resource::decl_key(res, dst_face);
+                    let key_expr =
+                        Resource::decl_key(res, dst_face, dst_face.whatami != WhatAmI::Client);
                     send_declare(
                         &dst_face.primitives,
                         RoutingContext::with_expr(
@@ -432,7 +433,7 @@ pub(super) fn declare_sub_interest(
                     } else {
                         0
                     };
-                    let wire_expr = Resource::decl_key(res, face);
+                    let wire_expr = Resource::decl_key(res, face, face.whatami != WhatAmI::Client);
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -468,7 +469,8 @@ pub(super) fn declare_sub_interest(
                                 } else {
                                     0
                                 };
-                                let wire_expr = Resource::decl_key(sub, face);
+                                let wire_expr =
+                                    Resource::decl_key(sub, face, face.whatami != WhatAmI::Client);
                                 send_declare(
                                     &face.primitives,
                                     RoutingContext::with_expr(
@@ -509,7 +511,8 @@ pub(super) fn declare_sub_interest(
                         } else {
                             0
                         };
-                        let wire_expr = Resource::decl_key(sub, face);
+                        let wire_expr =
+                            Resource::decl_key(sub, face, face.whatami != WhatAmI::Client);
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(

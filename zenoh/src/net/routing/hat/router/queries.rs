@@ -39,7 +39,8 @@ use zenoh_sync::get_mut_unchecked;
 
 use super::{
     face_hat, face_hat_mut, get_peer, get_router, get_routes_entries, hat, hat_mut,
-    network::Network, res_hat, res_hat_mut, HatCode, HatContext, HatFace, HatTables,
+    interests::push_declaration_profile, network::Network, res_hat, res_hat_mut, HatCode,
+    HatContext, HatFace, HatTables,
 };
 use crate::net::routing::{
     dispatcher::{
@@ -206,7 +207,8 @@ fn send_sourced_queryable_to_net_children(
                         .map(|src_face| someface.id != src_face.id)
                         .unwrap_or(true)
                     {
-                        let key_expr = Resource::decl_key(res, &mut someface);
+                        let push_declaration = push_declaration_profile(tables, &someface);
+                        let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
@@ -272,7 +274,8 @@ fn propagate_simple_queryable(
             face_hat_mut!(&mut dst_face)
                 .local_qabls
                 .insert(res.clone(), (id, info));
-            let key_expr = Resource::decl_key(res, &mut dst_face);
+            let push_declaration = push_declaration_profile(tables, &dst_face);
+            let key_expr = Resource::decl_key(res, &mut dst_face, push_declaration);
             send_declare(
                 &dst_face.primitives,
                 RoutingContext::with_expr(
@@ -515,7 +518,8 @@ fn send_forget_sourced_queryable_to_net_children(
                         .map(|src_face| someface.id != src_face.id)
                         .unwrap_or(true)
                     {
-                        let wire_expr = Resource::decl_key(res, &mut someface);
+                        let push_declaration = push_declaration_profile(tables, &someface);
+                        let wire_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
@@ -999,7 +1003,8 @@ pub(super) fn queries_linkstate_change(
                             face_hat_mut!(&mut dst_face)
                                 .local_qabls
                                 .insert(res.clone(), (id, info));
-                            let key_expr = Resource::decl_key(res, &mut dst_face);
+                            let push_declaration = push_declaration_profile(tables, &dst_face);
+                            let key_expr = Resource::decl_key(res, &mut dst_face, push_declaration);
                             send_declare(
                                 &dst_face.primitives,
                                 RoutingContext::with_expr(
@@ -1161,7 +1166,8 @@ pub(crate) fn declare_qabl_interest(
                     } else {
                         0
                     };
-                    let wire_expr = Resource::decl_key(res, face);
+                    let wire_expr =
+                        Resource::decl_key(res, face, push_declaration_profile(tables, face));
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -1206,7 +1212,8 @@ pub(crate) fn declare_qabl_interest(
                         } else {
                             0
                         };
-                        let key_expr = Resource::decl_key(qabl, face);
+                        let key_expr =
+                            Resource::decl_key(qabl, face, push_declaration_profile(tables, face));
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(
@@ -1244,7 +1251,8 @@ pub(crate) fn declare_qabl_interest(
                     } else {
                         0
                     };
-                    let key_expr = Resource::decl_key(qabl, face);
+                    let key_expr =
+                        Resource::decl_key(qabl, face, push_declaration_profile(tables, face));
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(

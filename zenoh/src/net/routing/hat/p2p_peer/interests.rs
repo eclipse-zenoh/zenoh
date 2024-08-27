@@ -57,7 +57,9 @@ pub(super) fn interests_new_face(tables: &mut Tables, face: &mut Arc<FaceState>)
                             finalized: false,
                         },
                     );
-                    let wire_expr = res.as_ref().map(|res| Resource::decl_key(res, face));
+                    let wire_expr = res
+                        .as_ref()
+                        .map(|res| Resource::decl_key(res, face, face.whatami != WhatAmI::Client));
                     face.primitives.send_interest(RoutingContext::with_expr(
                         Interest {
                             id,
@@ -152,7 +154,9 @@ impl HatInterestTrait for HatCode {
                     .insert(id, (interest.clone(), cancellation_token));
                 CurrentInterestCleanup::spawn_interest_clean_up_task(dst_face, tables_ref, id);
             }
-            let wire_expr = res.as_ref().map(|res| Resource::decl_key(res, dst_face));
+            let wire_expr = res
+                .as_ref()
+                .map(|res| Resource::decl_key(res, dst_face, dst_face.whatami == WhatAmI::Client));
             dst_face.primitives.send_interest(RoutingContext::with_expr(
                 Interest {
                     id,

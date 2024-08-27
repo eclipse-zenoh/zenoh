@@ -138,7 +138,8 @@ fn send_sourced_queryable_to_net_children(
                         .map(|src_face| someface.id != src_face.id)
                         .unwrap_or(true)
                     {
-                        let key_expr = Resource::decl_key(res, &mut someface);
+                        let push_declaration = someface.whatami != WhatAmI::Client;
+                        let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
@@ -191,7 +192,8 @@ fn propagate_simple_queryable(
             face_hat_mut!(&mut dst_face)
                 .local_qabls
                 .insert(res.clone(), (id, info));
-            let key_expr = Resource::decl_key(res, &mut dst_face);
+            let push_declaration = dst_face.whatami != WhatAmI::Client;
+            let key_expr = Resource::decl_key(res, &mut dst_face, push_declaration);
             send_declare(
                 &dst_face.primitives,
                 RoutingContext::with_expr(
@@ -369,7 +371,8 @@ fn send_forget_sourced_queryable_to_net_children(
                         .map(|src_face| someface.id != src_face.id)
                         .unwrap_or(true)
                     {
-                        let wire_expr = Resource::decl_key(res, &mut someface);
+                        let push_declaration = someface.whatami != WhatAmI::Client;
+                        let wire_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
@@ -767,7 +770,7 @@ pub(super) fn declare_qabl_interest(
                     } else {
                         0
                     };
-                    let wire_expr = Resource::decl_key(res, face);
+                    let wire_expr = Resource::decl_key(res, face, face.whatami != WhatAmI::Client);
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -803,7 +806,8 @@ pub(super) fn declare_qabl_interest(
                         } else {
                             0
                         };
-                        let key_expr = Resource::decl_key(qabl, face);
+                        let key_expr =
+                            Resource::decl_key(qabl, face, face.whatami != WhatAmI::Client);
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(
@@ -839,7 +843,7 @@ pub(super) fn declare_qabl_interest(
                     } else {
                         0
                     };
-                    let key_expr = Resource::decl_key(qabl, face);
+                    let key_expr = Resource::decl_key(qabl, face, face.whatami != WhatAmI::Client);
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(

@@ -32,7 +32,8 @@ use zenoh_sync::get_mut_unchecked;
 
 use super::{
     face_hat, face_hat_mut, get_peer, get_router, get_routes_entries, hat, hat_mut,
-    network::Network, res_hat, res_hat_mut, HatCode, HatContext, HatFace, HatTables,
+    interests::push_declaration_profile, network::Network, res_hat, res_hat_mut, HatCode,
+    HatContext, HatFace, HatTables,
 };
 #[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
@@ -66,7 +67,8 @@ fn send_sourced_subscription_to_net_children(
                         .map(|src_face| someface.id != src_face.id)
                         .unwrap_or(true)
                     {
-                        let key_expr = Resource::decl_key(res, &mut someface);
+                        let push_declaration = push_declaration_profile(tables, &someface);
+                        let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
@@ -129,7 +131,8 @@ fn propagate_simple_subscription_to(
             if !face_hat!(dst_face).local_subs.contains_key(res) {
                 let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
                 face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
-                let key_expr = Resource::decl_key(res, dst_face);
+                let key_expr =
+                    Resource::decl_key(res, dst_face, push_declaration_profile(tables, dst_face));
                 send_declare(
                     &dst_face.primitives,
                     RoutingContext::with_expr(
@@ -384,7 +387,8 @@ fn send_forget_sourced_subscription_to_net_children(
                         .map(|src_face| someface.id != src_face.id)
                         .unwrap_or(true)
                     {
-                        let wire_expr = Resource::decl_key(res, &mut someface);
+                        let push_declaration = push_declaration_profile(tables, &someface);
+                        let wire_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
@@ -883,15 +887,18 @@ pub(super) fn pubsub_linkstate_change(
                 }
             }
 
-            for dst_face in tables.faces.values_mut() {
+            for mut dst_face in tables.faces.values().cloned() {
                 if src_face.id != dst_face.id
                     && HatTables::failover_brokering_to(links, dst_face.zid)
                 {
                     for res in face_hat!(src_face).remote_subs.values() {
                         if !face_hat!(dst_face).local_subs.contains_key(res) {
                             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-                            face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
-                            let key_expr = Resource::decl_key(res, dst_face);
+                            face_hat_mut!(&mut dst_face)
+                                .local_subs
+                                .insert(res.clone(), id);
+                            let push_declaration = push_declaration_profile(tables, &dst_face);
+                            let key_expr = Resource::decl_key(res, &mut dst_face, push_declaration);
                             let sub_info = SubscriberInfo {
                                 reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
                             };
@@ -950,7 +957,8 @@ pub(crate) fn declare_sub_interest(
                     } else {
                         0
                     };
-                    let wire_expr = Resource::decl_key(res, face);
+                    let wire_expr =
+                        Resource::decl_key(res, face, push_declaration_profile(tables, face));
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -995,7 +1003,8 @@ pub(crate) fn declare_sub_interest(
                         } else {
                             0
                         };
-                        let wire_expr = Resource::decl_key(sub, face);
+                        let wire_expr =
+                            Resource::decl_key(sub, face, push_declaration_profile(tables, face));
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(
@@ -1038,7 +1047,8 @@ pub(crate) fn declare_sub_interest(
                     } else {
                         0
                     };
-                    let wire_expr = Resource::decl_key(sub, face);
+                    let wire_expr =
+                        Resource::decl_key(sub, face, push_declaration_profile(tables, face));
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
