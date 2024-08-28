@@ -760,7 +760,7 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 ///     .unwrap();
 /// // queryable run in background until the session is closed
 /// tokio::spawn(async move {
-///     while let Ok(query) = rx.recv().await {
+///     while let Ok(query) = rx.recv_async().await {
 ///         println!(">> Handling query '{}'", query.selector());
 ///         query.reply("key/expression", "value").await.unwrap();
 ///     }
