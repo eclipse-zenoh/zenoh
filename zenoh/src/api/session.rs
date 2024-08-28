@@ -19,7 +19,7 @@ use std::{
     ops::Deref,
     sync::{
         atomic::{AtomicU16, Ordering},
-        Arc, RwLock,
+        Arc, RwLock, Weak,
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -451,19 +451,43 @@ impl fmt::Debug for SessionRef<'_> {
     }
 }
 
-pub(crate) trait UndeclarableSealed<S, O, T = ZResult<()>>
-where
-    O: Resolve<T> + Send,
-{
-    fn undeclare_inner(self, session: S) -> O;
+#[derive(Debug, Clone)]
+pub(crate) enum WeakSessionRef<'a> {
+    Borrow(&'a Session),
+    Shared(Weak<Session>),
 }
 
-impl<'a, O, T, G> UndeclarableSealed<&'a Session, O, T> for G
+impl<'a> WeakSessionRef<'a> {
+    pub(crate) fn upgrade(&self) -> Option<SessionRef<'a>> {
+        match self {
+            Self::Borrow(s) => Some(SessionRef::Borrow(s)),
+            Self::Shared(s) => s.upgrade().map(SessionRef::Shared),
+        }
+    }
+}
+
+impl<'a> From<SessionRef<'a>> for WeakSessionRef<'a> {
+    fn from(value: SessionRef<'a>) -> Self {
+        match value {
+            SessionRef::Borrow(s) => Self::Borrow(s),
+            SessionRef::Shared(s) => Self::Shared(Arc::downgrade(&s)),
+        }
+    }
+}
+
+/// A trait implemented by types that can be undeclared.
+pub trait UndeclarableSealed<S> {
+    type Undeclaration: Resolve<ZResult<()>> + Send;
+    fn undeclare_inner(self, session: S) -> Self::Undeclaration;
+}
+
+impl<'a, T> UndeclarableSealed<&'a Session> for T
 where
-    O: Resolve<T> + Send,
-    G: UndeclarableSealed<(), O, T>,
+    T: UndeclarableSealed<()>,
 {
-    fn undeclare_inner(self, _: &'a Session) -> O {
+    type Undeclaration = <T as UndeclarableSealed<()>>::Undeclaration;
+
+    fn undeclare_inner(self, _session: &'a Session) -> Self::Undeclaration {
         self.undeclare_inner(())
     }
 }
@@ -472,18 +496,9 @@ where
 // care about the `private_bounds` lint in this particular case.
 #[allow(private_bounds)]
 /// A trait implemented by types that can be undeclared.
-pub trait Undeclarable<S, O, T>: UndeclarableSealed<S, O, T>
-where
-    O: Resolve<T> + Send,
-{
-}
+pub trait Undeclarable<S = ()>: UndeclarableSealed<S> {}
 
-impl<S, O, T, U> Undeclarable<S, O, T> for U
-where
-    O: Resolve<T> + Send,
-    U: UndeclarableSealed<S, O, T>,
-{
-}
+impl<T, S> Undeclarable<S> for T where T: UndeclarableSealed<S> {}
 
 /// A zenoh session.
 ///
@@ -636,10 +651,9 @@ impl Session {
         })
     }
 
-    pub fn undeclare<'a, T, O>(&'a self, decl: T) -> O
+    pub fn undeclare<'a, T>(&'a self, decl: T) -> impl Resolve<ZResult<()>> + 'a
     where
-        O: Resolve<ZResult<()>>,
-        T: Undeclarable<&'a Self, O, ZResult<()>>,
+        T: Undeclarable<&'a Session> + 'a,
     {
         UndeclarableSealed::undeclare_inner(decl, self)
     }
@@ -770,13 +784,6 @@ impl Session {
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let key_expr: ZResult<KeyExpr> = key_expr.try_into().map_err(Into::into);
-        self._declare_keyexpr(key_expr)
-    }
-
-    fn _declare_keyexpr<'a, 'b: 'a>(
-        &'a self,
-        key_expr: ZResult<KeyExpr<'b>>,
-    ) -> impl Resolve<ZResult<KeyExpr<'b>>> + 'a {
         let sid = self.id;
         ResolveClosure::new(move || {
             let key_expr: KeyExpr = key_expr?;
