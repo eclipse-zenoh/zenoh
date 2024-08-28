@@ -56,7 +56,7 @@ fn propagate_simple_subscription_to(
     {
         let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
         face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
-        let key_expr = Resource::decl_key(res, dst_face);
+        let key_expr = Resource::decl_key(res, dst_face, true);
         send_declare(
             &dst_face.primitives,
             RoutingContext::with_expr(

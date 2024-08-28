@@ -45,7 +45,7 @@ fn propagate_simple_token_to(
     {
         let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
         face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
-        let key_expr = Resource::decl_key(res, dst_face);
+        let key_expr = Resource::decl_key(res, dst_face, true);
         send_declare(
             &dst_face.primitives,
             RoutingContext::with_expr(
@@ -120,7 +120,7 @@ fn declare_simple_token(
 
     propagate_simple_token(tables, res, face, send_declare);
 
-    let wire_expr = Resource::decl_key(res, face);
+    let wire_expr = Resource::decl_key(res, face, true);
     if let Some(interest_id) = interest_id {
         if let Some((interest, _)) = face.pending_current_interests.get(&interest_id) {
             send_declare(
@@ -312,7 +312,7 @@ pub(crate) fn declare_token_interest(
                     } else {
                         0
                     };
-                    let wire_expr = Resource::decl_key(res, face);
+                    let wire_expr = Resource::decl_key(res, face, true);
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -343,7 +343,7 @@ pub(crate) fn declare_token_interest(
                             } else {
                                 0
                             };
-                            let wire_expr = Resource::decl_key(token, face);
+                            let wire_expr = Resource::decl_key(token, face, true);
                             send_declare(
                                 &face.primitives,
                                 RoutingContext::with_expr(
@@ -379,7 +379,7 @@ pub(crate) fn declare_token_interest(
                     } else {
                         0
                     };
-                    let wire_expr = Resource::decl_key(token, face);
+                    let wire_expr = Resource::decl_key(token, face, true);
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(

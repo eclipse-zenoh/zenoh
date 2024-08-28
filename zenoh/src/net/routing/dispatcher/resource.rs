@@ -461,7 +461,11 @@ impl Resource {
     }
 
     #[inline]
-    pub fn decl_key(res: &Arc<Resource>, face: &mut Arc<FaceState>) -> WireExpr<'static> {
+    pub fn decl_key(
+        res: &Arc<Resource>,
+        face: &mut Arc<FaceState>,
+        push: bool,
+    ) -> WireExpr<'static> {
         let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(res);
         match nonwild_prefix {
             Some(mut nonwild_prefix) => {
@@ -484,11 +488,13 @@ impl Resource {
                         };
                     }
                 }
-                if face.remote_key_interests.values().any(|res| {
-                    res.as_ref()
-                        .map(|res| res.matches(&nonwild_prefix))
-                        .unwrap_or(true)
-                }) {
+                if push
+                    || face.remote_key_interests.values().any(|res| {
+                        res.as_ref()
+                            .map(|res| res.matches(&nonwild_prefix))
+                            .unwrap_or(true)
+                    })
+                {
                     let ctx = get_mut_unchecked(&mut nonwild_prefix)
                         .session_ctxs
                         .entry(face.id)

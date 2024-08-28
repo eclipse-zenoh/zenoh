@@ -46,7 +46,7 @@ fn propagate_simple_token_to(
         if dst_face.whatami != WhatAmI::Client {
             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
             face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
-            let key_expr = Resource::decl_key(res, dst_face);
+            let key_expr = Resource::decl_key(res, dst_face, dst_face.whatami != WhatAmI::Client);
             send_declare(
                 &dst_face.primitives,
                 RoutingContext::with_expr(
@@ -80,7 +80,8 @@ fn propagate_simple_token_to(
                 if !face_hat!(dst_face).local_tokens.contains_key(res) {
                     let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
                     face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
-                    let key_expr = Resource::decl_key(res, dst_face);
+                    let key_expr =
+                        Resource::decl_key(res, dst_face, dst_face.whatami != WhatAmI::Client);
                     send_declare(
                         &dst_face.primitives,
                         RoutingContext::with_expr(
@@ -427,7 +428,7 @@ pub(crate) fn declare_token_interest(
                     } else {
                         0
                     };
-                    let wire_expr = Resource::decl_key(res, face);
+                    let wire_expr = Resource::decl_key(res, face, face.whatami != WhatAmI::Client);
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -458,7 +459,8 @@ pub(crate) fn declare_token_interest(
                             } else {
                                 0
                             };
-                            let wire_expr = Resource::decl_key(token, face);
+                            let wire_expr =
+                                Resource::decl_key(token, face, face.whatami != WhatAmI::Client);
                             send_declare(
                                 &face.primitives,
                                 RoutingContext::with_expr(
@@ -494,7 +496,8 @@ pub(crate) fn declare_token_interest(
                     } else {
                         0
                     };
-                    let wire_expr = Resource::decl_key(token, face);
+                    let wire_expr =
+                        Resource::decl_key(token, face, face.whatami != WhatAmI::Client);
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
