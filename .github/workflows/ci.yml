@@ -29,6 +29,7 @@ env:
 jobs:
   check-labels:
     name: Check PR labels
+    if: ${{ github.event_name == 'pull_request'}}
     uses: eclipse-zenoh/ci/.github/workflows/check-labels.yml@main
     secrets: inherit
 
