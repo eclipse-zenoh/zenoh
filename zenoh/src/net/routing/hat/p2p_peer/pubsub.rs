@@ -55,7 +55,7 @@ fn propagate_simple_subscription_to(
 ) {
     if (src_face.id != dst_face.id)
         && !face_hat!(dst_face).local_subs.contains_key(res)
-        && (src_face.whatami == WhatAmI::Client || dst_face.whatami != WhatAmI::Client)
+        && (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
     {
         if dst_face.whatami != WhatAmI::Client {
             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
