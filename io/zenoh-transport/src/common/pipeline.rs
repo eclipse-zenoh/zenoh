@@ -513,8 +513,8 @@ pub(crate) struct TransmissionPipelineConf {
     pub(crate) batch: BatchConfig,
     pub(crate) queue_size: [usize; Priority::NUM],
     pub(crate) wait_before_drop: Duration,
-    pub(crate) batching: bool,
-    pub(crate) backoff: Duration,
+    pub(crate) batching_enabled: bool,
+    pub(crate) batching_time_limit: Duration,
 }
 
 // A 2-stage transmission pipeline
@@ -578,7 +578,7 @@ impl TransmissionPipeline {
                     priority: priority[prio].clone(),
                 },
                 fragbuf: ZBuf::empty(),
-                batching: config.batching,
+                batching: config.batching_enabled,
             }));
 
             // The stage out for this priority
@@ -586,7 +586,7 @@ impl TransmissionPipeline {
                 s_in: StageOutIn {
                     s_out_r,
                     current,
-                    backoff: Backoff::new(config.backoff, bytes),
+                    backoff: Backoff::new(config.batching_time_limit, bytes),
                 },
                 s_ref: StageOutRefill { n_ref_w, s_ref_w },
             });
@@ -788,9 +788,9 @@ mod tests {
             is_compression: true,
         },
         queue_size: [1; Priority::NUM],
-        batching: true,
+        batching_enabled: true,
         wait_before_drop: Duration::from_millis(1),
-        backoff: Duration::from_micros(1),
+        batching_time_limit: Duration::from_micros(1),
     };
 
     const CONFIG_NOT_STREAMED: TransmissionPipelineConf = TransmissionPipelineConf {
@@ -801,9 +801,9 @@ mod tests {
             is_compression: false,
         },
         queue_size: [1; Priority::NUM],
-        batching: true,
+        batching_enabled: true,
         wait_before_drop: Duration::from_millis(1),
-        backoff: Duration::from_micros(1),
+        batching_time_limit: Duration::from_micros(1),
     };
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

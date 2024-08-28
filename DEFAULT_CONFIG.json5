@@ -353,8 +353,6 @@
         /// Therefore, the maximum batch size is 2^16-1 (i.e. 65535).
         /// The default batch size value is the maximum batch size: 65535.
         batch_size: 65535,
-        /// Perform batching of messages if they are smaller of the batch_size
-        batching: true,
         /// Each zenoh link has a transmission queue that can be configured
         queue: {
           /// The size of each priority queue indicates the number of batches a given queue can contain.
@@ -380,9 +378,16 @@
             /// The maximum time in microseconds to wait for an available batch before dropping the message if still no batch is available.
             wait_before_drop: 1000,
           },
-          /// The initial exponential backoff time in nanoseconds to allow the batching to eventually progress.
-          /// Higher values lead to a more aggressive batching but it will introduce additional latency.
-          backoff: 100,
+          /// Perform batching of messages if they are smaller of the batch_size
+          batching: {
+            /// Perform adaptive batching of messages if they are smaller of the batch_size.
+            /// When the network is detected to not be fast enough to transmit every message individually, many small messages may be
+            /// batched together and sent all at once on the wire reducing the overall network overhead. This is typically of a high-throughput
+            /// scenario mainly composed of small messages. In other words, batching is actived by the network back-pressure.
+            enabled: true,
+            /// The maximum time limit (in ms) a message should be retained for batching when back-pressure happens.
+            time_limit: 1,
+          }
         },
       },
       /// Configure the zenoh RX parameters of a link
