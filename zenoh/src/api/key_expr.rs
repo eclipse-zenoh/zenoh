@@ -549,8 +549,9 @@ impl<'a> KeyExpr<'a> {
     }
 }
 
-impl<'a> UndeclarableSealed<&'a Session, KeyExprUndeclaration<'a>> for KeyExpr<'a> {
-    fn undeclare_inner(self, session: &'a Session) -> KeyExprUndeclaration<'a> {
+impl<'a> UndeclarableSealed<&'a Session> for KeyExpr<'a> {
+    type Undeclaration = KeyExprUndeclaration<'a>;
+    fn undeclare_inner(self, session: &'a Session) -> Self::Undeclaration {
         KeyExprUndeclaration {
             session,
             expr: self,

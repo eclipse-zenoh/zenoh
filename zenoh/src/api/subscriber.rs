@@ -15,21 +15,26 @@
 use std::{
     fmt,
     future::{IntoFuture, Ready},
+    mem::size_of,
     ops::{Deref, DerefMut},
     sync::Arc,
 };
 
+use tracing::error;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
 use zenoh_result::ZResult;
 #[cfg(feature = "unstable")]
-use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
+use {
+    zenoh_config::wrappers::{EntityGlobalId, ZenohId},
+    zenoh_protocol::core::EntityGlobalIdProto,
+};
 
-use super::{
+use crate::api::{
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
     sample::{Locality, Sample},
-    session::{SessionRef, UndeclarableSealed},
+    session::{SessionRef, UndeclarableSealed, WeakSessionRef},
     Id,
 };
 #[cfg(feature = "unstable")]
@@ -52,69 +57,14 @@ impl fmt::Debug for SubscriberState {
     }
 }
 
-/// A subscriber that provides data through a callback.
-///
-/// CallbackSubscribers can be created from a zenoh [`Session`](crate::Session)
-/// with the [`declare_subscriber`](crate::SessionDeclarations::declare_subscriber) function
-/// and the [`callback`](SubscriberBuilder::callback) function
-/// of the resulting builder.
-///
-/// Subscribers are automatically undeclared when dropped.
-///
-/// # Examples
-/// ```
-/// # #[tokio::main]
-/// # async fn main() {
-/// use zenoh::prelude::*;
-///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
-/// let subscriber = session
-///     .declare_subscriber("key/expression")
-///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr(), sample.payload()) })
-///     .await
-///     .unwrap();
-/// # }
-/// ```
 #[derive(Debug)]
 pub(crate) struct SubscriberInner<'a> {
-    pub(crate) session: SessionRef<'a>,
+    #[cfg(feature = "unstable")]
+    pub(crate) session_id: ZenohId,
+    pub(crate) session: WeakSessionRef<'a>,
     pub(crate) state: Arc<SubscriberState>,
     pub(crate) kind: SubscriberKind,
     pub(crate) undeclare_on_drop: bool,
-}
-
-impl<'a> SubscriberInner<'a> {
-    /// Close a [`CallbackSubscriber`](CallbackSubscriber).
-    ///
-    /// `CallbackSubscribers` are automatically closed when dropped, but you may want to use this function to handle errors or
-    /// close the `CallbackSubscriber` asynchronously.
-    ///
-    /// # Examples
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::{prelude::*, sample::Sample};
-    ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
-    /// # fn data_handler(_sample: Sample) { };
-    /// let subscriber = session
-    ///     .declare_subscriber("key/expression")
-    ///     .callback(data_handler)
-    ///     .await
-    ///     .unwrap();
-    /// subscriber.undeclare().await.unwrap();
-    /// # }
-    /// ```
-    #[inline]
-    pub fn undeclare(self) -> SubscriberUndeclaration<'a> {
-        UndeclarableSealed::undeclare_inner(self, ())
-    }
-}
-
-impl<'a> UndeclarableSealed<(), SubscriberUndeclaration<'a>> for SubscriberInner<'a> {
-    fn undeclare_inner(self, _: ()) -> SubscriberUndeclaration<'a> {
-        SubscriberUndeclaration { subscriber: self }
-    }
 }
 
 /// A [`Resolvable`] returned when undeclaring a subscriber.
@@ -134,40 +84,24 @@ impl<'a> UndeclarableSealed<(), SubscriberUndeclaration<'a>> for SubscriberInner
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-pub struct SubscriberUndeclaration<'a> {
-    subscriber: SubscriberInner<'a>,
-}
+pub struct SubscriberUndeclaration<'a, Handler>(Subscriber<'a, Handler>);
 
-impl Resolvable for SubscriberUndeclaration<'_> {
+impl<Handler> Resolvable for SubscriberUndeclaration<'_, Handler> {
     type To = ZResult<()>;
 }
 
-impl Wait for SubscriberUndeclaration<'_> {
+impl<Handler> Wait for SubscriberUndeclaration<'_, Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        // set the flag first to avoid double panic if this function panic
-        self.subscriber.undeclare_on_drop = false;
-        self.subscriber
-            .session
-            .undeclare_subscriber_inner(self.subscriber.state.id, self.subscriber.kind)
+        self.0.undeclare_impl()
     }
 }
 
-impl IntoFuture for SubscriberUndeclaration<'_> {
+impl<Handler> IntoFuture for SubscriberUndeclaration<'_, Handler> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
-    }
-}
-
-impl Drop for SubscriberInner<'_> {
-    fn drop(&mut self) {
-        if self.undeclare_on_drop {
-            let _ = self
-                .session
-                .undeclare_subscriber_inner(self.state.id, self.kind);
-        }
     }
 }
 
@@ -394,11 +328,13 @@ where
                 &SubscriberInfo::default(),
             )
             .map(|sub_state| Subscriber {
-                subscriber: SubscriberInner {
-                    session,
+                inner: SubscriberInner {
+                    #[cfg(feature = "unstable")]
+                    session_id: session.zid(),
+                    session: session.into(),
                     state: sub_state,
                     kind: SubscriberKind::Subscriber,
-                    undeclare_on_drop: true,
+                    undeclare_on_drop: size_of::<Handler::Handler>() > 0,
                 },
                 handler: receiver,
             })
@@ -425,9 +361,29 @@ where
 /// and the [`with`](SubscriberBuilder::with) function
 /// of the resulting builder.
 ///
-/// Subscribers are automatically undeclared when dropped.
+/// Callback subscribers will run in background until the session is closed,
+/// or until it is undeclared.
+/// On the other hand, subscribers with a handler are automatically undeclared when dropped.
 ///
 /// # Examples
+///
+/// Using callback:
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::prelude::*;
+///
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// session
+///     .declare_subscriber("key/expression")
+///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr(), sample.payload()) })
+///     .await
+///     .unwrap();
+/// // subscriber run in background until the session is closed
+/// # }
+/// ```
+///
+/// Using channel handler:
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
@@ -442,12 +398,13 @@ where
 /// while let Ok(sample) = subscriber.recv_async().await {
 ///     println!("Received: {} {:?}", sample.key_expr(), sample.payload());
 /// }
+/// // subscriber is undeclared at the end of the scope
 /// # }
 /// ```
 #[non_exhaustive]
 #[derive(Debug)]
 pub struct Subscriber<'a, Handler> {
-    pub(crate) subscriber: SubscriberInner<'a>,
+    pub(crate) inner: SubscriberInner<'a>,
     pub(crate) handler: Handler,
 }
 
@@ -470,15 +427,15 @@ impl<'a, Handler> Subscriber<'a, Handler> {
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
         EntityGlobalIdProto {
-            zid: self.subscriber.session.zid().into(),
-            eid: self.subscriber.state.id,
+            zid: self.inner.session_id.into(),
+            eid: self.inner.state.id,
         }
         .into()
     }
 
     /// Returns the [`KeyExpr`] this Subscriber subscribes to.
     pub fn key_expr(&self) -> &KeyExpr<'static> {
-        &self.subscriber.state.key_expr
+        &self.inner.state.key_expr
     }
 
     /// Returns a reference to this subscriber's handler.
@@ -495,10 +452,7 @@ impl<'a, Handler> Subscriber<'a, Handler> {
         &mut self.handler
     }
 
-    /// Close a [`Subscriber`].
-    ///
-    /// Subscribers are automatically closed when dropped, but you may want to use this function to handle errors or
-    /// close the Subscriber asynchronously.
+    /// Undeclare the [`Subscriber`].
     ///
     /// # Examples
     /// ```
@@ -514,24 +468,39 @@ impl<'a, Handler> Subscriber<'a, Handler> {
     /// # }
     /// ```
     #[inline]
-    pub fn undeclare(self) -> SubscriberUndeclaration<'a> {
-        self.subscriber.undeclare()
+    pub fn undeclare(self) -> SubscriberUndeclaration<'a, Handler>
+    where
+        Handler: Send + 'a,
+    {
+        self.undeclare_inner(())
     }
 
-    /// Make the subscriber run in background, until the session is closed.
-    #[inline]
-    #[zenoh_macros::unstable]
-    pub fn background(mut self) {
-        // It's not necessary to undeclare this resource when session close, as other sessions
-        // will clean all resources related to the closed one.
-        // So we can just never undeclare it.
-        self.subscriber.undeclare_on_drop = false;
+    fn undeclare_impl(&mut self) -> ZResult<()> {
+        self.inner.undeclare_on_drop = false;
+        match self.inner.session.upgrade() {
+            Some(session) => {
+                session.undeclare_subscriber_inner(self.inner.state.id, self.inner.kind)
+            }
+            None => Ok(()),
+        }
     }
 }
 
-impl<'a, T> UndeclarableSealed<(), SubscriberUndeclaration<'a>> for Subscriber<'a, T> {
-    fn undeclare_inner(self, _: ()) -> SubscriberUndeclaration<'a> {
-        UndeclarableSealed::undeclare_inner(self.subscriber, ())
+impl<Handler> Drop for Subscriber<'_, Handler> {
+    fn drop(&mut self) {
+        if self.inner.undeclare_on_drop {
+            if let Err(error) = self.undeclare_impl() {
+                error!(error);
+            }
+        }
+    }
+}
+
+impl<'a, Handler: Send + 'a> UndeclarableSealed<()> for Subscriber<'a, Handler> {
+    type Undeclaration = SubscriberUndeclaration<'a, Handler>;
+
+    fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
+        SubscriberUndeclaration(self)
     }
 }
 
