@@ -695,7 +695,6 @@ impl TransmissionPipelineConsumer {
             // While trying to pull from the queue, the stage_in `lock()` will most likely taken, leading to
             // a spinning behaviour while attempting to take the lock. Yield the current task to avoid
             // spinning the current task indefinitely.
-            // std::thread::yield_now();
             tokio::task::yield_now().await;
 
             // Wait for the backoff to expire or for a new message
