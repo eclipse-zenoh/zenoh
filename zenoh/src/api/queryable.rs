@@ -755,7 +755,7 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 /// let (tx, rx) = flume::bounded(32);
 /// session
 ///     .declare_queryable("key/expression")
-///     .callback(|query| tx.send(query).unwrap())
+///     .callback(move |query| tx.send(query).unwrap())
 ///     .await
 ///     .unwrap();
 /// // queryable run in background until the session is closed
