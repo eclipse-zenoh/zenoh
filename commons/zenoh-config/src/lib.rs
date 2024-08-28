@@ -435,7 +435,7 @@ validated_struct::validator! {
                             /// Perform adaptive batching of messages if they are smaller of the batch_size.
                             /// When the network is detected to not be fast enough to transmit every message individually, many small messages may be
                             /// batched together and sent all at once on the wire reducing the overall network overhead. This is typically of a high-throughput
-                            /// scenario mainly composed of small messages. In other words, batching is actived by the network back-pressure.
+                            /// scenario mainly composed of small messages. In other words, batching is activated by the network back-pressure.
                             enabled: bool,
                             /// The maximum time limit (in ms) a message should be retained for batching when back-pressure happens.
                             time_limit: u64,
