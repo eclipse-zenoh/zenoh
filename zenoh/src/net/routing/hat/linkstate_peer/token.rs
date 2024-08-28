@@ -81,13 +81,16 @@ fn send_sourced_token_to_net_clildren(
 
 #[inline]
 fn propagate_simple_token_to(
-    _tables: &mut Tables,
+    tables: &mut Tables,
     dst_face: &mut Arc<FaceState>,
     res: &Arc<Resource>,
-    _src_face: &mut Arc<FaceState>,
+    src_face: &mut Arc<FaceState>,
     send_declare: &mut SendDeclare,
 ) {
-    if !face_hat!(dst_face).local_tokens.contains_key(res) && dst_face.whatami == WhatAmI::Client {
+    if (src_face.id != dst_face.id || dst_face.zid == tables.zid)
+        && !face_hat!(dst_face).local_tokens.contains_key(res)
+        && dst_face.whatami == WhatAmI::Client
+    {
         if dst_face.whatami != WhatAmI::Client {
             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
             face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
