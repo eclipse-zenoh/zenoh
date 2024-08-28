@@ -25,6 +25,9 @@ use std::{
 
 use futures::FutureExt;
 
+pub mod event;
+pub use event::*;
+
 pub mod fifo_queue;
 pub use fifo_queue::*;
 

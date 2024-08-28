@@ -90,6 +90,7 @@ console-subscriber = "0.3.0"
 const_format = "0.2.30"
 crc = "3.0.1"
 criterion = "0.5"
+crossbeam-utils = "0.8.2"
 derive_more = "0.99.17"
 derive-new = "0.6.0"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }

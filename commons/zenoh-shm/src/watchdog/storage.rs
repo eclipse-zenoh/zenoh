@@ -21,7 +21,7 @@ use zenoh_result::{zerror, ZResult};
 
 use super::{allocated_watchdog::AllocatedWatchdog, descriptor::OwnedDescriptor, segment::Segment};
 
-#[dynamic(lazy,drop)]
+#[dynamic(lazy, drop)]
 pub static mut GLOBAL_STORAGE: WatchdogStorage = WatchdogStorage::new(32768usize).unwrap();
 
 pub struct WatchdogStorage {

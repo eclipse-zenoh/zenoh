@@ -25,7 +25,7 @@ use super::{
     segment::HeaderSegment,
 };
 
-#[dynamic(lazy,drop)]
+#[dynamic(lazy, drop)]
 pub static mut GLOBAL_HEADER_STORAGE: HeaderStorage = HeaderStorage::new(32768usize).unwrap();
 
 pub struct HeaderStorage {

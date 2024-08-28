@@ -24,9 +24,8 @@ use super::{
     segment::HeaderSegment,
 };
 
-#[dynamic(lazy,drop)]
-    pub static mut GLOBAL_HEADER_SUBSCRIPTION: Subscription = Subscription::new();
-
+#[dynamic(lazy, drop)]
+pub static mut GLOBAL_HEADER_SUBSCRIPTION: Subscription = Subscription::new();
 
 pub struct Subscription {
     linked_table: Mutex<BTreeMap<HeaderSegmentID, Arc<HeaderSegment>>>,
