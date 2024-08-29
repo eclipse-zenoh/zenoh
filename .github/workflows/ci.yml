@@ -32,7 +32,9 @@ jobs:
     if: ${{ github.event_name == 'pull_request'}}
     uses: eclipse-zenoh/ci/.github/workflows/check-labels.yml@main
     secrets:
-      github-token: ${{ secrets.BOT_TOKEN_WORKFLOW }}
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      pull-requests: write
 
   check:
     name: Lints and doc tests on ${{ matrix.os }}
