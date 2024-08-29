@@ -31,7 +31,8 @@ jobs:
     name: Check PR labels
     if: ${{ github.event_name == 'pull_request'}}
     uses: eclipse-zenoh/ci/.github/workflows/check-labels.yml@main
-    secrets: inherit
+    secrets:
+      github-token: ${{ secrets.BOT_TOKEN_WORKFLOW }}
 
   check:
     name: Lints and doc tests on ${{ matrix.os }}
