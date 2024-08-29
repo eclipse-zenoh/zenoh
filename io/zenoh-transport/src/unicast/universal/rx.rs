@@ -145,23 +145,23 @@ impl TransportUnicastUniversal {
         if guard.defrag.is_empty() {
             let _ = guard.defrag.sync(sn);
         }
-        guard.defrag.push(sn, payload)?;
-        if !more {
+        if let Err(e) = guard.defrag.push(sn, payload) {
+            tracing::trace!("{}", e);
+        } else if !more {
             // When shared-memory feature is disabled, msg does not need to be mutable
-            let msg = guard
-                .defrag
-                .defragment()
-                .ok_or_else(|| zerror!("Transport: {}. Defragmentation error.", self.config.zid))?;
-
-            let callback = zread!(self.callback).clone();
-            if let Some(callback) = callback.as_ref() {
-                return self.trigger_callback(callback.as_ref(), msg);
+            if let Some(msg) = guard.defrag.defragment() {
+                let callback = zread!(self.callback).clone();
+                if let Some(callback) = callback.as_ref() {
+                    return self.trigger_callback(callback.as_ref(), msg);
+                } else {
+                    tracing::debug!(
+                        "Transport: {}. No callback available, dropping messages: {:?}",
+                        self.config.zid,
+                        msg
+                    );
+                }
             } else {
-                tracing::debug!(
-                    "Transport: {}. No callback available, dropping messages: {:?}",
-                    self.config.zid,
-                    msg
-                );
+                tracing::trace!("Transport: {}. Defragmentation error.", self.config.zid);
             }
         }
 

@@ -207,18 +207,20 @@ impl TransportMulticastInner {
         if guard.defrag.is_empty() {
             let _ = guard.defrag.sync(sn);
         }
-        guard.defrag.push(sn, payload)?;
-        if !more {
+        if let Err(e) = guard.defrag.push(sn, payload) {
+            tracing::trace!("{}", e);
+        } else if !more {
             // When shared-memory feature is disabled, msg does not need to be mutable
-            let msg = guard.defrag.defragment().ok_or_else(|| {
-                zerror!(
+            if let Some(msg) = guard.defrag.defragment() {
+                return self.trigger_callback(msg, peer);
+            } else {
+                tracing::trace!(
                     "Transport: {}. Peer: {}. Priority: {:?}. Defragmentation error.",
                     self.manager.config.zid,
                     peer.zid,
                     priority
-                )
-            })?;
-            return self.trigger_callback(msg, peer);
+                );
+            }
         }
 
         Ok(())
