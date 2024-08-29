@@ -185,7 +185,7 @@ uuid = { version = "1.10.0", default-features = false, features = [
 validated_struct = "2.1.0"
 vec_map = "0.8.2"
 webpki-roots = "0.26.3"
-winapi = { version = "0.3.9", features = ["iphlpapi"] }
+winapi = { version = "0.3.9", features = ["iphlpapi", "winerror"] }
 x509-parser = "0.16.0"
 z-serial = "0.2.3"
 either = "1.13.0"

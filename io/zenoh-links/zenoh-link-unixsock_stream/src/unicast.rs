@@ -328,7 +328,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         })?;
 
         // We try to acquire the lock
-        // @TODO: updating the deprecated function will require the refactoring of this module
+        // @TODO: flock is deprecated and upgrading to new Flock will require some refactoring of this module
         #[allow(deprecated)]
         nix::fcntl::flock(lock_fd, nix::fcntl::FlockArg::LockExclusiveNonblock).map_err(|e| {
             let _ = nix::unistd::close(lock_fd);
@@ -429,7 +429,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         listener.handle.await??;
 
         //Release the lock
-        // @TODO: updating the deprecated function will require the refactoring of this module
+        // @TODO: flock is deprecated and upgrading to new Flock will require some refactoring of this module
         #[allow(deprecated)]
         let _ = nix::fcntl::flock(listener.lock_fd, nix::fcntl::FlockArg::UnlockNonblock);
         let _ = nix::unistd::close(listener.lock_fd);
