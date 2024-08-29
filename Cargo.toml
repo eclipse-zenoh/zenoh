@@ -75,117 +75,117 @@ description = "Zenoh: The Zero Overhead Pub/Sub/Query Protocol."
 # DEFAULT-FEATURES NOTE: Be careful with default-features and additivity!
 #                        (https://github.com/rust-lang/cargo/issues/11329)
 [workspace.dependencies]
-aes = "0.8.2"
-ahash = "0.8.7"
-anyhow = { version = "1.0.69", default-features = false } # Default features are disabled due to usage in no_std crates
-async-executor = "1.5.0"
-async-global-executor = "2.3.1"
-async-io = "2.3.3"
-async-trait = "0.1.60"
+aes = "0.8.4"
+ahash = "0.8.11"
+anyhow = { version = "1.0.86", default-features = false } # Default features are disabled due to usage in no_std crates
+async-executor = "1.13.0"
+async-global-executor = "2.4.1"
+async-io = "2.3.4"
+async-trait = "0.1.81"
 base64 = "0.22.1"
 bincode = "1.3.3"
-bytes = "1.6.1"
-clap = { version = "4.4.11", features = ["derive"] }
-console-subscriber = "0.3.0"
-const_format = "0.2.30"
-crc = "3.0.1"
+bytes = "1.7.1"
+clap = { version = "4.5.16", features = ["derive"] }
+console-subscriber = "0.4.0"
+const_format = "0.2.32"
+crc = "3.2.1"
 criterion = "0.5"
-crossbeam-utils = "0.8.2"
-derive_more = "0.99.17"
-derive-new = "0.6.0"
+crossbeam-utils = "0.8.20"
+derive_more = { version = "1.0.0", features = ["as_ref"] }
+derive-new = "0.7.0"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 tracing-loki = "0.2"
 event-listener = "5.3.1"
 flume = "0.11"
-form_urlencoded = "1.1.0"
-futures = "0.3.25"
-futures-util = { version = "0.3.25", default-features = false } # Default features are disabled due to some crates' requirements
-git-version = "0.3.5"
+form_urlencoded = "1.2.1"
+futures = "0.3.30"
+futures-util = { version = "0.3.30", default-features = false } # Default features are disabled due to some crates' requirements
+git-version = "0.3.9"
 hashbrown = "0.14"
 hex = { version = "0.4.3", default-features = false } # Default features are disabled due to usage in no_std crates
 hmac = { version = "0.12.1", features = ["std"] }
-home = "0.5.4"
+home = "0.5.9"
 http-types = "2.12.0"
 humantime = "2.1.0"
 itertools = "0.13.0"
 json5 = "0.4.1"
-jsonschema = { version = "0.18.0", default-features = false }
+jsonschema = { version = "0.18.1", default-features = false }
 keyed-set = "1.0.0"
-lazy_static = "1.4.0"
-libc = "0.2.139"
+lazy_static = "1.5.0"
+libc = "0.2.158"
 libloading = "0.8"
 tracing = "0.1"
 lockfree = "0.5"
 lz4_flex = "0.11"
-nix = { version = "0.27.0", features = ["fs"] }
+nix = { version = "0.29.0", features = ["fs"] }
 num_cpus = "1.16.0"
-num-traits = { version = "0.2.17", default-features = false }
+num-traits = { version = "0.2.19", default-features = false }
 once_cell = "1.19.0"
-ordered-float = "4.1.1"
+ordered-float = "4.2.2"
 panic-message = "0.3.0"
-paste = "1.0.12"
-petgraph = "0.6.3"
+paste = "1.0.15"
+petgraph = "0.6.5"
 phf = { version = "0.11.2", features = ["macros"] }
 pnet = "0.35.0"
 pnet_datalink = "0.35.0"
-proc-macro2 = "1.0.51"
-quinn = "0.11.1"
-quote = "1.0.23"
+proc-macro2 = "1.0.86"
+quinn = "0.11.3"
+quote = "1.0.37"
 rand = { version = "0.8.5", default-features = false } # Default features are disabled due to usage in no_std crates
 rand_chacha = "0.3.1"
 rcgen = "0.13.1"
-regex = "1.7.1"
+regex = "1.10.6"
 ron = "0.8.1"
 ringbuffer-spsc = "0.1.9"
 rsa = "0.9"
-rustc_version = "0.4.0"
-rustls = { version = "0.23.9", default-features = false, features = [
+rustc_version = "0.4.1"
+rustls = { version = "0.23.12", default-features = false, features = [
   "logging",
   "tls12",
   "ring",
 ] }
-rustls-native-certs = "0.7.0"
-rustls-pemfile = "2.0.0"
-rustls-webpki = "0.102.0"
-rustls-pki-types = "1.1.0"
-schemars = { version = "0.8.12", features = ["either"] }
+rustls-native-certs = "0.7.3"
+rustls-pemfile = "2.1.3"
+rustls-webpki = "0.102.7"
+rustls-pki-types = "1.8.0"
+schemars = { version = "0.8.21", features = ["either"] }
 secrecy = { version = "0.8.0", features = ["serde", "alloc"] }
-serde = { version = "1.0.154", default-features = false, features = [
+serde = { version = "1.0.209", default-features = false, features = [
   "derive",
 ] } # Default features are disabled due to usage in no_std crates
 serde_cbor = "0.11.2"
-serde_json = "1.0.114"
+serde_json = "1.0.127"
 serde-pickle = "1.1.1"
-serde_yaml = "0.9.19"
+serde_yaml = "0.9.34"
 static_init = "1.0.3"
 stabby = "36.1.1"
-sha3 = "0.10.6"
+sha3 = "0.10.8"
 shared_memory = "0.12.4"
-shellexpand = "3.0.0"
-socket2 = { version = "0.5.1", features = ["all"] }
+shellexpand = "3.1.0"
+socket2 = { version = "0.5.7", features = ["all"] }
 stop-token = "0.7.0"
 syn = "2.0"
 tide = "0.16.0"
-token-cell = { version = "1.4.2", default-features = false }
-tokio = { version = "1.35.1", default-features = false } # Default features are disabled due to some crates' requirements
-tokio-util = "0.7.10"
+token-cell = { version = "1.5.0", default-features = false }
+tokio = { version = "1.39.3", default-features = false } # Default features are disabled due to some crates' requirements
+tokio-util = "0.7.11"
 tokio-tungstenite = "0.23.1"
 tokio-rustls = { version = "0.26.0", default-features = false }
 # tokio-vsock = see: io/zenoh-links/zenoh-link-vsock/Cargo.toml (workspaces does not support platform dependent dependencies)
 thread-priority = "1.1.0"
-typenum = "1.16.0"
+typenum = "1.17.0"
 uhlc = { version = "0.8.0", default-features = false } # Default features are disabled due to usage in no_std crates
 unwrap-infallible = "0.1.5"
 unzip-n = "0.1.2"
-url = "2.3.1"
-urlencoding = "2.1.2"
-uuid = { version = "1.3.0", default-features = false, features = [
+url = "2.5.2"
+urlencoding = "2.1.3"
+uuid = { version = "1.10.0", default-features = false, features = [
   "v4",
 ] } # Default features are disabled due to usage in no_std crates
 validated_struct = "2.1.0"
 vec_map = "0.8.2"
-webpki-roots = "0.26.0"
-winapi = { version = "0.3.9", features = ["iphlpapi"] }
+webpki-roots = "0.26.3"
+winapi = { version = "0.3.9", features = ["iphlpapi", "winerror"] }
 x509-parser = "0.16.0"
 z-serial = "0.2.3"
 either = "1.13.0"
