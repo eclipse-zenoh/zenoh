@@ -89,10 +89,10 @@
   },
   /// Configure the scouting mechanisms and their behaviours
   scouting: {
-    /// In client mode, the period dedicated to scouting for a router before failing
+    /// In client mode, the period in milliseconds dedicated to scouting for a router before failing.
     timeout: 3000,
-    /// In peer mode, the period dedicated to scouting remote peers before attempting other operations
-    delay: 200,
+    /// In peer mode, the maximum period in milliseconds dedicated to scouting remote peers before attempting other operations.
+    delay: 500,
     /// The multicast scouting configuration.
     multicast: {
       /// Whether multicast scouting is enabled or not
