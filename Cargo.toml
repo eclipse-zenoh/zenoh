@@ -91,7 +91,7 @@ const_format = "0.2.32"
 crc = "3.2.1"
 criterion = "0.5"
 crossbeam-utils = "0.8.20"
-derive_more = "1.0.0"
+derive_more = { version = "1.0.0", features = ["as_ref"] }
 derive-new = "0.7.0"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 tracing-loki = "0.2"
