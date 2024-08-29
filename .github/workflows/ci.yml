@@ -162,4 +162,9 @@ jobs:
     if: always()
     steps:
       - name: Check whether all jobs pass
-        run: echo '${{ toJson(needs) }}' | jq -e 'all(.result == "success")'
+        run: |
+          if [${{ github.event_name == 'pull_request' }}]; then
+            echo '${{ toJson(needs) }}' | jq -e 'all(.result == "success")'
+          else
+            echo '${{ toJson(needs) }}' | jq -e 'del(."check-labels")' | jq -e 'all(.result == "success")'
+          fi
