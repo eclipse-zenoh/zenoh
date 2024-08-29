@@ -27,15 +27,6 @@ env:
   RUSTUP_WINDOWS_PATH_ADD_BIN: 1
 
 jobs:
-  check-labels:
-    name: Check PR labels
-    if: ${{ github.event_name == 'pull_request'}}
-    uses: eclipse-zenoh/ci/.github/workflows/check-labels.yml@main
-    secrets:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
-    permissions:
-      pull-requests: write
-
   check:
     name: Lints and doc tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -160,13 +151,8 @@ jobs:
   ci:
     name: CI status checks
     runs-on: ubuntu-latest
-    needs: [check-labels, check, test, valgrind, typos]
+    needs: [check, test, valgrind, typos]
     if: always()
     steps:
       - name: Check whether all jobs pass
-        run: |
-          if [${{ github.event_name == 'pull_request' }}]; then
-            echo '${{ toJson(needs) }}' | jq -e 'all(.result == "success")'
-          else
-            echo '${{ toJson(needs) }}' | jq -e 'del(."check-labels")' | jq -e 'all(.result == "success")'
-          fi
+        run: echo '${{ toJson(needs) }}' | jq -e 'all(.result == "success")'
