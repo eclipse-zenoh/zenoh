@@ -12,14 +12,19 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
-use async_trait::async_trait;
 use core::{
     fmt,
     hash::{Hash, Hasher},
     ops::Deref,
 };
 use std::net::SocketAddr;
-use zenoh_protocol::core::{EndPoint, Locator};
+
+use async_trait::async_trait;
+use serde::Serialize;
+use zenoh_protocol::{
+    core::{EndPoint, Locator},
+    transport::BatchSize,
+};
 use zenoh_result::ZResult;
 
 pub type LinkManagerUnicast = Arc<dyn LinkManagerUnicastTrait>;
@@ -41,12 +46,13 @@ pub struct LinkUnicast(pub Arc<dyn LinkUnicastTrait>);
 
 #[async_trait]
 pub trait LinkUnicastTrait: Send + Sync {
-    fn get_mtu(&self) -> u16;
+    fn get_mtu(&self) -> BatchSize;
     fn get_src(&self) -> &Locator;
     fn get_dst(&self) -> &Locator;
     fn is_reliable(&self) -> bool;
     fn is_streamed(&self) -> bool;
     fn get_interface_names(&self) -> Vec<String>;
+    fn get_auth_id(&self) -> &LinkAuthId;
     async fn write(&self, buffer: &[u8]) -> ZResult<usize>;
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()>;
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize>;
@@ -111,6 +117,79 @@ pub fn get_ip_interface_names(addr: &SocketAddr) -> Vec<String> {
         Err(e) => {
             tracing::debug!("get_interface_names for {:?} failed: {:?}", addr.ip(), e);
             vec![]
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
+pub enum LinkAuthType {
+    Tls,
+    Quic,
+    None,
+}
+
+#[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
+pub struct LinkAuthId {
+    auth_type: LinkAuthType,
+    auth_value: Option<String>,
+}
+
+impl LinkAuthId {
+    pub const NONE: Self = Self {
+        auth_type: LinkAuthType::None,
+        auth_value: None,
+    };
+    pub fn get_type(&self) -> &LinkAuthType {
+        &self.auth_type
+    }
+    pub fn get_value(&self) -> &Option<String> {
+        &self.auth_value
+    }
+    pub fn builder() -> LinkAuthIdBuilder {
+        LinkAuthIdBuilder::new()
+    }
+}
+
+impl Default for LinkAuthId {
+    fn default() -> Self {
+        LinkAuthId::NONE.clone()
+    }
+}
+
+#[derive(Debug)]
+pub struct LinkAuthIdBuilder {
+    pub auth_type: LinkAuthType,    // HAS to be provided when building
+    pub auth_value: Option<String>, // actual value added to the above type; is None for None type
+}
+
+impl Default for LinkAuthIdBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl LinkAuthIdBuilder {
+    pub fn new() -> LinkAuthIdBuilder {
+        LinkAuthIdBuilder {
+            auth_type: LinkAuthType::None,
+            auth_value: None,
+        }
+    }
+
+    pub fn auth_type(mut self, auth_type: LinkAuthType) -> Self {
+        self.auth_type = auth_type;
+        self
+    }
+
+    pub fn auth_value(mut self, auth_value: Option<String>) -> Self {
+        self.auth_value = auth_value;
+        self
+    }
+
+    pub fn build(self) -> LinkAuthId {
+        LinkAuthId {
+            auth_type: self.auth_type.clone(),
+            auth_value: self.auth_value.clone(),
         }
     }
 }

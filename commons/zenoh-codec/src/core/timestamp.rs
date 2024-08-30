@@ -11,17 +11,20 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{LCodec, RCodec, WCodec, Zenoh080};
 use core::convert::TryFrom;
+
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
-use zenoh_protocol::core::{Timestamp, ZenohId};
+use zenoh_protocol::core::{Timestamp, ZenohIdProto};
+
+use crate::{LCodec, RCodec, WCodec, Zenoh080};
 
 impl LCodec<&Timestamp> for Zenoh080 {
     fn w_len(self, x: &Timestamp) -> usize {
-        self.w_len(x.get_time().as_u64()) + self.w_len(x.get_id().size())
+        let id = x.get_id();
+        self.w_len(x.get_time().as_u64()) + self.w_len(&id.to_le_bytes()[..id.size()])
     }
 }
 
@@ -51,7 +54,7 @@ where
         if size > (uhlc::ID::MAX_SIZE) {
             return Err(DidntRead);
         }
-        let mut id = [0_u8; ZenohId::MAX_SIZE];
+        let mut id = [0_u8; ZenohIdProto::MAX_SIZE];
         reader.read_exact(&mut id[..size])?;
 
         let time = uhlc::NTP64(time);

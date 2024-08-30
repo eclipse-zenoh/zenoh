@@ -11,114 +11,104 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::key_expr::{
-    utils::{Split, Writer},
-    DELIMITER, DOUBLE_WILD, SINGLE_WILD,
-};
 use alloc::string::String;
-use core::{slice, str};
 
-pub trait Canonizable {
+pub trait Canonize {
     fn canonize(&mut self);
 }
 
-const DOLLAR_STAR: &[u8; 2] = b"$*";
-
-impl Canonizable for &mut str {
-    fn canonize(&mut self) {
-        let mut writer = Writer {
-            ptr: self.as_mut_ptr(),
-            len: 0,
-        };
-        if let Some(position) = self.find("$*$*") {
-            writer.len = position;
-            let mut need_final_write = true;
-            for between_dollarstar in self.as_bytes()[(position + 4)..].splitter(DOLLAR_STAR) {
-                need_final_write = between_dollarstar.is_empty();
-                if !need_final_write {
-                    writer.write(DOLLAR_STAR.as_ref());
-                    writer.write(between_dollarstar);
+// Return the length of the canonized string
+fn canonize(bytes: &mut [u8]) -> usize {
+    let mut index = 0;
+    let mut written = 0;
+    let mut double_wild = false;
+    loop {
+        match &bytes[index..] {
+            [b'*', b'*'] => {
+                bytes[written..written + 2].copy_from_slice(b"**");
+                written += 2;
+                return written;
+            }
+            [b'*', b'*', b'/', ..] => {
+                double_wild = true;
+                index += 3;
+            }
+            [b'*', r @ ..] | [b'$', b'*', r @ ..] if r.is_empty() || r.starts_with(b"/") => {
+                let (end, len) = (!r.starts_with(b"/"), r.len());
+                bytes[written] = b'*';
+                written += 1;
+                if end {
+                    if double_wild {
+                        bytes[written..written + 3].copy_from_slice(b"/**");
+                        written += 3;
+                    }
+                    return written;
+                }
+                bytes[written] = b'/';
+                written += 1;
+                index = bytes.len() - len + 1;
+            }
+            // Handle chunks with only repeated "$*"
+            [b'$', b'*', b'$', b'*', ..] => {
+                index += 2;
+            }
+            _ => {
+                if double_wild && &bytes[index..] != b"**" {
+                    bytes[written..written + 3].copy_from_slice(b"**/");
+                    written += 3;
+                    double_wild = false;
+                }
+                let mut write_start = index;
+                loop {
+                    match bytes.get(index) {
+                        Some(b'/') => {
+                            index += 1;
+                            bytes.copy_within(write_start..index, written);
+                            written += index - write_start;
+                            break;
+                        }
+                        Some(b'$') if matches!(bytes.get(index + 1..index + 4), Some(b"*$*")) => {
+                            index += 2;
+                            bytes.copy_within(write_start..index, written);
+                            written += index - write_start;
+                            let skip = bytes[index + 4..]
+                                .windows(2)
+                                .take_while(|s| s == b"$*")
+                                .count();
+                            index += (1 + skip) * 2;
+                            write_start = index;
+                        }
+                        Some(_) => index += 1,
+                        None => {
+                            bytes.copy_within(write_start..index, written);
+                            written += index - write_start;
+                            return written;
+                        }
+                    }
                 }
             }
-            if need_final_write {
-                writer.write(DOLLAR_STAR.as_ref())
-            }
-            *self = unsafe {
-                str::from_utf8_unchecked_mut(slice::from_raw_parts_mut(writer.ptr, writer.len))
-            }
-        }
-        writer.len = 0;
-        let mut ke = self.as_bytes().splitter(&b'/');
-        let mut in_big_wild = false;
-
-        for chunk in ke.by_ref() {
-            if chunk.is_empty() {
-                break;
-            }
-            if in_big_wild {
-                match chunk {
-                    [SINGLE_WILD] | b"$*" => {
-                        writer.write_byte(b'*');
-                        break;
-                    }
-                    DOUBLE_WILD => continue,
-                    _ => {
-                        writer.write(b"**/");
-                        writer.write(chunk);
-                        in_big_wild = false;
-                        break;
-                    }
-                }
-            } else if chunk == DOUBLE_WILD {
-                in_big_wild = true;
-                continue;
-            } else {
-                writer.write(if chunk == b"$*" { b"*" } else { chunk });
-                break;
-            }
-        }
-        for chunk in ke {
-            if chunk.is_empty() {
-                writer.write_byte(b'/');
-                continue;
-            }
-            if in_big_wild {
-                match chunk {
-                    [SINGLE_WILD] | b"$*" => {
-                        writer.write(b"/*");
-                    }
-                    DOUBLE_WILD => {}
-                    _ => {
-                        writer.write(b"/**/");
-                        writer.write(chunk);
-                        in_big_wild = false;
-                    }
-                }
-            } else if chunk == DOUBLE_WILD {
-                in_big_wild = true;
-            } else {
-                writer.write_byte(DELIMITER);
-                writer.write(if chunk == b"$*" { b"*" } else { chunk });
-            }
-        }
-        if in_big_wild {
-            if writer.len != 0 {
-                writer.write_byte(DELIMITER);
-            }
-            writer.write(DOUBLE_WILD)
-        }
-        *self = unsafe {
-            str::from_utf8_unchecked_mut(slice::from_raw_parts_mut(writer.ptr, writer.len))
         }
     }
 }
 
-impl Canonizable for String {
+impl Canonize for &mut str {
     fn canonize(&mut self) {
-        let mut s = self.as_mut();
-        s.canonize();
-        let len = s.len();
-        self.truncate(len);
+        // SAFETY: canonize leave an UTF8 string within the returned length,
+        // and remaining garbage bytes are zeroed
+        let bytes = unsafe { self.as_bytes_mut() };
+        let length = canonize(bytes);
+        bytes[length..].fill(b'\0');
+        *self = &mut core::mem::take(self)[..length];
+    }
+}
+
+impl Canonize for String {
+    fn canonize(&mut self) {
+        // SAFETY: canonize leave an UTF8 string within the returned length,
+        // and remaining garbage bytes are truncated
+        let bytes = unsafe { self.as_mut_vec() };
+        let length = canonize(bytes);
+        bytes.truncate(length);
     }
 }
 
@@ -149,6 +139,9 @@ fn canonizer() {
     let mut s = String::from("hello/**/**/bye");
     s.canonize();
     assert_eq!(s, "hello/**/bye");
+    let mut s = String::from("hello/**/**");
+    s.canonize();
+    assert_eq!(s, "hello/**");
 
     // Any $* chunk is replaced by a * chunk
     let mut s = String::from("hello/$*/bye");
@@ -171,4 +164,11 @@ fn canonizer() {
     let mut s = String::from("hello/**/*");
     s.canonize();
     assert_eq!(s, "hello/*/**");
+
+    // &mut str remaining part is zeroed
+    let mut s = String::from("$*$*$*/hello/$*$*/bye/$*$*");
+    let mut s_mut = s.as_mut_str();
+    s_mut.canonize();
+    assert_eq!(s_mut, "*/hello/*/bye/*");
+    assert_eq!(s, "*/hello/*/bye/*\0\0\0\0\0\0\0\0\0\0\0");
 }

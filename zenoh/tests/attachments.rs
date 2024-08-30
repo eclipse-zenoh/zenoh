@@ -11,26 +11,32 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "unstable")]
-#[test]
-fn pubsub() {
-    use zenoh::prelude::sync::*;
+#![cfg(feature = "unstable")]
+use zenoh::{bytes::ZBytes, config::Config, prelude::*};
 
-    let zenoh = zenoh::open(Config::default()).res().unwrap();
+#[test]
+fn attachment_pubsub() {
+    let zenoh = zenoh::open(Config::default()).wait().unwrap();
     let _sub = zenoh
         .declare_subscriber("test/attachment")
         .callback(|sample| {
-            println!(
-                "{}",
-                std::str::from_utf8(&sample.payload.contiguous()).unwrap()
-            );
-            for (k, v) in &sample.attachment.unwrap() {
+            println!("{}", sample.payload().deserialize::<String>().unwrap());
+            for (k, v) in sample
+                .attachment()
+                .unwrap()
+                .iter::<(
+                    [u8; std::mem::size_of::<usize>()],
+                    [u8; std::mem::size_of::<usize>()],
+                )>()
+                .map(Result::unwrap)
+            {
                 assert!(k.iter().rev().zip(v.as_slice()).all(|(k, v)| k == v))
             }
         })
-        .res()
+        .wait()
         .unwrap();
-    let publisher = zenoh.declare_publisher("test/attachment").res().unwrap();
+
+    let publisher = zenoh.declare_publisher("test/attachment").wait().unwrap();
     for i in 0..10 {
         let mut backer = [(
             [0; std::mem::size_of::<usize>()],
@@ -39,62 +45,60 @@ fn pubsub() {
         for (j, backer) in backer.iter_mut().enumerate() {
             *backer = ((i * 10 + j).to_le_bytes(), (i * 10 + j).to_be_bytes())
         }
+
         zenoh
             .put("test/attachment", "put")
-            .with_attachment(
-                backer
-                    .iter()
-                    .map(|b| (b.0.as_slice(), b.1.as_slice()))
-                    .collect(),
-            )
-            .res()
+            .attachment(ZBytes::from_iter(backer.iter()))
+            .wait()
             .unwrap();
         publisher
             .put("publisher")
-            .with_attachment(
-                backer
-                    .iter()
-                    .map(|b| (b.0.as_slice(), b.1.as_slice()))
-                    .collect(),
-            )
-            .res()
+            .attachment(ZBytes::from_iter(backer.iter()))
+            .wait()
             .unwrap();
     }
 }
-#[cfg(feature = "unstable")]
-#[test]
-fn queries() {
-    use zenoh::{prelude::sync::*, sample::Attachment};
 
-    let zenoh = zenoh::open(Config::default()).res().unwrap();
+#[test]
+fn attachment_queries() {
+    use zenoh::prelude::*;
+    let zenoh = zenoh::open(Config::default()).wait().unwrap();
     let _sub = zenoh
         .declare_queryable("test/attachment")
         .callback(|query| {
-            println!(
-                "{}",
-                std::str::from_utf8(
-                    &query
-                        .value()
-                        .map(|q| q.payload.contiguous())
-                        .unwrap_or_default()
-                )
-                .unwrap()
-            );
-            let mut attachment = Attachment::new();
-            for (k, v) in query.attachment().unwrap() {
+            let s = query
+                .payload()
+                .map(|p| p.deserialize::<String>().unwrap())
+                .unwrap_or_default();
+            println!("Query value: {}", s);
+
+            let attachment = query.attachment().unwrap();
+            println!("Query attachment: {:?}", attachment);
+            for (k, v) in attachment
+                .iter::<(
+                    [u8; std::mem::size_of::<usize>()],
+                    [u8; std::mem::size_of::<usize>()],
+                )>()
+                .map(Result::unwrap)
+            {
                 assert!(k.iter().rev().zip(v.as_slice()).all(|(k, v)| k == v));
-                attachment.insert(&k, &k);
             }
+
             query
-                .reply(Ok(Sample::new(
-                    query.key_expr().clone(),
-                    query.value().unwrap().clone(),
-                )
-                .with_attachment(attachment)))
-                .res()
+                .reply(query.key_expr().clone(), query.payload().unwrap().clone())
+                .attachment(ZBytes::from_iter(
+                    attachment
+                        .iter::<(
+                            [u8; std::mem::size_of::<usize>()],
+                            [u8; std::mem::size_of::<usize>()],
+                        )>()
+                        .map(Result::unwrap)
+                        .map(|(k, _)| (k, k)),
+                ))
+                .wait()
                 .unwrap();
         })
-        .res()
+        .wait()
         .unwrap();
     for i in 0..10 {
         let mut backer = [(
@@ -104,20 +108,24 @@ fn queries() {
         for (j, backer) in backer.iter_mut().enumerate() {
             *backer = ((i * 10 + j).to_le_bytes(), (i * 10 + j).to_be_bytes())
         }
+
         let get = zenoh
             .get("test/attachment")
-            .with_value("query")
-            .with_attachment(
-                backer
-                    .iter()
-                    .map(|b| (b.0.as_slice(), b.1.as_slice()))
-                    .collect(),
-            )
-            .res()
+            .payload("query")
+            .attachment(ZBytes::from_iter(backer.iter()))
+            .wait()
             .unwrap();
         while let Ok(reply) = get.recv() {
-            let response = reply.sample.as_ref().unwrap();
-            for (k, v) in response.attachment().unwrap() {
+            let response = reply.result().unwrap();
+            for (k, v) in response
+                .attachment()
+                .unwrap()
+                .iter::<(
+                    [u8; std::mem::size_of::<usize>()],
+                    [u8; std::mem::size_of::<usize>()],
+                )>()
+                .map(Result::unwrap)
+            {
                 assert_eq!(k, v)
             }
         }

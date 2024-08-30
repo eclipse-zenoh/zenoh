@@ -13,7 +13,6 @@
 //
 extern crate alloc;
 
-use super::{canon::Canonizable, keyexpr};
 // use crate::core::WireExpr;
 use alloc::{borrow::ToOwned, boxed::Box, string::String, sync::Arc};
 use core::{
@@ -22,6 +21,8 @@ use core::{
     ops::{Deref, Div},
     str::FromStr,
 };
+
+use super::{canon::Canonize, keyexpr};
 
 /// A [`Arc<str>`] newtype that is statically known to be a valid key expression.
 ///
@@ -59,7 +60,7 @@ impl OwnedKeyExpr {
     pub fn autocanonize<T, E>(mut t: T) -> Result<Self, E>
     where
         Self: TryFrom<T, Error = E>,
-        T: Canonizable,
+        T: Canonize,
     {
         t.canonize();
         Self::new(t)
@@ -70,13 +71,13 @@ impl OwnedKeyExpr {
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
     pub unsafe fn from_string_unchecked(s: String) -> Self {
-        Self::from_boxed_string_unchecked(s.into_boxed_str())
+        Self::from_boxed_str_unchecked(s.into_boxed_str())
     }
     /// Constructs an OwnedKeyExpr without checking [`keyexpr`]'s invariants
     /// # Safety
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
-    pub unsafe fn from_boxed_string_unchecked(s: Box<str>) -> Self {
+    pub unsafe fn from_boxed_str_unchecked(s: Box<str>) -> Self {
         OwnedKeyExpr(s.into())
     }
 }

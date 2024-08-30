@@ -17,6 +17,25 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
+use std::{any::Any, sync::Arc};
+
+use zenoh_config::{unwrap_or_default, Config, WhatAmI};
+use zenoh_protocol::{
+    core::ZenohIdProto,
+    network::{
+        declare::{
+            queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
+            SubscriberId, TokenId,
+        },
+        interest::{InterestId, InterestMode, InterestOptions},
+        Declare, Oam,
+    },
+};
+use zenoh_result::ZResult;
+use zenoh_transport::unicast::TransportUnicast;
+#[cfg(feature = "unstable")]
+use {crate::key_expr::KeyExpr, std::collections::HashMap};
+
 use super::{
     dispatcher::{
         face::{Face, FaceState},
@@ -25,19 +44,7 @@ use super::{
     router::RoutesIndexes,
     RoutingContext,
 };
-use crate::runtime::Runtime;
-use std::{any::Any, sync::Arc};
-use zenoh_buffers::ZBuf;
-use zenoh_config::{unwrap_or_default, Config, WhatAmI, ZenohId};
-use zenoh_protocol::{
-    core::WireExpr,
-    network::{
-        declare::{queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo},
-        Declare, Oam,
-    },
-};
-use zenoh_result::ZResult;
-use zenoh_transport::unicast::TransportUnicast;
+use crate::net::runtime::Runtime;
 
 mod client;
 mod linkstate_peer;
@@ -50,9 +57,9 @@ zconfigurable! {
 
 #[derive(serde::Serialize)]
 pub(crate) struct Sources {
-    routers: Vec<ZenohId>,
-    peers: Vec<ZenohId>,
-    clients: Vec<ZenohId>,
+    routers: Vec<ZenohIdProto>,
+    peers: Vec<ZenohIdProto>,
+    clients: Vec<ZenohIdProto>,
 }
 
 impl Sources {
@@ -67,8 +74,10 @@ impl Sources {
 
 pub(crate) type SendDeclare<'a> = dyn FnMut(&Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>, RoutingContext<Declare>)
     + 'a;
-
-pub(crate) trait HatTrait: HatBaseTrait + HatPubSubTrait + HatQueriesTrait {}
+pub(crate) trait HatTrait:
+    HatBaseTrait + HatInterestTrait + HatPubSubTrait + HatQueriesTrait + HatTokenTrait
+{
+}
 
 pub(crate) trait HatBaseTrait {
     fn init(&self, tables: &mut Tables, runtime: Runtime);
@@ -140,11 +149,29 @@ pub(crate) trait HatBaseTrait {
     );
 }
 
+pub(crate) trait HatInterestTrait {
+    #[allow(clippy::too_many_arguments)]
+    fn declare_interest(
+        &self,
+        tables: &mut Tables,
+        tables_ref: &Arc<TablesLock>,
+        face: &mut Arc<FaceState>,
+        id: InterestId,
+        res: Option<&mut Arc<Resource>>,
+        mode: InterestMode,
+        options: InterestOptions,
+        send_declare: &mut SendDeclare,
+    );
+    fn undeclare_interest(&self, tables: &mut Tables, face: &mut Arc<FaceState>, id: InterestId);
+}
+
 pub(crate) trait HatPubSubTrait {
+    #[allow(clippy::too_many_arguments)]
     fn declare_subscription(
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
+        id: SubscriberId,
         res: &mut Arc<Resource>,
         sub_info: &SubscriberInfo,
         node_id: NodeId,
@@ -154,10 +181,11 @@ pub(crate) trait HatPubSubTrait {
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
-        res: &mut Arc<Resource>,
+        id: SubscriberId,
+        res: Option<Arc<Resource>>,
         node_id: NodeId,
         send_declare: &mut SendDeclare,
-    );
+    ) -> Option<Arc<Resource>>;
 
     fn get_subscriptions(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;
 
@@ -170,15 +198,24 @@ pub(crate) trait HatPubSubTrait {
     ) -> Arc<Route>;
 
     fn get_data_routes_entries(&self, tables: &Tables) -> RoutesIndexes;
+
+    #[zenoh_macros::unstable]
+    fn get_matching_subscriptions(
+        &self,
+        tables: &Tables,
+        key_expr: &KeyExpr<'_>,
+    ) -> HashMap<usize, Arc<FaceState>>;
 }
 
 pub(crate) trait HatQueriesTrait {
+    #[allow(clippy::too_many_arguments)]
     fn declare_queryable(
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
+        id: QueryableId,
         res: &mut Arc<Resource>,
-        qabl_info: &QueryableInfo,
+        qabl_info: &QueryableInfoType,
         node_id: NodeId,
         send_declare: &mut SendDeclare,
     );
@@ -186,10 +223,11 @@ pub(crate) trait HatQueriesTrait {
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
-        res: &mut Arc<Resource>,
+        id: QueryableId,
+        res: Option<Arc<Resource>>,
         node_id: NodeId,
         send_declare: &mut SendDeclare,
-    );
+    ) -> Option<Arc<Resource>>;
 
     fn get_queryables(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;
 
@@ -202,14 +240,6 @@ pub(crate) trait HatQueriesTrait {
     ) -> Arc<QueryTargetQablSet>;
 
     fn get_query_routes_entries(&self, tables: &Tables) -> RoutesIndexes;
-
-    fn compute_local_replies(
-        &self,
-        tables: &Tables,
-        prefix: &Arc<Resource>,
-        suffix: &str,
-        face: &Arc<FaceState>,
-    ) -> Vec<(WireExpr<'static>, ZBuf)>;
 }
 
 pub(crate) fn new_hat(whatami: WhatAmI, config: &Config) -> Box<dyn HatTrait + Send + Sync> {
@@ -223,5 +253,46 @@ pub(crate) fn new_hat(whatami: WhatAmI, config: &Config) -> Box<dyn HatTrait + S
             }
         }
         WhatAmI::Router => Box::new(router::HatCode {}),
+    }
+}
+
+pub(crate) trait HatTokenTrait {
+    #[allow(clippy::too_many_arguments)]
+    fn declare_token(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: TokenId,
+        res: &mut Arc<Resource>,
+        node_id: NodeId,
+        interest_id: Option<InterestId>,
+        send_declare: &mut SendDeclare,
+    );
+
+    fn undeclare_token(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: TokenId,
+        res: Option<Arc<Resource>>,
+        node_id: NodeId,
+        send_declare: &mut SendDeclare,
+    ) -> Option<Arc<Resource>>;
+}
+
+trait CurrentFutureTrait {
+    fn future(&self) -> bool;
+    fn current(&self) -> bool;
+}
+
+impl CurrentFutureTrait for InterestMode {
+    #[inline]
+    fn future(&self) -> bool {
+        self == &InterestMode::Future || self == &InterestMode::CurrentFuture
+    }
+
+    #[inline]
+    fn current(&self) -> bool {
+        self == &InterestMode::Current || self == &InterestMode::CurrentFuture
     }
 }

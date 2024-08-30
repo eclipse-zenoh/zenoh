@@ -25,13 +25,13 @@
 //!
 //! The actual work of the plugin is performed by the instance, which is created by the [`start`](Plugin::start) function.
 //!
-//! Plugins are loaded, started and stopped by [`PluginsManager`](crate::manager::PluginsManager). Stopping plugin is just dropping it's instance.
+//! Plugins are loaded, started and stopped by [`PluginsManager`]. Stopping plugin is just dropping it's instance.
 //!
 //! Plugins can be static and dynamic.
 //!
-//! Static plugin is just a type which implements [`Plugin`] trait. It can be added to [`PluginsManager`](crate::manager::PluginsManager) by [`PluginsManager::add_static_plugin`](crate::manager::PluginsManager::add_static_plugin) method.
+//! Static plugin is just a type which implements [`Plugin`] trait. It can be added to [`PluginsManager`] by [`PluginsManager::declare_static_plugin`](crate::manager::PluginsManager::declare_static_plugin) method.
 //!
-//! Dynamic plugin is a shared library which exports set of C-repr (unmangled) functions which allows to check plugin compatibility and create plugin instance. These functiuons are defined automatically by [`declare_plugin`](crate::declare_plugin) macro.
+//! Dynamic plugin is a shared library which exports set of C-repr (unmangled) functions which allows to check plugin compatibility and create plugin instance. These functiuons are defined automatically by [`declare_plugin`] macro.
 //!
 mod compatibility;
 mod manager;

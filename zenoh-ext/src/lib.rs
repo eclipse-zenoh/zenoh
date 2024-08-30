@@ -21,8 +21,8 @@ pub use querying_subscriber::{
     FetchingSubscriber, FetchingSubscriberBuilder, QueryingSubscriberBuilder,
 };
 pub use session_ext::SessionExt;
-pub use subscriber_ext::SubscriberBuilderExt;
-pub use subscriber_ext::SubscriberForward;
+pub use subscriber_ext::{SubscriberBuilderExt, SubscriberForward};
+use zenoh::{internal::zerror, query::Reply, sample::Sample, Result as ZResult};
 
 /// The space of keys to use in a [`FetchingSubscriber`].
 pub enum KeySpace {
@@ -49,5 +49,15 @@ pub struct LivelinessSpace;
 impl From<LivelinessSpace> for KeySpace {
     fn from(_: LivelinessSpace) -> Self {
         KeySpace::Liveliness
+    }
+}
+
+pub trait ExtractSample {
+    fn extract(self) -> ZResult<Sample>;
+}
+
+impl ExtractSample for Reply {
+    fn extract(self) -> ZResult<Sample> {
+        self.into_result().map_err(|e| zerror!("{:?}", e).into())
     }
 }

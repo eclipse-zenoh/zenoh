@@ -11,27 +11,28 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{cell::UnsafeCell, convert::TryInto, fmt, net::SocketAddr, sync::Arc, time::Duration};
+
 use async_trait::async_trait;
-use std::cell::UnsafeCell;
-use std::convert::TryInto;
-use std::fmt;
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::{TcpListener, TcpSocket, TcpStream},
+};
 use tokio_util::sync::CancellationToken;
 use zenoh_link_commons::{
-    get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
+    get_ip_interface_names, LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
 };
-use zenoh_protocol::core::{EndPoint, Locator};
+use zenoh_protocol::{
+    core::{EndPoint, Locator},
+    transport::BatchSize,
+};
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 
 use super::{
     get_tcp_addrs, TCP_ACCEPT_THROTTLE_TIME, TCP_DEFAULT_MTU, TCP_LINGER_TIMEOUT,
     TCP_LOCATOR_PREFIX,
 };
-use tokio::net::{TcpListener, TcpSocket, TcpStream};
 
 pub struct LinkUnicastTcp {
     // The underlying socket as returned from the tokio library
@@ -42,6 +43,8 @@ pub struct LinkUnicastTcp {
     // The destination socket address of this link (address used on the remote host)
     dst_addr: SocketAddr,
     dst_locator: Locator,
+    // The computed mtu
+    mtu: BatchSize,
 }
 
 unsafe impl Sync for LinkUnicastTcp {}
@@ -70,6 +73,29 @@ impl LinkUnicastTcp {
             );
         }
 
+        // Compute the MTU
+        // See IETF RFC6691: https://datatracker.ietf.org/doc/rfc6691/
+        let header = match src_addr.ip() {
+            std::net::IpAddr::V4(_) => 40,
+            std::net::IpAddr::V6(_) => 60,
+        };
+        #[allow(unused_mut)] // mut is not needed when target_family != unix
+        let mut mtu = *TCP_DEFAULT_MTU - header;
+
+        // target limitation of socket2: https://docs.rs/socket2/latest/src/socket2/sys/unix.rs.html#1544
+        #[cfg(target_family = "unix")]
+        {
+            let socket = socket2::SockRef::from(&socket);
+            // Get the MSS and divide it by 2 to ensure we can at least fill half the MSS
+            let mss = socket.mss().unwrap_or(mtu as u32) / 2;
+            // Compute largest multiple of TCP MSS that is smaller of default MTU
+            let mut tgt = mss;
+            while (tgt + mss) < mtu as u32 {
+                tgt += mss;
+            }
+            mtu = (mtu as u32).min(tgt) as BatchSize;
+        }
+
         // Build the Tcp object
         LinkUnicastTcp {
             socket: UnsafeCell::new(socket),
@@ -77,8 +103,10 @@ impl LinkUnicastTcp {
             src_locator: Locator::new(TCP_LOCATOR_PREFIX, src_addr.to_string(), "").unwrap(),
             dst_addr,
             dst_locator: Locator::new(TCP_LOCATOR_PREFIX, dst_addr.to_string(), "").unwrap(),
+            mtu,
         }
     }
+
     #[allow(clippy::mut_from_ref)]
     fn get_mut_socket(&self) -> &mut TcpStream {
         unsafe { &mut *self.socket.get() }
@@ -145,8 +173,8 @@ impl LinkUnicastTrait for LinkUnicastTcp {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> u16 {
-        *TCP_DEFAULT_MTU
+    fn get_mtu(&self) -> BatchSize {
+        self.mtu
     }
 
     #[inline(always)]
@@ -162,6 +190,11 @@ impl LinkUnicastTrait for LinkUnicastTcp {
     #[inline(always)]
     fn is_streamed(&self) -> bool {
         true
+    }
+
+    #[inline(always)]
+    fn get_auth_id(&self) -> &LinkAuthId {
+        &LinkAuthId::NONE
     }
 }
 
@@ -189,6 +222,7 @@ impl fmt::Debug for LinkUnicastTcp {
         f.debug_struct("Tcp")
             .field("src", &self.src_addr)
             .field("dst", &self.dst_addr)
+            .field("mtu", &self.get_mtu())
             .finish()
     }
 }

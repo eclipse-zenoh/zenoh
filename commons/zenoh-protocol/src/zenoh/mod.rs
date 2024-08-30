@@ -11,22 +11,19 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-pub mod ack;
 pub mod del;
 pub mod err;
-pub mod pull;
 pub mod put;
 pub mod query;
 pub mod reply;
 
-use crate::core::Encoding;
-pub use ack::Ack;
 pub use del::Del;
 pub use err::Err;
-pub use pull::Pull;
 pub use put::Put;
 pub use query::{Consolidation, Query};
 pub use reply::Reply;
+
+use crate::core::Encoding;
 
 pub mod id {
     pub const OAM: u8 = 0x00;
@@ -35,8 +32,6 @@ pub mod id {
     pub const QUERY: u8 = 0x03;
     pub const REPLY: u8 = 0x04;
     pub const ERR: u8 = 0x05;
-    pub const ACK: u8 = 0x06;
-    pub const PULL: u8 = 0x07;
 }
 
 // DataInfo
@@ -83,9 +78,6 @@ impl From<Del> for PushBody {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RequestBody {
     Query(Query),
-    Put(Put),
-    Del(Del),
-    Pull(Pull),
 }
 
 impl RequestBody {
@@ -95,10 +87,8 @@ impl RequestBody {
 
         let mut rng = rand::thread_rng();
 
-        match rng.gen_range(0..3) {
+        match rng.gen_range(0..1) {
             0 => RequestBody::Query(Query::rand()),
-            1 => RequestBody::Put(Put::rand()),
-            2 => RequestBody::Del(Del::rand()),
             _ => unreachable!(),
         }
     }
@@ -110,39 +100,22 @@ impl From<Query> for RequestBody {
     }
 }
 
-impl From<Put> for RequestBody {
-    fn from(p: Put) -> RequestBody {
-        RequestBody::Put(p)
-    }
-}
-
-impl From<Del> for RequestBody {
-    fn from(d: Del) -> RequestBody {
-        RequestBody::Del(d)
-    }
-}
-
 // Response
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResponseBody {
     Reply(Reply),
     Err(Err),
-    Ack(Ack),
-    Put(Put),
 }
 
 impl ResponseBody {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
-
         let mut rng = rand::thread_rng();
 
-        match rng.gen_range(0..4) {
+        match rng.gen_range(0..2) {
             0 => ResponseBody::Reply(Reply::rand()),
             1 => ResponseBody::Err(Err::rand()),
-            2 => ResponseBody::Ack(Ack::rand()),
-            3 => ResponseBody::Put(Put::rand()),
             _ => unreachable!(),
         }
     }
@@ -160,17 +133,12 @@ impl From<Err> for ResponseBody {
     }
 }
 
-impl From<Ack> for ResponseBody {
-    fn from(r: Ack) -> ResponseBody {
-        ResponseBody::Ack(r)
-    }
-}
-
 pub mod ext {
     use zenoh_buffers::ZBuf;
 
-    use crate::core::{Encoding, ZenohId};
+    use crate::core::{Encoding, EntityGlobalIdProto};
 
+    /// ```text
     ///  7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
     /// |zid_len|X|X|X|X|
@@ -181,10 +149,10 @@ pub mod ext {
     /// +---------------+
     /// %      sn       %
     /// +---------------+
+    /// ```
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct SourceInfoType<const ID: u8> {
-        pub zid: ZenohId,
-        pub eid: u32,
+        pub id: EntityGlobalIdProto,
         pub sn: u32,
     }
 
@@ -194,10 +162,9 @@ pub mod ext {
             use rand::Rng;
             let mut rng = rand::thread_rng();
 
-            let zid = ZenohId::rand();
-            let eid: u32 = rng.gen();
+            let id = EntityGlobalIdProto::rand();
             let sn: u32 = rng.gen();
-            Self { zid, eid, sn }
+            Self { id, sn }
         }
     }
 
@@ -226,12 +193,14 @@ pub mod ext {
         }
     }
 
+    /// ```text
     ///   7 6 5 4 3 2 1 0
     ///  +-+-+-+-+-+-+-+-+
     ///  ~   encoding    ~
     ///  +---------------+
     ///  ~ pl: [u8;z32]  ~  -- Payload
     ///  +---------------+
+    /// ```
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct ValueType<const VID: u8, const SID: u8> {
         #[cfg(feature = "shared-memory")]

@@ -11,7 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::unicast::establishment::{ext::auth::id, AcceptFsm, OpenFsm};
+use std::{collections::HashSet, fmt, ops::Deref, path::Path};
+
 use async_trait::async_trait;
 use rand::Rng;
 use rsa::{
@@ -19,7 +20,6 @@ use rsa::{
     traits::PublicKeyParts,
     BigUint, Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey,
 };
-use std::{collections::HashSet, fmt, ops::Deref, path::Path};
 use tokio::sync::{Mutex, RwLock};
 use zenoh_buffers::{
     reader::{DidntRead, HasReader, Reader},
@@ -31,9 +31,12 @@ use zenoh_core::{bail, zasynclock, zasyncread, zerror, Error as ZError, Result a
 use zenoh_crypto::PseudoRng;
 use zenoh_protocol::common::{ZExtUnit, ZExtZBuf};
 
+use crate::unicast::establishment::{ext::auth::id, AcceptFsm, OpenFsm};
+
 mod ext {
-    use super::{id::PUBKEY, ZExtUnit, ZExtZBuf};
     use zenoh_protocol::{zextunit, zextzbuf};
+
+    use super::{id::PUBKEY, ZExtUnit, ZExtZBuf};
 
     pub(super) type InitSyn = zextzbuf!(PUBKEY, false);
     pub(super) type InitAck = zextzbuf!(PUBKEY, false);
@@ -210,12 +213,14 @@ where
 /*************************************/
 /*             InitSyn               */
 /*************************************/
+/// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
 /// ~  public key   ~
 /// +---------------+
 ///
 /// ZExtZBuf
+/// ```
 pub(crate) struct InitSyn {
     pub(crate) alice_pubkey: ZPublicKey,
 }
@@ -247,6 +252,7 @@ where
 /*************************************/
 /*             InitAck               */
 /*************************************/
+/// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
 /// ~  public key   ~
@@ -255,6 +261,7 @@ where
 /// +---------------+
 ///
 /// ZExtZBuf
+/// ```
 pub(crate) struct InitAck {
     pub(crate) bob_pubkey: ZPublicKey,
     pub(crate) nonce_encrypted_with_alice_pubkey: Vec<u8>,
@@ -292,12 +299,14 @@ where
 /*************************************/
 /*             OpenSyn               */
 /*************************************/
+/// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
 /// ~ ciphered nonce~
 /// +---------------+
 ///
 /// ZExtZBuf
+/// ```
 pub(crate) struct OpenSyn {
     pub(crate) nonce_encrypted_with_bob_pubkey: Vec<u8>,
 }
@@ -331,11 +340,13 @@ where
 /*************************************/
 /*             OpenAck               */
 /*************************************/
+/// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
 /// +---------------+
 ///
 /// ZExtUnit
+/// ```
 
 pub(crate) struct AuthPubKeyFsm<'a> {
     inner: &'a RwLock<AuthPubKey>,

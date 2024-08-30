@@ -11,21 +11,27 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::{Digest, DigestConfig, LogEntry};
-use async_std::stream::{interval, StreamExt};
-use async_std::sync::Arc;
-use async_std::sync::RwLock;
-use async_std::task::sleep;
+use std::{
+    collections::{HashMap, HashSet},
+    convert::TryFrom,
+    sync::Arc,
+    time::Duration,
+};
+
 use flume::Receiver;
 use futures::join;
-use std::collections::{HashMap, HashSet};
-use std::convert::TryFrom;
-use std::time::Duration;
-use zenoh::key_expr::OwnedKeyExpr;
-use zenoh::time::Timestamp;
+use tokio::{
+    sync::RwLock,
+    time::{interval, sleep},
+};
+use zenoh::{key_expr::OwnedKeyExpr, time::Timestamp, Session};
 use zenoh_backend_traits::config::ReplicaConfig;
 
+use super::{Digest, DigestConfig, LogEntry};
+
 pub struct Snapshotter {
+    // session ref for timestamp generation
+    session: Arc<Session>,
     // channel to get updates from the storage
     storage_update: Receiver<(OwnedKeyExpr, Timestamp)>,
     // configuration parameters of the replica
@@ -51,6 +57,7 @@ pub struct ReplicationInfo {
 impl Snapshotter {
     // Initialize the snapshot parameters, logs and digest
     pub async fn new(
+        session: Arc<Session>,
         rx_sample: Receiver<(OwnedKeyExpr, Timestamp)>,
         initial_entries: &Vec<(OwnedKeyExpr, Timestamp)>,
         replica_config: &ReplicaConfig,
@@ -59,10 +66,12 @@ impl Snapshotter {
         // from initial entries, populate the log - stable and volatile
         // compute digest
         let (last_snapshot_time, last_interval) = Snapshotter::compute_snapshot_params(
+            session.clone(),
             replica_config.propagation_delay,
             replica_config.delta,
         );
         let snapshotter = Snapshotter {
+            session,
             storage_update: rx_sample,
             replica_config: replica_config.clone(),
             content: ReplicationInfo {
@@ -117,11 +126,12 @@ impl Snapshotter {
 
         let mut interval = interval(self.replica_config.delta);
         loop {
-            let _ = interval.next().await;
+            let _ = interval.tick().await;
 
             let mut last_snapshot_time = self.content.last_snapshot_time.write().await;
             let mut last_interval = self.content.last_interval.write().await;
             let (time, interval) = Snapshotter::compute_snapshot_params(
+                self.session.clone(),
                 self.replica_config.propagation_delay,
                 self.replica_config.delta,
             );
@@ -133,12 +143,15 @@ impl Snapshotter {
         }
     }
 
+    // TODO
     // Compute latest snapshot time and latest interval with respect to the current time
     pub fn compute_snapshot_params(
+        session: Arc<Session>,
         propagation_delay: Duration,
         delta: Duration,
     ) -> (Timestamp, u64) {
-        let now = zenoh::time::new_reception_timestamp();
+        let now = session.new_timestamp();
+
         let latest_interval = (now
             .get_time()
             .to_system_time()
@@ -195,7 +208,7 @@ impl Snapshotter {
 
     // Create digest from the stable log at startup
     async fn initialize_digest(&self) {
-        let now = zenoh::time::new_reception_timestamp();
+        let now = self.session.new_timestamp();
         let replica_data = &self.content;
         let log_locked = replica_data.stable_log.read().await;
         let latest_interval = replica_data.last_interval.read().await;

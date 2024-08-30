@@ -11,10 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{network::RequestId, transport::TransportSn};
 use alloc::string::String;
 use core::{fmt, str::FromStr};
+
 use zenoh_result::{bail, ZError};
+
+use crate::{network::RequestId, transport::TransportSn};
 
 #[repr(u8)]
 // The value represents the 2-bit encoded value

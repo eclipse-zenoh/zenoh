@@ -10,62 +10,71 @@
 //
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
-use super::routing::dispatcher::face::Face;
-use super::Runtime;
-use crate::key_expr::KeyExpr;
-use crate::net::primitives::Primitives;
-#[cfg(all(feature = "unstable", feature = "plugins"))]
-use crate::plugins::sealed::{self as plugins};
-use crate::prelude::sync::{Sample, SyncResolve};
-use crate::queryable::Query;
-use crate::queryable::QueryInner;
-use crate::value::Value;
+use std::{
+    collections::HashMap,
+    convert::{TryFrom, TryInto},
+    sync::{Arc, Mutex},
+};
+
 use serde_json::json;
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::convert::TryInto;
-use std::sync::Arc;
-use std::sync::Mutex;
 use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
-use zenoh_config::{unwrap_or_default, ConfigValidator, ValidatedMap, WhatAmI};
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+use zenoh_config::{unwrap_or_default, wrappers::ZenohId, ConfigValidator, ValidatedMap, WhatAmI};
+use zenoh_core::Wait;
+#[cfg(feature = "plugins")]
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, ExprId, KnownEncoding, WireExpr, ZenohId, EMPTY_EXPR_ID},
+    core::{key_expr::OwnedKeyExpr, ExprId, WireExpr, EMPTY_EXPR_ID},
     network::{
-        declare::{queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo},
-        ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Push, Request, Response,
-        ResponseFinal,
+        declare::{
+            queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
+        },
+        ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Interest, Push, Request,
+        Response, ResponseFinal,
     },
     zenoh::{PushBody, RequestBody},
 };
 use zenoh_result::ZResult;
 use zenoh_transport::unicast::TransportUnicast;
 
+use super::{routing::dispatcher::face::Face, Runtime};
+#[cfg(feature = "plugins")]
+use crate::api::plugins::PluginsManager;
+use crate::{
+    api::{
+        builders::sample::EncodingBuilderTrait,
+        bytes::ZBytes,
+        key_expr::KeyExpr,
+        queryable::{Query, QueryInner},
+        value::Value,
+    },
+    bytes::Encoding,
+    net::primitives::Primitives,
+};
+
 pub struct AdminContext {
     runtime: Runtime,
     version: String,
-    metadata: serde_json::Value,
 }
 
 type Handler = Arc<dyn Fn(&AdminContext, Query) + Send + Sync>;
 
 pub struct AdminSpace {
     zid: ZenohId,
+    queryable_id: QueryableId,
     primitives: Mutex<Option<Arc<Face>>>,
     mappings: Mutex<HashMap<ExprId, String>>,
     handlers: HashMap<OwnedKeyExpr, Handler>,
     context: Arc<AdminContext>,
 }
 
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 #[derive(Debug, Clone)]
 enum PluginDiff {
     Delete(String),
-    Start(crate::config::PluginLoad),
+    Start(zenoh_config::PluginLoad),
 }
 
 impl ConfigValidator for AdminSpace {
@@ -76,7 +85,7 @@ impl ConfigValidator for AdminSpace {
         current: &serde_json::Map<String, serde_json::Value>,
         new: &serde_json::Map<String, serde_json::Value>,
     ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        #[cfg(feature = "plugins")]
         {
             let plugins_mgr = self.context.runtime.plugins_manager();
             let Some(plugin) = plugins_mgr.started_plugin(name) else {
@@ -87,7 +96,7 @@ impl ConfigValidator for AdminSpace {
             };
             plugin.instance().config_checker(path, current, new)
         }
-        #[cfg(not(all(feature = "unstable", feature = "plugins")))]
+        #[cfg(not(feature = "plugins"))]
         {
             let _ = (name, path, current, new);
             Ok(None)
@@ -96,10 +105,10 @@ impl ConfigValidator for AdminSpace {
 }
 
 impl AdminSpace {
-    #[cfg(all(feature = "unstable", feature = "plugins"))]
+    #[cfg(feature = "plugins")]
     fn start_plugin(
-        plugin_mgr: &mut plugins::PluginsManager,
-        config: &crate::config::PluginLoad,
+        plugin_mgr: &mut PluginsManager,
+        config: &zenoh_config::PluginLoad,
         start_args: &Runtime,
         required: bool,
     ) -> ZResult<()> {
@@ -122,7 +131,16 @@ impl AdminSpace {
             );
             loaded
         } else {
-            declared.load()?
+            match declared.load()? {
+                Some(loaded) => loaded,
+                None => {
+                    tracing::warn!(
+                        "Plugin `{}` will not be loaded as plugin loading is disabled",
+                        config.name
+                    );
+                    return Ok(());
+                }
+            }
         };
 
         if let Some(started) = loaded.started_mut() {
@@ -143,20 +161,19 @@ impl AdminSpace {
         let zid_str = runtime.state.zid.to_string();
         let whatami_str = runtime.state.whatami.to_str();
         let mut config = runtime.config().lock();
-        let metadata = runtime.state.metadata.clone();
-        let root_key: OwnedKeyExpr = format!("@/{whatami_str}/{zid_str}").try_into().unwrap();
+        let root_key: OwnedKeyExpr = format!("@/{zid_str}/{whatami_str}").try_into().unwrap();
 
         let mut handlers: HashMap<_, Handler> = HashMap::new();
         handlers.insert(root_key.clone(), Arc::new(local_data));
         handlers.insert(
-            format!("@/{whatami_str}/{zid_str}/metrics")
+            format!("@/{zid_str}/{whatami_str}/metrics")
                 .try_into()
                 .unwrap(),
             Arc::new(metrics),
         );
         if runtime.state.whatami == WhatAmI::Router {
             handlers.insert(
-                format!("@/{whatami_str}/{zid_str}/linkstate/routers")
+                format!("@/{zid_str}/{whatami_str}/linkstate/routers")
                     .try_into()
                     .unwrap(),
                 Arc::new(routers_linkstate_data),
@@ -166,42 +183,42 @@ impl AdminSpace {
             && unwrap_or_default!(config.routing().peer().mode()) == *"linkstate"
         {
             handlers.insert(
-                format!("@/{whatami_str}/{zid_str}/linkstate/peers")
+                format!("@/{zid_str}/{whatami_str}/linkstate/peers")
                     .try_into()
                     .unwrap(),
                 Arc::new(peers_linkstate_data),
             );
         }
         handlers.insert(
-            format!("@/{whatami_str}/{zid_str}/subscriber/**")
+            format!("@/{zid_str}/{whatami_str}/subscriber/**")
                 .try_into()
                 .unwrap(),
             Arc::new(subscribers_data),
         );
         handlers.insert(
-            format!("@/{whatami_str}/{zid_str}/queryable/**")
+            format!("@/{zid_str}/{whatami_str}/queryable/**")
                 .try_into()
                 .unwrap(),
             Arc::new(queryables_data),
         );
 
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        #[cfg(feature = "plugins")]
         handlers.insert(
-            format!("@/{whatami_str}/{zid_str}/plugins/**")
+            format!("@/{zid_str}/{whatami_str}/plugins/**")
                 .try_into()
                 .unwrap(),
             Arc::new(plugins_data),
         );
 
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        #[cfg(feature = "plugins")]
         handlers.insert(
-            format!("@/{whatami_str}/{zid_str}/status/plugins/**")
+            format!("@/{zid_str}/{whatami_str}/status/plugins/**")
                 .try_into()
                 .unwrap(),
             Arc::new(plugins_status),
         );
 
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        #[cfg(feature = "plugins")]
         let mut active_plugins = runtime
             .plugins_manager()
             .started_plugins_iter()
@@ -211,10 +228,10 @@ impl AdminSpace {
         let context = Arc::new(AdminContext {
             runtime: runtime.clone(),
             version,
-            metadata,
         });
         let admin = Arc::new(AdminSpace {
-            zid: runtime.state.zid,
+            zid: runtime.zid(),
+            queryable_id: runtime.next_id(),
             primitives: Mutex::new(None),
             mappings: Mutex::new(HashMap::new()),
             handlers,
@@ -223,7 +240,7 @@ impl AdminSpace {
 
         config.set_plugin_validator(Arc::downgrade(&admin));
 
-        #[cfg(all(feature = "unstable", feature = "plugins"))]
+        #[cfg(feature = "plugins")]
         {
             let cfg_rx = admin.context.runtime.state.config.subscribe();
 
@@ -299,27 +316,27 @@ impl AdminSpace {
         zlock!(admin.primitives).replace(primitives.clone());
 
         primitives.send_declare(Declare {
-            ext_qos: ext::QoSType::declare_default(),
+            interest_id: None,
+
+            ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::default(),
+            ext_nodeid: ext::NodeIdType::DEFAULT,
             body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                id: 0, // @TODO use proper QueryableId (#703)
+                id: runtime.next_id(),
                 wire_expr: [&root_key, "/**"].concat().into(),
-                ext_info: QueryableInfo {
-                    complete: 0,
-                    distance: 0,
-                },
+                ext_info: QueryableInfoType::DEFAULT,
             }),
         });
 
         primitives.send_declare(Declare {
-            ext_qos: ext::QoSType::declare_default(),
+            interest_id: None,
+            ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::default(),
+            ext_nodeid: ext::NodeIdType::DEFAULT,
             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                id: 0, // @TODO use proper SubscriberId (#703)
+                id: runtime.next_id(),
                 wire_expr: [&root_key, "/config/**"].concat().into(),
-                ext_info: SubscriberInfo::default(),
+                ext_info: SubscriberInfo::DEFAULT,
             }),
         });
     }
@@ -342,6 +359,10 @@ impl AdminSpace {
 }
 
 impl Primitives for AdminSpace {
+    fn send_interest(&self, msg: Interest) {
+        tracing::trace!("Recv interest {:?}", msg);
+    }
+
     fn send_declare(&self, msg: Declare) {
         tracing::trace!("Recv declare {:?}", msg);
         if let DeclareBody::DeclareKeyExpr(m) = msg.body {
@@ -369,24 +390,24 @@ impl Primitives for AdminSpace {
 
         if let Some(key) = msg.wire_expr.as_str().strip_prefix(&format!(
             "@/{}/{}/config/",
-            self.context.runtime.state.whatami, self.context.runtime.state.zid
+            self.context.runtime.state.zid, self.context.runtime.state.whatami,
         )) {
             match msg.payload {
                 PushBody::Put(put) => match std::str::from_utf8(&put.payload.contiguous()) {
                     Ok(json) => {
                         tracing::trace!(
-                            "Insert conf value /@/{}/{}/config/{} : {}",
-                            self.context.runtime.state.whatami,
+                            "Insert conf value @/{}/{}/config/{} : {}",
                             self.context.runtime.state.zid,
+                            self.context.runtime.state.whatami,
                             key,
                             json
                         );
                         if let Err(e) = (&self.context.runtime.state.config).insert_json5(key, json)
                         {
                             error!(
-                                "Error inserting conf value /@/{}/{}/config/{} : {} - {}",
-                                self.context.runtime.state.whatami,
+                                "Error inserting conf value @/{}/{}/config/{} : {} - {}",
                                 self.context.runtime.state.zid,
+                                self.context.runtime.state.whatami,
                                 key,
                                 json,
                                 e
@@ -394,15 +415,15 @@ impl Primitives for AdminSpace {
                         }
                     }
                     Err(e) => error!(
-                        "Received non utf8 conf value on /@/{}/{}/config/{} : {}",
-                        self.context.runtime.state.whatami, self.context.runtime.state.zid, key, e
+                        "Received non utf8 conf value on @/{}/{}/config/{} : {}",
+                        self.context.runtime.state.zid, self.context.runtime.state.whatami, key, e
                     ),
                 },
                 PushBody::Del(_) => {
                     tracing::trace!(
                         "Deleting conf value /@/{}/{}/config/{}",
-                        self.context.runtime.state.whatami,
                         self.context.runtime.state.zid,
+                        self.context.runtime.state.whatami,
                         key
                     );
                     if let Err(e) = self.context.runtime.state.config.remove(key) {
@@ -415,57 +436,56 @@ impl Primitives for AdminSpace {
 
     fn send_request(&self, msg: Request) {
         trace!("recv Request {:?}", msg);
-        if let RequestBody::Query(query) = msg.payload {
-            let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
-            {
-                let conf = self.context.runtime.state.config.lock();
-                if !conf.adminspace.permissions().read {
-                    tracing::error!(
+        match msg.payload {
+            RequestBody::Query(query) => {
+                let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
+                {
+                    let conf = self.context.runtime.state.config.lock();
+                    if !conf.adminspace.permissions().read {
+                        tracing::error!(
                         "Received GET on '{}' but adminspace.permissions.read=false in configuration",
                         msg.wire_expr
                     );
-                    primitives.send_response_final(ResponseFinal {
-                        rid: msg.id,
-                        ext_qos: ext::QoSType::response_final_default(),
-                        ext_tstamp: None,
-                    });
-                    return;
+                        primitives.send_response_final(ResponseFinal {
+                            rid: msg.id,
+                            ext_qos: ext::QoSType::RESPONSE_FINAL,
+                            ext_tstamp: None,
+                        });
+                        return;
+                    }
                 }
-            }
 
-            let key_expr = match self.key_expr_to_string(&msg.wire_expr) {
-                Ok(key_expr) => key_expr.into_owned(),
-                Err(e) => {
-                    tracing::error!("Unknown KeyExpr: {}", e);
-                    primitives.send_response_final(ResponseFinal {
-                        rid: msg.id,
-                        ext_qos: ext::QoSType::response_final_default(),
-                        ext_tstamp: None,
-                    });
-                    return;
-                }
-            };
+                let key_expr = match self.key_expr_to_string(&msg.wire_expr) {
+                    Ok(key_expr) => key_expr.into_owned(),
+                    Err(e) => {
+                        tracing::error!("Unknown KeyExpr: {}", e);
+                        primitives.send_response_final(ResponseFinal {
+                            rid: msg.id,
+                            ext_qos: ext::QoSType::RESPONSE_FINAL,
+                            ext_tstamp: None,
+                        });
+                        return;
+                    }
+                };
 
-            let zid = self.zid;
-            let parameters = query.parameters.to_owned();
-            let query = Query {
-                inner: Arc::new(QueryInner {
-                    key_expr: key_expr.clone(),
-                    parameters,
-                    value: query
-                        .ext_body
-                        .map(|b| Value::from(b.payload).encoding(b.encoding)),
-                    qid: msg.id,
-                    zid,
-                    primitives,
-                    #[cfg(feature = "unstable")]
+                let zid = self.zid;
+                let query = Query {
+                    inner: Arc::new(QueryInner {
+                        key_expr: key_expr.clone(),
+                        parameters: query.parameters.into(),
+                        qid: msg.id,
+                        zid: zid.into(),
+                        primitives,
+                    }),
+                    eid: self.queryable_id,
+                    value: query.ext_body.map(|b| Value::new(b.payload, b.encoding)),
                     attachment: query.ext_attachment.map(Into::into),
-                }),
-            };
+                };
 
-            for (key, handler) in &self.handlers {
-                if key_expr.intersects(key) {
-                    handler(&self.context, query.clone());
+                for (key, handler) in &self.handlers {
+                    if key_expr.intersects(key) {
+                        handler(&self.context, query.clone());
+                    }
                 }
             }
         }
@@ -486,6 +506,11 @@ impl Primitives for AdminSpace {
 
 impl crate::net::primitives::EPrimitives for AdminSpace {
     #[inline]
+    fn send_interest(&self, ctx: crate::net::routing::RoutingContext<Interest>) {
+        (self as &dyn Primitives).send_interest(ctx.msg)
+    }
+
+    #[inline]
     fn send_declare(&self, ctx: crate::net::routing::RoutingContext<Declare>) {
         (self as &dyn Primitives).send_declare(ctx.msg)
     }
@@ -496,18 +521,18 @@ impl crate::net::primitives::EPrimitives for AdminSpace {
     }
 
     #[inline]
-    fn send_request(&self, ctx: crate::net::routing::RoutingContext<Request>) {
-        (self as &dyn Primitives).send_request(ctx.msg)
+    fn send_request(&self, msg: Request) {
+        (self as &dyn Primitives).send_request(msg)
     }
 
     #[inline]
-    fn send_response(&self, ctx: crate::net::routing::RoutingContext<Response>) {
-        (self as &dyn Primitives).send_response(ctx.msg)
+    fn send_response(&self, msg: Response) {
+        (self as &dyn Primitives).send_response(msg)
     }
 
     #[inline]
-    fn send_response_final(&self, ctx: crate::net::routing::RoutingContext<ResponseFinal>) {
-        (self as &dyn Primitives).send_response_final(ctx.msg)
+    fn send_response_final(&self, msg: ResponseFinal) {
+        (self as &dyn Primitives).send_response_final(msg)
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -518,7 +543,7 @@ impl crate::net::primitives::EPrimitives for AdminSpace {
 fn local_data(context: &AdminContext, query: Query) {
     let reply_key: OwnedKeyExpr = format!(
         "@/{}/{}",
-        context.runtime.state.whatami, context.runtime.state.zid
+        context.runtime.state.zid, context.runtime.state.whatami
     )
     .try_into()
     .unwrap();
@@ -526,7 +551,7 @@ fn local_data(context: &AdminContext, query: Query) {
     let transport_mgr = context.runtime.manager().clone();
 
     // plugins info
-    #[cfg(all(feature = "unstable", feature = "plugins"))]
+    #[cfg(feature = "plugins")]
     let plugins: serde_json::Value = {
         let plugins_mgr = context.runtime.plugins_manager();
         plugins_mgr
@@ -557,8 +582,10 @@ fn local_data(context: &AdminContext, query: Query) {
         });
         #[cfg(feature = "stats")]
         {
-            let stats = crate::prelude::Parameters::decode(&query.selector())
-                .any(|(k, v)| k.as_ref() == "_stats" && v != "false");
+            let stats = query
+                .parameters()
+                .iter()
+                .any(|(k, v)| k == "_stats" && v != "false");
             if stats {
                 json.as_object_mut().unwrap().insert(
                     "stats".to_string(),
@@ -580,7 +607,7 @@ fn local_data(context: &AdminContext, query: Query) {
     let mut json = json!({
         "zid": context.runtime.state.zid,
         "version": context.version,
-        "metadata": context.metadata,
+        "metadata": context.runtime.config().lock().metadata(),
         "locators": locators,
         "sessions": transports,
         "plugins": plugins,
@@ -588,8 +615,10 @@ fn local_data(context: &AdminContext, query: Query) {
 
     #[cfg(feature = "stats")]
     {
-        let stats = crate::prelude::Parameters::decode(&query.selector())
-            .any(|(k, v)| k.as_ref() == "_stats" && v != "false");
+        let stats = query
+            .parameters()
+            .iter()
+            .any(|(k, v)| k == "_stats" && v != "false");
         if stats {
             json.as_object_mut().unwrap().insert(
                 "stats".to_string(),
@@ -599,13 +628,17 @@ fn local_data(context: &AdminContext, query: Query) {
     }
 
     tracing::trace!("AdminSpace router_data: {:?}", json);
+    let payload = match ZBytes::try_from(json) {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::error!("Error serializing AdminSpace reply: {:?}", e);
+            return;
+        }
+    };
     if let Err(e) = query
-        .reply(Ok(Sample::new(
-            reply_key,
-            Value::from(json.to_string().as_bytes().to_vec())
-                .encoding(KnownEncoding::AppJson.into()),
-        )))
-        .res()
+        .reply(reply_key, payload)
+        .encoding(Encoding::APPLICATION_JSON)
+        .wait()
     {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
@@ -614,7 +647,7 @@ fn local_data(context: &AdminContext, query: Query) {
 fn metrics(context: &AdminContext, query: Query) {
     let reply_key: OwnedKeyExpr = format!(
         "@/{}/{}/metrics",
-        context.runtime.state.whatami, context.runtime.state.zid
+        context.runtime.state.zid, context.runtime.state.whatami
     )
     .try_into()
     .unwrap();
@@ -638,11 +671,9 @@ zenoh_build{{version="{}"}} 1
     );
 
     if let Err(e) = query
-        .reply(Ok(Sample::new(
-            reply_key,
-            Value::from(metrics.as_bytes().to_vec()).encoding(KnownEncoding::TextPlain.into()),
-        )))
-        .res()
+        .reply(reply_key, metrics)
+        .encoding(Encoding::TEXT_PLAIN)
+        .wait()
     {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
@@ -651,7 +682,7 @@ zenoh_build{{version="{}"}} 1
 fn routers_linkstate_data(context: &AdminContext, query: Query) {
     let reply_key: OwnedKeyExpr = format!(
         "@/{}/{}/linkstate/routers",
-        context.runtime.state.whatami, context.runtime.state.zid
+        context.runtime.state.zid, context.runtime.state.whatami
     )
     .try_into()
     .unwrap();
@@ -659,18 +690,9 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
     let tables = zread!(context.runtime.state.router.tables.tables);
 
     if let Err(e) = query
-        .reply(Ok(Sample::new(
-            reply_key,
-            Value::from(
-                tables
-                    .hat_code
-                    .info(&tables, WhatAmI::Router)
-                    .as_bytes()
-                    .to_vec(),
-            )
-            .encoding(KnownEncoding::TextPlain.into()),
-        )))
-        .res()
+        .reply(reply_key, tables.hat_code.info(&tables, WhatAmI::Router))
+        .encoding(Encoding::TEXT_PLAIN)
+        .wait()
     {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
@@ -679,7 +701,7 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
 fn peers_linkstate_data(context: &AdminContext, query: Query) {
     let reply_key: OwnedKeyExpr = format!(
         "@/{}/{}/linkstate/peers",
-        context.runtime.state.whatami, context.runtime.state.zid
+        context.runtime.state.zid, context.runtime.state.whatami
     )
     .try_into()
     .unwrap();
@@ -687,18 +709,9 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
     let tables = zread!(context.runtime.state.router.tables.tables);
 
     if let Err(e) = query
-        .reply(Ok(Sample::new(
-            reply_key,
-            Value::from(
-                tables
-                    .hat_code
-                    .info(&tables, WhatAmI::Peer)
-                    .as_bytes()
-                    .to_vec(),
-            )
-            .encoding(KnownEncoding::TextPlain.into()),
-        )))
-        .res()
+        .reply(reply_key, tables.hat_code.info(&tables, WhatAmI::Peer))
+        .encoding(Encoding::TEXT_PLAIN)
+        .wait()
     {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
@@ -709,19 +722,18 @@ fn subscribers_data(context: &AdminContext, query: Query) {
     for sub in tables.hat_code.get_subscriptions(&tables) {
         let key = KeyExpr::try_from(format!(
             "@/{}/{}/subscriber/{}",
-            context.runtime.state.whatami,
             context.runtime.state.zid,
+            context.runtime.state.whatami,
             sub.0.expr()
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
+            let payload =
+                ZBytes::from(serde_json::to_string(&sub.1).unwrap_or_else(|_| "{}".to_string()));
             if let Err(e) = query
-                .reply(Ok(Sample::new(
-                    key,
-                    Value::from(serde_json::to_string(&sub.1).unwrap_or_else(|_| "{}".to_string()))
-                        .encoding(KnownEncoding::AppJson.into()),
-                )))
-                .res()
+                .reply(key, payload)
+                .encoding(Encoding::APPLICATION_JSON)
+                .wait()
             {
                 tracing::error!("Error sending AdminSpace reply: {:?}", e);
             }
@@ -734,21 +746,18 @@ fn queryables_data(context: &AdminContext, query: Query) {
     for qabl in tables.hat_code.get_queryables(&tables) {
         let key = KeyExpr::try_from(format!(
             "@/{}/{}/queryable/{}",
-            context.runtime.state.whatami,
             context.runtime.state.zid,
+            context.runtime.state.whatami,
             qabl.0.expr()
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
+            let payload =
+                ZBytes::from(serde_json::to_string(&qabl.1).unwrap_or_else(|_| "{}".to_string()));
             if let Err(e) = query
-                .reply(Ok(Sample::new(
-                    key,
-                    Value::from(
-                        serde_json::to_string(&qabl.1).unwrap_or_else(|_| "{}".to_string()),
-                    )
-                    .encoding(KnownEncoding::AppJson.into()),
-                )))
-                .res()
+                .reply(key, payload)
+                .encoding(Encoding::APPLICATION_JSON)
+                .wait()
             {
                 tracing::error!("Error sending AdminSpace reply: {:?}", e);
             }
@@ -756,12 +765,12 @@ fn queryables_data(context: &AdminContext, query: Query) {
     }
 }
 
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 fn plugins_data(context: &AdminContext, query: Query) {
     let guard = context.runtime.plugins_manager();
     let root_key = format!(
         "@/{}/{}/plugins",
-        context.runtime.state.whatami, &context.runtime.state.zid
+        &context.runtime.state.zid, context.runtime.state.whatami
     );
     let root_key = unsafe { keyexpr::from_str_unchecked(&root_key) };
     tracing::debug!("requested plugins status {:?}", query.key_expr());
@@ -771,20 +780,29 @@ fn plugins_data(context: &AdminContext, query: Query) {
             tracing::debug!("plugin status: {:?}", status);
             let key = root_key.join(status.id()).unwrap();
             let status = serde_json::to_value(status).unwrap();
-            if let Err(e) = query.reply(Ok(Sample::new(key, Value::from(status)))).res() {
-                tracing::error!("Error sending AdminSpace reply: {:?}", e);
+            match ZBytes::try_from(status) {
+                Ok(zbuf) => {
+                    if let Err(e) = query
+                        .reply(key, zbuf)
+                        .encoding(Encoding::APPLICATION_JSON)
+                        .wait()
+                    {
+                        tracing::error!("Error sending AdminSpace reply: {:?}", e);
+                    }
+                }
+                Err(e) => tracing::debug!("Admin query error: {}", e),
             }
         }
     }
 }
 
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 fn plugins_status(context: &AdminContext, query: Query) {
-    let selector = query.selector();
+    let key_expr = query.key_expr();
     let guard = context.runtime.plugins_manager();
     let mut root_key = format!(
         "@/{}/{}/status/plugins/",
-        context.runtime.state.whatami, &context.runtime.state.zid
+        &context.runtime.state.zid, context.runtime.state.whatami
     );
 
     for plugin in guard.started_plugins_iter() {
@@ -794,11 +812,9 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 if let Ok(key_expr) = KeyExpr::try_from(plugin_path_key.clone()) {
                     if query.key_expr().intersects(&key_expr) {
                         if let Err(e) = query
-                            .reply(Ok(Sample::new(
-                                key_expr,
-                                serde_json::Value::String(plugin.path().into()),
-                            )))
-                            .res()
+                            .reply(key_expr, plugin.path())
+                            .encoding(Encoding::TEXT_PLAIN)
+                            .wait()
                         {
                             tracing::error!("Error sending AdminSpace reply: {:?}", e);
                         }
@@ -816,18 +832,18 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 return;
             }
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                plugin.instance().adminspace_getter(&selector, plugin_key)
+                plugin.instance().adminspace_getter(key_expr, plugin_key)
             })) {
                 Ok(Ok(responses)) => {
                     for response in responses {
                         if let Ok(key_expr) = KeyExpr::try_from(response.key) {
-                            if let Err(e) = query.reply(Ok(Sample::new(
-                                key_expr,
-                                Value::from(response.value).encoding(KnownEncoding::AppJson.into()),
-                            )))
-                            .res()
-                            {
-                                tracing::error!("Error sending AdminSpace reply: {:?}", e);
+                            match ZBytes::try_from(response.value) {
+                                Ok(zbuf) => {
+                                    if let Err(e) = query.reply(key_expr, zbuf).encoding(Encoding::APPLICATION_JSON).wait() {
+                                        tracing::error!("Error sending AdminSpace reply: {:?}", e);
+                                    }
+                                },
+                                Err(e) => tracing::debug!("Admin query error: {}", e),
                             }
                         } else {
                             tracing::error!("Error: plugin {} replied with an invalid key", plugin_key);
@@ -850,7 +866,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
     }
 }
 
-#[cfg(all(feature = "unstable", feature = "plugins"))]
+#[cfg(feature = "plugins")]
 fn with_extended_string<R, F: FnMut(&mut String) -> R>(
     prefix: &mut String,
     suffixes: &[&str],

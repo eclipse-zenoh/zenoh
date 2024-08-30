@@ -11,14 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{Locator, WhatAmI, ZenohId};
 use alloc::vec::Vec;
-use core::fmt;
+
+use crate::core::{Locator, WhatAmI, ZenohIdProto};
 
 /// # Hello message
 ///
-/// The [`Hello`] message is used to advertise the locators a zenoh node is reachable at.
-/// The [`Hello`] message SHOULD be sent in a unicast fashion in response to a [`super::Scout`]
+/// The `Hello` message is used to advertise the locators a zenoh node is reachable at.
+/// The `Hello` message SHOULD be sent in a unicast fashion in response to a [`super::Scout`]
 /// message as shown below:
 ///
 /// ```text
@@ -34,7 +34,7 @@ use core::fmt;
 /// |                   |                   |
 /// ```
 ///
-/// Moreover, a [`Hello`] message MAY be sent in the network in a multicast
+/// Moreover, a `Hello` message MAY be sent in the network in a multicast
 /// fashion to advertise the presence of zenoh node. The advertisement operation MAY be performed
 /// periodically as shown below:
 ///
@@ -54,7 +54,7 @@ use core::fmt;
 /// |                   |                   |
 /// ```
 ///
-/// Examples of locators included in the [`Hello`] message are:
+/// Examples of locators included in the `Hello` message are:
 ///
 /// ```text
 ///  udp/192.168.1.1:7447
@@ -63,7 +63,7 @@ use core::fmt;
 ///  tcp/localhost:7447
 /// ```
 ///
-/// The [`Hello`] message structure is defined as follows:
+/// The `Hello` message structure is defined as follows:
 ///
 /// ```text
 /// Header flags:
@@ -99,24 +99,14 @@ pub mod flag {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Hello {
+pub struct HelloProto {
     pub version: u8,
     pub whatami: WhatAmI,
-    pub zid: ZenohId,
+    pub zid: ZenohIdProto,
     pub locators: Vec<Locator>,
 }
 
-impl fmt::Display for Hello {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Hello")
-            .field("zid", &self.zid)
-            .field("whatami", &self.whatami)
-            .field("locators", &self.locators)
-            .finish()
-    }
-}
-
-impl Hello {
+impl HelloProto {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
@@ -124,7 +114,7 @@ impl Hello {
         let mut rng = rand::thread_rng();
 
         let version: u8 = rng.gen();
-        let zid = ZenohId::default();
+        let zid = ZenohIdProto::default();
         let whatami = WhatAmI::rand();
         let locators = if rng.gen_bool(0.5) {
             Vec::from_iter((1..5).map(|_| Locator::rand()))

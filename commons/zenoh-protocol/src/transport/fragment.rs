@@ -11,13 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use zenoh_buffers::ZSlice;
+
 use crate::core::Reliability;
 pub use crate::transport::TransportSn;
-use zenoh_buffers::ZSlice;
 
 /// # Fragment message
 ///
-/// The [`Fragment`] message is used to transmit on the wire large [`crate::zenoh::ZenohMessage`]
+/// The [`Fragment`] message is used to transmit on the wire large [`crate::network::NetworkMessage`]
 /// that require fragmentation because they are larger than the maximum batch size
 /// (i.e. 2^16-1) and/or the link MTU.
 ///

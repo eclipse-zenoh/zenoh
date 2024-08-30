@@ -11,290 +11,69 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::CowStr;
-use alloc::{borrow::Cow, string::String};
-use core::{
-    convert::TryFrom,
-    fmt::{self, Debug},
-    mem,
-};
-use zenoh_result::{bail, zerror, ZError, ZResult};
+use core::fmt::Debug;
 
-mod consts {
-    pub(super) const MIMES: [&str; 21] = [
-        /*  0 */ "",
-        /*  1 */ "application/octet-stream",
-        /*  2 */ "application/custom", // non iana standard
-        /*  3 */ "text/plain",
-        /*  4 */ "application/properties", // non iana standard
-        /*  5 */ "application/json", // if not readable from casual users
-        /*  6 */ "application/sql",
-        /*  7 */ "application/integer", // non iana standard
-        /*  8 */ "application/float", // non iana standard
-        /*  9 */
-        "application/xml", // if not readable from casual users (RFC 3023, sec 3)
-        /* 10 */ "application/xhtml+xml",
-        /* 11 */ "application/x-www-form-urlencoded",
-        /* 12 */ "text/json", // non iana standard - if readable from casual users
-        /* 13 */ "text/html",
-        /* 14 */ "text/xml", // if readable from casual users (RFC 3023, section 3)
-        /* 15 */ "text/css",
-        /* 16 */ "text/csv",
-        /* 17 */ "text/javascript",
-        /* 18 */ "image/jpeg",
-        /* 19 */ "image/png",
-        /* 20 */ "image/gif",
-    ];
-}
+use zenoh_buffers::ZSlice;
 
-#[repr(u8)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum KnownEncoding {
-    Empty = 0,
-    AppOctetStream = 1,
-    AppCustom = 2,
-    TextPlain = 3,
-    AppProperties = 4,
-    AppJson = 5,
-    AppSql = 6,
-    AppInteger = 7,
-    AppFloat = 8,
-    AppXml = 9,
-    AppXhtmlXml = 10,
-    AppXWwwFormUrlencoded = 11,
-    TextJson = 12,
-    TextHtml = 13,
-    TextXml = 14,
-    TextCss = 15,
-    TextCsv = 16,
-    TextJavascript = 17,
-    ImageJpeg = 18,
-    ImagePng = 19,
-    ImageGif = 20,
-}
+pub type EncodingId = u16;
 
-impl From<KnownEncoding> for u8 {
-    fn from(val: KnownEncoding) -> Self {
-        val as u8
-    }
-}
-
-impl From<KnownEncoding> for &str {
-    fn from(val: KnownEncoding) -> Self {
-        consts::MIMES[u8::from(val) as usize]
-    }
-}
-
-impl TryFrom<u8> for KnownEncoding {
-    type Error = ZError;
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        if value < consts::MIMES.len() as u8 + 1 {
-            Ok(unsafe { mem::transmute::<u8, KnownEncoding>(value) })
-        } else {
-            Err(zerror!("Unknown encoding"))
-        }
-    }
-}
-
-impl AsRef<str> for KnownEncoding {
-    fn as_ref(&self) -> &str {
-        consts::MIMES[u8::from(*self) as usize]
-    }
-}
-
-/// The encoding of a zenoh `zenoh::Value`.
-///
-/// A zenoh encoding is a HTTP Mime type represented, for wire efficiency,
-/// as an integer prefix (that maps to a string) and a string suffix.
+/// [`Encoding`] is a metadata that indicates how the data payload should be interpreted.
+/// For wire-efficiency and extensibility purposes, Zenoh defines an [`Encoding`] as
+/// composed of an unsigned integer prefix and a bytes schema. The actual meaning of the
+/// prefix and schema are out-of-scope of the protocol definition. Therefore, Zenoh does not
+/// impose any encoding mapping and users are free to use any mapping they like.
+/// Nevertheless, it is worth highlighting that Zenoh still provides a default mapping as part
+/// of the API as per user convenience. That mapping has no impact on the Zenoh protocol definition.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Encoding {
-    Exact(KnownEncoding),
-    WithSuffix(KnownEncoding, CowStr<'static>),
+pub struct Encoding {
+    pub id: EncodingId,
+    pub schema: Option<ZSlice>,
+}
+
+/// # Encoding field
+///
+/// ```text
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// ~   id: z16   |S~
+/// +---------------+
+/// ~schema: <u8;z8>~  -- if S==1
+/// +---------------+
+/// ```
+pub mod flag {
+    pub const S: u32 = 1; // 0x01 Suffix    if S==1 then schema is present
 }
 
 impl Encoding {
-    pub fn new<IntoCowStr>(prefix: u8, suffix: IntoCowStr) -> ZResult<Self>
-    where
-        IntoCowStr: Into<Cow<'static, str>> + AsRef<str>,
-    {
-        let prefix = KnownEncoding::try_from(prefix)?;
-        let suffix = suffix.into();
-        if suffix.as_bytes().len() > u8::MAX as usize {
-            bail!("Suffix length is limited to 255 characters")
+    /// Returns a new [`Encoding`] object with default empty prefix ID.
+    pub const fn empty() -> Self {
+        Self {
+            id: 0,
+            schema: None,
         }
-        if suffix.as_ref().is_empty() {
-            Ok(Encoding::Exact(prefix))
-        } else {
-            Ok(Encoding::WithSuffix(prefix, suffix.into()))
-        }
-    }
-
-    /// Sets the suffix of this encoding.
-    pub fn with_suffix<IntoCowStr>(self, suffix: IntoCowStr) -> ZResult<Self>
-    where
-        IntoCowStr: Into<Cow<'static, str>> + AsRef<str>,
-    {
-        match self {
-            Encoding::Exact(e) => Encoding::new(e as u8, suffix),
-            Encoding::WithSuffix(e, s) => Encoding::new(e as u8, s + suffix.as_ref()),
-        }
-    }
-
-    pub fn as_ref<'a, T>(&'a self) -> T
-    where
-        &'a Self: Into<T>,
-    {
-        self.into()
-    }
-
-    /// Returns `true`if the string representation of this encoding starts with
-    /// the string representation of their given encoding.
-    pub fn starts_with<T>(&self, with: T) -> bool
-    where
-        T: Into<Encoding>,
-    {
-        let with: Encoding = with.into();
-        self.prefix() == with.prefix() && self.suffix().starts_with(with.suffix())
-    }
-
-    pub const fn prefix(&self) -> &KnownEncoding {
-        match self {
-            Encoding::Exact(e) | Encoding::WithSuffix(e, _) => e,
-        }
-    }
-
-    pub fn suffix(&self) -> &str {
-        match self {
-            Encoding::Exact(_) => "",
-            Encoding::WithSuffix(_, s) => s.as_ref(),
-        }
-    }
-}
-
-impl Encoding {
-    pub const EMPTY: Encoding = Encoding::Exact(KnownEncoding::Empty);
-    pub const APP_OCTET_STREAM: Encoding = Encoding::Exact(KnownEncoding::AppOctetStream);
-    pub const APP_CUSTOM: Encoding = Encoding::Exact(KnownEncoding::AppCustom);
-    pub const TEXT_PLAIN: Encoding = Encoding::Exact(KnownEncoding::TextPlain);
-    pub const APP_PROPERTIES: Encoding = Encoding::Exact(KnownEncoding::AppProperties);
-    pub const APP_JSON: Encoding = Encoding::Exact(KnownEncoding::AppJson);
-    pub const APP_SQL: Encoding = Encoding::Exact(KnownEncoding::AppSql);
-    pub const APP_INTEGER: Encoding = Encoding::Exact(KnownEncoding::AppInteger);
-    pub const APP_FLOAT: Encoding = Encoding::Exact(KnownEncoding::AppFloat);
-    pub const APP_XML: Encoding = Encoding::Exact(KnownEncoding::AppXml);
-    pub const APP_XHTML_XML: Encoding = Encoding::Exact(KnownEncoding::AppXhtmlXml);
-    pub const APP_XWWW_FORM_URLENCODED: Encoding =
-        Encoding::Exact(KnownEncoding::AppXWwwFormUrlencoded);
-    pub const TEXT_JSON: Encoding = Encoding::Exact(KnownEncoding::TextJson);
-    pub const TEXT_HTML: Encoding = Encoding::Exact(KnownEncoding::TextHtml);
-    pub const TEXT_XML: Encoding = Encoding::Exact(KnownEncoding::TextXml);
-    pub const TEXT_CSS: Encoding = Encoding::Exact(KnownEncoding::TextCss);
-    pub const TEXT_CSV: Encoding = Encoding::Exact(KnownEncoding::TextCsv);
-    pub const TEXT_JAVASCRIPT: Encoding = Encoding::Exact(KnownEncoding::TextJavascript);
-    pub const IMAGE_JPEG: Encoding = Encoding::Exact(KnownEncoding::ImageJpeg);
-    pub const IMAGE_PNG: Encoding = Encoding::Exact(KnownEncoding::ImagePng);
-    pub const IMAGE_GIF: Encoding = Encoding::Exact(KnownEncoding::ImageGif);
-}
-
-impl fmt::Display for Encoding {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Encoding::Exact(e) => f.write_str(e.as_ref()),
-            Encoding::WithSuffix(e, s) => {
-                f.write_str(e.as_ref())?;
-                f.write_str(s)
-            }
-        }
-    }
-}
-
-impl From<&'static str> for Encoding {
-    fn from(s: &'static str) -> Self {
-        for (i, v) in consts::MIMES.iter().enumerate().skip(1) {
-            if let Some(suffix) = s.strip_prefix(v) {
-                if suffix.is_empty() {
-                    return Encoding::Exact(unsafe {
-                        mem::transmute::<u8, KnownEncoding>(i as u8)
-                    });
-                } else {
-                    return Encoding::WithSuffix(
-                        unsafe { mem::transmute::<u8, KnownEncoding>(i as u8) },
-                        suffix.into(),
-                    );
-                }
-            }
-        }
-        if s.is_empty() {
-            Encoding::Exact(KnownEncoding::Empty)
-        } else {
-            Encoding::WithSuffix(KnownEncoding::Empty, s.into())
-        }
-    }
-}
-
-impl From<String> for Encoding {
-    fn from(mut s: String) -> Self {
-        for (i, v) in consts::MIMES.iter().enumerate().skip(1) {
-            if s.starts_with(v) {
-                s.replace_range(..v.len(), "");
-                if s.is_empty() {
-                    return Encoding::Exact(unsafe {
-                        mem::transmute::<u8, KnownEncoding>(i as u8)
-                    });
-                } else {
-                    return Encoding::WithSuffix(
-                        unsafe { mem::transmute::<u8, KnownEncoding>(i as u8) },
-                        s.into(),
-                    );
-                }
-            }
-        }
-        if s.is_empty() {
-            Encoding::Exact(KnownEncoding::Empty)
-        } else {
-            Encoding::WithSuffix(KnownEncoding::Empty, s.into())
-        }
-    }
-}
-
-impl From<&KnownEncoding> for Encoding {
-    fn from(e: &KnownEncoding) -> Encoding {
-        Encoding::Exact(*e)
-    }
-}
-
-impl From<KnownEncoding> for Encoding {
-    fn from(e: KnownEncoding) -> Encoding {
-        Encoding::Exact(e)
     }
 }
 
 impl Default for Encoding {
     fn default() -> Self {
-        KnownEncoding::Empty.into()
+        Self::empty()
     }
 }
 
 impl Encoding {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use rand::{
-            distributions::{Alphanumeric, DistString},
-            Rng,
-        };
+        use rand::Rng;
 
         const MIN: usize = 2;
         const MAX: usize = 16;
 
         let mut rng = rand::thread_rng();
 
-        let prefix: u8 = rng.gen_range(0..20);
-        let suffix: String = if rng.gen_bool(0.5) {
-            let len = rng.gen_range(MIN..MAX);
-            Alphanumeric.sample_string(&mut rng, len)
-        } else {
-            String::new()
-        };
-        Encoding::new(prefix, suffix).unwrap()
+        let id: EncodingId = rng.gen();
+        let schema = rng
+            .gen_bool(0.5)
+            .then_some(ZSlice::rand(rng.gen_range(MIN..MAX)));
+        Encoding { id, schema }
     }
 }

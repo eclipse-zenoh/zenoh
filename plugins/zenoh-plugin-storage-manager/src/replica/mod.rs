@@ -14,22 +14,20 @@
 
 // This module extends Storage with alignment protocol that aligns storages subscribing to the same key_expr
 
-use crate::backends_mgt::StoreIntercept;
-use crate::storages_mgt::StorageMessage;
-use async_std::stream::{interval, StreamExt};
-use async_std::sync::Arc;
-use async_std::sync::RwLock;
+use std::{
+    collections::{HashMap, HashSet},
+    str,
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
+
 use flume::{Receiver, Sender};
 use futures::{pin_mut, select, FutureExt};
-use std::collections::{HashMap, HashSet};
-use std::str;
-use std::str::FromStr;
-use std::time::{Duration, SystemTime};
-use urlencoding::encode;
-use zenoh::prelude::r#async::*;
-use zenoh::time::Timestamp;
-use zenoh::Session;
+use tokio::{sync::RwLock, time::interval};
+use zenoh::{key_expr::keyexpr, prelude::*};
 use zenoh_backend_traits::config::{ReplicaConfig, StorageConfig};
+
+use crate::{backends_mgt::StoreIntercept, storages_mgt::StorageMessage};
 
 pub mod align_queryable;
 pub mod aligner;
@@ -42,15 +40,18 @@ pub use aligner::Aligner;
 pub use digest::{Digest, DigestConfig, EraType, LogEntry};
 pub use snapshotter::Snapshotter;
 pub use storage::{ReplicationService, StorageService};
+use zenoh::{key_expr::OwnedKeyExpr, sample::Locality, time::Timestamp, Session};
 
 const ERA: &str = "era";
 const INTERVALS: &str = "intervals";
 const SUBINTERVALS: &str = "subintervals";
 const CONTENTS: &str = "contents";
 pub const EPOCH_START: SystemTime = SystemTime::UNIX_EPOCH;
-
-pub const ALIGN_PREFIX: &str = "@-digest";
 pub const SUBINTERVAL_CHUNKS: usize = 10;
+
+lazy_static::lazy_static!(
+    static ref KE_PREFIX_DIGEST: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("@-digest") };
+);
 
 // A replica consists of a storage service and services required for anti-entropy
 // To perform anti-entropy, we need a `Digest` that contains the state of the datastore
@@ -93,10 +94,7 @@ impl Replica {
                         }
                     } else {
                         result.push((
-                            StorageService::get_prefixed(
-                                &storage_config.strip_prefix,
-                                &entry.0.unwrap().into(),
-                            ),
+                            crate::prefix(storage_config.strip_prefix.as_ref(), &entry.0.unwrap()),
                             entry.1,
                         ));
                     }
@@ -109,14 +107,15 @@ impl Replica {
             }
         };
 
+        // Zid of session for generating timestamps
+
         let replica = Replica {
             name: name.to_string(),
-            session,
+            session: session.clone(),
             key_expr: storage_config.key_expr.clone(),
             replica_config: storage_config.replica_config.clone().unwrap(),
             digests_published: RwLock::new(HashSet::new()),
         };
-
         // Create channels for communication between components
         // channel to queue digests to be aligned
         let (tx_digest, rx_digest) = flume::unbounded();
@@ -127,11 +126,12 @@ impl Replica {
 
         let config = replica.replica_config.clone();
         // snapshotter
-        let snapshotter = Arc::new(Snapshotter::new(rx_log, &startup_entries, &config).await);
+        let snapshotter =
+            Arc::new(Snapshotter::new(session, rx_log, &startup_entries, &config).await);
         // digest sub
         let digest_sub = replica.start_digest_sub(tx_digest).fuse();
         // queryable for alignment
-        let digest_key = Replica::get_digest_key(&replica.key_expr, ALIGN_PREFIX);
+        let digest_key = Replica::get_digest_key(&replica.key_expr);
         let align_q = AlignQueryable::start_align_queryable(
             replica.session.clone(),
             digest_key.clone(),
@@ -195,9 +195,7 @@ impl Replica {
     pub async fn start_digest_sub(&self, tx: Sender<(String, Digest)>) {
         let mut received = HashMap::<String, Timestamp>::new();
 
-        let digest_key = Replica::get_digest_key(&self.key_expr, ALIGN_PREFIX)
-            .join("**")
-            .unwrap();
+        let digest_key = Replica::get_digest_key(&self.key_expr).join("**").unwrap();
 
         tracing::debug!(
             "[DIGEST_SUB] Declaring Subscriber named {} on '{}'",
@@ -208,7 +206,6 @@ impl Replica {
             .session
             .declare_subscriber(&digest_key)
             .allowed_origin(Locality::Remote)
-            .res()
             .await
             .unwrap();
         loop {
@@ -219,22 +216,25 @@ impl Replica {
                     continue;
                 }
             };
-            let from = &sample.key_expr.as_str()
-                [Replica::get_digest_key(&self.key_expr, ALIGN_PREFIX).len() + 1..];
-            tracing::trace!(
-                "[DIGEST_SUB] From {} Received {} ('{}': '{}')",
-                from,
-                sample.kind,
-                sample.key_expr.as_str(),
-                sample.value
-            );
-            let digest: Digest = match serde_json::from_str(&format!("{}", sample.value)) {
+            let from =
+                &sample.key_expr().as_str()[Replica::get_digest_key(&self.key_expr).len() + 1..];
+
+            let digest: Digest = match serde_json::from_reader(sample.payload().reader()) {
                 Ok(digest) => digest,
                 Err(e) => {
                     tracing::error!("[DIGEST_SUB] Error in decoding the digest: {}", e);
                     continue;
                 }
             };
+
+            tracing::trace!(
+                "[DIGEST_SUB] From {} Received {} ('{}': '{:?}')",
+                from,
+                sample.kind(),
+                sample.key_expr().as_str(),
+                digest,
+            );
+
             let ts = digest.timestamp;
             let to_be_processed = self
                 .processing_needed(
@@ -253,7 +253,7 @@ impl Replica {
                         tracing::error!("[DIGEST_SUB] Error sending digest to aligner: {}", e)
                     }
                 }
-            };
+            }
             received.insert(from.to_string(), ts);
         }
     }
@@ -261,23 +261,18 @@ impl Replica {
     // Create a publisher to periodically publish digests from the snapshotter
     // Publish on <align_prefix>/<encoded_key_expr>/<replica_name>
     pub async fn start_digest_pub(&self, snapshotter: Arc<Snapshotter>) {
-        let digest_key = Replica::get_digest_key(&self.key_expr, ALIGN_PREFIX)
+        let digest_key = Replica::get_digest_key(&self.key_expr)
             .join(&self.name)
             .unwrap();
 
         tracing::debug!("[DIGEST_PUB] Declaring Publisher on '{}'...", digest_key);
-        let publisher = self
-            .session
-            .declare_publisher(digest_key)
-            .res()
-            .await
-            .unwrap();
+        let publisher = self.session.declare_publisher(digest_key).await.unwrap();
 
         // Ensure digest gets published every interval, accounting for
         // time it takes to publish.
         let mut interval = interval(self.replica_config.publication_interval);
         loop {
-            let _ = interval.next().await;
+            let _ = interval.tick().await;
 
             let digest = snapshotter.get_digest().await;
             let digest = digest.compress();
@@ -288,7 +283,7 @@ impl Replica {
             drop(digest);
 
             tracing::trace!("[DIGEST_PUB] Putting Digest: {} ...", digest_json);
-            match publisher.put(digest_json).res().await {
+            match publisher.put(digest_json).await {
                 Ok(()) => {}
                 Err(e) => tracing::error!("[DIGEST_PUB] Digest publication failed: {}", e),
             }
@@ -332,12 +327,8 @@ impl Replica {
         true
     }
 
-    fn get_digest_key(key_expr: &OwnedKeyExpr, align_prefix: &str) -> OwnedKeyExpr {
-        let key_expr = encode(key_expr).to_string();
-        OwnedKeyExpr::from_str(align_prefix)
-            .unwrap()
-            .join(&key_expr)
-            .unwrap()
+    fn get_digest_key(key_expr: &keyexpr) -> OwnedKeyExpr {
+        *KE_PREFIX_DIGEST / key_expr
     }
 
     pub fn get_hot_interval_number(publication_interval: Duration, delta: Duration) -> usize {

@@ -14,8 +14,8 @@
 use zenoh_buffers::{
     reader::{HasReader, Reader, SiphonableReader},
     writer::{BacktrackableWriter, HasWriter, Writer},
+    BBuf, ZBuf, ZSlice,
 };
-use zenoh_buffers::{BBuf, ZBuf, ZSlice};
 
 const BYTES: usize = 18;
 
@@ -46,13 +46,15 @@ macro_rules! run_write {
 
         writer.write_exact(&WBS4).unwrap();
 
-        writer
-            .with_slot(4, |mut buffer| {
+        // SAFETY: callback returns the length of the buffer
+        unsafe {
+            writer.with_slot(4, |mut buffer| {
                 let w = buffer.write(&WBS5).unwrap();
                 assert_eq!(4, w.get());
                 w.get()
             })
-            .unwrap();
+        }
+        .unwrap();
     };
 }
 

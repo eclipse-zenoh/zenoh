@@ -18,38 +18,50 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 
+use std::{any::Any, collections::HashSet, iter, sync::Arc};
+
+use itertools::Itertools;
+use zenoh_config::{
+    AclConfig, AclMessage, CertCommonName, InterceptorFlow, Interface, Permission, Username,
+};
+use zenoh_protocol::{
+    core::ZenohIdProto,
+    network::{Declare, DeclareBody, NetworkBody, NetworkMessage, Push, Request, Response},
+    zenoh::{PushBody, RequestBody},
+};
+use zenoh_result::ZResult;
+use zenoh_transport::{
+    multicast::TransportMulticast,
+    unicast::{authentication::AuthId, TransportUnicast},
+};
+
 use super::{
     authorization::PolicyEnforcer, EgressInterceptor, IngressInterceptor, InterceptorFactory,
     InterceptorFactoryTrait, InterceptorTrait,
 };
-use crate::net::routing::RoutingContext;
-use crate::KeyExpr;
-use std::any::Any;
-use std::sync::Arc;
-use zenoh_config::{AclConfig, Action, InterceptorFlow, Permission, Subject, ZenohId};
-use zenoh_protocol::{
-    network::{Declare, DeclareBody, NetworkBody, NetworkMessage, Push, Request},
-    zenoh::{PushBody, RequestBody},
+use crate::{
+    api::key_expr::KeyExpr,
+    net::routing::{interceptor::authorization::SubjectQuery, RoutingContext},
 };
-use zenoh_result::ZResult;
-use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 pub struct AclEnforcer {
     enforcer: Arc<PolicyEnforcer>,
 }
-#[derive(Clone, Debug)]
-pub struct Interface {
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct AuthSubject {
     id: usize,
     name: String,
 }
+
 struct EgressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
-    interface_list: Vec<Interface>,
-    zid: ZenohId,
+    subject: Vec<AuthSubject>,
+    zid: ZenohIdProto,
 }
+
 struct IngressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
-    interface_list: Vec<Interface>,
-    zid: ZenohId,
+    subject: Vec<AuthSubject>,
+    zid: ZenohIdProto,
 }
 
 pub(crate) fn acl_interceptor_factories(
@@ -80,54 +92,112 @@ impl InterceptorFactoryTrait for AclEnforcer {
         &self,
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
-        match transport.get_zid() {
-            Ok(zid) => {
-                let mut interface_list: Vec<Interface> = Vec::new();
-                match transport.get_links() {
-                    Ok(links) => {
-                        for link in links {
-                            let enforcer = self.enforcer.clone();
-                            for face in link.interfaces {
-                                let subject = &Subject::Interface(face.clone());
-                                if let Some(val) = enforcer.subject_map.get(subject) {
-                                    interface_list.push(Interface {
-                                        id: *val,
-                                        name: face,
-                                    });
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        tracing::error!("Couldn't get interface list with error: {}", e);
+        let auth_ids = match transport.get_auth_ids() {
+            Ok(auth_ids) => auth_ids,
+            Err(err) => {
+                tracing::error!("Couldn't get Transport Auth IDs: {}", err);
+                return (None, None);
+            }
+        };
+
+        let mut cert_common_names = Vec::new();
+        let mut username = None;
+
+        for auth_id in auth_ids {
+            match auth_id {
+                AuthId::CertCommonName(value) => {
+                    cert_common_names.push(Some(CertCommonName(value)));
+                }
+                AuthId::Username(value) => {
+                    if username.is_some() {
+                        tracing::error!("Transport should not report more than one username");
                         return (None, None);
                     }
+                    username = Some(Username(value));
                 }
-                let ingress_interceptor = Box::new(IngressAclEnforcer {
-                    policy_enforcer: self.enforcer.clone(),
-                    interface_list: interface_list.clone(),
-                    zid,
-                });
-                let egress_interceptor = Box::new(EgressAclEnforcer {
-                    policy_enforcer: self.enforcer.clone(),
-                    interface_list: interface_list.clone(),
-                    zid,
-                });
-                match (
-                    self.enforcer.interface_enabled.ingress,
-                    self.enforcer.interface_enabled.egress,
-                ) {
-                    (true, true) => (Some(ingress_interceptor), Some(egress_interceptor)),
-                    (true, false) => (Some(ingress_interceptor), None),
-                    (false, true) => (None, Some(egress_interceptor)),
-                    (false, false) => (None, None),
-                }
-            }
-            Err(e) => {
-                tracing::error!("Failed to get zid with error :{}", e);
-                (None, None)
+                AuthId::None => {}
             }
         }
+        if cert_common_names.is_empty() {
+            cert_common_names.push(None);
+        }
+
+        let links = match transport.get_links() {
+            Ok(links) => links,
+            Err(err) => {
+                tracing::error!("Couldn't get Transport links: {}", err);
+                return (None, None);
+            }
+        };
+        let mut interfaces = links
+            .into_iter()
+            .flat_map(|link| {
+                link.interfaces
+                    .into_iter()
+                    .map(|interface| Some(Interface(interface)))
+            })
+            .collect::<Vec<_>>();
+        if interfaces.is_empty() {
+            interfaces.push(None);
+        } else if interfaces.len() > 1 {
+            tracing::warn!("Transport returned multiple network interfaces, current ACL logic might incorrectly apply filters in this case!");
+        }
+
+        let mut auth_subjects = HashSet::new();
+
+        for ((username, interface), cert_common_name) in iter::once(username)
+            .cartesian_product(interfaces.into_iter())
+            .cartesian_product(cert_common_names.into_iter())
+        {
+            let query = SubjectQuery {
+                interface,
+                cert_common_name,
+                username,
+            };
+
+            if let Some(entry) = self.enforcer.subject_store.query(&query) {
+                auth_subjects.insert(AuthSubject {
+                    id: entry.id,
+                    name: format!("{query}"),
+                });
+            }
+        }
+
+        let zid = match transport.get_zid() {
+            Ok(zid) => zid,
+            Err(err) => {
+                tracing::error!("Couldn't get Transport zid: {}", err);
+                return (None, None);
+            }
+        };
+        // FIXME: Investigate if `AuthSubject` can have duplicates above and try to avoid this conversion
+        let auth_subjects = auth_subjects.into_iter().collect::<Vec<AuthSubject>>();
+        if auth_subjects.is_empty() {
+            tracing::info!(
+                "{zid} did not match any configured ACL subject. Default permission `{:?}` will be applied on all messages",
+                self.enforcer.default_permission
+            );
+        }
+        let ingress_interceptor = Box::new(IngressAclEnforcer {
+            policy_enforcer: self.enforcer.clone(),
+            zid,
+            subject: auth_subjects.clone(),
+        });
+        let egress_interceptor = Box::new(EgressAclEnforcer {
+            policy_enforcer: self.enforcer.clone(),
+            zid,
+            subject: auth_subjects,
+        });
+        (
+            self.enforcer
+                .interface_enabled
+                .ingress
+                .then_some(ingress_interceptor),
+            self.enforcer
+                .interface_enabled
+                .egress
+                .then_some(egress_interceptor),
+        )
     }
 
     fn new_transport_multicast(
@@ -165,19 +235,36 @@ impl InterceptorTrait for IngressAclEnforcer {
             .or_else(|| ctx.full_expr());
 
         match &ctx.msg.body {
-            NetworkBody::Push(Push {
-                payload: PushBody::Put(_),
-                ..
-            }) => {
-                if self.action(Action::Put, "Put (ingress)", key_expr?) == Permission::Deny {
-                    return None;
-                }
-            }
             NetworkBody::Request(Request {
                 payload: RequestBody::Query(_),
                 ..
             }) => {
-                if self.action(Action::Get, "Get (ingress)", key_expr?) == Permission::Deny {
+                if self.action(AclMessage::Query, "Query (ingress)", key_expr?) == Permission::Deny
+                {
+                    return None;
+                }
+            }
+            NetworkBody::Response(Response { .. }) => {
+                if self.action(AclMessage::Reply, "Reply (ingress)", key_expr?) == Permission::Deny
+                {
+                    return None;
+                }
+            }
+            NetworkBody::Push(Push {
+                payload: PushBody::Put(_),
+                ..
+            }) => {
+                if self.action(AclMessage::Put, "Put (ingress)", key_expr?) == Permission::Deny {
+                    return None;
+                }
+            }
+            NetworkBody::Push(Push {
+                payload: PushBody::Del(_),
+                ..
+            }) => {
+                if self.action(AclMessage::Delete, "Delete (ingress)", key_expr?)
+                    == Permission::Deny
+                {
                     return None;
                 }
             }
@@ -186,7 +273,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                 ..
             }) => {
                 if self.action(
-                    Action::DeclareSubscriber,
+                    AclMessage::DeclareSubscriber,
                     "Declare Subscriber (ingress)",
                     key_expr?,
                 ) == Permission::Deny
@@ -199,7 +286,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                 ..
             }) => {
                 if self.action(
-                    Action::DeclareQueryable,
+                    AclMessage::DeclareQueryable,
                     "Declare Queryable (ingress)",
                     key_expr?,
                 ) == Permission::Deny
@@ -207,7 +294,38 @@ impl InterceptorTrait for IngressAclEnforcer {
                     return None;
                 }
             }
-            _ => {}
+            // Unfiltered Declare messages
+            NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareKeyExpr(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareFinal(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareToken(_),
+                ..
+            }) => {}
+            // Unfiltered Undeclare messages
+            NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareKeyExpr(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareToken(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareQueryable(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareSubscriber(_),
+                ..
+            }) => {}
+            // Unfiltered remaining message types
+            NetworkBody::Interest(_) | NetworkBody::OAM(_) | NetworkBody::ResponseFinal(_) => {}
         }
         Some(ctx)
     }
@@ -217,6 +335,7 @@ impl InterceptorTrait for EgressAclEnforcer {
     fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
         Some(Box::new(key_expr.to_string()))
     }
+
     fn intercept(
         &self,
         ctx: RoutingContext<NetworkMessage>,
@@ -233,19 +352,33 @@ impl InterceptorTrait for EgressAclEnforcer {
             .or_else(|| ctx.full_expr());
 
         match &ctx.msg.body {
-            NetworkBody::Push(Push {
-                payload: PushBody::Put(_),
-                ..
-            }) => {
-                if self.action(Action::Put, "Put (egress)", key_expr?) == Permission::Deny {
-                    return None;
-                }
-            }
             NetworkBody::Request(Request {
                 payload: RequestBody::Query(_),
                 ..
             }) => {
-                if self.action(Action::Get, "Get (egress)", key_expr?) == Permission::Deny {
+                if self.action(AclMessage::Query, "Query (egress)", key_expr?) == Permission::Deny {
+                    return None;
+                }
+            }
+            NetworkBody::Response(Response { .. }) => {
+                if self.action(AclMessage::Reply, "Reply (egress)", key_expr?) == Permission::Deny {
+                    return None;
+                }
+            }
+            NetworkBody::Push(Push {
+                payload: PushBody::Put(_),
+                ..
+            }) => {
+                if self.action(AclMessage::Put, "Put (egress)", key_expr?) == Permission::Deny {
+                    return None;
+                }
+            }
+            NetworkBody::Push(Push {
+                payload: PushBody::Del(_),
+                ..
+            }) => {
+                if self.action(AclMessage::Delete, "Delete (egress)", key_expr?) == Permission::Deny
+                {
                     return None;
                 }
             }
@@ -254,7 +387,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                 ..
             }) => {
                 if self.action(
-                    Action::DeclareSubscriber,
+                    AclMessage::DeclareSubscriber,
                     "Declare Subscriber (egress)",
                     key_expr?,
                 ) == Permission::Deny
@@ -267,7 +400,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                 ..
             }) => {
                 if self.action(
-                    Action::DeclareQueryable,
+                    AclMessage::DeclareQueryable,
                     "Declare Queryable (egress)",
                     key_expr?,
                 ) == Permission::Deny
@@ -275,22 +408,53 @@ impl InterceptorTrait for EgressAclEnforcer {
                     return None;
                 }
             }
-            _ => {}
+            // Unfiltered Declare messages
+            NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareKeyExpr(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareFinal(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareToken(_),
+                ..
+            }) => {}
+            // Unfiltered Undeclare messages
+            NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareKeyExpr(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareToken(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareQueryable(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareSubscriber(_),
+                ..
+            }) => {}
+            // Unfiltered remaining message types
+            NetworkBody::Interest(_) | NetworkBody::OAM(_) | NetworkBody::ResponseFinal(_) => {}
         }
         Some(ctx)
     }
 }
 pub trait AclActionMethods {
     fn policy_enforcer(&self) -> Arc<PolicyEnforcer>;
-    fn interface_list(&self) -> Vec<Interface>;
-    fn zid(&self) -> ZenohId;
+    fn zid(&self) -> ZenohIdProto;
     fn flow(&self) -> InterceptorFlow;
-    fn action(&self, action: Action, log_msg: &str, key_expr: &str) -> Permission {
+    fn authn_ids(&self) -> Vec<AuthSubject>;
+    fn action(&self, action: AclMessage, log_msg: &str, key_expr: &str) -> Permission {
         let policy_enforcer = self.policy_enforcer();
-        let interface_list = self.interface_list();
+        let authn_ids: Vec<AuthSubject> = self.authn_ids();
         let zid = self.zid();
         let mut decision = policy_enforcer.default_permission;
-        for subject in &interface_list {
+        for subject in &authn_ids {
             match policy_enforcer.policy_decision_point(subject.id, self.flow(), action, key_expr) {
                 Ok(Permission::Allow) => {
                     tracing::trace!(
@@ -337,15 +501,16 @@ impl AclActionMethods for EgressAclEnforcer {
         self.policy_enforcer.clone()
     }
 
-    fn interface_list(&self) -> Vec<Interface> {
-        self.interface_list.clone()
-    }
-
-    fn zid(&self) -> ZenohId {
+    fn zid(&self) -> ZenohIdProto {
         self.zid
     }
+
     fn flow(&self) -> InterceptorFlow {
         InterceptorFlow::Egress
+    }
+
+    fn authn_ids(&self) -> Vec<AuthSubject> {
+        self.subject.clone()
     }
 }
 
@@ -354,14 +519,15 @@ impl AclActionMethods for IngressAclEnforcer {
         self.policy_enforcer.clone()
     }
 
-    fn interface_list(&self) -> Vec<Interface> {
-        self.interface_list.clone()
-    }
-
-    fn zid(&self) -> ZenohId {
+    fn zid(&self) -> ZenohIdProto {
         self.zid
     }
+
     fn flow(&self) -> InterceptorFlow {
         InterceptorFlow::Ingress
+    }
+
+    fn authn_ids(&self) -> Vec<AuthSubject> {
+        self.subject.clone()
     }
 }

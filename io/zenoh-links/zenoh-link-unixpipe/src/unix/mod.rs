@@ -24,7 +24,7 @@ pub use unicast::*;
 use zenoh_config::Config;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
-use zenoh_protocol::core::{Locator, Parameters};
+use zenoh_protocol::core::{parameters, Locator};
 use zenoh_result::ZResult;
 
 pub const UNIXPIPE_LOCATOR_PREFIX: &str = "unixpipe";
@@ -56,8 +56,7 @@ impl ConfigurationInspector<Config> for UnixPipeConfigurator {
             properties.push((config::FILE_ACCESS_MASK, &file_access_mask_));
         }
 
-        let mut s = String::new();
-        Parameters::extend(properties.drain(..), &mut s);
+        let s = parameters::from_iter(properties.drain(..));
 
         Ok(s)
     }

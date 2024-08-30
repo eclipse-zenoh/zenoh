@@ -22,8 +22,8 @@
 //! # Storing Key Expressions
 //! This module provides 2 flavours to store strings that have been validated to respect the KE syntax, and a third is provided by [`zenoh`](https://docs.rs/zenoh):
 //! - [`keyexpr`] is the equivalent of a [`str`],
-//! - [`OwnedKeyExpr`] works like an [`Arc<str>`],
-//! - [`KeyExpr`](https://docs.rs/zenoh/latest/zenoh/key_expr/struct.KeyExpr.html) works like a [`Cow<str>`], but also stores some additional context internal to Zenoh to optimize
+//! - [`OwnedKeyExpr`] works like an [`Arc<str>`](std::sync::Arc),
+//! - [`KeyExpr`](https://docs.rs/zenoh/latest/zenoh/key_expr/struct.KeyExpr.html) works like a [`Cow<str>`](std::borrow::Cow), but also stores some additional context internal to Zenoh to optimize
 //!   routing and network usage.
 //!
 //! All of these types [`Deref`](core::ops::Deref) to [`keyexpr`], which notably has methods to check whether a given [`keyexpr::intersects`] with another,
@@ -40,8 +40,8 @@
 //! The same issue arises naturally when designing a KE space, and [`KeFormat`](format::KeFormat) was designed to help you with this,
 //! both in constructing and in parsing KEs that fit the formats you've defined.
 //!
-//! [`kedefine`] also allows you to define formats at compile time, allowing a more performant, but more importantly safer and more convenient use of said formats,
-//! as the [`keformat`] and [`kewrite`] macros will be able to tell you if you're attempting to set fields of the format that do not exist.
+//! [`kedefine`](https://docs.rs/zenoh/latest/zenoh/key_expr/format/macro.kedefine.html) also allows you to define formats at compile time, allowing a more performant, but more importantly safer and more convenient use of said formats,
+//! as the [`keformat`](https://docs.rs/zenoh/latest/zenoh/key_expr/format/macro.keformat.html) and [`kewrite`](https://docs.rs/zenoh/latest/zenoh/key_expr/format/macro.kewrite.html) macros will be able to tell you if you're attempting to set fields of the format that do not exist.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;

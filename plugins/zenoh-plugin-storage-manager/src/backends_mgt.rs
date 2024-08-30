@@ -11,28 +11,23 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::storages_mgt::*;
-use flume::Sender;
 use std::sync::Arc;
-use zenoh::prelude::r#async::*;
-use zenoh::Session;
-use zenoh_backend_traits::config::StorageConfig;
-use zenoh_backend_traits::{Capability, VolumeInstance};
-use zenoh_result::ZResult;
+
+use flume::Sender;
+use zenoh::{session::Session, Result as ZResult};
+use zenoh_backend_traits::{config::StorageConfig, Capability, VolumeInstance};
+
+use super::storages_mgt::*;
 
 pub struct StoreIntercept {
     pub storage: Box<dyn zenoh_backend_traits::Storage>,
     pub capability: Capability,
-    pub in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
-    pub out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
 }
 
 pub(crate) async fn create_and_start_storage(
     admin_key: String,
     config: StorageConfig,
     backend: &VolumeInstance,
-    in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
-    out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     zenoh: Arc<Session>,
 ) -> ZResult<Sender<StorageMessage>> {
     tracing::trace!("Create storage '{}'", &admin_key);
@@ -41,8 +36,6 @@ pub(crate) async fn create_and_start_storage(
     let store_intercept = StoreIntercept {
         storage,
         capability,
-        in_interceptor,
-        out_interceptor,
     };
 
     start_storage(store_intercept, config, admin_key, zenoh).await

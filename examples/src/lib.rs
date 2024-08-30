@@ -33,7 +33,7 @@ pub struct CommonArgs {
     /// Disable the multicast-based scouting mechanism.
     no_multicast_scouting: bool,
     #[arg(long)]
-    /// Disable the multicast-based scouting mechanism.
+    /// Enable shared-memory feature.
     enable_shm: bool,
 }
 
@@ -49,17 +49,25 @@ impl From<&CommonArgs> for Config {
             None => Config::default(),
         };
         match value.mode {
-            Some(Wai::Peer) => config.set_mode(Some(zenoh::scouting::WhatAmI::Peer)),
-            Some(Wai::Client) => config.set_mode(Some(zenoh::scouting::WhatAmI::Client)),
-            Some(Wai::Router) => config.set_mode(Some(zenoh::scouting::WhatAmI::Router)),
+            Some(Wai::Peer) => config.set_mode(Some(zenoh::config::WhatAmI::Peer)),
+            Some(Wai::Client) => config.set_mode(Some(zenoh::config::WhatAmI::Client)),
+            Some(Wai::Router) => config.set_mode(Some(zenoh::config::WhatAmI::Router)),
             None => Ok(None),
         }
         .unwrap();
         if !value.connect.is_empty() {
-            config.connect.endpoints = value.connect.iter().map(|v| v.parse().unwrap()).collect();
+            config
+                .connect
+                .endpoints
+                .set(value.connect.iter().map(|v| v.parse().unwrap()).collect())
+                .unwrap();
         }
         if !value.listen.is_empty() {
-            config.listen.endpoints = value.listen.iter().map(|v| v.parse().unwrap()).collect();
+            config
+                .listen
+                .endpoints
+                .set(value.listen.iter().map(|v| v.parse().unwrap()).collect())
+                .unwrap();
         }
         if value.no_multicast_scouting {
             config.scouting.multicast.set_enabled(Some(false)).unwrap();

@@ -10,16 +10,21 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::any::Any;
-use std::convert::TryFrom;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
+use std::{
+    any::Any,
+    convert::TryFrom,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+
 use tokio::sync::Barrier;
 use zenoh_core::ztimeout;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohId},
+    core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohIdProto},
     network::{
         push::{
             ext::{NodeIdType, QoSType},
@@ -103,8 +108,8 @@ impl TransportPeerEventHandler for MHPeer {
 
 async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoint>) {
     /* [Peers] */
-    let peer_id01 = ZenohId::try_from([2]).unwrap();
-    let peer_id02 = ZenohId::try_from([3]).unwrap();
+    let peer_id01 = ZenohIdProto::try_from([2]).unwrap();
+    let peer_id02 = ZenohIdProto::try_from([3]).unwrap();
 
     // Create the peer01 transport manager
     let peer_sh01 = Arc::new(SHPeer::new());
@@ -145,7 +150,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
             println!("[Transport Peer 01a] => Adding endpoint {e:?}: {res:?}");
             assert!(res.is_ok());
         }
-        let locs = peer01_manager.get_listeners().await;
+        let locs = ztimeout!(peer01_manager.get_listeners());
         println!("[Transport Peer 01b] => Getting endpoints: {c_end01:?} {locs:?}");
         assert_eq!(c_end01.len(), locs.len());
 
@@ -173,11 +178,8 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         println!("[Transport Peer 01e] => Waiting... OK");
 
         // Verify that the transport has been correctly open
-        assert_eq!(peer01_manager.get_transports_unicast().await.len(), 1);
-        let s02 = peer01_manager
-            .get_transport_unicast(&c_zid02)
-            .await
-            .unwrap();
+        assert_eq!(ztimeout!(peer01_manager.get_transports_unicast()).len(), 1);
+        let s02 = ztimeout!(peer01_manager.get_transport_unicast(&c_zid02)).unwrap();
         assert_eq!(
             s02.get_links().unwrap().len(),
             c_end01.len() + c_end02.len()
@@ -186,13 +188,13 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         // Create the message to send
         let message: NetworkMessage = Push {
             wire_expr: "test".into(),
-            ext_qos: QoSType::new(Priority::default(), CongestionControl::Block, false),
+            ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
             ext_tstamp: None,
-            ext_nodeid: NodeIdType::default(),
+            ext_nodeid: NodeIdType::DEFAULT,
             payload: Put {
                 payload: vec![0u8; MSG_SIZE].into(),
                 timestamp: None,
-                encoding: Encoding::default(),
+                encoding: Encoding::empty(),
                 ext_sinfo: None,
                 #[cfg(feature = "shared-memory")]
                 ext_shm: None,
@@ -246,7 +248,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
             println!("[Transport Peer 02a] => Adding endpoint {e:?}: {res:?}");
             assert!(res.is_ok());
         }
-        let locs = peer02_manager.get_listeners().await;
+        let locs = ztimeout!(peer02_manager.get_listeners());
         println!("[Transport Peer 02b] => Getting endpoints: {c_end02:?} {locs:?}");
         assert_eq!(c_end02.len(), locs.len());
 
@@ -276,13 +278,10 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         // Verify that the transport has been correctly open
         println!(
             "[Transport Peer 02e] => Transports: {:?}",
-            peer02_manager.get_transports_unicast().await
+            ztimeout!(peer02_manager.get_transports_unicast())
         );
-        assert_eq!(peer02_manager.get_transports_unicast().await.len(), 1);
-        let s01 = peer02_manager
-            .get_transport_unicast(&c_zid01)
-            .await
-            .unwrap();
+        assert_eq!(ztimeout!(peer02_manager.get_transports_unicast()).len(), 1);
+        let s01 = ztimeout!(peer02_manager.get_transport_unicast(&c_zid01)).unwrap();
         assert_eq!(
             s01.get_links().unwrap().len(),
             c_end01.len() + c_end02.len()
@@ -291,13 +290,13 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         // Create the message to send
         let message: NetworkMessage = Push {
             wire_expr: "test".into(),
-            ext_qos: QoSType::new(Priority::default(), CongestionControl::Block, false),
+            ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
             ext_tstamp: None,
-            ext_nodeid: NodeIdType::default(),
+            ext_nodeid: NodeIdType::DEFAULT,
             payload: Put {
                 payload: vec![0u8; MSG_SIZE].into(),
                 timestamp: None,
-                encoding: Encoding::default(),
+                encoding: Encoding::empty(),
                 ext_sinfo: None,
                 #[cfg(feature = "shared-memory")]
                 ext_shm: None,

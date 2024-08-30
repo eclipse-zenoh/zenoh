@@ -12,8 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use crate::key_expr::{fuzzer, intersect::*, keyexpr};
 use std::{convert::TryInto, fmt::Debug};
+
+use crate::key_expr::{fuzzer, intersect::*, keyexpr};
 
 type BoxedIntersectors = Vec<Box<dyn for<'a> Intersector<&'a keyexpr, &'a keyexpr> + Send + Sync>>;
 

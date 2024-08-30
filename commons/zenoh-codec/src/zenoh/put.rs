@@ -11,12 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(not(feature = "shared-memory"))]
-use crate::Zenoh080Bounded;
-#[cfg(feature = "shared-memory")]
-use crate::Zenoh080Sliced;
-use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
 use alloc::vec::Vec;
+
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -30,6 +26,12 @@ use zenoh_protocol::{
         put::{ext, flag, Put},
     },
 };
+
+#[cfg(not(feature = "shared-memory"))]
+use crate::Zenoh080Bounded;
+#[cfg(feature = "shared-memory")]
+use crate::Zenoh080Sliced;
+use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
 
 impl<W> WCodec<&Put, &mut W> for Zenoh080
 where
@@ -54,7 +56,7 @@ where
         if timestamp.is_some() {
             header |= flag::T;
         }
-        if encoding != &Encoding::default() {
+        if encoding != &Encoding::empty() {
             header |= flag::E;
         }
         let mut n_exts = (ext_sinfo.is_some()) as u8
@@ -73,7 +75,7 @@ where
         if let Some(ts) = timestamp.as_ref() {
             self.write(&mut *writer, ts)?;
         }
-        if encoding != &Encoding::default() {
+        if encoding != &Encoding::empty() {
             self.write(&mut *writer, encoding)?;
         }
 
@@ -143,7 +145,7 @@ where
             timestamp = Some(self.codec.read(&mut *reader)?);
         }
 
-        let mut encoding = Encoding::default();
+        let mut encoding = Encoding::empty();
         if imsg::has_flag(self.header, flag::E) {
             encoding = self.codec.read(&mut *reader)?;
         }

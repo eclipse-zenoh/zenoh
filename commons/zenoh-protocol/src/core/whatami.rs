@@ -12,14 +12,16 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use alloc::string::String;
-use const_format::formatcp;
 use core::{convert::TryFrom, fmt, num::NonZeroU8, ops::BitOr, str::FromStr};
+
+use const_format::formatcp;
 use zenoh_result::{bail, ZError};
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum WhatAmI {
     Router = 0b001,
+    #[default]
     Peer = 0b010,
     Client = 0b100,
 }
@@ -144,6 +146,7 @@ impl WhatAmIMatcher {
             Self::U8_R_C => formatcp!("{}|{}", WhatAmI::STR_R, WhatAmI::STR_C),
             Self::U8_P_C => formatcp!("{}|{}", WhatAmI::STR_P, WhatAmI::STR_C),
             Self::U8_R_P_C => formatcp!("{}|{}|{}", WhatAmI::STR_R, WhatAmI::STR_P, WhatAmI::STR_C),
+
             _ => unreachable!(),
         }
     }
@@ -327,41 +330,40 @@ impl<'de> serde::de::Visitor<'de> for WhatAmIMatcherVisitor {
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         write!(
             formatter,
-            "a | separated list of whatami variants ('{}', '{}', '{}')",
+            "a list of whatami variants ('{}', '{}', '{}')",
             WhatAmI::STR_R,
             WhatAmI::STR_P,
             WhatAmI::STR_C
         )
     }
 
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
     where
-        E: serde::de::Error,
+        A: serde::de::SeqAccess<'de>,
     {
-        v.parse().map_err(|_| {
-            serde::de::Error::invalid_value(
-                serde::de::Unexpected::Str(v),
-                &formatcp!(
-                    "a | separated list of whatami variants ('{}', '{}', '{}')",
-                    WhatAmI::STR_R,
-                    WhatAmI::STR_P,
-                    WhatAmI::STR_C
-                ),
-            )
-        })
-    }
+        let mut inner = 0;
 
-    fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        self.visit_str(v)
-    }
-    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        self.visit_str(&v)
+        while let Some(s) = seq.next_element::<String>()? {
+            match s.as_str() {
+                WhatAmI::STR_R => inner |= WhatAmI::U8_R,
+                WhatAmI::STR_P => inner |= WhatAmI::U8_P,
+                WhatAmI::STR_C => inner |= WhatAmI::U8_C,
+                _ => {
+                    return Err(serde::de::Error::invalid_value(
+                        serde::de::Unexpected::Str(&s),
+                        &formatcp!(
+                            "one of ('{}', '{}', '{}')",
+                            WhatAmI::STR_R,
+                            WhatAmI::STR_P,
+                            WhatAmI::STR_C
+                        ),
+                    ))
+                }
+            }
+        }
+
+        Ok(WhatAmIMatcher::try_from(inner)
+            .expect("`WhatAmIMatcher` should be valid by construction"))
     }
 }
 
@@ -370,6 +372,6 @@ impl<'de> serde::Deserialize<'de> for WhatAmIMatcher {
     where
         D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_str(WhatAmIMatcherVisitor)
+        deserializer.deserialize_seq(WhatAmIMatcherVisitor)
     }
 }

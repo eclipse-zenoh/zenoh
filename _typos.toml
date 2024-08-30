@@ -1,8 +1,9 @@
 [files]
 extend-exclude = [
-  # Ignore all files in transport tests as they contain
-  # hashes that are treated as typos.
+  # Ignore files containing hexa.
   "io/zenoh-transport/tests/*.rs",
+  "zenoh/tests/open_time.rs",
+  "zenoh/tests/authentication.rs",
 ]
 
 

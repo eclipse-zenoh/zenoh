@@ -10,12 +10,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::*;
 use std::path::{Path, PathBuf};
 
 use libloading::Library;
-use zenoh_result::{bail, ZResult};
+use zenoh_result::{bail, zerror, ZResult};
 use zenoh_util::LibLoader;
+
+use crate::*;
 
 /// This enum contains information where to load the plugin from.
 pub enum DynamicPluginSource {
@@ -27,7 +28,7 @@ pub enum DynamicPluginSource {
 }
 
 impl DynamicPluginSource {
-    fn load(&self) -> ZResult<(Library, PathBuf)> {
+    fn load(&self) -> ZResult<Option<(Library, PathBuf)>> {
         match self {
             DynamicPluginSource::ByName((libloader, name)) => unsafe {
                 libloader.search_and_load(name)
@@ -35,11 +36,11 @@ impl DynamicPluginSource {
             DynamicPluginSource::ByPaths(paths) => {
                 for path in paths {
                     match unsafe { LibLoader::load_file(path) } {
-                        Ok((l, p)) => return Ok((l, p)),
+                        Ok((l, p)) => return Ok(Some((l, p))),
                         Err(e) => tracing::debug!("Attempt to load {} failed: {}", path, e),
                     }
                 }
-                bail!("Plugin not found in {:?}", &paths)
+                Err(zerror!("Plugin not found in {:?}", &paths).into())
             }
         }
     }
@@ -178,16 +179,22 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> DeclaredPlugin<StartA
     fn as_status(&self) -> &dyn PluginStatus {
         self
     }
-    fn load(&mut self) -> ZResult<&mut dyn LoadedPlugin<StartArgs, Instance>> {
+    fn load(&mut self) -> ZResult<Option<&mut dyn LoadedPlugin<StartArgs, Instance>>> {
         if self.starter.is_none() {
-            let (lib, path) = self.source.load().add_error(&mut self.report)?;
+            let Some((lib, path)) = self.source.load().add_error(&mut self.report)? else {
+                tracing::warn!(
+                    "Plugin `{}` will not be loaded as plugin loading is disabled",
+                    self.name
+                );
+                return Ok(None);
+            };
             let starter = DynamicPluginStarter::new(lib, path).add_error(&mut self.report)?;
             tracing::debug!("Plugin {} loaded from {}", self.name, starter.path());
             self.starter = Some(starter);
         } else {
             tracing::warn!("Plugin `{}` already loaded", self.name);
         }
-        Ok(self)
+        Ok(Some(self))
     }
     fn loaded(&self) -> Option<&dyn LoadedPlugin<StartArgs, Instance>> {
         if self.starter.is_some() {

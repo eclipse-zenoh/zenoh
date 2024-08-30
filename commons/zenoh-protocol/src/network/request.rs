@@ -11,8 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{core::WireExpr, zenoh::RequestBody};
 use core::sync::atomic::AtomicU32;
+
+use crate::{core::WireExpr, zenoh::RequestBody};
 
 /// The resolution of a RequestId
 pub type RequestId = u32;
@@ -64,12 +65,12 @@ pub struct Request {
 }
 
 pub mod ext {
+    use core::{num::NonZeroU32, time::Duration};
+
     use crate::{
         common::{ZExtZ64, ZExtZBuf},
-        core::QueryTarget,
         zextz64, zextzbuf,
     };
-    use core::{num::NonZeroU32, time::Duration};
 
     pub type QoS = zextz64!(0x1, false);
     pub type QoSType = crate::network::ext::QoSType<{ QoS::ID }>;
@@ -87,12 +88,19 @@ pub mod ext {
     /// +-+-+-+-+-+-+-+-+
     /// %     target    %
     /// +---------------+
-    ///
-    /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
     /// ```
-    pub type TargetType = QueryTarget;
+    /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
+    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+    pub enum TargetType {
+        #[default]
+        BestMatching,
+        All,
+        AllComplete,
+    }
 
     impl TargetType {
+        pub const DEFAULT: Self = Self::BestMatching;
+
         #[cfg(feature = "test")]
         pub fn rand() -> Self {
             use rand::prelude::*;
@@ -102,8 +110,6 @@ pub mod ext {
                 TargetType::All,
                 TargetType::AllComplete,
                 TargetType::BestMatching,
-                #[cfg(feature = "complete_n")]
-                TargetType::Complete(rng.gen()),
             ]
             .choose(&mut rng)
             .unwrap()

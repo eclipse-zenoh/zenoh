@@ -12,15 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use std::{fmt, marker::PhantomData};
+
 use serde::{
     de::{self, MapAccess, Visitor},
     Deserialize, Serialize,
 };
-use std::fmt;
-use std::marker::PhantomData;
-pub use zenoh_protocol::core::{
-    whatami, EndPoint, Locator, Priority, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor, ZenohId,
-};
+use zenoh_protocol::core::{EndPoint, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor};
 
 pub trait ModeDependent<T> {
     fn router(&self) -> Option<&T>;
@@ -34,6 +32,7 @@ pub trait ModeDependent<T> {
             WhatAmI::Client => self.client(),
         }
     }
+    fn get_mut(&mut self, whatami: WhatAmI) -> Option<&mut T>;
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -61,12 +60,30 @@ impl<T> ModeDependent<T> for ModeValues<T> {
     fn client(&self) -> Option<&T> {
         self.client.as_ref()
     }
+
+    #[inline]
+    fn get_mut(&mut self, whatami: WhatAmI) -> Option<&mut T> {
+        match whatami {
+            WhatAmI::Router => self.router.as_mut(),
+            WhatAmI::Peer => self.peer.as_mut(),
+            WhatAmI::Client => self.client.as_mut(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
 pub enum ModeDependentValue<T> {
     Unique(T),
     Dependent(ModeValues<T>),
+}
+
+impl<T> ModeDependentValue<T> {
+    #[inline]
+    pub fn set(&mut self, value: T) -> Result<ModeDependentValue<T>, ModeDependentValue<T>> {
+        let mut value = ModeDependentValue::Unique(value);
+        std::mem::swap(self, &mut value);
+        Ok(value)
+    }
 }
 
 impl<T> ModeDependent<T> for ModeDependentValue<T> {
@@ -91,6 +108,14 @@ impl<T> ModeDependent<T> for ModeDependentValue<T> {
         match self {
             Self::Unique(v) => Some(v),
             Self::Dependent(o) => o.client(),
+        }
+    }
+
+    #[inline]
+    fn get_mut(&mut self, whatami: WhatAmI) -> Option<&mut T> {
+        match self {
+            Self::Unique(v) => Some(v),
+            Self::Dependent(o) => o.get_mut(whatami),
         }
     }
 }
@@ -230,13 +255,51 @@ impl<'a> serde::Deserialize<'a> for ModeDependentValue<WhatAmIMatcher> {
                 formatter.write_str("WhatAmIMatcher or mode dependent WhatAmIMatcher")
             }
 
-            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
             where
-                E: de::Error,
+                A: de::SeqAccess<'de>,
             {
                 WhatAmIMatcherVisitor {}
-                    .visit_str(value)
+                    .visit_seq(seq)
                     .map(ModeDependentValue::Unique)
+            }
+
+            fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                ModeValues::deserialize(de::value::MapAccessDeserializer::new(map))
+                    .map(ModeDependentValue::Dependent)
+            }
+        }
+        deserializer.deserialize_any(UniqueOrDependent(PhantomData))
+    }
+}
+
+impl<'a> serde::Deserialize<'a> for ModeDependentValue<Vec<EndPoint>> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'a>,
+    {
+        struct UniqueOrDependent<U>(PhantomData<fn() -> U>);
+
+        impl<'de> Visitor<'de> for UniqueOrDependent<ModeDependentValue<Vec<EndPoint>>> {
+            type Value = ModeDependentValue<Vec<EndPoint>>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("list of endpoints or mode dependent list of endpoints")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: de::SeqAccess<'de>,
+            {
+                let mut v = seq.size_hint().map_or_else(Vec::new, Vec::with_capacity);
+
+                while let Some(s) = seq.next_element()? {
+                    v.push(s);
+                }
+                Ok(ModeDependentValue::Unique(v))
             }
 
             fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
@@ -254,28 +317,21 @@ impl<'a> serde::Deserialize<'a> for ModeDependentValue<WhatAmIMatcher> {
 impl<T> ModeDependent<T> for Option<ModeDependentValue<T>> {
     #[inline]
     fn router(&self) -> Option<&T> {
-        match self {
-            Some(ModeDependentValue::Unique(v)) => Some(v),
-            Some(ModeDependentValue::Dependent(o)) => o.router(),
-            None => None,
-        }
+        self.as_ref().and_then(|m| m.router())
     }
 
     #[inline]
     fn peer(&self) -> Option<&T> {
-        match self {
-            Some(ModeDependentValue::Unique(v)) => Some(v),
-            Some(ModeDependentValue::Dependent(o)) => o.peer(),
-            None => None,
-        }
+        self.as_ref().and_then(|m| m.peer())
     }
 
     #[inline]
     fn client(&self) -> Option<&T> {
-        match self {
-            Some(ModeDependentValue::Unique(v)) => Some(v),
-            Some(ModeDependentValue::Dependent(o)) => o.client(),
-            None => None,
-        }
+        self.as_ref().and_then(|m| m.client())
+    }
+
+    #[inline]
+    fn get_mut(&mut self, whatami: WhatAmI) -> Option<&mut T> {
+        self.as_mut().and_then(|m| m.get_mut(whatami))
     }
 }

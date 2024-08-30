@@ -11,46 +11,50 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::common::ZExtUnknown;
 use alloc::vec::Vec;
-use uhlc::Timestamp;
+
+use zenoh_buffers::ZBuf;
+
+use crate::{common::ZExtUnknown, core::Encoding};
 
 /// # Err message
 ///
 /// ```text
 /// Flags:
-/// - T: Timestamp      If T==1 then the timestamp if present
-/// - I: Infrastructure If I==1 then the error is related to the infrastructure else to the user
+/// - X: Reserved
+/// - E: Encoding       If E==1 then the encoding is present
 /// - Z: Extension      If Z==1 then at least one extension is present
 ///
 ///   7 6 5 4 3 2 1 0
 ///  +-+-+-+-+-+-+-+-+
-///  |Z|I|T|   ERR   |
+///  |Z|E|X|   ERR   |
 ///  +-+-+-+---------+
-///  %   code:z16    %
-///  +---------------+
-///  ~ ts: <u8;z16>  ~  if T==1
+///  ~   encoding    ~  if E==1
 ///  +---------------+
 ///  ~  [err_exts]   ~  if Z==1
 ///  +---------------+
+///  ~ pl: <u8;z32>  ~  -- Payload
+///  +---------------+
 /// ```
 pub mod flag {
-    pub const T: u8 = 1 << 5; // 0x20 Timestamp         if T==0 then the timestamp if present
-    pub const I: u8 = 1 << 6; // 0x40 Infrastructure    if I==1 then the error is related to the infrastructure else to the user
+    // pub const X: u8 = 1 << 5; // 0x20 Reserved
+    pub const E: u8 = 1 << 6; // 0x40 Encoding      if E==1 then the encoding is present
     pub const Z: u8 = 1 << 7; // 0x80 Extensions        if Z==1 then an extension will follow
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Err {
-    pub code: u16,
-    pub is_infrastructure: bool,
-    pub timestamp: Option<Timestamp>,
+    pub encoding: Encoding,
     pub ext_sinfo: Option<ext::SourceInfoType>,
-    pub ext_body: Option<ext::ErrBodyType>,
+    #[cfg(feature = "shared-memory")]
+    pub ext_shm: Option<ext::ShmType>,
     pub ext_unknown: Vec<ZExtUnknown>,
+    pub payload: ZBuf,
 }
 
 pub mod ext {
+    #[cfg(feature = "shared-memory")]
+    use crate::{common::ZExtUnit, zextunit};
     use crate::{common::ZExtZBuf, zextzbuf};
 
     /// # SourceInfo extension
@@ -58,44 +62,42 @@ pub mod ext {
     pub type SourceInfo = zextzbuf!(0x1, false);
     pub type SourceInfoType = crate::zenoh::ext::SourceInfoType<{ SourceInfo::ID }>;
 
-    /// # ErrBody extension
-    /// Used to carry a body attached to the query
-    /// Shared Memory extension is automatically defined by ValueType extension if
-    /// #[cfg(feature = "shared-memory")] is defined.
-    pub type ErrBodyType = crate::zenoh::ext::ValueType<{ ZExtZBuf::<0x02>::id(false) }, 0x03>;
+    /// # Shared Memory extension
+    /// Used to carry additional information about the shared-memory layout of data
+    #[cfg(feature = "shared-memory")]
+    pub type Shm = zextunit!(0x2, true);
+    #[cfg(feature = "shared-memory")]
+    pub type ShmType = crate::zenoh::ext::ShmType<{ Shm::ID }>;
 }
 
 impl Err {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::{common::iext, core::ZenohId};
         use rand::Rng;
+
+        use crate::common::iext;
         let mut rng = rand::thread_rng();
 
-        let code: u16 = rng.gen();
-        let is_infrastructure = rng.gen_bool(0.5);
-        let timestamp = rng.gen_bool(0.5).then_some({
-            let time = uhlc::NTP64(rng.gen());
-            let id = uhlc::ID::try_from(ZenohId::rand().to_le_bytes()).unwrap();
-            Timestamp::new(time, id)
-        });
+        let encoding = Encoding::rand();
         let ext_sinfo = rng.gen_bool(0.5).then_some(ext::SourceInfoType::rand());
-        let ext_body = rng.gen_bool(0.5).then_some(ext::ErrBodyType::rand());
+        #[cfg(feature = "shared-memory")]
+        let ext_shm = rng.gen_bool(0.5).then_some(ext::ShmType::rand());
         let mut ext_unknown = Vec::new();
         for _ in 0..rng.gen_range(0..4) {
             ext_unknown.push(ZExtUnknown::rand2(
-                iext::mid(ext::ErrBodyType::SID) + 1,
+                iext::mid(ext::SourceInfo::ID) + 1,
                 false,
             ));
         }
+        let payload = ZBuf::rand(rng.gen_range(0..=64));
 
         Self {
-            code,
-            is_infrastructure,
-            timestamp,
+            encoding,
             ext_sinfo,
-            ext_body,
+            #[cfg(feature = "shared-memory")]
+            ext_shm,
             ext_unknown,
+            payload,
         }
     }
 }

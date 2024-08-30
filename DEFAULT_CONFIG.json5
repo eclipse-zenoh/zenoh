@@ -11,10 +11,10 @@
   /// The node's mode (router, peer or client)
   mode: "peer",
 
-  /// The node's metadata (name, location, DNS name, etc.) Arbitrary JSON data not interpreted by zenohd and available in admin space @/router/<id>
+  /// The node's metadata (name, location, DNS name, etc.) Arbitrary JSON data not interpreted by zenoh and available in admin space @/<zid>/router, @/<zid>/peer or @/<zid>/client
   metadata: {
     name: "strawberry",
-    location: "Penny Lane"
+    location: "Penny Lane",
   },
 
   /// Which endpoints to connect to. E.g. tcp/localhost:7447.
@@ -23,9 +23,13 @@
   /// E.g. tcp/192.168.0.1:7447#iface=eth0, for connect only if the IP address is reachable via the interface eth0
   connect: {
     /// timeout waiting for all endpoints connected (0: no retry, -1: infinite timeout)
-    /// Accepts a single value or different values for router, peer and client.
+    /// Accepts a single value (e.g. timeout_ms: 0)
+    /// or different values for router, peer and client (e.g. timeout_ms: { router: -1, peer: -1, client: 0 }).
     timeout_ms: { router: -1, peer: -1, client: 0 },
 
+    /// The list of endpoints to connect to.
+    /// Accepts a single list (e.g. endpoints: ["tcp/10.10.10.10:7447", "tcp/11.11.11.11:7447"])
+    /// or different lists for router, peer and client (e.g. endpoints: { router: ["tcp/10.10.10.10:7447"], peer: ["tcp/11.11.11.11:7447"] }).
     endpoints: [
       // "<proto>/<address>"
     ],
@@ -49,19 +53,21 @@
     },
   },
 
-  /// Which endpoints to listen on. E.g. tcp/localhost:7447.
+  /// Which endpoints to listen on. E.g. tcp/0.0.0.0:7447.
   /// By configuring the endpoints, it is possible to tell zenoh which are the endpoints that other routers,
   /// peers, or client can use to establish a zenoh session.
   /// For TCP/UDP on Linux, it is possible additionally specify the interface to be listened to:
   /// E.g. tcp/0.0.0.0:7447#iface=eth0, for listen connection only on eth0
   listen: {
     /// timeout waiting for all listen endpoints (0: no retry, -1: infinite timeout)
-    /// Accepts a single value or different values for router, peer and client.
+    /// Accepts a single value (e.g. timeout_ms: 0)
+    /// or different values for router, peer and client (e.g. timeout_ms: { router: -1, peer: -1, client: 0 }).
     timeout_ms: 0,
 
-    endpoints: [
-      // "<proto>/<address>"
-    ],
+    /// The list of endpoints to listen on.
+    /// Accepts a single list (e.g. endpoints: ["tcp/[::]:7447", "udp/[::]:7447"])
+    /// or different lists for router, peer and client (e.g. endpoints: { router: ["tcp/[::]:7447"], peer: ["tcp/[::]:0"] }).
+    endpoints: { router: ["tcp/[::]:7447"], peer: ["tcp/[::]:0"] },
 
     /// Global listen configuration,
     /// Accepts a single value or different values for router, peer and client.
@@ -83,10 +89,10 @@
   },
   /// Configure the scouting mechanisms and their behaviours
   scouting: {
-    /// In client mode, the period dedicated to scouting for a router before failing
+    /// In client mode, the period in milliseconds dedicated to scouting for a router before failing.
     timeout: 3000,
-    /// In peer mode, the period dedicated to scouting remote peers before attempting other operations
-    delay: 200,
+    /// In peer mode, the maximum period in milliseconds dedicated to scouting remote peers before attempting other operations.
+    delay: 500,
     /// The multicast scouting configuration.
     multicast: {
       /// Whether multicast scouting is enabled or not
@@ -98,9 +104,10 @@
       /// The time-to-live on multicast scouting packets
       ttl: 1,
       /// Which type of Zenoh instances to automatically establish sessions with upon discovery on UDP multicast.
-      /// Accepts a single value or different values for router, peer and client.
-      /// Each value is bit-or-like combinations of "peer", "router" and "client".
-      autoconnect: { router: "", peer: "router|peer" },
+      /// Accepts a single value (e.g. autoconnect: ["router", "peer"])
+      /// or different values for router, peer and client (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
+      /// Each value is a list of: "peer", "router" and/or "client".
+      autoconnect: { router: [], peer: ["router", "peer"] },
       /// Whether or not to listen for scout messages on UDP multicast and reply to them.
       listen: true,
     },
@@ -115,9 +122,10 @@
       /// direct connectivity with each other.
       multihop: false,
       /// Which type of Zenoh instances to automatically establish sessions with upon discovery on gossip.
-      /// Accepts a single value or different values for router, peer and client.
-      /// Each value is bit-or-like combinations of "peer", "router" and "client".
-      autoconnect: { router: "", peer: "router|peer" },
+      /// Accepts a single value (e.g. autoconnect: ["router", "peer"])
+      /// or different values for router, peer and client (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
+      /// Each value is a list of: "peer", "router" and/or "client".
+      autoconnect: { router: [], peer: ["router", "peer"] },
     },
   },
 
@@ -178,29 +186,99 @@
   //    },
   //  ],
 
-  //  /// configure access control (ACL) rules
+  //  /// Configure access control (ACL) rules
   //  access_control: {
-  //   ///[true/false] acl will be activated only if this is set to true
+  //   /// [true/false] acl will be activated only if this is set to true
   //   "enabled": false,
-  //   ///[deny/allow] default permission is deny (even if this is left empty or not specified)
+  //   /// [deny/allow] default permission is deny (even if this is left empty or not specified)
   //   "default_permission": "deny",
-  //   ///rule set for permissions allowing or denying access to key-expressions
+  //   /// Rule set for permissions allowing or denying access to key-expressions
   //   "rules":
   //   [
   //     {
-  //       "actions": [
-  //         "put", "get", "declare_subscriber", "declare_queryable"
+  //       /// Id has to be unique within the rule set
+  //       "id": "rule1",
+  //       "messages": [
+  //         "put", "delete", "declare_subscriber",
+  //         "query", "reply", "declare_queryable",
   //       ],
   //       "flows":["egress","ingress"],
   //       "permission": "allow",
   //       "key_exprs": [
   //         "test/demo"
   //       ],
-  //       "interfaces": [
-  //         "lo0"
-  //       ]
   //     },
-  //  ]
+  //     {
+  //       "id": "rule2",
+  //       "messages": [
+  //         "put", "delete", "declare_subscriber",
+  //         "query", "reply", "declare_queryable",
+  //       ],
+  //       "flows":["ingress"],
+  //       "permission": "allow",
+  //       "key_exprs": [
+  //         "**"
+  //       ],
+  //     },
+  //   ],
+  //   /// List of combinations of subjects.
+  //   ///
+  //   /// If a subject property (i.e. username, certificate common name or interface) is empty
+  //   /// it is interpreted as a wildcard. Moreover, a subject property cannot be an empty list.
+  //   "subjects":
+  //   [
+  //     {
+  //       /// Id has to be unique within the subjects list
+  //       "id": "subject1",
+  //       /// Subjects can be interfaces
+  //       "interfaces": [
+  //         "lo0",
+  //         "en0",
+  //       ],
+  //       /// Subjects can be cert_common_names when using TLS or Quic
+  //       "cert_common_names": [
+  //         "example.zenoh.io"
+  //       ],
+  //       /// Subjects can be usernames when using user/password authentication
+  //       "usernames": [
+  //         "zenoh-example"
+  //       ],
+  //       /// This instance translates internally to this filter:
+  //       /// (interface="lo0" && cert_common_name="example.zenoh.io" && username="zenoh-example") ||
+  //       /// (interface="en0" && cert_common_name="example.zenoh.io" && username="zenoh-example")
+  //     },
+  //     {
+  //       "id": "subject2",
+  //       "interfaces": [
+  //         "lo0",
+  //         "en0",
+  //       ],
+  //       "cert_common_names": [
+  //         "example2.zenoh.io"
+  //       ],
+  //       /// This instance translates internally to this filter:
+  //       /// (interface="lo0" && cert_common_name="example2.zenoh.io") ||
+  //       /// (interface="en0" && cert_common_name="example2.zenoh.io")
+  //     },
+  //     {
+  //       "id": "subject3",
+  //       /// An empty subject combination is a wildcard
+  //     },
+  //   ],
+  //   /// The policies list associates rules to subjects
+  //   "policies":
+  //   [
+  //      /// Each policy associates one or multiple rules to one or multiple subject combinations
+  //      {
+  //         /// Rules and Subjects are identified with their unique IDs declared above
+  //         "rules": ["rule1"],
+  //         "subjects": ["subject1", "subject2"],
+  //      },
+  //      {
+  //         "rules": ["rule2"],
+  //         "subjects": ["subject3"],
+  //      },
+  //   ]
   //},
 
   /// Configure internal transport parameters
@@ -221,7 +299,7 @@
       /// NOTE: Currently, the LowLatency transport doesn't preserve QoS prioritization.
       /// NOTE: Due to the note above, 'lowlatency' is incompatible with 'qos' option, so in order to
       ///       enable 'lowlatency' you need to explicitly disable 'qos'.
-      /// NOTE: LowLatency transport does not support the fragmentation, so the message size should be 
+      /// NOTE: LowLatency transport does not support the fragmentation, so the message size should be
       ///       smaller than the tx batch_size.
       lowlatency: false,
       /// Enables QoS on unicast communications.
@@ -278,6 +356,7 @@
         /// Each zenoh link has a transmission queue that can be configured
         queue: {
           /// The size of each priority queue indicates the number of batches a given queue can contain.
+          /// NOTE: the number of batches in each priority must be included between 1 and 16. Different values will result in an error.
           /// The amount of memory being allocated for each queue is then SIZE_XXX * BATCH_SIZE.
           /// In the case of the transport link MTU being smaller than the ZN_BATCH_SIZE,
           /// then amount of memory being allocated for each queue is SIZE_XXX * LINK_MTU.
@@ -297,11 +376,18 @@
           /// Using CongestionControl::Drop the message might be dropped, depending on conditions configured here.
           congestion_control: {
             /// The maximum time in microseconds to wait for an available batch before dropping the message if still no batch is available.
-            wait_before_drop: 1000
+            wait_before_drop: 1000,
           },
-          /// The initial exponential backoff time in nanoseconds to allow the batching to eventually progress.
-          /// Higher values lead to a more aggressive batching but it will introduce additional latency.
-          backoff: 100,
+          /// Perform batching of messages if they are smaller of the batch_size
+          batching: {
+            /// Perform adaptive batching of messages if they are smaller of the batch_size.
+            /// When the network is detected to not be fast enough to transmit every message individually, many small messages may be
+            /// batched together and sent all at once on the wire reducing the overall network overhead. This is typically of a high-throughput
+            /// scenario mainly composed of small messages. In other words, batching is activated by the network back-pressure.
+            enabled: true,
+            /// The maximum time limit (in ms) a message should be retained for batching when back-pressure happens.
+            time_limit: 1,
+          }
         },
       },
       /// Configure the zenoh RX parameters of a link
@@ -340,9 +426,14 @@
         server_name_verification: null,
       },
     },
-    /// Shared memory configuration
+    /// Shared memory configuration.
+    /// NOTE: shared memory can be used only if zenoh is compiled with "shared-memory" feature, otherwise
+    /// settings in this section have no effect.
     shared_memory: {
-      enabled: false,
+      /// A probing procedure for shared memory is performed upon session opening. To enable zenoh to operate
+      /// over shared memory (and to not fallback on network mode), shared memory needs to be enabled also on the
+      /// subscriber side. By doing so, the probing procedure will succeed and shared memory will operate as expected.
+      enabled: true,
     },
     auth: {
       /// The configuration of authentication.
@@ -381,11 +472,15 @@
   ///
   //
   //  plugins_loading: {
-  //    // Enable plugins loading.
+  //    /// Enable plugins loading.
   //    enabled: false,
   //    /// Directories where plugins configured by name should be looked for. Plugins configured by __path__ are not subject to lookup.
-  //    /// If `enabled: true` and `search_dirs` is not specified then `search_dirs` falls back to the default value: ".:~/.zenoh/lib:/opt/homebrew/lib:/usr/local/lib:/usr/lib"
-  //    search_dirs: [],
+  //    /// Directories are specified as object with fields `kind` and `value` is accepted.
+  //    ///   1. If `kind` is `current_exe_parent`, then the parent of the current executable's directory is searched and `value` should be `null`.
+  //    ///      In Bash notation, `{ "kind": "current_exe_parent" }` equals `$(dirname $(which zenohd))` while `"."` equals `$PWD`.
+  //    ///   2. If `kind` is `path`, then `value` is interpreted as a filesystem path. Simply supplying a string instead of a object is equivalent to this.
+  //    /// If `enabled: true` and `search_dirs` is not specified then `search_dirs` falls back to the default value:
+  //    search_dirs: [{ "kind": "current_exe_parent" }, ".", "~/.zenoh/lib", "/opt/homebrew/lib", "/usr/local/lib", "/usr/lib"],
   //  },
   //  /// Plugins are only loaded if `plugins_loading: { enabled: true }` and present in the configuration when starting.
   //  /// Once loaded, they may react to changes in the configuration made through the zenoh instance's adminspace.
@@ -408,6 +503,12 @@
   //      __config__: "./plugins/zenoh-plugin-rest/config.json5",
   //      /// http port to answer to rest requests
   //      http_port: 8000,
+  //      /// The number of worker thread in TOKIO runtime (default: 2)
+  //      /// The configuration only takes effect if running as a dynamic plugin, which can not reuse the current runtime.
+  //      work_thread_num: 0,
+  //      /// The number of blocking thread in TOKIO runtime (default: 50)
+  //      /// The configuration only takes effect if running as a dynamic plugin, which can not reuse the current runtime.
+  //      max_block_thread_num: 50,
   //    },
   //
   //    /// Configure the storage manager plugin
@@ -519,5 +620,4 @@
   //     __config__: "./plugins/zenoh-plugin-storage-manager/config.json5",
   //   }
   // },
-
 }

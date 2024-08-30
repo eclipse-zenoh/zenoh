@@ -16,41 +16,34 @@
 // 1. normal case, just some wild card puts and deletes on existing keys and ensure it works
 // 2. check for dealing with out of order updates
 
-use std::str::FromStr;
-use std::thread::sleep;
+use std::{borrow::Cow, str::FromStr, thread::sleep};
 
 // use std::collections::HashMap;
-use async_std::task;
-use zenoh::prelude::r#async::*;
-use zenoh::query::Reply;
-use zenoh::{prelude::Config, time::Timestamp};
-use zenoh_core::zasync_executor_init;
+use tokio::runtime::Runtime;
+use zenoh::{
+    internal::zasync_executor_init, prelude::*, query::Reply, sample::Sample, time::Timestamp,
+    Config, Session,
+};
 use zenoh_plugin_trait::Plugin;
 
-async fn put_data(session: &zenoh::Session, key_expr: &str, value: &str, _timestamp: Timestamp) {
+async fn put_data(session: &Session, key_expr: &str, value: &str, _timestamp: Timestamp) {
     println!("Putting Data ('{key_expr}': '{value}')...");
     //  @TODO: how to add timestamp metadata with put, not manipulating sample...
-    session.put(key_expr, value).res().await.unwrap();
+    session.put(key_expr, value).await.unwrap();
 }
 
-async fn delete_data(session: &zenoh::Session, key_expr: &str, _timestamp: Timestamp) {
+async fn delete_data(session: &Session, key_expr: &str, _timestamp: Timestamp) {
     println!("Deleting Data '{key_expr}'...");
     //  @TODO: how to add timestamp metadata with delete, not manipulating sample...
-    session.delete(key_expr).res().await.unwrap();
+    session.delete(key_expr).await.unwrap();
 }
 
-async fn get_data(session: &zenoh::Session, key_expr: &str) -> Vec<Sample> {
-    let replies: Vec<Reply> = session
-        .get(key_expr)
-        .res()
-        .await
-        .unwrap()
-        .into_iter()
-        .collect();
+async fn get_data(session: &Session, key_expr: &str) -> Vec<Sample> {
+    let replies: Vec<Reply> = session.get(key_expr).await.unwrap().into_iter().collect();
     println!("Getting replies on '{key_expr}': '{replies:?}'...");
     let mut samples = Vec::new();
     for reply in replies {
-        if let Ok(sample) = reply.sample {
+        if let Ok(sample) = reply.into_result() {
             samples.push(sample);
         }
     }
@@ -59,9 +52,7 @@ async fn get_data(session: &zenoh::Session, key_expr: &str) -> Vec<Sample> {
 }
 
 async fn test_wild_card_in_order() {
-    task::block_on(async {
-        zasync_executor_init!();
-    });
+    zasync_executor_init!();
     let mut config = Config::default();
     config
         .insert_json5(
@@ -78,15 +69,27 @@ async fn test_wild_card_in_order() {
                 }"#,
         )
         .unwrap();
+    config
+        .insert_json5(
+            "timestamping",
+            r#"{
+                    enabled: {
+                        router: true,
+                        peer: true,
+                        client: true
+                    }
+                }"#,
+        )
+        .unwrap();
 
-    let runtime = zenoh::runtime::RuntimeBuilder::new(config)
+    let runtime = zenoh::internal::runtime::RuntimeBuilder::new(config)
         .build()
         .await
         .unwrap();
     let storage =
         zenoh_plugin_storage_manager::StoragesPlugin::start("storage-manager", &runtime).unwrap();
 
-    let session = zenoh::init(runtime).res().await.unwrap();
+    let session = zenoh::session::init(runtime).await.unwrap();
     sleep(std::time::Duration::from_secs(1));
 
     // put *, ts: 1
@@ -94,8 +97,7 @@ async fn test_wild_card_in_order() {
         &session,
         "wild/test/*",
         "1",
-        Timestamp::from_str("2022-01-17T10:42:10.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
-            .unwrap(),
+        Timestamp::from_str("7054123566570568799/BC779A06D7E049BD88C3FF3DB0C17FCC").unwrap(),
     )
     .await;
 
@@ -109,8 +111,7 @@ async fn test_wild_card_in_order() {
         &session,
         "wild/test/a",
         "2",
-        Timestamp::from_str("2022-01-17T10:42:11.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
-            .unwrap(),
+        Timestamp::from_str("7054123570865536095/BC779A06D7E049BD88C3FF3DB0C17FCC").unwrap(),
     )
     .await;
 
@@ -119,15 +120,14 @@ async fn test_wild_card_in_order() {
     // expected single entry
     let data = get_data(&session, "wild/test/*").await;
     assert_eq!(data.len(), 1);
-    assert_eq!(data[0].key_expr.as_str(), "wild/test/a");
-    assert_eq!(format!("{}", data[0].value), "2");
+    assert_eq!(data[0].key_expr().as_str(), "wild/test/a");
+    assert_eq!(data[0].payload().deserialize::<Cow<str>>().unwrap(), "2");
 
     put_data(
         &session,
         "wild/test/b",
         "3",
-        Timestamp::from_str("2022-01-17T10:42:11.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
-            .unwrap(),
+        Timestamp::from_str("7054123570865536095/BC779A06D7E049BD88C3FF3DB0C17FCC").unwrap(),
     )
     .await;
 
@@ -136,17 +136,28 @@ async fn test_wild_card_in_order() {
     // expected two entries
     let data = get_data(&session, "wild/test/*").await;
     assert_eq!(data.len(), 2);
-    assert!(["wild/test/a", "wild/test/b"].contains(&data[0].key_expr.as_str()));
-    assert!(["wild/test/a", "wild/test/b"].contains(&data[1].key_expr.as_str()));
-    assert!(["2", "3"].contains(&format!("{}", data[0].value).as_str()));
-    assert!(["2", "3"].contains(&format!("{}", data[1].value).as_str()));
+    assert!(["wild/test/a", "wild/test/b"].contains(&data[0].key_expr().as_str()));
+    assert!(["wild/test/a", "wild/test/b"].contains(&data[1].key_expr().as_str()));
+    assert!(["2", "3"].contains(
+        &data[0]
+            .payload()
+            .deserialize::<Cow<str>>()
+            .unwrap()
+            .as_ref()
+    ));
+    assert!(["2", "3"].contains(
+        &data[1]
+            .payload()
+            .deserialize::<Cow<str>>()
+            .unwrap()
+            .as_ref()
+    ));
 
     put_data(
         &session,
         "wild/test/*",
         "4",
-        Timestamp::from_str("2022-01-17T10:43:12.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
-            .unwrap(),
+        Timestamp::from_str("7054123832858541151/BC779A06D7E049BD88C3FF3DB0C17FCC").unwrap(),
     )
     .await;
 
@@ -155,16 +166,15 @@ async fn test_wild_card_in_order() {
     // expected two entries
     let data = get_data(&session, "wild/test/*").await;
     assert_eq!(data.len(), 2);
-    assert!(["wild/test/a", "wild/test/b"].contains(&data[0].key_expr.as_str()));
-    assert!(["wild/test/a", "wild/test/b"].contains(&data[1].key_expr.as_str()));
-    assert_eq!(format!("{}", data[0].value).as_str(), "4");
-    assert_eq!(format!("{}", data[1].value).as_str(), "4");
+    assert!(["wild/test/a", "wild/test/b"].contains(&data[0].key_expr().as_str()));
+    assert!(["wild/test/a", "wild/test/b"].contains(&data[1].key_expr().as_str()));
+    assert_eq!(data[0].payload().deserialize::<Cow<str>>().unwrap(), "4");
+    assert_eq!(data[1].payload().deserialize::<Cow<str>>().unwrap(), "4");
 
     delete_data(
         &session,
         "wild/test/*",
-        Timestamp::from_str("2022-01-17T13:43:10.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
-            .unwrap(),
+        Timestamp::from_str("7054170209915403359/BC779A06D7E049BD88C3FF3DB0C17FCC").unwrap(),
     )
     .await;
 
@@ -177,12 +187,8 @@ async fn test_wild_card_in_order() {
     drop(storage);
 }
 
-// fn test_wild_card_out_of_order() {
-//     assert_eq!(true, true);
-// }
-
 #[test]
 fn wildcard_test() {
-    task::block_on(async { test_wild_card_in_order().await });
-    // task::block_on(async { test_wild_card_out_of_order() });
+    let rt = Runtime::new().unwrap();
+    rt.block_on(async { test_wild_card_in_order().await });
 }

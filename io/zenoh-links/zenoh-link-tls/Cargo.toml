@@ -33,14 +33,17 @@ rustls-pemfile = { workspace = true }
 rustls-pki-types = { workspace = true }
 rustls-webpki = { workspace = true }
 secrecy = { workspace = true }
+socket2 = { workspace = true }
 tokio = { workspace = true, features = ["fs", "io-util", "net", "sync"] }
 tokio-rustls = { workspace = true }
 tokio-util = { workspace = true, features = ["rt"] }
 tracing = { workspace = true }
+x509-parser = { workspace = true }
 webpki-roots = { workspace = true }
+zenoh-collections = { workspace = true }
 zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
-zenoh-link-commons = { workspace = true }
+zenoh-link-commons = { workspace = true, features = ["tls"] }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-runtime = { workspace = true }

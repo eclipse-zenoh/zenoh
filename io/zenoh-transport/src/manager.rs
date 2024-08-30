@@ -11,35 +11,41 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::unicast::manager::{
-    TransportManagerBuilderUnicast, TransportManagerConfigUnicast, TransportManagerStateUnicast,
-};
-use super::TransportEventHandler;
-use crate::multicast::manager::{
-    TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
-    TransportManagerStateMulticast,
-};
+use std::{collections::HashMap, sync::Arc, time::Duration};
+
 use rand::{RngCore, SeedableRng};
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::Mutex as AsyncMutex;
 use zenoh_config::{Config, LinkRxConf, QueueConf, QueueSizeConf};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::NewLinkChannelSender;
 use zenoh_protocol::{
-    core::{EndPoint, Field, Locator, Priority, Resolution, WhatAmI, ZenohId},
+    core::{EndPoint, Field, Locator, Priority, Resolution, WhatAmI, ZenohIdProto},
     transport::BatchSize,
     VERSION,
 };
 use zenoh_result::{bail, ZResult};
+#[cfg(feature = "shared-memory")]
+use zenoh_shm::api::client_storage::GLOBAL_CLIENT_STORAGE;
+#[cfg(feature = "shared-memory")]
+use zenoh_shm::reader::ShmReader;
 use zenoh_task::TaskController;
+
+use super::{
+    unicast::manager::{
+        TransportManagerBuilderUnicast, TransportManagerConfigUnicast, TransportManagerStateUnicast,
+    },
+    TransportEventHandler,
+};
+use crate::multicast::manager::{
+    TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
+    TransportManagerStateMulticast,
+};
 
 /// # Examples
 /// ```
 /// use std::sync::Arc;
 /// use std::time::Duration;
-/// use zenoh_protocol::core::{ZenohId, Resolution, Field, Bits, WhatAmI, whatami};
+/// use zenoh_protocol::core::{ZenohIdProto, Resolution, Field, Bits, WhatAmI, whatami};
 /// use zenoh_transport::*;
 /// use zenoh_result::ZResult;
 ///
@@ -79,7 +85,7 @@ use zenoh_task::TaskController;
 /// let mut resolution = Resolution::default();
 /// resolution.set(Field::FrameSN, Bits::U8);
 /// let manager = TransportManager::builder()
-///         .zid(ZenohId::rand())
+///         .zid(ZenohIdProto::rand().into())
 ///         .whatami(WhatAmI::Peer)
 ///         .batch_size(1_024)              // Use a batch size of 1024 bytes
 ///         .resolution(resolution)         // Use a sequence number resolution of 128
@@ -90,10 +96,11 @@ use zenoh_task::TaskController;
 
 pub struct TransportManagerConfig {
     pub version: u8,
-    pub zid: ZenohId,
+    pub zid: ZenohIdProto,
     pub whatami: WhatAmI,
     pub resolution: Resolution,
-    pub batch_size: u16,
+    pub batch_size: BatchSize,
+    pub batching: bool,
     pub wait_before_drop: Duration,
     pub queue_size: [usize; Priority::NUM],
     pub queue_backoff: Duration,
@@ -119,13 +126,14 @@ pub struct TransportManagerParams {
 
 pub struct TransportManagerBuilder {
     version: u8,
-    zid: ZenohId,
+    zid: ZenohIdProto,
     whatami: WhatAmI,
     resolution: Resolution,
-    batch_size: u16,
+    batch_size: BatchSize,
+    batching_enabled: bool,
+    batching_time_limit: Duration,
     wait_before_drop: Duration,
     queue_size: QueueSizeConf,
-    queue_backoff: Duration,
     defrag_buff_size: usize,
     link_rx_buffer_size: usize,
     unicast: TransportManagerBuilderUnicast,
@@ -133,10 +141,18 @@ pub struct TransportManagerBuilder {
     endpoints: HashMap<String, String>, // (protocol, config)
     tx_threads: usize,
     protocols: Option<Vec<String>>,
+    #[cfg(feature = "shared-memory")]
+    shm_reader: Option<ShmReader>,
 }
 
 impl TransportManagerBuilder {
-    pub fn zid(mut self, zid: ZenohId) -> Self {
+    #[cfg(feature = "shared-memory")]
+    pub fn shm_reader(mut self, shm_reader: Option<ShmReader>) -> Self {
+        self.shm_reader = shm_reader;
+        self
+    }
+
+    pub fn zid(mut self, zid: ZenohIdProto) -> Self {
         self.zid = zid;
         self
     }
@@ -151,8 +167,18 @@ impl TransportManagerBuilder {
         self
     }
 
-    pub fn batch_size(mut self, batch_size: u16) -> Self {
+    pub fn batch_size(mut self, batch_size: BatchSize) -> Self {
         self.batch_size = batch_size;
+        self
+    }
+
+    pub fn batching_enabled(mut self, batching_enabled: bool) -> Self {
+        self.batching_enabled = batching_enabled;
+        self
+    }
+
+    pub fn batching_time_limit(mut self, batching_time_limit: Duration) -> Self {
+        self.batching_time_limit = batching_time_limit;
         self
     }
 
@@ -163,11 +189,6 @@ impl TransportManagerBuilder {
 
     pub fn queue_size(mut self, queue_size: QueueSizeConf) -> Self {
         self.queue_size = queue_size;
-        self
-    }
-
-    pub fn queue_backoff(mut self, queue_backoff: Duration) -> Self {
-        self.queue_backoff = queue_backoff;
         self
     }
 
@@ -207,7 +228,7 @@ impl TransportManagerBuilder {
     }
 
     pub async fn from_config(mut self, config: &Config) -> ZResult<TransportManagerBuilder> {
-        self = self.zid(*config.id());
+        self = self.zid((*config.id()).into());
         if let Some(v) = config.mode() {
             self = self.whatami(*v);
         }
@@ -217,13 +238,16 @@ impl TransportManagerBuilder {
         resolution.set(Field::FrameSN, *link.tx().sequence_number_resolution());
         self = self.resolution(resolution);
         self = self.batch_size(*link.tx().batch_size());
+        self = self.batching_enabled(*link.tx().queue().batching().enabled());
+        self = self.batching_time_limit(Duration::from_millis(
+            *link.tx().queue().batching().time_limit(),
+        ));
         self = self.defrag_buff_size(*link.rx().max_message_size());
         self = self.link_rx_buffer_size(*link.rx().buffer_size());
         self = self.wait_before_drop(Duration::from_micros(
             *link.tx().queue().congestion_control().wait_before_drop(),
         ));
         self = self.queue_size(link.tx().queue().size().clone());
-        self = self.queue_backoff(Duration::from_nanos(*link.tx().queue().backoff()));
         self = self.tx_threads(*link.tx().threads());
         self = self.protocols(link.protocols().clone());
 
@@ -251,7 +275,16 @@ impl TransportManagerBuilder {
         // Initialize the PRNG and the Cipher
         let mut prng = PseudoRng::from_entropy();
 
-        let unicast = self.unicast.build(&mut prng)?;
+        #[cfg(feature = "shared-memory")]
+        let shm_reader = self
+            .shm_reader
+            .unwrap_or_else(|| ShmReader::new((*GLOBAL_CLIENT_STORAGE.read()).clone()));
+
+        let unicast = self.unicast.build(
+            &mut prng,
+            #[cfg(feature = "shared-memory")]
+            &shm_reader,
+        )?;
         let multicast = self.multicast.build()?;
 
         let mut queue_size = [0; Priority::NUM];
@@ -270,9 +303,10 @@ impl TransportManagerBuilder {
             whatami: self.whatami,
             resolution: self.resolution,
             batch_size: self.batch_size,
+            batching: self.batching_enabled,
             wait_before_drop: self.wait_before_drop,
             queue_size,
-            queue_backoff: self.queue_backoff,
+            queue_backoff: self.batching_time_limit,
             defrag_buff_size: self.defrag_buff_size,
             link_rx_buffer_size: self.link_rx_buffer_size,
             unicast: unicast.config,
@@ -295,7 +329,12 @@ impl TransportManagerBuilder {
 
         let params = TransportManagerParams { config, state };
 
-        Ok(TransportManager::new(params, prng))
+        Ok(TransportManager::new(
+            params,
+            prng,
+            #[cfg(feature = "shared-memory")]
+            shm_reader,
+        ))
     }
 }
 
@@ -303,17 +342,18 @@ impl Default for TransportManagerBuilder {
     fn default() -> Self {
         let link_rx = LinkRxConf::default();
         let queue = QueueConf::default();
-        let backoff = *queue.backoff();
+        let backoff = *queue.batching().time_limit();
         let wait_before_drop = *queue.congestion_control().wait_before_drop();
         Self {
             version: VERSION,
-            zid: ZenohId::rand(),
+            zid: ZenohIdProto::rand(),
             whatami: zenoh_config::defaults::mode,
             resolution: Resolution::default(),
             batch_size: BatchSize::MAX,
+            batching_enabled: true,
             wait_before_drop: Duration::from_micros(wait_before_drop),
             queue_size: queue.size,
-            queue_backoff: Duration::from_nanos(backoff),
+            batching_time_limit: Duration::from_millis(backoff),
             defrag_buff_size: *link_rx.max_message_size(),
             link_rx_buffer_size: *link_rx.buffer_size(),
             endpoints: HashMap::new(),
@@ -321,6 +361,8 @@ impl Default for TransportManagerBuilder {
             multicast: TransportManagerBuilderMulticast::default(),
             tx_threads: 1,
             protocols: None,
+            #[cfg(feature = "shared-memory")]
+            shm_reader: None,
         }
     }
 }
@@ -333,13 +375,19 @@ pub struct TransportManager {
     pub(crate) cipher: Arc<BlockCipher>,
     pub(crate) locator_inspector: zenoh_link::LocatorInspector,
     pub(crate) new_unicast_link_sender: NewLinkChannelSender,
+    #[cfg(feature = "shared-memory")]
+    pub(crate) shmr: ShmReader,
     #[cfg(feature = "stats")]
     pub(crate) stats: Arc<crate::stats::TransportStats>,
     pub(crate) task_controller: TaskController,
 }
 
 impl TransportManager {
-    pub fn new(params: TransportManagerParams, mut prng: PseudoRng) -> TransportManager {
+    pub fn new(
+        params: TransportManagerParams,
+        mut prng: PseudoRng,
+        #[cfg(feature = "shared-memory")] shmr: ShmReader,
+    ) -> TransportManager {
         // Initialize the Cipher
         let mut key = [0_u8; BlockCipher::BLOCK_SIZE];
         prng.fill_bytes(&mut key);
@@ -357,6 +405,8 @@ impl TransportManager {
             new_unicast_link_sender,
             #[cfg(feature = "stats")]
             stats: std::sync::Arc::new(crate::stats::TransportStats::default()),
+            #[cfg(feature = "shared-memory")]
+            shmr,
             task_controller: TaskController::default(),
         };
 
@@ -386,7 +436,7 @@ impl TransportManager {
         TransportManagerBuilder::default()
     }
 
-    pub fn zid(&self) -> ZenohId {
+    pub fn zid(&self) -> ZenohIdProto {
         self.config.zid
     }
 

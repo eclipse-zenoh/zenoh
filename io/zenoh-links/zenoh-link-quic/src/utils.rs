@@ -11,7 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::config::*;
+use std::{
+    fs::File,
+    io,
+    io::{BufReader, Cursor},
+    net::SocketAddr,
+    sync::Arc,
+};
+
 use rustls::{
     pki_types::{CertificateDer, PrivateKeyDer, TrustAnchor},
     server::WebPkiClientVerifier,
@@ -19,19 +26,16 @@ use rustls::{
     ClientConfig, RootCertStore, ServerConfig,
 };
 use secrecy::ExposeSecret;
-use std::fs::File;
-use std::io;
-use std::net::SocketAddr;
-use std::{
-    io::{BufReader, Cursor},
-    sync::Arc,
-};
 use webpki::anchor_from_trusted_cert;
 use zenoh_config::Config as ZenohConfig;
 use zenoh_link_commons::{tls::WebPkiVerifierAnyServerName, ConfigurationInspector};
-use zenoh_protocol::core::endpoint::Config;
-use zenoh_protocol::core::endpoint::{self, Address};
+use zenoh_protocol::core::{
+    endpoint::{Address, Config},
+    parameters,
+};
 use zenoh_result::{bail, zerror, ZError, ZResult};
+
+use crate::config::*;
 
 #[derive(Default, Clone, Copy, Debug)]
 pub struct TlsConfigurator;
@@ -136,10 +140,7 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
             };
         }
 
-        let mut s = String::new();
-        endpoint::Parameters::extend(ps.drain(..), &mut s);
-
-        Ok(s)
+        Ok(parameters::from_iter(ps.drain(..)))
     }
 }
 
@@ -479,8 +480,7 @@ pub async fn get_quic_addr(address: &Address<'_>) -> ZResult<SocketAddr> {
 }
 
 pub fn base64_decode(data: &str) -> ZResult<Vec<u8>> {
-    use base64::engine::general_purpose;
-    use base64::Engine;
+    use base64::{engine::general_purpose, Engine};
     Ok(general_purpose::STANDARD
         .decode(data)
         .map_err(|e| zerror!("Unable to perform base64 decoding: {e:?}"))?)

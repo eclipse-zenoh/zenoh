@@ -11,42 +11,47 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+pub mod authentication;
 pub mod establishment;
 pub(crate) mod link;
 pub(crate) mod lowlatency;
 pub(crate) mod manager;
+#[cfg(feature = "test")]
+pub mod test_helpers;
 pub(crate) mod transport_unicast_inner;
 pub(crate) mod universal;
 
-#[cfg(feature = "test")]
-pub mod test_helpers;
+use std::{
+    fmt,
+    sync::{Arc, Weak},
+};
 
-#[cfg(feature = "shared-memory")]
-pub(crate) mod shared_memory_unicast;
-
-use self::transport_unicast_inner::TransportUnicastTrait;
-
-use super::{TransportPeer, TransportPeerEventHandler};
 #[cfg(feature = "transport_multilink")]
 use establishment::ext::auth::ZPublicKey;
 pub use manager::*;
-use std::fmt;
-use std::sync::{Arc, Weak};
 use zenoh_core::zcondfeat;
 use zenoh_link::Link;
-use zenoh_protocol::network::NetworkMessage;
 use zenoh_protocol::{
-    core::{Bits, WhatAmI, ZenohId},
+    core::{Bits, WhatAmI, ZenohIdProto},
+    network::NetworkMessage,
     transport::{close, TransportSn},
 };
 use zenoh_result::{zerror, ZResult};
+
+use self::transport_unicast_inner::TransportUnicastTrait;
+use super::{TransportPeer, TransportPeerEventHandler};
+#[cfg(feature = "shared-memory")]
+use crate::shm::TransportShmConfig;
+use crate::unicast::authentication::AuthId;
+#[cfg(feature = "auth_usrpwd")]
+use crate::unicast::establishment::ext::auth::UsrPwdId;
 
 /*************************************/
 /*        TRANSPORT UNICAST          */
 /*************************************/
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct TransportConfigUnicast {
-    pub(crate) zid: ZenohId,
+    pub(crate) zid: ZenohIdProto,
     pub(crate) whatami: WhatAmI,
     pub(crate) sn_resolution: Bits,
     pub(crate) tx_initial_sn: TransportSn,
@@ -54,8 +59,10 @@ pub(crate) struct TransportConfigUnicast {
     #[cfg(feature = "transport_multilink")]
     pub(crate) multilink: Option<ZPublicKey>,
     #[cfg(feature = "shared-memory")]
-    pub(crate) is_shm: bool,
+    pub(crate) shm: Option<TransportShmConfig>,
     pub(crate) is_lowlatency: bool,
+    #[cfg(feature = "auth_usrpwd")]
+    pub(crate) auth_id: UsrPwdId,
 }
 
 /// [`TransportUnicast`] is the transport handler returned
@@ -72,7 +79,7 @@ impl TransportUnicast {
     }
 
     #[inline(always)]
-    pub fn get_zid(&self) -> ZResult<ZenohId> {
+    pub fn get_zid(&self) -> ZResult<ZenohIdProto> {
         let transport = self.get_inner()?;
         Ok(transport.get_zid())
     }
@@ -113,6 +120,11 @@ impl TransportUnicast {
     pub fn get_links(&self) -> ZResult<Vec<Link>> {
         let transport = self.get_inner()?;
         Ok(transport.get_links())
+    }
+
+    pub fn get_auth_ids(&self) -> ZResult<Vec<AuthId>> {
+        let transport = self.get_inner()?;
+        Ok(transport.get_auth_ids())
     }
 
     #[inline(always)]

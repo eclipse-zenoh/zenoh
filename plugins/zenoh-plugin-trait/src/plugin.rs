@@ -11,11 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::StructVersion;
-use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, ops::BitOrAssign};
+
+use serde::{Deserialize, Serialize};
 use zenoh_keyexpr::keyexpr;
 use zenoh_result::ZResult;
+
+use crate::StructVersion;
 
 /// The plugin can be in one of these states:
 /// - Declared: the plugin is declared in the configuration file, but not loaded yet or failed to load
@@ -173,9 +175,9 @@ pub trait Plugin: Sized + 'static {
     type Instance: PluginInstance;
     /// Plugins' default name when statically linked.
     const DEFAULT_NAME: &'static str;
-    /// Plugin's version. Used only for information purposes. It's recommended to use [plugin_version!] macro to generate this string.
+    /// Plugin's version. Used only for information purposes. It's recommended to use [plugin_version!](crate::plugin_version!) macro to generate this string.
     const PLUGIN_VERSION: &'static str;
-    /// Plugin's long version (with git commit hash). Used only for information purposes. It's recommended to use [plugin_long_version!] macro to generate this string.
+    /// Plugin's long version (with git commit hash). Used only for information purposes. It's recommended to use [plugin_version!](crate::plugin_version!) macro to generate this string.
     const PLUGIN_LONG_VERSION: &'static str;
     /// Starts your plugin. Use `Ok` to return your plugin's control structure
     fn start(name: &str, args: &Self::StartArgs) -> ZResult<Self::Instance>;

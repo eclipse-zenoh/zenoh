@@ -11,15 +11,20 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{convert::TryFrom, time::Duration};
+
 use const_format::concatcp;
 use derive_more::{AsMut, AsRef};
+use either::Either;
 use schemars::JsonSchema;
 use serde_json::{Map, Value};
-use std::convert::TryFrom;
-use std::time::Duration;
-use zenoh::{key_expr::keyexpr, prelude::OwnedKeyExpr, Result as ZResult};
+use zenoh::{
+    key_expr::{keyexpr, OwnedKeyExpr},
+    Result as ZResult,
+};
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_result::{bail, zerror, Error};
+use zenoh_util::LibSearchDirs;
 
 #[derive(JsonSchema, Debug, Clone, AsMut, AsRef)]
 pub struct PluginConfig {
@@ -27,7 +32,9 @@ pub struct PluginConfig {
     pub name: String,
     #[schemars(with = "Option<bool>")]
     pub required: bool,
-    pub backend_search_dirs: Option<Vec<String>>,
+    // REVIEW: This is inconsistent with `plugins_loading/search_dirs`
+    #[schemars(with = "Option<Either<String, Vec<Either<Map<String, Value>, String>>>>")]
+    pub backend_search_dirs: LibSearchDirs,
     #[schemars(with = "Map<String, Value>")]
     pub volumes: Vec<VolumeConfig>,
     #[schemars(with = "Map<String, Value>")]
@@ -158,16 +165,18 @@ impl<S: Into<String> + AsRef<str>, V: AsObject> TryFrom<(S, &V)> for PluginConfi
             })
             .unwrap_or(Ok(true))?;
         let backend_search_dirs = match value.get("backend_search_dirs") {
-            Some(serde_json::Value::String(path)) => Some(vec![path.clone()]),
+            Some(serde_json::Value::String(path)) => LibSearchDirs::from_paths(&[path.clone()]),
             Some(serde_json::Value::Array(paths)) => {
-                let mut result = Vec::with_capacity(paths.len());
+                let mut specs = Vec::with_capacity(paths.len());
                 for path in paths {
-                    let path = if let serde_json::Value::String(path) = path {path} else {bail!("`backend_search_dirs` field of {}'s configuration must be a string or array of strings", name.as_ref())};
-                    result.push(path.clone());
+                    let serde_json::Value::String(path) = path else {
+                        bail!("`backend_search_dirs` field of {}'s configuration must be a string or array of strings", name.as_ref());
+                    };
+                    specs.push(path.clone());
                 }
-                Some(result)
+                LibSearchDirs::from_specs(&specs)?
             }
-            None => None,
+            None => LibSearchDirs::default(),
             _ => bail!("`backend_search_dirs` field of {}'s configuration must be a string or array of strings", name.as_ref())
         };
         let volumes = match value.get("volumes") {

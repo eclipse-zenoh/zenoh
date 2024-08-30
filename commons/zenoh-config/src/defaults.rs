@@ -36,7 +36,7 @@ pub const mode: WhatAmI = WhatAmI::Peer;
 #[allow(dead_code)]
 pub mod scouting {
     pub const timeout: u64 = 3000;
-    pub const delay: u64 = 200;
+    pub const delay: u64 = 500;
     pub mod multicast {
         pub const enabled: bool = true;
         pub const address: ([u8; 4], u16) = ([224, 0, 0, 224], 7446);
@@ -97,6 +97,34 @@ pub mod routing {
     }
     pub mod peer {
         pub const mode: &str = "peer_to_peer";
+    }
+}
+
+impl Default for ListenConfig {
+    #[allow(clippy::unnecessary_cast)]
+    fn default() -> Self {
+        Self {
+            timeout_ms: None,
+            endpoints: ModeDependentValue::Dependent(ModeValues {
+                router: Some(vec!["tcp/[::]:7447".parse().unwrap()]),
+                peer: Some(vec!["tcp/[::]:0".parse().unwrap()]),
+                client: None,
+            }),
+            exit_on_failure: None,
+            retry: None,
+        }
+    }
+}
+
+impl Default for ConnectConfig {
+    #[allow(clippy::unnecessary_cast)]
+    fn default() -> Self {
+        Self {
+            timeout_ms: None,
+            endpoints: ModeDependentValue::Unique(vec![]),
+            exit_on_failure: None,
+            retry: None,
+        }
     }
 }
 
@@ -167,16 +195,6 @@ impl Default for LinkTxConf {
     }
 }
 
-impl Default for QueueConf {
-    fn default() -> Self {
-        Self {
-            size: QueueSizeConf::default(),
-            congestion_control: CongestionControlConf::default(),
-            backoff: 100,
-        }
-    }
-}
-
 impl QueueSizeConf {
     pub const MIN: usize = 1;
     pub const MAX: usize = 16;
@@ -205,6 +223,15 @@ impl Default for CongestionControlConf {
     }
 }
 
+impl Default for BatchingConf {
+    fn default() -> Self {
+        BatchingConf {
+            enabled: true,
+            time_limit: 1,
+        }
+    }
+}
+
 impl Default for LinkRxConf {
     fn default() -> Self {
         Self {
@@ -216,9 +243,9 @@ impl Default for LinkRxConf {
 
 // Make explicit the value and ignore clippy warning
 #[allow(clippy::derivable_impls)]
-impl Default for SharedMemoryConf {
+impl Default for ShmConf {
     fn default() -> Self {
-        Self { enabled: false }
+        Self { enabled: true }
     }
 }
 
@@ -228,6 +255,8 @@ impl Default for AclConfig {
             enabled: false,
             default_permission: Permission::Deny,
             rules: None,
+            subjects: None,
+            policies: None,
         }
     }
 }

@@ -16,7 +16,6 @@ pub(super) mod cookie;
 pub mod ext;
 pub(crate) mod open;
 
-use crate::common::seq_num;
 use async_trait::async_trait;
 use cookie::*;
 use sha3::{
@@ -24,9 +23,11 @@ use sha3::{
     Shake128,
 };
 use zenoh_protocol::{
-    core::{Field, Resolution, ZenohId},
+    core::{Field, Resolution, ZenohIdProto},
     transport::TransportSn,
 };
+
+use crate::common::seq_num;
 
 /*************************************/
 /*             TRAITS                */
@@ -100,7 +101,11 @@ pub trait AcceptFsm {
 /*************************************/
 /*           FUNCTIONS               */
 /*************************************/
-pub(super) fn compute_sn(zid1: ZenohId, zid2: ZenohId, resolution: Resolution) -> TransportSn {
+pub(super) fn compute_sn(
+    zid1: ZenohIdProto,
+    zid2: ZenohIdProto,
+    resolution: Resolution,
+) -> TransportSn {
     // Create a random yet deterministic initial_sn.
     // In case of multilink it's important that the same initial_sn is used for every connection attempt.
     // Instead of storing the state everywhere, we make sure that the we always compute the same initial_sn.

@@ -11,22 +11,24 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::extension, LCodec, RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
 use alloc::boxed::Box;
 use core::time::Duration;
+
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
     common::{iext, imsg, ZExtZBufHeader},
-    core::{Priority, Resolution, WhatAmI, ZenohId},
+    core::{Priority, Resolution, WhatAmI, ZenohIdProto},
     transport::{
         batch_size, id,
         join::{ext, flag, Join},
         BatchSize, PrioritySn, TransportSn,
     },
 };
+
+use crate::{common::extension, LCodec, RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
 
 impl LCodec<&PrioritySn> for Zenoh080 {
     fn w_len(self, p: &PrioritySn) -> usize {
@@ -121,7 +123,7 @@ where
         let (_, more): (ZExtZBufHeader<{ ext::QoS::ID }>, bool) = self.read(&mut *reader)?;
 
         // Body
-        let mut ext_qos = Box::new([PrioritySn::default(); Priority::NUM]);
+        let mut ext_qos = Box::new([PrioritySn::DEFAULT; Priority::NUM]);
         for p in ext_qos.iter_mut() {
             *p = self.codec.read(&mut *reader)?;
         }
@@ -240,7 +242,7 @@ where
         };
         let length = 1 + ((flags >> 4) as usize);
         let lodec = Zenoh080Length::new(length);
-        let zid: ZenohId = lodec.read(&mut *reader)?;
+        let zid: ZenohIdProto = lodec.read(&mut *reader)?;
 
         let mut resolution = Resolution::default();
         let mut batch_size = batch_size::MULTICAST.to_le_bytes();

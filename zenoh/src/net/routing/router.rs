@@ -11,33 +11,33 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::dispatcher::face::{Face, FaceState};
-pub use super::dispatcher::pubsub::*;
-pub use super::dispatcher::queries::*;
-pub use super::dispatcher::resource::*;
-use super::dispatcher::tables::Tables;
-use super::dispatcher::tables::TablesLock;
-use super::hat;
-use super::interceptor::EgressInterceptor;
-use super::interceptor::InterceptorsChain;
-use super::runtime::Runtime;
-use crate::net::primitives::DeMux;
-use crate::net::primitives::DummyPrimitives;
-use crate::net::primitives::EPrimitives;
-use crate::net::primitives::McastMux;
-use crate::net::primitives::Mux;
-use crate::net::routing::interceptor::IngressInterceptor;
-use std::str::FromStr;
-use std::sync::Arc;
-use std::sync::{Mutex, RwLock};
+use std::{
+    str::FromStr,
+    sync::{Arc, Mutex, RwLock},
+};
+
 use uhlc::HLC;
 use zenoh_config::Config;
-use zenoh_protocol::core::{WhatAmI, ZenohId};
-use zenoh_transport::multicast::TransportMulticast;
-use zenoh_transport::unicast::TransportUnicast;
-use zenoh_transport::TransportPeer;
+use zenoh_protocol::core::{WhatAmI, ZenohIdProto};
 // use zenoh_collections::Timer;
 use zenoh_result::ZResult;
+use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast, TransportPeer};
+
+pub(crate) use super::dispatcher::token::*;
+pub use super::dispatcher::{pubsub::*, queries::*, resource::*};
+use super::{
+    dispatcher::{
+        face::{Face, FaceState},
+        tables::{Tables, TablesLock},
+    },
+    hat,
+    interceptor::{EgressInterceptor, InterceptorsChain},
+    runtime::Runtime,
+};
+use crate::net::{
+    primitives::{DeMux, DummyPrimitives, EPrimitives, McastMux, Mux},
+    routing::interceptor::IngressInterceptor,
+};
 
 pub struct Router {
     // whatami: WhatAmI,
@@ -46,7 +46,7 @@ pub struct Router {
 
 impl Router {
     pub fn new(
-        zid: ZenohId,
+        zid: ZenohIdProto,
         whatami: WhatAmI,
         hlc: Option<Arc<HLC>>,
         config: &Config,
@@ -61,7 +61,6 @@ impl Router {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn init_link_state(&mut self, runtime: Runtime) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut tables = zwrite!(self.tables.tables);
@@ -195,7 +194,7 @@ impl Router {
         let mux = Arc::new(McastMux::new(transport.clone(), interceptor));
         let face = FaceState::new(
             fid,
-            ZenohId::from_str("1").unwrap(),
+            ZenohIdProto::from_str("1").unwrap(),
             WhatAmI::Peer,
             #[cfg(feature = "stats")]
             None,

@@ -12,9 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use crate::DELIMITER;
-
 use super::keyexpr;
+use crate::DELIMITER;
 
 mod classical;
 pub use classical::ClassicIntersector;

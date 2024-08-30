@@ -20,13 +20,17 @@
 mod multicast;
 mod unicast;
 
+use std::net::SocketAddr;
+
 use async_trait::async_trait;
 pub use multicast::*;
-use std::net::SocketAddr;
 pub use unicast::*;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
-use zenoh_protocol::core::{endpoint::Address, Locator};
+use zenoh_protocol::{
+    core::{endpoint::Address, Locator},
+    transport::BatchSize,
+};
 use zenoh_result::{zerror, ZResult};
 
 // NOTE: In case of using UDP in high-throughput scenarios, it is recommended to set the
@@ -46,24 +50,24 @@ use zenoh_result::{zerror, ZResult};
 ///
 /// Although in IPv6 it is possible to have UDP datagrams of size greater than 65,535 bytes via IPv6
 /// Jumbograms, its usage in Zenoh is discouraged unless the consequences are very well understood.
-const UDP_MAX_MTU: u16 = u16::MAX - 8 - 40;
+const UDP_MAX_MTU: BatchSize = u16::MAX - 8 - 40;
 
 pub const UDP_LOCATOR_PREFIX: &str = "udp";
 
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 // Linux default value of a maximum datagram size is set to UDP MAX MTU.
-const UDP_MTU_LIMIT: u16 = UDP_MAX_MTU;
+const UDP_MTU_LIMIT: BatchSize = UDP_MAX_MTU;
 
 #[cfg(target_os = "macos")]
 // Mac OS X default value of a maximum datagram size is set to 9216 bytes.
-const UDP_MTU_LIMIT: u16 = 9_216;
+const UDP_MTU_LIMIT: BatchSize = 9_216;
 
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-const UDP_MTU_LIMIT: u16 = 8_192;
+const UDP_MTU_LIMIT: BatchSize = 8_192;
 
 zconfigurable! {
     // Default MTU (UDP PDU) in bytes.
-    static ref UDP_DEFAULT_MTU: u16 = UDP_MTU_LIMIT;
+    static ref UDP_DEFAULT_MTU: BatchSize = UDP_MTU_LIMIT;
     // Amount of time in microseconds to throttle the accept loop upon an error.
     // Default set to 100 ms.
     static ref UDP_ACCEPT_THROTTLE_TIME: u64 = 100_000;

@@ -12,19 +12,22 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use super::{canon::Canonizable, OwnedKeyExpr, FORBIDDEN_CHARS};
+#[cfg(feature = "internal")]
+use alloc::vec::Vec;
 use alloc::{
     borrow::{Borrow, ToOwned},
     format,
     string::String,
-    vec::Vec,
 };
 use core::{
     convert::{TryFrom, TryInto},
     fmt,
     ops::{Deref, Div},
 };
+
 use zenoh_result::{bail, Error as ZError, ZResult};
+
+use super::{canon::Canonize, OwnedKeyExpr, FORBIDDEN_CHARS};
 
 /// A [`str`] newtype that is statically known to be a valid key expression.
 ///
@@ -69,7 +72,7 @@ impl keyexpr {
     pub fn autocanonize<'a, T, E>(t: &'a mut T) -> Result<&'a Self, E>
     where
         &'a Self: TryFrom<&'a T, Error = E>,
-        T: Canonizable + ?Sized,
+        T: Canonize + ?Sized,
     {
         t.canonize();
         Self::new(t)
@@ -90,6 +93,7 @@ impl keyexpr {
     /// Returns the relation between `self` and `other` from `self`'s point of view ([`SetIntersectionLevel::Includes`] signifies that `self` includes `other`).
     ///
     /// Note that this is slower than [`keyexpr::intersects`] and [`keyexpr::includes`], so you should favor these methods for most applications.
+    #[cfg(feature = "unstable")]
     pub fn relation_to(&self, other: &Self) -> SetIntersectionLevel {
         use SetIntersectionLevel::*;
         if self.intersects(other) {
@@ -124,7 +128,12 @@ impl keyexpr {
     }
 
     /// Returns `true` if `self` contains any wildcard character (`**` or `$*`).
+    #[cfg(feature = "internal")]
+    #[doc(hidden)]
     pub fn is_wild(&self) -> bool {
+        self.is_wild_impl()
+    }
+    pub(crate) fn is_wild_impl(&self) -> bool {
         self.0.contains(super::SINGLE_WILD as char)
     }
 
@@ -161,6 +170,8 @@ impl keyexpr {
     ///     None,
     ///     keyexpr::new("dem$*").unwrap().get_nonwild_prefix());
     /// ```
+    #[cfg(feature = "internal")]
+    #[doc(hidden)]
     pub fn get_nonwild_prefix(&self) -> Option<&keyexpr> {
         match self.0.find('*') {
             Some(i) => match self.0[..i].rfind('/') {
@@ -226,6 +237,8 @@ impl keyexpr {
     ///     keyexpr::new("demo/example/test/**").unwrap().strip_prefix(keyexpr::new("not/a/prefix").unwrap()).is_empty()
     /// );
     /// ```
+    #[cfg(feature = "internal")]
+    #[doc(hidden)]
     pub fn strip_prefix(&self, prefix: &Self) -> Vec<&keyexpr> {
         let mut result = alloc::vec![];
         'chunks: for i in (0..=self.len()).rev() {
@@ -291,7 +304,13 @@ impl keyexpr {
     pub unsafe fn from_slice_unchecked(s: &[u8]) -> &Self {
         core::mem::transmute(s)
     }
+
+    #[cfg(feature = "internal")]
+    #[doc(hidden)]
     pub const fn chunks(&self) -> Chunks {
+        self.chunks_impl()
+    }
+    pub(crate) const fn chunks_impl(&self) -> Chunks {
         Chunks {
             inner: self.as_str(),
         }
@@ -550,6 +569,7 @@ impl Div for &keyexpr {
 ///
 /// You can check for intersection with `level >= SetIntersecionLevel::Intersection` and for inclusion with `level >= SetIntersectionLevel::Includes`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg(feature = "unstable")]
 pub enum SetIntersectionLevel {
     Disjoint,
     Intersects,

@@ -14,15 +14,14 @@
 use clap::Parser;
 use futures::future;
 use git_version::git_version;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
-use zenoh::config::{Config, ModeDependentValue, PermissionsConf, ValidatedMap};
-use zenoh::prelude::r#async::*;
-use zenoh::Result;
-
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 #[cfg(feature = "loki")]
 use url::Url;
+use zenoh::{
+    config::{Config, EndPoint, ModeDependentValue, PermissionsConf, ValidatedMap, WhatAmI},
+    Result,
+};
+use zenoh_util::LibSearchDirs;
 
 #[cfg(feature = "loki")]
 const LOKI_ENDPOINT_VAR: &str = "LOKI_ENDPOINT";
@@ -38,8 +37,6 @@ const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 lazy_static::lazy_static!(
     static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
 );
-
-const DEFAULT_LISTENER: &str = "tcp/[::]:7447";
 
 #[derive(Debug, Parser)]
 #[command(version=GIT_VERSION, long_version=LONG_VERSION.as_str(), about="The zenoh router")]
@@ -58,7 +55,7 @@ struct Args {
     /// WARNING: this identifier must be unique in the system and must be 16 bytes maximum (32 chars)!
     #[arg(short, long)]
     id: Option<String>,
-    /// A plugin that MUST be loaded. You can give just the name of the plugin, zenohd will search for a library named 'libzenoh_plugin_<name>.so' (exact name depending the OS). Or you can give such a string: "<plugin_name>:<library_path>
+    /// A plugin that MUST be loaded. You can give just the name of the plugin, zenohd will search for a library named 'libzenoh_plugin_\<name\>.so' (exact name depending the OS). Or you can give such a string: "\<plugin_name\>:\<library_path\>"
     /// Repeat this option to load several plugins. If loading failed, zenohd will exit.
     #[arg(short = 'P', long)]
     plugin: Vec<String>,
@@ -83,8 +80,8 @@ struct Args {
     ///   - VALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.
     ///
     /// Examples:
-    ///   - `--cfg='startup/subscribe:["demo/**"]'`
-    ///   - `--cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'`
+    /// - `--cfg='startup/subscribe:["demo/**"]'`
+    /// - `--cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'`
     #[arg(long)]
     cfg: Vec<String>,
     /// Configure the read and/or write permissions on the admin space. Default is read only.
@@ -106,7 +103,7 @@ fn main() {
             let config = config_from_args(&args);
             tracing::info!("Initial conf: {}", &config);
 
-            let _session = match zenoh::open(config).res().await {
+            let _session = match zenoh::open(config).await {
                 Ok(runtime) => runtime,
                 Err(e) => {
                     println!("{e}. Exiting...");
@@ -123,11 +120,7 @@ fn config_from_args(args: &Args) -> Config {
         .config
         .as_ref()
         .map_or_else(Config::default, |conf_file| {
-            Config::from_file(conf_file).unwrap_or_else(|e| {
-                // if file load fail, wanning it, and load default config
-                tracing::warn!("Warn: File {} not found! {}", conf_file, e.to_string());
-                Config::default()
-            })
+            Config::from_file(conf_file).unwrap()
         });
 
     if config.mode().is_none() {
@@ -154,7 +147,11 @@ fn config_from_args(args: &Args) -> Config {
     if !args.plugin_search_dir.is_empty() {
         config
             .plugins_loading
-            .set_search_dirs(Some(args.plugin_search_dir.clone()))
+            // REVIEW: Should this append to search_dirs instead? As there is no way to pass the new
+            // `current_exe_parent` unless we change the format of the argument and this overrides
+            // the one set from the default config. 
+            // Also, --cfg plugins_loading/search_dirs=[...] makes this argument superfluous.
+            .set_search_dirs(LibSearchDirs::from_paths(&args.plugin_search_dir))
             .unwrap();
     }
     for plugin in &args.plugin {
@@ -175,7 +172,8 @@ fn config_from_args(args: &Args) -> Config {
     if !args.connect.is_empty() {
         config
             .connect
-            .set_endpoints(
+            .endpoints
+            .set(
                 args.connect
                     .iter()
                     .map(|v| match v.parse::<EndPoint>() {
@@ -191,7 +189,8 @@ fn config_from_args(args: &Args) -> Config {
     if !args.listen.is_empty() {
         config
             .listen
-            .set_endpoints(
+            .endpoints
+            .set(
                 args.listen
                     .iter()
                     .map(|v| match v.parse::<EndPoint>() {
@@ -203,12 +202,6 @@ fn config_from_args(args: &Args) -> Config {
                     .collect(),
             )
             .unwrap();
-    }
-    if config.listen.endpoints.is_empty() {
-        config
-            .listen
-            .endpoints
-            .push(DEFAULT_LISTENER.parse().unwrap())
     }
     if args.no_timestamp {
         config
@@ -348,7 +341,6 @@ fn test_default_features() {
         concat!(
             " zenoh/auth_pubkey",
             " zenoh/auth_usrpwd",
-            // " zenoh/complete_n",
             // " zenoh/shared-memory",
             // " zenoh/stats",
             " zenoh/transport_multilink",
@@ -375,7 +367,6 @@ fn test_no_default_features() {
         concat!(
             // " zenoh/auth_pubkey",
             // " zenoh/auth_usrpwd",
-            // " zenoh/complete_n",
             // " zenoh/shared-memory",
             // " zenoh/stats",
             // " zenoh/transport_multilink",

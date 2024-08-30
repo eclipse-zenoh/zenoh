@@ -11,11 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use clap::{arg, Command};
 use std::time::Duration;
-use zenoh::prelude::r#async::*;
-use zenoh::publication::CongestionControl;
-use zenoh::{config::Config, key_expr::keyexpr};
+
+use clap::{arg, Command};
+use zenoh::{
+    config::Config,
+    key_expr::keyexpr,
+    qos::{CongestionControl, QoSBuilderTrait},
+    session::SessionDeclarations,
+};
 
 const HTML: &str = r#"
 <div id="result"></div>
@@ -30,30 +34,26 @@ if(typeof(EventSource) !== "undefined") {
 }
 </script>"#;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     // initiate logging
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
 
     let config = parse_args();
     let key = keyexpr::new("demo/sse").unwrap();
     let value = "Pub from sse server!";
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Declaring Queryable on '{key}'...");
-    let queryable = session.declare_queryable(key).res().await.unwrap();
+    let queryable = session.declare_queryable(key).await.unwrap();
 
-    async_std::task::spawn({
-        let receiver = queryable.receiver.clone();
+    tokio::task::spawn({
+        let receiver = queryable.handler().clone();
         async move {
             while let Ok(request) = receiver.recv_async().await {
-                request
-                    .reply(Ok(Sample::new(key, HTML)))
-                    .res()
-                    .await
-                    .unwrap();
+                request.reply(key, HTML).await.unwrap();
             }
         }
     });
@@ -64,7 +64,6 @@ async fn main() {
     let publisher = session
         .declare_publisher(&event_key)
         .congestion_control(CongestionControl::Block)
-        .res()
         .await
         .unwrap();
 
@@ -75,12 +74,8 @@ async fn main() {
 
     println!("Data updates are accessible through HTML5 SSE at http://<hostname>:8000/{key}");
     loop {
-        publisher
-            .put(Value::from(value).encoding(KnownEncoding::TextPlain.into()))
-            .res()
-            .await
-            .unwrap();
-        async_std::task::sleep(Duration::from_secs(1)).await;
+        publisher.put(value).await.unwrap();
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
 }
 
@@ -115,13 +110,15 @@ fn parse_args() -> Config {
         config
             .connect
             .endpoints
-            .extend(values.into_iter().map(|v| v.parse().unwrap()))
+            .set(values.into_iter().map(|v| v.parse().unwrap()).collect())
+            .unwrap();
     }
     if let Some(values) = args.get_many::<&String>("listen") {
         config
             .listen
             .endpoints
-            .extend(values.into_iter().map(|v| v.parse().unwrap()))
+            .set(values.into_iter().map(|v| v.parse().unwrap()).collect())
+            .unwrap();
     }
     if args.get_flag("no-multicast-scouting") {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();

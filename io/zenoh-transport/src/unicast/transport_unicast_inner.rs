@@ -12,22 +12,23 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use crate::{
-    unicast::{link::TransportLinkUnicast, TransportConfigUnicast},
-    TransportPeerEventHandler,
-};
-use async_trait::async_trait;
 use std::{fmt::DebugStruct, sync::Arc, time::Duration};
+
+use async_trait::async_trait;
 use tokio::sync::MutexGuard as AsyncMutexGuard;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{WhatAmI, ZenohId},
+    core::{WhatAmI, ZenohIdProto},
     network::NetworkMessage,
     transport::TransportSn,
 };
 use zenoh_result::ZResult;
 
 use super::link::{LinkUnicastWithOpenAck, MaybeOpenAck};
+use crate::{
+    unicast::{link::TransportLinkUnicast, TransportConfigUnicast},
+    TransportPeerEventHandler,
+};
 
 pub(crate) type LinkError = (zenoh_result::Error, TransportLinkUnicast, u8);
 pub(crate) type TransportError = (zenoh_result::Error, Arc<dyn TransportUnicastTrait>, u8);
@@ -57,10 +58,11 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     fn set_callback(&self, callback: Arc<dyn TransportPeerEventHandler>);
 
     async fn get_alive(&self) -> AsyncMutexGuard<'_, bool>;
-    fn get_zid(&self) -> ZenohId;
+    fn get_zid(&self) -> ZenohIdProto;
     fn get_whatami(&self) -> WhatAmI;
     fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>>;
     fn get_links(&self) -> Vec<Link>;
+    fn get_auth_ids(&self) -> Vec<super::authentication::AuthId>;
     #[cfg(feature = "shared-memory")]
     fn is_shm(&self) -> bool;
     fn is_qos(&self) -> bool;

@@ -11,9 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::*;
 use std::marker::PhantomData;
+
 use zenoh_result::ZResult;
+
+use crate::*;
 
 pub struct StaticPlugin<StartArgs, Instance: PluginInstance, P>
 where
@@ -82,8 +84,8 @@ where
     fn as_status(&self) -> &dyn PluginStatus {
         self
     }
-    fn load(&mut self) -> ZResult<&mut dyn LoadedPlugin<StartArgs, Instance>> {
-        Ok(self)
+    fn load(&mut self) -> ZResult<Option<&mut dyn LoadedPlugin<StartArgs, Instance>>> {
+        Ok(Some(self))
     }
     fn loaded(&self) -> Option<&dyn LoadedPlugin<StartArgs, Instance>> {
         Some(self)

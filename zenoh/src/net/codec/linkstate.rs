@@ -11,12 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::Zenoh080Routing;
-use crate::net::protocol::{
-    linkstate,
-    linkstate::{LinkState, LinkStateList},
-};
 use core::convert::TryFrom;
+
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -24,7 +20,13 @@ use zenoh_buffers::{
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_protocol::{
     common::imsg,
-    core::{Locator, WhatAmI, ZenohId},
+    core::{Locator, WhatAmI, ZenohIdProto},
+};
+
+use super::Zenoh080Routing;
+use crate::net::protocol::{
+    linkstate,
+    linkstate::{LinkState, LinkStateList},
 };
 
 // LinkState
@@ -83,7 +85,7 @@ where
         let psid: u64 = codec.read(&mut *reader)?;
         let sn: u64 = codec.read(&mut *reader)?;
         let zid = if imsg::has_option(options, linkstate::PID) {
-            let zid: ZenohId = codec.read(&mut *reader)?;
+            let zid: ZenohIdProto = codec.read(&mut *reader)?;
             Some(zid)
         } else {
             None

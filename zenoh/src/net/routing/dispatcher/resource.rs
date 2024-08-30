@@ -11,39 +11,38 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::face::FaceState;
-use super::tables::{Tables, TablesLock};
-use crate::net::routing::dispatcher::face::Face;
-use crate::net::routing::RoutingContext;
-use std::any::Any;
-use std::collections::HashMap;
-use std::convert::TryInto;
-use std::hash::{Hash, Hasher};
-use std::sync::{Arc, Weak};
+use std::{
+    any::Any,
+    collections::HashMap,
+    convert::TryInto,
+    hash::{Hash, Hasher},
+    sync::{Arc, Weak},
+};
+
 use zenoh_config::WhatAmI;
-#[cfg(feature = "complete_n")]
-use zenoh_protocol::network::request::ext::TargetType;
-use zenoh_protocol::network::RequestId;
-use zenoh_protocol::zenoh::PushBody;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr},
     network::{
         declare::{
-            ext, queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo, Declare,
+            ext, queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, Declare,
             DeclareBody, DeclareKeyExpr,
         },
-        Mapping,
+        interest::InterestId,
+        Mapping, RequestId,
     },
 };
 use zenoh_sync::get_mut_unchecked;
+
+use super::{
+    face::FaceState,
+    tables::{Tables, TablesLock},
+};
+use crate::net::routing::{dispatcher::face::Face, RoutingContext};
 
 pub(crate) type NodeId = u16;
 
 pub(crate) type Direction = (Arc<FaceState>, WireExpr<'static>, NodeId);
 pub(crate) type Route = HashMap<usize, Direction>;
-#[cfg(feature = "complete_n")]
-pub(crate) type QueryRoute = HashMap<usize, (Direction, RequestId, TargetType)>;
-#[cfg(not(feature = "complete_n"))]
 pub(crate) type QueryRoute = HashMap<usize, (Direction, RequestId)>;
 pub(crate) struct QueryTargetQabl {
     pub(crate) direction: Direction,
@@ -51,17 +50,31 @@ pub(crate) struct QueryTargetQabl {
     pub(crate) distance: f64,
 }
 pub(crate) type QueryTargetQablSet = Vec<QueryTargetQabl>;
-pub(crate) type PullCaches = Vec<Arc<SessionContext>>;
 
 pub(crate) struct SessionContext {
     pub(crate) face: Arc<FaceState>,
     pub(crate) local_expr_id: Option<ExprId>,
     pub(crate) remote_expr_id: Option<ExprId>,
     pub(crate) subs: Option<SubscriberInfo>,
-    pub(crate) qabl: Option<QueryableInfo>,
-    pub(crate) last_values: HashMap<String, PushBody>,
+    pub(crate) qabl: Option<QueryableInfoType>,
+    pub(crate) token: bool,
     pub(crate) in_interceptor_cache: Option<Box<dyn Any + Send + Sync>>,
     pub(crate) e_interceptor_cache: Option<Box<dyn Any + Send + Sync>>,
+}
+
+impl SessionContext {
+    pub(crate) fn new(face: Arc<FaceState>) -> Self {
+        Self {
+            face,
+            local_expr_id: None,
+            remote_expr_id: None,
+            subs: None,
+            qabl: None,
+            token: false,
+            in_interceptor_cache: None,
+            e_interceptor_cache: None,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -121,7 +134,6 @@ impl QueryRoutes {
 
 pub(crate) struct ResourceContext {
     pub(crate) matches: Vec<Weak<Resource>>,
-    pub(crate) matching_pulls: Option<Arc<PullCaches>>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) valid_data_routes: bool,
     pub(crate) data_routes: DataRoutes,
@@ -133,7 +145,6 @@ impl ResourceContext {
     fn new(hat: Box<dyn Any + Send + Sync>) -> ResourceContext {
         ResourceContext {
             matches: Vec::new(),
-            matching_pulls: None,
             hat,
             valid_data_routes: false,
             data_routes: DataRoutes::default(),
@@ -158,14 +169,6 @@ impl ResourceContext {
 
     pub(crate) fn disable_query_routes(&mut self) {
         self.valid_query_routes = false;
-    }
-
-    pub(crate) fn update_matching_pulls(&mut self, pulls: Arc<PullCaches>) {
-        self.matching_pulls = Some(pulls);
-    }
-
-    pub(crate) fn disable_matching_pulls(&mut self) {
-        self.matching_pulls = None;
     }
 }
 
@@ -233,6 +236,16 @@ impl Resource {
     #[inline(always)]
     pub(crate) fn context_mut(&mut self) -> &mut ResourceContext {
         self.context.as_mut().unwrap()
+    }
+
+    #[inline(always)]
+    pub(crate) fn matches(&self, other: &Arc<Resource>) -> bool {
+        self.context
+            .as_ref()
+            .unwrap()
+            .matches
+            .iter()
+            .any(|m| m.upgrade().is_some_and(|m| &m == other))
     }
 
     pub fn nonwild_prefix(res: &Arc<Resource>) -> (Option<Arc<Resource>>, String) {
@@ -448,39 +461,44 @@ impl Resource {
     }
 
     #[inline]
-    pub fn decl_key(res: &Arc<Resource>, face: &mut Arc<FaceState>) -> WireExpr<'static> {
+    pub fn decl_key(
+        res: &Arc<Resource>,
+        face: &mut Arc<FaceState>,
+        push: bool,
+    ) -> WireExpr<'static> {
         let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(res);
         match nonwild_prefix {
             Some(mut nonwild_prefix) => {
-                let ctx = get_mut_unchecked(&mut nonwild_prefix)
+                if let Some(ctx) = get_mut_unchecked(&mut nonwild_prefix)
                     .session_ctxs
-                    .entry(face.id)
-                    .or_insert_with(|| {
-                        Arc::new(SessionContext {
-                            face: face.clone(),
-                            local_expr_id: None,
-                            remote_expr_id: None,
-                            subs: None,
-                            qabl: None,
-                            last_values: HashMap::new(),
-                            in_interceptor_cache: None,
-                            e_interceptor_cache: None,
-                        })
-                    });
-
-                if let Some(expr_id) = ctx.remote_expr_id {
-                    WireExpr {
-                        scope: expr_id,
-                        suffix: wildsuffix.into(),
-                        mapping: Mapping::Receiver,
+                    .get(&face.id)
+                {
+                    if let Some(expr_id) = ctx.remote_expr_id {
+                        return WireExpr {
+                            scope: expr_id,
+                            suffix: wildsuffix.into(),
+                            mapping: Mapping::Receiver,
+                        };
                     }
-                } else if let Some(expr_id) = ctx.local_expr_id {
-                    WireExpr {
-                        scope: expr_id,
-                        suffix: wildsuffix.into(),
-                        mapping: Mapping::Sender,
+                    if let Some(expr_id) = ctx.local_expr_id {
+                        return WireExpr {
+                            scope: expr_id,
+                            suffix: wildsuffix.into(),
+                            mapping: Mapping::Sender,
+                        };
                     }
-                } else {
+                }
+                if push
+                    || face.remote_key_interests.values().any(|res| {
+                        res.as_ref()
+                            .map(|res| res.matches(&nonwild_prefix))
+                            .unwrap_or(true)
+                    })
+                {
+                    let ctx = get_mut_unchecked(&mut nonwild_prefix)
+                        .session_ctxs
+                        .entry(face.id)
+                        .or_insert_with(|| Arc::new(SessionContext::new(face.clone())));
                     let expr_id = face.get_next_local_id();
                     get_mut_unchecked(ctx).local_expr_id = Some(expr_id);
                     get_mut_unchecked(face)
@@ -488,9 +506,10 @@ impl Resource {
                         .insert(expr_id, nonwild_prefix.clone());
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
-                            ext_qos: ext::QoSType::declare_default(),
+                            interest_id: None,
+                            ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::default(),
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
                             body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
                                 id: expr_id,
                                 wire_expr: nonwild_prefix.expr().into(),
@@ -504,6 +523,8 @@ impl Resource {
                         suffix: wildsuffix.into(),
                         mapping: Mapping::Sender,
                     }
+                } else {
+                    res.expr().into()
                 }
             }
             None => wildsuffix.into(),
@@ -516,9 +537,9 @@ impl Resource {
             prefix: &Arc<Resource>,
             suffix: &'a str,
             sid: usize,
-            checkchilds: bool,
+            checkclildren: bool,
         ) -> WireExpr<'a> {
-            if checkchilds && !suffix.is_empty() {
+            if checkclildren && !suffix.is_empty() {
                 let (chunk, rest) = suffix.split_at(suffix.find('/').unwrap_or(suffix.len()));
                 if let Some(child) = prefix.children.get(chunk) {
                     return get_best_key_(child, rest, sid, true);
@@ -668,7 +689,7 @@ impl Resource {
     }
 }
 
-pub fn register_expr(
+pub(crate) fn register_expr(
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
     expr_id: ExprId,
@@ -684,7 +705,11 @@ pub fn register_expr(
                 let mut fullexpr = prefix.expr();
                 fullexpr.push_str(expr.suffix.as_ref());
                 if res.expr() != fullexpr {
-                    tracing::error!("Resource {} remapped. Remapping unsupported!", expr_id);
+                    tracing::error!(
+                        "{} Resource {} remapped. Remapping unsupported!",
+                        face,
+                        expr_id
+                    );
                 }
             }
             None => {
@@ -711,21 +736,12 @@ pub fn register_expr(
                     Resource::match_resource(&wtables, &mut res, matches);
                     (res, wtables)
                 };
-                get_mut_unchecked(&mut res)
+                let ctx = get_mut_unchecked(&mut res)
                     .session_ctxs
                     .entry(face.id)
-                    .or_insert_with(|| {
-                        Arc::new(SessionContext {
-                            face: face.clone(),
-                            local_expr_id: None,
-                            remote_expr_id: Some(expr_id),
-                            subs: None,
-                            qabl: None,
-                            last_values: HashMap::new(),
-                            in_interceptor_cache: None,
-                            e_interceptor_cache: None,
-                        })
-                    });
+                    .or_insert_with(|| Arc::new(SessionContext::new(face.clone())));
+
+                get_mut_unchecked(ctx).remote_expr_id = Some(expr_id);
 
                 get_mut_unchecked(face)
                     .remote_mappings
@@ -735,15 +751,80 @@ pub fn register_expr(
                 drop(wtables);
             }
         },
-        None => tracing::error!("Declare resource with unknown scope {}!", expr.scope),
+        None => tracing::error!(
+            "{} Declare resource with unknown scope {}!",
+            face,
+            expr.scope
+        ),
     }
 }
 
-pub fn unregister_expr(tables: &TablesLock, face: &mut Arc<FaceState>, expr_id: ExprId) {
+pub(crate) fn unregister_expr(tables: &TablesLock, face: &mut Arc<FaceState>, expr_id: ExprId) {
     let wtables = zwrite!(tables.tables);
     match get_mut_unchecked(face).remote_mappings.remove(&expr_id) {
         Some(mut res) => Resource::clean(&mut res),
-        None => tracing::error!("Undeclare unknown resource!"),
+        None => tracing::error!("{} Undeclare unknown resource!", face),
     }
+    drop(wtables);
+}
+
+pub(crate) fn register_expr_interest(
+    tables: &TablesLock,
+    face: &mut Arc<FaceState>,
+    id: InterestId,
+    expr: Option<&WireExpr>,
+) {
+    if let Some(expr) = expr {
+        let rtables = zread!(tables.tables);
+        match rtables
+            .get_mapping(face, &expr.scope, expr.mapping)
+            .cloned()
+        {
+            Some(mut prefix) => {
+                let res = Resource::get_resource(&prefix, &expr.suffix);
+                let (res, wtables) = if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {
+                    drop(rtables);
+                    let wtables = zwrite!(tables.tables);
+                    (res.unwrap(), wtables)
+                } else {
+                    let mut fullexpr = prefix.expr();
+                    fullexpr.push_str(expr.suffix.as_ref());
+                    let mut matches = keyexpr::new(fullexpr.as_str())
+                        .map(|ke| Resource::get_matches(&rtables, ke))
+                        .unwrap_or_default();
+                    drop(rtables);
+                    let mut wtables = zwrite!(tables.tables);
+                    let mut res =
+                        Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
+                    matches.push(Arc::downgrade(&res));
+                    Resource::match_resource(&wtables, &mut res, matches);
+                    (res, wtables)
+                };
+                get_mut_unchecked(face)
+                    .remote_key_interests
+                    .insert(id, Some(res));
+                drop(wtables);
+            }
+            None => tracing::error!(
+                "Declare keyexpr interest with unknown scope {}!",
+                expr.scope
+            ),
+        }
+    } else {
+        let wtables = zwrite!(tables.tables);
+        get_mut_unchecked(face)
+            .remote_key_interests
+            .insert(id, None);
+        drop(wtables);
+    }
+}
+
+pub(crate) fn unregister_expr_interest(
+    tables: &TablesLock,
+    face: &mut Arc<FaceState>,
+    id: InterestId,
+) {
+    let wtables = zwrite!(tables.tables);
+    get_mut_unchecked(face).remote_key_interests.remove(&id);
     drop(wtables);
 }

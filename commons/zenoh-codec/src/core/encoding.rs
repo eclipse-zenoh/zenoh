@@ -11,17 +11,24 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Bounded};
-use alloc::string::String;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
-use zenoh_protocol::core::Encoding;
+use zenoh_protocol::{
+    common::imsg,
+    core::encoding::{flag, Encoding, EncodingId},
+};
+
+use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Bounded};
 
 impl LCodec<&Encoding> for Zenoh080 {
     fn w_len(self, x: &Encoding) -> usize {
-        1 + self.w_len(x.suffix())
+        let mut len = self.w_len((x.id as u32) << 1);
+        if let Some(schema) = x.schema.as_ref() {
+            len += self.w_len(schema.as_slice());
+        }
+        len
     }
 }
 
@@ -32,9 +39,17 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Encoding) -> Self::Output {
-        let zodec = Zenoh080Bounded::<u8>::new();
-        zodec.write(&mut *writer, *x.prefix() as u8)?;
-        zodec.write(&mut *writer, x.suffix())?;
+        let mut id = (x.id as u32) << 1;
+
+        if x.schema.is_some() {
+            id |= flag::S;
+        }
+        let zodec = Zenoh080Bounded::<u32>::new();
+        zodec.write(&mut *writer, id)?;
+        if let Some(schema) = x.schema.as_ref() {
+            let zodec = Zenoh080Bounded::<u8>::new();
+            zodec.write(&mut *writer, schema)?;
+        }
         Ok(())
     }
 }
@@ -46,10 +61,20 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Encoding, Self::Error> {
-        let zodec = Zenoh080Bounded::<u8>::new();
-        let prefix: u8 = zodec.read(&mut *reader)?;
-        let suffix: String = zodec.read(&mut *reader)?;
-        let encoding = Encoding::new(prefix, suffix).map_err(|_| DidntRead)?;
+        let zodec = Zenoh080Bounded::<u32>::new();
+        let id: u32 = zodec.read(&mut *reader)?;
+        let (id, has_schema) = (
+            (id >> 1) as EncodingId,
+            imsg::has_flag(id as u8, flag::S as u8),
+        );
+
+        let mut schema = None;
+        if has_schema {
+            let zodec = Zenoh080Bounded::<u8>::new();
+            schema = Some(zodec.read(&mut *reader)?);
+        }
+
+        let encoding = Encoding { id, schema };
         Ok(encoding)
     }
 }

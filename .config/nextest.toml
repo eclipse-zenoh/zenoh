@@ -8,9 +8,15 @@ slow-timeout = { period = "60s", terminate-after = 2 }
 filter = """
 test(=zenoh_session_unicast) |
 test(=zenoh_session_multicast) |
+test(=zenoh_unicity_p2p) |
+test(=zenoh_unicity_brokered) |
 test(=transport_tcp_intermittent) |
 test(=transport_tcp_intermittent_for_lowlatency_transport) |
-test(=three_node_combination)
+test(=three_node_combination) |
+test(=watchdog_alloc_concurrent) |
+test(=header_check_memory_concurrent) |
+test(=header_link_concurrent) |
+test(=header_link_failure_concurrent)
 """
 threads-required = 'num-cpus'
 slow-timeout = { period = "60s", terminate-after = 6 }

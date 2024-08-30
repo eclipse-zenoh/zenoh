@@ -15,11 +15,8 @@
 //! Configuration to pass to `zenoh::open()` and `zenoh::scout()` functions and associated constants.
 pub mod defaults;
 mod include;
+pub mod wrappers;
 
-use include::recursive_include;
-use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
-use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
 #[allow(unused_imports)]
 use std::convert::TryFrom; // This is a false positive from the rust analyser
 use std::{
@@ -31,18 +28,24 @@ use std::{
     path::Path,
     sync::{Arc, Mutex, MutexGuard, Weak},
 };
+
+use include::recursive_include;
+use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 use validated_struct::ValidatedMapAssociatedTypes;
 pub use validated_struct::{GetError, ValidatedMap};
+pub use wrappers::ZenohId;
 use zenoh_core::zlock;
 pub use zenoh_protocol::core::{
-    whatami, EndPoint, Locator, Priority, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor, ZenohId,
+    whatami, EndPoint, Locator, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor,
 };
 use zenoh_protocol::{
     core::{key_expr::OwnedKeyExpr, Bits},
     transport::{BatchSize, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
-use zenoh_util::LibLoader;
+use zenoh_util::{LibLoader, LibSearchDirs};
 
 pub mod mode_dependent;
 pub use mode_dependent::*;
@@ -101,37 +104,73 @@ pub struct DownsamplingItemConf {
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
-pub struct AclConfigRules {
-    pub interfaces: Option<Vec<String>>,
+pub struct AclConfigRule {
+    pub id: String,
     pub key_exprs: Vec<String>,
-    pub actions: Vec<Action>,
+    pub messages: Vec<AclMessage>,
     pub flows: Option<Vec<InterceptorFlow>>,
     pub permission: Permission,
 }
 
+#[derive(Serialize, Debug, Deserialize, Clone)]
+pub struct AclConfigSubjects {
+    pub id: String,
+    pub interfaces: Option<Vec<Interface>>,
+    pub cert_common_names: Option<Vec<CertCommonName>>,
+    pub usernames: Option<Vec<Username>>,
+}
+
+#[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
+pub struct Interface(pub String);
+
+impl std::fmt::Display for Interface {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Interface({})", self.0)
+    }
+}
+
+#[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
+pub struct CertCommonName(pub String);
+
+impl std::fmt::Display for CertCommonName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "CertCommonName({})", self.0)
+    }
+}
+
+#[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
+pub struct Username(pub String);
+
+impl std::fmt::Display for Username {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Username({})", self.0)
+    }
+}
+
+#[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
+pub struct AclConfigPolicyEntry {
+    pub rules: Vec<String>,
+    pub subjects: Vec<String>,
+}
+
 #[derive(Clone, Serialize, Debug, Deserialize)]
 pub struct PolicyRule {
-    pub subject: Subject,
+    pub subject_id: usize,
     pub key_expr: String,
-    pub action: Action,
+    pub message: AclMessage,
     pub permission: Permission,
     pub flow: InterceptorFlow,
 }
 
-#[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone)]
-#[serde(untagged)]
-#[serde(rename_all = "snake_case")]
-pub enum Subject {
-    Interface(String),
-}
-
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub enum Action {
+pub enum AclMessage {
     Put,
+    Delete,
     DeclareSubscriber,
-    Get,
+    Query,
     DeclareQueryable,
+    Reply,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
@@ -178,10 +217,8 @@ pub fn peer() -> Config {
 pub fn client<I: IntoIterator<Item = T>, T: Into<EndPoint>>(peers: I) -> Config {
     let mut config = Config::default();
     config.set_mode(Some(WhatAmI::Client)).unwrap();
-    config
-        .connect
-        .endpoints
-        .extend(peers.into_iter().map(|t| t.into()));
+    config.connect.endpoints =
+        ModeDependentValue::Unique(peers.into_iter().map(|t| t.into()).collect());
     config
 }
 
@@ -190,15 +227,6 @@ fn config_keys() {
     use validated_struct::ValidatedMap;
     let c = Config::default();
     dbg!(c.keys());
-}
-
-fn treat_error_as_none<'a, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
-where
-    T: serde::de::Deserialize<'a>,
-    D: serde::de::Deserializer<'a>,
-{
-    let value: Value = serde::de::Deserialize::deserialize(deserializer)?;
-    Ok(T::deserialize(value).ok())
 }
 
 validated_struct::validator! {
@@ -220,21 +248,23 @@ validated_struct::validator! {
         /// The node's mode ("router" (default value in `zenohd`), "peer" or "client").
         mode: Option<whatami::WhatAmI>,
         /// Which zenoh nodes to connect to.
-        pub connect: #[derive(Default)]
+        pub connect:
         ConnectConfig {
             /// global timeout for full connect cycle
             pub timeout_ms: Option<ModeDependentValue<i64>>,
-            pub endpoints: Vec<EndPoint>,
+            /// The list of endpoints to connect to
+            pub endpoints: ModeDependentValue<Vec<EndPoint>>,
             /// if connection timeout exceed, exit from application
             pub exit_on_failure: Option<ModeDependentValue<bool>>,
             pub retry: Option<connection_retry::ConnectionRetryModeDependentConf>,
         },
-        /// Which endpoints to listen on. `zenohd` will add `tcp/[::]:7447` to these locators if left empty.
-        pub listen: #[derive(Default)]
+        /// Which endpoints to listen on.
+        pub listen:
         ListenConfig {
             /// global timeout for full listen cycle
             pub timeout_ms: Option<ModeDependentValue<i64>>,
-            pub endpoints: Vec<EndPoint>,
+            /// The list of endpoints to listen on
+            pub endpoints: ModeDependentValue<Vec<EndPoint>>,
             /// if connection timeout exceed, exit from application
             pub exit_on_failure: Option<ModeDependentValue<bool>>,
             pub retry: Option<connection_retry::ConnectionRetryModeDependentConf>,
@@ -257,7 +287,6 @@ validated_struct::validator! {
                 /// The time-to-live on multicast scouting packets. (default: 1)
                 pub ttl: Option<u32>,
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through UDP multicast.
-                #[serde(deserialize_with = "treat_error_as_none")]
                 autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
                 /// Whether or not to listen for scout messages on UDP multicast and reply to them.
                 listen: Option<ModeDependentValue<bool>>,
@@ -274,7 +303,6 @@ validated_struct::validator! {
                 /// direct connectivity with each other.
                 multihop: Option<bool>,
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through gossip.
-                #[serde(deserialize_with = "treat_error_as_none")]
                 autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
             },
         },
@@ -377,9 +405,10 @@ validated_struct::validator! {
                     lease: u64,
                     /// Number of keep-alive messages in a link lease duration (default: 4)
                     keep_alive: usize,
-                    /// Zenoh's MTU equivalent (default: 2^16-1)
+                    /// Zenoh's MTU equivalent (default: 2^16-1) (max: 2^16-1)
                     batch_size: BatchSize,
-                    pub queue: QueueConf {
+                    pub queue: #[derive(Default)]
+                    QueueConf {
                         /// The size of each priority queue indicates the number of batches a given queue can contain.
                         /// The amount of memory being allocated for each queue is then SIZE_XXX * BATCH_SIZE.
                         /// In the case of the transport link MTU being smaller than the ZN_BATCH_SIZE,
@@ -402,9 +431,15 @@ validated_struct::validator! {
                             /// The maximum time in microseconds to wait for an available batch before dropping the message if still no batch is available.
                             pub wait_before_drop: u64,
                         },
-                        /// The initial exponential backoff time in nanoseconds to allow the batching to eventually progress.
-                        /// Higher values lead to a more aggressive batching but it will introduce additional latency.
-                        backoff: u64,
+                        pub batching: BatchingConf {
+                            /// Perform adaptive batching of messages if they are smaller of the batch_size.
+                            /// When the network is detected to not be fast enough to transmit every message individually, many small messages may be
+                            /// batched together and sent all at once on the wire reducing the overall network overhead. This is typically of a high-throughput
+                            /// scenario mainly composed of small messages. In other words, batching is activated by the network back-pressure.
+                            enabled: bool,
+                            /// The maximum time limit (in ms) a message should be retained for batching when back-pressure happens.
+                            time_limit: u64,
+                        },
                     },
                     // Number of threads used for TX
                     threads: usize,
@@ -447,7 +482,7 @@ validated_struct::validator! {
                 },
             },
             pub shared_memory:
-            SharedMemoryConf {
+            ShmConf {
                 /// Whether shared memory is enabled or not.
                 /// If set to `true`, the SHM buffer optimization support will be announced to other parties. (default `false`).
                 /// This option doesn't make SHM buffer optimization mandatory, the real support depends on other party setting
@@ -507,7 +542,9 @@ validated_struct::validator! {
         pub access_control: AclConfig {
             pub enabled: bool,
             pub default_permission: Permission,
-            pub rules: Option<Vec<AclConfigRules>>
+            pub rules: Option<Vec<AclConfigRule>>,
+            pub subjects: Option<Vec<AclConfigSubjects>>,
+            pub policies: Option<Vec<AclConfigPolicyEntry>>,
         },
 
         /// A list of directories where plugins may be searched for if no `__path__` was specified for them.
@@ -515,7 +552,7 @@ validated_struct::validator! {
         pub plugins_loading: #[derive(Default)]
         PluginsLoading {
             pub enabled: bool,
-            pub search_dirs: Option<Vec<String>>, // TODO (low-prio): Switch this String to a PathBuf? (applies to other paths in the config as well)
+            pub search_dirs: LibSearchDirs,
         },
         #[validated(recursive_accessors)]
         /// The configuration for plugins.
@@ -541,19 +578,6 @@ fn set_false() -> bool {
     false
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PluginSearchDirs(Vec<String>);
-impl Default for PluginSearchDirs {
-    fn default() -> Self {
-        Self(
-            (*zenoh_util::LIB_DEFAULT_SEARCH_PATHS)
-                .split(':')
-                .map(|c| c.to_string())
-                .collect(),
-        )
-    }
-}
-
 #[test]
 fn config_deser() {
     let config = Config::from_deserializer(
@@ -562,7 +586,7 @@ fn config_deser() {
         scouting: {
           multicast: {
             enabled: false,
-            autoconnect: "peer|router"
+            autoconnect: ["peer", "router"]
           }
         }
       }"#,
@@ -589,7 +613,7 @@ fn config_deser() {
         scouting: {
           multicast: {
             enabled: false,
-            autoconnect: {router: "", peer: "peer|router"}
+            autoconnect: {router: [], peer: ["peer", "router"]}
           }
         }
       }"#,
@@ -731,10 +755,7 @@ impl Config {
 
     pub fn libloader(&self) -> LibLoader {
         if self.plugins_loading.enabled {
-            match self.plugins_loading.search_dirs() {
-                Some(dirs) => LibLoader::new(dirs, true),
-                None => LibLoader::default(),
-            }
+            LibLoader::new(self.plugins_loading.search_dirs().clone())
         } else {
             LibLoader::empty()
         }

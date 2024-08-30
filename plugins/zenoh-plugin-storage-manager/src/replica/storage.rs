@@ -11,29 +11,40 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::backends_mgt::StoreIntercept;
-use crate::storages_mgt::StorageMessage;
-use async_std::sync::Arc;
-use async_std::sync::{Mutex, RwLock};
+use std::{
+    collections::{HashMap, HashSet},
+    str::{self, FromStr},
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
 use async_trait::async_trait;
 use flume::{Receiver, Sender};
 use futures::select;
-use std::collections::{HashMap, HashSet};
-use std::str::{self, FromStr};
-use std::time::{SystemTime, UNIX_EPOCH};
-use zenoh::buffers::ZBuf;
-use zenoh::prelude::r#async::*;
-use zenoh::query::ConsolidationMode;
-use zenoh::time::{Timestamp, NTP64};
-use zenoh::{Result as ZResult, Session};
-use zenoh_backend_traits::config::{GarbageCollectionConfig, StorageConfig};
-use zenoh_backend_traits::{Capability, History, Persistence, StorageInsertionResult, StoredData};
-use zenoh_keyexpr::key_expr::OwnedKeyExpr;
-use zenoh_keyexpr::keyexpr_tree::impls::KeyedSetProvider;
-use zenoh_keyexpr::keyexpr_tree::{support::NonWild, support::UnknownWildness, KeBoxTree};
-use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut};
-use zenoh_result::bail;
-use zenoh_util::{zenoh_home, Timed, TimedEvent, Timer};
+use tokio::sync::{Mutex, RwLock};
+use zenoh::{
+    bytes::EncodingBuilderTrait,
+    internal::{
+        buffers::{SplitBuffer, ZBuf},
+        zenoh_home, Timed, TimedEvent, Timer, Value,
+    },
+    key_expr::{
+        keyexpr_tree::{
+            IKeyExprTree, IKeyExprTreeMut, KeBoxTree, KeyedSetProvider, NonWild, UnknownWildness,
+        },
+        KeyExpr, OwnedKeyExpr,
+    },
+    query::{ConsolidationMode, QueryTarget},
+    sample::{Sample, SampleBuilder, SampleKind, TimestampBuilderTrait},
+    session::{Session, SessionDeclarations},
+    time::{Timestamp, NTP64},
+};
+use zenoh_backend_traits::{
+    config::{GarbageCollectionConfig, StorageConfig},
+    Capability, History, Persistence, StorageInsertionResult, StoredData,
+};
+
+use crate::{backends_mgt::StoreIntercept, storages_mgt::StorageMessage};
 
 pub const WILDCARD_UPDATES_FILENAME: &str = "wildcard_updates";
 pub const TOMBSTONE_FILENAME: &str = "tombstones";
@@ -60,8 +71,6 @@ pub struct StorageService {
     capability: Capability,
     tombstones: Arc<RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>>,
     wildcard_updates: Arc<RwLock<KeBoxTree<Update, UnknownWildness, KeyedSetProvider>>>,
-    in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
-    out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     replication: Option<ReplicationService>,
 }
 
@@ -85,8 +94,6 @@ impl StorageService {
             capability: store_intercept.capability,
             tombstones: Arc::new(RwLock::new(KeBoxTree::default())),
             wildcard_updates: Arc::new(RwLock::new(KeBoxTree::default())),
-            in_interceptor: store_intercept.in_interceptor,
-            out_interceptor: store_intercept.out_interceptor,
             replication,
         };
         if storage_service
@@ -141,7 +148,7 @@ impl StorageService {
         t.add_async(gc).await;
 
         // subscribe on key_expr
-        let storage_sub = match self.session.declare_subscriber(&self.key_expr).res().await {
+        let storage_sub = match self.session.declare_subscriber(&self.key_expr).await {
             Ok(storage_sub) => storage_sub,
             Err(e) => {
                 tracing::error!("Error starting storage '{}': {}", self.name, e);
@@ -154,7 +161,6 @@ impl StorageService {
             .session
             .declare_queryable(&self.key_expr)
             .complete(self.complete)
-            .res()
             .await
         {
             Ok(storage_queryable) => storage_queryable,
@@ -179,8 +185,8 @@ impl StorageService {
                         };
                         // log error if the sample is not timestamped
                         // This is to reduce down the line inconsistencies of having duplicate samples stored
-                        if sample.get_timestamp().is_none() {
-                            tracing::error!("Sample {} is not timestamped. Please timestamp samples meant for replicated storage.", sample);
+                        if sample.timestamp().is_none() {
+                            tracing::error!("Sample {:?} is not timestamped. Please timestamp samples meant for replicated storage.", sample);
                         }
                         else {
                             self.process_sample(sample).await;
@@ -223,14 +229,15 @@ impl StorageService {
                 select!(
                     // on sample for key_expr
                     sample = storage_sub.recv_async() => {
-                        let mut sample = match sample {
+                        let sample = match sample {
                             Ok(sample) => sample,
                             Err(e) => {
                                 tracing::error!("Error in sample: {}", e);
                                 continue;
                             }
                         };
-                        sample.ensure_timestamp();
+                        let timestamp = sample.timestamp().cloned().unwrap_or(self.session.new_timestamp());
+                        let sample = SampleBuilder::from(sample).timestamp(timestamp).into();
                         self.process_sample(sample).await;
                     },
                     // on query on key_expr
@@ -262,66 +269,81 @@ impl StorageService {
     // The storage should only simply save the key, sample pair while put and retrieve the same during get
     // the trimming during PUT and GET should be handled by the plugin
     async fn process_sample(&self, sample: Sample) {
-        tracing::trace!("[STORAGE] Processing sample: {}", sample);
-        // Call incoming data interceptor (if any)
-        let sample = if let Some(ref interceptor) = self.in_interceptor {
-            interceptor(sample)
-        } else {
-            sample
+        tracing::trace!("[STORAGE] Processing sample: {:?}", sample);
+
+        // A Sample, in theory, will not arrive to a Storage without a Timestamp. This check (which, again, should
+        // never enter the `None` branch) ensures that the Storage Manager does not panic even if it ever happens.
+        let sample_timestamp = match sample.timestamp() {
+            Some(timestamp) => timestamp,
+            None => {
+                tracing::error!("Discarding Sample that has no Timestamp: {:?}", sample);
+                return;
+            }
         };
 
         // if wildcard, update wildcard_updates
-        if sample.key_expr.is_wild() {
+        if sample.key_expr().is_wild() {
             self.register_wildcard_update(sample.clone()).await;
         }
 
-        let matching_keys = if sample.key_expr.is_wild() {
-            self.get_matching_keys(&sample.key_expr).await
+        let matching_keys = if sample.key_expr().is_wild() {
+            self.get_matching_keys(sample.key_expr()).await
         } else {
-            vec![sample.key_expr.clone().into()]
+            vec![sample.key_expr().clone().into()]
         };
         tracing::trace!(
             "The list of keys matching `{}` is : {:?}",
-            sample.key_expr,
+            sample.key_expr(),
             matching_keys
         );
 
         for k in matching_keys {
-            if !self
-                .is_deleted(&k.clone(), sample.get_timestamp().unwrap())
-                .await
+            if !self.is_deleted(&k.clone(), sample_timestamp).await
                 && (self.capability.history.eq(&History::All)
                     || (self.capability.history.eq(&History::Latest)
-                        && self.is_latest(&k, sample.get_timestamp().unwrap()).await))
+                        && self.is_latest(&k, sample_timestamp).await))
             {
                 tracing::trace!(
-                    "Sample `{}` identified as needed processing for key {}",
+                    "Sample `{:?}` identified as needed processing for key {}",
                     sample,
                     k
                 );
                 // there might be the case that the actual update was outdated due to a wild card update, but not stored yet in the storage.
                 // get the relevant wild card entry and use that value and timestamp to update the storage
-                let sample_to_store = match self
-                    .ovderriding_wild_update(&k, sample.get_timestamp().unwrap())
-                    .await
+                let sample_to_store: Sample = if let Some(update) =
+                    self.ovderriding_wild_update(&k, sample_timestamp).await
                 {
-                    Some(overriding_update) => {
-                        let mut sample_to_store =
-                            Sample::new(KeyExpr::from(k.clone()), overriding_update.data.value)
-                                .with_timestamp(overriding_update.data.timestamp);
-                        sample_to_store.kind = overriding_update.kind;
-                        sample_to_store
+                    match update.kind {
+                        SampleKind::Put => {
+                            SampleBuilder::put(k.clone(), update.data.value.payload().clone())
+                                .encoding(update.data.value.encoding().clone())
+                                .timestamp(update.data.timestamp)
+                                .into()
+                        }
+                        SampleKind::Delete => SampleBuilder::delete(k.clone())
+                            .timestamp(update.data.timestamp)
+                            .into(),
                     }
+                } else {
+                    SampleBuilder::from(sample.clone())
+                        .keyexpr(k.clone())
+                        .into()
+                };
+
+                // A Sample that is to be stored **must** have a Timestamp. In theory, the Sample generated should have
+                // a Timestamp and, in theory, this check is unneeded.
+                let sample_to_store_timestamp = match sample_to_store.timestamp() {
+                    Some(timestamp) => *timestamp,
                     None => {
-                        let mut sample_to_store =
-                            Sample::new(KeyExpr::from(k.clone()), sample.value.clone())
-                                .with_timestamp(sample.timestamp.unwrap());
-                        sample_to_store.kind = sample.kind;
-                        sample_to_store
+                        tracing::error!("Discarding `Sample` generated through `SampleBuilder` that has no Timestamp: {:?}", sample_to_store);
+                        continue;
                     }
                 };
 
-                let stripped_key = match self.strip_prefix(&sample_to_store.key_expr) {
+                let stripped_key = match crate::strip_prefix(
+                    self.strip_prefix.as_ref(),
+                    sample_to_store.key_expr(),
+                ) {
                     Ok(stripped) => stripped,
                     Err(e) => {
                         tracing::error!("{}", e);
@@ -329,23 +351,26 @@ impl StorageService {
                     }
                 };
                 let mut storage = self.storage.lock().await;
-                let result = if sample.kind == SampleKind::Put {
-                    storage
-                        .put(
-                            stripped_key,
-                            sample_to_store.value.clone(),
-                            sample_to_store.timestamp.unwrap(),
-                        )
-                        .await
-                } else if sample.kind == SampleKind::Delete {
-                    // register a tombstone
-                    self.mark_tombstone(&k, sample_to_store.timestamp.unwrap())
-                        .await;
-                    storage
-                        .delete(stripped_key, sample_to_store.timestamp.unwrap())
-                        .await
-                } else {
-                    Err("sample kind not implemented".into())
+                let result = match sample.kind() {
+                    SampleKind::Put => {
+                        storage
+                            .put(
+                                stripped_key,
+                                Value::new(
+                                    sample_to_store.payload().clone(),
+                                    sample_to_store.encoding().clone(),
+                                ),
+                                sample_to_store_timestamp,
+                            )
+                            .await
+                    }
+                    SampleKind::Delete => {
+                        // register a tombstone
+                        self.mark_tombstone(&k, sample_to_store_timestamp).await;
+                        storage
+                            .delete(stripped_key, sample_to_store_timestamp)
+                            .await
+                    }
                 };
                 drop(storage);
                 if self.replication.is_some()
@@ -357,7 +382,7 @@ impl StorageService {
                         .as_ref()
                         .unwrap()
                         .log_propagation
-                        .send((k.clone(), *sample_to_store.get_timestamp().unwrap()));
+                        .send((k.clone(), sample_to_store_timestamp));
                     match sending {
                         Ok(_) => (),
                         Err(e) => {
@@ -390,15 +415,16 @@ impl StorageService {
 
     async fn register_wildcard_update(&self, sample: Sample) {
         // @TODO: change into a better store that does incremental writes
-        let key = sample.clone().key_expr;
+        let key = sample.key_expr().clone();
         let mut wildcards = self.wildcard_updates.write().await;
+        let timestamp = *sample.timestamp().unwrap();
         wildcards.insert(
             &key,
             Update {
-                kind: sample.kind,
+                kind: sample.kind(),
                 data: StoredData {
-                    value: sample.value,
-                    timestamp: sample.timestamp.unwrap(),
+                    value: Value::from(sample),
+                    timestamp,
                 },
             },
         );
@@ -438,13 +464,14 @@ impl StorageService {
             if weight.is_some() && weight.unwrap().data.timestamp > *ts {
                 // if the key matches a wild card update, check whether it was saved in storage
                 // remember that wild card updates change only existing keys
-                let stripped_key = match self.strip_prefix(&key_expr.into()) {
-                    Ok(stripped) => stripped,
-                    Err(e) => {
-                        tracing::error!("{}", e);
-                        break;
-                    }
-                };
+                let stripped_key =
+                    match crate::strip_prefix(self.strip_prefix.as_ref(), &key_expr.into()) {
+                        Ok(stripped) => stripped,
+                        Err(e) => {
+                            tracing::error!("{}", e);
+                            break;
+                        }
+                    };
                 let mut storage = self.storage.lock().await;
                 match storage.get(stripped_key, "").await {
                     Ok(stored_data) => {
@@ -473,7 +500,7 @@ impl StorageService {
     async fn is_latest(&self, key_expr: &OwnedKeyExpr, timestamp: &Timestamp) -> bool {
         // @TODO: if cache exists, read from there
         let mut storage = self.storage.lock().await;
-        let stripped_key = match self.strip_prefix(&key_expr.into()) {
+        let stripped_key = match crate::strip_prefix(self.strip_prefix.as_ref(), &key_expr.into()) {
             Ok(stripped) => stripped,
             Err(e) => {
                 tracing::error!("{}", e);
@@ -490,7 +517,7 @@ impl StorageService {
         true
     }
 
-    async fn reply_query(&self, query: Result<zenoh::queryable::Query, flume::RecvError>) {
+    async fn reply_query(&self, query: Result<zenoh::query::Query, flume::RecvError>) {
         let q = match query {
             Ok(q) => q,
             Err(e) => {
@@ -504,26 +531,24 @@ impl StorageService {
             let matching_keys = self.get_matching_keys(q.key_expr()).await;
             let mut storage = self.storage.lock().await;
             for key in matching_keys {
-                let stripped_key = match self.strip_prefix(&key.clone().into()) {
-                    Ok(k) => k,
-                    Err(e) => {
-                        tracing::error!("{}", e);
-                        // @TODO: return error when it is supported
-                        return;
-                    }
-                };
-                match storage.get(stripped_key, q.parameters()).await {
+                let stripped_key =
+                    match crate::strip_prefix(self.strip_prefix.as_ref(), &key.clone().into()) {
+                        Ok(k) => k,
+                        Err(e) => {
+                            tracing::error!("{}", e);
+                            // @TODO: return error when it is supported
+                            return;
+                        }
+                    };
+                match storage.get(stripped_key, q.parameters().as_str()).await {
                     Ok(stored_data) => {
                         for entry in stored_data {
-                            let sample = Sample::new(key.clone(), entry.value)
-                                .with_timestamp(entry.timestamp);
-                            // apply outgoing interceptor on results
-                            let sample = if let Some(ref interceptor) = self.out_interceptor {
-                                interceptor(sample)
-                            } else {
-                                sample
-                            };
-                            if let Err(e) = q.reply(Ok(sample)).res().await {
+                            if let Err(e) = q
+                                .reply(key.clone(), entry.value.payload().clone())
+                                .encoding(entry.value.encoding().clone())
+                                .timestamp(entry.timestamp)
+                                .await
+                            {
                                 tracing::warn!(
                                     "Storage '{}' raised an error replying a query: {}",
                                     self.name,
@@ -539,7 +564,7 @@ impl StorageService {
             }
             drop(storage);
         } else {
-            let stripped_key = match self.strip_prefix(q.key_expr()) {
+            let stripped_key = match crate::strip_prefix(self.strip_prefix.as_ref(), q.key_expr()) {
                 Ok(k) => k,
                 Err(e) => {
                     tracing::error!("{}", e);
@@ -548,18 +573,15 @@ impl StorageService {
                 }
             };
             let mut storage = self.storage.lock().await;
-            match storage.get(stripped_key, q.parameters()).await {
+            match storage.get(stripped_key, q.parameters().as_str()).await {
                 Ok(stored_data) => {
                     for entry in stored_data {
-                        let sample = Sample::new(q.key_expr().clone(), entry.value)
-                            .with_timestamp(entry.timestamp);
-                        // apply outgoing interceptor on results
-                        let sample = if let Some(ref interceptor) = self.out_interceptor {
-                            interceptor(sample)
-                        } else {
-                            sample
-                        };
-                        if let Err(e) = q.reply(Ok(sample)).res().await {
+                        if let Err(e) = q
+                            .reply(q.key_expr().clone(), entry.value.payload().clone())
+                            .encoding(entry.value.encoding().clone())
+                            .timestamp(entry.timestamp)
+                            .await
+                        {
                             tracing::warn!(
                                 "Storage '{}' raised an error replying a query: {}",
                                 self.name,
@@ -584,7 +606,7 @@ impl StorageService {
                 for (k, _ts) in entries {
                     // @TODO: optimize adding back the prefix (possible inspiration from https://github.com/eclipse-zenoh/zenoh/blob/0.5.0-beta.9/backends/traits/src/utils.rs#L79)
                     let full_key = match k {
-                        Some(key) => StorageService::get_prefixed(&self.strip_prefix, &key.into()),
+                        Some(key) => crate::prefix(self.strip_prefix.as_ref(), &key),
                         None => self.strip_prefix.clone().unwrap(),
                     };
                     if key_expr.intersects(&full_key.clone()) {
@@ -601,51 +623,15 @@ impl StorageService {
         result
     }
 
-    fn strip_prefix(&self, key_expr: &KeyExpr<'_>) -> ZResult<Option<OwnedKeyExpr>> {
-        let key = match &self.strip_prefix {
-            Some(prefix) => {
-                if key_expr.as_str().eq(prefix.as_str()) {
-                    ""
-                } else {
-                    match key_expr.strip_prefix(prefix).as_slice() {
-                        [ke] => ke.as_str(),
-                        _ => bail!(
-                            "Keyexpr doesn't start with prefix '{}': '{}'",
-                            prefix,
-                            key_expr
-                        ),
-                    }
-                }
-            }
-            None => key_expr.as_str(),
-        };
-        if key.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(OwnedKeyExpr::new(key.to_string()).unwrap()))
-        }
-    }
-
-    pub fn get_prefixed(
-        strip_prefix: &Option<OwnedKeyExpr>,
-        key_expr: &KeyExpr<'_>,
-    ) -> OwnedKeyExpr {
-        match strip_prefix {
-            Some(prefix) => prefix.join(key_expr.as_keyexpr()).unwrap(),
-            None => OwnedKeyExpr::from(key_expr.as_keyexpr()),
-        }
-    }
-
     async fn initialize_if_empty(&mut self) {
         if self.replication.is_some() && self.replication.as_ref().unwrap().empty_start {
             // align with other storages, querying them on key_expr,
             // with `_time=[..]` to get historical data (in case of time-series)
             let replies = match self
                 .session
-                .get(KeyExpr::from(&self.key_expr).with_parameters("_time=[..]"))
+                .get((&self.key_expr, "_time=[..]"))
                 .target(QueryTarget::All)
                 .consolidation(ConsolidationMode::None)
-                .res()
                 .await
             {
                 Ok(replies) => replies,
@@ -655,12 +641,12 @@ impl StorageService {
                 }
             };
             while let Ok(reply) = replies.recv_async().await {
-                match reply.sample {
+                match reply.into_result() {
                     Ok(sample) => {
                         self.process_sample(sample).await;
                     }
                     Err(e) => tracing::warn!(
-                        "Storage '{}' received an error to align query: {}",
+                        "Storage '{}' received an error to align query: {:?}",
                         self.name,
                         e
                     ),
@@ -671,25 +657,31 @@ impl StorageService {
 }
 
 fn serialize_update(update: &Update) -> String {
+    let Update {
+        kind,
+        data: StoredData { value, timestamp },
+    } = update;
+    let zbuf: ZBuf = value.payload().into();
+
     let result = (
-        update.kind.to_string(),
-        update.data.timestamp.to_string(),
-        update.data.value.encoding.to_string(),
-        update.data.value.payload.slices().collect::<Vec<&[u8]>>(),
+        kind.to_string(),
+        timestamp.to_string(),
+        value.encoding().to_string(),
+        zbuf.slices().collect::<Vec<&[u8]>>(),
     );
     serde_json::to_string_pretty(&result).unwrap()
 }
 
 fn construct_update(data: String) -> Update {
-    let result: (String, String, String, Vec<&[u8]>) = serde_json::from_str(&data).unwrap();
+    let result: (String, String, String, Vec<&[u8]>) = serde_json::from_str(&data).unwrap(); // @TODO: remove the unwrap()
     let mut payload = ZBuf::default();
     for slice in result.3 {
         payload.push_zslice(slice.to_vec().into());
     }
-    let value = Value::new(payload).encoding(Encoding::from(result.2));
+    let value = Value::new(payload, result.2);
     let data = StoredData {
         value,
-        timestamp: Timestamp::from_str(&result.1).unwrap(),
+        timestamp: Timestamp::from_str(&result.1).unwrap(), // @TODO: remove the unwrap()
     };
     let kind = if result.0.eq(&(SampleKind::Put).to_string()) {
         SampleKind::Put

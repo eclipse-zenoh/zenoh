@@ -11,10 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::unicast::establishment::{ext::auth::id, AcceptFsm, OpenFsm};
+use std::{collections::HashMap, fmt};
+
 use async_trait::async_trait;
 use rand::{CryptoRng, Rng};
-use std::{collections::HashMap, fmt};
 use tokio::sync::RwLock;
 use zenoh_buffers::{
     reader::{DidntRead, HasReader, Reader},
@@ -26,9 +26,12 @@ use zenoh_core::{bail, zasyncread, zerror, Error as ZError, Result as ZResult};
 use zenoh_crypto::hmac;
 use zenoh_protocol::common::{ZExtUnit, ZExtZ64, ZExtZBuf};
 
+use crate::unicast::establishment::{ext::auth::id, AcceptFsm, OpenFsm};
+
 mod ext {
-    use super::{id::USRPWD, ZExtUnit, ZExtZ64, ZExtZBuf};
     use zenoh_protocol::{zextunit, zextz64, zextzbuf};
+
+    use super::{id::USRPWD, ZExtUnit, ZExtZ64, ZExtZBuf};
 
     pub(super) type InitSyn = zextunit!(USRPWD, false);
     pub(super) type InitAck = zextz64!(USRPWD, false);
@@ -159,6 +162,8 @@ impl StateOpen {
 pub(crate) struct StateAccept {
     nonce: u64,
 }
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct UsrPwdId(pub Option<Vec<u8>>);
 
 impl StateAccept {
     pub(crate) fn new<R>(prng: &mut R) -> Self
@@ -212,25 +217,30 @@ impl<'a> AuthUsrPwdFsm<'a> {
 /*************************************/
 /*             InitSyn               */
 /*************************************/
+/// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
 /// +---------------+
 ///
 /// ZExtUnit
+/// ```
 
 /*************************************/
 /*             InitAck               */
 /*************************************/
+/// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
 /// ~     nonce     ~
 /// +---------------+
 ///
 /// ZExtZ64
+/// ```
 
 /*************************************/
 /*             OpenSyn               */
 /*************************************/
+/// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
 /// ~     user      ~
@@ -239,6 +249,7 @@ impl<'a> AuthUsrPwdFsm<'a> {
 /// +---------------+
 ///
 /// ZExtZBuf
+/// ```
 struct OpenSyn {
     user: Vec<u8>,
     hmac: Vec<u8>,
@@ -273,11 +284,13 @@ where
 /*************************************/
 /*             OpenAck               */
 /*************************************/
+/// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
 /// +---------------+
 ///
 /// ZExtUnit
+/// ```
 
 #[async_trait]
 impl<'a> OpenFsm for &'a AuthUsrPwdFsm<'a> {
@@ -403,7 +416,7 @@ impl<'a> AcceptFsm for &'a AuthUsrPwdFsm<'a> {
     }
 
     type RecvOpenSynIn = (&'a mut StateAccept, Option<ext::OpenSyn>);
-    type RecvOpenSynOut = ();
+    type RecvOpenSynOut = Vec<u8>; //value of userid is returned if recvopensynout is processed as valid
     async fn recv_open_syn(
         self,
         input: Self::RecvOpenSynIn,
@@ -433,8 +446,8 @@ impl<'a> AcceptFsm for &'a AuthUsrPwdFsm<'a> {
         if hmac != open_syn.hmac {
             bail!("{S} Invalid password.");
         }
-
-        Ok(())
+        let username = open_syn.user.to_owned();
+        Ok(username)
     }
 
     type SendOpenAckIn = &'a StateAccept;
@@ -451,9 +464,11 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn authenticator_usrpwd_config() {
         async fn inner() {
-            use super::AuthUsrPwd;
             use std::{fs::File, io::Write};
+
             use zenoh_config::UsrPwdConf;
+
+            use super::AuthUsrPwd;
 
             /* [CONFIG] */
             let f1 = "zenoh-test-auth-usrpwd.txt";

@@ -12,8 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use crate::{keyexpr, OwnedKeyExpr};
 use alloc::boxed::Box;
+
+use crate::{keyexpr, OwnedKeyExpr};
 pub mod default_impls;
 
 /// The basic immutable methods of all KeTrees.

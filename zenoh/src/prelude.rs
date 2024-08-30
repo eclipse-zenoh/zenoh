@@ -16,64 +16,50 @@
 //!
 //! This prelude is similar to the standard library's prelude in that you'll
 //! almost always want to import its entire contents, but unlike the standard
-//! library's prelude you'll have to do so manually. An example of using this is:
+//! library's prelude you'll have to do so manually.
+//!
+//! Examples:
 //!
 //! ```
-//! use zenoh::prelude::r#async::*;
+//!use zenoh::prelude::*;
 //! ```
 
-pub use common::*;
-pub(crate) mod common {
-    pub use crate::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
-    pub use zenoh_buffers::{
-        buffer::{Buffer, SplitBuffer},
-        reader::HasReader,
-        writer::HasWriter,
+mod _prelude {
+    #[zenoh_macros::unstable]
+    pub use crate::api::publisher::PublisherDeclarations;
+    #[zenoh_macros::unstable]
+    pub use crate::api::selector::ZenohParameters;
+    pub use crate::{
+        api::{
+            builders::sample::{
+                EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
+            },
+            session::{SessionDeclarations, Undeclarable},
+        },
+        config::ValidatedMap,
+        Error as ZError, Resolvable, Resolve, Result as ZResult,
     };
-    pub use zenoh_core::Resolve;
-
-    pub(crate) type Id = usize;
-
-    pub use crate::config::{self, Config, ValidatedMap};
-    pub use crate::handlers::IntoCallbackReceiverPair;
-    pub use crate::selector::{Parameter, Parameters, Selector};
-    pub use crate::session::{Session, SessionDeclarations};
-
-    pub use crate::query::{QueryConsolidation, QueryTarget};
-
-    pub use crate::value::Value;
-    /// The encoding of a zenoh `Value`.
-    pub use zenoh_protocol::core::{Encoding, KnownEncoding};
-
-    pub use crate::query::ConsolidationMode;
-    #[zenoh_macros::unstable]
-    pub use crate::sample::Locality;
-    #[cfg(not(feature = "unstable"))]
-    pub(crate) use crate::sample::Locality;
-    pub use crate::sample::Sample;
-
-    pub use zenoh_protocol::core::SampleKind;
-
-    pub use crate::publication::Priority;
-    #[zenoh_macros::unstable]
-    pub use crate::publication::PublisherDeclarations;
-    pub use zenoh_protocol::core::{CongestionControl, Reliability, WhatAmI};
-
-    /// A [`Locator`] contains a choice of protocol, an address and port, as well as optional additional properties to work with.
-    pub use zenoh_protocol::core::EndPoint;
-    /// A [`Locator`] contains a choice of protocol, an address and port, as well as optional additional properties to work with.
-    pub use zenoh_protocol::core::Locator;
-    /// The global unique id of a zenoh peer.
-    pub use zenoh_protocol::core::ZenohId;
 }
+
+pub use _prelude::*;
+
+#[allow(deprecated)]
+pub use crate::AsyncResolve;
+#[allow(deprecated)]
+pub use crate::SyncResolve;
+pub use crate::Wait;
 
 /// Prelude to import when using Zenoh's sync API.
+#[deprecated(since = "1.0.0", note = "use `zenoh::prelude` instead")]
 pub mod sync {
-    pub use super::common::*;
-    pub use zenoh_core::SyncResolve;
+    pub use super::_prelude::*;
+    #[allow(deprecated)]
+    pub use crate::SyncResolve;
 }
 /// Prelude to import when using Zenoh's async API.
+#[deprecated(since = "1.0.0", note = "use `zenoh::prelude` instead")]
 pub mod r#async {
-    pub use super::common::*;
-    pub use zenoh_core::AsyncResolve;
+    pub use super::_prelude::*;
+    #[allow(deprecated)]
+    pub use crate::AsyncResolve;
 }

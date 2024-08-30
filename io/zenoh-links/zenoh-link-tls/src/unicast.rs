@@ -11,30 +11,35 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{cell::UnsafeCell, convert::TryInto, fmt, net::SocketAddr, sync::Arc, time::Duration};
+
+use async_trait::async_trait;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::{TcpListener, TcpStream},
+    sync::Mutex as AsyncMutex,
+};
+use tokio_rustls::{TlsAcceptor, TlsConnector, TlsStream};
+use tokio_util::sync::CancellationToken;
+use x509_parser::prelude::*;
+use zenoh_core::zasynclock;
+use zenoh_link_commons::{
+    get_ip_interface_names, LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast,
+    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender,
+};
+use zenoh_protocol::{
+    core::{EndPoint, Locator},
+    transport::BatchSize,
+};
+use zenoh_result::{zerror, ZResult};
+
 use crate::{
     utils::{get_tls_addr, get_tls_host, get_tls_server_name, TlsClientConfig, TlsServerConfig},
     TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
 };
 
-use async_trait::async_trait;
-use std::cell::UnsafeCell;
-use std::convert::TryInto;
-use std::fmt;
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::Mutex as AsyncMutex;
-use tokio_rustls::{TlsAcceptor, TlsConnector, TlsStream};
-use tokio_util::sync::CancellationToken;
-use zenoh_core::zasynclock;
-use zenoh_link_commons::{
-    get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
-    ListenersUnicastIP, NewLinkChannelSender,
-};
-use zenoh_protocol::core::{EndPoint, Locator};
-use zenoh_result::{zerror, ZResult};
+#[derive(Default, Debug, PartialEq, Eq, Hash)]
+pub struct TlsCommonName(String);
 
 pub struct LinkUnicastTls {
     // The underlying socket as returned from the async-rustls library
@@ -55,6 +60,8 @@ pub struct LinkUnicastTls {
     // Make sure there are no concurrent read or writes
     write_mtx: AsyncMutex<()>,
     read_mtx: AsyncMutex<()>,
+    auth_identifier: LinkAuthId,
+    mtu: BatchSize,
 }
 
 unsafe impl Send for LinkUnicastTls {}
@@ -65,6 +72,7 @@ impl LinkUnicastTls {
         socket: TlsStream<TcpStream>,
         src_addr: SocketAddr,
         dst_addr: SocketAddr,
+        auth_identifier: LinkAuthId,
     ) -> LinkUnicastTls {
         let (tcp_stream, _) = socket.get_ref();
         // Set the TLS nodelay option
@@ -89,6 +97,29 @@ impl LinkUnicastTls {
             );
         }
 
+        // Compute the MTU
+        // See IETF RFC6691: https://datatracker.ietf.org/doc/rfc6691/
+        let header = match src_addr.ip() {
+            std::net::IpAddr::V4(_) => 40,
+            std::net::IpAddr::V6(_) => 60,
+        };
+        #[allow(unused_mut)] // mut is not needed when target_family != unix
+        let mut mtu = *TLS_DEFAULT_MTU - header;
+
+        // target limitation of socket2: https://docs.rs/socket2/latest/src/socket2/sys/unix.rs.html#1544
+        #[cfg(target_family = "unix")]
+        {
+            let socket = socket2::SockRef::from(&tcp_stream);
+            // Get the MSS and divide it by 2 to ensure we can at least fill half the MSS
+            let mss = socket.mss().unwrap_or(mtu as u32) / 2;
+            // Compute largest multiple of TCP MSS that is smaller of default MTU
+            let mut tgt = mss;
+            while (tgt + mss) < mtu as u32 {
+                tgt += mss;
+            }
+            mtu = (mtu as u32).min(tgt) as BatchSize;
+        }
+
         // Build the Tls object
         LinkUnicastTls {
             inner: UnsafeCell::new(socket),
@@ -98,6 +129,8 @@ impl LinkUnicastTls {
             dst_locator: Locator::new(TLS_LOCATOR_PREFIX, dst_addr.to_string(), "").unwrap(),
             write_mtx: AsyncMutex::new(()),
             read_mtx: AsyncMutex::new(()),
+            auth_identifier,
+            mtu,
         }
     }
 
@@ -105,7 +138,7 @@ impl LinkUnicastTls {
     //       or concurrent writes will ever happen. The read_mtx and write_mtx
     //       are respectively acquired in any read and write operation.
     #[allow(clippy::mut_from_ref)]
-    fn get_sock_mut(&self) -> &mut TlsStream<TcpStream> {
+    fn get_mut_socket(&self) -> &mut TlsStream<TcpStream> {
         unsafe { &mut *self.inner.get() }
     }
 }
@@ -116,7 +149,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
         tracing::trace!("Closing TLS link: {}", self);
         // Flush the TLS stream
         let _guard = zasynclock!(self.write_mtx);
-        let tls_stream = self.get_sock_mut();
+        let tls_stream = self.get_mut_socket();
         let res = tls_stream.flush().await;
         tracing::trace!("TLS link flush {}: {:?}", self, res);
         // Close the underlying TCP stream
@@ -128,7 +161,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         let _guard = zasynclock!(self.write_mtx);
-        self.get_sock_mut().write(buffer).await.map_err(|e| {
+        self.get_mut_socket().write(buffer).await.map_err(|e| {
             tracing::trace!("Write error on TLS link {}: {}", self, e);
             zerror!(e).into()
         })
@@ -136,7 +169,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
 
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         let _guard = zasynclock!(self.write_mtx);
-        self.get_sock_mut().write_all(buffer).await.map_err(|e| {
+        self.get_mut_socket().write_all(buffer).await.map_err(|e| {
             tracing::trace!("Write error on TLS link {}: {}", self, e);
             zerror!(e).into()
         })
@@ -144,7 +177,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         let _guard = zasynclock!(self.read_mtx);
-        self.get_sock_mut().read(buffer).await.map_err(|e| {
+        self.get_mut_socket().read(buffer).await.map_err(|e| {
             tracing::trace!("Read error on TLS link {}: {}", self, e);
             zerror!(e).into()
         })
@@ -152,10 +185,14 @@ impl LinkUnicastTrait for LinkUnicastTls {
 
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         let _guard = zasynclock!(self.read_mtx);
-        let _ = self.get_sock_mut().read_exact(buffer).await.map_err(|e| {
-            tracing::trace!("Read error on TLS link {}: {}", self, e);
-            zerror!(e)
-        })?;
+        let _ = self
+            .get_mut_socket()
+            .read_exact(buffer)
+            .await
+            .map_err(|e| {
+                tracing::trace!("Read error on TLS link {}: {}", self, e);
+                zerror!(e)
+            })?;
         Ok(())
     }
 
@@ -170,8 +207,8 @@ impl LinkUnicastTrait for LinkUnicastTls {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> u16 {
-        *TLS_DEFAULT_MTU
+    fn get_mtu(&self) -> BatchSize {
+        self.mtu
     }
 
     #[inline(always)]
@@ -188,12 +225,17 @@ impl LinkUnicastTrait for LinkUnicastTls {
     fn is_streamed(&self) -> bool {
         true
     }
+
+    #[inline(always)]
+    fn get_auth_id(&self) -> &LinkAuthId {
+        &self.auth_identifier
+    }
 }
 
 impl Drop for LinkUnicastTls {
     fn drop(&mut self) {
         // Close the underlying TCP stream
-        let (tcp_stream, _) = self.get_sock_mut().get_mut();
+        let (tcp_stream, _) = self.get_mut_socket().get_mut();
         let _ = zenoh_runtime::ZRuntime::Acceptor
             .block_in_place(async move { tcp_stream.shutdown().await });
     }
@@ -281,9 +323,18 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
                     e
                 )
             })?;
+
+        let (_, tls_conn) = tls_stream.get_ref();
+        let auth_identifier = get_server_cert_common_name(tls_conn)?;
+
         let tls_stream = TlsStream::Client(tls_stream);
 
-        let link = Arc::new(LinkUnicastTls::new(tls_stream, src_addr, dst_addr));
+        let link = Arc::new(LinkUnicastTls::new(
+            tls_stream,
+            src_addr,
+            dst_addr,
+            auth_identifier.into(),
+        ));
 
         Ok(LinkUnicast(link))
     }
@@ -391,11 +442,18 @@ async fn accept_task(
                             }
                         };
 
-
+                        // Get TLS auth identifier
+                        let (_, tls_conn) = tls_stream.get_ref();
+                        let auth_identifier = get_client_cert_common_name(tls_conn)?;
 
                         tracing::debug!("Accepted TLS connection on {:?}: {:?}", src_addr, dst_addr);
                         // Create the new link object
-                        let link = Arc::new(LinkUnicastTls::new(tls_stream, src_addr, dst_addr));
+                        let link = Arc::new(LinkUnicastTls::new(
+                            tls_stream,
+                            src_addr,
+                            dst_addr,
+                            auth_identifier.into(),
+                        ));
 
                         // Communicate the new link to the initial transport manager
                         if let Err(e) = manager.send_async(LinkUnicast(link)).await {
@@ -418,4 +476,57 @@ async fn accept_task(
     }
 
     Ok(())
+}
+
+fn get_client_cert_common_name(tls_conn: &rustls::CommonState) -> ZResult<TlsAuthId> {
+    if let Some(serv_certs) = tls_conn.peer_certificates() {
+        let (_, cert) = X509Certificate::from_der(serv_certs[0].as_ref())?;
+        let subject_name = &cert
+            .subject
+            .iter_common_name()
+            .next()
+            .and_then(|cn| cn.as_str().ok())
+            .unwrap();
+
+        Ok(TlsAuthId {
+            auth_value: Some(subject_name.to_string()),
+        })
+    } else {
+        Ok(TlsAuthId { auth_value: None })
+    }
+}
+
+fn get_server_cert_common_name(tls_conn: &rustls::ClientConnection) -> ZResult<TlsAuthId> {
+    let serv_certs = tls_conn.peer_certificates().unwrap();
+    let mut auth_id = TlsAuthId { auth_value: None };
+
+    // Need the first certificate in the chain so no need for looping
+    if let Some(item) = serv_certs.iter().next() {
+        let (_, cert) = X509Certificate::from_der(item.as_ref())?;
+        let subject_name = &cert
+            .subject
+            .iter_common_name()
+            .next()
+            .and_then(|cn| cn.as_str().ok())
+            .unwrap();
+
+        auth_id = TlsAuthId {
+            auth_value: Some(subject_name.to_string()),
+        };
+        return Ok(auth_id);
+    }
+    Ok(auth_id)
+}
+
+struct TlsAuthId {
+    auth_value: Option<String>,
+}
+
+impl From<TlsAuthId> for LinkAuthId {
+    fn from(value: TlsAuthId) -> Self {
+        LinkAuthId::builder()
+            .auth_type(LinkAuthType::Tls)
+            .auth_value(value.auth_value.clone())
+            .build()
+    }
 }

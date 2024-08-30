@@ -11,6 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(not(feature = "std"))]
+use alloc::boxed::Box;
+use alloc::sync::Arc;
+use core::{fmt, num::NonZeroUsize, option};
+
 use crate::{
     buffer::{Buffer, SplitBuffer},
     reader::HasReader,
@@ -18,11 +23,6 @@ use crate::{
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
     ZSlice,
 };
-use alloc::sync::Arc;
-use core::{fmt, num::NonZeroUsize, option};
-
-#[cfg(not(feature = "std"))]
-use alloc::boxed::Box;
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct BBuf {
@@ -127,7 +127,7 @@ impl Writer for &mut BBuf {
         self.capacity() - self.len()
     }
 
-    fn with_slot<F>(&mut self, len: usize, f: F) -> Result<NonZeroUsize, DidntWrite>
+    unsafe fn with_slot<F>(&mut self, len: usize, write: F) -> Result<NonZeroUsize, DidntWrite>
     where
         F: FnOnce(&mut [u8]) -> usize,
     {
@@ -135,7 +135,8 @@ impl Writer for &mut BBuf {
             return Err(DidntWrite);
         }
 
-        let written = f(self.as_writable_slice());
+        // SAFETY: self.remaining() >= len
+        let written = write(unsafe { self.as_writable_slice().get_unchecked_mut(..len) });
         self.len += written;
 
         NonZeroUsize::new(written).ok_or(DidntWrite)
@@ -184,13 +185,8 @@ impl<'a> HasReader for &'a BBuf {
 // From impls
 impl From<BBuf> for ZSlice {
     fn from(value: BBuf) -> Self {
-        ZSlice {
-            buf: Arc::new(value.buffer),
-            start: 0,
-            end: value.len,
-            #[cfg(feature = "shared-memory")]
-            kind: crate::ZSliceKind::Raw,
-        }
+        // SAFETY: buffer length is ensured to be lesser than its capacity
+        unsafe { ZSlice::new(Arc::new(value.buffer), 0, value.len).unwrap_unchecked() }
     }
 }
 
@@ -199,6 +195,7 @@ impl BBuf {
     pub fn rand(len: usize) -> Self {
         #[cfg(not(feature = "std"))]
         use alloc::vec::Vec;
+
         use rand::Rng;
 
         let mut rng = rand::thread_rng();

@@ -20,25 +20,50 @@
 pub use lazy_static::lazy_static;
 pub mod macros;
 
-use std::future::{Future, Ready};
+use std::future::{Future, IntoFuture, Ready};
 
 // Re-exports after moving ZError/ZResult to zenoh-result
 pub use zenoh_result::{bail, to_zerror, zerror};
 pub mod zresult {
     pub use zenoh_result::*;
 }
-pub use zresult::Error;
-pub use zresult::ZResult as Result;
+pub use zresult::{Error, ZResult as Result};
 
+/// A resolvable execution, either sync or async
 pub trait Resolvable {
     type To: Sized + Send;
 }
 
-pub trait AsyncResolve: Resolvable {
-    type Future: Future<Output = <Self as Resolvable>::To> + Send;
+/// Trick used to mark `<Resolve as IntoFuture>::IntoFuture` bound as Send
+#[doc(hidden)]
+pub trait IntoSendFuture: Resolvable {
+    type IntoFuture: Future<Output = Self::To> + Send;
+}
 
+impl<T> IntoSendFuture for T
+where
+    T: Resolvable + IntoFuture<Output = Self::To>,
+    T::IntoFuture: Send,
+{
+    type IntoFuture = T::IntoFuture;
+}
+
+/// Synchronous execution of a resolvable
+pub trait Wait: Resolvable {
+    /// Synchronously execute and wait
+    fn wait(self) -> Self::To;
+}
+
+#[deprecated(since = "1.0.0", note = "use `.await` directly instead")]
+pub trait AsyncResolve: Resolvable {
+    type Future: Future<Output = Self::To> + Send;
+
+    #[allow(deprecated)]
+    #[deprecated(since = "1.0.0", note = "use `.await` directly instead")]
     fn res_async(self) -> Self::Future;
 
+    #[allow(deprecated)]
+    #[deprecated(since = "1.0.0", note = "use `.wait()` instead`")]
     fn res(self) -> Self::Future
     where
         Self: Sized,
@@ -47,10 +72,27 @@ pub trait AsyncResolve: Resolvable {
     }
 }
 
-pub trait SyncResolve: Resolvable {
-    fn res_sync(self) -> <Self as Resolvable>::To;
+#[allow(deprecated)]
+impl<T> AsyncResolve for T
+where
+    T: Resolvable + IntoFuture<Output = Self::To>,
+    T::IntoFuture: Send,
+{
+    type Future = T::IntoFuture;
 
-    fn res(self) -> <Self as Resolvable>::To
+    fn res_async(self) -> Self::Future {
+        self.into_future()
+    }
+}
+
+#[deprecated(since = "1.0.0", note = "use `.wait()` instead`")]
+pub trait SyncResolve: Resolvable {
+    #[deprecated(since = "1.0.0", note = "use `.wait()` instead`")]
+    fn res_sync(self) -> Self::To;
+
+    #[allow(deprecated)]
+    #[deprecated(since = "1.0.0", note = "use `.wait()` instead`")]
+    fn res(self) -> Self::To
     where
         Self: Sized,
     {
@@ -58,23 +100,42 @@ pub trait SyncResolve: Resolvable {
     }
 }
 
+#[allow(deprecated)]
+impl<T> SyncResolve for T
+where
+    T: Wait,
+{
+    fn res_sync(self) -> Self::To {
+        self.wait()
+    }
+}
+
 /// Zenoh's trait for resolving builder patterns.
 ///
-/// Builder patterns in Zenoh can be resolved with [`AsyncResolve`] in async context and [`SyncResolve`] in sync context.
-/// In both async and sync context calling `.res()` resolves the builder.
-/// `.res()` maps to `.res_async()` in async context.
-/// `.res()` maps to `.res_sync()` in sync context.
-/// We advise to prefer the usage of [`AsyncResolve`] and to use [`SyncResolve`] with caution.
-#[must_use = "Resolvables do nothing unless you resolve them using `.res()`."]
-pub trait Resolve<Output>: Resolvable<To = Output> + SyncResolve + AsyncResolve + Send {}
+/// Builder patterns in Zenoh can be resolved by awaiting them, in async context,
+/// and [`Wait::wait`] in sync context.
+/// We advise to prefer the usage of asynchronous execution, and to use synchronous one with caution
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or synchronous `.wait()` method"]
+pub trait Resolve<Output>:
+    Resolvable<To = Output>
+    + Wait
+    + IntoSendFuture
+    + IntoFuture<IntoFuture = <Self as IntoSendFuture>::IntoFuture, Output = Output>
+    + Send
+{
+}
 
 impl<T, Output> Resolve<Output> for T where
-    T: Resolvable<To = Output> + SyncResolve + AsyncResolve + Send
+    T: Resolvable<To = Output>
+        + Wait
+        + IntoSendFuture
+        + IntoFuture<IntoFuture = <Self as IntoSendFuture>::IntoFuture, Output = Output>
+        + Send
 {
 }
 
 // Closure to wait
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or synchronous `.wait()` method"]
 pub struct ResolveClosure<C, To>(C)
 where
     To: Sized + Send,
@@ -98,30 +159,31 @@ where
     type To = To;
 }
 
-impl<C, To> AsyncResolve for ResolveClosure<C, To>
+impl<C, To> IntoFuture for ResolveClosure<C, To>
 where
     To: Sized + Send,
     C: FnOnce() -> To + Send,
 {
-    type Future = Ready<<Self as Resolvable>::To>;
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
 
-    fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
     }
 }
 
-impl<C, To> SyncResolve for ResolveClosure<C, To>
+impl<C, To> Wait for ResolveClosure<C, To>
 where
     To: Sized + Send,
     C: FnOnce() -> To + Send,
 {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+    fn wait(self) -> <Self as Resolvable>::To {
         self.0()
     }
 }
 
 // Future to wait
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or synchronous `.wait()` method"]
 pub struct ResolveFuture<F, To>(F)
 where
     To: Sized + Send,
@@ -145,24 +207,25 @@ where
     type To = To;
 }
 
-impl<F, To> AsyncResolve for ResolveFuture<F, To>
+impl<F, To> IntoFuture for ResolveFuture<F, To>
 where
     To: Sized + Send,
     F: Future<Output = To> + Send,
 {
-    type Future = F;
+    type Output = To;
+    type IntoFuture = F;
 
-    fn res_async(self) -> Self::Future {
+    fn into_future(self) -> Self::IntoFuture {
         self.0
     }
 }
 
-impl<F, To> SyncResolve for ResolveFuture<F, To>
+impl<F, To> Wait for ResolveFuture<F, To>
 where
     To: Sized + Send,
     F: Future<Output = To> + Send,
 {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+    fn wait(self) -> <Self as Resolvable>::To {
         zenoh_runtime::ZRuntime::Application.block_in_place(self.0)
     }
 }

@@ -12,10 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{convert::TryFrom, sync::Arc, time::Duration};
+
 use zenoh_core::ztimeout;
 use zenoh_protocol::{
     core::{
-        Channel, CongestionControl, Encoding, EndPoint, Priority, Reliability, WhatAmI, ZenohId,
+        Channel, CongestionControl, Encoding, EndPoint, Priority, Reliability, WhatAmI,
+        ZenohIdProto,
     },
     network::{
         push::{
@@ -36,8 +38,8 @@ const MSG_DEFRAG_BUF: usize = 128_000;
 
 async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     // Define client and router IDs
-    let client_id = ZenohId::try_from([1]).unwrap();
-    let router_id = ZenohId::try_from([2]).unwrap();
+    let client_id = ZenohIdProto::try_from([1]).unwrap();
+    let router_id = ZenohIdProto::try_from([2]).unwrap();
 
     // Create the router transport manager
     let router_manager = TransportManager::builder()
@@ -64,21 +66,18 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     println!("Opening transport with {endpoint}");
     let _ = ztimeout!(client_manager.open_transport_unicast(endpoint.clone())).unwrap();
 
-    let client_transport = client_manager
-        .get_transport_unicast(&router_id)
-        .await
-        .unwrap();
+    let client_transport = ztimeout!(client_manager.get_transport_unicast(&router_id)).unwrap();
 
     // Create the message to send
     let message: NetworkMessage = Push {
         wire_expr: "test".into(),
         ext_qos: QoSType::new(channel.priority, CongestionControl::Block, false),
         ext_tstamp: None,
-        ext_nodeid: NodeIdType::default(),
+        ext_nodeid: NodeIdType::DEFAULT,
         payload: Put {
             payload: vec![0u8; msg_size].into(),
             timestamp: None,
-            encoding: Encoding::default(),
+            encoding: Encoding::empty(),
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
@@ -138,11 +137,11 @@ async fn transport_unicast_defragmentation_tcp_only() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::Reliable,
         },
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::BestEffort,
         },
         Channel {
@@ -171,11 +170,11 @@ async fn transport_unicast_defragmentation_ws_only() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::Reliable,
         },
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::BestEffort,
         },
         Channel {
@@ -206,11 +205,11 @@ async fn transport_unicast_defragmentation_unixpipe_only() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::Reliable,
         },
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::BestEffort,
         },
         Channel {

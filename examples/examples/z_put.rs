@@ -12,22 +12,22 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::config::Config;
-use zenoh::prelude::r#async::*;
+use zenoh::{key_expr::KeyExpr, Config};
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
 async fn main() {
     // initiate logging
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
 
-    let (config, key_expr, value) = parse_args();
+    let (config, key_expr, payload) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
-    println!("Putting Data ('{key_expr}': '{value}')...");
-    session.put(&key_expr, value).res().await.unwrap();
+    println!("Putting Data ('{key_expr}': '{payload}')...");
+    // Refer to z_bytes.rs to see how to serialize different types of message
+    session.put(&key_expr, payload).await.unwrap();
 }
 
 #[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]
@@ -36,13 +36,13 @@ struct Args {
     /// The key expression to write to.
     key: KeyExpr<'static>,
     #[arg(short, long, default_value = "Put from Rust!")]
-    /// The value to write.
-    value: String,
+    /// The payload to write.
+    payload: String,
     #[command(flatten)]
     common: CommonArgs,
 }
 
 fn parse_args() -> (Config, KeyExpr<'static>, String) {
     let args = Args::parse();
-    (args.common.into(), args.key, args.value)
+    (args.common.into(), args.key, args.payload)
 }

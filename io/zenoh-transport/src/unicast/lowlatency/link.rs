@@ -11,23 +11,22 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::transport::TransportUnicastLowlatency;
-#[cfg(feature = "stats")]
-use crate::stats::TransportStats;
-use crate::unicast::link::TransportLinkUnicast;
-use crate::unicast::link::TransportLinkUnicastRx;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
+
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use zenoh_buffers::{writer::HasWriter, ZSlice};
 use zenoh_codec::*;
 use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_link::LinkUnicast;
-use zenoh_protocol::transport::TransportMessageLowLatency;
-use zenoh_protocol::transport::{KeepAlive, TransportBodyLowLatency};
+use zenoh_protocol::transport::{KeepAlive, TransportBodyLowLatency, TransportMessageLowLatency};
 use zenoh_result::{zerror, ZResult};
 use zenoh_runtime::ZRuntime;
+
+use super::transport::TransportUnicastLowlatency;
+#[cfg(feature = "stats")]
+use crate::stats::TransportStats;
+use crate::unicast::link::{TransportLinkUnicast, TransportLinkUnicastRx};
 
 pub(crate) async fn send_with_link(
     link: &LinkUnicast,
@@ -153,11 +152,7 @@ impl TransportUnicastLowlatency {
 
             // The pool of buffers
             let pool = {
-                let mtu = if is_streamed {
-                    link_rx.batch.mtu as usize
-                } else {
-                    link_rx.batch.max_buffer_size()
-                };
+                let mtu = link_rx.batch.mtu as usize;
                 let mut n = rx_buffer_size / mtu;
                 if rx_buffer_size % mtu != 0 {
                     n += 1;
@@ -180,7 +175,7 @@ impl TransportUnicastLowlatency {
                         }
 
                         // Deserialize all the messages from the current ZBuf
-                        let zslice = ZSlice::make(Arc::new(buffer), 0, bytes).unwrap();
+                        let zslice = ZSlice::new(Arc::new(buffer), 0, bytes).unwrap();
                         c_transport.read_messages(zslice, &link_rx.link).await?;
                     }
 

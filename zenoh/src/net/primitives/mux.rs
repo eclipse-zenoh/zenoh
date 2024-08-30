@@ -11,17 +11,20 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::sync::OnceLock;
+
+use zenoh_protocol::network::{
+    interest::Interest, Declare, NetworkBody, NetworkMessage, Push, Request, Response,
+    ResponseFinal,
+};
+use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
+
 use super::{EPrimitives, Primitives};
 use crate::net::routing::{
     dispatcher::face::{Face, WeakFace},
     interceptor::{InterceptorTrait, InterceptorsChain},
     RoutingContext,
 };
-use std::sync::OnceLock;
-use zenoh_protocol::network::{
-    Declare, NetworkBody, NetworkMessage, Push, Request, Response, ResponseFinal,
-};
-use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 pub struct Mux {
     pub handler: TransportUnicast,
@@ -40,6 +43,34 @@ impl Mux {
 }
 
 impl Primitives for Mux {
+    fn send_interest(&self, msg: Interest) {
+        let msg = NetworkMessage {
+            body: NetworkBody::Interest(msg),
+            #[cfg(feature = "stats")]
+            size: None,
+        };
+        if self.interceptor.interceptors.is_empty() {
+            let _ = self.handler.schedule(msg);
+        } else if let Some(face) = self.face.get() {
+            let Some(face) = face.upgrade() else {
+                tracing::debug!("Invalid face: {:?}. Interest not sent: {:?}", face, msg);
+                return;
+            };
+            let ctx = RoutingContext::new_out(msg, face.clone());
+            let prefix = ctx
+                .wire_expr()
+                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+                .flatten()
+                .cloned();
+            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(&face));
+            if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
+                let _ = self.handler.schedule(ctx.msg);
+            }
+        } else {
+            tracing::debug!("Uninitialized multiplexer. Interest not sent: {:?}", msg);
+        }
+    }
+
     fn send_declare(&self, msg: Declare) {
         let msg = NetworkMessage {
             body: NetworkBody::Declare(msg),
@@ -166,6 +197,31 @@ impl Primitives for Mux {
 }
 
 impl EPrimitives for Mux {
+    fn send_interest(&self, ctx: RoutingContext<Interest>) {
+        let ctx = RoutingContext {
+            msg: NetworkMessage {
+                body: NetworkBody::Interest(ctx.msg),
+                #[cfg(feature = "stats")]
+                size: None,
+            },
+            inface: ctx.inface,
+            outface: ctx.outface,
+            prefix: ctx.prefix,
+            full_expr: ctx.full_expr,
+        };
+        let prefix = ctx
+            .wire_expr()
+            .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+            .flatten()
+            .cloned();
+        let cache = prefix
+            .as_ref()
+            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap()));
+        if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
+            let _ = self.handler.schedule(ctx.msg);
+        }
+    }
+
     fn send_declare(&self, ctx: RoutingContext<Declare>) {
         let ctx = RoutingContext {
             msg: NetworkMessage {
@@ -215,78 +271,75 @@ impl EPrimitives for Mux {
         }
     }
 
-    fn send_request(&self, ctx: RoutingContext<Request>) {
-        let ctx = RoutingContext {
-            msg: NetworkMessage {
-                body: NetworkBody::Request(ctx.msg),
-                #[cfg(feature = "stats")]
-                size: None,
-            },
-            inface: ctx.inface,
-            outface: ctx.outface,
-            prefix: ctx.prefix,
-            full_expr: ctx.full_expr,
+    fn send_request(&self, msg: Request) {
+        let msg = NetworkMessage {
+            body: NetworkBody::Request(msg),
+            #[cfg(feature = "stats")]
+            size: None,
         };
-        let prefix = ctx
-            .wire_expr()
-            .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
-            .flatten()
-            .cloned();
-        let cache = prefix
-            .as_ref()
-            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap()));
-        if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
-            let _ = self.handler.schedule(ctx.msg);
+        if self.interceptor.interceptors.is_empty() {
+            let _ = self.handler.schedule(msg);
+        } else if let Some(face) = self.face.get().and_then(|f| f.upgrade()) {
+            let ctx = RoutingContext::new_out(msg, face.clone());
+            let prefix = ctx
+                .wire_expr()
+                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+                .flatten()
+                .cloned();
+            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(&face));
+            if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
+                let _ = self.handler.schedule(ctx.msg);
+            }
+        } else {
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
-    fn send_response(&self, ctx: RoutingContext<Response>) {
-        let ctx = RoutingContext {
-            msg: NetworkMessage {
-                body: NetworkBody::Response(ctx.msg),
-                #[cfg(feature = "stats")]
-                size: None,
-            },
-            inface: ctx.inface,
-            outface: ctx.outface,
-            prefix: ctx.prefix,
-            full_expr: ctx.full_expr,
+    fn send_response(&self, msg: Response) {
+        let msg = NetworkMessage {
+            body: NetworkBody::Response(msg),
+            #[cfg(feature = "stats")]
+            size: None,
         };
-        let prefix = ctx
-            .wire_expr()
-            .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
-            .flatten()
-            .cloned();
-        let cache = prefix
-            .as_ref()
-            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap()));
-        if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
-            let _ = self.handler.schedule(ctx.msg);
+        if self.interceptor.interceptors.is_empty() {
+            let _ = self.handler.schedule(msg);
+        } else if let Some(face) = self.face.get().and_then(|f| f.upgrade()) {
+            let ctx = RoutingContext::new_out(msg, face.clone());
+            let prefix = ctx
+                .wire_expr()
+                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+                .flatten()
+                .cloned();
+            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(&face));
+            if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
+                let _ = self.handler.schedule(ctx.msg);
+            }
+        } else {
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
-    fn send_response_final(&self, ctx: RoutingContext<ResponseFinal>) {
-        let ctx = RoutingContext {
-            msg: NetworkMessage {
-                body: NetworkBody::ResponseFinal(ctx.msg),
-                #[cfg(feature = "stats")]
-                size: None,
-            },
-            inface: ctx.inface,
-            outface: ctx.outface,
-            prefix: ctx.prefix,
-            full_expr: ctx.full_expr,
+    fn send_response_final(&self, msg: ResponseFinal) {
+        let msg = NetworkMessage {
+            body: NetworkBody::ResponseFinal(msg),
+            #[cfg(feature = "stats")]
+            size: None,
         };
-        let prefix = ctx
-            .wire_expr()
-            .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
-            .flatten()
-            .cloned();
-        let cache = prefix
-            .as_ref()
-            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap()));
-        if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
-            let _ = self.handler.schedule(ctx.msg);
+        if self.interceptor.interceptors.is_empty() {
+            let _ = self.handler.schedule(msg);
+        } else if let Some(face) = self.face.get().and_then(|f| f.upgrade()) {
+            let ctx = RoutingContext::new_out(msg, face.clone());
+            let prefix = ctx
+                .wire_expr()
+                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+                .flatten()
+                .cloned();
+            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(&face));
+            if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
+                let _ = self.handler.schedule(ctx.msg);
+            }
+        } else {
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -312,6 +365,30 @@ impl McastMux {
 }
 
 impl Primitives for McastMux {
+    fn send_interest(&self, msg: Interest) {
+        let msg = NetworkMessage {
+            body: NetworkBody::Interest(msg),
+            #[cfg(feature = "stats")]
+            size: None,
+        };
+        if self.interceptor.interceptors.is_empty() {
+            let _ = self.handler.schedule(msg);
+        } else if let Some(face) = self.face.get() {
+            let ctx = RoutingContext::new_out(msg, face.clone());
+            let prefix = ctx
+                .wire_expr()
+                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+                .flatten()
+                .cloned();
+            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(face));
+            if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
+                let _ = self.handler.schedule(ctx.msg);
+            }
+        } else {
+            tracing::error!("Uninitialized multiplexer!");
+        }
+    }
+
     fn send_declare(&self, msg: Declare) {
         let msg = NetworkMessage {
             body: NetworkBody::Declare(msg),
@@ -438,6 +515,31 @@ impl Primitives for McastMux {
 }
 
 impl EPrimitives for McastMux {
+    fn send_interest(&self, ctx: RoutingContext<Interest>) {
+        let ctx = RoutingContext {
+            msg: NetworkMessage {
+                body: NetworkBody::Interest(ctx.msg),
+                #[cfg(feature = "stats")]
+                size: None,
+            },
+            inface: ctx.inface,
+            outface: ctx.outface,
+            prefix: ctx.prefix,
+            full_expr: ctx.full_expr,
+        };
+        let prefix = ctx
+            .wire_expr()
+            .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+            .flatten()
+            .cloned();
+        let cache = prefix
+            .as_ref()
+            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap()));
+        if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
+            let _ = self.handler.schedule(ctx.msg);
+        }
+    }
+
     fn send_declare(&self, ctx: RoutingContext<Declare>) {
         let ctx = RoutingContext {
             msg: NetworkMessage {
@@ -487,78 +589,75 @@ impl EPrimitives for McastMux {
         }
     }
 
-    fn send_request(&self, ctx: RoutingContext<Request>) {
-        let ctx = RoutingContext {
-            msg: NetworkMessage {
-                body: NetworkBody::Request(ctx.msg),
-                #[cfg(feature = "stats")]
-                size: None,
-            },
-            inface: ctx.inface,
-            outface: ctx.outface,
-            prefix: ctx.prefix,
-            full_expr: ctx.full_expr,
+    fn send_request(&self, msg: Request) {
+        let msg = NetworkMessage {
+            body: NetworkBody::Request(msg),
+            #[cfg(feature = "stats")]
+            size: None,
         };
-        let prefix = ctx
-            .wire_expr()
-            .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
-            .flatten()
-            .cloned();
-        let cache = prefix
-            .as_ref()
-            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap()));
-        if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
-            let _ = self.handler.schedule(ctx.msg);
+        if self.interceptor.interceptors.is_empty() {
+            let _ = self.handler.schedule(msg);
+        } else if let Some(face) = self.face.get() {
+            let ctx = RoutingContext::new_out(msg, face.clone());
+            let prefix = ctx
+                .wire_expr()
+                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+                .flatten()
+                .cloned();
+            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(face));
+            if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
+                let _ = self.handler.schedule(ctx.msg);
+            }
+        } else {
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
-    fn send_response(&self, ctx: RoutingContext<Response>) {
-        let ctx = RoutingContext {
-            msg: NetworkMessage {
-                body: NetworkBody::Response(ctx.msg),
-                #[cfg(feature = "stats")]
-                size: None,
-            },
-            inface: ctx.inface,
-            outface: ctx.outface,
-            prefix: ctx.prefix,
-            full_expr: ctx.full_expr,
+    fn send_response(&self, msg: Response) {
+        let msg = NetworkMessage {
+            body: NetworkBody::Response(msg),
+            #[cfg(feature = "stats")]
+            size: None,
         };
-        let prefix = ctx
-            .wire_expr()
-            .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
-            .flatten()
-            .cloned();
-        let cache = prefix
-            .as_ref()
-            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap()));
-        if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
-            let _ = self.handler.schedule(ctx.msg);
+        if self.interceptor.interceptors.is_empty() {
+            let _ = self.handler.schedule(msg);
+        } else if let Some(face) = self.face.get() {
+            let ctx = RoutingContext::new_out(msg, face.clone());
+            let prefix = ctx
+                .wire_expr()
+                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+                .flatten()
+                .cloned();
+            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(face));
+            if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
+                let _ = self.handler.schedule(ctx.msg);
+            }
+        } else {
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 
-    fn send_response_final(&self, ctx: RoutingContext<ResponseFinal>) {
-        let ctx = RoutingContext {
-            msg: NetworkMessage {
-                body: NetworkBody::ResponseFinal(ctx.msg),
-                #[cfg(feature = "stats")]
-                size: None,
-            },
-            inface: ctx.inface,
-            outface: ctx.outface,
-            prefix: ctx.prefix,
-            full_expr: ctx.full_expr,
+    fn send_response_final(&self, msg: ResponseFinal) {
+        let msg = NetworkMessage {
+            body: NetworkBody::ResponseFinal(msg),
+            #[cfg(feature = "stats")]
+            size: None,
         };
-        let prefix = ctx
-            .wire_expr()
-            .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
-            .flatten()
-            .cloned();
-        let cache = prefix
-            .as_ref()
-            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap()));
-        if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
-            let _ = self.handler.schedule(ctx.msg);
+        if self.interceptor.interceptors.is_empty() {
+            let _ = self.handler.schedule(msg);
+        } else if let Some(face) = self.face.get() {
+            let ctx = RoutingContext::new_out(msg, face.clone());
+            let prefix = ctx
+                .wire_expr()
+                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
+                .flatten()
+                .cloned();
+            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(face));
+            if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
+                let _ = self.handler.schedule(ctx.msg);
+            }
+        } else {
+            tracing::error!("Uninitialized multiplexer!");
         }
     }
 

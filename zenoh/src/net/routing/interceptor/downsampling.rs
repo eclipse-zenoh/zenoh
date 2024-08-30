@@ -18,16 +18,20 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 
-use crate::net::routing::interceptor::*;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
+
 use zenoh_config::{DownsamplingItemConf, DownsamplingRuleConf, InterceptorFlow};
 use zenoh_core::zlock;
-use zenoh_keyexpr::keyexpr_tree::impls::KeyedSetProvider;
-use zenoh_keyexpr::keyexpr_tree::{support::UnknownWildness, KeBoxTree};
-use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut};
+use zenoh_keyexpr::keyexpr_tree::{
+    impls::KeyedSetProvider, support::UnknownWildness, IKeyExprTree, IKeyExprTreeMut, KeBoxTree,
+};
 use zenoh_protocol::network::NetworkBody;
 use zenoh_result::ZResult;
+
+use crate::net::routing::interceptor::*;
 
 pub(crate) fn downsampling_interceptor_factories(
     config: &Vec<DownsamplingItemConf>,
@@ -122,11 +126,12 @@ pub(crate) struct DownsamplingInterceptor {
 impl InterceptorTrait for DownsamplingInterceptor {
     fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
         let ke_id = zlock!(self.ke_id);
-        if let Some(id) = ke_id.weight_at(&key_expr.clone()) {
-            Some(Box::new(Some(*id)))
-        } else {
-            Some(Box::new(None::<usize>))
+        if let Some(node) = ke_id.intersecting_keys(key_expr).next() {
+            if let Some(id) = ke_id.weight_at(&node) {
+                return Some(Box::new(Some(*id)));
+            }
         }
+        Some(Box::new(None::<usize>))
     }
 
     fn intercept(
@@ -183,6 +188,11 @@ impl DownsamplingInterceptor {
                     threshold,
                     latest_message_timestamp,
                 },
+            );
+            tracing::debug!(
+                "New downsampler rule enabled: key_expr={:?}, threshold={:?}",
+                rule.key_expr,
+                threshold
             );
         }
         Self {

@@ -11,10 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use clap::Parser;
 use std::time::Instant;
-use zenoh::config::Config;
-use zenoh::prelude::sync::*;
+
+use clap::Parser;
+use zenoh::{prelude::*, Config};
 use zenoh_examples::CommonArgs;
 
 struct Stats {
@@ -69,21 +69,16 @@ impl Drop for Stats {
 
 fn main() {
     // initiate logging
-    zenoh_util::try_init_log_from_env();
+    zenoh::try_init_log_from_env();
 
-    let (mut config, m, n) = parse_args();
+    let (config, m, n) = parse_args();
 
-    // A probing procedure for shared memory is performed upon session opening. To enable `z_pub_shm_thr` to operate
-    // over shared memory (and to not fallback on network mode), shared memory needs to be enabled also on the
-    // subscriber side. By doing so, the probing procedure will succeed and shared memory will operate as expected.
-    config.transport.shared_memory.set_enabled(true).unwrap();
-
-    let session = zenoh::open(config).res().unwrap();
+    let session = zenoh::open(config).wait().unwrap();
 
     let key_expr = "test/thr";
 
     let mut stats = Stats::new(n);
-    let _sub = session
+    session
         .declare_subscriber(key_expr)
         .callback_mut(move |_sample| {
             stats.increment();
@@ -91,8 +86,10 @@ fn main() {
                 std::process::exit(0)
             }
         })
-        .res()
-        .unwrap();
+        .wait()
+        .unwrap()
+        // Make the subscriber run in background, until the session is closed.
+        .background();
 
     println!("Press CTRL-C to quit...");
     std::thread::park();

@@ -20,10 +20,11 @@ use core::fmt::Debug;
 
 use token_cell::prelude::*;
 
-use super::box_tree::PruneResult;
-use super::support::IterOrOption;
-use crate::keyexpr;
-use crate::keyexpr_tree::{support::IWildness, *};
+use super::{box_tree::PruneResult, support::IterOrOption};
+use crate::{
+    keyexpr,
+    keyexpr_tree::{support::IWildness, *},
+};
 
 pub struct KeArcTreeInner<
     Weight,
@@ -147,7 +148,7 @@ where
     // tags{ketree.arc.node}
     fn node(&'a self, token: &'a Token, at: &keyexpr) -> Option<Self::Node> {
         let inner = ketree_borrow(&self.inner, token);
-        let mut chunks = at.chunks();
+        let mut chunks = at.chunks_impl();
         let mut node = inner.children.child_at(chunks.next().unwrap())?;
         for chunk in chunks {
             let as_node: &Arc<
@@ -168,7 +169,7 @@ where
     // tags{ketree.arc.node.or_create}
     fn node_or_create(&'a self, token: &'a mut Token, at: &keyexpr) -> Self::NodeMut {
         let inner = ketree_borrow_mut(&self.inner, token);
-        if at.is_wild() {
+        if at.is_wild_impl() {
             inner.wildness.set(true);
         }
         let inner: &mut KeArcTreeInner<Weight, Wildness, Children, Token> =
@@ -184,7 +185,7 @@ where
                 token,
             ))
         };
-        let mut chunks = at.chunks();
+        let mut chunks = at.chunks_impl();
         let mut node = inner
             .children
             .entry(chunks.next().unwrap())
@@ -262,7 +263,7 @@ where
     // tags{ketree.arc.intersecting}
     fn intersecting_nodes(&'a self, token: &'a Token, key: &'a keyexpr) -> Self::Intersection {
         let inner = ketree_borrow(&self.inner, token);
-        if inner.wildness.get() || key.is_wild() {
+        if inner.wildness.get() || key.is_wild_impl() {
             IterOrOption::Iter(TokenPacker {
                 iter: Intersection::new(&inner.children, key),
                 token,
@@ -291,7 +292,7 @@ where
         key: &'a keyexpr,
     ) -> Self::IntersectionMut {
         let inner = ketree_borrow(&self.inner, token);
-        if inner.wildness.get() || key.is_wild() {
+        if inner.wildness.get() || key.is_wild_impl() {
             IterOrOption::Iter(TokenPacker {
                 iter: Intersection::new(
                     unsafe {
@@ -322,7 +323,7 @@ where
     // tags{ketree.arc.included}
     fn included_nodes(&'a self, token: &'a Token, key: &'a keyexpr) -> Self::Inclusion {
         let inner = ketree_borrow(&self.inner, token);
-        if inner.wildness.get() || key.is_wild() {
+        if inner.wildness.get() || key.is_wild_impl() {
             IterOrOption::Iter(TokenPacker {
                 iter: Inclusion::new(&inner.children, key),
                 token,
@@ -347,7 +348,7 @@ where
     // tags{ketree.arc.included.mut}
     fn included_nodes_mut(&'a self, token: &'a mut Token, key: &'a keyexpr) -> Self::InclusionMut {
         let inner = ketree_borrow(&self.inner, token);
-        if inner.wildness.get() || key.is_wild() {
+        if inner.wildness.get() || key.is_wild_impl() {
             unsafe {
                 IterOrOption::Iter(TokenPacker {
                     iter: Inclusion::new(
@@ -378,7 +379,7 @@ where
     // tags{ketree.arc.including}
     fn nodes_including(&'a self, token: &'a Token, key: &'a keyexpr) -> Self::Includer {
         let inner = ketree_borrow(&self.inner, token);
-        if inner.wildness.get() || key.is_wild() {
+        if inner.wildness.get() || key.is_wild_impl() {
             IterOrOption::Iter(TokenPacker {
                 iter: Includer::new(&inner.children, key),
                 token,
@@ -403,7 +404,7 @@ where
     // tags{ketree.arc.including.mut}
     fn nodes_including_mut(&'a self, token: &'a mut Token, key: &'a keyexpr) -> Self::IncluderMut {
         let inner = ketree_borrow(&self.inner, token);
-        if inner.wildness.get() || key.is_wild() {
+        if inner.wildness.get() || key.is_wild_impl() {
             unsafe {
                 IterOrOption::Iter(TokenPacker {
                     iter: Includer::new(
@@ -444,6 +445,7 @@ where
 pub(crate) mod sealed {
     use alloc::sync::Arc;
     use core::ops::{Deref, DerefMut};
+
     use token_cell::prelude::{TokenCell, TokenTrait};
 
     pub struct Tokenized<A, B>(pub A, pub(crate) B);
@@ -595,7 +597,7 @@ where
         });
         if predicate(self) && self.children.is_empty() {
             result = PruneResult::Delete
-        } else if self.chunk.is_wild() {
+        } else if self.chunk.is_wild_impl() {
             result = PruneResult::Wild
         }
         result

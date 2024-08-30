@@ -11,6 +11,16 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::time::Duration;
+
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use zenoh_buffers::ZSliceBuffer;
+use zenoh_protocol::transport::{KeepAlive, TransportMessage};
+use zenoh_result::{zerror, ZResult};
+use zenoh_sync::{RecyclingObject, RecyclingObjectPool};
+#[cfg(feature = "stats")]
+use {crate::common::stats::TransportStats, std::sync::Arc};
+
 use super::transport::TransportUnicastUniversal;
 use crate::{
     common::{
@@ -23,14 +33,6 @@ use crate::{
     },
     unicast::link::{TransportLinkUnicast, TransportLinkUnicastRx, TransportLinkUnicastTx},
 };
-use std::time::Duration;
-use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use zenoh_buffers::ZSliceBuffer;
-use zenoh_protocol::transport::{KeepAlive, TransportMessage};
-use zenoh_result::{zerror, ZResult};
-use zenoh_sync::{RecyclingObject, RecyclingObjectPool};
-#[cfg(feature = "stats")]
-use {crate::common::stats::TransportStats, std::sync::Arc};
 
 #[derive(Clone)]
 pub(super) struct TransportLinkUnicastUniversal {
@@ -60,7 +62,8 @@ impl TransportLinkUnicastUniversal {
             },
             queue_size: transport.manager.config.queue_size,
             wait_before_drop: transport.manager.config.wait_before_drop,
-            backoff: transport.manager.config.queue_backoff,
+            batching_enabled: transport.manager.config.batching,
+            batching_time_limit: transport.manager.config.queue_backoff,
         };
 
         // The pipeline
@@ -236,7 +239,7 @@ async fn rx_task(
     where
         T: ZSliceBuffer + 'static,
         F: Fn() -> T,
-        RecyclingObject<T>: ZSliceBuffer,
+        RecyclingObject<T>: AsMut<[u8]> + ZSliceBuffer,
     {
         let batch = link
             .recv_batch(|| pool.try_take().unwrap_or_else(|| pool.alloc()))
@@ -245,7 +248,7 @@ async fn rx_task(
     }
 
     // The pool of buffers
-    let mtu = link.batch.max_buffer_size();
+    let mtu = link.batch.mtu as usize;
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
