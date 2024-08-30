@@ -166,10 +166,10 @@ impl TransportMulticastInner {
             Reliability::BestEffort => zlock!(c.best_effort),
         };
 
-        self.verify_sn(sn, &mut guard)?;
-
-        for msg in payload.drain(..) {
-            self.trigger_callback(msg, peer)?;
+        if self.verify_sn(sn, &mut guard)? {
+            for msg in payload.drain(..) {
+                self.trigger_callback(msg, peer)?;
+            }
         }
         Ok(())
     }
@@ -202,24 +202,24 @@ impl TransportMulticastInner {
             Reliability::BestEffort => zlock!(c.best_effort),
         };
 
-        self.verify_sn(sn, &mut guard)?;
-
-        if guard.defrag.is_empty() {
-            let _ = guard.defrag.sync(sn);
-        }
-        if let Err(e) = guard.defrag.push(sn, payload) {
-            tracing::trace!("{}", e);
-        } else if !more {
-            // When shared-memory feature is disabled, msg does not need to be mutable
-            if let Some(msg) = guard.defrag.defragment() {
-                return self.trigger_callback(msg, peer);
-            } else {
-                tracing::trace!(
-                    "Transport: {}. Peer: {}. Priority: {:?}. Defragmentation error.",
-                    self.manager.config.zid,
-                    peer.zid,
-                    priority
-                );
+        if self.verify_sn(sn, &mut guard)? {
+            if guard.defrag.is_empty() {
+                let _ = guard.defrag.sync(sn);
+            }
+            if let Err(e) = guard.defrag.push(sn, payload) {
+                tracing::trace!("{}", e);
+            } else if !more {
+                // When shared-memory feature is disabled, msg does not need to be mutable
+                if let Some(msg) = guard.defrag.defragment() {
+                    return self.trigger_callback(msg, peer);
+                } else {
+                    tracing::trace!(
+                        "Transport: {}. Peer: {}. Priority: {:?}. Defragmentation error.",
+                        self.manager.config.zid,
+                        peer.zid,
+                        priority
+                    );
+                }
             }
         }
 
@@ -230,7 +230,7 @@ impl TransportMulticastInner {
         &self,
         sn: TransportSn,
         guard: &mut MutexGuard<'_, TransportChannelRx>,
-    ) -> ZResult<()> {
+    ) -> ZResult<bool> {
         let precedes = guard.sn.precedes(sn)?;
         if !precedes {
             tracing::debug!(
@@ -239,19 +239,14 @@ impl TransportMulticastInner {
                 sn,
                 guard.sn.next()
             );
-            // Drop the fragments if needed
-            if !guard.defrag.is_empty() {
-                guard.defrag.clear();
-            }
-            // Keep reading
-            return Ok(());
+            return Ok(false);
         }
 
         // Set will always return OK because we have already checked
         // with precedes() that the sn has the right resolution
         let _ = guard.sn.set(sn);
 
-        Ok(())
+        Ok(true)
     }
 
     pub(super) fn read_messages(
