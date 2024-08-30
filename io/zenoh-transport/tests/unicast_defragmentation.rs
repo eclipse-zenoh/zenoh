@@ -93,20 +93,6 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     );
     client_transport.schedule(message.clone()).unwrap();
 
-    // Wait that the client transport has been closed
-    ztimeout!(async {
-        while client_transport.get_zid().is_ok() {
-            tokio::time::sleep(SLEEP).await;
-        }
-    });
-
-    // Wait on the router manager that the transport has been closed
-    ztimeout!(async {
-        while !router_manager.get_transports_unicast().await.is_empty() {
-            tokio::time::sleep(SLEEP).await;
-        }
-    });
-
     // Stop the locators on the manager
     println!("Del locator: {endpoint}");
     ztimeout!(router_manager.del_listener(endpoint)).unwrap();
