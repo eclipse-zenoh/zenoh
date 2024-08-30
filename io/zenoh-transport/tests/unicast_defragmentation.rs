@@ -93,6 +93,9 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     );
     client_transport.schedule(message.clone()).unwrap();
 
+    // wait a little bit for the message to be sent
+    tokio::time::sleep(SLEEP).await;
+
     // Stop the locators on the manager
     println!("Del locator: {endpoint}");
     ztimeout!(router_manager.del_listener(endpoint)).unwrap();
