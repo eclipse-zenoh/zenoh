@@ -39,9 +39,9 @@ use crate::{
 ///
 /// ```text
 /// Flags:
-/// - T: Lease period   if T==1 then the lease period is in seconds else in milliseconds
+/// - T: Lease period   if T==1 then the lease period is in seconds otherwise it is in milliseconds
 /// - S: Size params    If S==1 then size parameters are exchanged
-/// - Z: Extensions     If Z==1 then zenoh extensions will follow.
+/// - Z: Extensions     If Z==1 then Zenoh extensions will follow.
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
@@ -51,7 +51,7 @@ use crate::{
 /// +---------------+
 /// |zid_len|x|x|wai| (#)(*)
 /// +-------+-+-+---+
-/// ~      [u8]     ~ -- ZenohID of the sender of the INIT message
+/// ~      [u8]     ~ -- ZenohID of the sender of the JOIN message
 /// +---------------+
 /// |x|x|x|x|rid|fsn| \                -- SN/ID resolution (+)
 /// +---------------+  | if Flag(S)==1
@@ -60,12 +60,10 @@ use crate::{
 /// +---------------+
 /// %     lease     % -- Lease period of the sender of the JOIN message
 /// +---------------+
-/// %    next_sn    % -- Next SN to be sent by the sender of the JOIN(^)
+/// %    next_sn    % -- Next SN to be sent by the sender of the JOIN message (^)
 /// +---------------+
 /// ~   [JoinExts]  ~ -- if Flag(Z)==1
 /// +---------------+
-///
-/// If A==1 and S==0 then size parameters are (ie. S flag) are accepted.
 ///
 /// (*) WhatAmI. It indicates the role of the zenoh node sending the JOIN message.
 ///    The valid WhatAmI values are:
@@ -93,14 +91,6 @@ use crate::{
 ///
 /// (^) The next sequence number MUST be compatible with the adverstised Sequence Number resolution
 /// ```
-///
-
-pub mod flag {
-    pub const T: u8 = 1 << 5; // 0x20 Lease period  if T==1 then the lease period is in seconds else in milliseconds
-    pub const S: u8 = 1 << 6; // 0x40 Size params   if S==1 then size parameters are advertised
-    pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Join {
     pub version: u8,
@@ -112,6 +102,12 @@ pub struct Join {
     pub next_sn: PrioritySn,
     pub ext_qos: Option<ext::QoSType>,
     pub ext_shm: Option<ext::Shm>,
+}
+
+pub mod flag {
+    pub const T: u8 = 1 << 5; // 0x20 Lease period  if T==1 then the lease period is in seconds else in milliseconds
+    pub const S: u8 = 1 << 6; // 0x40 Size params   if S==1 then size parameters are advertised
+    pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
 }
 
 // Extensions
