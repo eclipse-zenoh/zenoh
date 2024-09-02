@@ -64,6 +64,7 @@ pub(crate) struct SubscriberInner<'a> {
     pub(crate) session: WeakSessionRef<'a>,
     pub(crate) state: Arc<SubscriberState>,
     pub(crate) kind: SubscriberKind,
+    // Subscriber is undeclared on drop unless its handler is a ZST, i.e. it is callback-only
     pub(crate) undeclare_on_drop: bool,
 }
 
@@ -334,6 +335,7 @@ where
                     session: session.into(),
                     state: sub_state,
                     kind: SubscriberKind::Subscriber,
+                    // `size_of::<Handler::Handler>() == 0` means callback-only subscriber
                     undeclare_on_drop: size_of::<Handler::Handler>() > 0,
                 },
                 handler: receiver,
@@ -476,6 +478,7 @@ impl<'a, Handler> Subscriber<'a, Handler> {
     }
 
     fn undeclare_impl(&mut self) -> ZResult<()> {
+        // set the flag first to avoid double panic if this function panic
         self.inner.undeclare_on_drop = false;
         match self.inner.session.upgrade() {
             Some(session) => {

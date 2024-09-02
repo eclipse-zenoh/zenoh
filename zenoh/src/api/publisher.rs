@@ -368,6 +368,7 @@ impl<'a> Publisher<'a> {
     }
 
     fn undeclare_impl(&mut self) -> ZResult<()> {
+        // set the flag first to avoid double panic if this function panic
         self.undeclare_on_drop = false;
         #[cfg(feature = "unstable")]
         {

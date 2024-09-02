@@ -385,6 +385,7 @@ impl<'a> LivelinessToken<'a> {
     }
 
     fn undeclare_impl(&mut self) -> ZResult<()> {
+        // set the flag first to avoid double panic if this function panic
         self.undeclare_on_drop = false;
         match self.session.upgrade() {
             Some(session) => session.undeclare_liveliness(self.state.id),
@@ -581,6 +582,7 @@ where
                     session: session.into(),
                     state: sub_state,
                     kind: SubscriberKind::LivelinessSubscriber,
+                    // `size_of::<Handler::Handler>() == 0` means callback-only subscriber
                     undeclare_on_drop: size_of::<Handler::Handler>() > 0,
                 },
                 handler,
