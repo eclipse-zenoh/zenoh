@@ -166,11 +166,14 @@ impl TransportMulticastInner {
             Reliability::BestEffort => zlock!(c.best_effort),
         };
 
-        if self.verify_sn(sn, &mut guard)? {
-            for msg in payload.drain(..) {
-                self.trigger_callback(msg, peer)?;
-            }
+        if !self.verify_sn(sn, &mut guard)? {
+            // Drop invalid message and continue
+            return Ok(());
         }
+        for msg in payload.drain(..) {
+            self.trigger_callback(msg, peer)?;
+        }
+
         Ok(())
     }
 
@@ -202,24 +205,29 @@ impl TransportMulticastInner {
             Reliability::BestEffort => zlock!(c.best_effort),
         };
 
-        if self.verify_sn(sn, &mut guard)? {
-            if guard.defrag.is_empty() {
-                let _ = guard.defrag.sync(sn);
-            }
-            if let Err(e) = guard.defrag.push(sn, payload) {
-                tracing::trace!("{}", e);
-            } else if !more {
-                // When shared-memory feature is disabled, msg does not need to be mutable
-                if let Some(msg) = guard.defrag.defragment() {
-                    return self.trigger_callback(msg, peer);
-                } else {
-                    tracing::trace!(
-                        "Transport: {}. Peer: {}. Priority: {:?}. Defragmentation error.",
-                        self.manager.config.zid,
-                        peer.zid,
-                        priority
-                    );
-                }
+        if !self.verify_sn(sn, &mut guard)? {
+            // Drop invalid message and continue
+            return Ok(());
+        }
+        if guard.defrag.is_empty() {
+            let _ = guard.defrag.sync(sn);
+        }
+        if let Err(e) = guard.defrag.push(sn, payload) {
+            // Defrag errors don't close transport
+            tracing::trace!("{}", e);
+            return Ok(());
+        }
+        if !more {
+            // When shared-memory feature is disabled, msg does not need to be mutable
+            if let Some(msg) = guard.defrag.defragment() {
+                return self.trigger_callback(msg, peer);
+            } else {
+                tracing::trace!(
+                    "Transport: {}. Peer: {}. Priority: {:?}. Defragmentation error.",
+                    self.manager.config.zid,
+                    peer.zid,
+                    priority
+                );
             }
         }
 
