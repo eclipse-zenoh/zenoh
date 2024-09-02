@@ -544,6 +544,7 @@ pub(crate) struct QueryableInner<'a> {
     pub(crate) session_id: ZenohId,
     pub(crate) session: WeakSessionRef<'a>,
     pub(crate) state: Arc<QueryableState>,
+    // Queryable is undeclared on drop unless its handler is a ZST, i.e. it is callback-only
     pub(crate) undeclare_on_drop: bool,
 }
 
@@ -859,6 +860,7 @@ impl<'a, Handler> Queryable<'a, Handler> {
     }
 
     fn undeclare_impl(&mut self) -> ZResult<()> {
+        // set the flag first to avoid double panic if this function panic
         self.inner.undeclare_on_drop = false;
         match self.inner.session.upgrade() {
             Some(session) => session.close_queryable(self.inner.state.id),
@@ -928,6 +930,7 @@ where
                     session_id: session.zid(),
                     session: session.into(),
                     state: qable_state,
+                    // `size_of::<Handler::Handler>() == 0` means callback-only queryable
                     undeclare_on_drop: size_of::<Handler::Handler>() > 0,
                 },
                 handler: receiver,
