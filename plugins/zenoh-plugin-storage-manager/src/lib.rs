@@ -451,6 +451,7 @@ pub fn strip_prefix(
             }
 
             match key_expr.strip_prefix(prefix).as_slice() {
+                // NOTE: `stripped_key_expr.is_empty()` should be impossible as "" is not a valid key expression
                 [stripped_key_expr] if !stripped_key_expr.is_empty() => {
                     OwnedKeyExpr::from_str(stripped_key_expr).map(Some)
                 }
