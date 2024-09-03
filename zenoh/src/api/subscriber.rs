@@ -11,20 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
-use std::{
-    fmt,
-    future::{IntoFuture, Ready},
-    ops::{Deref, DerefMut},
-    sync::Arc,
-};
-
-use zenoh_core::{Resolvable, Wait};
-use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
-use zenoh_result::ZResult;
-#[cfg(feature = "unstable")]
-use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
-
 use super::{
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
@@ -34,6 +20,16 @@ use super::{
 };
 #[cfg(feature = "unstable")]
 use crate::pubsub::Reliability;
+use std::{
+    fmt,
+    future::{IntoFuture, Ready},
+    ops::{Deref, DerefMut},
+    sync::Arc,
+};
+use zenoh_core::{Resolvable, Wait};
+use zenoh_result::ZResult;
+#[cfg(feature = "unstable")]
+use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
 
 pub(crate) struct SubscriberState {
     pub(crate) id: Id,
@@ -201,9 +197,6 @@ pub struct SubscriberBuilder<'a, 'b, Handler> {
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
 
     #[cfg(feature = "unstable")]
-    pub reliability: Reliability,
-
-    #[cfg(feature = "unstable")]
     pub origin: Locality,
     #[cfg(not(feature = "unstable"))]
     pub(crate) origin: Locality,
@@ -239,16 +232,12 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
         let SubscriberBuilder {
             session,
             key_expr,
-            #[cfg(feature = "unstable")]
-            reliability,
             origin,
             handler: _,
         } = self;
         SubscriberBuilder {
             session,
             key_expr,
-            #[cfg(feature = "unstable")]
-            reliability,
             origin,
             handler: callback,
         }
@@ -312,16 +301,12 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
         let SubscriberBuilder {
             session,
             key_expr,
-            #[cfg(feature = "unstable")]
-            reliability,
             origin,
             handler: _,
         } = self;
         SubscriberBuilder {
             session,
             key_expr,
-            #[cfg(feature = "unstable")]
-            reliability,
             origin,
             handler,
         }
@@ -330,26 +315,32 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
 
 impl<'a, 'b, Handler> SubscriberBuilder<'a, 'b, Handler> {
     /// Change the subscription reliability.
-    #[inline]
-    #[zenoh_macros::unstable]
+    #[deprecated(
+        since = "1.0.0",
+        note = "please use `reliability` on `declare_publisher` or `put`"
+    )]
+    #[allow(unused_mut, unused_variables)]
     pub fn reliability(mut self, reliability: Reliability) -> Self {
-        self.reliability = reliability;
         self
     }
 
-    /// Change the subscription reliability to `Reliable`.
-    #[inline]
-    #[zenoh_macros::unstable]
+    /// Change the subscription reliability to `Reliable`.   
+    #[deprecated(
+        since = "1.0.0",
+        note = "please use `reliability` on `declare_publisher` or `put`"
+    )]
+    #[allow(unused_mut)]
     pub fn reliable(mut self) -> Self {
-        self.reliability = Reliability::Reliable;
         self
     }
 
     /// Change the subscription reliability to `BestEffort`.
-    #[inline]
-    #[zenoh_macros::unstable]
+    #[deprecated(
+        since = "1.0.0",
+        note = "please use `reliability` on `declare_publisher` or `put`"
+    )]
+    #[allow(unused_mut)]
     pub fn best_effort(mut self) -> Self {
-        self.reliability = Reliability::BestEffort;
         self
     }
 
@@ -382,17 +373,7 @@ where
         let session = self.session;
         let (callback, receiver) = self.handler.into_handler();
         session
-            .declare_subscriber_inner(
-                &key_expr,
-                self.origin,
-                callback,
-                #[cfg(feature = "unstable")]
-                &SubscriberInfo {
-                    reliability: self.reliability,
-                },
-                #[cfg(not(feature = "unstable"))]
-                &SubscriberInfo::default(),
-            )
+            .declare_subscriber_inner(&key_expr, self.origin, callback)
             .map(|sub_state| Subscriber {
                 subscriber: SubscriberInner {
                     session,

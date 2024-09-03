@@ -44,9 +44,9 @@ use zenoh_protocol::{
     network::{
         self,
         declare::{
-            self, common::ext::WireExprType, queryable::ext::QueryableInfoType,
-            subscriber::ext::SubscriberInfo, Declare, DeclareBody, DeclareKeyExpr,
-            DeclareQueryable, DeclareSubscriber, UndeclareQueryable, UndeclareSubscriber,
+            self, common::ext::WireExprType, queryable::ext::QueryableInfoType, Declare,
+            DeclareBody, DeclareKeyExpr, DeclareQueryable, DeclareSubscriber, UndeclareQueryable,
+            UndeclareSubscriber,
         },
         interest::{InterestMode, InterestOptions},
         request::{self, ext::TargetType},
@@ -101,8 +101,6 @@ use crate::net::{
     routing::dispatcher::face::Face,
     runtime::{Runtime, RuntimeBuilder},
 };
-#[cfg(feature = "unstable")]
-use crate::pubsub::Reliability;
 
 zconfigurable! {
     pub(crate) static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;
@@ -378,8 +376,6 @@ impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
         SubscriberBuilder {
             session: self.clone(),
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
-            #[cfg(feature = "unstable")]
-            reliability: Reliability::DEFAULT,
             origin: Locality::default(),
             handler: DefaultHandler::default(),
         }
@@ -1127,7 +1123,6 @@ impl Session {
         key_expr: &KeyExpr,
         origin: Locality,
         callback: Callback<'static, Sample>,
-        info: &SubscriberInfo,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
         tracing::trace!("declare_subscriber({:?})", key_expr);
@@ -1240,7 +1235,6 @@ impl Session {
                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                     id,
                     wire_expr: key_expr.to_wire(self).to_owned(),
-                    ext_info: *info,
                 }),
             });
 
@@ -2037,8 +2031,6 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
         SubscriberBuilder {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.try_into().map_err(Into::into),
-            #[cfg(feature = "unstable")]
-            reliability: Reliability::DEFAULT,
             origin: Locality::default(),
             handler: DefaultHandler::default(),
         }

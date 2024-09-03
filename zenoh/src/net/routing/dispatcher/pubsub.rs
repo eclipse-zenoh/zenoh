@@ -17,7 +17,7 @@ use zenoh_core::zread;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, WhatAmI, WireExpr},
     network::{
-        declare::{ext, subscriber::ext::SubscriberInfo, SubscriberId},
+        declare::{ext, SubscriberId},
         Push,
     },
     zenoh::PushBody,
@@ -32,6 +32,9 @@ use super::{
 #[zenoh_macros::unstable]
 use crate::key_expr::KeyExpr;
 use crate::net::routing::hat::{HatTrait, SendDeclare};
+
+#[derive(Copy, Clone)]
+pub(crate) struct SubscriberInfo;
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn declare_subscription(

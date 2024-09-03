@@ -257,7 +257,7 @@ impl Primitives for Face {
                     &mut self.state.clone(),
                     m.id,
                     &m.wire_expr,
-                    &m.ext_info,
+                    &SubscriberInfo,
                     msg.ext_nodeid.node_id,
                     &mut |p, m| declares.push((p.clone(), m)),
                 );
