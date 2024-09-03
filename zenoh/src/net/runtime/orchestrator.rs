@@ -614,7 +614,7 @@ impl Runtime {
         ifaces: &[IpAddr],
         multicast_ttl: u32,
     ) -> ZResult<UdpSocket> {
-        let socket = match Socket::new(Domain::IPV4, Type::DGRAM, None) {
+        let socket = match Socket::new(Domain::for_address(*sockaddr), Type::DGRAM, None) {
             Ok(socket) => socket,
             Err(err) => {
                 tracing::error!("Unable to create datagram socket: {}", err);
@@ -704,21 +704,22 @@ impl Runtime {
     }
 
     pub fn bind_ucast_port(addr: IpAddr, multicast_ttl: u32) -> ZResult<UdpSocket> {
-        let socket = match Socket::new(Domain::IPV4, Type::DGRAM, None) {
+        let sockaddr = || SocketAddr::new(addr, 0);
+        let socket = match Socket::new(Domain::for_address(sockaddr()), Type::DGRAM, None) {
             Ok(socket) => socket,
             Err(err) => {
                 tracing::warn!("Unable to create datagram socket: {}", err);
                 bail!(err=> "Unable to create datagram socket");
             }
         };
-        match socket.bind(&SocketAddr::new(addr, 0).into()) {
+        match socket.bind(&sockaddr().into()) {
             Ok(()) => {
                 #[allow(clippy::or_fun_call)]
                 let local_addr = socket
                     .local_addr()
-                    .unwrap_or(SocketAddr::new(addr, 0).into())
+                    .unwrap_or(sockaddr().into())
                     .as_socket()
-                    .unwrap_or(SocketAddr::new(addr, 0));
+                    .unwrap_or(sockaddr());
                 tracing::debug!("UDP port bound to {}", local_addr);
             }
             Err(err) => {
@@ -964,11 +965,18 @@ impl Runtime {
             }
         }
 
-        tracing::warn!(
-            "Unable to connect to any locator of scouted peer {}: {:?}",
-            zid,
-            locators
-        );
+        if self.manager().get_transport_unicast(zid).await.is_none() {
+            tracing::warn!(
+                "Unable to connect to any locator of scouted peer {}: {:?}",
+                zid,
+                locators
+            );
+        } else {
+            tracing::trace!(
+                "Unable to connect to any locator of scouted peer {}: Already connected!",
+                zid
+            );
+        }
         false
     }
 

@@ -45,8 +45,8 @@ zenoh = { workspace = true, default-features = true }
 zenoh-ext = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
-prost = "0.12.6"
-prost-types = "0.12.6"
+prost = "0.13.1"
+prost-types = "0.13.1"
 
 [dev-dependencies]
 rand = { workspace = true, features = ["default"] }

@@ -62,8 +62,8 @@ impl TransportLinkUnicastUniversal {
             },
             queue_size: transport.manager.config.queue_size,
             wait_before_drop: transport.manager.config.wait_before_drop,
-            batching: transport.manager.config.batching,
-            backoff: transport.manager.config.queue_backoff,
+            batching_enabled: transport.manager.config.batching,
+            batching_time_limit: transport.manager.config.queue_backoff,
         };
 
         // The pipeline

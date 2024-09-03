@@ -164,6 +164,8 @@ impl<S: Into<String> + AsRef<str>, V: AsObject> TryFrom<(S, &V)> for PluginConfi
                 })
             })
             .unwrap_or(Ok(true))?;
+        // TODO(fuzzypixelz): refactor this function's interface to get access to the configuration
+        // source, this we can support spec syntax in the lib search dir.
         let backend_search_dirs = match value.get("backend_search_dirs") {
             Some(serde_json::Value::String(path)) => LibSearchDirs::from_paths(&[path.clone()]),
             Some(serde_json::Value::Array(paths)) => {
@@ -174,7 +176,7 @@ impl<S: Into<String> + AsRef<str>, V: AsObject> TryFrom<(S, &V)> for PluginConfi
                     };
                     specs.push(path.clone());
                 }
-                LibSearchDirs::from_specs(&specs)?
+                LibSearchDirs::from_paths(&specs)
             }
             None => LibSearchDirs::default(),
             _ => bail!("`backend_search_dirs` field of {}'s configuration must be a string or array of strings", name.as_ref())

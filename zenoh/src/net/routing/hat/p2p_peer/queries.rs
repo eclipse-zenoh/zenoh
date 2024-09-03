@@ -112,7 +112,7 @@ fn propagate_simple_queryable_to(
         face_hat_mut!(dst_face)
             .local_qabls
             .insert(res.clone(), (id, info));
-        let key_expr = Resource::decl_key(res, dst_face);
+        let key_expr = Resource::decl_key(res, dst_face, dst_face.whatami != WhatAmI::Client);
         send_declare(
             &dst_face.primitives,
             RoutingContext::with_expr(
@@ -411,7 +411,7 @@ pub(super) fn declare_qabl_interest(
                     } else {
                         0
                     };
-                    let wire_expr = Resource::decl_key(res, face);
+                    let wire_expr = Resource::decl_key(res, face, face.whatami != WhatAmI::Client);
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -450,7 +450,8 @@ pub(super) fn declare_qabl_interest(
                                 } else {
                                     0
                                 };
-                                let key_expr = Resource::decl_key(qabl, face);
+                                let key_expr =
+                                    Resource::decl_key(qabl, face, face.whatami != WhatAmI::Client);
                                 send_declare(
                                     &face.primitives,
                                     RoutingContext::with_expr(
@@ -493,7 +494,8 @@ pub(super) fn declare_qabl_interest(
                             } else {
                                 0
                             };
-                            let key_expr = Resource::decl_key(qabl, face);
+                            let key_expr =
+                                Resource::decl_key(qabl, face, face.whatami != WhatAmI::Client);
                             send_declare(
                                 &face.primitives,
                                 RoutingContext::with_expr(

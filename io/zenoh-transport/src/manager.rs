@@ -130,10 +130,10 @@ pub struct TransportManagerBuilder {
     whatami: WhatAmI,
     resolution: Resolution,
     batch_size: BatchSize,
-    batching: bool,
+    batching_enabled: bool,
+    batching_time_limit: Duration,
     wait_before_drop: Duration,
     queue_size: QueueSizeConf,
-    queue_backoff: Duration,
     defrag_buff_size: usize,
     link_rx_buffer_size: usize,
     unicast: TransportManagerBuilderUnicast,
@@ -172,8 +172,13 @@ impl TransportManagerBuilder {
         self
     }
 
-    pub fn batching(mut self, batching: bool) -> Self {
-        self.batching = batching;
+    pub fn batching_enabled(mut self, batching_enabled: bool) -> Self {
+        self.batching_enabled = batching_enabled;
+        self
+    }
+
+    pub fn batching_time_limit(mut self, batching_time_limit: Duration) -> Self {
+        self.batching_time_limit = batching_time_limit;
         self
     }
 
@@ -184,11 +189,6 @@ impl TransportManagerBuilder {
 
     pub fn queue_size(mut self, queue_size: QueueSizeConf) -> Self {
         self.queue_size = queue_size;
-        self
-    }
-
-    pub fn queue_backoff(mut self, queue_backoff: Duration) -> Self {
-        self.queue_backoff = queue_backoff;
         self
     }
 
@@ -238,14 +238,16 @@ impl TransportManagerBuilder {
         resolution.set(Field::FrameSN, *link.tx().sequence_number_resolution());
         self = self.resolution(resolution);
         self = self.batch_size(*link.tx().batch_size());
-        self = self.batching(*link.tx().batching());
+        self = self.batching_enabled(*link.tx().queue().batching().enabled());
+        self = self.batching_time_limit(Duration::from_millis(
+            *link.tx().queue().batching().time_limit(),
+        ));
         self = self.defrag_buff_size(*link.rx().max_message_size());
         self = self.link_rx_buffer_size(*link.rx().buffer_size());
         self = self.wait_before_drop(Duration::from_micros(
             *link.tx().queue().congestion_control().wait_before_drop(),
         ));
         self = self.queue_size(link.tx().queue().size().clone());
-        self = self.queue_backoff(Duration::from_nanos(*link.tx().queue().backoff()));
         self = self.tx_threads(*link.tx().threads());
         self = self.protocols(link.protocols().clone());
 
@@ -301,10 +303,10 @@ impl TransportManagerBuilder {
             whatami: self.whatami,
             resolution: self.resolution,
             batch_size: self.batch_size,
-            batching: self.batching,
+            batching: self.batching_enabled,
             wait_before_drop: self.wait_before_drop,
             queue_size,
-            queue_backoff: self.queue_backoff,
+            queue_backoff: self.batching_time_limit,
             defrag_buff_size: self.defrag_buff_size,
             link_rx_buffer_size: self.link_rx_buffer_size,
             unicast: unicast.config,
@@ -340,7 +342,7 @@ impl Default for TransportManagerBuilder {
     fn default() -> Self {
         let link_rx = LinkRxConf::default();
         let queue = QueueConf::default();
-        let backoff = *queue.backoff();
+        let backoff = *queue.batching().time_limit();
         let wait_before_drop = *queue.congestion_control().wait_before_drop();
         Self {
             version: VERSION,
@@ -348,10 +350,10 @@ impl Default for TransportManagerBuilder {
             whatami: zenoh_config::defaults::mode,
             resolution: Resolution::default(),
             batch_size: BatchSize::MAX,
-            batching: true,
+            batching_enabled: true,
             wait_before_drop: Duration::from_micros(wait_before_drop),
             queue_size: queue.size,
-            queue_backoff: Duration::from_nanos(backoff),
+            batching_time_limit: Duration::from_millis(backoff),
             defrag_buff_size: *link_rx.max_message_size(),
             link_rx_buffer_size: *link_rx.buffer_size(),
             endpoints: HashMap::new(),

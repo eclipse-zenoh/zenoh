@@ -407,9 +407,8 @@ validated_struct::validator! {
                     keep_alive: usize,
                     /// Zenoh's MTU equivalent (default: 2^16-1) (max: 2^16-1)
                     batch_size: BatchSize,
-                    /// Perform batching of messages if they are smaller of the batch_size
-                    batching: bool,
-                    pub queue: QueueConf {
+                    pub queue: #[derive(Default)]
+                    QueueConf {
                         /// The size of each priority queue indicates the number of batches a given queue can contain.
                         /// The amount of memory being allocated for each queue is then SIZE_XXX * BATCH_SIZE.
                         /// In the case of the transport link MTU being smaller than the ZN_BATCH_SIZE,
@@ -432,16 +431,22 @@ validated_struct::validator! {
                             /// The maximum time in microseconds to wait for an available batch before dropping the message if still no batch is available.
                             pub wait_before_drop: u64,
                         },
-                        /// The initial exponential backoff time in nanoseconds to allow the batching to eventually progress.
-                        /// Higher values lead to a more aggressive batching but it will introduce additional latency.
-                        backoff: u64,
+                        pub batching: BatchingConf {
+                            /// Perform adaptive batching of messages if they are smaller of the batch_size.
+                            /// When the network is detected to not be fast enough to transmit every message individually, many small messages may be
+                            /// batched together and sent all at once on the wire reducing the overall network overhead. This is typically of a high-throughput
+                            /// scenario mainly composed of small messages. In other words, batching is activated by the network back-pressure.
+                            enabled: bool,
+                            /// The maximum time limit (in ms) a message should be retained for batching when back-pressure happens.
+                            time_limit: u64,
+                        },
                     },
                     // Number of threads used for TX
                     threads: usize,
                 },
                 pub rx: LinkRxConf {
                     /// Receiving buffer size in bytes for each link
-                    /// The default the rx_buffer_size value is the same as the default batch size: 65335.
+                    /// The default the rx_buffer_size value is the same as the default batch size: 65535.
                     /// For very high throughput scenarios, the rx_buffer_size can be increased to accommodate
                     /// more in-flight data. This is particularly relevant when dealing with large messages.
                     /// E.g. for 16MiB rx_buffer_size set the value to: 16777216.

@@ -230,6 +230,7 @@ pub mod bytes {
 
 /// Pub/sub primitives
 pub mod pubsub {
+    #[zenoh_macros::unstable]
     pub use zenoh_protocol::core::Reliability;
 
     #[zenoh_macros::unstable]

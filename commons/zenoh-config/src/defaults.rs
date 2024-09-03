@@ -191,17 +191,6 @@ impl Default for LinkTxConf {
             batch_size: BatchSize::MAX,
             queue: QueueConf::default(),
             threads: num,
-            batching: true,
-        }
-    }
-}
-
-impl Default for QueueConf {
-    fn default() -> Self {
-        Self {
-            size: QueueSizeConf::default(),
-            congestion_control: CongestionControlConf::default(),
-            backoff: 100,
         }
     }
 }
@@ -234,6 +223,15 @@ impl Default for CongestionControlConf {
     }
 }
 
+impl Default for BatchingConf {
+    fn default() -> Self {
+        BatchingConf {
+            enabled: true,
+            time_limit: 1,
+        }
+    }
+}
+
 impl Default for LinkRxConf {
     fn default() -> Self {
         Self {
@@ -247,7 +245,7 @@ impl Default for LinkRxConf {
 #[allow(clippy::derivable_impls)]
 impl Default for ShmConf {
     fn default() -> Self {
-        Self { enabled: false }
+        Self { enabled: true }
     }
 }
 

@@ -39,8 +39,7 @@ use zenoh_protocol::network::{
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
-        AtomicExprId, CongestionControl, EntityId, ExprId, Parameters, Reliability, WireExpr,
-        EMPTY_EXPR_ID,
+        AtomicExprId, CongestionControl, EntityId, ExprId, Parameters, WireExpr, EMPTY_EXPR_ID,
     },
     network::{
         self,
@@ -102,6 +101,8 @@ use crate::net::{
     routing::dispatcher::face::Face,
     runtime::{Runtime, RuntimeBuilder},
 };
+#[cfg(feature = "unstable")]
+use crate::pubsub::Reliability;
 
 zconfigurable! {
     pub(crate) static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;
@@ -377,6 +378,7 @@ impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
         SubscriberBuilder {
             session: self.clone(),
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
+            #[cfg(feature = "unstable")]
             reliability: Reliability::DEFAULT,
             origin: Locality::default(),
             handler: DefaultHandler::default(),
@@ -451,22 +453,38 @@ impl fmt::Debug for SessionRef<'_> {
     }
 }
 
-/// A trait implemented by types that can be undeclared.
-pub trait Undeclarable<S, O, T = ZResult<()>>
+pub(crate) trait UndeclarableSealed<S, O, T = ZResult<()>>
 where
     O: Resolve<T> + Send,
 {
     fn undeclare_inner(self, session: S) -> O;
 }
 
-impl<'a, O, T, G> Undeclarable<&'a Session, O, T> for G
+impl<'a, O, T, G> UndeclarableSealed<&'a Session, O, T> for G
 where
     O: Resolve<T> + Send,
-    G: Undeclarable<(), O, T>,
+    G: UndeclarableSealed<(), O, T>,
 {
     fn undeclare_inner(self, _: &'a Session) -> O {
         self.undeclare_inner(())
     }
+}
+
+// NOTE: `UndeclarableInner` is only pub(crate) to hide the `undeclare_inner` method. So we don't
+// care about the `private_bounds` lint in this particular case.
+#[allow(private_bounds)]
+/// A trait implemented by types that can be undeclared.
+pub trait Undeclarable<S, O, T>: UndeclarableSealed<S, O, T>
+where
+    O: Resolve<T> + Send,
+{
+}
+
+impl<S, O, T, U> Undeclarable<S, O, T> for U
+where
+    O: Resolve<T> + Send,
+    U: UndeclarableSealed<S, O, T>,
+{
 }
 
 /// A zenoh session.
@@ -625,7 +643,7 @@ impl Session {
         O: Resolve<ZResult<()>>,
         T: Undeclarable<&'a Self, O, ZResult<()>>,
     {
-        Undeclarable::undeclare_inner(decl, self)
+        UndeclarableSealed::undeclare_inner(decl, self)
     }
 
     /// Get the current configuration of the zenoh [`Session`](Session).
@@ -2033,6 +2051,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
         SubscriberBuilder {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.try_into().map_err(Into::into),
+            #[cfg(feature = "unstable")]
             reliability: Reliability::DEFAULT,
             origin: Locality::default(),
             handler: DefaultHandler::default(),

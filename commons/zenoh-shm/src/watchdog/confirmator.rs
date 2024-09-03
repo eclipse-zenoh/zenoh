@@ -27,10 +27,9 @@ use super::{
     segment::Segment,
 };
 
-#[dynamic(lazy,drop)]
+#[dynamic(lazy, drop)]
 pub static mut GLOBAL_CONFIRMATOR: WatchdogConfirmator =
-        WatchdogConfirmator::new(Duration::from_millis(50));
-
+    WatchdogConfirmator::new(Duration::from_millis(50));
 
 pub struct ConfirmedDescriptor {
     pub owned: OwnedDescriptor,
