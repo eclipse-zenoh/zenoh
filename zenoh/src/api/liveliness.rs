@@ -33,7 +33,7 @@ use super::{
     subscriber::{Subscriber, SubscriberInner},
     Id,
 };
-use crate::api::session::WeakSessionRef;
+use crate::api::session::MaybeWeakSessionRef;
 
 /// A structure with functions to declare a
 /// [`LivelinessToken`](LivelinessToken), query
@@ -254,12 +254,13 @@ impl Wait for LivelinessTokenBuilder<'_, '_> {
     fn wait(self) -> <Self as Resolvable>::To {
         let session = self.session;
         let key_expr = self.key_expr?.into_owned();
+        let undeclare_on_drop = true;
         session
             .declare_liveliness_inner(&key_expr)
             .map(|tok_state| LivelinessToken {
-                session: session.into(),
+                session: MaybeWeakSessionRef::new(session, !undeclare_on_drop),
                 state: tok_state,
-                undeclare_on_drop: true,
+                undeclare_on_drop,
             })
     }
 }
@@ -310,7 +311,7 @@ pub(crate) struct LivelinessTokenState {
 #[zenoh_macros::unstable]
 #[derive(Debug)]
 pub struct LivelinessToken<'a> {
-    session: WeakSessionRef<'a>,
+    session: MaybeWeakSessionRef<'a>,
     state: Arc<LivelinessTokenState>,
     undeclare_on_drop: bool,
 }
@@ -573,19 +574,22 @@ where
         let key_expr = self.key_expr?;
         let session = self.session;
         let (callback, handler) = self.handler.into_handler();
+        let undeclare_on_drop = size_of::<Handler::Handler>() > 0;
         session
             .declare_liveliness_subscriber_inner(&key_expr, Locality::default(), callback)
-            .map(|sub_state| Subscriber {
-                inner: SubscriberInner {
-                    #[cfg(feature = "unstable")]
-                    session_id: session.zid(),
-                    session: session.into(),
-                    state: sub_state,
-                    kind: SubscriberKind::LivelinessSubscriber,
-                    // `size_of::<Handler::Handler>() == 0` means callback-only subscriber
-                    undeclare_on_drop: size_of::<Handler::Handler>() > 0,
-                },
-                handler,
+            .map(|sub_state| {
+                Subscriber {
+                    inner: SubscriberInner {
+                        #[cfg(feature = "unstable")]
+                        session_id: session.zid(),
+                        session: MaybeWeakSessionRef::new(session, !undeclare_on_drop),
+                        state: sub_state,
+                        kind: SubscriberKind::LivelinessSubscriber,
+                        // `size_of::<Handler::Handler>() == 0` means callback-only subscriber
+                        undeclare_on_drop,
+                    },
+                    handler,
+                }
             })
     }
 }

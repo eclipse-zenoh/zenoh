@@ -452,25 +452,26 @@ impl fmt::Debug for SessionRef<'_> {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum WeakSessionRef<'a> {
+pub(crate) enum MaybeWeakSessionRef<'a> {
     Borrow(&'a Session),
-    Shared(Weak<Session>),
+    Arc(Arc<Session>),
+    Weak(Weak<Session>),
 }
 
-impl<'a> WeakSessionRef<'a> {
+impl<'a> MaybeWeakSessionRef<'a> {
+    pub(crate) fn new(session: SessionRef<'a>, downgrade: bool) -> Self {
+        match session {
+            SessionRef::Borrow(s) => Self::Borrow(s),
+            SessionRef::Shared(s) if downgrade => Self::Weak(Arc::downgrade(&s)),
+            SessionRef::Shared(s) => Self::Arc(s),
+        }
+    }
+
     pub(crate) fn upgrade(&self) -> Option<SessionRef<'a>> {
         match self {
             Self::Borrow(s) => Some(SessionRef::Borrow(s)),
-            Self::Shared(s) => s.upgrade().map(SessionRef::Shared),
-        }
-    }
-}
-
-impl<'a> From<SessionRef<'a>> for WeakSessionRef<'a> {
-    fn from(value: SessionRef<'a>) -> Self {
-        match value {
-            SessionRef::Borrow(s) => Self::Borrow(s),
-            SessionRef::Shared(s) => Self::Shared(Arc::downgrade(&s)),
+            Self::Arc(s) => Some(SessionRef::Shared(s.clone())),
+            Self::Weak(s) => s.upgrade().map(SessionRef::Shared),
         }
     }
 }
