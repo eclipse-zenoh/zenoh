@@ -317,6 +317,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
 
 impl<'a, 'b, Handler> SubscriberBuilder<'a, 'b, Handler> {
     /// Change the subscription reliability.
+    #[cfg(feature = "unstable")]
     #[deprecated(
         since = "1.0.0",
         note = "please use `reliability` on `declare_publisher` or `put`"
@@ -327,6 +328,7 @@ impl<'a, 'b, Handler> SubscriberBuilder<'a, 'b, Handler> {
     }
 
     /// Change the subscription reliability to `Reliable`.   
+    #[cfg(feature = "unstable")]
     #[deprecated(
         since = "1.0.0",
         note = "please use `reliability` on `declare_publisher` or `put`"
@@ -337,6 +339,7 @@ impl<'a, 'b, Handler> SubscriberBuilder<'a, 'b, Handler> {
     }
 
     /// Change the subscription reliability to `BestEffort`.
+    #[cfg(feature = "unstable")]
     #[deprecated(
         since = "1.0.0",
         note = "please use `reliability` on `declare_publisher` or `put`"

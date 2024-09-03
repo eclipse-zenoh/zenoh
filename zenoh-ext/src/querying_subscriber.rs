@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use crate::ExtractSample;
 use std::{
     collections::{btree_map, BTreeMap, VecDeque},
     convert::TryInto,
@@ -19,21 +20,20 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-
+#[cfg(feature = "unstable")]
+use zenoh::pubsub::Reliability;
 use zenoh::{
     handlers::{locked, DefaultHandler, IntoHandler},
     internal::zlock,
     key_expr::KeyExpr,
     prelude::Wait,
-    pubsub::{Reliability, Subscriber},
+    pubsub::Subscriber,
     query::{QueryConsolidation, QueryTarget, ReplyKeyExpr, Selector},
     sample::{Locality, Sample, SampleBuilder, TimestampBuilderTrait},
     session::{SessionDeclarations, SessionRef},
     time::Timestamp,
     Error, Resolvable, Resolve, Result as ZResult,
 };
-
-use crate::ExtractSample;
 
 /// The builder of [`FetchingSubscriber`], allowing to configure it.
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
@@ -140,6 +140,7 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
 
 impl<'a, 'b, Handler> QueryingSubscriberBuilder<'a, 'b, crate::UserSpace, Handler> {
     /// Change the subscription reliability.
+    #[cfg(feature = "unstable")]
     #[deprecated(
         since = "1.0.0",
         note = "please use `reliability` on `declare_publisher` or `put`"
@@ -150,6 +151,7 @@ impl<'a, 'b, Handler> QueryingSubscriberBuilder<'a, 'b, crate::UserSpace, Handle
     }
 
     /// Change the subscription reliability to Reliable.
+    #[cfg(feature = "unstable")]
     #[deprecated(
         since = "1.0.0",
         note = "please use `reliability` on `declare_publisher` or `put`"
@@ -160,6 +162,7 @@ impl<'a, 'b, Handler> QueryingSubscriberBuilder<'a, 'b, crate::UserSpace, Handle
     }
 
     /// Change the subscription reliability to BestEffort.
+    #[cfg(feature = "unstable")]
     #[deprecated(
         since = "1.0.0",
         note = "please use `reliability` on `declare_publisher` or `put`"
@@ -503,6 +506,7 @@ where
     TryIntoSample: ExtractSample,
 {
     /// Change the subscription reliability.
+    #[cfg(feature = "unstable")]
     #[deprecated(
         since = "1.0.0",
         note = "please use `reliability` on `declare_publisher` or `put`"
@@ -513,6 +517,7 @@ where
     }
 
     /// Change the subscription reliability to Reliable.
+    #[cfg(feature = "unstable")]
     #[deprecated(
         since = "1.0.0",
         note = "please use `reliability` on `declare_publisher` or `put`"
@@ -523,6 +528,7 @@ where
     }
 
     /// Change the subscription reliability to BestEffort.
+    #[cfg(feature = "unstable")]
     #[deprecated(
         since = "1.0.0",
         note = "please use `reliability` on `declare_publisher` or `put`"
