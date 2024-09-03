@@ -39,7 +39,8 @@ use zenoh_protocol::network::{
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
-        AtomicExprId, CongestionControl, EntityId, ExprId, Parameters, WireExpr, EMPTY_EXPR_ID,
+        AtomicExprId, CongestionControl, EntityId, ExprId, Parameters, Reliability, WireExpr,
+        EMPTY_EXPR_ID,
     },
     network::{
         self,
@@ -101,8 +102,6 @@ use crate::net::{
     routing::dispatcher::face::Face,
     runtime::{Runtime, RuntimeBuilder},
 };
-#[cfg(feature = "unstable")]
-use crate::pubsub::Reliability;
 
 zconfigurable! {
     pub(crate) static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;
