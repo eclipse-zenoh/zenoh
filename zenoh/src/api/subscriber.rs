@@ -484,12 +484,10 @@ impl<Handler> Subscriber<Handler> {
     fn undeclare_impl(&mut self) -> ZResult<()> {
         // set the flag first to avoid double panic if this function panic
         self.inner.undeclare_on_drop = false;
-        match self.inner.session.upgrade() {
-            Some(session) => {
-                session.undeclare_subscriber_inner(self.inner.state.id, self.inner.kind)
-            }
-            None => Ok(()),
-        }
+        let Some(session) = self.inner.session.upgrade() else {
+            return Ok(());
+        };
+        session.undeclare_subscriber_inner(self.inner.state.id, self.inner.kind)
     }
 }
 

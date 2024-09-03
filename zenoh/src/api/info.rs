@@ -156,7 +156,7 @@ impl<'a> IntoFuture for PeersZenohIdBuilder<'a> {
     }
 }
 
-/// Struct returned by [`Session::info()`](crate::session::SessionDeclarations::info) which allows
+/// Struct returned by [`Session::info()`](crate::Session::info) which allows
 /// to access information about the current zenoh [`Session`](crate::Session).
 ///
 /// # Examples

@@ -736,7 +736,7 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 /// A queryable that provides data through a [`Handler`](crate::handlers::IntoHandler).
 ///
 /// Queryables can be created from a zenoh [`Session`](crate::Session)
-/// with the [`declare_queryable`](crate::session::SessionDeclarations::declare_queryable) function
+/// with the [`declare_queryable`](crate::Session::declare_queryable) function
 /// and the [`with`](QueryableBuilder::with) function
 /// of the resulting builder.
 ///
@@ -863,10 +863,10 @@ impl<Handler> Queryable<Handler> {
     fn undeclare_impl(&mut self) -> ZResult<()> {
         // set the flag first to avoid double panic if this function panic
         self.inner.undeclare_on_drop = false;
-        match self.inner.session.upgrade() {
-            Some(session) => session.close_queryable(self.inner.state.id),
-            None => Ok(()),
-        }
+        let Some(session) = self.inner.session.upgrade() else {
+            return Ok(());
+        };
+        session.close_queryable(self.inner.state.id)
     }
 }
 

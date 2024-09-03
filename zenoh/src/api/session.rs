@@ -939,6 +939,7 @@ impl SessionInner {
             Ok(())
         })
     }
+
     pub(crate) fn declare_prefix<'a>(
         &'a self,
         prefix: &'a str,
