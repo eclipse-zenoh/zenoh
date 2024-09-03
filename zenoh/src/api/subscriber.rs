@@ -34,7 +34,7 @@ use crate::api::{
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
     sample::{Locality, Sample},
-    session::{SessionRef, UndeclarableSealed, WeakSessionRef},
+    session::{MaybeWeakSessionRef, SessionRef, UndeclarableSealed},
     Id,
 };
 #[cfg(feature = "unstable")]
@@ -61,7 +61,7 @@ impl fmt::Debug for SubscriberState {
 pub(crate) struct SubscriberInner<'a> {
     #[cfg(feature = "unstable")]
     pub(crate) session_id: ZenohId,
-    pub(crate) session: WeakSessionRef<'a>,
+    pub(crate) session: MaybeWeakSessionRef<'a>,
     pub(crate) state: Arc<SubscriberState>,
     pub(crate) kind: SubscriberKind,
     // Subscriber is undeclared on drop unless its handler is a ZST, i.e. it is callback-only
@@ -316,6 +316,7 @@ where
         let key_expr = self.key_expr?;
         let session = self.session;
         let (callback, receiver) = self.handler.into_handler();
+        let undeclare_on_drop = size_of::<Handler::Handler>() > 0;
         session
             .declare_subscriber_inner(
                 &key_expr,
@@ -328,17 +329,19 @@ where
                 #[cfg(not(feature = "unstable"))]
                 &SubscriberInfo::default(),
             )
-            .map(|sub_state| Subscriber {
-                inner: SubscriberInner {
-                    #[cfg(feature = "unstable")]
-                    session_id: session.zid(),
-                    session: session.into(),
-                    state: sub_state,
-                    kind: SubscriberKind::Subscriber,
-                    // `size_of::<Handler::Handler>() == 0` means callback-only subscriber
-                    undeclare_on_drop: size_of::<Handler::Handler>() > 0,
-                },
-                handler: receiver,
+            .map(|sub_state| {
+                Subscriber {
+                    inner: SubscriberInner {
+                        #[cfg(feature = "unstable")]
+                        session_id: session.zid(),
+                        session: MaybeWeakSessionRef::new(session, !undeclare_on_drop),
+                        state: sub_state,
+                        kind: SubscriberKind::Subscriber,
+                        // `size_of::<Handler::Handler>() == 0` means callback-only subscriber
+                        undeclare_on_drop,
+                    },
+                    handler: receiver,
+                }
             })
     }
 }

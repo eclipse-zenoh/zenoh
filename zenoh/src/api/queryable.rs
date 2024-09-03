@@ -50,7 +50,7 @@ use crate::{
         publisher::Priority,
         sample::{Locality, QoSBuilder, Sample, SampleKind},
         selector::Selector,
-        session::{SessionRef, UndeclarableSealed, WeakSessionRef},
+        session::{MaybeWeakSessionRef, SessionRef, UndeclarableSealed},
         value::Value,
         Id,
     },
@@ -542,7 +542,7 @@ impl fmt::Debug for QueryableState {
 pub(crate) struct QueryableInner<'a> {
     #[cfg(feature = "unstable")]
     pub(crate) session_id: ZenohId,
-    pub(crate) session: WeakSessionRef<'a>,
+    pub(crate) session: MaybeWeakSessionRef<'a>,
     pub(crate) state: Arc<QueryableState>,
     // Queryable is undeclared on drop unless its handler is a ZST, i.e. it is callback-only
     pub(crate) undeclare_on_drop: bool,
@@ -917,6 +917,7 @@ where
     fn wait(self) -> <Self as Resolvable>::To {
         let session = self.session;
         let (callback, receiver) = self.handler.into_handler();
+        let undeclare_on_drop = size_of::<Handler::Handler>() > 0;
         session
             .declare_queryable_inner(
                 &self.key_expr?.to_wire(&session),
@@ -924,16 +925,18 @@ where
                 self.origin,
                 callback,
             )
-            .map(|qable_state| Queryable {
-                inner: QueryableInner {
-                    #[cfg(feature = "unstable")]
-                    session_id: session.zid(),
-                    session: session.into(),
-                    state: qable_state,
-                    // `size_of::<Handler::Handler>() == 0` means callback-only queryable
-                    undeclare_on_drop: size_of::<Handler::Handler>() > 0,
-                },
-                handler: receiver,
+            .map(|qable_state| {
+                Queryable {
+                    inner: QueryableInner {
+                        #[cfg(feature = "unstable")]
+                        session_id: session.zid(),
+                        session: MaybeWeakSessionRef::new(session, !undeclare_on_drop),
+                        state: qable_state,
+                        // `size_of::<Handler::Handler>() == 0` means callback-only queryable
+                        undeclare_on_drop,
+                    },
+                    handler: receiver,
+                }
             })
     }
 }
