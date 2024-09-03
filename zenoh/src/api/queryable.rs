@@ -16,7 +16,7 @@ use std::{
     future::{IntoFuture, Ready},
     mem::size_of,
     ops::{Deref, DerefMut},
-    sync::Arc,
+    sync::{Arc, Weak},
 };
 
 use tracing::error;
@@ -50,11 +50,12 @@ use crate::{
         publisher::Priority,
         sample::{Locality, QoSBuilder, Sample, SampleKind},
         selector::Selector,
-        session::{MaybeWeakSessionRef, SessionRef, UndeclarableSealed},
+        session::{SessionInner, UndeclarableSealed},
         value::Value,
         Id,
     },
     net::primitives::Primitives,
+    Session,
 };
 
 pub(crate) struct QueryInner {
@@ -539,10 +540,10 @@ impl fmt::Debug for QueryableState {
 }
 
 #[derive(Debug)]
-pub(crate) struct QueryableInner<'a> {
+pub(crate) struct QueryableInner {
     #[cfg(feature = "unstable")]
     pub(crate) session_id: ZenohId,
-    pub(crate) session: MaybeWeakSessionRef<'a>,
+    pub(crate) session: Weak<SessionInner>,
     pub(crate) state: Arc<QueryableState>,
     // Queryable is undeclared on drop unless its handler is a ZST, i.e. it is callback-only
     pub(crate) undeclare_on_drop: bool,
@@ -562,19 +563,19 @@ pub(crate) struct QueryableInner<'a> {
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-pub struct QueryableUndeclaration<'a, Handler>(Queryable<'a, Handler>);
+pub struct QueryableUndeclaration<Handler>(Queryable<Handler>);
 
-impl<Handler> Resolvable for QueryableUndeclaration<'_, Handler> {
+impl<Handler> Resolvable for QueryableUndeclaration<Handler> {
     type To = ZResult<()>;
 }
 
-impl<Handler> Wait for QueryableUndeclaration<'_, Handler> {
+impl<Handler> Wait for QueryableUndeclaration<Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.0.undeclare_impl()
     }
 }
 
-impl<Handler> IntoFuture for QueryableUndeclaration<'_, Handler> {
+impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
@@ -598,7 +599,7 @@ impl<Handler> IntoFuture for QueryableUndeclaration<'_, Handler> {
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
 pub struct QueryableBuilder<'a, 'b, Handler> {
-    pub(crate) session: SessionRef<'a>,
+    pub(crate) session: &'a Session,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) complete: bool,
     pub(crate) origin: Locality,
@@ -792,12 +793,12 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 /// ```
 #[non_exhaustive]
 #[derive(Debug)]
-pub struct Queryable<'a, Handler> {
-    pub(crate) inner: QueryableInner<'a>,
+pub struct Queryable<Handler> {
+    pub(crate) inner: QueryableInner,
     pub(crate) handler: Handler,
 }
 
-impl<'a, Handler> Queryable<'a, Handler> {
+impl<Handler> Queryable<Handler> {
     /// Returns the [`EntityGlobalId`] of this Queryable.
     ///
     /// # Examples
@@ -852,9 +853,9 @@ impl<'a, Handler> Queryable<'a, Handler> {
     /// # }
     /// ```
     #[inline]
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a
+    pub fn undeclare(self) -> impl Resolve<ZResult<()>>
     where
-        Handler: Send + 'a,
+        Handler: Send,
     {
         UndeclarableSealed::undeclare_inner(self, ())
     }
@@ -869,7 +870,7 @@ impl<'a, Handler> Queryable<'a, Handler> {
     }
 }
 
-impl<Handler> Drop for Queryable<'_, Handler> {
+impl<Handler> Drop for Queryable<Handler> {
     fn drop(&mut self) {
         if self.inner.undeclare_on_drop {
             if let Err(error) = self.undeclare_impl() {
@@ -879,15 +880,15 @@ impl<Handler> Drop for Queryable<'_, Handler> {
     }
 }
 
-impl<'a, Handler: Send + 'a> UndeclarableSealed<()> for Queryable<'a, Handler> {
-    type Undeclaration = QueryableUndeclaration<'a, Handler>;
+impl<Handler: Send> UndeclarableSealed<()> for Queryable<Handler> {
+    type Undeclaration = QueryableUndeclaration<Handler>;
 
     fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
         QueryableUndeclaration(self)
     }
 }
 
-impl<Handler> Deref for Queryable<'_, Handler> {
+impl<Handler> Deref for Queryable<Handler> {
     type Target = Handler;
 
     fn deref(&self) -> &Self::Target {
@@ -895,21 +896,21 @@ impl<Handler> Deref for Queryable<'_, Handler> {
     }
 }
 
-impl<Handler> DerefMut for Queryable<'_, Handler> {
+impl<Handler> DerefMut for Queryable<Handler> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.handler_mut()
     }
 }
 
-impl<'a, Handler> Resolvable for QueryableBuilder<'a, '_, Handler>
+impl<Handler> Resolvable for QueryableBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, Query> + Send,
     Handler::Handler: Send,
 {
-    type To = ZResult<Queryable<'a, Handler::Handler>>;
+    type To = ZResult<Queryable<Handler::Handler>>;
 }
 
-impl<'a, Handler> Wait for QueryableBuilder<'a, '_, Handler>
+impl<Handler> Wait for QueryableBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, Query> + Send,
     Handler::Handler: Send,
@@ -917,31 +918,29 @@ where
     fn wait(self) -> <Self as Resolvable>::To {
         let session = self.session;
         let (callback, receiver) = self.handler.into_handler();
-        let undeclare_on_drop = size_of::<Handler::Handler>() > 0;
         session
+            .0
             .declare_queryable_inner(
-                &self.key_expr?.to_wire(&session),
+                &self.key_expr?.to_wire(&session.0),
                 self.complete,
                 self.origin,
                 callback,
             )
-            .map(|qable_state| {
-                Queryable {
-                    inner: QueryableInner {
-                        #[cfg(feature = "unstable")]
-                        session_id: session.zid(),
-                        session: MaybeWeakSessionRef::new(session, !undeclare_on_drop),
-                        state: qable_state,
-                        // `size_of::<Handler::Handler>() == 0` means callback-only queryable
-                        undeclare_on_drop,
-                    },
-                    handler: receiver,
-                }
+            .map(|qable_state| Queryable {
+                inner: QueryableInner {
+                    #[cfg(feature = "unstable")]
+                    session_id: session.zid(),
+                    session: Arc::downgrade(&self.session.0),
+                    state: qable_state,
+                    // `size_of::<Handler::Handler>() == 0` means callback-only queryable
+                    undeclare_on_drop: size_of::<Handler::Handler>() > 0,
+                },
+                handler: receiver,
             })
     }
 }
 
-impl<'a, Handler> IntoFuture for QueryableBuilder<'a, '_, Handler>
+impl<Handler> IntoFuture for QueryableBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, Query> + Send,
     Handler::Handler: Send,

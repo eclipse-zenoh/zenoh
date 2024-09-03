@@ -32,7 +32,7 @@ pub trait SubscriberForward<'a, S> {
     type Output;
     fn forward(&'a mut self, sink: S) -> Self::Output;
 }
-impl<'a, S> SubscriberForward<'a, S> for Subscriber<'_, flume::Receiver<Sample>>
+impl<'a, S> SubscriberForward<'a, S> for Subscriber<flume::Receiver<Sample>>
 where
     S: futures::sink::Sink<Sample>,
 {

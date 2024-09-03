@@ -18,7 +18,6 @@ use zenoh::{
     config::Config,
     key_expr::keyexpr,
     qos::{CongestionControl, QoSBuilderTrait},
-    session::SessionDeclarations,
 };
 
 const HTML: &str = r#"

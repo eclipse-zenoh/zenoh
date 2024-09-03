@@ -17,7 +17,7 @@ use std::{
     future::{IntoFuture, Ready},
     mem::size_of,
     ops::{Deref, DerefMut},
-    sync::Arc,
+    sync::{Arc, Weak},
 };
 
 use tracing::error;
@@ -30,15 +30,18 @@ use {
     zenoh_protocol::core::EntityGlobalIdProto,
 };
 
-use crate::api::{
-    handlers::{locked, Callback, DefaultHandler, IntoHandler},
-    key_expr::KeyExpr,
-    sample::{Locality, Sample},
-    session::{MaybeWeakSessionRef, SessionRef, UndeclarableSealed},
-    Id,
-};
 #[cfg(feature = "unstable")]
 use crate::pubsub::Reliability;
+use crate::{
+    api::{
+        handlers::{locked, Callback, DefaultHandler, IntoHandler},
+        key_expr::KeyExpr,
+        sample::{Locality, Sample},
+        session::{SessionInner, UndeclarableSealed},
+        Id,
+    },
+    Session,
+};
 
 pub(crate) struct SubscriberState {
     pub(crate) id: Id,
@@ -58,10 +61,10 @@ impl fmt::Debug for SubscriberState {
 }
 
 #[derive(Debug)]
-pub(crate) struct SubscriberInner<'a> {
+pub(crate) struct SubscriberInner {
     #[cfg(feature = "unstable")]
     pub(crate) session_id: ZenohId,
-    pub(crate) session: MaybeWeakSessionRef<'a>,
+    pub(crate) session: Weak<SessionInner>,
     pub(crate) state: Arc<SubscriberState>,
     pub(crate) kind: SubscriberKind,
     // Subscriber is undeclared on drop unless its handler is a ZST, i.e. it is callback-only
@@ -85,19 +88,19 @@ pub(crate) struct SubscriberInner<'a> {
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-pub struct SubscriberUndeclaration<'a, Handler>(Subscriber<'a, Handler>);
+pub struct SubscriberUndeclaration<Handler>(Subscriber<Handler>);
 
-impl<Handler> Resolvable for SubscriberUndeclaration<'_, Handler> {
+impl<Handler> Resolvable for SubscriberUndeclaration<Handler> {
     type To = ZResult<()>;
 }
 
-impl<Handler> Wait for SubscriberUndeclaration<'_, Handler> {
+impl<Handler> Wait for SubscriberUndeclaration<Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.0.undeclare_impl()
     }
 }
 
-impl<Handler> IntoFuture for SubscriberUndeclaration<'_, Handler> {
+impl<Handler> IntoFuture for SubscriberUndeclaration<Handler> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
@@ -126,9 +129,9 @@ impl<Handler> IntoFuture for SubscriberUndeclaration<'_, Handler> {
 #[derive(Debug)]
 pub struct SubscriberBuilder<'a, 'b, Handler> {
     #[cfg(feature = "unstable")]
-    pub session: SessionRef<'a>,
+    pub session: &'a Session,
     #[cfg(not(feature = "unstable"))]
-    pub(crate) session: SessionRef<'a>,
+    pub(crate) session: &'a Session,
 
     #[cfg(feature = "unstable")]
     pub key_expr: ZResult<KeyExpr<'b>>,
@@ -304,7 +307,7 @@ where
     Handler: IntoHandler<'static, Sample> + Send,
     Handler::Handler: Send,
 {
-    type To = ZResult<Subscriber<'a, Handler::Handler>>;
+    type To = ZResult<Subscriber<Handler::Handler>>;
 }
 
 impl<'a, Handler> Wait for SubscriberBuilder<'a, '_, Handler>
@@ -316,8 +319,8 @@ where
         let key_expr = self.key_expr?;
         let session = self.session;
         let (callback, receiver) = self.handler.into_handler();
-        let undeclare_on_drop = size_of::<Handler::Handler>() > 0;
         session
+            .0
             .declare_subscriber_inner(
                 &key_expr,
                 self.origin,
@@ -329,19 +332,17 @@ where
                 #[cfg(not(feature = "unstable"))]
                 &SubscriberInfo::default(),
             )
-            .map(|sub_state| {
-                Subscriber {
-                    inner: SubscriberInner {
-                        #[cfg(feature = "unstable")]
-                        session_id: session.zid(),
-                        session: MaybeWeakSessionRef::new(session, !undeclare_on_drop),
-                        state: sub_state,
-                        kind: SubscriberKind::Subscriber,
-                        // `size_of::<Handler::Handler>() == 0` means callback-only subscriber
-                        undeclare_on_drop,
-                    },
-                    handler: receiver,
-                }
+            .map(|sub_state| Subscriber {
+                inner: SubscriberInner {
+                    #[cfg(feature = "unstable")]
+                    session_id: session.zid(),
+                    session: Arc::downgrade(&session.0),
+                    state: sub_state,
+                    kind: SubscriberKind::Subscriber,
+                    // `size_of::<Handler::Handler>() == 0` means callback-only subscriber
+                    undeclare_on_drop: size_of::<Handler::Handler>() > 0,
+                },
+                handler: receiver,
             })
     }
 }
@@ -408,12 +409,12 @@ where
 /// ```
 #[non_exhaustive]
 #[derive(Debug)]
-pub struct Subscriber<'a, Handler> {
-    pub(crate) inner: SubscriberInner<'a>,
+pub struct Subscriber<Handler> {
+    pub(crate) inner: SubscriberInner,
     pub(crate) handler: Handler,
 }
 
-impl<'a, Handler> Subscriber<'a, Handler> {
+impl<Handler> Subscriber<Handler> {
     /// Returns the [`EntityGlobalId`] of this Subscriber.
     ///
     /// # Examples
@@ -473,9 +474,9 @@ impl<'a, Handler> Subscriber<'a, Handler> {
     /// # }
     /// ```
     #[inline]
-    pub fn undeclare(self) -> SubscriberUndeclaration<'a, Handler>
+    pub fn undeclare(self) -> SubscriberUndeclaration<Handler>
     where
-        Handler: Send + 'a,
+        Handler: Send,
     {
         self.undeclare_inner(())
     }
@@ -492,7 +493,7 @@ impl<'a, Handler> Subscriber<'a, Handler> {
     }
 }
 
-impl<Handler> Drop for Subscriber<'_, Handler> {
+impl<Handler> Drop for Subscriber<Handler> {
     fn drop(&mut self) {
         if self.inner.undeclare_on_drop {
             if let Err(error) = self.undeclare_impl() {
@@ -502,29 +503,29 @@ impl<Handler> Drop for Subscriber<'_, Handler> {
     }
 }
 
-impl<'a, Handler: Send + 'a> UndeclarableSealed<()> for Subscriber<'a, Handler> {
-    type Undeclaration = SubscriberUndeclaration<'a, Handler>;
+impl<'a, Handler: Send + 'a> UndeclarableSealed<()> for Subscriber<Handler> {
+    type Undeclaration = SubscriberUndeclaration<Handler>;
 
     fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
         SubscriberUndeclaration(self)
     }
 }
 
-impl<Handler> Deref for Subscriber<'_, Handler> {
+impl<Handler> Deref for Subscriber<Handler> {
     type Target = Handler;
 
     fn deref(&self) -> &Self::Target {
         self.handler()
     }
 }
-impl<Handler> DerefMut for Subscriber<'_, Handler> {
+impl<Handler> DerefMut for Subscriber<Handler> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.handler_mut()
     }
 }
 
 /// A [`Subscriber`] that provides data through a `flume` channel.
-pub type FlumeSubscriber<'a> = Subscriber<'a, flume::Receiver<Sample>>;
+pub type FlumeSubscriber = Subscriber<flume::Receiver<Sample>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SubscriberKind {

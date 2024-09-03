@@ -191,15 +191,13 @@ pub mod session {
     pub use zenoh_config::wrappers::{EntityGlobalId, ZenohId};
     pub use zenoh_protocol::core::EntityId;
 
-    #[zenoh_macros::unstable]
-    pub use crate::api::session::SessionRef;
     #[zenoh_macros::internal]
     pub use crate::api::session::{init, InitBuilder};
     pub use crate::api::{
         builders::publisher::{SessionDeleteBuilder, SessionPutBuilder},
         info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, SessionInfo, ZenohIdBuilder},
         query::SessionGetBuilder,
-        session::{open, OpenBuilder, Session, SessionDeclarations, Undeclarable},
+        session::{open, OpenBuilder, Session, Undeclarable},
     };
 }
 
@@ -238,7 +236,6 @@ pub mod pubsub {
     #[zenoh_macros::unstable]
     pub use crate::api::publisher::{
         MatchingListener, MatchingListenerBuilder, MatchingListenerUndeclaration, MatchingStatus,
-        PublisherDeclarations, PublisherRef,
     };
     pub use crate::api::{
         builders::publisher::{

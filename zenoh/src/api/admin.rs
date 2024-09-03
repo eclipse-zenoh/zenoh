@@ -14,7 +14,7 @@
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
-    sync::Arc,
+    sync::{Arc, Weak},
 };
 
 use zenoh_core::{Result as ZResult, Wait};
@@ -32,9 +32,9 @@ use super::{
     key_expr::KeyExpr,
     queryable::Query,
     sample::{DataInfo, Locality, SampleKind},
-    session::Session,
     subscriber::SubscriberKind,
 };
+use crate::api::session::SessionInner;
 
 lazy_static::lazy_static!(
     static ref KE_STARSTAR: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("**") };
@@ -44,8 +44,8 @@ lazy_static::lazy_static!(
     static ref KE_LINK: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("link") };
 );
 
-pub(crate) fn init(session: &Session) {
-    if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
+pub(crate) fn init(session: &Arc<SessionInner>) {
+    if let Ok(own_zid) = keyexpr::new(&session.runtime.zid().to_string()) {
         let admin_key = KeyExpr::from(*KE_PREFIX / own_zid / *KE_SESSION / *KE_STARSTAR)
             .to_wire(session)
             .to_owned();
@@ -55,14 +55,18 @@ pub(crate) fn init(session: &Session) {
             true,
             Locality::SessionLocal,
             Arc::new({
-                let session = session.clone();
-                move |q| super::admin::on_admin_query(&session, q)
+                let session = Arc::downgrade(session);
+                move |q| {
+                    if let Some(session) = Weak::upgrade(&session) {
+                        on_admin_query(&session, q)
+                    }
+                }
             }),
         );
     }
 }
 
-pub(crate) fn on_admin_query(session: &Session, query: Query) {
+pub(crate) fn on_admin_query(session: &SessionInner, query: Query) {
     fn reply_peer(own_zid: &keyexpr, query: &Query, peer: TransportPeer) {
         let zid = peer.zid.to_string();
         if let Ok(zid) = keyexpr::new(&zid) {
@@ -104,7 +108,7 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
         }
     }
 
-    if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
+    if let Ok(own_zid) = keyexpr::new(&session.runtime.zid().to_string()) {
         for transport in zenoh_runtime::ZRuntime::Net
             .block_in_place(session.runtime.manager().get_transports_unicast())
         {
@@ -124,14 +128,12 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
 
 #[derive(Clone)]
 pub(crate) struct Handler {
-    pub(crate) session: Arc<Session>,
+    pub(crate) session: Weak<SessionInner>,
 }
 
 impl Handler {
-    pub(crate) fn new(session: Session) -> Self {
-        Self {
-            session: Arc::new(session),
-        }
+    pub(crate) fn new(session: Weak<SessionInner>) -> Self {
+        Self { session }
     }
 }
 
@@ -157,7 +159,10 @@ impl TransportMulticastEventHandler for Handler {
         &self,
         peer: zenoh_transport::TransportPeer,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        if let Ok(own_zid) = keyexpr::new(&self.session.zid().to_string()) {
+        let Some(session) = Weak::upgrade(&self.session) else {
+            bail!("session closed");
+        };
+        if let Ok(own_zid) = keyexpr::new(&session.runtime.zid().to_string()) {
             if let Ok(zid) = keyexpr::new(&peer.zid.to_string()) {
                 let expr = WireExpr::from(
                     &(*KE_PREFIX / own_zid / *KE_SESSION / *KE_TRANSPORT_UNICAST / zid),
@@ -167,7 +172,7 @@ impl TransportMulticastEventHandler for Handler {
                     encoding: Some(Encoding::APPLICATION_JSON),
                     ..Default::default()
                 };
-                self.session.execute_subscriber_callbacks(
+                session.execute_subscriber_callbacks(
                     true,
                     &expr,
                     Some(info),
@@ -200,7 +205,7 @@ impl TransportMulticastEventHandler for Handler {
 
 pub(crate) struct PeerHandler {
     pub(crate) expr: WireExpr<'static>,
-    pub(crate) session: Arc<Session>,
+    pub(crate) session: Weak<SessionInner>,
 }
 
 impl TransportPeerEventHandler for PeerHandler {
@@ -209,13 +214,16 @@ impl TransportPeerEventHandler for PeerHandler {
     }
 
     fn new_link(&self, link: zenoh_link::Link) {
+        let Some(session) = Weak::upgrade(&self.session) else {
+            return;
+        };
         let mut s = DefaultHasher::new();
         link.hash(&mut s);
         let info = DataInfo {
             encoding: Some(Encoding::APPLICATION_JSON),
             ..Default::default()
         };
-        self.session.execute_subscriber_callbacks(
+        session.execute_subscriber_callbacks(
             true,
             &self
                 .expr
@@ -231,13 +239,16 @@ impl TransportPeerEventHandler for PeerHandler {
     }
 
     fn del_link(&self, link: zenoh_link::Link) {
+        let Some(session) = Weak::upgrade(&self.session) else {
+            return;
+        };
         let mut s = DefaultHasher::new();
         link.hash(&mut s);
         let info = DataInfo {
             kind: SampleKind::Delete,
             ..Default::default()
         };
-        self.session.execute_subscriber_callbacks(
+        session.execute_subscriber_callbacks(
             true,
             &self
                 .expr
@@ -255,11 +266,14 @@ impl TransportPeerEventHandler for PeerHandler {
     fn closing(&self) {}
 
     fn closed(&self) {
+        let Some(session) = Weak::upgrade(&self.session) else {
+            return;
+        };
         let info = DataInfo {
             kind: SampleKind::Delete,
             ..Default::default()
         };
-        self.session.execute_subscriber_callbacks(
+        session.execute_subscriber_callbacks(
             true,
             &self.expr,
             Some(info),

@@ -17,6 +17,7 @@ use std::{
     fmt,
     future::{IntoFuture, Ready},
     pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
 };
 
@@ -35,10 +36,7 @@ use {
         handlers::{Callback, DefaultHandler, IntoHandler},
         sample::SourceInfo,
     },
-    std::{
-        collections::HashSet,
-        sync::{Arc, Mutex},
-    },
+    std::{collections::HashSet, sync::Mutex},
     zenoh_config::wrappers::EntityGlobalId,
     zenoh_protocol::core::EntityGlobalIdProto,
 };
@@ -52,10 +50,10 @@ use super::{
     encoding::Encoding,
     key_expr::KeyExpr,
     sample::{DataInfo, Locality, QoS, Sample, SampleFields, SampleKind},
-    session::{SessionRef, UndeclarableSealed},
+    session::UndeclarableSealed,
 };
 use crate::{
-    api::{subscriber::SubscriberKind, Id},
+    api::{session::SessionInner, subscriber::SubscriberKind, Id},
     net::primitives::Primitives,
 };
 
@@ -75,35 +73,6 @@ impl fmt::Debug for PublisherState {
     }
 }
 
-#[zenoh_macros::unstable]
-#[derive(Clone)]
-pub enum PublisherRef<'a> {
-    Borrow(&'a Publisher<'a>),
-    Shared(Arc<Publisher<'static>>),
-}
-
-#[zenoh_macros::unstable]
-impl<'a> std::ops::Deref for PublisherRef<'a> {
-    type Target = Publisher<'a>;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            PublisherRef::Borrow(b) => b,
-            PublisherRef::Shared(s) => s,
-        }
-    }
-}
-
-#[zenoh_macros::unstable]
-impl std::fmt::Debug for PublisherRef<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PublisherRef::Borrow(b) => Publisher::fmt(b, f),
-            PublisherRef::Shared(s) => Publisher::fmt(s, f),
-        }
-    }
-}
-
 /// A publisher that allows to send data through a stream.
 ///
 /// Publishers are automatically undeclared when dropped.
@@ -114,7 +83,7 @@ impl std::fmt::Debug for PublisherRef<'_> {
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let publisher = session.declare_publisher("key/expression").await.unwrap();
 /// publisher.put("value").await.unwrap();
 /// # }
@@ -129,7 +98,7 @@ impl std::fmt::Debug for PublisherRef<'_> {
 /// use futures::StreamExt;
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let mut subscriber = session.declare_subscriber("key/expression").await.unwrap();
 /// let publisher = session.declare_publisher("another/key/expression").await.unwrap();
 /// subscriber.stream().map(Ok).forward(publisher).await.unwrap();
@@ -137,7 +106,7 @@ impl std::fmt::Debug for PublisherRef<'_> {
 /// ```
 #[derive(Debug, Clone)]
 pub struct Publisher<'a> {
-    pub(crate) session: SessionRef<'a>,
+    pub(crate) session: Arc<SessionInner>,
     pub(crate) id: Id,
     pub(crate) key_expr: KeyExpr<'a>,
     pub(crate) encoding: Encoding,
@@ -171,7 +140,7 @@ impl<'a> Publisher<'a> {
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
         EntityGlobalIdProto {
-            zid: self.session.zid().into(),
+            zid: self.session.runtime.zid().into(),
             eid: self.id,
         }
         .into()
@@ -200,42 +169,6 @@ impl<'a> Publisher<'a> {
         self.priority
     }
 
-    /// Consumes the given `Publisher`, returning a thread-safe reference-counting
-    /// pointer to it (`Arc<Publisher>`). This is equivalent to `Arc::new(Publisher)`.
-    ///
-    /// This is useful to share ownership of the `Publisher` between several threads
-    /// and tasks. It also allows to create [`MatchingListener`] with static
-    /// lifetime that can be moved to several threads and tasks.
-    ///
-    /// Note: the given zenoh `Publisher` will be undeclared when the last reference to
-    /// it is dropped.
-    ///
-    /// # Examples
-    /// ```no_run
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
-    /// let publisher = session.declare_publisher("key/expression").await.unwrap().into_arc();
-    /// let matching_listener = publisher.matching_listener().await.unwrap();
-    ///
-    /// tokio::task::spawn(async move {
-    ///     while let Ok(matching_status) = matching_listener.recv_async().await {
-    ///         if matching_status.matching_subscribers() {
-    ///             println!("Publisher has matching subscribers.");
-    ///         } else {
-    ///             println!("Publisher has NO MORE matching subscribers.");
-    ///         }
-    ///     }
-    /// }).await;
-    /// # }
-    /// ```
-    #[zenoh_macros::unstable]
-    pub fn into_arc(self) -> std::sync::Arc<Self> {
-        std::sync::Arc::new(self)
-    }
-
     /// Put data.
     ///
     /// # Examples
@@ -244,7 +177,7 @@ impl<'a> Publisher<'a> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
     /// publisher.put("value").await.unwrap();
     /// # }
@@ -275,7 +208,7 @@ impl<'a> Publisher<'a> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
     /// publisher.delete().await.unwrap();
     /// # }
@@ -302,7 +235,7 @@ impl<'a> Publisher<'a> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
     /// let matching_subscribers: bool = publisher
     ///     .matching_status()
@@ -343,9 +276,9 @@ impl<'a> Publisher<'a> {
     /// # }
     /// ```
     #[zenoh_macros::unstable]
-    pub fn matching_listener(&self) -> MatchingListenerBuilder<'_, DefaultHandler> {
+    pub fn matching_listener(&self) -> MatchingListenerBuilder<'_, 'a, DefaultHandler> {
         MatchingListenerBuilder {
-            publisher: PublisherRef::Borrow(self),
+            publisher: self,
             handler: DefaultHandler::default(),
         }
     }
@@ -378,94 +311,6 @@ impl<'a> Publisher<'a> {
             }
         }
         self.session.undeclare_publisher_inner(self.id)
-    }
-}
-
-/// Functions to create zenoh entities with `'static` lifetime.
-///
-/// This trait contains functions to create zenoh entities like
-/// [`MatchingListener`] with a `'static` lifetime.
-/// This is useful to move zenoh entities to several threads and tasks.
-///
-/// This trait is implemented for `Arc<Publisher>`.
-///
-/// # Examples
-/// ```no_run
-/// # #[tokio::main]
-/// # async fn main() {
-/// use zenoh::prelude::*;
-///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
-/// let publisher = session.declare_publisher("key/expression").await.unwrap().into_arc();
-/// let matching_listener = publisher.matching_listener().await.unwrap();
-///
-/// tokio::task::spawn(async move {
-///     while let Ok(matching_status) = matching_listener.recv_async().await {
-///         if matching_status.matching_subscribers() {
-///             println!("Publisher has matching subscribers.");
-///         } else {
-///             println!("Publisher has NO MORE matching subscribers.");
-///         }
-///     }
-/// }).await;
-/// # }
-/// ```
-#[zenoh_macros::unstable]
-pub trait PublisherDeclarations {
-    /// # Examples
-    /// ```no_run
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
-    /// let publisher = session.declare_publisher("key/expression").await.unwrap().into_arc();
-    /// let matching_listener = publisher.matching_listener().await.unwrap();
-    ///
-    /// tokio::task::spawn(async move {
-    ///     while let Ok(matching_status) = matching_listener.recv_async().await {
-    ///         if matching_status.matching_subscribers() {
-    ///             println!("Publisher has matching subscribers.");
-    ///         } else {
-    ///             println!("Publisher has NO MORE matching subscribers.");
-    ///         }
-    ///     }
-    /// }).await;
-    /// # }
-    /// ```
-    #[zenoh_macros::unstable]
-    fn matching_listener(&self) -> MatchingListenerBuilder<'static, DefaultHandler>;
-}
-
-#[zenoh_macros::unstable]
-impl PublisherDeclarations for std::sync::Arc<Publisher<'static>> {
-    /// # Examples
-    /// ```no_run
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
-    /// let publisher = session.declare_publisher("key/expression").await.unwrap().into_arc();
-    /// let matching_listener = publisher.matching_listener().await.unwrap();
-    ///
-    /// tokio::task::spawn(async move {
-    ///     while let Ok(matching_status) = matching_listener.recv_async().await {
-    ///         if matching_status.matching_subscribers() {
-    ///             println!("Publisher has matching subscribers.");
-    ///         } else {
-    ///             println!("Publisher has NO MORE matching subscribers.");
-    ///         }
-    ///     }
-    /// }).await;
-    /// # }
-    /// ```
-    #[zenoh_macros::unstable]
-    fn matching_listener(&self) -> MatchingListenerBuilder<'static, DefaultHandler> {
-        MatchingListenerBuilder {
-            publisher: PublisherRef::Shared(self.clone()),
-            handler: DefaultHandler::default(),
-        }
     }
 }
 
@@ -753,7 +598,7 @@ impl TryFrom<ProtocolPriority> for Priority {
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let publisher = session.declare_publisher("key/expression").await.unwrap();
 /// let matching_status = publisher.matching_status().await.unwrap();
 /// # }
@@ -774,7 +619,7 @@ impl MatchingStatus {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
     /// let matching_subscribers: bool = publisher
     ///     .matching_status()
@@ -791,13 +636,13 @@ impl MatchingStatus {
 /// A builder for initializing a [`MatchingListener`].
 #[zenoh_macros::unstable]
 #[derive(Debug)]
-pub struct MatchingListenerBuilder<'a, Handler> {
-    pub(crate) publisher: PublisherRef<'a>,
+pub struct MatchingListenerBuilder<'a, 'b, Handler> {
+    pub(crate) publisher: &'a Publisher<'b>,
     pub handler: Handler,
 }
 
 #[zenoh_macros::unstable]
-impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
+impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
     /// Receive the MatchingStatuses for this listener with a callback.
     ///
     /// # Examples
@@ -823,7 +668,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
-    pub fn callback<Callback>(self, callback: Callback) -> MatchingListenerBuilder<'a, Callback>
+    pub fn callback<Callback>(self, callback: Callback) -> MatchingListenerBuilder<'a, 'b, Callback>
     where
         Callback: Fn(MatchingStatus) + Send + Sync + 'static,
     {
@@ -860,7 +705,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     pub fn callback_mut<CallbackMut>(
         self,
         callback: CallbackMut,
-    ) -> MatchingListenerBuilder<'a, impl Fn(MatchingStatus) + Send + Sync + 'static>
+    ) -> MatchingListenerBuilder<'a, 'b, impl Fn(MatchingStatus) + Send + Sync + 'static>
     where
         CallbackMut: FnMut(MatchingStatus) + Send + Sync + 'static,
     {
@@ -893,7 +738,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
-    pub fn with<Handler>(self, handler: Handler) -> MatchingListenerBuilder<'a, Handler>
+    pub fn with<Handler>(self, handler: Handler) -> MatchingListenerBuilder<'a, 'b, Handler>
     where
         Handler: IntoHandler<'static, MatchingStatus>,
     {
@@ -906,7 +751,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
 }
 
 #[zenoh_macros::unstable]
-impl<'a, Handler> Resolvable for MatchingListenerBuilder<'a, Handler>
+impl<'a, 'b, Handler> Resolvable for MatchingListenerBuilder<'a, 'b, Handler>
 where
     Handler: IntoHandler<'static, MatchingStatus> + Send,
     Handler::Handler: Send,
@@ -915,7 +760,7 @@ where
 }
 
 #[zenoh_macros::unstable]
-impl<'a, Handler> Wait for MatchingListenerBuilder<'a, Handler>
+impl<'a, 'b, Handler> Wait for MatchingListenerBuilder<'a, 'b, Handler>
 where
     Handler: IntoHandler<'static, MatchingStatus> + Send,
     Handler::Handler: Send,
@@ -926,11 +771,11 @@ where
         let state = self
             .publisher
             .session
-            .declare_matches_listener_inner(&self.publisher, callback)?;
+            .declare_matches_listener_inner(self.publisher, callback)?;
         zlock!(self.publisher.matching_listeners).insert(state.id);
         Ok(MatchingListener {
             listener: MatchingListenerInner {
-                publisher: self.publisher,
+                publisher: self.publisher.clone(),
                 state,
             },
             receiver,
@@ -939,7 +784,7 @@ where
 }
 
 #[zenoh_macros::unstable]
-impl<'a, Handler> IntoFuture for MatchingListenerBuilder<'a, Handler>
+impl<'a, 'b, Handler> IntoFuture for MatchingListenerBuilder<'a, 'b, Handler>
 where
     Handler: IntoHandler<'static, MatchingStatus> + Send,
     Handler::Handler: Send,
@@ -963,8 +808,8 @@ pub(crate) struct MatchingListenerState {
 }
 
 #[zenoh_macros::unstable]
-impl std::fmt::Debug for MatchingListenerState {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Debug for MatchingListenerState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("MatchingListener")
             .field("id", &self.id)
             .field("key_expr", &self.key_expr)
@@ -974,7 +819,7 @@ impl std::fmt::Debug for MatchingListenerState {
 
 #[zenoh_macros::unstable]
 pub(crate) struct MatchingListenerInner<'a> {
-    pub(crate) publisher: PublisherRef<'a>,
+    pub(crate) publisher: Publisher<'a>,
     pub(crate) state: Arc<MatchingListenerState>,
 }
 
@@ -1107,7 +952,7 @@ mod tests {
     use zenoh_config::Config;
     use zenoh_core::Wait;
 
-    use crate::api::{sample::SampleKind, session::SessionDeclarations};
+    use crate::api::sample::SampleKind;
 
     #[cfg(feature = "internal")]
     #[test]

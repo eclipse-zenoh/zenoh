@@ -47,7 +47,7 @@ use zenoh::{
     prelude::*,
     query::{Parameters, QueryConsolidation, Reply, Selector, ZenohParameters},
     sample::{Sample, SampleKind},
-    session::{Session, SessionDeclarations},
+    session::Session,
 };
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 

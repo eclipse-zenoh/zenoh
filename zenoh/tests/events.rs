@@ -52,7 +52,6 @@ async fn close_session(session: Session) {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_events() {
-    use zenoh::prelude::SessionDeclarations;
     let session = open_session(&["tcp/127.0.0.1:18447"], &[]).await;
     let zid = session.zid();
     let sub1 =

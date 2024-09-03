@@ -15,7 +15,6 @@ use clap::Parser;
 use zenoh::{
     bytes::ZBytes,
     key_expr::KeyExpr,
-    prelude::*,
     shm::{
         zshm, BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder,
         POSIX_PROTOCOL_ID,

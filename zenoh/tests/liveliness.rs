@@ -19,7 +19,7 @@ use zenoh_core::ztimeout;
 async fn test_liveliness_subscriber_clique() {
     use std::time::Duration;
 
-    use zenoh::{config, prelude::*, sample::SampleKind};
+    use zenoh::{config, sample::SampleKind};
     use zenoh_config::WhatAmI;
     use zenoh_link::EndPoint;
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -83,7 +83,7 @@ async fn test_liveliness_subscriber_clique() {
 async fn test_liveliness_query_clique() {
     use std::time::Duration;
 
-    use zenoh::{config, prelude::*, sample::SampleKind};
+    use zenoh::{config, sample::SampleKind};
     use zenoh_config::WhatAmI;
     use zenoh_link::EndPoint;
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -140,7 +140,7 @@ async fn test_liveliness_query_clique() {
 async fn test_liveliness_subscriber_brokered() {
     use std::time::Duration;
 
-    use zenoh::{config, prelude::*, sample::SampleKind};
+    use zenoh::{config, sample::SampleKind};
     use zenoh_config::WhatAmI;
     use zenoh_link::EndPoint;
 
@@ -219,7 +219,7 @@ async fn test_liveliness_subscriber_brokered() {
 async fn test_liveliness_query_brokered() {
     use std::time::Duration;
 
-    use zenoh::{config, prelude::*, sample::SampleKind};
+    use zenoh::{config, sample::SampleKind};
     use zenoh_config::WhatAmI;
     use zenoh_link::EndPoint;
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -290,7 +290,7 @@ async fn test_liveliness_query_brokered() {
 async fn test_liveliness_subscriber_local() {
     use std::time::Duration;
 
-    use zenoh::{config, prelude::*, sample::SampleKind};
+    use zenoh::{config, sample::SampleKind};
     use zenoh_config::WhatAmI;
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
@@ -333,7 +333,7 @@ async fn test_liveliness_subscriber_local() {
 async fn test_liveliness_query_local() {
     use std::time::Duration;
 
-    use zenoh::{config, prelude::*, sample::SampleKind};
+    use zenoh::{config, sample::SampleKind};
     use zenoh_config::WhatAmI;
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);

@@ -56,7 +56,7 @@ enum Task {
 impl Task {
     async fn run(
         &self,
-        session: Arc<Session>,
+        session: Session,
         remaining_checkpoints: Arc<AtomicUsize>,
         token: CancellationToken,
     ) -> Result<()> {
@@ -386,7 +386,7 @@ impl Recipe {
                     // In case of client can't connect to some peers/routers
                     loop {
                         if let Ok(session) = ztimeout!(zenoh::open(config.clone())) {
-                            break session.into_arc();
+                            break session;
                         } else {
                             tokio::time::sleep(Duration::from_secs(1)).await;
                         }
@@ -421,7 +421,7 @@ impl Recipe {
                 // node_task_tracker.wait().await;
 
                 // Close the session once all the task associated with the node are done.
-                ztimeout!(Arc::try_unwrap(session).unwrap().close())?;
+                ztimeout!(session.close())?;
 
                 println!("Node: {} is closed.", &node.name);
                 Result::Ok(())
