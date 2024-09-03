@@ -346,12 +346,12 @@ impl TryFrom<u8> for Priority {
 #[repr(u8)]
 pub enum Reliability {
     #[default]
-    BestEffort,
     Reliable,
+    BestEffort,
 }
 
 impl Reliability {
-    pub const DEFAULT: Self = Self::BestEffort;
+    pub const DEFAULT: Self = Self::Reliable;
 
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
