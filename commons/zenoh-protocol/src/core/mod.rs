@@ -324,8 +324,14 @@ impl PriorityRange {
         Ok(Self { start, end })
     }
 
-    pub fn includes(&self, priority: Priority) -> bool {
+    /// Returns `true` if `priority` is a member of `self`.
+    pub fn contains(&self, priority: Priority) -> bool {
         self.start <= (priority as u8) && (priority as u8) < self.end
+    }
+
+    /// Returns `true` if `self` is a superset of `other`.
+    pub fn includes(&self, other: PriorityRange) -> bool {
+        self.start <= other.start && other.end <= self.end
     }
 
     pub fn len(&self) -> usize {

@@ -38,7 +38,7 @@ impl TransportUnicastUniversal {
                     .link
                     .config
                     .priorities
-                    .and_then(|range| range.includes(msg.priority()).then_some(range));
+                    .and_then(|range| range.contains(msg.priority()).then_some(range));
 
                 match (reliability, priorities) {
                     (true, Some(priorities)) => {

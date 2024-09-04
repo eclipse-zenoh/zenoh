@@ -41,7 +41,7 @@ impl<'a> QoSFsm<'a> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub(crate) enum QoS {
     Disabled,
     Enabled { priorities: Option<PriorityRange> },
@@ -114,23 +114,6 @@ impl QoS {
             QoS::Enabled {
                 priorities: Some(range),
             } => ((range.end() as u64) << 10) | ((range.start() as u64) << 2) | 0b10_u64,
-        }
-    }
-
-    fn unify(&self, other: &Self) -> Self {
-        match (self, other) {
-            (QoS::Disabled, QoS::Disabled) => QoS::Disabled,
-            (QoS::Disabled, QoS::Enabled { priorities })
-            | (QoS::Enabled { priorities }, QoS::Disabled) => QoS::Enabled {
-                priorities: *priorities,
-            },
-            (QoS::Enabled { priorities: lhs }, QoS::Enabled { priorities: rhs }) => {
-                if lhs == rhs {
-                    QoS::Enabled { priorities: *rhs }
-                } else {
-                    QoS::Enabled { priorities: None }
-                }
-            }
         }
     }
 
@@ -217,7 +200,41 @@ impl<'a> OpenFsm for &'a QoSFsm<'a> {
             QoS::Disabled
         };
 
-        *state_self = state_self.unify(&state_other);
+        *state_self = match (*state_self, state_other) {
+            (QoS::Disabled, _) | (_, QoS::Disabled) => QoS::Disabled,
+            (QoS::Enabled { priorities: None }, QoS::Enabled { priorities: None }) => {
+                QoS::Enabled { priorities: None }
+            }
+            (
+                self_qos @ QoS::Enabled {
+                    priorities: Some(_),
+                },
+                QoS::Enabled { priorities: None },
+            ) => self_qos,
+            (
+                QoS::Enabled { priorities: None },
+                other_qos @ QoS::Enabled {
+                    priorities: Some(_),
+                },
+            ) => other_qos,
+            (
+                self_qos @ QoS::Enabled {
+                    priorities: Some(priorities_self),
+                },
+                QoS::Enabled {
+                    priorities: Some(priorities_other),
+                },
+            ) => {
+                if priorities_other.includes(priorities_self) {
+                    self_qos
+                } else {
+                    return Err(zerror!(
+                        "The PriorityRange set in InitAck is not a superset of my PriorityRange"
+                    )
+                    .into());
+                }
+            }
+        };
 
         Ok(())
     }
@@ -259,7 +276,41 @@ impl<'a> AcceptFsm for &'a QoSFsm<'a> {
             QoS::Disabled
         };
 
-        *state_self = state_self.unify(&state_other);
+        *state_self = match (*state_self, state_other) {
+            (QoS::Disabled, _) | (_, QoS::Disabled) => QoS::Disabled,
+            (QoS::Enabled { priorities: None }, QoS::Enabled { priorities: None }) => {
+                QoS::Enabled { priorities: None }
+            }
+            (
+                self_qos @ QoS::Enabled {
+                    priorities: Some(_),
+                },
+                QoS::Enabled { priorities: None },
+            ) => self_qos,
+            (
+                QoS::Enabled { priorities: None },
+                other_qos @ QoS::Enabled {
+                    priorities: Some(_),
+                },
+            ) => other_qos,
+            (
+                QoS::Enabled {
+                    priorities: Some(priorities_self),
+                },
+                other_qos @ QoS::Enabled {
+                    priorities: Some(priorities_other),
+                },
+            ) => {
+                if priorities_self.includes(priorities_other) {
+                    other_qos
+                } else {
+                    return Err(zerror!(
+                        "The PriorityRange set in InitSyn is not a subset of my PriorityRange"
+                    )
+                    .into());
+                }
+            }
+        };
 
         Ok(())
     }
