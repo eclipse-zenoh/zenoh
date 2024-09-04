@@ -17,7 +17,7 @@ use std::{
     future::{IntoFuture, Ready},
     mem::size_of,
     ops::{Deref, DerefMut},
-    sync::{Arc, Weak},
+    sync::Arc,
 };
 
 use tracing::error;
@@ -37,7 +37,7 @@ use crate::{
         handlers::{locked, Callback, DefaultHandler, IntoHandler},
         key_expr::KeyExpr,
         sample::{Locality, Sample},
-        session::{SessionInner, UndeclarableSealed},
+        session::{UndeclarableSealed, WeakSession},
         Id,
     },
     Session,
@@ -64,7 +64,7 @@ impl fmt::Debug for SubscriberState {
 pub(crate) struct SubscriberInner {
     #[cfg(feature = "unstable")]
     pub(crate) session_id: ZenohId,
-    pub(crate) session: Weak<SessionInner>,
+    pub(crate) session: WeakSession,
     pub(crate) state: Arc<SubscriberState>,
     pub(crate) kind: SubscriberKind,
     // Subscriber is undeclared on drop unless its handler is a ZST, i.e. it is callback-only
@@ -336,7 +336,7 @@ where
                 inner: SubscriberInner {
                     #[cfg(feature = "unstable")]
                     session_id: session.zid(),
-                    session: Arc::downgrade(&session.0),
+                    session: session.downgrade(),
                     state: sub_state,
                     kind: SubscriberKind::Subscriber,
                     // `size_of::<Handler::Handler>() == 0` means callback-only subscriber
@@ -484,10 +484,9 @@ impl<Handler> Subscriber<Handler> {
     fn undeclare_impl(&mut self) -> ZResult<()> {
         // set the flag first to avoid double panic if this function panic
         self.inner.undeclare_on_drop = false;
-        let Some(session) = self.inner.session.upgrade() else {
-            return Ok(());
-        };
-        session.undeclare_subscriber_inner(self.inner.state.id, self.inner.kind)
+        self.inner
+            .session
+            .undeclare_subscriber_inner(self.inner.state.id, self.inner.kind)
     }
 }
 

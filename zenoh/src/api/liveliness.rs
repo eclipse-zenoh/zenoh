@@ -16,7 +16,7 @@ use std::{
     convert::TryInto,
     future::{IntoFuture, Ready},
     mem::size_of,
-    sync::{Arc, Weak},
+    sync::Arc,
     time::Duration,
 };
 
@@ -33,7 +33,7 @@ use super::{
     subscriber::{Subscriber, SubscriberInner},
     Id,
 };
-use crate::api::session::SessionInner;
+use crate::api::session::WeakSession;
 
 /// A structure with functions to declare a
 /// [`LivelinessToken`](LivelinessToken), query
@@ -258,7 +258,7 @@ impl Wait for LivelinessTokenBuilder<'_, '_> {
             .0
             .declare_liveliness_inner(&key_expr)
             .map(|tok_state| LivelinessToken {
-                session: Arc::downgrade(&self.session.0),
+                session: self.session.downgrade(),
                 state: tok_state,
                 undeclare_on_drop: true,
             })
@@ -311,7 +311,7 @@ pub(crate) struct LivelinessTokenState {
 #[zenoh_macros::unstable]
 #[derive(Debug)]
 pub struct LivelinessToken {
-    session: Weak<SessionInner>,
+    session: WeakSession,
     state: Arc<LivelinessTokenState>,
     undeclare_on_drop: bool,
 }
@@ -388,10 +388,7 @@ impl LivelinessToken {
     fn undeclare_impl(&mut self) -> ZResult<()> {
         // set the flag first to avoid double panic if this function panic
         self.undeclare_on_drop = false;
-        match self.session.upgrade() {
-            Some(session) => session.undeclare_liveliness(self.state.id),
-            None => Ok(()),
-        }
+        self.session.undeclare_liveliness(self.state.id)
     }
 }
 
@@ -581,7 +578,7 @@ where
                 inner: SubscriberInner {
                     #[cfg(feature = "unstable")]
                     session_id: session.zid(),
-                    session: Arc::downgrade(&self.session.0),
+                    session: self.session.downgrade(),
                     state: sub_state,
                     kind: SubscriberKind::LivelinessSubscriber,
                     // `size_of::<Handler::Handler>() == 0` means callback-only subscriber

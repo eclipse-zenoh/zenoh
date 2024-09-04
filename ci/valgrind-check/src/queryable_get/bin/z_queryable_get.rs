@@ -16,7 +16,6 @@ use std::{convert::TryFrom, time::Duration};
 use zenoh::{
     config::Config,
     key_expr::KeyExpr,
-    prelude::*,
     query::{QueryTarget, Selector},
 };
 

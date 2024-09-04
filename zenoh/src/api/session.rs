@@ -16,9 +16,10 @@ use std::{
     convert::TryInto,
     fmt,
     future::{IntoFuture, Ready},
+    ops::Deref,
     sync::{
         atomic::{AtomicU16, Ordering},
-        Arc, RwLock, Weak,
+        Arc, Mutex, RwLock,
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -392,6 +393,7 @@ pub trait Undeclarable<S = ()>: UndeclarableSealed<S> {}
 impl<T, S> Undeclarable<S> for T where T: UndeclarableSealed<S> {}
 
 pub(crate) struct SessionInner {
+    weak_counter: Mutex<usize>,
     pub(crate) runtime: Runtime,
     pub(crate) state: RwLock<SessionState>,
     pub(crate) id: u16,
@@ -409,8 +411,77 @@ impl fmt::Debug for SessionInner {
 
 /// A zenoh session.
 ///
-#[derive(Clone)]
 pub struct Session(pub(crate) Arc<SessionInner>);
+
+impl Session {
+    pub(crate) fn downgrade(&self) -> WeakSession {
+        WeakSession::new(&self.0)
+    }
+}
+
+impl fmt::Debug for Session {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl Clone for Session {
+    fn clone(&self) -> Self {
+        let _weak = self.0.weak_counter.lock().unwrap();
+        Self(self.0.clone())
+    }
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        let weak = self.0.weak_counter.lock().unwrap();
+        if Arc::strong_count(&self.0) == *weak + 1 {
+            drop(weak);
+            if let Err(error) = self.close().wait() {
+                tracing::error!(error)
+            }
+        }
+    }
+}
+
+pub(crate) struct WeakSession(Arc<SessionInner>);
+
+impl WeakSession {
+    fn new(session: &Arc<SessionInner>) -> Self {
+        let mut weak = session.weak_counter.lock().unwrap();
+        *weak += 1;
+        Self(session.clone())
+    }
+}
+
+impl Clone for WeakSession {
+    fn clone(&self) -> Self {
+        let mut weak = self.0.weak_counter.lock().unwrap();
+        *weak += 1;
+        Self(self.0.clone())
+    }
+}
+
+impl fmt::Debug for WeakSession {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl Deref for WeakSession {
+    type Target = Arc<SessionInner>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Drop for WeakSession {
+    fn drop(&mut self) {
+        let mut weak = self.0.weak_counter.lock().unwrap();
+        *weak -= 1;
+    }
+}
 
 static SESSION_ID_COUNTER: AtomicU16 = AtomicU16::new(0);
 impl Session {
@@ -426,22 +497,23 @@ impl Session {
                 aggregated_subscribers,
                 aggregated_publishers,
             ));
-            let session = Arc::new(SessionInner {
+            let session = Session(Arc::new(SessionInner {
+                weak_counter: Mutex::new(0),
                 runtime: runtime.clone(),
                 state,
                 id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
                 owns_runtime,
                 task_controller: TaskController::default(),
-            });
+            }));
 
-            runtime.new_handler(Arc::new(admin::Handler::new(Arc::downgrade(&session))));
+            runtime.new_handler(Arc::new(admin::Handler::new(session.downgrade())));
 
-            let primitives = Some(router.new_primitives(Arc::new(Arc::downgrade(&session))));
-            zwrite!(session.state).primitives = primitives;
+            let primitives = Some(router.new_primitives(Arc::new(session.downgrade())));
+            zwrite!(session.0.state).primitives = primitives;
 
-            admin::init(&session);
+            admin::init(session.downgrade());
 
-            Session(session)
+            session
         })
     }
 
@@ -935,6 +1007,7 @@ impl SessionInner {
             if self.owns_runtime {
                 self.runtime.close().await?;
             }
+            zwrite!(self.state).queryables.clear();
             primitives.send_close();
             Ok(())
         })
@@ -1560,7 +1633,7 @@ impl SessionInner {
                 // TODO: check which ZRuntime should be used
                 self.task_controller
                     .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
-                        let session = self.clone();
+                        let session = WeakSession::new(self);
                         let msub = msub.clone();
                         async move {
                             match msub.current.lock() {
@@ -1598,7 +1671,7 @@ impl SessionInner {
                 // TODO: check which ZRuntime should be used
                 self.task_controller
                     .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
-                        let session = self.clone();
+                        let session = WeakSession::new(self);
                         let msub = msub.clone();
                         async move {
                             match msub.current.lock() {
@@ -1754,7 +1827,7 @@ impl SessionInner {
         let token = self.task_controller.get_cancellation_token();
         self.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
-                let session = self.clone();
+                let session = WeakSession::new(self);
                 #[cfg(feature = "unstable")]
                 let zid = self.runtime.zid();
                 async move {
@@ -1860,7 +1933,7 @@ impl SessionInner {
         let token = self.task_controller.get_cancellation_token();
         self.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
-                let session = self.clone();
+                let session = WeakSession::new(self);
                 let zid = self.runtime.zid();
                 async move {
                     tokio::select! {
@@ -1962,7 +2035,7 @@ impl SessionInner {
             qid,
             zid: zid.into(),
             primitives: if local {
-                Arc::new(Arc::downgrade(self))
+                Arc::new(WeakSession::new(self))
             } else {
                 primitives
             },
@@ -1981,21 +2054,15 @@ impl SessionInner {
     }
 }
 
-impl Primitives for Weak<SessionInner> {
+impl Primitives for WeakSession {
     fn send_interest(&self, msg: zenoh_protocol::network::Interest) {
-        if self.upgrade().is_none() {
-            return;
-        }
         trace!("recv Interest {} {:?}", msg.id, msg.wire_expr);
     }
     fn send_declare(&self, msg: zenoh_protocol::network::Declare) {
-        let Some(session) = self.upgrade() else {
-            return;
-        };
         match msg.body {
             zenoh_protocol::network::DeclareBody::DeclareKeyExpr(m) => {
                 trace!("recv DeclareKeyExpr {} {:?}", m.id, m.wire_expr);
-                let state = &mut zwrite!(session.state);
+                let state = &mut zwrite!(self.state);
                 match state.remote_key_to_expr(&m.wire_expr) {
                     Ok(key_expr) => {
                         let mut res_node = ResourceNode::new(key_expr.clone().into());
@@ -2027,14 +2094,14 @@ impl Primitives for Weak<SessionInner> {
                 trace!("recv DeclareSubscriber {} {:?}", m.id, m.wire_expr);
                 #[cfg(feature = "unstable")]
                 {
-                    let mut state = zwrite!(session.state);
+                    let mut state = zwrite!(self.state);
                     match state
                         .wireexpr_to_keyexpr(&m.wire_expr, false)
                         .map(|e| e.into_owned())
                     {
                         Ok(expr) => {
                             state.remote_subscribers.insert(m.id, expr.clone());
-                            session.update_status_up(&state, &expr);
+                            self.update_status_up(&state, &expr);
                         }
                         Err(err) => {
                             tracing::error!(
@@ -2049,9 +2116,9 @@ impl Primitives for Weak<SessionInner> {
                 trace!("recv UndeclareSubscriber {:?}", m.id);
                 #[cfg(feature = "unstable")]
                 {
-                    let mut state = zwrite!(session.state);
+                    let mut state = zwrite!(self.state);
                     if let Some(expr) = state.remote_subscribers.remove(&m.id) {
-                        session.update_status_down(&state, &expr);
+                        self.update_status_down(&state, &expr);
                     } else {
                         tracing::error!("Received Undeclare Subscriber for unknown id: {}", m.id);
                     }
@@ -2067,7 +2134,7 @@ impl Primitives for Weak<SessionInner> {
                 trace!("recv DeclareToken {:?}", m.id);
                 #[cfg(feature = "unstable")]
                 {
-                    let mut state = zwrite!(session.state);
+                    let mut state = zwrite!(self.state);
                     match state
                         .wireexpr_to_keyexpr(&m.wire_expr, false)
                         .map(|e| e.into_owned())
@@ -2101,7 +2168,7 @@ impl Primitives for Weak<SessionInner> {
 
                                 drop(state);
 
-                                session.execute_subscriber_callbacks(
+                                self.execute_subscriber_callbacks(
                                     false,
                                     &m.wire_expr,
                                     None,
@@ -2124,7 +2191,7 @@ impl Primitives for Weak<SessionInner> {
                 trace!("recv UndeclareToken {:?}", m.id);
                 #[cfg(feature = "unstable")]
                 {
-                    let mut state = zwrite!(session.state);
+                    let mut state = zwrite!(self.state);
                     if let Some(key_expr) = state.remote_tokens.remove(&m.id) {
                         drop(state);
 
@@ -2133,9 +2200,9 @@ impl Primitives for Weak<SessionInner> {
                             ..Default::default()
                         };
 
-                        session.execute_subscriber_callbacks(
+                        self.execute_subscriber_callbacks(
                             false,
-                            &key_expr.to_wire(&session),
+                            &key_expr.to_wire(self),
                             Some(data_info),
                             ZBuf::default(),
                             SubscriberKind::LivelinessSubscriber,
@@ -2157,9 +2224,9 @@ impl Primitives for Weak<SessionInner> {
                                     ..Default::default()
                                 };
 
-                                session.execute_subscriber_callbacks(
+                                self.execute_subscriber_callbacks(
                                     false,
-                                    &key_expr.to_wire(&session),
+                                    &key_expr.to_wire(self),
                                     Some(data_info),
                                     ZBuf::default(),
                                     SubscriberKind::LivelinessSubscriber,
@@ -2184,7 +2251,7 @@ impl Primitives for Weak<SessionInner> {
 
                 #[cfg(feature = "unstable")]
                 if let Some(interest_id) = msg.interest_id {
-                    let mut state = zwrite!(session.state);
+                    let mut state = zwrite!(self.state);
                     let _ = state.liveliness_queries.remove(&interest_id);
                 }
             }
@@ -2192,9 +2259,6 @@ impl Primitives for Weak<SessionInner> {
     }
 
     fn send_push(&self, msg: Push, _reliability: Reliability) {
-        let Some(session) = self.upgrade() else {
-            return;
-        };
         trace!("recv Push {:?}", msg);
         match msg.payload {
             PushBody::Put(m) => {
@@ -2206,7 +2270,7 @@ impl Primitives for Weak<SessionInner> {
                     source_id: m.ext_sinfo.as_ref().map(|i| i.id.into()),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
-                session.execute_subscriber_callbacks(
+                self.execute_subscriber_callbacks(
                     false,
                     &msg.wire_expr,
                     Some(info),
@@ -2226,7 +2290,7 @@ impl Primitives for Weak<SessionInner> {
                     source_id: m.ext_sinfo.as_ref().map(|i| i.id.into()),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
-                session.execute_subscriber_callbacks(
+                self.execute_subscriber_callbacks(
                     false,
                     &msg.wire_expr,
                     Some(info),
@@ -2241,12 +2305,9 @@ impl Primitives for Weak<SessionInner> {
     }
 
     fn send_request(&self, msg: Request) {
-        let Some(session) = self.upgrade() else {
-            return;
-        };
         trace!("recv Request {:?}", msg);
         match msg.payload {
-            RequestBody::Query(m) => session.handle_query(
+            RequestBody::Query(m) => self.handle_query(
                 false,
                 &msg.wire_expr,
                 &m.parameters,
@@ -2260,13 +2321,10 @@ impl Primitives for Weak<SessionInner> {
     }
 
     fn send_response(&self, msg: Response) {
-        let Some(session) = self.upgrade() else {
-            return;
-        };
         trace!("recv Response {:?}", msg);
         match msg.payload {
             ResponseBody::Err(e) => {
-                let mut state = zwrite!(session.state);
+                let mut state = zwrite!(self.state);
                 match state.queries.get_mut(&msg.rid) {
                     Some(query) => {
                         let callback = query.callback.clone();
@@ -2288,7 +2346,7 @@ impl Primitives for Weak<SessionInner> {
                 }
             }
             ResponseBody::Reply(m) => {
-                let mut state = zwrite!(session.state);
+                let mut state = zwrite!(self.state);
                 let key_expr = match state.remote_key_to_expr(&msg.wire_expr) {
                     Ok(key) => key.into_owned(),
                     Err(e) => {
@@ -2462,11 +2520,8 @@ impl Primitives for Weak<SessionInner> {
     }
 
     fn send_response_final(&self, msg: ResponseFinal) {
-        let Some(session) = self.upgrade() else {
-            return;
-        };
         trace!("recv ResponseFinal {:?}", msg);
-        let mut state = zwrite!(session.state);
+        let mut state = zwrite!(self.state);
         match state.queries.get_mut(&msg.rid) {
             Some(query) => {
                 query.nb_final -= 1;
@@ -2488,28 +2543,11 @@ impl Primitives for Weak<SessionInner> {
     }
 
     fn send_close(&self) {
-        if self.upgrade().is_none() {
-            return;
-        }
         trace!("recv Close");
     }
 }
 
-impl Drop for SessionInner {
-    fn drop(&mut self) {
-        if let Err(error) = self.close().wait() {
-            tracing::error!(error);
-        }
-    }
-}
-
-impl fmt::Debug for Session {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl crate::net::primitives::EPrimitives for Weak<SessionInner> {
+impl crate::net::primitives::EPrimitives for WeakSession {
     #[inline]
     fn send_interest(&self, ctx: crate::net::routing::RoutingContext<Interest>) {
         (self as &dyn Primitives).send_interest(ctx.msg)

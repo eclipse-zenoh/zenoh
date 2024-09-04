@@ -16,7 +16,7 @@ use std::{
     future::{IntoFuture, Ready},
     mem::size_of,
     ops::{Deref, DerefMut},
-    sync::{Arc, Weak},
+    sync::Arc,
 };
 
 use tracing::error;
@@ -50,7 +50,7 @@ use crate::{
         publisher::Priority,
         sample::{Locality, QoSBuilder, Sample, SampleKind},
         selector::Selector,
-        session::{SessionInner, UndeclarableSealed},
+        session::{UndeclarableSealed, WeakSession},
         value::Value,
         Id,
     },
@@ -543,7 +543,7 @@ impl fmt::Debug for QueryableState {
 pub(crate) struct QueryableInner {
     #[cfg(feature = "unstable")]
     pub(crate) session_id: ZenohId,
-    pub(crate) session: Weak<SessionInner>,
+    pub(crate) session: WeakSession,
     pub(crate) state: Arc<QueryableState>,
     // Queryable is undeclared on drop unless its handler is a ZST, i.e. it is callback-only
     pub(crate) undeclare_on_drop: bool,
@@ -863,10 +863,7 @@ impl<Handler> Queryable<Handler> {
     fn undeclare_impl(&mut self) -> ZResult<()> {
         // set the flag first to avoid double panic if this function panic
         self.inner.undeclare_on_drop = false;
-        let Some(session) = self.inner.session.upgrade() else {
-            return Ok(());
-        };
-        session.close_queryable(self.inner.state.id)
+        self.inner.session.close_queryable(self.inner.state.id)
     }
 }
 
@@ -930,7 +927,7 @@ where
                 inner: QueryableInner {
                     #[cfg(feature = "unstable")]
                     session_id: session.zid(),
-                    session: Arc::downgrade(&self.session.0),
+                    session: self.session.downgrade(),
                     state: qable_state,
                     // `size_of::<Handler::Handler>() == 0` means callback-only queryable
                     undeclare_on_drop: size_of::<Handler::Handler>() > 0,

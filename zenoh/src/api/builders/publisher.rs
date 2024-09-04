@@ -11,10 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{
-    future::{IntoFuture, Ready},
-    sync::Arc,
-};
+use std::future::{IntoFuture, Ready};
 
 use zenoh_core::{Resolvable, Result as ZResult, Wait};
 #[cfg(feature = "unstable")]
@@ -333,7 +330,7 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
         Ok(Publisher {
             #[cfg(feature = "unstable")]
             session_id: self.session.0.runtime.zid(),
-            session: Arc::downgrade(&self.session.0),
+            session: self.session.downgrade(),
             id: 0, // This is a one shot Publisher
             key_expr: self.key_expr?,
             encoding: self.encoding,
@@ -394,7 +391,7 @@ impl<'a, 'b> Wait for PublisherBuilder<'a, 'b> {
         Ok(Publisher {
             #[cfg(feature = "unstable")]
             session_id: self.session.0.runtime.zid(),
-            session: Arc::downgrade(&self.session.0),
+            session: self.session.downgrade(),
             id,
             key_expr,
             encoding: self.encoding,
@@ -404,7 +401,8 @@ impl<'a, 'b> Wait for PublisherBuilder<'a, 'b> {
             destination: self.destination,
             #[cfg(feature = "unstable")]
             reliability: self.reliability,
-                #[cfg(feature = "unstable")]matching_listeners: Default::default(),
+            #[cfg(feature = "unstable")]
+            matching_listeners: Default::default(),
             undeclare_on_drop: true,
         })
     }

@@ -17,7 +17,6 @@ use std::{
     fmt,
     future::{IntoFuture, Ready},
     pin::Pin,
-    sync::{Arc, Weak},
     task::{Context, Poll},
 };
 
@@ -36,7 +35,7 @@ use {
         handlers::{Callback, DefaultHandler, IntoHandler},
         sample::SourceInfo,
     },
-    std::{collections::HashSet, sync::Mutex},
+    std::{collections::HashSet, sync::Arc, sync::Mutex},
     zenoh_config::wrappers::EntityGlobalId,
     zenoh_config::ZenohId,
     zenoh_protocol::core::EntityGlobalIdProto,
@@ -54,7 +53,7 @@ use super::{
     session::UndeclarableSealed,
 };
 use crate::{
-    api::{session::SessionInner, subscriber::SubscriberKind, Id},
+    api::{session::WeakSession, subscriber::SubscriberKind, Id},
     net::primitives::Primitives,
 };
 
@@ -109,7 +108,7 @@ impl fmt::Debug for PublisherState {
 pub struct Publisher<'a> {
     #[cfg(feature = "unstable")]
     pub(crate) session_id: ZenohId,
-    pub(crate) session: Weak<SessionInner>,
+    pub(crate) session: WeakSession,
     pub(crate) id: Id,
     pub(crate) key_expr: KeyExpr<'a>,
     pub(crate) encoding: Encoding,
@@ -125,12 +124,6 @@ pub struct Publisher<'a> {
 }
 
 impl<'a> Publisher<'a> {
-    fn session(&self) -> ZResult<Arc<SessionInner>> {
-        self.session
-            .upgrade()
-            .ok_or_else(|| zerror!("session closed").into())
-    }
-
     /// Returns the [`EntityGlobalId`] of this Publisher.
     ///
     /// # Examples
@@ -256,7 +249,7 @@ impl<'a> Publisher<'a> {
     #[zenoh_macros::unstable]
     pub fn matching_status(&self) -> impl Resolve<ZResult<MatchingStatus>> + '_ {
         zenoh_core::ResolveFuture::new(async move {
-            self.session()?
+            self.session
                 .matching_status(self.key_expr(), self.destination)
         })
     }
@@ -312,17 +305,14 @@ impl<'a> Publisher<'a> {
     fn undeclare_impl(&mut self) -> ZResult<()> {
         // set the flag first to avoid double panic if this function panic
         self.undeclare_on_drop = false;
-        let Ok(session) = self.session() else {
-            return Ok(());
-        };
         #[cfg(feature = "unstable")]
         {
             let ids: Vec<Id> = zlock!(self.matching_listeners).drain().collect();
             for id in ids {
-                session.undeclare_matches_listener_inner(id)?
+                self.session.undeclare_matches_listener_inner(id)?
             }
         }
-        session.undeclare_publisher_inner(self.id)
+        self.session.undeclare_publisher_inner(self.id)
     }
 }
 
@@ -430,17 +420,16 @@ impl Publisher<'_> {
         attachment: Option<ZBytes>,
     ) -> ZResult<()> {
         tracing::trace!("write({:?}, [...])", &self.key_expr);
-        let session = self.session()?;
-        let primitives = zread!(session.state).primitives()?;
+        let primitives = zread!(self.session.state).primitives()?;
         let timestamp = if timestamp.is_none() {
-            session.runtime.new_timestamp()
+            self.session.runtime.new_timestamp()
         } else {
             timestamp
         };
         if self.destination != Locality::SessionLocal {
             primitives.send_push(
                 Push {
-                    wire_expr: self.key_expr.to_wire(&session).to_owned(),
+                    wire_expr: self.key_expr.to_wire(&self.session).to_owned(),
                     ext_qos: ext::QoSType::new(
                         self.priority.into(),
                         self.congestion_control,
@@ -493,9 +482,9 @@ impl Publisher<'_> {
                 )),
             };
 
-            session.execute_subscriber_callbacks(
+            self.session.execute_subscriber_callbacks(
                 true,
-                &self.key_expr.to_wire(&session),
+                &self.key_expr.to_wire(&self.session),
                 Some(data_info),
                 payload.into(),
                 SubscriberKind::Subscriber,
@@ -779,7 +768,7 @@ where
         let (callback, receiver) = self.handler.into_handler();
         let state = self
             .publisher
-            .session()?
+            .session
             .declare_matches_listener_inner(self.publisher, callback)?;
         zlock!(self.publisher.matching_listeners).insert(state.id);
         Ok(MatchingListener {
@@ -941,7 +930,7 @@ impl Wait for MatchingListenerUndeclaration<'_> {
         zlock!(self.subscriber.publisher.matching_listeners).remove(&self.subscriber.state.id);
         self.subscriber
             .publisher
-            .session()?
+            .session
             .undeclare_matches_listener_inner(self.subscriber.state.id)
     }
 }
