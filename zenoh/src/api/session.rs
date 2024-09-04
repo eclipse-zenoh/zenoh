@@ -39,7 +39,8 @@ use zenoh_protocol::network::{
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
-        AtomicExprId, CongestionControl, EntityId, ExprId, Parameters, WireExpr, EMPTY_EXPR_ID,
+        AtomicExprId, CongestionControl, EntityId, ExprId, Parameters, Reliability, WireExpr,
+        EMPTY_EXPR_ID,
     },
     network::{
         self,
@@ -101,8 +102,6 @@ use crate::net::{
     routing::dispatcher::face::Face,
     runtime::{Runtime, RuntimeBuilder},
 };
-#[cfg(feature = "unstable")]
-use crate::pubsub::Reliability;
 
 zconfigurable! {
     pub(crate) static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;
@@ -415,6 +414,8 @@ impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
             congestion_control: CongestionControl::DEFAULT,
             priority: Priority::DEFAULT,
             is_express: false,
+            #[cfg(feature = "unstable")]
+            reliability: Reliability::DEFAULT,
             destination: Locality::default(),
         }
     }
@@ -1671,6 +1672,7 @@ impl Session {
         }
     }
 
+    #[allow(clippy::too_many_arguments)] // TODO fixme
     pub(crate) fn execute_subscriber_callbacks(
         &self,
         local: bool,
@@ -1678,6 +1680,7 @@ impl Session {
         info: Option<DataInfo>,
         payload: ZBuf,
         kind: SubscriberKind,
+        #[cfg(feature = "unstable")] reliability: Reliability,
         attachment: Option<ZBytes>,
     ) {
         let mut callbacks = SingleOrVec::default();
@@ -1726,13 +1729,23 @@ impl Session {
         drop(state);
         let zenoh_collections::single_or_vec::IntoIter { drain, last } = callbacks.into_iter();
         for (cb, key_expr) in drain {
-            let sample = info
-                .clone()
-                .into_sample(key_expr, payload.clone(), attachment.clone());
+            let sample = info.clone().into_sample(
+                key_expr,
+                payload.clone(),
+                #[cfg(feature = "unstable")]
+                reliability,
+                attachment.clone(),
+            );
             cb(sample);
         }
         if let Some((cb, key_expr)) = last {
-            let sample = info.into_sample(key_expr, payload, attachment.clone());
+            let sample = info.into_sample(
+                key_expr,
+                payload,
+                #[cfg(feature = "unstable")]
+                reliability,
+                attachment.clone(),
+            );
             cb(sample);
         }
     }
@@ -2122,6 +2135,8 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
             congestion_control: CongestionControl::DEFAULT,
             priority: Priority::DEFAULT,
             is_express: false,
+            #[cfg(feature = "unstable")]
+            reliability: Reliability::DEFAULT,
             destination: Locality::default(),
         }
     }
@@ -2253,6 +2268,8 @@ impl Primitives for Session {
                                             timestamp: None,
                                             qos: QoS::default(),
                                             #[cfg(feature = "unstable")]
+                                            reliability: Reliability::Reliable,
+                                            #[cfg(feature = "unstable")]
                                             source_info: SourceInfo::empty(),
                                             #[cfg(feature = "unstable")]
                                             attachment: None,
@@ -2274,6 +2291,8 @@ impl Primitives for Session {
                                     None,
                                     ZBuf::default(),
                                     SubscriberKind::LivelinessSubscriber,
+                                    #[cfg(feature = "unstable")]
+                                    Reliability::Reliable,
                                     #[cfg(feature = "unstable")]
                                     None,
                                 );
@@ -2305,6 +2324,8 @@ impl Primitives for Session {
                             ZBuf::default(),
                             SubscriberKind::LivelinessSubscriber,
                             #[cfg(feature = "unstable")]
+                            Reliability::Reliable,
+                            #[cfg(feature = "unstable")]
                             None,
                         );
                     } else if m.ext_wire_expr.wire_expr != WireExpr::empty() {
@@ -2326,6 +2347,8 @@ impl Primitives for Session {
                                     Some(data_info),
                                     ZBuf::default(),
                                     SubscriberKind::LivelinessSubscriber,
+                                    #[cfg(feature = "unstable")]
+                                    Reliability::Reliable,
                                     #[cfg(feature = "unstable")]
                                     None,
                                 );
@@ -2352,7 +2375,7 @@ impl Primitives for Session {
         }
     }
 
-    fn send_push(&self, msg: Push) {
+    fn send_push(&self, msg: Push, _reliability: Reliability) {
         trace!("recv Push {:?}", msg);
         match msg.payload {
             PushBody::Put(m) => {
@@ -2370,6 +2393,8 @@ impl Primitives for Session {
                     Some(info),
                     m.payload,
                     SubscriberKind::Subscriber,
+                    #[cfg(feature = "unstable")]
+                    _reliability,
                     m.ext_attachment.map(Into::into),
                 )
             }
@@ -2388,6 +2413,8 @@ impl Primitives for Session {
                     Some(info),
                     ZBuf::empty(),
                     SubscriberKind::Subscriber,
+                    #[cfg(feature = "unstable")]
+                    _reliability,
                     m.ext_attachment.map(Into::into),
                 )
             }
@@ -2505,7 +2532,13 @@ impl Primitives for Session {
                                 attachment: _attachment.map(Into::into),
                             },
                         };
-                        let sample = info.into_sample(key_expr.into_owned(), payload, attachment);
+                        let sample = info.into_sample(
+                            key_expr.into_owned(),
+                            payload,
+                            #[cfg(feature = "unstable")]
+                            Reliability::Reliable,
+                            attachment,
+                        );
                         let new_reply = Reply {
                             result: Ok(sample),
                             #[cfg(feature = "unstable")]
@@ -2810,8 +2843,8 @@ impl crate::net::primitives::EPrimitives for Session {
     }
 
     #[inline]
-    fn send_push(&self, msg: Push) {
-        (self as &dyn Primitives).send_push(msg)
+    fn send_push(&self, msg: Push, reliability: Reliability) {
+        (self as &dyn Primitives).send_push(msg, reliability)
     }
 
     #[inline]

@@ -14,6 +14,8 @@
 use std::future::{IntoFuture, Ready};
 
 use zenoh_core::{Resolvable, Result as ZResult, Wait};
+#[cfg(feature = "unstable")]
+use zenoh_protocol::core::Reliability;
 use zenoh_protocol::{core::CongestionControl, network::Mapping};
 
 #[cfg(feature = "unstable")]
@@ -110,6 +112,17 @@ impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
         self.publisher = self.publisher.allowed_destination(destination);
         self
+    }
+    /// Change the `reliability` to apply when routing the data.
+    /// NOTE: Currently `reliability` does not trigger any data retransmission on the wire.
+    ///             It is rather used as a marker on the wire and it may be used to select the best link available (e.g. TCP for reliable data and UDP for best effort data).
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn reliability(self, reliability: Reliability) -> Self {
+        Self {
+            publisher: self.publisher.reliability(reliability),
+            ..self
+        }
     }
 }
 
@@ -239,6 +252,8 @@ pub struct PublisherBuilder<'a, 'b: 'a> {
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
     pub(crate) is_express: bool,
+    #[cfg(feature = "unstable")]
+    pub(crate) reliability: Reliability,
     pub(crate) destination: Locality,
 }
 
@@ -254,6 +269,8 @@ impl<'a, 'b> Clone for PublisherBuilder<'a, 'b> {
             congestion_control: self.congestion_control,
             priority: self.priority,
             is_express: self.is_express,
+            #[cfg(feature = "unstable")]
+            reliability: self.reliability,
             destination: self.destination,
         }
     }
@@ -294,6 +311,18 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
         self
     }
 
+    /// Change the `reliability`` to apply when routing the data.
+    /// NOTE: Currently `reliability` does not trigger any data retransmission on the wire.
+    ///             It is rather used as a marker on the wire and it may be used to select the best link available (e.g. TCP for reliable data and UDP for best effort data).
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn reliability(self, reliability: Reliability) -> Self {
+        Self {
+            reliability,
+            ..self
+        }
+    }
+
     // internal function for performing the publication
     fn create_one_shot_publisher(self) -> ZResult<Publisher<'a>> {
         Ok(Publisher {
@@ -305,6 +334,8 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
             priority: self.priority,
             is_express: self.is_express,
             destination: self.destination,
+            #[cfg(feature = "unstable")]
+            reliability: self.reliability,
             #[cfg(feature = "unstable")]
             matching_listeners: Default::default(),
             undeclare_on_drop: true,
@@ -360,6 +391,8 @@ impl<'a, 'b> Wait for PublisherBuilder<'a, 'b> {
                 priority: self.priority,
                 is_express: self.is_express,
                 destination: self.destination,
+                #[cfg(feature = "unstable")]
+                reliability: self.reliability,
                 #[cfg(feature = "unstable")]
                 matching_listeners: Default::default(),
                 undeclare_on_drop: true,
