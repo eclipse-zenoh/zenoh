@@ -570,7 +570,7 @@ mod tests {
         let mut batch = WBatch::new(config);
 
         let tmsg: TransportMessage = KeepAlive.into();
-        let nmsg: NetworkMessage = Push {
+        let mut nmsg: NetworkMessage = Push {
             wire_expr: WireExpr::empty(),
             ext_qos: ext::QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
             ext_tstamp: None,
@@ -601,6 +601,7 @@ mod tests {
             sn: 0,
             ext_qos: frame::ext::QoSType::DEFAULT,
         };
+        nmsg.reliability = frame.reliability;
 
         // Serialize with a frame
         batch.encode((&nmsg, &frame)).unwrap();
@@ -608,6 +609,7 @@ mod tests {
         nmsgs_in.push(nmsg.clone());
 
         frame.reliability = Reliability::BestEffort;
+        nmsg.reliability = frame.reliability;
         batch.encode((&nmsg, &frame)).unwrap();
         assert_ne!(batch.len(), 0);
         nmsgs_in.push(nmsg.clone());

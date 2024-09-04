@@ -66,7 +66,11 @@ impl DefragBuffer {
     pub(crate) fn push(&mut self, sn: TransportSn, zslice: ZSlice) -> ZResult<()> {
         if sn != self.sn.get() {
             self.clear();
-            bail!("Expected SN {}, received {}", self.sn.get(), sn)
+            bail!(
+                "Defragmentation SN error: expected SN {}, received {}",
+                self.sn.get(),
+                sn
+            )
         }
 
         let new_len = self.len + zslice.len();

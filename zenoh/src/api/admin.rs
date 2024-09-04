@@ -19,6 +19,8 @@ use std::{
 
 use zenoh_core::{Result as ZResult, Wait};
 use zenoh_keyexpr::keyexpr;
+#[cfg(feature = "unstable")]
+use zenoh_protocol::core::Reliability;
 use zenoh_protocol::{core::WireExpr, network::NetworkMessage};
 use zenoh_transport::{
     TransportEventHandler, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
@@ -171,6 +173,8 @@ impl TransportMulticastEventHandler for Handler {
                     Some(info),
                     serde_json::to_vec(&peer).unwrap().into(),
                     SubscriberKind::Subscriber,
+                    #[cfg(feature = "unstable")]
+                    Reliability::Reliable,
                     None,
                 );
                 Ok(Arc::new(PeerHandler {
@@ -220,6 +224,8 @@ impl TransportPeerEventHandler for PeerHandler {
             Some(info),
             serde_json::to_vec(&link).unwrap().into(),
             SubscriberKind::Subscriber,
+            #[cfg(feature = "unstable")]
+            Reliability::Reliable,
             None,
         );
     }
@@ -240,6 +246,8 @@ impl TransportPeerEventHandler for PeerHandler {
             Some(info),
             vec![0u8; 0].into(),
             SubscriberKind::Subscriber,
+            #[cfg(feature = "unstable")]
+            Reliability::Reliable,
             None,
         );
     }
@@ -257,6 +265,8 @@ impl TransportPeerEventHandler for PeerHandler {
             Some(info),
             vec![0u8; 0].into(),
             SubscriberKind::Subscriber,
+            #[cfg(feature = "unstable")]
+            Reliability::Reliable,
             None,
         );
     }
