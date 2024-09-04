@@ -187,7 +187,7 @@ pub trait Deserialize<T> {
 ///
 /// **NOTE 2:** `ZBytes` may store data in non-contiguous regions of memory.
 /// The typical case for `ZBytes` to store data in different memory regions is when data is received fragmented from the network.
-/// The user then can decided to use [`ZBytes::deserialize`], [`ZBytes::reader`], [`ZBytes::into`], or [`ZBytes::iter_raw`] depending
+/// The user then can decided to use [`ZBytes::deserialize`], [`ZBytes::reader`], [`ZBytes::into`], or [`ZBytes::slices`] depending
 /// on their needs.
 ///
 /// To directly access raw data as contiguous slice it is preferred to convert `ZBytes` into a [`std::borrow::Cow<[u8]>`].
@@ -215,7 +215,7 @@ pub trait Deserialize<T> {
 ///
 /// let buf: Vec<u8> = vec![0, 1, 2, 3];
 /// let bytes = ZBytes::from(buf.clone());
-/// for slice in bytes.iter_raw() {
+/// for slice in bytes.slices() {
 ///     println!("{:02x?}", slice);
 /// }
 /// ```
@@ -298,7 +298,7 @@ impl ZBytes {
     /// Please note that no guarantee is provided on the internal memory layout of [`ZBytes`].
     /// The only provided guarantee is on the bytes order that is preserved.
     ///
-    /// Please note that [`ZBytes::iter`] will perform deserialization while iterating while [`ZBytes::iter_raw`] will not.
+    /// Please note that [`ZBytes::iter`] will perform deserialization while iterating while [`ZBytes::slices`] will not.
     ///
     /// ```rust
     /// use std::io::Write;
@@ -312,19 +312,19 @@ impl ZBytes {
     /// writer.write(&buf2);
     ///
     /// // Print the raw content
-    /// for slice in zbs.iter_raw() {
+    /// for slice in zbs.slices() {
     ///     println!("{:02x?}", slice);
     /// }
     ///
     /// // Concatenate input in a single vector
     /// let buf: Vec<u8> = buf1.into_iter().chain(buf2.into_iter()).collect();
     /// // Concatenate raw bytes in a single vector
-    /// let out: Vec<u8> = zbs.iter_raw().fold(Vec::new(), |mut b, x| { b.extend_from_slice(x); b });
+    /// let out: Vec<u8> = zbs.slices().fold(Vec::new(), |mut b, x| { b.extend_from_slice(x); b });
     /// // The previous line is the equivalent of
     /// // let out: Vec<u8> = zbs.into();
     /// assert_eq!(buf, out);
     /// ```
-    pub fn iter_raw(&self) -> impl Iterator<Item = &[u8]> {
+    pub fn slices(&self) -> impl Iterator<Item = &[u8]> {
         self.0.slices()
     }
 

@@ -94,7 +94,7 @@ fn main() {
     // Iterator RAW
     let input: [i32; 4] = [1, 2, 3, 4];
     let payload = ZBytes::from_iter(input.iter());
-    for slice in payload.iter_raw() {
+    for slice in payload.slices() {
         println!("{:02x?}", slice);
     }
 
