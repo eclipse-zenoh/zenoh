@@ -601,7 +601,7 @@ mod tests {
             sn: 0,
             ext_qos: frame::ext::QoSType::DEFAULT,
         };
-        nmsg.reliability = Reliability::Reliable;
+        nmsg.reliability = frame.reliability;
 
         // Serialize with a frame
         batch.encode((&nmsg, &frame)).unwrap();
