@@ -82,7 +82,7 @@ impl TransportLinkUnicast {
     pub(crate) fn rx(&self) -> TransportLinkUnicastRx {
         TransportLinkUnicastRx {
             link: self.link.clone(),
-            config: self.config.clone(),
+            config: self.config,
         }
     }
 
