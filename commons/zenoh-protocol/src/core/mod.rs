@@ -19,10 +19,11 @@ use alloc::{
 };
 use core::{
     convert::{From, TryFrom, TryInto},
-    fmt,
+    fmt::{self, Display},
     hash::Hash,
     str::FromStr,
 };
+use std::error::Error;
 
 use serde::Serialize;
 pub use uhlc::{Timestamp, NTP64};
@@ -406,6 +407,14 @@ pub enum Reliability {
 impl Reliability {
     pub const DEFAULT: Self = Self::Reliable;
 
+    /// Returns `true` is `self` implies `other`.
+    pub fn implies(self, other: Self) -> bool {
+        match (self, other) {
+            (Reliability::Reliable, Reliability::BestEffort) => false,
+            _ => true,
+        }
+    }
+
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
@@ -426,6 +435,46 @@ impl From<bool> for Reliability {
             Reliability::Reliable
         } else {
             Reliability::BestEffort
+        }
+    }
+}
+
+impl From<Reliability> for bool {
+    fn from(value: Reliability) -> Self {
+        match value {
+            Reliability::BestEffort => false,
+            Reliability::Reliable => true,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct InvalidReliability {
+    found: String,
+}
+
+impl Display for InvalidReliability {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "invalid Reliability string, expected `best_effort` or `reliable` but found {}",
+            self.found
+        )
+    }
+}
+
+impl Error for InvalidReliability {}
+
+impl FromStr for Reliability {
+    type Err = InvalidReliability;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "reliable" => Ok(Reliability::Reliable),
+            "best_effort" => Ok(Reliability::BestEffort),
+            other => Err(InvalidReliability {
+                found: other.to_string(),
+            }),
         }
     }
 }
