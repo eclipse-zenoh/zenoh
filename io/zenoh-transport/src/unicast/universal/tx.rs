@@ -25,12 +25,12 @@ impl TransportUnicastUniversal {
     /// Returns the index of the best matching [`Reliability`]-[`PriorityRange`] pair.
     ///
     /// The result is either:
-    /// 1. A "full match" where the link matches both `reliability` and `priority`. In case of
-    ///    multiple candidates, the link with the smaller range is selected.
-    /// 2. A "partial match" where the link match `reliability` and **not** `priority`.
-    /// 3. An "any match" where any available link is selected.
+    /// 1. A "full match" where the pair matches both `reliability` and `priority`. In case of
+    ///    multiple candidates, the pair with the smaller range is selected.
+    /// 2. A "partial match" where the pair match `reliability` and **not** `priority`.
+    /// 3. An "any match" where any available pair is selected.
     ///
-    /// If `transport_links` is empty then [`None`] is returned.
+    /// If `elements` is empty then [`None`] is returned.
     fn select(
         elements: impl Iterator<Item = (Reliability, Option<PriorityRange>)>,
         reliability: Reliability,
