@@ -352,9 +352,8 @@ mod tests {
     use zenoh_protocol::core::PriorityRange;
     use zenoh_result::ZResult;
 
-    use crate::unicast::establishment::{AcceptFsm, OpenFsm};
-
     use super::{QoS, QoSFsm};
+    use crate::unicast::establishment::{AcceptFsm, OpenFsm};
 
     async fn test_priority_range_negotiation(
         qos_open: &mut QoS,

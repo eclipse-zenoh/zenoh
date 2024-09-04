@@ -12,55 +12,77 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use zenoh_protocol::{
-    core::{PriorityRange, Reliability},
+    core::{Priority, PriorityRange, Reliability},
     network::NetworkMessage,
 };
 
-use super::transport::TransportUnicastUniversal;
+use super::{link::TransportLinkUnicastUniversal, transport::TransportUnicastUniversal};
 #[cfg(feature = "shared-memory")]
 use crate::shm::map_zmsg_to_partner;
 use crate::unicast::transport_unicast_inner::TransportUnicastTrait;
 
 impl TransportUnicastUniversal {
+    /// Returns the best matching [`TransportLinkUnicastUniversal`].
+    ///
+    /// The result is either:
+    /// 1. A "full match" where the link matches both `reliability` and `priority`. In case of
+    ///    multiple candidates, the link with the smaller range is selected.
+    /// 2. A "partial match" where the link match `reliability` and **not** `priority`.
+    /// 3. A "no match" where any available link is selected.
+    ///
+    /// If `transport_links` is empty then [`None`] is returned.
+    fn select_link(
+        transport_links: &[TransportLinkUnicastUniversal],
+        reliability: Reliability,
+        priority: Priority,
+    ) -> Option<&TransportLinkUnicastUniversal> {
+        let (full_match, partial_match, any_match) = transport_links.iter().enumerate().fold(
+            (None::<(_, PriorityRange)>, None, None),
+            |(mut full_match, mut partial_match, mut no_match), (i, tl)| {
+                let config = tl.link.config;
+
+                let reliability = config.reliability.eq(&reliability);
+                let priorities = config.priorities.filter(|range| range.contains(priority));
+
+                match (reliability, priorities) {
+                    (true, Some(priorities))
+                        if full_match
+                            .as_ref()
+                            .map_or(true, |(_, r)| priorities.len() < r.len()) =>
+                    {
+                        full_match = Some((i, priorities))
+                    }
+                    (true, None) if partial_match.is_none() => partial_match = Some(i),
+                    _ if no_match.is_none() => no_match = Some(i),
+                    _ => {}
+                };
+
+                (full_match, partial_match, no_match)
+            },
+        );
+
+        full_match
+            .map(|(i, _)| i)
+            .or(partial_match)
+            .or(any_match)
+            .map(|i| {
+                transport_links
+                    .get(i)
+                    .expect("transport link index should be valid")
+            })
+    }
+
     fn schedule_on_link(&self, msg: NetworkMessage) -> bool {
         let transport_links = self
             .links
             .read()
             .expect("reading `TransportUnicastUniversal::links` should not fail");
 
-        let msg_reliability = Reliability::from(msg.is_reliable());
-
-        let (full_match, partial_match, any_match) = transport_links.iter().enumerate().fold(
-            (None::<(_, PriorityRange)>, None, None),
-            |(mut full_match, mut partial_match, mut any_match), (i, transport_link)| {
-                let reliability = transport_link.link.config.reliability == msg_reliability;
-                let priorities = transport_link
-                    .link
-                    .config
-                    .priorities
-                    .and_then(|range| range.contains(msg.priority()).then_some(range));
-
-                match (reliability, priorities) {
-                    (true, Some(priorities)) => {
-                        match full_match {
-                            Some((_, r)) if priorities.len() < r.len() => {
-                                full_match = Some((i, priorities))
-                            }
-                            None => full_match = Some((i, priorities)),
-                            _ => {}
-                        };
-                    }
-                    (true, None) if partial_match.is_none() => partial_match = Some(i),
-                    _ if any_match.is_none() => any_match = Some(i),
-                    _ => {}
-                };
-
-                (full_match, partial_match, any_match)
-            },
-        );
-
-        let Some(transport_link_index) = full_match.map(|(i, _)| i).or(partial_match).or(any_match)
-        else {
+        let Some(transport_link) = Self::select_link(
+            &transport_links,
+            Reliability::from(msg.is_reliable()),
+            msg.priority(),
+        ) else {
             tracing::trace!(
                 "Message dropped because the transport has no links: {}",
                 msg
@@ -69,10 +91,6 @@ impl TransportUnicastUniversal {
             // No Link found
             return false;
         };
-
-        let transport_link = transport_links
-            .get(transport_link_index)
-            .expect("transport link index should be valid");
 
         let pipeline = transport_link.pipeline.clone();
         tracing::trace!(
