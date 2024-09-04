@@ -114,6 +114,8 @@ impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
         self
     }
     /// Change the `reliability` to apply when routing the data.
+    /// NOTE: Currently `reliability` does not trigger any data retransmission on the wire. 
+    ///             It is rather used as a marker on the wire and it may be used to select the best link available (e.g. TCP for reliable data and UDP for best effort data).
     #[zenoh_macros::unstable]
     #[inline]
     pub fn reliability(self, reliability: Reliability) -> Self {
