@@ -169,6 +169,7 @@ impl<'a> Liveliness<'a> {
             session: self.session.clone(),
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
             handler: DefaultHandler::default(),
+            history: false,
         }
     }
 
@@ -439,6 +440,7 @@ pub struct LivelinessSubscriberBuilder<'a, 'b, Handler> {
     pub session: SessionRef<'a>,
     pub key_expr: ZResult<KeyExpr<'b>>,
     pub handler: Handler,
+    pub history: bool,
 }
 
 #[zenoh_macros::unstable]
@@ -473,11 +475,13 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
             session,
             key_expr,
             handler: _,
+            history,
         } = self;
         LivelinessSubscriberBuilder {
             session,
             key_expr,
             handler: callback,
+            history,
         }
     }
 
@@ -544,11 +548,33 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
             session,
             key_expr,
             handler: _,
+            history,
         } = self;
         LivelinessSubscriberBuilder {
             session,
             key_expr,
             handler,
+            history,
+        }
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> LivelinessSubscriberBuilder<'_, '_, Handler> {
+    #[inline]
+    #[zenoh_macros::unstable]
+    pub fn history(self, history: bool) -> Self {
+        let LivelinessSubscriberBuilder {
+            session,
+            key_expr,
+            handler,
+            history: _,
+        } = self;
+        LivelinessSubscriberBuilder {
+            session,
+            key_expr,
+            handler,
+            history,
         }
     }
 }
@@ -576,7 +602,12 @@ where
         let session = self.session;
         let (callback, handler) = self.handler.into_handler();
         session
-            .declare_liveliness_subscriber_inner(&key_expr, Locality::default(), callback)
+            .declare_liveliness_subscriber_inner(
+                &key_expr,
+                Locality::default(),
+                self.history,
+                callback,
+            )
             .map(|sub_state| Subscriber {
                 subscriber: SubscriberInner {
                     session,
