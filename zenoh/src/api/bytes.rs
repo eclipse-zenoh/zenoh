@@ -192,7 +192,7 @@ pub trait Deserialize<T> {
 ///
 /// To directly access raw data as contiguous slice it is preferred to convert `ZBytes` into a [`std::borrow::Cow<[u8]>`].
 /// If `ZBytes` contains all the data in a single memory location, this is guaranteed to be zero-copy. This is the common case for small messages.
-/// If `ZBytes` contains data scattered in differnt memory regions, this operation will do an allocation and a copy. This is the common case for large messages.
+/// If `ZBytes` contains data scattered in different memory regions, this operation will do an allocation and a copy. This is the common case for large messages.
 ///
 /// Example:
 /// ```rust
