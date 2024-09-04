@@ -28,7 +28,7 @@ impl TransportUnicastUniversal {
     /// 1. A "full match" where the link matches both `reliability` and `priority`. In case of
     ///    multiple candidates, the link with the smaller range is selected.
     /// 2. A "partial match" where the link match `reliability` and **not** `priority`.
-    /// 3. A "no match" where any available link is selected.
+    /// 3. An "any match" where any available link is selected.
     ///
     /// If `transport_links` is empty then [`None`] is returned.
     fn select(
@@ -36,30 +36,35 @@ impl TransportUnicastUniversal {
         reliability: Reliability,
         priority: Priority,
     ) -> Option<usize> {
-        let (full_match, partial_match, any_match) = elements.enumerate().fold(
-            (None::<(_, PriorityRange)>, None, None),
-            |(mut full_match, mut partial_match, mut no_match), (i, (reliability_, priorities))| {
-                let reliability = reliability_.eq(&reliability);
-                let priorities = priorities.filter(|range| range.contains(priority));
+        #[derive(Default)]
+        struct Match {
+            full: Option<usize>,
+            partial: Option<usize>,
+            any: Option<usize>,
+        }
 
-                match (reliability, priorities) {
+        let (match_, _) = elements.enumerate().fold(
+            (Match::default(), Option::<PriorityRange>::None),
+            |(mut match_, mut prev_priorities), (i, (r, ps))| {
+                match (r.eq(&reliability), ps.filter(|ps| ps.contains(priority))) {
                     (true, Some(priorities))
-                        if full_match
+                        if prev_priorities
                             .as_ref()
-                            .map_or(true, |(_, r)| priorities.len() < r.len()) =>
+                            .map_or(true, |ps| ps.len() > priorities.len()) =>
                     {
-                        full_match = Some((i, priorities))
+                        match_.full = Some(i);
+                        prev_priorities = Some(priorities);
                     }
-                    (true, None) if partial_match.is_none() => partial_match = Some(i),
-                    _ if no_match.is_none() => no_match = Some(i),
+                    (true, None) if match_.partial.is_none() => match_.partial = Some(i),
+                    _ if match_.any.is_none() => match_.any = Some(i),
                     _ => {}
                 };
 
-                (full_match, partial_match, no_match)
+                (match_, prev_priorities)
             },
         );
 
-        full_match.map(|(i, _)| i).or(partial_match).or(any_match)
+        match_.full.or(match_.partial).or(match_.any)
     }
 
     fn schedule_on_link(&self, msg: NetworkMessage) -> bool {
@@ -198,7 +203,7 @@ mod tests {
     }
 
     #[test]
-    /// Tests the "no match" scenario.
+    /// Tests the "any match" scenario.
     fn test_link_selection_scenario_4() {
         let selection = TransportUnicastUniversal::select(
             [(Reliability::BestEffort, None)].into_iter(),
