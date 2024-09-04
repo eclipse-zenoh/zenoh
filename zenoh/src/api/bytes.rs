@@ -264,7 +264,7 @@ impl ZBytes {
 
     /// Get a [`ZBytesWriter`] implementing [`std::io::Write`] trait.
     ///
-    /// See [`ZBytesWriter`] on how to chain the serialization of differnt types into a single [`ZBytes`].
+    /// See [`ZBytesWriter`] on how to chain the serialization of different types into a single [`ZBytes`].
     pub fn writer(&mut self) -> ZBytesWriter<'_> {
         ZBytesWriter(self.0.writer())
     }
@@ -449,7 +449,7 @@ impl ZBytes {
     /// ```
     ///
     /// If you want to be sure that no copy is performed at all, then you should use [`ZBytes::slices`].
-    /// Please note that in this case data may not be contiguous in memory and it is the responsability of the user to properly parse the raw slices.
+    /// Please note that in this case data may not be contiguous in memory and it is the responsibility of the user to properly parse the raw slices.
     pub fn into<'a, T>(&'a self) -> T
     where
         ZSerde: Deserialize<T, Input<'a> = &'a ZBytes, Error = Infallible>,
