@@ -609,7 +609,7 @@ mod tests {
         nmsgs_in.push(nmsg.clone());
 
         frame.reliability = Reliability::BestEffort;
-        nmsg.reliability = Reliability::BestEffort;
+        nmsg.reliability = frame.reliability;
         batch.encode((&nmsg, &frame)).unwrap();
         assert_ne!(batch.len(), 0);
         nmsgs_in.push(nmsg.clone());
