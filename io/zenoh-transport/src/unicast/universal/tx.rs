@@ -16,13 +16,13 @@ use zenoh_protocol::{
     network::NetworkMessage,
 };
 
-use super::{link::TransportLinkUnicastUniversal, transport::TransportUnicastUniversal};
+use super::transport::TransportUnicastUniversal;
 #[cfg(feature = "shared-memory")]
 use crate::shm::map_zmsg_to_partner;
 use crate::unicast::transport_unicast_inner::TransportUnicastTrait;
 
 impl TransportUnicastUniversal {
-    /// Returns the best matching [`TransportLinkUnicastUniversal`].
+    /// Returns the index of the best matching [`Reliability`]-[`PriorityRange`] pair.
     ///
     /// The result is either:
     /// 1. A "full match" where the link matches both `reliability` and `priority`. In case of
@@ -31,18 +31,16 @@ impl TransportUnicastUniversal {
     /// 3. A "no match" where any available link is selected.
     ///
     /// If `transport_links` is empty then [`None`] is returned.
-    fn select_link(
-        transport_links: &[TransportLinkUnicastUniversal],
+    fn select(
+        elements: impl Iterator<Item = (Reliability, Option<PriorityRange>)>,
         reliability: Reliability,
         priority: Priority,
-    ) -> Option<&TransportLinkUnicastUniversal> {
-        let (full_match, partial_match, any_match) = transport_links.iter().enumerate().fold(
+    ) -> Option<usize> {
+        let (full_match, partial_match, any_match) = elements.enumerate().fold(
             (None::<(_, PriorityRange)>, None, None),
-            |(mut full_match, mut partial_match, mut no_match), (i, tl)| {
-                let config = tl.link.config;
-
-                let reliability = config.reliability.eq(&reliability);
-                let priorities = config.priorities.filter(|range| range.contains(priority));
+            |(mut full_match, mut partial_match, mut no_match), (i, (reliability_, priorities))| {
+                let reliability = reliability_.eq(&reliability);
+                let priorities = priorities.filter(|range| range.contains(priority));
 
                 match (reliability, priorities) {
                     (true, Some(priorities))
@@ -61,15 +59,7 @@ impl TransportUnicastUniversal {
             },
         );
 
-        full_match
-            .map(|(i, _)| i)
-            .or(partial_match)
-            .or(any_match)
-            .map(|i| {
-                transport_links
-                    .get(i)
-                    .expect("transport link index should be valid")
-            })
+        full_match.map(|(i, _)| i).or(partial_match).or(any_match)
     }
 
     fn schedule_on_link(&self, msg: NetworkMessage) -> bool {
@@ -78,8 +68,10 @@ impl TransportUnicastUniversal {
             .read()
             .expect("reading `TransportUnicastUniversal::links` should not fail");
 
-        let Some(transport_link) = Self::select_link(
-            &transport_links,
+        let Some(transport_link_index) = Self::select(
+            transport_links
+                .iter()
+                .map(|tl| (tl.link.config.reliability, tl.link.config.priorities)),
             Reliability::from(msg.is_reliable()),
             msg.priority(),
         ) else {
@@ -91,6 +83,10 @@ impl TransportUnicastUniversal {
             // No Link found
             return false;
         };
+
+        let transport_link = transport_links
+            .get(transport_link_index)
+            .expect("transport link index should be valid");
 
         let pipeline = transport_link.pipeline.clone();
         tracing::trace!(
@@ -128,5 +124,87 @@ impl TransportUnicastUniversal {
         }
 
         res
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use zenoh_protocol::core::{Priority, PriorityRange, Reliability};
+
+    use crate::unicast::universal::transport::TransportUnicastUniversal;
+
+    #[test]
+    /// Tests the "full match" scenario with exactly one candidate.
+    fn test_link_selection_scenario_1() {
+        let selection = TransportUnicastUniversal::select(
+            [
+                (
+                    Reliability::Reliable,
+                    Some(PriorityRange::new(0, 1).unwrap()),
+                ),
+                (
+                    Reliability::Reliable,
+                    Some(PriorityRange::new(1, 2).unwrap()),
+                ),
+                (
+                    Reliability::BestEffort,
+                    Some(PriorityRange::new(0, 1).unwrap()),
+                ),
+            ]
+            .into_iter(),
+            Reliability::Reliable,
+            Priority::try_from(0).unwrap(),
+        );
+        assert_eq!(selection, Some(0));
+    }
+
+    #[test]
+    /// Tests the "full match" scenario with multiple candidates.
+    fn test_link_selection_scenario_2() {
+        let selection = TransportUnicastUniversal::select(
+            [
+                (
+                    Reliability::Reliable,
+                    Some(PriorityRange::new(0, 2).unwrap()),
+                ),
+                (
+                    Reliability::Reliable,
+                    Some(PriorityRange::new(0, 1).unwrap()),
+                ),
+            ]
+            .into_iter(),
+            Reliability::Reliable,
+            Priority::try_from(0).unwrap(),
+        );
+        assert_eq!(selection, Some(1));
+    }
+
+    #[test]
+    /// Tests the "partial match" scenario.
+    fn test_link_selection_scenario_3() {
+        let selection = TransportUnicastUniversal::select(
+            [
+                (
+                    Reliability::BestEffort,
+                    Some(PriorityRange::new(0, 1).unwrap()),
+                ),
+                (Reliability::Reliable, None),
+            ]
+            .into_iter(),
+            Reliability::Reliable,
+            Priority::try_from(0).unwrap(),
+        );
+        assert_eq!(selection, Some(1));
+    }
+
+    #[test]
+    /// Tests the "no match" scenario.
+    fn test_link_selection_scenario_4() {
+        let selection = TransportUnicastUniversal::select(
+            [(Reliability::BestEffort, None)].into_iter(),
+            Reliability::Reliable,
+            Priority::try_from(0).unwrap(),
+        );
+        assert_eq!(selection, Some(0));
     }
 }
