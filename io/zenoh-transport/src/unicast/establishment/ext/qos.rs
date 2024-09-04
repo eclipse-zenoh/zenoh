@@ -237,7 +237,7 @@ impl<'a> OpenFsm for &'a QoSFsm<'a> {
                     self_qos
                 } else {
                     return Err(zerror!(
-                        "The PriorityRange set in InitAck is not a superset of my PriorityRange"
+                        "The PriorityRange received in InitAck is not a superset of my PriorityRange"
                     )
                     .into());
                 }
@@ -309,7 +309,7 @@ impl<'a> AcceptFsm for &'a QoSFsm<'a> {
                     other_qos
                 } else {
                     return Err(zerror!(
-                        "The PriorityRange set in InitSyn is not a subset of my PriorityRange"
+                        "The PriorityRange received in InitSyn is not a subset of my PriorityRange"
                     )
                     .into());
                 }
