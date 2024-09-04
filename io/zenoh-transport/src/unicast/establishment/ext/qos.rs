@@ -481,9 +481,8 @@ mod tests {
             priorities: Some(PriorityRange::new(2, 3).unwrap()),
         };
 
-        match test_priority_range_negotiation(qos_open, qos_accept).await {
-            Ok(()) => panic!("expected `Err(_)`, got `Ok(())`"),
-            Err(_) => {}
-        };
+        if let Ok(()) = test_priority_range_negotiation(qos_open, qos_accept).await {
+            panic!("expected `Err(_)`, got `Ok(())`")
+        }
     }
 }
