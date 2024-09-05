@@ -1006,9 +1006,10 @@ impl SessionInner {
             self.task_controller.terminate_all(Duration::from_secs(10));
             if self.owns_runtime {
                 self.runtime.close().await?;
+            } else {
+                primitives.send_close();
             }
             zwrite!(self.state).queryables.clear();
-            primitives.send_close();
             Ok(())
         })
     }
