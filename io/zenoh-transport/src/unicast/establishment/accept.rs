@@ -796,7 +796,11 @@ pub(crate) async fn accept_link(
             is_compression: state.link.ext_compression.is_compression(),
         },
         priorities: state.transport.ext_qos.priorities(),
-        reliability: Reliability::from(link.link.is_reliable()),
+        reliability: state
+            .transport
+            .ext_qos
+            .reliability()
+            .unwrap_or_else(|| Reliability::from(link.link.is_reliable())),
     };
     let a_link = link.reconfigure(a_config);
     let s_link = format!("{:?}", a_link);
