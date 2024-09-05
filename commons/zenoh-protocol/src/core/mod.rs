@@ -409,10 +409,10 @@ impl Reliability {
 
     /// Returns `true` is `self` implies `other`.
     pub fn implies(self, other: Self) -> bool {
-        match (self, other) {
-            (Reliability::Reliable, Reliability::BestEffort) => false,
-            _ => true,
-        }
+        !matches!(
+            (self, other),
+            (Reliability::Reliable, Reliability::BestEffort)
+        )
     }
 
     #[cfg(feature = "test")]
