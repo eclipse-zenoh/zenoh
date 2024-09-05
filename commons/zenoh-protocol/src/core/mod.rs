@@ -23,7 +23,6 @@ use core::{
     hash::Hash,
     str::FromStr,
 };
-use std::error::Error;
 
 use serde::Serialize;
 pub use uhlc::{Timestamp, NTP64};
@@ -456,7 +455,8 @@ impl Display for InvalidReliability {
     }
 }
 
-impl Error for InvalidReliability {}
+#[cfg(feature = "std")]
+impl std::error::Error for InvalidReliability {}
 
 impl FromStr for Reliability {
     type Err = InvalidReliability;
