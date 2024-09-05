@@ -30,7 +30,7 @@ pub(crate) enum TransportLinkUnicastDirection {
     Outbound,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) struct TransportLinkUnicastConfig {
     // Inbound / outbound
     pub(crate) direction: TransportLinkUnicastDirection,
@@ -60,7 +60,11 @@ impl TransportLinkUnicast {
     }
 
     pub(crate) fn link(&self) -> Link {
-        Link::new_unicast(&self.link, self.config.priorities, self.config.reliability)
+        Link::new_unicast(
+            &self.link,
+            self.config.priorities.clone(),
+            self.config.reliability,
+        )
     }
 
     pub(crate) fn tx(&self) -> TransportLinkUnicastTx {
@@ -82,7 +86,7 @@ impl TransportLinkUnicast {
     pub(crate) fn rx(&self) -> TransportLinkUnicastRx {
         TransportLinkUnicastRx {
             link: self.link.clone(),
-            config: self.config,
+            config: self.config.clone(),
         }
     }
 

@@ -114,7 +114,7 @@ impl TransportLinkUnicastUniversal {
     }
 
     pub(super) fn start_rx(&mut self, transport: TransportUnicastUniversal, lease: Duration) {
-        let priorities = self.link.config.priorities;
+        let priorities = self.link.config.priorities.clone();
         let reliability = self.link.config.reliability;
         let mut rx = self.link.rx();
         let token = self.token.clone();
@@ -262,7 +262,11 @@ async fn rx_task(
     }
 
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
-    let l = Link::new_unicast(&link.link, link.config.priorities, link.config.reliability);
+    let l = Link::new_unicast(
+        &link.link,
+        link.config.priorities.clone(),
+        link.config.reliability,
+    );
 
     loop {
         tokio::select! {

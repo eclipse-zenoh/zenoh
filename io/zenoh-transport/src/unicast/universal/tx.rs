@@ -46,7 +46,7 @@ impl TransportUnicastUniversal {
         let (match_, _) = elements.enumerate().fold(
             (Match::default(), Option::<PriorityRange>::None),
             |(mut match_, mut prev_priorities), (i, (r, ps))| {
-                match (r.eq(&reliability), ps.filter(|ps| ps.contains(priority))) {
+                match (r.eq(&reliability), ps.filter(|ps| ps.contains(&priority))) {
                     (true, Some(priorities))
                         if prev_priorities
                             .as_ref()
@@ -74,9 +74,12 @@ impl TransportUnicastUniversal {
             .expect("reading `TransportUnicastUniversal::links` should not fail");
 
         let Some(transport_link_index) = Self::select(
-            transport_links
-                .iter()
-                .map(|tl| (tl.link.config.reliability, tl.link.config.priorities)),
+            transport_links.iter().map(|tl| {
+                (
+                    tl.link.config.reliability,
+                    tl.link.config.priorities.clone(),
+                )
+            }),
             Reliability::from(msg.is_reliable()),
             msg.priority(),
         ) else {
@@ -138,23 +141,20 @@ mod tests {
 
     use crate::unicast::universal::transport::TransportUnicastUniversal;
 
+    macro_rules! priority_range {
+        ($start:literal, $end:literal) => {
+            PriorityRange::new($start.try_into().unwrap()..=$end.try_into().unwrap())
+        };
+    }
+
     #[test]
     /// Tests the "full match" scenario with exactly one candidate.
     fn test_link_selection_scenario_1() {
         let selection = TransportUnicastUniversal::select(
             [
-                (
-                    Reliability::Reliable,
-                    Some(PriorityRange::new(0, 1).unwrap()),
-                ),
-                (
-                    Reliability::Reliable,
-                    Some(PriorityRange::new(1, 2).unwrap()),
-                ),
-                (
-                    Reliability::BestEffort,
-                    Some(PriorityRange::new(0, 1).unwrap()),
-                ),
+                (Reliability::Reliable, Some(priority_range!(0, 1))),
+                (Reliability::Reliable, Some(priority_range!(1, 2))),
+                (Reliability::BestEffort, Some(priority_range!(0, 1))),
             ]
             .into_iter(),
             Reliability::Reliable,
@@ -168,14 +168,8 @@ mod tests {
     fn test_link_selection_scenario_2() {
         let selection = TransportUnicastUniversal::select(
             [
-                (
-                    Reliability::Reliable,
-                    Some(PriorityRange::new(0, 2).unwrap()),
-                ),
-                (
-                    Reliability::Reliable,
-                    Some(PriorityRange::new(0, 1).unwrap()),
-                ),
+                (Reliability::Reliable, Some(priority_range!(0, 2))),
+                (Reliability::Reliable, Some(priority_range!(0, 1))),
             ]
             .into_iter(),
             Reliability::Reliable,
@@ -189,10 +183,7 @@ mod tests {
     fn test_link_selection_scenario_3() {
         let selection = TransportUnicastUniversal::select(
             [
-                (
-                    Reliability::BestEffort,
-                    Some(PriorityRange::new(0, 1).unwrap()),
-                ),
+                (Reliability::BestEffort, Some(priority_range!(0, 1))),
                 (Reliability::Reliable, None),
             ]
             .into_iter(),

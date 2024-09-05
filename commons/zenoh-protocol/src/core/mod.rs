@@ -21,13 +21,14 @@ use core::{
     convert::{From, TryFrom, TryInto},
     fmt::{self, Display},
     hash::Hash,
+    ops::{Deref, RangeInclusive},
     str::FromStr,
 };
 
 use serde::Serialize;
 pub use uhlc::{Timestamp, NTP64};
 use zenoh_keyexpr::OwnedKeyExpr;
-use zenoh_result::{bail, zerror, ZResult};
+use zenoh_result::{bail, zerror};
 
 /// The unique Id of the [`HLC`](uhlc::HLC) that generated the concerned [`Timestamp`].
 pub type TimestampId = uhlc::ID;
@@ -296,7 +297,7 @@ impl EntityGlobalIdProto {
 }
 
 #[repr(u8)]
-#[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq, PartialOrd, Ord, Serialize)]
 pub enum Priority {
     Control = 0,
     RealTime = 1,
@@ -309,46 +310,31 @@ pub enum Priority {
     Background = 7,
 }
 
-#[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq, Serialize)]
+// TODO: Use Priority type
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize)]
 /// A `u8` range bounded inclusively below and above.
-pub struct PriorityRange {
-    pub start: u8,
-    pub end: u8,
+pub struct PriorityRange(RangeInclusive<Priority>);
+
+impl Deref for PriorityRange {
+    type Target = RangeInclusive<Priority>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 impl PriorityRange {
-    pub fn new(start: u8, end: u8) -> ZResult<Self> {
-        if start > end || start < Priority::MAX as u8 || end > Priority::MIN as u8 {
-            bail!("Invalid priority range: {start}..{end}")
-        };
-
-        Ok(Self { start, end })
-    }
-
-    /// Returns `true` if `priority` is a member of `self`.
-    pub fn contains(&self, priority: Priority) -> bool {
-        self.start <= (priority as u8) && (priority as u8) <= self.end
+    pub fn new(range: RangeInclusive<Priority>) -> Self {
+        Self(range)
     }
 
     /// Returns `true` if `self` is a superset of `other`.
-    pub fn includes(&self, other: PriorityRange) -> bool {
-        self.start <= other.start && other.end <= self.end
+    pub fn includes(&self, other: &PriorityRange) -> bool {
+        self.start() <= other.start() && other.end() <= self.end()
     }
 
     pub fn len(&self) -> usize {
-        (self.end - self.start + 1) as usize
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.end == self.start
-    }
-
-    pub fn start(&self) -> u8 {
-        self.start
-    }
-
-    pub fn end(&self) -> u8 {
-        self.end
+        *self.end() as usize - *self.start() as usize + 1 // 1..=3, 3-1 == 2
     }
 
     #[cfg(feature = "test")]
@@ -358,7 +344,69 @@ impl PriorityRange {
         let start = rng.gen_range(Priority::MAX as u8..Priority::MIN as u8);
         let end = rng.gen_range((start + 1)..=Priority::MIN as u8);
 
-        Self { start, end }
+        Self(Priority::try_from(start).unwrap()..=Priority::try_from(end).unwrap())
+    }
+}
+
+#[derive(Debug)]
+pub enum InvalidPriorityRange {
+    InvalidSyntax { found: String },
+    InvalidBound { message: String },
+}
+
+impl Display for InvalidPriorityRange {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            InvalidPriorityRange::InvalidSyntax { found } => write!(f, "invalid PriorityRange string, expected an range of the form `start..=end` but found {found}"),
+            InvalidPriorityRange::InvalidBound { message } => write!(f, "invalid PriorityRange bound: {message}"),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for InvalidPriorityRange {}
+
+impl FromStr for PriorityRange {
+    type Err = InvalidPriorityRange;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut metadata = s.split("..=");
+
+        let start = metadata
+            .next()
+            .ok_or_else(|| InvalidPriorityRange::InvalidSyntax {
+                found: s.to_string(),
+            })?
+            .parse::<u8>()
+            .map(Priority::try_from)
+            .map_err(|err| InvalidPriorityRange::InvalidBound {
+                message: err.to_string(),
+            })?
+            .map_err(|err| InvalidPriorityRange::InvalidBound {
+                message: err.to_string(),
+            })?;
+
+        let end = metadata
+            .next()
+            .ok_or_else(|| InvalidPriorityRange::InvalidSyntax {
+                found: s.to_string(),
+            })?
+            .parse::<u8>()
+            .map(Priority::try_from)
+            .map_err(|err| InvalidPriorityRange::InvalidBound {
+                message: err.to_string(),
+            })?
+            .map_err(|err| InvalidPriorityRange::InvalidBound {
+                message: err.to_string(),
+            })?;
+
+        if metadata.next().is_some() {
+            return Err(InvalidPriorityRange::InvalidSyntax {
+                found: s.to_string(),
+            });
+        };
+
+        Ok(PriorityRange::new(start..=end))
     }
 }
 

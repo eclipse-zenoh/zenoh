@@ -21,10 +21,10 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_core::{bail, zerror};
+use zenoh_core::zerror;
 use zenoh_link::EndPoint;
 use zenoh_protocol::{
-    core::{PriorityRange, Reliability},
+    core::{Priority, PriorityRange, Reliability},
     transport::{init, open},
 };
 use zenoh_result::{Error as ZError, ZResult};
@@ -42,7 +42,7 @@ impl<'a> QoSFsm<'a> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub(crate) enum QoS {
     Disabled,
     Enabled {
@@ -68,25 +68,7 @@ impl QoS {
 
             let priorities = metadata
                 .get(PRIORITY_METADATA_KEY)
-                .map(|metadata| {
-                    let mut metadata = metadata.split("..");
-
-                    let start = metadata
-                        .next()
-                        .ok_or(zerror!("Invalid priority range syntax"))?
-                        .parse::<u8>()?;
-
-                    let end = metadata
-                        .next()
-                        .ok_or(zerror!("Invalid priority range syntax"))?
-                        .parse::<u8>()?;
-
-                    if metadata.next().is_some() {
-                        bail!("Invalid priority range syntax")
-                    };
-
-                    PriorityRange::new(start, end)
-                })
+                .map(PriorityRange::from_str)
                 .transpose()?;
 
             Ok(QoS::Enabled {
@@ -107,10 +89,10 @@ impl QoS {
                 let tag = value & 0b111_u64;
 
                 let priorities = if tag & 0b010_u64 != 0 {
-                    let start = ((value >> 3) & 0xff) as u8;
-                    let end = ((value >> (3 + 8)) & 0xff) as u8;
+                    let start = Priority::try_from(((value >> 3) & 0xff) as u8)?;
+                    let end = Priority::try_from(((value >> (3 + 8)) & 0xff) as u8)?;
 
-                    Some(PriorityRange::new(start, end)?)
+                    Some(PriorityRange::new(start..=end))
                 } else {
                     None
                 };
@@ -141,7 +123,7 @@ impl QoS {
     /// 3. QoS is enabled and priority range is available but reliability is unavailable
     /// 4. QoS is enabled and reliability is available but priority range is unavailable
     /// 5. QoS is enabled and both priority range and reliability are available
-    fn to_u64(self) -> u64 {
+    fn to_u64(&self) -> u64 {
         match self {
             QoS::Disabled => 0b000_u64,
             QoS::Enabled {
@@ -156,13 +138,13 @@ impl QoS {
 
                 if let Some(priorities) = priorities {
                     value |= 0b010_u64;
-                    value |= (priorities.start() as u64) << 3;
-                    value |= (priorities.end() as u64) << (3 + 8);
+                    value |= (*priorities.start() as u64) << 3;
+                    value |= (*priorities.end() as u64) << (3 + 8);
                 }
 
                 if let Some(reliability) = reliability {
                     value |= 0b100_u64;
-                    value |= (bool::from(reliability) as u64) << (3 + 8 + 8);
+                    value |= (bool::from(*reliability) as u64) << (3 + 8 + 8);
                 }
 
                 value
@@ -170,7 +152,7 @@ impl QoS {
         }
     }
 
-    fn to_ext(self) -> Option<init::ext::QoS> {
+    fn to_ext(&self) -> Option<init::ext::QoS> {
         if self.is_enabled() {
             Some(init::ext::QoS::new(self.to_u64()))
         } else {
@@ -199,7 +181,7 @@ impl QoS {
             QoS::Enabled {
                 priorities: Some(priorities),
                 ..
-            } => Some(*priorities),
+            } => Some(priorities.clone()),
         }
     }
 
@@ -291,7 +273,7 @@ impl<'a> OpenFsm for &'a QoSFsm<'a> {
                 reliability: other_reliability,
                 priorities: other_priorities,
             },
-        ) = (*state_self, state_other)
+        ) = (state_self.clone(), state_other)
         else {
             *state_self = QoS::Disabled;
             return Ok(());
@@ -300,7 +282,7 @@ impl<'a> OpenFsm for &'a QoSFsm<'a> {
         let priorities = match (self_priorities, other_priorities) {
             (None, priorities) | (priorities, None) => priorities,
             (Some(self_priorities), Some(other_priorities)) => {
-                if other_priorities.includes(self_priorities) {
+                if other_priorities.includes(&self_priorities) {
                     Some(self_priorities)
                 } else {
                     return Err(zerror!(
@@ -375,7 +357,7 @@ impl<'a> AcceptFsm for &'a QoSFsm<'a> {
                 reliability: other_reliability,
                 priorities: other_priorities,
             },
-        ) = (*state_self, state_other)
+        ) = (state_self.clone(), state_other)
         else {
             *state_self = QoS::Disabled;
             return Ok(());
@@ -384,7 +366,7 @@ impl<'a> AcceptFsm for &'a QoSFsm<'a> {
         let priorities = match (self_priorities, other_priorities) {
             (None, priorities) | (priorities, None) => priorities,
             (Some(self_priorities), Some(other_priorities)) => {
-                if self_priorities.includes(other_priorities) {
+                if self_priorities.includes(&other_priorities) {
                     Some(other_priorities)
                 } else {
                     return Err(zerror!(
@@ -453,6 +435,12 @@ mod tests {
     use super::{QoS, QoSFsm};
     use crate::unicast::establishment::{AcceptFsm, OpenFsm};
 
+    macro_rules! priority_range {
+        ($start:literal, $end:literal) => {
+            PriorityRange::new($start.try_into().unwrap()..=$end.try_into().unwrap())
+        };
+    }
+
     async fn test_negotiation(qos_open: &mut QoS, qos_accept: &mut QoS) -> ZResult<()> {
         let fsm = QoSFsm::new();
 
@@ -508,11 +496,11 @@ mod tests {
                 reliability: None,
             },
             QoS::Enabled {
-                priorities: Some(PriorityRange::new(1, 3).unwrap()),
+                priorities: Some(priority_range!(1, 3)),
                 reliability: None,
             },
             QoS::Enabled {
-                priorities: Some(PriorityRange::new(1, 3).unwrap()),
+                priorities: Some(priority_range!(1, 3)),
                 reliability: None,
             },
         )
@@ -523,7 +511,7 @@ mod tests {
     async fn test_priority_range_negotiation_scenario_3() {
         test_negotiation_ok(
             QoS::Enabled {
-                priorities: Some(PriorityRange::new(1, 3).unwrap()),
+                priorities: Some(priority_range!(1, 3)),
                 reliability: None,
             },
             QoS::Enabled {
@@ -531,7 +519,7 @@ mod tests {
                 reliability: None,
             },
             QoS::Enabled {
-                priorities: Some(PriorityRange::new(1, 3).unwrap()),
+                priorities: Some(priority_range!(1, 3)),
                 reliability: None,
             },
         )
@@ -542,15 +530,15 @@ mod tests {
     async fn test_priority_range_negotiation_scenario_4() {
         test_negotiation_ok(
             QoS::Enabled {
-                priorities: Some(PriorityRange::new(1, 3).unwrap()),
+                priorities: Some(priority_range!(1, 3)),
                 reliability: None,
             },
             QoS::Enabled {
-                priorities: Some(PriorityRange::new(1, 3).unwrap()),
+                priorities: Some(priority_range!(1, 3)),
                 reliability: None,
             },
             QoS::Enabled {
-                priorities: Some(PriorityRange::new(1, 3).unwrap()),
+                priorities: Some(priority_range!(1, 3)),
                 reliability: None,
             },
         )
@@ -561,15 +549,15 @@ mod tests {
     async fn test_priority_range_negotiation_scenario_5() {
         test_negotiation_ok(
             QoS::Enabled {
-                priorities: Some(PriorityRange::new(1, 3).unwrap()),
+                priorities: Some(priority_range!(1, 3)),
                 reliability: None,
             },
             QoS::Enabled {
-                priorities: Some(PriorityRange::new(0, 4).unwrap()),
+                priorities: Some(priority_range!(1, 3)),
                 reliability: None,
             },
             QoS::Enabled {
-                priorities: Some(PriorityRange::new(1, 3).unwrap()),
+                priorities: Some(priority_range!(1, 3)),
                 reliability: None,
             },
         )
@@ -580,11 +568,11 @@ mod tests {
     async fn test_priority_range_negotiation_scenario_6() {
         test_negotiation_err(
             QoS::Enabled {
-                priorities: Some(PriorityRange::new(1, 3).unwrap()),
+                priorities: Some(priority_range!(1, 3)),
                 reliability: None,
             },
             QoS::Enabled {
-                priorities: Some(PriorityRange::new(2, 3).unwrap()),
+                priorities: Some(priority_range!(1, 3)),
                 reliability: None,
             },
         )
@@ -664,15 +652,15 @@ mod tests {
         test_negotiation_ok(
             QoS::Enabled {
                 reliability: Some(Reliability::BestEffort),
-                priorities: Some(PriorityRange::new(1, 3).unwrap()),
+                priorities: Some(priority_range!(1, 3)),
             },
             QoS::Enabled {
                 reliability: Some(Reliability::BestEffort),
-                priorities: Some(PriorityRange::new(1, 4).unwrap()),
+                priorities: Some(priority_range!(1, 3)),
             },
             QoS::Enabled {
                 reliability: Some(Reliability::BestEffort),
-                priorities: Some(PriorityRange::new(1, 3).unwrap()),
+                priorities: Some(priority_range!(1, 3)),
             },
         )
         .await
