@@ -222,7 +222,7 @@ pub mod bytes {
         builders::sample::EncodingBuilderTrait,
         bytes::{
             Deserialize, OptionZBytes, Serialize, ZBytes, ZBytesIterator, ZBytesReader,
-            ZBytesWriter, ZDeserializeError, ZSerde,
+            ZBytesSliceIterator, ZBytesWriter, ZDeserializeError, ZSerde,
         },
         encoding::Encoding,
     };
