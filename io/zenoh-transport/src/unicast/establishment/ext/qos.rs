@@ -314,11 +314,11 @@ impl<'a> OpenFsm for &'a QoSFsm<'a> {
         let reliability = match (self_reliability, other_reliability) {
             (None, reliability) | (reliability, None) => reliability,
             (Some(self_reliability), Some(other_reliability)) => {
-                if other_reliability.implies(self_reliability) {
+                if self_reliability == other_reliability {
                     Some(self_reliability)
                 } else {
                     return Err(zerror!(
-                        "The Reliability received in InitAck cannot be substituted with my Reliability"
+                        "The Reliability received in InitAck doesn't match my Reliability"
                     )
                     .into());
                 }
@@ -398,11 +398,11 @@ impl<'a> AcceptFsm for &'a QoSFsm<'a> {
         let reliability = match (self_reliability, other_reliability) {
             (None, reliability) | (reliability, None) => reliability,
             (Some(self_reliability), Some(other_reliability)) => {
-                if self_reliability.implies(other_reliability) {
+                if self_reliability == other_reliability {
                     Some(other_reliability)
                 } else {
                     return Err(zerror!(
-                        "The Reliability received in InitSyn cannot be substituted for my Reliability"
+                        "The Reliability received in InitSyn doesn't match my Reliability"
                     )
                     .into());
                 }

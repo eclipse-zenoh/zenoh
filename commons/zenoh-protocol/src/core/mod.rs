@@ -408,14 +408,6 @@ pub enum Reliability {
 impl Reliability {
     pub const DEFAULT: Self = Self::Reliable;
 
-    /// Returns `true` is `self` implies `other`.
-    pub fn implies(self, other: Self) -> bool {
-        !matches!(
-            (self, other),
-            (Reliability::Reliable, Reliability::BestEffort)
-        )
-    }
-
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
