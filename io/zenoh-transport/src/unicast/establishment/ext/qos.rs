@@ -223,7 +223,7 @@ impl QoS {
         if rng.gen_bool(0.5) {
             QoS::Disabled
         } else {
-            let priorities = rng.gen_bool(0.5).then(|| PriorityRange::rand());
+            let priorities = rng.gen_bool(0.5).then(PriorityRange::rand);
             let reliability = rng
                 .gen_bool(0.5)
                 .then(|| Reliability::from(rng.gen_bool(0.5)));
