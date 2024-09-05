@@ -86,7 +86,7 @@ impl From<OptionZBytes> for Option<ZBytes> {
     }
 }
 
-/// Trait to encode a type `T` into a [`Value`].
+/// Trait to encode a type `T` into a [`ZBytes`].
 pub trait Serialize<T> {
     type Output;
 
