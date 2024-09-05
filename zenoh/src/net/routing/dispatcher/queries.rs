@@ -41,7 +41,7 @@ use zenoh_util::Timed;
 use super::{
     face::FaceState,
     resource::{QueryRoute, QueryRoutes, QueryTargetQablSet, Resource},
-    tables::{NodeId, RoutingExpr, Tables, TablesLock},
+    tables::{NodeId, QueryTargetQabl, RoutingExpr, Tables, TablesLock},
 };
 use crate::net::routing::hat::{HatTrait, SendDeclare};
 
@@ -344,7 +344,20 @@ fn compute_final_route(
         TargetType::BestMatching => {
             if let Some(qabl) = qabls
                 .iter()
-                .find(|qabl| qabl.direction.0.id != src_face.id && qabl.complete > 0)
+                .fold(None, |accu: Option<&QueryTargetQabl>, qabl| {
+                    if let Some(accu) = accu {
+                        if qabl.direction.0.id != src_face.id
+                            && qabl.complete > 0
+                            && qabl.distance < accu.distance
+                        {
+                            Some(qabl)
+                        } else {
+                            Some(accu)
+                        }
+                    } else {
+                        Some(qabl)
+                    }
+                })
             {
                 let mut route = HashMap::new();
 
