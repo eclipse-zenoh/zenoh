@@ -17,7 +17,6 @@ use std::{
     sync::{atomic::Ordering, Arc},
 };
 
-use ordered_float::OrderedFloat;
 use petgraph::graph::NodeIndex;
 use zenoh_protocol::{
     core::{
@@ -1102,12 +1101,10 @@ fn insert_target_for_qabls(
                                         Resource::get_best_key(expr.prefix, expr.suffix, face.id);
                                     route.push(QueryTargetQabl {
                                         direction: (face.clone(), key_expr.to_owned(), source),
-                                        complete: if complete {
-                                            qabl_info.complete as u64
-                                        } else {
-                                            0
-                                        },
-                                        distance: net.distances[qabl_idx.index()],
+                                        info: Some(QueryableInfoType {
+                                            complete: complete && qabl_info.complete,
+                                            distance: net.distances[qabl_idx.index()] as u16,
+                                        }),
                                     });
                                 }
                             }
@@ -1482,19 +1479,17 @@ impl HatQueriesTrait for HatCode {
                                     key_expr.to_owned(),
                                     NodeId::default(),
                                 ),
-                                complete: if complete {
-                                    qabl_info.complete as u64
-                                } else {
-                                    0
-                                },
-                                distance: 0.5,
+                                info: Some(QueryableInfoType {
+                                    complete: complete && qabl_info.complete,
+                                    distance: 0,
+                                }),
                             });
                         }
                     }
                 }
             }
         }
-        route.sort_by_key(|qabl| OrderedFloat(qabl.distance));
+        route.sort_by_key(|qabl| qabl.info.map(|i| i.distance).unwrap_or(u16::MAX));
         Arc::new(route)
     }
 

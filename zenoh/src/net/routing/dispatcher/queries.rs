@@ -327,7 +327,7 @@ fn compute_final_route(
         TargetType::AllComplete => {
             let mut route = HashMap::new();
             for qabl in qabls.iter() {
-                if qabl.complete > 0
+                if qabl.info.map(|info| info.complete).unwrap_or(true)
                     && tables
                         .hat_code
                         .egress_filter(tables, src_face, &qabl.direction.0, expr)
@@ -345,17 +345,23 @@ fn compute_final_route(
             if let Some(qabl) = qabls
                 .iter()
                 .fold(None, |accu: Option<&QueryTargetQabl>, qabl| {
-                    if let Some(accu) = accu {
-                        if qabl.direction.0.id != src_face.id
-                            && qabl.complete > 0
-                            && qabl.distance < accu.distance
-                        {
-                            Some(qabl)
-                        } else {
-                            Some(accu)
-                        }
-                    } else {
+                    if qabl.direction.0.id != src_face.id
+                        && qabl.info.is_some_and(|info| {
+                            info.complete
+                                && accu
+                                    .map(|accu| {
+                                        info.distance
+                                            < accu
+                                                .info
+                                                .map(|info| info.distance)
+                                                .unwrap_or(u16::MAX)
+                                    })
+                                    .unwrap_or(true)
+                        })
+                    {
                         Some(qabl)
+                    } else {
+                        accu
                     }
                 })
             {
