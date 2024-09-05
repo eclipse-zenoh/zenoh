@@ -70,11 +70,8 @@ tokio = { workspace = true, features = ["rt", "macros", "time"] }
 tokio-util = { workspace = true }
 ahash = { workspace = true }
 async-trait = { workspace = true }
-base64 = { workspace = true }
 bytes = { workspace = true }
-event-listener = { workspace = true }
 flume = { workspace = true }
-form_urlencoded = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
 itertools = { workspace = true }
@@ -85,24 +82,20 @@ paste = { workspace = true }
 petgraph = { workspace = true }
 phf = { workspace = true }
 rand = { workspace = true, features = ["default"] }
-regex = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 serde-pickle = { workspace = true }
 serde_yaml = { workspace = true }
 socket2 = { workspace = true }
-stop-token = { workspace = true }
 uhlc = { workspace = true, features = ["default"] }
 unwrap-infallible = { workspace = true }
-uuid = { workspace = true, features = ["default"] }
 vec_map = { workspace = true }
 zenoh-buffers = { workspace = true, features = ["std"] }
 zenoh-codec = { workspace = true }
 zenoh-collections = { workspace = true, features = ["std"] }
 zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
-zenoh-crypto = { workspace = true }
 zenoh-keyexpr = { workspace = true }
 zenoh-link = { workspace = true }
 zenoh-macros = { workspace = true }

@@ -75,7 +75,6 @@ sha3 = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 zenoh-buffers = { workspace = true }
 zenoh-codec = { workspace = true }
-zenoh-collections = { workspace = true }
 zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-crypto = { workspace = true }
