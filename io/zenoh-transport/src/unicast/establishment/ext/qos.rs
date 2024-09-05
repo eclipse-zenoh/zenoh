@@ -465,269 +465,216 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_priority_range_negotiation_scenario_1() {
-        let qos_open = &mut QoS::Enabled {
-            priorities: None,
-            reliability: None,
-        };
-        let qos_accept = &mut QoS::Enabled {
-            priorities: None,
-            reliability: None,
-        };
-
-        match test_negotiation(qos_open, qos_accept).await {
+    async fn test_negotiation_ok(mut open_qos: QoS, mut accept_qos: QoS, expected_qos: QoS) {
+        match test_negotiation(&mut open_qos, &mut accept_qos).await {
             Err(err) => panic!("expected `Ok(())`, got: {err}"),
             Ok(()) => {
-                assert_eq!(*qos_open, *qos_accept);
-                assert_eq!(
-                    *qos_open,
-                    QoS::Enabled {
-                        priorities: None,
-                        reliability: None
-                    }
-                );
+                assert_eq!(open_qos, accept_qos);
+                assert_eq!(open_qos, expected_qos);
             }
         };
+    }
+
+    async fn test_negotiation_err(mut open_qos: QoS, mut accept_qos: QoS) {
+        if let Ok(()) = test_negotiation(&mut open_qos, &mut accept_qos).await {
+            panic!("expected `Err(_)`, got `Ok(())`")
+        }
+    }
+
+    #[tokio::test]
+    async fn test_priority_range_negotiation_scenario_1() {
+        test_negotiation_ok(
+            QoS::Enabled {
+                priorities: None,
+                reliability: None,
+            },
+            QoS::Enabled {
+                priorities: None,
+                reliability: None,
+            },
+            QoS::Enabled {
+                priorities: None,
+                reliability: None,
+            },
+        )
+        .await
     }
 
     #[tokio::test]
     async fn test_priority_range_negotiation_scenario_2() {
-        let qos_open = &mut QoS::Enabled {
-            priorities: None,
-            reliability: None,
-        };
-        let qos_accept = &mut QoS::Enabled {
-            priorities: Some(PriorityRange::new(1, 3).unwrap()),
-            reliability: None,
-        };
-
-        match test_negotiation(qos_open, qos_accept).await {
-            Err(err) => panic!("expected `Ok(())`, got: {err}"),
-            Ok(()) => {
-                assert_eq!(*qos_open, *qos_accept);
-                assert_eq!(
-                    *qos_open,
-                    QoS::Enabled {
-                        priorities: Some(PriorityRange::new(1, 3).unwrap()),
-                        reliability: None
-                    }
-                );
-            }
-        };
+        test_negotiation_ok(
+            QoS::Enabled {
+                priorities: None,
+                reliability: None,
+            },
+            QoS::Enabled {
+                priorities: Some(PriorityRange::new(1, 3).unwrap()),
+                reliability: None,
+            },
+            QoS::Enabled {
+                priorities: Some(PriorityRange::new(1, 3).unwrap()),
+                reliability: None,
+            },
+        )
+        .await
     }
 
     #[tokio::test]
     async fn test_priority_range_negotiation_scenario_3() {
-        let qos_open = &mut QoS::Enabled {
-            priorities: Some(PriorityRange::new(1, 3).unwrap()),
-            reliability: None,
-        };
-        let qos_accept = &mut QoS::Enabled {
-            priorities: None,
-            reliability: None,
-        };
-
-        match test_negotiation(qos_open, qos_accept).await {
-            Err(err) => panic!("expected `Ok(())`, got: {err}"),
-            Ok(()) => {
-                assert_eq!(*qos_open, *qos_accept);
-                assert_eq!(
-                    *qos_open,
-                    QoS::Enabled {
-                        priorities: Some(PriorityRange::new(1, 3).unwrap()),
-                        reliability: None
-                    }
-                );
-            }
-        };
+        test_negotiation_ok(
+            QoS::Enabled {
+                priorities: Some(PriorityRange::new(1, 3).unwrap()),
+                reliability: None,
+            },
+            QoS::Enabled {
+                priorities: None,
+                reliability: None,
+            },
+            QoS::Enabled {
+                priorities: Some(PriorityRange::new(1, 3).unwrap()),
+                reliability: None,
+            },
+        )
+        .await
     }
 
     #[tokio::test]
     async fn test_priority_range_negotiation_scenario_4() {
-        let qos_open = &mut QoS::Enabled {
-            priorities: Some(PriorityRange::new(1, 3).unwrap()),
-            reliability: None,
-        };
-        let qos_accept = &mut QoS::Enabled {
-            priorities: Some(PriorityRange::new(1, 3).unwrap()),
-            reliability: None,
-        };
-
-        match test_negotiation(qos_open, qos_accept).await {
-            Err(err) => panic!("expected `Ok(())`, got: {err}"),
-            Ok(()) => {
-                assert_eq!(*qos_open, *qos_accept);
-                assert_eq!(
-                    *qos_open,
-                    QoS::Enabled {
-                        priorities: Some(PriorityRange::new(1, 3).unwrap()),
-                        reliability: None
-                    }
-                );
-            }
-        };
+        test_negotiation_ok(
+            QoS::Enabled {
+                priorities: Some(PriorityRange::new(1, 3).unwrap()),
+                reliability: None,
+            },
+            QoS::Enabled {
+                priorities: Some(PriorityRange::new(1, 3).unwrap()),
+                reliability: None,
+            },
+            QoS::Enabled {
+                priorities: Some(PriorityRange::new(1, 3).unwrap()),
+                reliability: None,
+            },
+        )
+        .await
     }
 
     #[tokio::test]
     async fn test_priority_range_negotiation_scenario_5() {
-        let qos_open = &mut QoS::Enabled {
-            priorities: Some(PriorityRange::new(1, 3).unwrap()),
-            reliability: None,
-        };
-        let qos_accept = &mut QoS::Enabled {
-            priorities: Some(PriorityRange::new(0, 4).unwrap()),
-            reliability: None,
-        };
-
-        match test_negotiation(qos_open, qos_accept).await {
-            Err(err) => panic!("expected `Ok(())`, got: {err}"),
-            Ok(()) => {
-                assert_eq!(*qos_open, *qos_accept);
-                assert_eq!(
-                    *qos_open,
-                    QoS::Enabled {
-                        priorities: Some(PriorityRange::new(1, 3).unwrap()),
-                        reliability: None
-                    }
-                );
-            }
-        };
+        test_negotiation_ok(
+            QoS::Enabled {
+                priorities: Some(PriorityRange::new(1, 3).unwrap()),
+                reliability: None,
+            },
+            QoS::Enabled {
+                priorities: Some(PriorityRange::new(0, 4).unwrap()),
+                reliability: None,
+            },
+            QoS::Enabled {
+                priorities: Some(PriorityRange::new(1, 3).unwrap()),
+                reliability: None,
+            },
+        )
+        .await
     }
 
     #[tokio::test]
     async fn test_priority_range_negotiation_scenario_6() {
-        let qos_open = &mut QoS::Enabled {
-            priorities: Some(PriorityRange::new(1, 3).unwrap()),
-            reliability: None,
-        };
-        let qos_accept = &mut QoS::Enabled {
-            priorities: Some(PriorityRange::new(2, 3).unwrap()),
-            reliability: None,
-        };
-
-        if let Ok(()) = test_negotiation(qos_open, qos_accept).await {
-            panic!("expected `Err(_)`, got `Ok(())`")
-        }
+        test_negotiation_err(
+            QoS::Enabled {
+                priorities: Some(PriorityRange::new(1, 3).unwrap()),
+                reliability: None,
+            },
+            QoS::Enabled {
+                priorities: Some(PriorityRange::new(2, 3).unwrap()),
+                reliability: None,
+            },
+        )
+        .await
     }
 
     #[tokio::test]
     async fn test_reliability_negotiation_scenario_2() {
-        let qos_open = &mut QoS::Enabled {
-            reliability: None,
-            priorities: None,
-        };
-        let qos_accept = &mut QoS::Enabled {
-            reliability: Some(Reliability::BestEffort),
-            priorities: None,
-        };
-
-        match test_negotiation(qos_open, qos_accept).await {
-            Err(err) => panic!("expected `Ok(())`, got: {err}"),
-            Ok(()) => {
-                assert_eq!(*qos_open, *qos_accept);
-                assert_eq!(
-                    *qos_open,
-                    QoS::Enabled {
-                        reliability: Some(Reliability::BestEffort),
-                        priorities: None
-                    }
-                );
-            }
-        };
+        test_negotiation_ok(
+            QoS::Enabled {
+                reliability: None,
+                priorities: None,
+            },
+            QoS::Enabled {
+                reliability: Some(Reliability::BestEffort),
+                priorities: None,
+            },
+            QoS::Enabled {
+                reliability: Some(Reliability::BestEffort),
+                priorities: None,
+            },
+        )
+        .await
     }
 
     #[tokio::test]
     async fn test_reliability_negotiation_scenario_3() {
-        let qos_open = &mut QoS::Enabled {
-            reliability: Some(Reliability::Reliable),
-            priorities: None,
-        };
-        let qos_accept = &mut QoS::Enabled {
-            reliability: Some(Reliability::BestEffort),
-            priorities: None,
-        };
-
-        match test_negotiation(qos_open, qos_accept).await {
-            Err(err) => panic!("expected `Ok(())`, got: {err}"),
-            Ok(()) => {
-                assert_eq!(*qos_open, *qos_accept);
-                assert_eq!(
-                    *qos_open,
-                    QoS::Enabled {
-                        reliability: Some(Reliability::Reliable),
-                        priorities: None
-                    }
-                );
-            }
-        };
+        test_negotiation_err(
+            QoS::Enabled {
+                reliability: Some(Reliability::Reliable),
+                priorities: None,
+            },
+            QoS::Enabled {
+                reliability: Some(Reliability::BestEffort),
+                priorities: None,
+            },
+        )
+        .await
     }
 
     #[tokio::test]
     async fn test_reliability_negotiation_scenario_4() {
-        let qos_open = &mut QoS::Enabled {
-            reliability: Some(Reliability::Reliable),
-            priorities: None,
-        };
-        let qos_accept = &mut QoS::Enabled {
-            reliability: Some(Reliability::Reliable),
-            priorities: None,
-        };
-
-        match test_negotiation(qos_open, qos_accept).await {
-            Err(err) => panic!("expected `Ok(())`, got: {err}"),
-            Ok(()) => {
-                assert_eq!(*qos_open, *qos_accept);
-                assert_eq!(
-                    *qos_open,
-                    QoS::Enabled {
-                        reliability: Some(Reliability::Reliable),
-                        priorities: None
-                    }
-                );
-            }
-        };
+        test_negotiation_ok(
+            QoS::Enabled {
+                reliability: Some(Reliability::Reliable),
+                priorities: None,
+            },
+            QoS::Enabled {
+                reliability: Some(Reliability::Reliable),
+                priorities: None,
+            },
+            QoS::Enabled {
+                reliability: Some(Reliability::Reliable),
+                priorities: None,
+            },
+        )
+        .await
     }
 
     #[tokio::test]
     async fn test_reliability_negotiation_scenario_5() {
-        let qos_open = &mut QoS::Enabled {
-            reliability: Some(Reliability::BestEffort),
-            priorities: None,
-        };
-        let qos_accept = &mut QoS::Enabled {
-            reliability: Some(Reliability::Reliable),
-            priorities: None,
-        };
-
-        if let Ok(()) = test_negotiation(qos_open, qos_accept).await {
-            panic!("expected `Err(_)`, got `Ok(())`")
-        }
+        test_negotiation_err(
+            QoS::Enabled {
+                reliability: Some(Reliability::BestEffort),
+                priorities: None,
+            },
+            QoS::Enabled {
+                reliability: Some(Reliability::Reliable),
+                priorities: None,
+            },
+        )
+        .await
     }
 
     #[tokio::test]
     async fn test_priority_range_and_reliability_negotiation_scenario_1() {
-        let qos_open = &mut QoS::Enabled {
-            reliability: Some(Reliability::Reliable),
-            priorities: Some(PriorityRange::new(1, 3).unwrap()),
-        };
-        let qos_accept = &mut QoS::Enabled {
-            reliability: Some(Reliability::BestEffort),
-            priorities: Some(PriorityRange::new(1, 4).unwrap()),
-        };
-
-        match test_negotiation(qos_open, qos_accept).await {
-            Err(err) => panic!("expected `Ok(())`, got: {err}"),
-            Ok(()) => {
-                assert_eq!(*qos_open, *qos_accept);
-                assert_eq!(
-                    *qos_open,
-                    QoS::Enabled {
-                        reliability: Some(Reliability::Reliable),
-                        priorities: Some(PriorityRange::new(1, 3).unwrap())
-                    }
-                );
-            }
-        };
+        test_negotiation_ok(
+            QoS::Enabled {
+                reliability: Some(Reliability::BestEffort),
+                priorities: Some(PriorityRange::new(1, 3).unwrap()),
+            },
+            QoS::Enabled {
+                reliability: Some(Reliability::BestEffort),
+                priorities: Some(PriorityRange::new(1, 4).unwrap()),
+            },
+            QoS::Enabled {
+                reliability: Some(Reliability::BestEffort),
+                priorities: Some(PriorityRange::new(1, 3).unwrap()),
+            },
+        )
+        .await
     }
 }
