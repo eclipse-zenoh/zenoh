@@ -354,7 +354,7 @@ impl HatQueriesTrait for HatCode {
                 let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
                 route.push(QueryTargetQabl {
                     direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
-                    complete: 0,
+                    complete: 1,
                     distance: f64::MAX,
                 });
             }
