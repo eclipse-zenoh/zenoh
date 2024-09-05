@@ -651,6 +651,7 @@ impl std::io::Write for ZBytesWriter<'_> {
 
 /// An iterator that implements [`std::iter::Iterator`] trait to iterate on [`&[u8]`].
 #[repr(transparent)]
+#[derive(Debug)]
 pub struct ZBytesSliceIterator<'a>(ZBytesSliceIteratorInner<'a>);
 
 // Typedef to make clippy happy about complex type. Encapsulate inner `ZBufSliceOperator`.
