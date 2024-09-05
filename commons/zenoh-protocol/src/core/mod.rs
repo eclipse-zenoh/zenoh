@@ -311,6 +311,7 @@ pub enum Priority {
 }
 
 #[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq, Serialize)]
+/// A `u8` range bounded inclusively below and above.
 pub struct PriorityRange {
     pub start: u8,
     pub end: u8,
@@ -318,7 +319,7 @@ pub struct PriorityRange {
 
 impl PriorityRange {
     pub fn new(start: u8, end: u8) -> ZResult<Self> {
-        if start >= end || start < Priority::MAX as u8 || end > Priority::MIN as u8 + 1 {
+        if start > end || start < Priority::MAX as u8 || end > Priority::MIN as u8 {
             bail!("Invalid priority range: {start}..{end}")
         };
 
@@ -327,7 +328,7 @@ impl PriorityRange {
 
     /// Returns `true` if `priority` is a member of `self`.
     pub fn contains(&self, priority: Priority) -> bool {
-        self.start <= (priority as u8) && (priority as u8) < self.end
+        self.start <= (priority as u8) && (priority as u8) <= self.end
     }
 
     /// Returns `true` if `self` is a superset of `other`.
@@ -336,7 +337,7 @@ impl PriorityRange {
     }
 
     pub fn len(&self) -> usize {
-        (self.end - self.start) as usize
+        (self.end - self.start + 1) as usize
     }
 
     pub fn is_empty(&self) -> bool {

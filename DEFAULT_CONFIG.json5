@@ -333,17 +333,16 @@
       },
     },
     link: {
-      /// An optional whitelist of protocols to be used for accepting and opening sessions.
-      /// If not configured, all the supported protocols are automatically whitelisted.
-      /// The supported protocols are: ["tcp" , "udp", "tls", "quic", "ws", "unixsock-stream", "vsock"]
-      /// For example, to only enable "tls" and "quic":
-      ///   protocols: ["tls", "quic"],
+      /// An optional whitelist of protocols to be used for accepting and opening sessions. If not
+      /// configured, all the supported protocols are automatically whitelisted. The supported
+      /// protocols are: ["tcp" , "udp", "tls", "quic", "ws", "unixsock-stream", "vsock"] For
+      /// example, to only enable "tls" and "quic": protocols: ["tls", "quic"],
       ///
       /// ## Endpoint metadata
       ///
-      /// **priorities**: a Rust-style half-open range (e.g. `2..4` signifies priorities 2 and 3).
-      /// This value is used to select the link used for transmission based on the Priority of the
-      /// message in question.
+      /// **priorities**: a range bounded inclusively below and above (e.g. `2..4` signifies
+      /// priorities 2, 3 and 4). This value is used to select the link used for transmission based
+      /// on the Priority of the message in question.
       ///
       /// **reliability**: either "best_effort" or "reliable". This value is used to select the link
       /// used for transmission based on the Reliability of the message in question.
