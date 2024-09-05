@@ -310,7 +310,6 @@ pub enum Priority {
     Background = 7,
 }
 
-// TODO: Use Priority type
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize)]
 /// A `u8` range bounded inclusively below and above.
 pub struct PriorityRange(RangeInclusive<Priority>);
@@ -334,7 +333,11 @@ impl PriorityRange {
     }
 
     pub fn len(&self) -> usize {
-        *self.end() as usize - *self.start() as usize + 1 // 1..=3, 3-1 == 2
+        *self.end() as usize - *self.start() as usize + 1
+    }
+
+    pub fn is_empty(&self) -> bool {
+        false
     }
 
     #[cfg(feature = "test")]
