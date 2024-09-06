@@ -54,6 +54,15 @@ impl From<ZenohIdProto> for ZenohId {
     }
 }
 
+impl TryFrom<&[u8]> for ZenohId {
+    type Error = zenoh_result::Error;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        let proto: ZenohIdProto = value.try_into()?;
+        Ok(ZenohId::from(proto))
+    }
+}
+
 impl From<ZenohId> for ZenohIdProto {
     fn from(id: ZenohId) -> Self {
         id.0
@@ -69,6 +78,13 @@ impl From<ZenohId> for uhlc::ID {
 impl From<ZenohId> for OwnedKeyExpr {
     fn from(zid: ZenohId) -> Self {
         zid.0.into()
+    }
+}
+
+impl From<ZenohId> for [u8; ZenohIdProto::MAX_SIZE] {
+    fn from(value: ZenohId) -> Self {
+        let proto: ZenohIdProto = value.into();
+        proto.to_le_bytes()
     }
 }
 
