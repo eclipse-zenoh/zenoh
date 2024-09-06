@@ -52,7 +52,7 @@ type OpenError = (zenoh_result::Error, Option<u8>);
 struct StateTransport {
     batch_size: BatchSize,
     resolution: Resolution,
-    ext_qos: ext::qos::QoS,
+    ext_qos: ext::qos::StateOpen,
     #[cfg(feature = "transport_multilink")]
     ext_mlink: ext::multilink::StateOpen,
     #[cfg(feature = "shared-memory")]
@@ -586,7 +586,7 @@ pub(crate) async fn open_link(
         transport: StateTransport {
             batch_size,
             resolution: manager.config.resolution,
-            ext_qos: ext::qos::QoS::new(manager.config.unicast.is_qos, &endpoint)?,
+            ext_qos: ext::qos::StateOpen::new(manager.config.unicast.is_qos, &endpoint)?,
             #[cfg(feature = "transport_multilink")]
             ext_mlink: manager
                 .state
@@ -654,7 +654,7 @@ pub(crate) async fn open_link(
         whatami: iack_out.other_whatami,
         sn_resolution: state.transport.resolution.get(Field::FrameSN),
         tx_initial_sn: osyn_out.mine_initial_sn,
-        is_qos: state.transport.ext_qos.is_enabled(),
+        is_qos: state.transport.ext_qos.is_qos(),
         #[cfg(feature = "transport_multilink")]
         multilink: state.transport.ext_mlink.multilink(),
         #[cfg(feature = "shared-memory")]

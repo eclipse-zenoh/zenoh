@@ -45,6 +45,7 @@ use zenoh_result::ZResult;
 
 pub const BIND_INTERFACE: &str = "iface";
 
+// TODO(fuzzypixelz): Patch the Locators to contain negotiated priority and reliability
 #[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
 pub struct Link {
     pub src: Locator,

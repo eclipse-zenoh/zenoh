@@ -311,7 +311,7 @@ pub enum Priority {
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize)]
-/// A `u8` range bounded inclusively below and above.
+/// A [`Priority`] range bounded inclusively below and above.
 pub struct PriorityRange(RangeInclusive<Priority>);
 
 impl Deref for PriorityRange {

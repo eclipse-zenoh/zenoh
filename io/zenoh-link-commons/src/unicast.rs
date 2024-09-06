@@ -38,6 +38,7 @@ pub trait LinkManagerUnicastTrait: Send + Sync {
 }
 pub type NewLinkChannelSender = flume::Sender<NewLinkUnicast>;
 
+// TODO(fuzzypixelz): Delete this
 /// Notification of a new inbound connection.
 ///
 /// Link implementations should preserve the metadata sections of [`NewLinkUnicast::endpoint`].
