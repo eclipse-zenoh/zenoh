@@ -120,9 +120,9 @@ fn declare_simple_token(
 
     propagate_simple_token(tables, res, face, send_declare);
 
-    let wire_expr = Resource::decl_key(res, face, true);
     if let Some(interest_id) = interest_id {
         if let Some((interest, _)) = face.pending_current_interests.get(&interest_id) {
+            let wire_expr = Resource::get_best_key(res, "", interest.src_face.id);
             send_declare(
                 &interest.src_face.primitives,
                 RoutingContext::with_expr(
