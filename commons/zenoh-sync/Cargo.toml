@@ -35,7 +35,6 @@ tokio = { workspace = true, features = ["sync"] }
 zenoh-buffers = { workspace = true }
 zenoh-collections = { workspace = true, features = ["default"] }
 zenoh-core = { workspace = true }
-zenoh-runtime = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "sync", "rt-multi-thread", "time"] }

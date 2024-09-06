@@ -48,6 +48,9 @@ jobs:
       - name: Install latest cargo-deny
         uses: taiki-e/install-action@cargo-deny
 
+      - name: Install latest cargo-machete
+        uses: taiki-e/install-action@cargo-machete
+
       - name: Code format check
         run: cargo fmt --check -- --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate"
 
@@ -93,6 +96,9 @@ jobs:
 
       - name: Check licenses
         run: cargo deny check licenses
+
+      - name: Check unused dependencies
+        run: cargo machete
 
   test:
     name: Unit tests on ${{ matrix.os }}

@@ -569,13 +569,18 @@ pub(crate) async fn open_link(
         ext_compression: ext::compression::CompressionFsm::new(),
     };
 
+    // Clippy raises a warning because `batch_size::UNICAST` is currently equal to `BatchSize::MAX`.
+    // However, the current code catches the cases where `batch_size::UNICAST` is different from `BatchSize::MAX`.
+    #[allow(clippy::unnecessary_min_or_max)]
+    let batch_size = manager
+        .config
+        .batch_size
+        .min(link.config.batch.mtu)
+        .min(batch_size::UNICAST);
+
     let mut state = State {
         transport: StateTransport {
-            batch_size: manager
-                .config
-                .batch_size
-                .min(batch_size::UNICAST)
-                .min(link.config.batch.mtu),
+            batch_size,
             resolution: manager.config.resolution,
             ext_qos: ext::qos::StateOpen::new(manager.config.unicast.is_qos),
             #[cfg(feature = "transport_multilink")]

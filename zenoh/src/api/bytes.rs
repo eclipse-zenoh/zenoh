@@ -86,7 +86,7 @@ impl From<OptionZBytes> for Option<ZBytes> {
     }
 }
 
-/// Trait to encode a type `T` into a [`Value`].
+/// Trait to encode a type `T` into a [`ZBytes`].
 pub trait Serialize<T> {
     type Output;
 
@@ -106,7 +106,7 @@ pub trait Deserialize<T> {
 ///
 /// `ZBytes` provides convenient methods to the user for serialization/deserialization based on the default Zenoh serializer [`ZSerde`].
 ///
-/// **NOTE:** Zenoh semantic and protocol take care of sending and receiving bytes without restricting the actual data types.
+/// **NOTE 1:** Zenoh semantic and protocol take care of sending and receiving bytes without restricting the actual data types.
 /// [`ZSerde`] is the default serializer/deserializer provided for convenience to the users to deal with primitives data types via
 /// a simple out-of-the-box encoding. [`ZSerde`] is **NOT** by any means the only serializer/deserializer users can use nor a limitation
 /// to the types supported by Zenoh. Users are free and encouraged to use any serializer/deserializer of their choice like *serde*,
@@ -185,6 +185,40 @@ pub trait Deserialize<T> {
 /// assert_eq!(start, end);
 /// ```
 ///
+/// **NOTE 2:** `ZBytes` may store data in non-contiguous regions of memory.
+/// The typical case for `ZBytes` to store data in different memory regions is when data is received fragmented from the network.
+/// The user then can decided to use [`ZBytes::deserialize`], [`ZBytes::reader`], [`ZBytes::into`], or [`ZBytes::slices`] depending
+/// on their needs.
+///
+/// To directly access raw data as contiguous slice it is preferred to convert `ZBytes` into a [`std::borrow::Cow<[u8]>`].
+/// If `ZBytes` contains all the data in a single memory location, this is guaranteed to be zero-copy. This is the common case for small messages.
+/// If `ZBytes` contains data scattered in different memory regions, this operation will do an allocation and a copy. This is the common case for large messages.
+///
+/// Example:
+/// ```rust
+/// use std::borrow::Cow;
+/// use zenoh::bytes::ZBytes;
+///
+/// let buf: Vec<u8> = vec![0, 1, 2, 3];
+/// let bytes = ZBytes::from(buf.clone());
+/// let deser: Cow<[u8]> = bytes.into();
+/// assert_eq!(buf.as_slice(), deser.as_ref());
+/// ```
+///
+/// It is also possible to iterate over the raw data that may be scattered on different memory regions.
+/// Please note that no guarantee is provided on the internal memory layout of [`ZBytes`] nor on how many slices a given [`ZBytes`] will be composed of.
+/// The only provided guarantee is on the bytes order that is preserved.
+///
+/// Example:
+/// ```rust
+/// use zenoh::bytes::ZBytes;
+///
+/// let buf: Vec<u8> = vec![0, 1, 2, 3];
+/// let bytes = ZBytes::from(buf.clone());
+/// for slice in bytes.slices() {
+///     println!("{:02x?}", slice);
+/// }
+/// ```
 #[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ZBytes(ZBuf);
@@ -208,7 +242,7 @@ impl ZBytes {
         self.0.is_empty()
     }
 
-    /// Returns the length of the ZBytes.
+    /// Returns the total number of bytes in the ZBytes.
     pub fn len(&self) -> usize {
         self.0.len()
     }
@@ -229,11 +263,25 @@ impl ZBytes {
     }
 
     /// Get a [`ZBytesWriter`] implementing [`std::io::Write`] trait.
+    ///
+    /// See [`ZBytesWriter`] on how to chain the serialization of different types into a single [`ZBytes`].
     pub fn writer(&mut self) -> ZBytesWriter<'_> {
         ZBytesWriter(self.0.writer())
     }
 
-    /// Get a [`ZBytesReader`] implementing [`std::io::Read`] trait.
+    /// Get a [`ZBytesIterator`] that deserializes a sequence of `T`.
+    ///
+    /// Example:
+    /// ```rust
+    /// use zenoh::bytes::ZBytes;
+    ///
+    /// let list: Vec<f32> = vec![1.1, 2.2, 3.3];
+    /// let mut zbs = ZBytes::from_iter(list.iter());
+    ///
+    /// for (index, elem) in zbs.iter::<f32>().enumerate() {
+    ///     assert_eq!(list[index], elem.unwrap());
+    /// }
+    /// ```
     pub fn iter<T>(&self) -> ZBytesIterator<'_, T>
     where
         for<'b> ZSerde: Deserialize<T, Input<'b> = &'b ZBytes>,
@@ -243,6 +291,62 @@ impl ZBytes {
             reader: self.0.reader(),
             _t: PhantomData::<T>,
         }
+    }
+
+    /// Return an iterator on raw bytes slices contained in the [`ZBytes`].
+    ///
+    /// [`ZBytes`] may store data in non-contiguous regions of memory, this iterator
+    /// then allows to access raw data directly without any attempt of deserializing it.
+    /// Please note that no guarantee is provided on the internal memory layout of [`ZBytes`].
+    /// The only provided guarantee is on the bytes order that is preserved.
+    ///
+    /// Please note that [`ZBytes::iter`] will perform deserialization while iterating while [`ZBytes::slices`] will not.
+    ///
+    /// ```rust
+    /// use std::io::Write;
+    /// use zenoh::bytes::ZBytes;
+    ///
+    /// let buf1: Vec<u8> = vec![1, 2, 3];
+    /// let buf2: Vec<u8> = vec![4, 5, 6, 7, 8];
+    /// let mut zbs = ZBytes::empty();
+    /// let mut writer = zbs.writer();
+    /// writer.write(&buf1);
+    /// writer.write(&buf2);
+    ///
+    /// // Access the raw content
+    /// for slice in zbs.slices() {
+    ///     println!("{:02x?}", slice);
+    /// }
+    ///
+    /// // Concatenate input in a single vector
+    /// let buf: Vec<u8> = buf1.into_iter().chain(buf2.into_iter()).collect();
+    /// // Concatenate raw bytes in a single vector
+    /// let out: Vec<u8> = zbs.slices().fold(Vec::new(), |mut b, x| { b.extend_from_slice(x); b });
+    /// // The previous line is the equivalent of
+    /// // let out: Vec<u8> = zbs.into();
+    /// assert_eq!(buf, out);    
+    /// ```
+    ///
+    /// The example below shows how the [`ZBytesWriter::append`] simply appends the slices of one [`ZBytes`]
+    /// to another and how those slices can be iterated over to access the raw data.
+    /// ```rust
+    /// use std::io::Write;
+    /// use zenoh::bytes::ZBytes;
+    ///
+    /// let buf1: Vec<u8> = vec![1, 2, 3];
+    /// let buf2: Vec<u8> = vec![4, 5, 6, 7, 8];
+    ///
+    /// let mut zbs = ZBytes::empty();
+    /// let mut writer = zbs.writer();
+    /// writer.append(ZBytes::from(buf1.clone()));
+    /// writer.append(ZBytes::from(buf2.clone()));
+    ///
+    /// let mut iter = zbs.slices();
+    /// assert_eq!(buf1.as_slice(), iter.next().unwrap());
+    /// assert_eq!(buf2.as_slice(), iter.next().unwrap());
+    /// ```
+    pub fn slices(&self) -> ZBytesSliceIterator<'_> {
+        ZBytesSliceIterator(self.0.slices())
     }
 
     /// Serialize an object of type `T` as a [`ZBytes`] using the [`ZSerde`].
@@ -293,7 +397,11 @@ impl ZBytes {
         ZSerde.serialize(t)
     }
 
-    /// Deserialize an object of type `T` from a [`Value`] using the [`ZSerde`].
+    /// Deserialize an object of type `T` using [`ZSerde`].
+    ///
+    /// See [`ZBytes::serialize`] and [`ZBytes::try_serialize`] for the examples.
+    ///
+    /// See [`ZBytes::into`] for infallible conversion, e.g. to get raw bytes.
     pub fn deserialize<'a, T>(&'a self) -> Result<T, <ZSerde as Deserialize<T>>::Error>
     where
         ZSerde: Deserialize<T, Input<'a> = &'a ZBytes>,
@@ -302,7 +410,7 @@ impl ZBytes {
         ZSerde.deserialize(self)
     }
 
-    /// Deserialize an object of type `T` from a [`Value`] using the [`ZSerde`].
+    /// Deserialize an object of type `T` using [`ZSerde`].
     pub fn deserialize_mut<'a, T>(&'a mut self) -> Result<T, <ZSerde as Deserialize<T>>::Error>
     where
         ZSerde: Deserialize<T, Input<'a> = &'a mut ZBytes>,
@@ -311,7 +419,37 @@ impl ZBytes {
         ZSerde.deserialize(self)
     }
 
-    /// Infallibly deserialize an object of type `T` from a [`Value`] using the [`ZSerde`].
+    /// Infallibly deserialize an object of type `T` using [`ZSerde`].
+    ///
+    /// To directly access raw data as contiguous slice it is preferred to convert `ZBytes` into a [`std::borrow::Cow<[u8]>`](`std::borrow::Cow`).
+    /// If [`ZBytes`] contains all the data in a single memory location, then it is guaranteed to be zero-copy. This is the common case for small messages.
+    /// If [`ZBytes`] contains data scattered in different memory regions, this operation will do an allocation and a copy. This is the common case for large messages.
+    ///
+    /// ```rust
+    /// use std::borrow::Cow;
+    /// use zenoh::bytes::ZBytes;
+    ///
+    /// let buf: Vec<u8> = vec![0, 1, 2, 3];
+    /// let bytes = ZBytes::from(buf.clone());
+    /// let deser: Cow<[u8]> = bytes.into();
+    /// assert_eq!(buf.as_slice(), deser.as_ref());
+    /// ```
+    ///
+    /// An alternative is to convert `ZBytes` into a [`std::vec::Vec<u8>`].
+    /// Converting to [`std::vec::Vec<u8>`] will always allocate and make a copy.
+    ///
+    /// ```rust
+    /// use std::borrow::Cow;
+    /// use zenoh::bytes::ZBytes;
+    ///
+    /// let buf: Vec<u8> = vec![0, 1, 2, 3];
+    /// let bytes = ZBytes::from(buf.clone());
+    /// let deser: Vec<u8> = bytes.into();
+    /// assert_eq!(buf.as_slice(), deser.as_slice());
+    /// ```
+    ///
+    /// If you want to be sure that no copy is performed at all, then you should use [`ZBytes::slices`].
+    /// Please note that in this case data may not be contiguous in memory and it is the responsibility of the user to properly parse the raw slices.
     pub fn into<'a, T>(&'a self) -> T
     where
         ZSerde: Deserialize<T, Input<'a> = &'a ZBytes, Error = Infallible>,
@@ -320,7 +458,7 @@ impl ZBytes {
         ZSerde.deserialize(self).unwrap_infallible()
     }
 
-    /// Infallibly deserialize an object of type `T` from a [`Value`] using the [`ZSerde`].
+    /// Infallibly deserialize an object of type `T` using the [`ZSerde`].
     pub fn into_mut<'a, T>(&'a mut self) -> T
     where
         ZSerde: Deserialize<T, Input<'a> = &'a mut ZBytes, Error = Infallible>,
@@ -511,6 +649,23 @@ impl std::io::Write for ZBytesWriter<'_> {
     }
 }
 
+/// An iterator that implements [`std::iter::Iterator`] trait to iterate on [`&[u8]`].
+#[repr(transparent)]
+#[derive(Debug)]
+pub struct ZBytesSliceIterator<'a>(ZBytesSliceIteratorInner<'a>);
+
+// Typedef to make clippy happy about complex type. Encapsulate inner `ZBufSliceOperator`.
+type ZBytesSliceIteratorInner<'a> =
+    std::iter::Map<core::slice::Iter<'a, ZSlice>, fn(&'a ZSlice) -> &'a [u8]>;
+
+impl<'a> Iterator for ZBytesSliceIterator<'a> {
+    type Item = &'a [u8];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next()
+    }
+}
+
 /// An iterator that implements [`std::iter::Iterator`] trait to iterate on values `T` in a [`ZBytes`].
 /// Note that [`ZBytes`] contains a serialized version of `T` and iterating over a [`ZBytes`] performs lazy deserialization.
 #[repr(transparent)]
@@ -553,7 +708,7 @@ where
 }
 
 /// The default serializer for [`ZBytes`]. It supports primitives types, such as: `Vec<u8>`, `uX`, `iX`, `fX`, `String`, `bool`.
-/// It also supports common Rust serde values like `serde_json::Value`.
+/// It also supports common Rust serde values like [`serde_json::Value`].
 ///
 /// **NOTE:** Zenoh semantic and protocol take care of sending and receiving bytes without restricting the actual data types.
 /// [`ZSerde`] is the default serializer/deserializer provided for convenience to the users to deal with primitives data types via
@@ -1164,6 +1319,7 @@ impl From<&mut Cow<'_, str>> for ZBytes {
     }
 }
 
+/// See [`Deserialize<Cow<'a, [u8]>>`] for guarantees on copies.
 impl<'a> Deserialize<Cow<'a, str>> for ZSerde {
     type Input<'b> = &'a ZBytes;
     type Error = Utf8Error;

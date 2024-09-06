@@ -33,7 +33,8 @@ fn main() {
     // Corresponding encoding to be used in operations like `.put()`, `.reply()`, etc.
     // let encoding = Encoding::ZENOH_STRING;
 
-    // Cow
+    // Cow<str>
+    // See [`zenoh::bytes::ZBytes`] documentation for zero-copy behaviour.
     let input = Cow::from("test");
     let payload = ZBytes::from(&input);
     let output: Cow<str> = payload.deserialize().unwrap();
@@ -45,6 +46,15 @@ fn main() {
     let input: Vec<u8> = vec![1, 2, 3, 4];
     let payload = ZBytes::from(&input);
     let output: Vec<u8> = payload.into();
+    assert_eq!(input, output);
+    // Corresponding encoding to be used in operations like `.put()`, `.reply()`, etc.
+    // let encoding = Encoding::ZENOH_BYTES;
+
+    // Cow<[u8]>
+    // See [`zenoh::bytes::ZBytes`] documentation for zero-copy behaviour.
+    let input = Cow::from(vec![1, 2, 3, 4]);
+    let payload = ZBytes::from(&input);
+    let output: Cow<[u8]> = payload.into();
     assert_eq!(input, output);
     // Corresponding encoding to be used in operations like `.put()`, `.reply()`, etc.
     // let encoding = Encoding::ZENOH_BYTES;
@@ -79,6 +89,13 @@ fn main() {
     let payload = ZBytes::from_iter(input.iter());
     for (idx, value) in payload.iter::<i32>().enumerate() {
         assert_eq!(input[idx], value.unwrap());
+    }
+
+    // Iterator RAW
+    let input: [i32; 4] = [1, 2, 3, 4];
+    let payload = ZBytes::from_iter(input.iter());
+    for slice in payload.slices() {
+        println!("{:02x?}", slice);
     }
 
     // HashMap

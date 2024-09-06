@@ -34,7 +34,6 @@ name = "zenoh_plugin_example"
 crate-type = ["cdylib"]
 
 [dependencies]
-const_format = { workspace = true }
 zenoh-util = { workspace = true }
 futures = { workspace = true }
 lazy_static = { workspace = true }
@@ -49,3 +48,6 @@ zenoh = { workspace = true, features = [
     "unstable",
 ] }
 zenoh-plugin-trait = { workspace = true }
+
+[package.metadata.cargo-machete]
+ignored = ["git-version"]

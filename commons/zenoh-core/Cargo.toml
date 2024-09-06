@@ -33,7 +33,6 @@ default = ["std"]
 
 [dependencies]
 tokio = { workspace = true, features = ["rt"] }
-async-global-executor = { workspace = true, features = ["tokio"] }
 lazy_static = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-runtime = { workspace = true }
