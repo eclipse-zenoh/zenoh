@@ -393,6 +393,7 @@ pub trait Undeclarable<S = ()>: UndeclarableSealed<S> {}
 impl<T, S> Undeclarable<S> for T where T: UndeclarableSealed<S> {}
 
 pub(crate) struct SessionInner {
+    /// See [`WeakSession`] doc
     weak_counter: Mutex<usize>,
     pub(crate) runtime: Runtime,
     pub(crate) state: RwLock<SessionState>,
@@ -435,7 +436,7 @@ impl Clone for Session {
 impl Drop for Session {
     fn drop(&mut self) {
         let weak = self.0.weak_counter.lock().unwrap();
-        if Arc::strong_count(&self.0) == *weak + 1 {
+        if Arc::strong_count(&self.0) == *weak + /* the `Arc` currently dropped */ 1 {
             drop(weak);
             if let Err(error) = self.close().wait() {
                 tracing::error!(error)
@@ -444,6 +445,20 @@ impl Drop for Session {
     }
 }
 
+/// `WeakSession` provides a weak-like semantic to the arc-like session, without using [`Weak`].
+/// It allows notably to establish reference cycles inside the session, for the primitive
+/// implementation.
+/// When all `Session` instance are dropped, [`Session::close`] is be called and cleans
+/// the reference cycles, allowing the underlying `Arc` to be properly reclaimed.
+///
+/// The pseudo-weak algorithm relies on a counter wrapped in a mutex. It was indeed the simplest
+/// to implement it, because atomic manipulations to achieve this semantic would not have been
+/// trivial at all — what could happen if a pseudo-weak is cloned while the last session instance
+/// is dropped? With a mutex, it's simple, and it works perfectly fine, as we don't care about the
+/// performance penalty when it comes to session entities cloning/dropping.
+///
+/// (Although it was planed to be used initially, `Weak` was in fact causing errors in the session
+/// closing, because the primitive implementation seemed to be used in the closing operation.)
 pub(crate) struct WeakSession(Arc<SessionInner>);
 
 impl WeakSession {
