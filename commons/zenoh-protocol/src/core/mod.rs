@@ -464,8 +464,8 @@ pub enum Reliability {
 impl Reliability {
     pub const DEFAULT: Self = Self::Reliable;
 
-    const BEST_EFFORT_STR: &str = "best_effort";
-    const RELIABLE_STR: &str = "reliable";
+    const BEST_EFFORT_STR: &'static str = "best_effort";
+    const RELIABLE_STR: &'static str = "reliable";
 
     pub fn as_str(&self) -> &str {
         match self {
