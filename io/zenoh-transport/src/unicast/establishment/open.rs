@@ -569,6 +569,8 @@ pub(crate) async fn open_link(
         ext_compression: ext::compression::CompressionFsm::new(),
     };
 
+    // Clippy raises a warning because `batch_size::UNICAST` is currently equal to `BatchSize::MAX`.  
+    // However, the current code catches the cases where `batch_size::UNICAST` is different from `BatchSize::MAX`.
     #[allow(clippy::unnecessary_min_or_max)]
     let batch_size = manager
         .config
