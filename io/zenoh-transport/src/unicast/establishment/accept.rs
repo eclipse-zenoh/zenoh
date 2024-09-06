@@ -211,11 +211,16 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         };
 
         // Compute the minimum batch size
-        state.transport.batch_size = state
-            .transport
-            .batch_size
-            .min(init_syn.batch_size)
-            .min(batch_size::UNICAST);
+        // Clippy raises a warning because `batch_size::UNICAST` is currently equal to `BatchSize::MAX`.
+        // However, the current code catches the cases where `batch_size::UNICAST` is different from `BatchSize::MAX`.
+        #[allow(clippy::unnecessary_min_or_max)]
+        {
+            state.transport.batch_size = state
+                .transport
+                .batch_size
+                .min(init_syn.batch_size)
+                .min(batch_size::UNICAST);
+        }
 
         // Extension QoS
         self.ext_qos
@@ -684,10 +689,15 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         };
     }
 
+    // Clippy raises a warning because `batch_size::UNICAST` is currently equal to `BatchSize::MAX`.
+    // However, the current code catches the cases where `batch_size::UNICAST` is different from `BatchSize::MAX`.
+    #[allow(clippy::unnecessary_min_or_max)]
+    let batch_size = manager.config.batch_size.min(batch_size::UNICAST).min(mtu);
+
     let iack_out = {
         let mut state = State {
             transport: StateTransport {
-                batch_size: manager.config.batch_size.min(batch_size::UNICAST).min(mtu),
+                batch_size,
                 resolution: manager.config.resolution,
                 ext_qos: ext::qos::StateAccept::new(manager.config.unicast.is_qos),
                 #[cfg(feature = "transport_multilink")]
