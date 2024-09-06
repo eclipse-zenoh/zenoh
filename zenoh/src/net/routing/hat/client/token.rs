@@ -116,10 +116,6 @@ fn declare_simple_token(
     interest_id: Option<InterestId>,
     send_declare: &mut SendDeclare,
 ) {
-    register_simple_token(tables, face, id, res);
-
-    propagate_simple_token(tables, res, face, send_declare);
-
     if let Some(interest_id) = interest_id {
         if let Some((interest, _)) = face.pending_current_interests.get(&interest_id) {
             let wire_expr = Resource::get_best_key(res, "", interest.src_face.id);
@@ -137,6 +133,9 @@ fn declare_simple_token(
                 ),
             )
         }
+    } else {
+        register_simple_token(tables, face, id, res);
+        propagate_simple_token(tables, res, face, send_declare);
     }
 }
 
