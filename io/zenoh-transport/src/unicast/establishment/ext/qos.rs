@@ -629,7 +629,7 @@ mod tests {
                 reliability: None,
             },
             State::QoS {
-                priorities: Some(priority_range!(1, 3)),
+                priorities: Some(priority_range!(0, 4)),
                 reliability: None,
             },
             State::QoS {
@@ -648,7 +648,7 @@ mod tests {
                 reliability: None,
             },
             State::QoS {
-                priorities: Some(priority_range!(1, 3)),
+                priorities: Some(priority_range!(2, 3)),
                 reliability: None,
             },
         )
@@ -732,7 +732,7 @@ mod tests {
             },
             State::QoS {
                 reliability: Some(Reliability::BestEffort),
-                priorities: Some(priority_range!(1, 3)),
+                priorities: Some(priority_range!(1, 4)),
             },
             State::QoS {
                 reliability: Some(Reliability::BestEffort),
