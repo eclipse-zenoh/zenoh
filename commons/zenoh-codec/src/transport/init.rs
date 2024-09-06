@@ -60,6 +60,7 @@ where
             header |= flag::S;
         }
         let mut n_exts = (ext_qos.is_some() as u8)
+            + (ext_qos_optimized.is_some() as u8)
             + (ext_auth.is_some() as u8)
             + (ext_mlink.is_some() as u8)
             + (ext_lowlatency.is_some() as u8)
@@ -282,6 +283,7 @@ where
             header |= flag::S;
         }
         let mut n_exts = (ext_qos.is_some() as u8)
+            + (ext_qos_optimized.is_some() as u8)
             + (ext_auth.is_some() as u8)
             + (ext_mlink.is_some() as u8)
             + (ext_lowlatency.is_some() as u8)
