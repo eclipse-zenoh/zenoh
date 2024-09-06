@@ -363,9 +363,7 @@ where
 /// A subscriber that provides data through a [`Handler`](crate::handlers::IntoHandler).
 ///
 /// Subscribers can be created from a zenoh [`Session`](crate::Session)
-/// with the [`declare_subscriber`](crate::Session::declare_subscriber) function
-/// and the [`with`](SubscriberBuilder::with) function
-/// of the resulting builder.
+/// with the [`declare_subscriber`](crate::Session::declare_subscriber) function.
 ///
 /// Callback subscribers will run in background until the session is closed,
 /// or until it is undeclared.
@@ -500,7 +498,7 @@ impl<Handler> Drop for Subscriber<Handler> {
     }
 }
 
-impl<'a, Handler: Send + 'a> UndeclarableSealed<()> for Subscriber<Handler> {
+impl<Handler: Send> UndeclarableSealed<()> for Subscriber<Handler> {
     type Undeclaration = SubscriberUndeclaration<Handler>;
 
     fn undeclare_inner(self, _: ()) -> Self::Undeclaration {

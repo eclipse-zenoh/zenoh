@@ -736,9 +736,7 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 /// A queryable that provides data through a [`Handler`](crate::handlers::IntoHandler).
 ///
 /// Queryables can be created from a zenoh [`Session`](crate::Session)
-/// with the [`declare_queryable`](crate::Session::declare_queryable) function
-/// and the [`with`](QueryableBuilder::with) function
-/// of the resulting builder.
+/// with the [`declare_queryable`](crate::Session::declare_queryable) function.
 ///
 /// Callback queryables will run in background until the session is closed,
 /// or until it is undeclared.
