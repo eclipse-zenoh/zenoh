@@ -351,6 +351,12 @@ impl PriorityRange {
     }
 }
 
+impl ToString for PriorityRange {
+    fn to_string(&self) -> String {
+        format!("{}..={}", *self.start() as u8, *self.end() as u8)
+    }
+}
+
 #[derive(Debug)]
 pub enum InvalidPriorityRange {
     InvalidSyntax { found: String },
@@ -458,6 +464,16 @@ pub enum Reliability {
 impl Reliability {
     pub const DEFAULT: Self = Self::Reliable;
 
+    const BEST_EFFORT_STR: &str = "best_effort";
+    const RELIABLE_STR: &str = "reliable";
+
+    pub fn as_str(&self) -> &str {
+        match self {
+            Reliability::BestEffort => Reliability::BEST_EFFORT_STR,
+            Reliability::Reliable => Reliability::RELIABLE_STR,
+        }
+    }
+
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
@@ -500,7 +516,9 @@ impl Display for InvalidReliability {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "invalid Reliability string, expected `best_effort` or `reliable` but found {}",
+            "invalid Reliability string, expected `{}` or `{}` but found {}",
+            Reliability::BEST_EFFORT_STR,
+            Reliability::RELIABLE_STR,
             self.found
         )
     }
@@ -514,8 +532,8 @@ impl FromStr for Reliability {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "reliable" => Ok(Reliability::Reliable),
-            "best_effort" => Ok(Reliability::BestEffort),
+            Reliability::RELIABLE_STR => Ok(Reliability::Reliable),
+            Reliability::BEST_EFFORT_STR => Ok(Reliability::BestEffort),
             other => Err(InvalidReliability {
                 found: other.to_string(),
             }),

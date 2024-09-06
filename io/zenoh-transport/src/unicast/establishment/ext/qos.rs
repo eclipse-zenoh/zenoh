@@ -23,7 +23,7 @@ use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_core::zerror;
 use zenoh_link::EndPoint;
 use zenoh_protocol::{
-    core::{Priority, PriorityRange, Reliability},
+    core::{Metadata, Priority, PriorityRange, Reliability},
     transport::{init, open},
 };
 use zenoh_result::{Error as ZError, ZResult};
@@ -56,18 +56,15 @@ impl State {
         if !is_qos {
             Ok(State::NoQoS)
         } else {
-            const RELIABILITY_METADATA_KEY: &str = "reliability";
-            const PRIORITY_METADATA_KEY: &str = "priorities";
-
             let metadata = endpoint.metadata();
 
             let reliability = metadata
-                .get(RELIABILITY_METADATA_KEY)
+                .get(Metadata::RELIABILITY)
                 .map(Reliability::from_str)
                 .transpose()?;
 
             let priorities = metadata
-                .get(PRIORITY_METADATA_KEY)
+                .get(Metadata::PRIORITIES)
                 .map(PriorityRange::from_str)
                 .transpose()?;
 

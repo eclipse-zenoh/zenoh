@@ -34,7 +34,7 @@ pub use multicast::*;
 use serde::Serialize;
 pub use unicast::*;
 use zenoh_protocol::{
-    core::{Locator, PriorityRange, Reliability},
+    core::{Locator, Metadata, PriorityRange, Reliability},
     transport::BatchSize,
 };
 use zenoh_result::ZResult;
@@ -45,7 +45,6 @@ use zenoh_result::ZResult;
 
 pub const BIND_INTERFACE: &str = "iface";
 
-// TODO(fuzzypixelz): Patch the Locators to contain negotiated priority and reliability
 #[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
 pub struct Link {
     pub src: Locator,
@@ -82,8 +81,8 @@ impl Link {
         reliability: Reliability,
     ) -> Self {
         Link {
-            src: link.get_src().to_owned(),
-            dst: link.get_dst().to_owned(),
+            src: Self::to_patched_locator(link.get_src(), priorities.as_ref(), reliability),
+            dst: Self::to_patched_locator(link.get_dst(), priorities.as_ref(), reliability),
             group: None,
             mtu: link.get_mtu(),
             is_streamed: link.is_streamed(),
@@ -106,6 +105,24 @@ impl Link {
             priorities: None,
             reliability: Reliability::from(link.is_reliable()),
         }
+    }
+
+    /// Updates the metdata of the `locator` with `priorities` and `reliability`.
+    fn to_patched_locator(
+        locator: &Locator,
+        priorities: Option<&PriorityRange>,
+        reliability: Reliability,
+    ) -> Locator {
+        let mut locator = locator.clone();
+        let mut metadata = locator.metadata_mut();
+        metadata
+            .insert(Metadata::RELIABILITY, reliability.as_str())
+            .expect("adding `reliability` to Locator metadata should not fail");
+        priorities
+            .map(|ps| metadata.insert(Metadata::PRIORITIES, ps.to_string()))
+            .transpose()
+            .expect("adding `priorities` to Locator metadata should not fail");
+        locator
     }
 }
 
