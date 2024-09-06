@@ -431,7 +431,7 @@ pub(crate) fn declare_token_interest(
     aggregate: bool,
     send_declare: &mut SendDeclare,
 ) {
-    if mode.current() && face.whatami == WhatAmI::Client {
+    if mode.current() {
         let interest_id = (!mode.future()).then_some(id);
         if let Some(res) = res.as_ref() {
             if aggregate {

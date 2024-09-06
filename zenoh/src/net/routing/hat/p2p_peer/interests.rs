@@ -132,11 +132,16 @@ impl HatInterestTrait for HatCode {
             src_interest_id: id,
         });
 
-        for dst_face in tables
-            .faces
-            .values_mut()
-            .filter(|f| f.whatami == WhatAmI::Router)
-        {
+        for dst_face in tables.faces.values_mut().filter(|f| {
+            f.whatami == WhatAmI::Router
+                || (options.tokens()
+                    && f.whatami == WhatAmI::Peer
+                    && !f
+                        .local_interests
+                        .get(&0)
+                        .map(|i| i.finalized)
+                        .unwrap_or(true))
+        }) {
             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
             get_mut_unchecked(dst_face).local_interests.insert(
                 id,
