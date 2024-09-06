@@ -841,7 +841,7 @@ impl<'a> UndeclarableSealed<()> for MatchingListenerInner<'a> {
 /// A listener that sends notifications when the [`MatchingStatus`] of a
 /// publisher changes.
 ///
-/// Matching litsteners run in background until the publisher is undeclared.
+/// Matching listeners run in background until the publisher is undeclared.
 /// They can be manually undeclared, but will not be undeclared on drop.
 ///
 /// # Examples
