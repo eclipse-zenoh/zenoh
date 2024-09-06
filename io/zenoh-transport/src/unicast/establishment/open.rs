@@ -22,7 +22,8 @@ use zenoh_link::LinkUnicast;
 use zenoh_protocol::{
     core::{Field, Resolution, WhatAmI, ZenohIdProto},
     transport::{
-        close, BatchSize, Close, InitSyn, OpenSyn, TransportBody, TransportMessage, TransportSn,
+        batch_size, close, BatchSize, Close, InitSyn, OpenSyn, TransportBody, TransportMessage,
+        TransportSn,
     },
 };
 use zenoh_result::ZResult;
@@ -568,9 +569,16 @@ pub(crate) async fn open_link(
         ext_compression: ext::compression::CompressionFsm::new(),
     };
 
+    #[allow(clippy::unnecessary_min_or_max)]
+    let batch_size = manager
+        .config
+        .batch_size
+        .min(link.config.batch.mtu)
+        .min(batch_size::UNICAST);
+
     let mut state = State {
         transport: StateTransport {
-            batch_size: manager.config.batch_size.min(link.config.batch.mtu),
+            batch_size,
             resolution: manager.config.resolution,
             ext_qos: ext::qos::StateOpen::new(manager.config.unicast.is_qos),
             #[cfg(feature = "transport_multilink")]
