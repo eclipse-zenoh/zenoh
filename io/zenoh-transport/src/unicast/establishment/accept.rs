@@ -687,6 +687,8 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         };
     }
 
+    // Clippy raises a warning because `batch_size::UNICAST` is currently equal to `BatchSize::MAX`.
+    // However, the current code catches the cases where `batch_size::UNICAST` is different from `BatchSize::MAX`.
     #[allow(clippy::unnecessary_min_or_max)]
     let batch_size = manager.config.batch_size.min(batch_size::UNICAST).min(mtu);
 
