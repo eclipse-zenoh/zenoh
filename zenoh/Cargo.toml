@@ -80,7 +80,6 @@ git-version = { workspace = true }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
 tracing = { workspace = true }
-ordered-float = { workspace = true }
 paste = { workspace = true }
 petgraph = { workspace = true }
 phf = { workspace = true }
