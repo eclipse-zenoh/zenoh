@@ -35,7 +35,6 @@ use tokio_util::sync::CancellationToken;
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
 use zenoh_link_commons::{
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
-    NewLinkUnicast,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -375,11 +374,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
             let manager = self.manager.clone();
             let listeners = self.listeners.clone();
             let addr = local_addr;
-            let endpoint = endpoint.clone();
 
             async move {
                 // Wait for the accept loop to terminate
-                let res = accept_task(endpoint, socket, token, manager).await;
+                let res = accept_task(socket, token, manager).await;
                 zasyncwrite!(listeners).remove(&addr);
                 res
             }
@@ -472,7 +470,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
 }
 
 async fn accept_task(
-    endpoint: EndPoint,
     socket: TcpListener,
     token: CancellationToken,
     manager: NewLinkChannelSender,
@@ -541,13 +538,7 @@ async fn accept_task(
         let link = Arc::new(LinkUnicastWs::new(stream, src_addr, dst_addr));
 
         // Communicate the new link to the initial transport manager
-        if let Err(e) = manager
-            .send_async(NewLinkUnicast {
-                link: LinkUnicast(link),
-                endpoint: endpoint.clone(),
-            })
-            .await
-        {
+        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
             tracing::error!("{}-{}: {}", file!(), line!(), e)
         }
     }

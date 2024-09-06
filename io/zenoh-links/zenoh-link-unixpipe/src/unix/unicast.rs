@@ -37,7 +37,7 @@ use unix_named_pipe::{create, open_write};
 use zenoh_core::{zasyncread, zasyncwrite, ResolveFuture, Wait};
 use zenoh_link_commons::{
     ConstructibleLinkManagerUnicast, LinkAuthId, LinkManagerUnicastTrait, LinkUnicast,
-    LinkUnicastTrait, NewLinkChannelSender, NewLinkUnicast,
+    LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -281,12 +281,7 @@ async fn handle_incoming_connections(
     });
 
     // send newly established link to manager
-    manager
-        .send_async(NewLinkUnicast {
-            link: LinkUnicast(link),
-            endpoint: endpoint.clone(),
-        })
-        .await?;
+    manager.send_async(LinkUnicast(link)).await?;
 
     ZResult::Ok(())
 }

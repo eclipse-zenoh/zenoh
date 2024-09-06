@@ -33,7 +33,7 @@ use z_serial::ZSerial;
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
 use zenoh_link_commons::{
     ConstructibleLinkManagerUnicast, LinkAuthId, LinkManagerUnicastTrait, LinkUnicast,
-    LinkUnicastTrait, NewLinkChannelSender, NewLinkUnicast,
+    LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -339,13 +339,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
             let path = path.clone();
             let manager = self.manager.clone();
             let listeners = self.listeners.clone();
-            let endpoint = endpoint.clone();
 
             async move {
                 // Wait for the accept loop to terminate
-                let res =
-                    accept_read_task(endpoint, link, token, manager, path.clone(), is_connected)
-                        .await;
+                let res = accept_read_task(link, token, manager, path.clone(), is_connected).await;
                 zasyncwrite!(listeners).remove(&path);
                 res
             }
@@ -394,7 +391,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
 }
 
 async fn accept_read_task(
-    endpoint: EndPoint,
     link: Arc<LinkUnicastSerial>,
     token: CancellationToken,
     manager: NewLinkChannelSender,
@@ -428,7 +424,7 @@ async fn accept_read_task(
                 match res {
                     Ok(link) => {
                         // Communicate the new link to the initial transport manager
-                        if let Err(e) = manager.send_async(NewLinkUnicast{ link: LinkUnicast(link.clone()), endpoint: endpoint.clone() }).await {
+                        if let Err(e) = manager.send_async(LinkUnicast(link.clone())).await {
                             tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
 

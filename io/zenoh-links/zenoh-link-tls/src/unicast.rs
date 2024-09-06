@@ -25,7 +25,7 @@ use x509_parser::prelude::*;
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
     get_ip_interface_names, LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast,
-    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, NewLinkUnicast,
+    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -368,9 +368,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             let acceptor = TlsAcceptor::from(Arc::new(tls_server_config.server_config));
             let token = token.clone();
             let manager = self.manager.clone();
-            let endpoint = endpoint.clone();
 
-            async move { accept_task(endpoint, socket, acceptor, token, manager).await }
+            async move { accept_task(socket, acceptor, token, manager).await }
         };
 
         // Update the endpoint locator address
@@ -403,7 +402,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
 }
 
 async fn accept_task(
-    endpoint: EndPoint,
     socket: TcpListener,
     acceptor: TlsAcceptor,
     token: CancellationToken,
@@ -461,7 +459,7 @@ async fn accept_task(
                         ));
 
                         // Communicate the new link to the initial transport manager
-                        if let Err(e) = manager.send_async(NewLinkUnicast {link: LinkUnicast(link), endpoint: endpoint.clone()}).await {
+                        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
                             tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
                     }

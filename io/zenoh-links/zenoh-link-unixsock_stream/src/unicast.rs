@@ -28,7 +28,6 @@ use uuid::Uuid;
 use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_link_commons::{
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
-    NewLinkUnicast,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -397,11 +396,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
             let manager = self.manager.clone();
             let listeners = self.listeners.clone();
             let path = local_path_str.to_owned();
-            let endpoint = endpoint.clone();
 
             async move {
                 // Wait for the accept loop to terminate
-                let res = accept_task(endpoint, socket, c_token, manager).await;
+                let res = accept_task(socket, c_token, manager).await;
                 zasyncwrite!(listeners).remove(&path);
                 res
             }
@@ -463,7 +461,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
 }
 
 async fn accept_task(
-    endpoint: EndPoint,
     socket: UnixListener,
     token: CancellationToken,
     manager: NewLinkChannelSender,
@@ -520,7 +517,7 @@ async fn accept_task(
                         ));
 
                         // Communicate the new link to the initial transport manager
-                        if let Err(e) = manager.send_async(NewLinkUnicast { link: LinkUnicast(link), endpoint: endpoint.clone() }).await {
+                        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
                             tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
 

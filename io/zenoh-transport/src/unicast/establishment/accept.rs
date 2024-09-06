@@ -20,7 +20,7 @@ use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZSlice};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_core::{zasynclock, zcondfeat, zerror};
 use zenoh_crypto::{BlockCipher, PseudoRng};
-use zenoh_link::{EndPoint, LinkUnicast};
+use zenoh_link::LinkUnicast;
 use zenoh_protocol::{
     core::{Field, Reliability, Resolution, WhatAmI, ZenohIdProto},
     transport::{
@@ -641,11 +641,8 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
     }
 }
 
-pub(crate) async fn accept_link(
-    endpoint: EndPoint,
-    link: LinkUnicast,
-    manager: &TransportManager,
-) -> ZResult<()> {
+pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -> ZResult<()> {
+    let endpoint = link.get_src().to_endpoint();
     let direction = TransportLinkUnicastDirection::Inbound;
     let mtu = link.get_mtu();
     let is_streamed = link.is_streamed();

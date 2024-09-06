@@ -736,8 +736,7 @@ impl TransportManager {
         Ok(())
     }
 
-    pub(crate) async fn handle_new_link_unicast(&self, new_link: NewLinkUnicast) {
-        let NewLinkUnicast { link, endpoint } = new_link;
+    pub(crate) async fn handle_new_link_unicast(&self, link: LinkUnicast) {
         let incoming_counter = self.state.unicast.incoming.clone();
         if incoming_counter.load(SeqCst) >= self.config.unicast.accept_pending {
             // We reached the limit of concurrent incoming transport, this means two things:
@@ -760,7 +759,7 @@ impl TransportManager {
             .spawn_with_rt(zenoh_runtime::ZRuntime::Acceptor, async move {
                 if tokio::time::timeout(
                     c_manager.config.unicast.accept_timeout,
-                    super::establishment::accept::accept_link(endpoint, link, &c_manager),
+                    super::establishment::accept::accept_link(link, &c_manager),
                 )
                 .await
                 .is_err()

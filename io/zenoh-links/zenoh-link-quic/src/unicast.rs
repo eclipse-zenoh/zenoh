@@ -27,7 +27,7 @@ use x509_parser::prelude::*;
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
     get_ip_interface_names, LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast,
-    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, NewLinkUnicast,
+    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -336,9 +336,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let task = {
             let token = token.clone();
             let manager = self.manager.clone();
-            let endpoint = endpoint.clone();
 
-            async move { accept_task(endpoint, quic_endpoint, token, manager).await }
+            async move { accept_task(quic_endpoint, token, manager).await }
         };
 
         // Initialize the QuicAcceptor
@@ -367,7 +366,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
 }
 
 async fn accept_task(
-    endpoint: EndPoint,
     quic_endpoint: quinn::Endpoint,
     token: CancellationToken,
     manager: NewLinkChannelSender,
@@ -433,7 +431,7 @@ async fn accept_task(
                         ));
 
                         // Communicate the new link to the initial transport manager
-                        if let Err(e) = manager.send_async(NewLinkUnicast { link: LinkUnicast(link), endpoint: endpoint.clone() }).await {
+                        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
                             tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
 
