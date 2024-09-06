@@ -1006,7 +1006,7 @@ impl HatQueriesTrait for HatCode {
                 }
             }
         }
-        route.sort_by_key(|qabl| qabl.info.map(|i| i.distance).unwrap_or(u16::MAX));
+        route.sort_by_key(|qabl| qabl.info.map_or(u16::MAX, |i| i.distance));
         Arc::new(route)
     }
 
