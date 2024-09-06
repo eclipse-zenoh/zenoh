@@ -211,6 +211,8 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         };
 
         // Compute the minimum batch size
+        // Clippy raises a warning because `batch_size::UNICAST` is currently equal to `BatchSize::MAX`.
+        // However, the current code catches the cases where `batch_size::UNICAST` is different from `BatchSize::MAX`.
         #[allow(clippy::unnecessary_min_or_max)]
         {
             state.transport.batch_size = state
