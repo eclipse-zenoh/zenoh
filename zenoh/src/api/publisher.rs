@@ -134,7 +134,7 @@ impl std::fmt::Debug for PublisherRef<'_> {
 /// subscriber.stream().map(Ok).forward(publisher).await.unwrap();
 /// # }
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Publisher<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) id: Id,
