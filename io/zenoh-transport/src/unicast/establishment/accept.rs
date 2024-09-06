@@ -24,7 +24,6 @@ use zenoh_link::LinkUnicast;
 use zenoh_protocol::{
     core::{Field, Resolution, WhatAmI, ZenohIdProto},
     transport::{
-        batch_size,
         close::{self, Close},
         BatchSize, InitAck, OpenAck, TransportBody, TransportMessage, TransportSn,
     },
@@ -211,11 +210,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         };
 
         // Compute the minimum batch size
-        state.transport.batch_size = state
-            .transport
-            .batch_size
-            .min(init_syn.batch_size)
-            .min(batch_size::UNICAST);
+        state.transport.batch_size = state.transport.batch_size.min(init_syn.batch_size);
 
         // Extension QoS
         self.ext_qos
@@ -687,7 +682,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
     let iack_out = {
         let mut state = State {
             transport: StateTransport {
-                batch_size: manager.config.batch_size.min(batch_size::UNICAST).min(mtu),
+                batch_size: manager.config.batch_size.min(mtu),
                 resolution: manager.config.resolution,
                 ext_qos: ext::qos::StateAccept::new(manager.config.unicast.is_qos),
                 #[cfg(feature = "transport_multilink")]
