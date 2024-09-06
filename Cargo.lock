@@ -333,7 +333,6 @@ dependencies = [
  "blocking",
  "futures-lite 2.0.0",
  "once_cell",
- "tokio",
 ]
 
 [[package]]
@@ -1817,7 +1816,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite 0.2.13",
- "socket2 0.4.9",
+ "socket2 0.5.7",
  "tokio",
  "tower-service",
  "tracing",
@@ -2154,7 +2153,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f56d36f573486ba7f462b62cbae597fef7d5d93665e7047956b457531b8a1ced"
 dependencies = [
  "prost 0.11.9",
- "prost-types 0.11.9",
+ "prost-types",
 ]
 
 [[package]]
@@ -2661,16 +2660,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
-name = "pem"
-version = "3.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e459365e590736a54c3fa561947c84837534b8e9af6fc5bf781307e82658fae"
-dependencies = [
- "base64 0.22.1",
- "serde",
-]
-
-[[package]]
 name = "pem-rfc7468"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3008,12 +2997,12 @@ dependencies = [
 
 [[package]]
 name = "prost"
-version = "0.13.1"
+version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e13db3d3fde688c61e2446b4d843bc27a7e8af269a69440c0308021dc92333cc"
+checksum = "3b2ecbe40f08db5c006b5764a2645f7f3f141ce756412ac9e1dd6087e6d32995"
 dependencies = [
  "bytes",
- "prost-derive 0.13.1",
+ "prost-derive 0.13.2",
 ]
 
 [[package]]
@@ -3031,9 +3020,9 @@ dependencies = [
 
 [[package]]
 name = "prost-derive"
-version = "0.13.1"
+version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18bec9b0adc4eba778b33684b7ba3e7137789434769ee3ce3930463ef904cfca"
+checksum = "acf0c195eebb4af52c752bec4f52f645da98b6e92077a04110c7f349477ae5ac"
 dependencies = [
  "anyhow",
  "itertools 0.13.0",
@@ -3049,15 +3038,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "213622a1460818959ac1181aaeb2dc9c7f63df720db7d788b3e24eacd1983e13"
 dependencies = [
  "prost 0.11.9",
-]
-
-[[package]]
-name = "prost-types"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cee5168b05f49d4b0ca581206eb14a7b22fafd963efe729ac48eb03266e25cc2"
-dependencies = [
- "prost 0.13.1",
 ]
 
 [[package]]
@@ -3209,19 +3189,6 @@ dependencies = [
  "crossbeam-deque",
  "crossbeam-utils",
  "num_cpus",
-]
-
-[[package]]
-name = "rcgen"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54077e1872c46788540de1ea3d7f4ccb1983d12f9aa909b234468676c1a36779"
-dependencies = [
- "pem",
- "ring",
- "rustls-pki-types",
- "time 0.3.36",
- "yasna",
 ]
 
 [[package]]
@@ -4130,18 +4097,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "213701ba3370744dcd1a12960caa4843b3d68b4d1c0a5d575e0d65b2ee9d16c0"
 
 [[package]]
-name = "stop-token"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af91f480ee899ab2d9f8435bfdfc14d08a5754bd9d3fef1f1a1c23336aad6c8b"
-dependencies = [
- "async-channel 1.9.0",
- "cfg-if 1.0.0",
- "futures-core",
- "pin-project-lite 0.2.13",
-]
-
-[[package]]
 name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4736,7 +4691,7 @@ version = "1.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
  "static_assertions",
 ]
 
@@ -4853,12 +4808,6 @@ dependencies = [
  "percent-encoding",
  "serde",
 ]
-
-[[package]]
-name = "urlencoding"
-version = "2.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "daf8dba3b7eb870caf1ddeed7bc9d2a049f3cfdfae7cb521b087cc33ae4c49da"
 
 [[package]]
 name = "utf-8"
@@ -5360,15 +5309,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "yasna"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e17bb3549cc1321ae1296b9cdc2698e2b6cb1992adfa19a8c72e5b7a738f44cd"
-dependencies = [
- "time 0.3.36",
-]
-
-[[package]]
 name = "z-serial"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5387,11 +5327,8 @@ version = "1.0.0-dev"
 dependencies = [
  "ahash",
  "async-trait",
- "base64 0.22.1",
  "bytes",
- "event-listener 5.3.1",
  "flume",
- "form_urlencoded",
  "futures",
  "git-version",
  "itertools 0.13.0",
@@ -5401,7 +5338,6 @@ dependencies = [
  "petgraph",
  "phf",
  "rand 0.8.5",
- "regex",
  "rustc_version 0.4.1",
  "serde",
  "serde-pickle",
@@ -5409,20 +5345,17 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "socket2 0.5.7",
- "stop-token",
  "tokio",
  "tokio-util",
  "tracing",
  "uhlc",
  "unwrap-infallible",
- "uuid",
  "vec_map",
  "zenoh-buffers",
  "zenoh-codec",
  "zenoh-collections",
  "zenoh-config",
  "zenoh-core",
- "zenoh-crypto",
  "zenoh-keyexpr",
  "zenoh-link",
  "zenoh-macros",
@@ -5442,12 +5375,9 @@ name = "zenoh-backend-example"
 version = "1.0.0-dev"
 dependencies = [
  "async-trait",
- "const_format",
- "futures",
  "git-version",
  "serde_json",
  "tokio",
- "tracing",
  "zenoh",
  "zenoh-plugin-trait",
  "zenoh_backend_traits",
@@ -5467,7 +5397,6 @@ version = "1.0.0-dev"
 dependencies = [
  "criterion",
  "rand 0.8.5",
- "serde",
  "tracing",
  "uhlc",
  "zenoh-buffers",
@@ -5479,9 +5408,6 @@ dependencies = [
 [[package]]
 name = "zenoh-collections"
 version = "1.0.0-dev"
-dependencies = [
- "rand 0.8.5",
-]
 
 [[package]]
 name = "zenoh-config"
@@ -5508,7 +5434,6 @@ dependencies = [
 name = "zenoh-core"
 version = "1.0.0-dev"
 dependencies = [
- "async-global-executor",
  "lazy_static",
  "tokio",
  "zenoh-result",
@@ -5532,22 +5457,15 @@ name = "zenoh-examples"
 version = "1.0.0-dev"
 dependencies = [
  "clap",
- "flume",
  "futures",
- "git-version",
- "json5",
- "prost 0.13.1",
- "prost-types 0.13.1",
+ "prost 0.13.2",
  "rand 0.8.5",
  "rustc_version 0.4.1",
  "serde_json",
  "serde_yaml",
  "tokio",
- "tracing",
  "zenoh",
- "zenoh-collections",
  "zenoh-ext",
- "zenoh-util",
 ]
 
 [[package]]
@@ -5557,10 +5475,7 @@ dependencies = [
  "bincode",
  "flume",
  "futures",
- "phf",
  "serde",
- "serde_cbor",
- "serde_json",
  "tokio",
  "tracing",
  "zenoh",
@@ -5572,16 +5487,11 @@ dependencies = [
 name = "zenoh-ext-examples"
 version = "1.0.0-dev"
 dependencies = [
- "bincode",
  "clap",
- "flume",
  "futures",
- "serde",
  "tokio",
- "tracing",
  "zenoh",
  "zenoh-ext",
- "zenoh-util",
 ]
 
 [[package]]
@@ -5604,8 +5514,6 @@ dependencies = [
 name = "zenoh-link"
 version = "1.0.0-dev"
 dependencies = [
- "async-trait",
- "rcgen",
  "zenoh-config",
  "zenoh-link-commons",
  "zenoh-link-quic",
@@ -5626,7 +5534,6 @@ name = "zenoh-link-commons"
 version = "1.0.0-dev"
 dependencies = [
  "async-trait",
- "base64 0.22.1",
  "flume",
  "futures",
  "rustls",
@@ -5635,10 +5542,8 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
- "webpki-roots",
  "zenoh-buffers",
  "zenoh-codec",
- "zenoh-config",
  "zenoh-core",
  "zenoh-protocol",
  "zenoh-result",
@@ -5652,7 +5557,6 @@ version = "1.0.0-dev"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
- "futures",
  "quinn",
  "rustls",
  "rustls-pemfile 2.1.3",
@@ -5660,20 +5564,15 @@ dependencies = [
  "rustls-webpki",
  "secrecy",
  "tokio",
- "tokio-rustls",
  "tokio-util",
  "tracing",
  "webpki-roots",
  "x509-parser",
- "zenoh-collections",
  "zenoh-config",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
- "zenoh-runtime",
- "zenoh-sync",
- "zenoh-util",
 ]
 
 [[package]]
@@ -5681,20 +5580,16 @@ name = "zenoh-link-serial"
 version = "1.0.0-dev"
 dependencies = [
  "async-trait",
- "futures",
  "tokio",
  "tokio-util",
  "tracing",
  "uuid",
  "z-serial",
- "zenoh-collections",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
  "zenoh-runtime",
- "zenoh-sync",
- "zenoh-util",
 ]
 
 [[package]]
@@ -5710,8 +5605,6 @@ dependencies = [
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
- "zenoh-runtime",
- "zenoh-sync",
  "zenoh-util",
 ]
 
@@ -5721,7 +5614,6 @@ version = "1.0.0-dev"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
- "futures",
  "rustls",
  "rustls-pemfile 2.1.3",
  "rustls-pki-types",
@@ -5734,15 +5626,12 @@ dependencies = [
  "tracing",
  "webpki-roots",
  "x509-parser",
- "zenoh-collections",
  "zenoh-config",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
  "zenoh-runtime",
- "zenoh-sync",
- "zenoh-util",
 ]
 
 [[package]]
@@ -5755,12 +5644,10 @@ dependencies = [
  "tokio-util",
  "tracing",
  "zenoh-buffers",
- "zenoh-collections",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
- "zenoh-runtime",
  "zenoh-sync",
  "zenoh-util",
 ]
@@ -5778,8 +5665,6 @@ dependencies = [
  "tokio-util",
  "tracing",
  "unix-named-pipe",
- "zenoh-buffers",
- "zenoh-collections",
  "zenoh-config",
  "zenoh-core",
  "zenoh-link-commons",
@@ -5793,7 +5678,6 @@ name = "zenoh-link-unixsock_stream"
 version = "1.0.0-dev"
 dependencies = [
  "async-trait",
- "futures",
  "nix 0.29.0",
  "tokio",
  "tokio-util",
@@ -5804,7 +5688,6 @@ dependencies = [
  "zenoh-protocol",
  "zenoh-result",
  "zenoh-runtime",
- "zenoh-sync",
 ]
 
 [[package]]
@@ -5822,8 +5705,6 @@ dependencies = [
  "zenoh-protocol",
  "zenoh-result",
  "zenoh-runtime",
- "zenoh-sync",
- "zenoh-util",
 ]
 
 [[package]]
@@ -5842,7 +5723,6 @@ dependencies = [
  "zenoh-protocol",
  "zenoh-result",
  "zenoh-runtime",
- "zenoh-sync",
  "zenoh-util",
 ]
 
@@ -5860,7 +5740,6 @@ dependencies = [
 name = "zenoh-plugin-example"
 version = "1.0.0-dev"
 dependencies = [
- "const_format",
  "futures",
  "git-version",
  "lazy_static",
@@ -5879,7 +5758,6 @@ dependencies = [
  "anyhow",
  "base64 0.22.1",
  "clap",
- "const_format",
  "flume",
  "futures",
  "git-version",
@@ -5903,7 +5781,6 @@ version = "1.0.0-dev"
 dependencies = [
  "async-global-executor",
  "async-trait",
- "const_format",
  "crc",
  "derive-new",
  "flume",
@@ -5911,17 +5788,14 @@ dependencies = [
  "git-version",
  "jsonschema",
  "lazy_static",
- "libloading",
  "rustc_version 0.4.1",
  "schemars",
  "serde",
  "serde_json",
  "tokio",
  "tracing",
- "urlencoding",
  "zenoh",
  "zenoh-plugin-trait",
- "zenoh-util",
  "zenoh_backend_traits",
 ]
 
@@ -5929,9 +5803,9 @@ dependencies = [
 name = "zenoh-plugin-trait"
 version = "1.0.0-dev"
 dependencies = [
+ "git-version",
  "libloading",
  "serde",
- "serde_json",
  "tracing",
  "zenoh-keyexpr",
  "zenoh-macros",
@@ -5949,7 +5823,6 @@ dependencies = [
  "serde",
  "uhlc",
  "zenoh-buffers",
- "zenoh-collections",
  "zenoh-keyexpr",
  "zenoh-result",
 ]
@@ -5965,9 +5838,7 @@ dependencies = [
 name = "zenoh-runtime"
 version = "1.0.0-dev"
 dependencies = [
- "futures",
  "lazy_static",
- "libc",
  "ron",
  "serde",
  "tokio",
@@ -5980,14 +5851,12 @@ name = "zenoh-shm"
 version = "1.0.0-dev"
 dependencies = [
  "async-trait",
- "bincode",
  "crc",
  "libc",
  "lockfree",
  "num-traits",
  "num_cpus",
  "rand 0.8.5",
- "serde",
  "shared_memory",
  "stabby",
  "static_init",
@@ -6011,7 +5880,6 @@ dependencies = [
  "zenoh-collections",
  "zenoh-core",
  "zenoh-result",
- "zenoh-runtime",
 ]
 
 [[package]]
@@ -6048,7 +5916,6 @@ dependencies = [
  "tracing",
  "zenoh-buffers",
  "zenoh-codec",
- "zenoh-collections",
  "zenoh-config",
  "zenoh-core",
  "zenoh-crypto",

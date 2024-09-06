@@ -36,8 +36,6 @@ transport_unixpipe = ["zenoh-link-unixpipe", "zenoh-link-unixpipe/transport_unix
 transport_vsock = ["zenoh-link-vsock"]
 
 [dependencies]
-async-trait = { workspace = true }
-rcgen = { workspace = true, optional = true }
 zenoh-config = { workspace = true }
 zenoh-link-commons = { workspace = true }
 zenoh-link-quic = { workspace = true, optional = true }

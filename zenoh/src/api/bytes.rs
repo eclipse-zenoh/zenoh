@@ -86,7 +86,7 @@ impl From<OptionZBytes> for Option<ZBytes> {
     }
 }
 
-/// Trait to encode a type `T` into a [`Value`].
+/// Trait to encode a type `T` into a [`ZBytes`].
 pub trait Serialize<T> {
     type Output;
 
@@ -345,8 +345,8 @@ impl ZBytes {
     /// assert_eq!(buf1.as_slice(), iter.next().unwrap());
     /// assert_eq!(buf2.as_slice(), iter.next().unwrap());
     /// ```
-    pub fn slices(&self) -> impl Iterator<Item = &[u8]> {
-        self.0.slices()
+    pub fn slices(&self) -> ZBytesSliceIterator<'_> {
+        ZBytesSliceIterator(self.0.slices())
     }
 
     /// Serialize an object of type `T` as a [`ZBytes`] using the [`ZSerde`].
@@ -646,6 +646,23 @@ impl std::io::Write for ZBytesWriter<'_> {
 
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
+    }
+}
+
+/// An iterator that implements [`std::iter::Iterator`] trait to iterate on [`&[u8]`].
+#[repr(transparent)]
+#[derive(Debug)]
+pub struct ZBytesSliceIterator<'a>(ZBytesSliceIteratorInner<'a>);
+
+// Typedef to make clippy happy about complex type. Encapsulate inner `ZBufSliceOperator`.
+type ZBytesSliceIteratorInner<'a> =
+    std::iter::Map<core::slice::Iter<'a, ZSlice>, fn(&'a ZSlice) -> &'a [u8]>;
+
+impl<'a> Iterator for ZBytesSliceIterator<'a> {
+    type Item = &'a [u8];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next()
     }
 }
 

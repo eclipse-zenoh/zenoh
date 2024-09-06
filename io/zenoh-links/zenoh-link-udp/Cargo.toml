@@ -31,11 +31,9 @@ async-trait = { workspace = true }
 tracing = {workspace = true}
 socket2 = { workspace = true }
 zenoh-buffers = { workspace = true }
-zenoh-collections = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-link-commons = { workspace = true }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-sync = { workspace = true }
 zenoh-util = { workspace = true }
-zenoh-runtime = { workspace = true }

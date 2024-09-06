@@ -34,7 +34,6 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 anyhow = { workspace = true, features = ["default"] }
 base64 = { workspace = true }
-const_format = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
