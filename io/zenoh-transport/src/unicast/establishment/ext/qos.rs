@@ -41,7 +41,6 @@ impl<'a> QoSFsm<'a> {
     }
 }
 
-// TODO(fuzzypixelz): Fallback to ZExtUnit QoS matching QoS::Disabled or QoS::Enabled { reliability: None, priorities: None }
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum State {
     NoQoS,
@@ -153,19 +152,38 @@ impl State {
         }
     }
 
-    fn to_ext(&self) -> Option<init::ext::QoS> {
-        if self.is_qos() {
-            Some(init::ext::QoS::new(self.to_u64()))
-        } else {
-            None
+    fn to_exts(&self) -> (Option<init::ext::QoS>, Option<init::ext::QoSOptimized>) {
+        match self {
+            State::NoQoS => (None, None),
+            State::QoS {
+                reliability: None,
+                priorities: None,
+            } => (None, Some(init::ext::QoSOptimized::new())),
+            State::QoS {
+                reliability: Some(_),
+                ..
+            }
+            | State::QoS {
+                priorities: Some(_),
+                ..
+            } => (Some(init::ext::QoS::new(self.to_u64())), None),
         }
     }
 
-    fn try_from_ext(ext: Option<init::ext::QoS>) -> ZResult<Self> {
-        if let Some(ext) = ext {
-            State::try_from_u64(ext.value)
-        } else {
-            Ok(State::NoQoS)
+    fn try_from_exts(
+        (qos, qos_optimized): (Option<init::ext::QoS>, Option<init::ext::QoSOptimized>),
+    ) -> ZResult<Self> {
+        match (qos, qos_optimized) {
+            (Some(_), Some(_)) => Err(zerror!(
+                "Extensions QoS and QoSOptimized cannot both be enabled at once"
+            )
+            .into()),
+            (None, None) => Ok(State::NoQoS),
+            (None, Some(_)) => Ok(State::QoS {
+                reliability: None,
+                priorities: None,
+            }),
+            (Some(qos), None) => State::try_from_u64(qos.value),
         }
     }
 
@@ -251,15 +269,18 @@ impl<'a> OpenFsm for &'a QoSFsm<'a> {
     type Error = ZError;
 
     type SendInitSynIn = &'a StateOpen;
-    type SendInitSynOut = Option<init::ext::QoS>;
+    type SendInitSynOut = (Option<init::ext::QoS>, Option<init::ext::QoSOptimized>);
     async fn send_init_syn(
         self,
         state: Self::SendInitSynIn,
     ) -> Result<Self::SendInitSynOut, Self::Error> {
-        Ok(state.0.to_ext())
+        Ok(state.0.to_exts())
     }
 
-    type RecvInitAckIn = (&'a mut StateOpen, Option<init::ext::QoS>);
+    type RecvInitAckIn = (
+        &'a mut StateOpen,
+        (Option<init::ext::QoS>, Option<init::ext::QoSOptimized>),
+    );
     type RecvInitAckOut = ();
     async fn recv_init_ack(
         self,
@@ -267,7 +288,7 @@ impl<'a> OpenFsm for &'a QoSFsm<'a> {
     ) -> Result<Self::RecvInitAckOut, Self::Error> {
         let (state_self, other_ext) = input;
 
-        let state_other = State::try_from_ext(other_ext)?;
+        let state_other = State::try_from_exts(other_ext)?;
 
         let (
             State::QoS {
@@ -401,7 +422,10 @@ where
 impl<'a> AcceptFsm for &'a QoSFsm<'a> {
     type Error = ZError;
 
-    type RecvInitSynIn = (&'a mut StateAccept, Option<init::ext::QoS>);
+    type RecvInitSynIn = (
+        &'a mut StateAccept,
+        (Option<init::ext::QoS>, Option<init::ext::QoSOptimized>),
+    );
     type RecvInitSynOut = ();
     async fn recv_init_syn(
         self,
@@ -409,7 +433,7 @@ impl<'a> AcceptFsm for &'a QoSFsm<'a> {
     ) -> Result<Self::RecvInitSynOut, Self::Error> {
         let (state_self, other_ext) = input;
 
-        let state_other = State::try_from_ext(other_ext)?;
+        let state_other = State::try_from_exts(other_ext)?;
 
         let (
             State::QoS {
@@ -464,12 +488,12 @@ impl<'a> AcceptFsm for &'a QoSFsm<'a> {
     }
 
     type SendInitAckIn = &'a StateAccept;
-    type SendInitAckOut = Option<init::ext::QoS>;
+    type SendInitAckOut = (Option<init::ext::QoS>, Option<init::ext::QoSOptimized>);
     async fn send_init_ack(
         self,
         state: Self::SendInitAckIn,
     ) -> Result<Self::SendInitAckOut, Self::Error> {
-        Ok(state.0.to_ext())
+        Ok(state.0.to_exts())
     }
 
     type RecvOpenSynIn = (&'a mut StateAccept, Option<open::ext::QoS>);

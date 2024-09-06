@@ -224,7 +224,10 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
 
         // Extension QoS
         self.ext_qos
-            .recv_init_syn((&mut state.transport.ext_qos, init_syn.ext_qos))
+            .recv_init_syn((
+                &mut state.transport.ext_qos,
+                (init_syn.ext_qos, init_syn.ext_qos_optimized),
+            ))
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -284,7 +287,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         let (mut state, input) = input;
 
         // Extension QoS
-        let ext_qos = self
+        let (ext_qos, ext_qos_optimized) = self
             .ext_qos
             .send_init_ack(&state.transport.ext_qos)
             .await
@@ -381,6 +384,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             batch_size: state.transport.batch_size,
             cookie,
             ext_qos,
+            ext_qos_optimized,
             #[cfg(feature = "shared-memory")]
             ext_shm,
             ext_auth,
