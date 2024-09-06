@@ -40,7 +40,7 @@ pub(crate) struct SubscriberState {
     pub(crate) remote_id: Id,
     pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) origin: Locality,
-    pub(crate) callback: Callback<'static, Sample>,
+    pub(crate) callback: Callback<Sample>,
 }
 
 impl fmt::Debug for SubscriberState {
@@ -307,7 +307,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> SubscriberBuilder<'a, 'b, Handler>
     where
-        Handler: IntoHandler<'static, Sample>,
+        Handler: IntoHandler<Sample>,
     {
         let SubscriberBuilder {
             session,
@@ -366,7 +366,7 @@ impl<'a, 'b, Handler> SubscriberBuilder<'a, 'b, Handler> {
 // Push mode
 impl<'a, Handler> Resolvable for SubscriberBuilder<'a, '_, Handler>
 where
-    Handler: IntoHandler<'static, Sample> + Send,
+    Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
 {
     type To = ZResult<Subscriber<'a, Handler::Handler>>;
@@ -374,7 +374,7 @@ where
 
 impl<'a, Handler> Wait for SubscriberBuilder<'a, '_, Handler>
 where
-    Handler: IntoHandler<'static, Sample> + Send,
+    Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
 {
     fn wait(self) -> <Self as Resolvable>::To {
@@ -407,7 +407,7 @@ where
 
 impl<'a, Handler> IntoFuture for SubscriberBuilder<'a, '_, Handler>
 where
-    Handler: IntoHandler<'static, Sample> + Send,
+    Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
 {
     type Output = <Self as Resolvable>::To;

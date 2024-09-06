@@ -35,6 +35,7 @@ use super::{
     session::Session,
     subscriber::SubscriberKind,
 };
+use crate::handlers::Callback;
 
 lazy_static::lazy_static!(
     static ref KE_STARSTAR: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("**") };
@@ -54,15 +55,15 @@ pub(crate) fn init(session: &Session) {
             &admin_key,
             true,
             Locality::SessionLocal,
-            Arc::new({
+            Callback::new(Arc::new({
                 let session = session.clone();
                 move |q| super::admin::on_admin_query(&session, q)
-            }),
+            })),
         );
     }
 }
 
-pub(crate) fn on_admin_query(session: &Session, query: Query) {
+pub(crate) fn on_admin_query(session: &Session, query: &Query) {
     fn reply_peer(own_zid: &keyexpr, query: &Query, peer: TransportPeer) {
         let zid = peer.zid.to_string();
         if let Ok(zid) = keyexpr::new(&zid) {

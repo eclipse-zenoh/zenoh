@@ -154,7 +154,7 @@ impl From<Reply> for Result<Sample, ReplyError> {
 
 #[cfg(feature = "unstable")]
 pub(crate) struct LivelinessQueryState {
-    pub(crate) callback: Callback<'static, Reply>,
+    pub(crate) callback: Callback<Reply>,
 }
 
 pub(crate) struct QueryState {
@@ -163,7 +163,7 @@ pub(crate) struct QueryState {
     pub(crate) parameters: Parameters<'static>,
     pub(crate) reception_mode: ConsolidationMode,
     pub(crate) replies: Option<HashMap<OwnedKeyExpr, Reply>>,
-    pub(crate) callback: Callback<'static, Reply>,
+    pub(crate) callback: Callback<Reply>,
 }
 
 impl QueryState {
@@ -362,7 +362,7 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> SessionGetBuilder<'a, 'b, Handler>
     where
-        Handler: IntoHandler<'static, Reply>,
+        Handler: IntoHandler<Reply>,
     {
         let SessionGetBuilder {
             session,
@@ -473,7 +473,7 @@ pub enum ReplyKeyExpr {
 
 impl<Handler> Resolvable for SessionGetBuilder<'_, '_, Handler>
 where
-    Handler: IntoHandler<'static, Reply> + Send,
+    Handler: IntoHandler<Reply> + Send,
     Handler::Handler: Send,
 {
     type To = ZResult<Handler::Handler>;
@@ -481,7 +481,7 @@ where
 
 impl<Handler> Wait for SessionGetBuilder<'_, '_, Handler>
 where
-    Handler: IntoHandler<'static, Reply> + Send,
+    Handler: IntoHandler<Reply> + Send,
     Handler::Handler: Send,
 {
     fn wait(self) -> <Self as Resolvable>::To {
@@ -511,7 +511,7 @@ where
 
 impl<Handler> IntoFuture for SessionGetBuilder<'_, '_, Handler>
 where
-    Handler: IntoHandler<'static, Reply> + Send,
+    Handler: IntoHandler<Reply> + Send,
     Handler::Handler: Send,
 {
     type Output = <Self as Resolvable>::To;

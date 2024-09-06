@@ -112,7 +112,7 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
         handler: Handler,
     ) -> QueryingSubscriberBuilder<'a, 'b, KeySpace, Handler>
     where
-        Handler: IntoHandler<'static, Sample>,
+        Handler: IntoHandler<Sample>,
     {
         let QueryingSubscriberBuilder {
             session,
@@ -221,7 +221,7 @@ impl<'a, 'b, KeySpace, Handler> QueryingSubscriberBuilder<'a, 'b, KeySpace, Hand
 
 impl<'a, KeySpace, Handler> Resolvable for QueryingSubscriberBuilder<'a, '_, KeySpace, Handler>
 where
-    Handler: IntoHandler<'static, Sample>,
+    Handler: IntoHandler<Sample>,
     Handler::Handler: Send,
 {
     type To = ZResult<FetchingSubscriber<'a, Handler::Handler>>;
@@ -230,7 +230,7 @@ where
 impl<KeySpace, Handler> Wait for QueryingSubscriberBuilder<'_, '_, KeySpace, Handler>
 where
     KeySpace: Into<crate::KeySpace> + Clone,
-    Handler: IntoHandler<'static, Sample> + Send,
+    Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
 {
     fn wait(self) -> <Self as Resolvable>::To {
@@ -279,7 +279,7 @@ where
 impl<'a, KeySpace, Handler> IntoFuture for QueryingSubscriberBuilder<'a, '_, KeySpace, Handler>
 where
     KeySpace: Into<crate::KeySpace> + Clone,
-    Handler: IntoHandler<'static, Sample> + Send,
+    Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
 {
     type Output = <Self as Resolvable>::To;
@@ -470,7 +470,7 @@ where
         handler: Handler,
     ) -> FetchingSubscriberBuilder<'a, 'b, KeySpace, Handler, Fetch, TryIntoSample>
     where
-        Handler: IntoHandler<'static, Sample>,
+        Handler: IntoHandler<Sample>,
     {
         let FetchingSubscriberBuilder {
             session,
@@ -544,7 +544,7 @@ impl<
         TryIntoSample,
     > Resolvable for FetchingSubscriberBuilder<'a, '_, KeySpace, Handler, Fetch, TryIntoSample>
 where
-    Handler: IntoHandler<'static, Sample>,
+    Handler: IntoHandler<Sample>,
     Handler::Handler: Send,
     TryIntoSample: ExtractSample,
 {
@@ -559,7 +559,7 @@ impl<
     > Wait for FetchingSubscriberBuilder<'_, '_, KeySpace, Handler, Fetch, TryIntoSample>
 where
     KeySpace: Into<crate::KeySpace>,
-    Handler: IntoHandler<'static, Sample> + Send,
+    Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
     TryIntoSample: ExtractSample + Send + Sync,
 {
@@ -577,7 +577,7 @@ impl<
     > IntoFuture for FetchingSubscriberBuilder<'a, '_, KeySpace, Handler, Fetch, TryIntoSample>
 where
     KeySpace: Into<crate::KeySpace>,
-    Handler: IntoHandler<'static, Sample> + Send,
+    Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
     TryIntoSample: ExtractSample + Send + Sync,
 {
@@ -651,7 +651,7 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
     ) -> ZResult<Self>
     where
         KeySpace: Into<crate::KeySpace>,
-        InputHandler: IntoHandler<'static, Sample, Handler = Handler> + Send,
+        InputHandler: IntoHandler<Sample, Handler = Handler> + Send,
         TryIntoSample: ExtractSample + Send + Sync,
     {
         let session_id = conf.session.zid();

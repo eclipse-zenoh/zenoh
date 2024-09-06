@@ -100,6 +100,7 @@ impl FromStr for ZenohId {
 }
 
 /// A zenoh Hello message.
+#[derive(Clone, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct Hello(HelloProto);
 

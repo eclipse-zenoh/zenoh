@@ -136,7 +136,7 @@ impl ScoutBuilder<DefaultHandler> {
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> ScoutBuilder<Handler>
     where
-        Handler: IntoHandler<'static, Hello>,
+        Handler: IntoHandler<Hello>,
     {
         let ScoutBuilder {
             what,
@@ -153,7 +153,7 @@ impl ScoutBuilder<DefaultHandler> {
 
 impl<Handler> Resolvable for ScoutBuilder<Handler>
 where
-    Handler: IntoHandler<'static, Hello> + Send,
+    Handler: IntoHandler<Hello> + Send,
     Handler::Handler: Send,
 {
     type To = ZResult<Scout<Handler::Handler>>;
@@ -161,7 +161,7 @@ where
 
 impl<Handler> Wait for ScoutBuilder<Handler>
 where
-    Handler: IntoHandler<'static, Hello> + Send,
+    Handler: IntoHandler<Hello> + Send,
     Handler::Handler: Send,
 {
     fn wait(self) -> <Self as Resolvable>::To {
@@ -172,7 +172,7 @@ where
 
 impl<Handler> IntoFuture for ScoutBuilder<Handler>
 where
-    Handler: IntoHandler<'static, Hello> + Send,
+    Handler: IntoHandler<Hello> + Send,
     Handler::Handler: Send,
 {
     type Output = <Self as Resolvable>::To;
@@ -295,7 +295,7 @@ impl<Receiver> Scout<Receiver> {
 fn _scout(
     what: WhatAmIMatcher,
     config: zenoh_config::Config,
-    callback: Callback<'static, Hello>,
+    callback: Callback<Hello>,
 ) -> ZResult<ScoutInner> {
     tracing::trace!("scout({}, {})", what, &config);
     let default_addr = SocketAddr::from(zenoh_config::defaults::scouting::multicast::address);
@@ -325,7 +325,7 @@ fn _scout(
                     let scout = Runtime::scout(&sockets, what, &addr, move |hello| {
                         let callback = callback.clone();
                         async move {
-                            callback(hello.into());
+                            callback.call_by_value(hello.into());
                             Loop::Continue
                         }
                     });

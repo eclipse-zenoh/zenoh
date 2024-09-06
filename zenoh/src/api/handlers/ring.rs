@@ -21,7 +21,7 @@ use std::{
 use zenoh_collections::RingBuffer;
 use zenoh_result::ZResult;
 
-use super::{callback::Callback, Dyn, IntoHandler};
+use super::{callback::Callback, IntoHandler};
 use crate::api::session::API_DATA_RECEPTION_CHANNEL_SIZE;
 
 /// A synchronous ring channel with a limited size that allows users to keep the last N data.
@@ -44,7 +44,30 @@ impl Default for RingChannel {
 
 struct RingChannelInner<T> {
     ring: std::sync::Mutex<RingBuffer<T>>,
-    not_empty: flume::Receiver<()>,
+    not_empty_tx: flume::Sender<()>,
+    not_empty_rx: flume::Receiver<()>,
+}
+
+pub(crate) struct RingChannelSender<T>(Arc<RingChannelInner<T>>);
+
+impl<T> Clone for RingChannelSender<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<T> RingChannelSender<T> {
+    pub(crate) fn send(&self, t: T) {
+        match self.0.ring.lock() {
+            Ok(mut g) => {
+                // Eventually drop the oldest element.
+                g.push_force(t);
+                drop(g);
+                let _ = self.0.not_empty_tx.try_send(());
+            }
+            Err(error) => tracing::error!(%error),
+        }
+    }
 }
 
 pub struct RingChannelHandler<T> {
@@ -63,7 +86,7 @@ impl<T> RingChannelHandler<T> {
             if let Some(t) = channel.ring.lock().map_err(|e| zerror!("{}", e))?.pull() {
                 return Ok(t);
             }
-            channel.not_empty.recv().map_err(|e| zerror!("{}", e))?;
+            channel.not_empty_rx.recv().map_err(|e| zerror!("{}", e))?;
         }
     }
 
@@ -80,7 +103,7 @@ impl<T> RingChannelHandler<T> {
             if let Some(t) = channel.ring.lock().map_err(|e| zerror!("{}", e))?.pull() {
                 return Ok(Some(t));
             }
-            match channel.not_empty.recv_deadline(deadline) {
+            match channel.not_empty_rx.recv_deadline(deadline) {
                 Ok(()) => {}
                 Err(flume::RecvTimeoutError::Timeout) => return Ok(None),
                 Err(err) => bail!("{}", err),
@@ -101,7 +124,7 @@ impl<T> RingChannelHandler<T> {
             if let Some(t) = channel.ring.lock().map_err(|e| zerror!("{}", e))?.pull() {
                 return Ok(Some(t));
             }
-            match channel.not_empty.recv_timeout(timeout) {
+            match channel.not_empty_rx.recv_timeout(timeout) {
                 Ok(()) => {}
                 Err(flume::RecvTimeoutError::Timeout) => return Ok(None),
                 Err(err) => bail!("{}", err),
@@ -121,7 +144,7 @@ impl<T> RingChannelHandler<T> {
                 return Ok(t);
             }
             channel
-                .not_empty
+                .not_empty_rx
                 .recv_async()
                 .await
                 .map_err(|e| zerror!("{}", e))?;
@@ -140,29 +163,19 @@ impl<T> RingChannelHandler<T> {
     }
 }
 
-impl<T: Send + 'static> IntoHandler<'static, T> for RingChannel {
+impl<T: Clone + Send + 'static> IntoHandler<T> for RingChannel {
     type Handler = RingChannelHandler<T>;
 
-    fn into_handler(self) -> (Callback<'static, T>, Self::Handler) {
-        let (sender, receiver) = flume::bounded(1);
+    fn into_handler(self) -> (Callback<T>, Self::Handler) {
+        let (not_empty_tx, not_empty_rx) = flume::bounded(1);
         let inner = Arc::new(RingChannelInner {
             ring: std::sync::Mutex::new(RingBuffer::new(self.capacity)),
-            not_empty: receiver,
+            not_empty_tx,
+            not_empty_rx,
         });
         let receiver = RingChannelHandler {
             ring: Arc::downgrade(&inner),
         };
-        (
-            Dyn::new(move |t| match inner.ring.lock() {
-                Ok(mut g) => {
-                    // Eventually drop the oldest element.
-                    g.push_force(t);
-                    drop(g);
-                    let _ = sender.try_send(());
-                }
-                Err(e) => tracing::error!("{}", e),
-            }),
-            receiver,
-        )
+        (Callback::new_ring(RingChannelSender(inner)), receiver)
     }
 }

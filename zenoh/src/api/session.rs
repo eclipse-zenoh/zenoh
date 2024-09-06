@@ -1127,7 +1127,7 @@ impl Session {
         &self,
         key_expr: &KeyExpr,
         origin: Locality,
-        callback: Callback<'static, Sample>,
+        callback: Callback<Sample>,
         info: &SubscriberInfo,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
@@ -1331,7 +1331,7 @@ impl Session {
         key_expr: &WireExpr,
         complete: bool,
         origin: Locality,
-        callback: Callback<'static, Query>,
+        callback: Callback<Query>,
     ) -> ZResult<Arc<QueryableState>> {
         let mut state = zwrite!(self.state);
         tracing::trace!("declare_queryable({:?})", key_expr);
@@ -1429,7 +1429,7 @@ impl Session {
         key_expr: &KeyExpr,
         origin: Locality,
         history: bool,
-        callback: Callback<'static, Sample>,
+        callback: Callback<Sample>,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
         trace!("declare_liveliness_subscriber({:?})", key_expr);
@@ -1523,7 +1523,7 @@ impl Session {
     pub(crate) fn declare_matches_listener_inner(
         &self,
         publisher: &Publisher,
-        callback: Callback<'static, MatchingStatus>,
+        callback: Callback<MatchingStatus>,
     ) -> ZResult<Arc<MatchingListenerState>> {
         let mut state = zwrite!(self.state);
         let id = self.runtime.next_id();
@@ -1545,7 +1545,9 @@ impl Session {
                     .unwrap_or(true)
                 {
                     *current = true;
-                    (listener_state.callback)(MatchingStatus { matching: true });
+                    listener_state
+                        .callback
+                        .call_by_value(MatchingStatus { matching: true });
                 }
             }
             Err(e) => tracing::error!("Error trying to acquire MathginListener lock: {}", e),
@@ -1609,8 +1611,7 @@ impl Session {
                                         {
                                             if status.matching_subscribers() {
                                                 *current = true;
-                                                let callback = msub.callback.clone();
-                                                (callback)(status)
+                                                msub.callback.call_by_value(status);
                                             }
                                         }
                                     }
@@ -1647,8 +1648,7 @@ impl Session {
                                         {
                                             if !status.matching_subscribers() {
                                                 *current = false;
-                                                let callback = msub.callback.clone();
-                                                (callback)(status)
+                                                msub.callback.call_by_value(status);
                                             }
                                         }
                                     }
@@ -1732,26 +1732,21 @@ impl Session {
             }
         };
         drop(state);
+        let mut sample = info.clone().into_sample(
+            unsafe { KeyExpr::from_str_unchecked("dummy") },
+            payload.clone(),
+            #[cfg(feature = "unstable")]
+            reliability,
+            attachment.clone(),
+        );
         let zenoh_collections::single_or_vec::IntoIter { drain, last } = callbacks.into_iter();
         for (cb, key_expr) in drain {
-            let sample = info.clone().into_sample(
-                key_expr,
-                payload.clone(),
-                #[cfg(feature = "unstable")]
-                reliability,
-                attachment.clone(),
-            );
-            cb(sample);
+            sample.key_expr = key_expr;
+            cb.call(&sample);
         }
         if let Some((cb, key_expr)) = last {
-            let sample = info.into_sample(
-                key_expr,
-                payload,
-                #[cfg(feature = "unstable")]
-                reliability,
-                attachment.clone(),
-            );
-            cb(sample);
+            sample.key_expr = key_expr;
+            cb.call_by_value(sample);
         }
     }
 
@@ -1768,7 +1763,7 @@ impl Session {
         value: Option<Value>,
         attachment: Option<ZBytes>,
         #[cfg(feature = "unstable")] source: SourceInfo,
-        callback: Callback<'static, Reply>,
+        callback: Callback<Reply>,
     ) -> ZResult<()> {
         tracing::trace!(
             "get({}, {:?}, {:?})",
@@ -1804,10 +1799,10 @@ impl Session {
                                 tracing::debug!("Timeout on query {}! Send error and close.", qid);
                                 if query.reception_mode == ConsolidationMode::Latest {
                                     for (_, reply) in query.replies.unwrap().into_iter() {
-                                        (query.callback)(reply);
+                                        query.callback.call_by_value(reply);
                                     }
                                 }
-                                (query.callback)(Reply {
+                                query.callback.call_by_value(Reply {
                                     result: Err(Value::new("Timeout", Encoding::ZENOH_STRING).into()),
                                     #[cfg(feature = "unstable")]
                                     replier_id: Some(zid.into()),
@@ -1890,7 +1885,7 @@ impl Session {
         &self,
         key_expr: &KeyExpr<'_>,
         timeout: Duration,
-        callback: Callback<'static, Reply>,
+        callback: Callback<Reply>,
     ) -> ZResult<()> {
         tracing::trace!("liveliness.get({}, {:?})", key_expr, timeout);
         let mut state = zwrite!(self.state);
@@ -1907,7 +1902,7 @@ impl Session {
                             if let Some(query) = state.liveliness_queries.remove(&id) {
                                 std::mem::drop(state);
                                 tracing::debug!("Timeout on liveliness query {}! Send error and close.", id);
-                                (query.callback)(Reply {
+                                query.callback.call_by_value(Reply {
                                     result: Err(Value::new("Timeout", Encoding::ZENOH_STRING).into()),
                                     #[cfg(feature = "unstable")]
                                     replier_id: Some(zid.into()),
@@ -1979,7 +1974,7 @@ impl Session {
                                 }
                         )
                         .map(|(id, qable)| (*id, qable.callback.clone()))
-                        .collect::<Vec<(u32, Arc<dyn Fn(Query) + Send + Sync>)>>();
+                        .collect::<Vec<(u32, Callback<Query>)>>();
                     (
                         state.primitives.as_ref().unwrap().clone(),
                         key_expr.into_owned(),
@@ -2006,16 +2001,18 @@ impl Session {
                 primitives
             },
         });
-        for (eid, callback) in queryables {
-            callback(Query {
-                inner: query_inner.clone(),
-                eid,
-                value: body.as_ref().map(|b| Value {
-                    payload: b.payload.clone().into(),
-                    encoding: b.encoding.clone().into(),
-                }),
-                attachment: attachment.clone(),
-            });
+        let mut query = Query {
+            inner: query_inner,
+            eid: 0,
+            value: body.map(|b| Value {
+                payload: b.payload.into(),
+                encoding: b.encoding.into(),
+            }),
+            attachment,
+        };
+        for (eid, cb) in queryables {
+            query.eid = eid;
+            cb.call(&query);
         }
     }
 }
@@ -2283,7 +2280,7 @@ impl Primitives for Session {
                                         replier_id: None,
                                     };
 
-                                    (query.callback)(reply);
+                                    query.callback.call_by_value(reply);
                                 }
                             } else {
                                 state.remote_tokens.insert(m.id, key_expr.clone());
@@ -2460,7 +2457,7 @@ impl Primitives for Session {
                             #[cfg(feature = "unstable")]
                             replier_id: e.ext_sinfo.map(|info| info.id.zid),
                         };
-                        callback(new_reply);
+                        callback.call_by_value(new_reply);
                     }
                     None => {
                         tracing::warn!("Received ReplyData for unknown Query: {}", msg.rid);
@@ -2630,7 +2627,7 @@ impl Primitives for Session {
                             };
                         std::mem::drop(state);
                         if let Some((callback, new_reply)) = callback {
-                            callback(new_reply);
+                            callback.call_by_value(new_reply);
                         }
                     }
                     None => {
@@ -2652,7 +2649,7 @@ impl Primitives for Session {
                     std::mem::drop(state);
                     if query.reception_mode == ConsolidationMode::Latest {
                         for (_, reply) in query.replies.unwrap().into_iter() {
-                            (query.callback)(reply);
+                            query.callback.call_by_value(reply);
                         }
                     }
                     trace!("Close query {}", msg.rid);
