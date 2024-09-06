@@ -32,7 +32,6 @@ description = "Internal crate for zenoh."
 default = ["std"]
 std = [
     "tracing",
-    "serde/std",
     "uhlc/std",
     "zenoh-protocol/std"
 ]
@@ -45,7 +44,6 @@ shared-memory = [
 
 [dependencies]
 tracing = {workspace = true, optional = true }
-serde = { workspace = true, features = ["alloc"] }
 uhlc = { workspace = true }
 zenoh-buffers = { workspace = true, default-features = false }
 zenoh-protocol = { workspace = true }

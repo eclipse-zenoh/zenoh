@@ -33,15 +33,12 @@ default = []
 
 [dependencies]
 tokio = { workspace = true, features = ["rt", "sync", "time", "macros", "io-std"] }
-bincode = { workspace = true }
-zenoh-util = {workspace = true }
-flume = { workspace = true }
 futures = { workspace = true }
-tracing = {workspace = true}
-serde = { workspace = true, features = ["default"] }
 zenoh = { workspace = true, features = ["unstable"], default-features = false }
-zenoh-ext = {workspace = true }
 clap = { workspace = true, features = ["derive"] }
+zenoh-ext = { workspace = true }
+
+[dev-dependencies]
 
 [[example]]
 name = "z_query_sub"

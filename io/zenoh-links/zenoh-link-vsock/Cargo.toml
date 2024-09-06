@@ -34,8 +34,6 @@ zenoh-core = { workspace = true }
 zenoh-link-commons = { workspace = true }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
-zenoh-sync = { workspace = true }
-zenoh-util = { workspace = true }
 zenoh-runtime = { workspace = true }
 
 # Workspaces does not support platform dependent dependencies, and 
