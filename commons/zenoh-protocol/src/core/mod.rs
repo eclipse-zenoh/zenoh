@@ -351,9 +351,9 @@ impl PriorityRange {
     }
 }
 
-impl ToString for PriorityRange {
-    fn to_string(&self) -> String {
-        format!("{}..={}", *self.start() as u8, *self.end() as u8)
+impl Display for PriorityRange {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}..={}", *self.start() as u8, *self.end() as u8)
     }
 }
 
