@@ -197,7 +197,7 @@ pub mod session {
         builders::publisher::{SessionDeleteBuilder, SessionPutBuilder},
         info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, SessionInfo, ZenohIdBuilder},
         query::SessionGetBuilder,
-        session::{open, OpenBuilder, Session, SessionDeclarations, SessionRef, Undeclarable},
+        session::{open, OpenBuilder, Session, Undeclarable},
     };
 }
 
@@ -236,7 +236,6 @@ pub mod pubsub {
     #[zenoh_macros::unstable]
     pub use crate::api::publisher::{
         MatchingListener, MatchingListenerBuilder, MatchingListenerUndeclaration, MatchingStatus,
-        PublisherDeclarations, PublisherRef,
     };
     pub use crate::api::{
         builders::publisher::{

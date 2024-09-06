@@ -443,14 +443,16 @@ pub fn strip_prefix(
                 );
             }
 
-            match key_expr.strip_prefix(prefix).as_slice() {
-                [stripped_key_expr] => {
-                    if stripped_key_expr.is_empty() {
-                        return Ok(None);
-                    }
+            // `key_expr.strip_prefix` returns empty vec if `key_expr == prefix`,
+            // but also returns empty vec if `prefix` is not a prefix to `key_expr`.
+            // First case needs to be handled before calling `key_expr.strip_prefix`
+            if key_expr.as_str().eq(prefix.as_str()) {
+                return Ok(None);
+            }
 
-                    OwnedKeyExpr::from_str(stripped_key_expr).map(Some)
-                }
+            match key_expr.strip_prefix(prefix).as_slice() {
+                // NOTE: `stripped_key_expr.is_empty()` should be impossible as "" is not a valid key expression
+                [stripped_key_expr] => OwnedKeyExpr::from_str(stripped_key_expr).map(Some),
                 _ => bail!("Failed to strip prefix < {} > from: {}", prefix, key_expr),
             }
         }

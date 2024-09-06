@@ -25,7 +25,7 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 
-use super::session::{Session, UndeclarableSealed};
+use super::session::{Session, SessionInner, UndeclarableSealed};
 use crate::net::primitives::Primitives;
 
 #[derive(Clone, Debug)]
@@ -492,7 +492,7 @@ impl<'a> KeyExpr<'a> {
     //pub(crate) fn is_optimized(&self, session: &Session) -> bool {
     //    matches!(&self.0, KeyExprInner::Wire { expr_id, session_id, .. } | KeyExprInner::BorrowedWire { expr_id, session_id, .. } if *expr_id != 0 && session.id == *session_id)
     //}
-    pub(crate) fn is_fully_optimized(&self, session: &Session) -> bool {
+    pub(crate) fn is_fully_optimized(&self, session: &SessionInner) -> bool {
         match &self.0 {
             KeyExprInner::Wire {
                 key_expr,
@@ -509,7 +509,7 @@ impl<'a> KeyExpr<'a> {
             _ => false,
         }
     }
-    pub(crate) fn to_wire(&'a self, session: &Session) -> WireExpr<'a> {
+    pub(crate) fn to_wire(&'a self, session: &SessionInner) -> WireExpr<'a> {
         match &self.0 {
             KeyExprInner::Wire {
                 key_expr,
@@ -549,8 +549,10 @@ impl<'a> KeyExpr<'a> {
     }
 }
 
-impl<'a> UndeclarableSealed<&'a Session, KeyExprUndeclaration<'a>> for KeyExpr<'a> {
-    fn undeclare_inner(self, session: &'a Session) -> KeyExprUndeclaration<'a> {
+impl<'a> UndeclarableSealed<&'a Session> for KeyExpr<'a> {
+    type Undeclaration = KeyExprUndeclaration<'a>;
+
+    fn undeclare_inner(self, session: &'a Session) -> Self::Undeclaration {
         KeyExprUndeclaration {
             session,
             expr: self,
@@ -592,7 +594,7 @@ impl Wait for KeyExprUndeclaration<'_> {
                 session_id,
                 ..
             } if *prefix_len as usize == key_expr.len() => {
-                if *session_id == session.id {
+                if *session_id == session.0.id {
                     *expr_id
                 } else {
                     return Err(zerror!("Failed to undeclare {}, as it was declared by an other Session", expr).into())
@@ -605,7 +607,7 @@ impl Wait for KeyExprUndeclaration<'_> {
                 session_id,
                 ..
             } if *prefix_len as usize == key_expr.len() => {
-                if *session_id == session.id {
+                if *session_id == session.0.id {
                     *expr_id
                 } else {
                     return Err(zerror!("Failed to undeclare {}, as it was declared by an other Session", expr).into())
@@ -614,10 +616,10 @@ impl Wait for KeyExprUndeclaration<'_> {
             _ => return Err(zerror!("Failed to undeclare {}, make sure you use the result of `Session::declare_keyexpr` to call `Session::undeclare`", expr).into()),
         };
         tracing::trace!("undeclare_keyexpr({:?})", expr_id);
-        let mut state = zwrite!(session.state);
+        let mut state = zwrite!(session.0.state);
         state.local_resources.remove(&expr_id);
 
-        let primitives = state.primitives.as_ref().unwrap().clone();
+        let primitives = state.primitives()?;
         drop(state);
         primitives.send_declare(zenoh_protocol::network::Declare {
             interest_id: None,

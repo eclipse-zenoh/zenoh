@@ -14,10 +14,12 @@
 use std::{
     fmt,
     future::{IntoFuture, Ready},
+    mem::size_of,
     ops::{Deref, DerefMut},
     sync::Arc,
 };
 
+use tracing::error;
 use uhlc::Timestamp;
 use zenoh_core::{Resolvable, Resolve, Wait};
 use zenoh_protocol::{
@@ -28,30 +30,33 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 #[zenoh_macros::unstable]
 use {
-    super::{query::ReplyKeyExpr, sample::SourceInfo},
-    zenoh_config::wrappers::EntityGlobalId,
+    crate::api::{query::ReplyKeyExpr, sample::SourceInfo},
+    zenoh_config::wrappers::{EntityGlobalId, ZenohId},
     zenoh_protocol::core::EntityGlobalIdProto,
 };
 
 #[zenoh_macros::unstable]
-use super::selector::ZenohParameters;
-use super::{
-    builders::sample::{
-        EncodingBuilderTrait, QoSBuilderTrait, SampleBuilder, SampleBuilderTrait,
-        TimestampBuilderTrait,
+use crate::api::selector::ZenohParameters;
+use crate::{
+    api::{
+        builders::sample::{
+            EncodingBuilderTrait, QoSBuilderTrait, SampleBuilder, SampleBuilderTrait,
+            TimestampBuilderTrait,
+        },
+        bytes::{OptionZBytes, ZBytes},
+        encoding::Encoding,
+        handlers::{locked, DefaultHandler, IntoHandler},
+        key_expr::KeyExpr,
+        publisher::Priority,
+        sample::{Locality, QoSBuilder, Sample, SampleKind},
+        selector::Selector,
+        session::{UndeclarableSealed, WeakSession},
+        value::Value,
+        Id,
     },
-    bytes::{OptionZBytes, ZBytes},
-    encoding::Encoding,
-    handlers::{locked, DefaultHandler, IntoHandler},
-    key_expr::KeyExpr,
-    publisher::Priority,
-    sample::{Locality, QoSBuilder, Sample, SampleKind},
-    selector::Selector,
-    session::{SessionRef, UndeclarableSealed},
-    value::Value,
-    Id,
+    net::primitives::Primitives,
+    Session,
 };
-use crate::net::primitives::Primitives;
 
 pub(crate) struct QueryInner {
     pub(crate) key_expr: KeyExpr<'static>,
@@ -534,43 +539,14 @@ impl fmt::Debug for QueryableState {
     }
 }
 
-/// An entity able to reply to queries through a callback.
-///
-/// CallbackQueryables can be created from a zenoh [`Session`](crate::Session)
-/// with the [`declare_queryable`](crate::Session::declare_queryable) function
-/// and the [`callback`](QueryableBuilder::callback) function
-/// of the resulting builder.
-///
-/// Queryables are automatically undeclared when dropped.
-///
-/// # Examples
-/// ```no_run
-/// # #[tokio::main]
-/// # async fn main() {
-/// use futures::prelude::*;
-/// use zenoh::prelude::*;
-///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
-/// let queryable = session.declare_queryable("key/expression").await.unwrap();
-/// while let Ok(query) = queryable.recv_async().await {
-///     println!(">> Handling query '{}'", query.selector());
-///     query.reply("key/expression", "value")
-///         .await
-///         .unwrap();
-/// }
-/// # }
-/// ```
 #[derive(Debug)]
-pub(crate) struct CallbackQueryable<'a> {
-    pub(crate) session: SessionRef<'a>,
+pub(crate) struct QueryableInner {
+    #[cfg(feature = "unstable")]
+    pub(crate) session_id: ZenohId,
+    pub(crate) session: WeakSession,
     pub(crate) state: Arc<QueryableState>,
-    undeclare_on_drop: bool,
-}
-
-impl<'a> UndeclarableSealed<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> {
-    fn undeclare_inner(self, _: ()) -> QueryableUndeclaration<'a> {
-        QueryableUndeclaration { queryable: self }
-    }
+    // Queryable is undeclared on drop unless its handler is a ZST, i.e. it is callback-only
+    pub(crate) undeclare_on_drop: bool,
 }
 
 /// A [`Resolvable`] returned when undeclaring a queryable.
@@ -587,38 +563,24 @@ impl<'a> UndeclarableSealed<(), QueryableUndeclaration<'a>> for CallbackQueryabl
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-pub struct QueryableUndeclaration<'a> {
-    queryable: CallbackQueryable<'a>,
-}
+pub struct QueryableUndeclaration<Handler>(Queryable<Handler>);
 
-impl Resolvable for QueryableUndeclaration<'_> {
+impl<Handler> Resolvable for QueryableUndeclaration<Handler> {
     type To = ZResult<()>;
 }
 
-impl Wait for QueryableUndeclaration<'_> {
+impl<Handler> Wait for QueryableUndeclaration<Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        // set the flag first to avoid double panic if this function panic
-        self.queryable.undeclare_on_drop = false;
-        self.queryable
-            .session
-            .close_queryable(self.queryable.state.id)
+        self.0.undeclare_impl()
     }
 }
 
-impl<'a> IntoFuture for QueryableUndeclaration<'a> {
+impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
-    }
-}
-
-impl Drop for CallbackQueryable<'_> {
-    fn drop(&mut self) {
-        if self.undeclare_on_drop {
-            let _ = self.session.close_queryable(self.state.id);
-        }
     }
 }
 
@@ -637,7 +599,7 @@ impl Drop for CallbackQueryable<'_> {
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
 pub struct QueryableBuilder<'a, 'b, Handler> {
-    pub(crate) session: SessionRef<'a>,
+    pub(crate) session: &'a Session,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) complete: bool,
     pub(crate) origin: Locality,
@@ -774,13 +736,41 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 /// A queryable that provides data through a [`Handler`](crate::handlers::IntoHandler).
 ///
 /// Queryables can be created from a zenoh [`Session`](crate::Session)
-/// with the [`declare_queryable`](crate::session::SessionDeclarations::declare_queryable) function
+/// with the [`declare_queryable`](crate::Session::declare_queryable) function
 /// and the [`with`](QueryableBuilder::with) function
 /// of the resulting builder.
 ///
-/// Queryables are automatically undeclared when dropped.
+/// Callback queryables will run in background until the session is closed,
+/// or until it is undeclared.
+/// On the other hand, queryables with a handler are automatically undeclared when dropped.
 ///
 /// # Examples
+///
+/// Using callback:
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// use futures::prelude::*;
+/// use zenoh::prelude::*;
+///
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let (tx, rx) = flume::bounded(32);
+/// session
+///     .declare_queryable("key/expression")
+///     .callback(move |query| tx.send(query).unwrap())
+///     .await
+///     .unwrap();
+/// // queryable run in background until the session is closed
+/// tokio::spawn(async move {
+///     while let Ok(query) = rx.recv_async().await {
+///         println!(">> Handling query '{}'", query.selector());
+///         query.reply("key/expression", "value").await.unwrap();
+///     }
+/// });
+/// # }
+/// ```
+///
+/// Using channel handler:
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
@@ -798,16 +788,17 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 ///         .await
 ///         .unwrap();
 /// }
+/// // queryable is undeclared at the end of the scope
 /// # }
 /// ```
 #[non_exhaustive]
 #[derive(Debug)]
-pub struct Queryable<'a, Handler> {
-    pub(crate) queryable: CallbackQueryable<'a>,
+pub struct Queryable<Handler> {
+    pub(crate) inner: QueryableInner,
     pub(crate) handler: Handler,
 }
 
-impl<'a, Handler> Queryable<'a, Handler> {
+impl<Handler> Queryable<Handler> {
     /// Returns the [`EntityGlobalId`] of this Queryable.
     ///
     /// # Examples
@@ -826,8 +817,8 @@ impl<'a, Handler> Queryable<'a, Handler> {
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
         EntityGlobalIdProto {
-            zid: self.queryable.session.zid().into(),
-            eid: self.queryable.state.id,
+            zid: self.inner.session_id.into(),
+            eid: self.inner.state.id,
         }
         .into()
     }
@@ -846,29 +837,55 @@ impl<'a, Handler> Queryable<'a, Handler> {
         &mut self.handler
     }
 
+    /// Undeclare the [`Queryable`].
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use zenoh::prelude::*;
+    ///
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let queryable = session.declare_queryable("key/expression")
+    ///     .await
+    ///     .unwrap();
+    /// queryable.undeclare().await.unwrap();
+    /// # }
+    /// ```
     #[inline]
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
+    pub fn undeclare(self) -> impl Resolve<ZResult<()>>
+    where
+        Handler: Send,
+    {
         UndeclarableSealed::undeclare_inner(self, ())
     }
 
-    /// Make the queryable run in background, until the session is closed.
-    #[inline]
-    #[zenoh_macros::unstable]
-    pub fn background(mut self) {
-        // It's not necessary to undeclare this resource when session close, as other sessions
-        // will clean all resources related to the closed one.
-        // So we can just never undeclare it.
-        self.queryable.undeclare_on_drop = false;
+    fn undeclare_impl(&mut self) -> ZResult<()> {
+        // set the flag first to avoid double panic if this function panic
+        self.inner.undeclare_on_drop = false;
+        self.inner.session.close_queryable(self.inner.state.id)
     }
 }
 
-impl<'a, T> UndeclarableSealed<(), QueryableUndeclaration<'a>> for Queryable<'a, T> {
-    fn undeclare_inner(self, _: ()) -> QueryableUndeclaration<'a> {
-        UndeclarableSealed::undeclare_inner(self.queryable, ())
+impl<Handler> Drop for Queryable<Handler> {
+    fn drop(&mut self) {
+        if self.inner.undeclare_on_drop {
+            if let Err(error) = self.undeclare_impl() {
+                error!(error);
+            }
+        }
     }
 }
 
-impl<Handler> Deref for Queryable<'_, Handler> {
+impl<Handler: Send> UndeclarableSealed<()> for Queryable<Handler> {
+    type Undeclaration = QueryableUndeclaration<Handler>;
+
+    fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
+        QueryableUndeclaration(self)
+    }
+}
+
+impl<Handler> Deref for Queryable<Handler> {
     type Target = Handler;
 
     fn deref(&self) -> &Self::Target {
@@ -876,21 +893,21 @@ impl<Handler> Deref for Queryable<'_, Handler> {
     }
 }
 
-impl<Handler> DerefMut for Queryable<'_, Handler> {
+impl<Handler> DerefMut for Queryable<Handler> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.handler_mut()
     }
 }
 
-impl<'a, Handler> Resolvable for QueryableBuilder<'a, '_, Handler>
+impl<Handler> Resolvable for QueryableBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, Query> + Send,
     Handler::Handler: Send,
 {
-    type To = ZResult<Queryable<'a, Handler::Handler>>;
+    type To = ZResult<Queryable<Handler::Handler>>;
 }
 
-impl<'a, Handler> Wait for QueryableBuilder<'a, '_, Handler>
+impl<Handler> Wait for QueryableBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, Query> + Send,
     Handler::Handler: Send,
@@ -899,24 +916,28 @@ where
         let session = self.session;
         let (callback, receiver) = self.handler.into_handler();
         session
+            .0
             .declare_queryable_inner(
-                &self.key_expr?.to_wire(&session),
+                &self.key_expr?.to_wire(&session.0),
                 self.complete,
                 self.origin,
                 callback,
             )
             .map(|qable_state| Queryable {
-                queryable: CallbackQueryable {
-                    session,
+                inner: QueryableInner {
+                    #[cfg(feature = "unstable")]
+                    session_id: session.zid(),
+                    session: self.session.downgrade(),
                     state: qable_state,
-                    undeclare_on_drop: true,
+                    // `size_of::<Handler::Handler>() == 0` means callback-only queryable
+                    undeclare_on_drop: size_of::<Handler::Handler>() > 0,
                 },
                 handler: receiver,
             })
     }
 }
 
-impl<'a, Handler> IntoFuture for QueryableBuilder<'a, '_, Handler>
+impl<Handler> IntoFuture for QueryableBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, Query> + Send,
     Handler::Handler: Send,

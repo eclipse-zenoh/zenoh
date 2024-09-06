@@ -87,9 +87,7 @@ fn main() {
             }
         })
         .wait()
-        .unwrap()
-        // Make the subscriber run in background, until the session is closed.
-        .background();
+        .unwrap();
 
     println!("Press CTRL-C to quit...");
     std::thread::park();

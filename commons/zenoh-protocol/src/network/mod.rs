@@ -30,7 +30,7 @@ pub use push::Push;
 pub use request::{AtomicRequestId, Request, RequestId};
 pub use response::{Response, ResponseFinal};
 
-use crate::core::{CongestionControl, Priority};
+use crate::core::{CongestionControl, Priority, Reliability};
 
 pub mod id {
     // WARNING: it's crucial that these IDs do NOT collide with the IDs
@@ -83,6 +83,7 @@ pub enum NetworkBody {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NetworkMessage {
     pub body: NetworkBody,
+    pub reliability: Reliability,
     #[cfg(feature = "stats")]
     pub size: Option<core::num::NonZeroUsize>,
 }
@@ -109,8 +110,7 @@ impl NetworkMessage {
 
     #[inline]
     pub fn is_reliable(&self) -> bool {
-        // TODO
-        true
+        self.reliability == Reliability::Reliable
     }
 
     #[inline]
@@ -179,6 +179,7 @@ impl From<NetworkBody> for NetworkMessage {
     fn from(body: NetworkBody) -> Self {
         Self {
             body,
+            reliability: Reliability::DEFAULT,
             #[cfg(feature = "stats")]
             size: None,
         }

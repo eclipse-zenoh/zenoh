@@ -28,9 +28,8 @@ use zenoh::{
     pubsub::{Reliability, Subscriber},
     query::{QueryConsolidation, QueryTarget, ReplyKeyExpr, Selector},
     sample::{Locality, Sample, SampleBuilder, TimestampBuilderTrait},
-    session::{SessionDeclarations, SessionRef},
     time::Timestamp,
-    Error, Resolvable, Resolve, Result as ZResult,
+    Error, Resolvable, Resolve, Result as ZResult, Session,
 };
 
 use crate::ExtractSample;
@@ -38,7 +37,7 @@ use crate::ExtractSample;
 /// The builder of [`FetchingSubscriber`], allowing to configure it.
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct QueryingSubscriberBuilder<'a, 'b, KeySpace, Handler> {
-    pub(crate) session: SessionRef<'a>,
+    pub(crate) session: &'a Session,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) key_space: KeySpace,
     pub(crate) reliability: Reliability,
@@ -224,7 +223,7 @@ where
     Handler: IntoHandler<'static, Sample>,
     Handler::Handler: Send,
 {
-    type To = ZResult<FetchingSubscriber<'a, Handler::Handler>>;
+    type To = ZResult<FetchingSubscriber<Handler::Handler>>;
 }
 
 impl<KeySpace, Handler> Wait for QueryingSubscriberBuilder<'_, '_, KeySpace, Handler>
@@ -362,7 +361,7 @@ pub struct FetchingSubscriberBuilder<
 > where
     TryIntoSample: ExtractSample,
 {
-    pub(crate) session: SessionRef<'a>,
+    pub(crate) session: &'a Session,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) key_space: KeySpace,
     pub(crate) reliability: Reliability,
@@ -548,7 +547,7 @@ where
     Handler::Handler: Send,
     TryIntoSample: ExtractSample,
 {
-    type To = ZResult<FetchingSubscriber<'a, Handler::Handler>>;
+    type To = ZResult<FetchingSubscriber<Handler::Handler>>;
 }
 
 impl<
@@ -620,28 +619,29 @@ where
 /// }
 /// # }
 /// ```
-pub struct FetchingSubscriber<'a, Handler> {
-    subscriber: Subscriber<'a, ()>,
+pub struct FetchingSubscriber<Handler> {
+    subscriber: Subscriber<()>,
     callback: Arc<dyn Fn(Sample) + Send + Sync + 'static>,
     state: Arc<Mutex<InnerState>>,
     handler: Handler,
 }
 
-impl<Handler> std::ops::Deref for FetchingSubscriber<'_, Handler> {
+impl<Handler> std::ops::Deref for FetchingSubscriber<Handler> {
     type Target = Handler;
     fn deref(&self) -> &Self::Target {
         &self.handler
     }
 }
 
-impl<Handler> std::ops::DerefMut for FetchingSubscriber<'_, Handler> {
+impl<Handler> std::ops::DerefMut for FetchingSubscriber<Handler> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.handler
     }
 }
 
-impl<'a, Handler> FetchingSubscriber<'a, Handler> {
+impl<Handler> FetchingSubscriber<Handler> {
     fn new<
+        'a,
         KeySpace,
         InputHandler,
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()> + Send + Sync,
@@ -724,7 +724,7 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
 
     /// Undeclare this [`FetchingSubscriber`]`.
     #[inline]
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
+    pub fn undeclare(self) -> impl Resolve<ZResult<()>> {
         self.subscriber.undeclare()
     }
 

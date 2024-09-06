@@ -279,13 +279,10 @@ impl Runtime {
         // the task responsible for resource clean up was aborted earlier than expected.
         // This should be resolved by identfying correspodning task, and placing
         // cancellation token manually inside it.
-        self.router()
-            .tables
-            .tables
-            .write()
-            .unwrap()
-            .root_res
-            .close();
+        let router = self.router();
+        let mut tables = router.tables.tables.write().unwrap();
+        tables.root_res.close();
+        tables.faces.clear();
         Ok(())
     }
 

@@ -36,7 +36,6 @@ use zenoh::{
     key_expr::{keyexpr, KeyExpr},
     prelude::ZResult,
     sample::Sample,
-    session::SessionDeclarations,
 };
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 

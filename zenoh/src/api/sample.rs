@@ -18,6 +18,8 @@ use std::{convert::TryFrom, fmt};
 #[cfg(feature = "unstable")]
 use serde::Serialize;
 use zenoh_config::wrappers::EntityGlobalId;
+#[cfg(feature = "unstable")]
+use zenoh_protocol::core::Reliability;
 use zenoh_protocol::{
     core::{CongestionControl, Timestamp},
     network::declare::ext::QoSType,
@@ -63,6 +65,7 @@ pub(crate) trait DataInfoIntoSample {
         self,
         key_expr: IntoKeyExpr,
         payload: IntoZBytes,
+        #[cfg(feature = "unstable")] reliability: Reliability,
         attachment: Option<ZBytes>,
     ) -> Sample
     where
@@ -80,6 +83,7 @@ impl DataInfoIntoSample for DataInfo {
         self,
         key_expr: IntoKeyExpr,
         payload: IntoZBytes,
+        #[cfg(feature = "unstable")] reliability: Reliability,
         attachment: Option<ZBytes>,
     ) -> Sample
     where
@@ -93,6 +97,8 @@ impl DataInfoIntoSample for DataInfo {
             encoding: self.encoding.unwrap_or_default(),
             timestamp: self.timestamp,
             qos: self.qos,
+            #[cfg(feature = "unstable")]
+            reliability,
             #[cfg(feature = "unstable")]
             source_info: SourceInfo {
                 source_id: self.source_id,
@@ -109,6 +115,7 @@ impl DataInfoIntoSample for Option<DataInfo> {
         self,
         key_expr: IntoKeyExpr,
         payload: IntoZBytes,
+        #[cfg(feature = "unstable")] reliability: Reliability,
         attachment: Option<ZBytes>,
     ) -> Sample
     where
@@ -116,7 +123,13 @@ impl DataInfoIntoSample for Option<DataInfo> {
         IntoZBytes: Into<ZBytes>,
     {
         if let Some(data_info) = self {
-            data_info.into_sample(key_expr, payload, attachment)
+            data_info.into_sample(
+                key_expr,
+                payload,
+                #[cfg(feature = "unstable")]
+                reliability,
+                attachment,
+            )
         } else {
             Sample {
                 key_expr: key_expr.into(),
@@ -125,6 +138,8 @@ impl DataInfoIntoSample for Option<DataInfo> {
                 encoding: Encoding::default(),
                 timestamp: None,
                 qos: QoS::default(),
+                #[cfg(feature = "unstable")]
+                reliability,
                 #[cfg(feature = "unstable")]
                 source_info: SourceInfo::empty(),
                 attachment,
@@ -252,6 +267,8 @@ pub struct SampleFields {
     pub priority: Priority,
     pub congestion_control: CongestionControl,
     #[cfg(feature = "unstable")]
+    pub reliability: Reliability,
+    #[cfg(feature = "unstable")]
     pub source_info: SourceInfo,
     pub attachment: Option<ZBytes>,
 }
@@ -267,6 +284,8 @@ impl From<Sample> for SampleFields {
             express: sample.qos.express(),
             priority: sample.qos.priority(),
             congestion_control: sample.qos.congestion_control(),
+            #[cfg(feature = "unstable")]
+            reliability: sample.reliability,
             #[cfg(feature = "unstable")]
             source_info: sample.source_info,
             attachment: sample.attachment,
@@ -284,6 +303,8 @@ pub struct Sample {
     pub(crate) encoding: Encoding,
     pub(crate) timestamp: Option<Timestamp>,
     pub(crate) qos: QoS,
+    #[cfg(feature = "unstable")]
+    pub(crate) reliability: Reliability,
     #[cfg(feature = "unstable")]
     pub(crate) source_info: SourceInfo,
     pub(crate) attachment: Option<ZBytes>,
@@ -334,6 +355,12 @@ impl Sample {
     /// Gets the priority of this Sample
     pub fn priority(&self) -> Priority {
         self.qos.priority()
+    }
+
+    /// Gets the reliability of this Sample
+    #[zenoh_macros::unstable]
+    pub fn reliability(&self) -> Reliability {
+        self.reliability
     }
 
     /// Gets the express flag value. If `true`, the message is not batched during transmission, in order to reduce latency.

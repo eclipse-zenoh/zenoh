@@ -489,6 +489,7 @@ where
             parameters,
         } = self.selector?;
         self.session
+            .0
             .query(
                 &key_expr,
                 &parameters,
