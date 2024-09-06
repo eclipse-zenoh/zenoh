@@ -107,7 +107,7 @@ impl Link {
         }
     }
 
-    /// Updates the metdata of the `locator` with `priorities` and `reliability`.
+    /// Updates the metadata of the `locator` with `priorities` and `reliability`.
     fn to_patched_locator(
         locator: &Locator,
         priorities: Option<&PriorityRange>,
