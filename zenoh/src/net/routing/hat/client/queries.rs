@@ -375,7 +375,7 @@ impl HatQueriesTrait for HatCode {
                         direction: (context.face.clone(), key_expr.to_owned(), NodeId::default()),
                         info: Some(QueryableInfoType {
                             complete: complete && qabl_info.complete,
-                            distance: 0,
+                            distance: 1,
                         }),
                     });
                 }

@@ -638,7 +638,7 @@ impl HatQueriesTrait for HatCode {
                             ),
                             info: Some(QueryableInfoType {
                                 complete: complete && qabl_info.complete,
-                                distance: 0,
+                                distance: 1,
                             }),
                         });
                     }
