@@ -526,8 +526,9 @@ pub fn register_param(input: proc_macro::TokenStream) -> proc_macro::TokenStream
 /// Macro `#[internal_trait]` should precede
 /// `impl Trait for Struct { ... }`
 ///
-/// This macro is used for the implementation of so-called "scaffolding" tratis.
-/// The purpose of such traits is to group set of functions which should be implemented
+/// This macro wraps the implementations of "internal" tratis.
+/// 
+/// These traits are used to group set of functions which should be implemented
 /// togehter and with the same portotyoe. E.g. `QoSBuilderTrait` provides set of
 /// setters (`congestion_control`, `priority`, `express`) and we should not
 /// forget to implement all these setters for each entity which supports
@@ -537,8 +538,8 @@ pub fn register_param(input: proc_macro::TokenStream) -> proc_macro::TokenStream
 /// adds extra burden to end user who have to import it every time.
 ///
 /// The macro `internal_trait` solves this problem by adding
-/// own structure methods with same names as in trait. The trait itself is still available
-/// if needed in `internal` namespace module.
+/// methods with same names as in trait to structure implemetation itself,
+/// making them available to user without additional trait import.
 ///
 #[proc_macro_attribute]
 pub fn internal_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
