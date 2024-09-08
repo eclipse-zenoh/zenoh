@@ -538,7 +538,7 @@ pub fn register_param(input: proc_macro::TokenStream) -> proc_macro::TokenStream
 /// adds extra burden to end user who have to import it every time.
 ///
 /// The macro `internal_trait` solves this problem by adding
-/// methods with same names as in trait to structure implemetation itself,
+/// methods with same names as in trait to structure implementation itself,
 /// making them available to user without additional trait import.
 ///
 #[proc_macro_attribute]
