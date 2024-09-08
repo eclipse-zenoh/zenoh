@@ -19,7 +19,7 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
-use syn::{parse_macro_input, parse_quote, Attribute, Error, Item, LitStr, TraitItem};
+use syn::{parse_macro_input, parse_quote, Attribute, Error, Item, ItemImpl, LitStr, TraitItem};
 use zenoh_keyexpr::{
     format::{
         macro_support::{self, SegmentBuilder},
@@ -521,4 +521,82 @@ pub fn register_param(input: proc_macro::TokenStream) -> proc_macro::TokenStream
     derive_register_param(input)
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
+}
+
+/// Macro `#[internal_scaffolding_trait]` should precede
+/// `impl Trait for Struct { ... }`
+///
+/// This macro is used for the implementation of so-called "scaffolding" tratis.
+/// The purpose of such traits is to group set of functions which should be implemented
+/// togehter and with the same portotyoe. E.g. `QoSBuilderTrait` provides set of
+/// setters (`congestion_control`, `priority`, `express`) and we should not 
+/// forget to implement all these setters for each entity which supports
+/// QoS functionality.
+/// 
+/// The traits mechanism is a good way to group functions. But additional traits
+/// adds extra burden to end user who have to import it every time.
+/// 
+/// The macro `internal_scaffolding_trait` solves this problem. It creates
+/// own structure methods with same names as in trait and puts trait implementation
+/// under "internal" feature hiding it from user.
+/// 
+#[proc_macro_attribute]
+pub fn scaffolding(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as ItemImpl);
+    let trait_path = &input.trait_.as_ref().unwrap().1;
+    let struct_path = &input.self_ty;
+    let generics = &input.generics;
+    // let struct_lifetime = get_type_path_lifetime(struct_path);
+
+    let mut struct_methods = quote! {};
+    for item_fn in input.items.iter() {
+        if let syn::ImplItem::Fn(method) = item_fn {
+            let method_name = &method.sig.ident;
+            let method_generic_params = &method.sig.generics.params;
+            let method_generic_params = if method_generic_params.is_empty() {
+                quote! {}
+            } else {
+                quote! {<#method_generic_params>}
+            };
+            let method_args = &method.sig.inputs;
+            let method_output = &method.sig.output;
+            let where_clause = &method.sig.generics.where_clause;
+            let mut method_call_args = quote! {};
+            for arg in method_args.iter() {
+                match arg {
+                    syn::FnArg::Receiver(_) => {
+                        method_call_args.extend(quote! { self, });
+                    }
+                    syn::FnArg::Typed(pat_type) => {
+                        let pat = &pat_type.pat;
+                        method_call_args.extend(quote! { #pat, });
+                    }
+                }
+            }
+            let mut attributes = quote! {};
+            for attr in &method.attrs {
+                attributes.extend( quote! {
+                    #attr 
+                });
+            }
+            // call corresponding trait method from struct method
+            struct_methods.extend(quote! {
+                #attributes
+                pub fn #method_name #method_generic_params (#method_args) #method_output #where_clause {
+                    <#struct_path as #trait_path>::#method_name(#method_call_args)
+                }
+            });
+        }
+    }
+    let struct_methods_output = quote! {
+        impl #generics #struct_path {
+            #struct_methods
+        }
+    };
+    (quote! {
+        #[cfg(feature = "internal")]
+        #input
+        #struct_methods_output
+    })
+    .into()
 }
