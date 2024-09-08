@@ -30,12 +30,7 @@ mod _prelude {
     #[zenoh_macros::unstable]
     pub use crate::api::selector::ZenohParameters;
     pub use crate::{
-        api::{
-            builders::sample::{
-                EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
-            },
-            session::{SessionDeclarations, Undeclarable},
-        },
+        api::session::{SessionDeclarations, Undeclarable},
         config::ValidatedMap,
         Error as ZError, Resolvable, Resolve, Result as ZResult,
     };

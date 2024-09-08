@@ -523,25 +523,25 @@ pub fn register_param(input: proc_macro::TokenStream) -> proc_macro::TokenStream
         .into()
 }
 
-/// Macro `#[internal_scaffolding_trait]` should precede
+/// Macro `#[internal_trait]` should precede
 /// `impl Trait for Struct { ... }`
 ///
 /// This macro is used for the implementation of so-called "scaffolding" tratis.
 /// The purpose of such traits is to group set of functions which should be implemented
 /// togehter and with the same portotyoe. E.g. `QoSBuilderTrait` provides set of
-/// setters (`congestion_control`, `priority`, `express`) and we should not 
+/// setters (`congestion_control`, `priority`, `express`) and we should not
 /// forget to implement all these setters for each entity which supports
 /// QoS functionality.
-/// 
+///
 /// The traits mechanism is a good way to group functions. But additional traits
 /// adds extra burden to end user who have to import it every time.
-/// 
-/// The macro `internal_scaffolding_trait` solves this problem. It creates
-/// own structure methods with same names as in trait and puts trait implementation
-/// under "internal" feature hiding it from user.
-/// 
+///
+/// The macro `internal_trait` solves this problem by adding
+/// own structure methods with same names as in trait. The trait itself is still available
+/// if needed in `internal` namespace module.
+///
 #[proc_macro_attribute]
-pub fn scaffolding(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn internal_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemImpl);
     let trait_path = &input.trait_.as_ref().unwrap().1;
     let struct_path = &input.self_ty;
@@ -575,8 +575,8 @@ pub fn scaffolding(_attr: TokenStream, item: TokenStream) -> TokenStream {
             }
             let mut attributes = quote! {};
             for attr in &method.attrs {
-                attributes.extend( quote! {
-                    #attr 
+                attributes.extend(quote! {
+                    #attr
                 });
             }
             // call corresponding trait method from struct method
@@ -594,7 +594,6 @@ pub fn scaffolding(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     };
     (quote! {
-        #[cfg(feature = "internal")]
         #input
         #struct_methods_output
     })

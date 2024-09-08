@@ -23,7 +23,6 @@ use flume::{Receiver, Sender};
 use futures::select;
 use tokio::sync::{Mutex, RwLock};
 use zenoh::{
-    bytes::EncodingBuilderTrait,
     internal::{
         buffers::{SplitBuffer, ZBuf},
         zenoh_home, Timed, TimedEvent, Timer, Value,
@@ -35,7 +34,7 @@ use zenoh::{
         KeyExpr, OwnedKeyExpr,
     },
     query::{ConsolidationMode, QueryTarget},
-    sample::{Sample, SampleBuilder, SampleKind, TimestampBuilderTrait},
+    sample::{Sample, SampleBuilder, SampleKind},
     session::{Session, SessionDeclarations},
     time::{Timestamp, NTP64},
 };

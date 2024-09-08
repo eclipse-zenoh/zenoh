@@ -210,7 +210,6 @@ pub mod sample {
     pub use crate::api::{
         builders::sample::{
             SampleBuilder, SampleBuilderAny, SampleBuilderDelete, SampleBuilderPut,
-            SampleBuilderTrait, TimestampBuilderTrait,
         },
         sample::{Sample, SampleFields, SampleKind, SourceSn},
     };
@@ -219,7 +218,6 @@ pub mod sample {
 /// Payload primitives
 pub mod bytes {
     pub use crate::api::{
-        builders::sample::EncodingBuilderTrait,
         bytes::{
             Deserialize, OptionZBytes, Serialize, ZBytes, ZBytesIterator, ZBytesReader,
             ZBytesSliceIterator, ZBytesWriter, ZDeserializeError, ZSerde,
@@ -280,7 +278,7 @@ pub mod handlers {
 pub mod qos {
     pub use zenoh_protocol::core::CongestionControl;
 
-    pub use crate::api::{builders::sample::QoSBuilderTrait, publisher::Priority};
+    pub use crate::api::publisher::Priority;
 }
 
 /// Scouting primitives
@@ -375,6 +373,11 @@ compile_error!(
 
 #[zenoh_macros::internal]
 pub mod internal {
+    pub mod traits {
+        pub use crate::api::builders::sample::{
+            EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
+        };
+    }
     pub use zenoh_core::{
         zasync_executor_init, zasynclock, zerror, zlock, zread, ztimeout, zwrite, ResolveFuture,
     };
