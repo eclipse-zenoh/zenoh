@@ -527,7 +527,7 @@ pub fn register_param(input: proc_macro::TokenStream) -> proc_macro::TokenStream
 /// `impl Trait for Struct { ... }`
 ///
 /// This macro wraps the implementations of "internal" tratis.
-/// 
+///
 /// These traits are used to group set of functions which should be implemented
 /// togehter and with the same portotyoe. E.g. `QoSBuilderTrait` provides set of
 /// setters (`congestion_control`, `priority`, `express`) and we should not
