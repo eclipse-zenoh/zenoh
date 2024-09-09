@@ -38,7 +38,9 @@ use crate::{
             resource::{NodeId, Resource, SessionContext},
             tables::{Route, RoutingExpr, Tables},
         },
-        hat::{CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources},
+        hat::{
+            p2p_peer::initial_interest, CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources,
+        },
         router::{update_data_routes_from, RoutesIndexes},
         RoutingContext,
     },
@@ -654,11 +656,7 @@ impl HatPubSubTrait for HatCode {
 
             for face in tables.faces.values().filter(|f| {
                 f.whatami == WhatAmI::Peer
-                    && !f
-                        .local_interests
-                        .get(&0)
-                        .map(|i| i.finalized)
-                        .unwrap_or(true)
+                    && !initial_interest(f).map(|i| i.finalized).unwrap_or(true)
             }) {
                 route.entry(face.id).or_insert_with(|| {
                     let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
