@@ -24,7 +24,6 @@ use tokio::sync::RwLock;
 use zenoh::{
     internal::Value,
     key_expr::{KeyExpr, OwnedKeyExpr},
-    prelude::*,
     query::Selector,
     sample::{Sample, SampleBuilder},
     time::Timestamp,
