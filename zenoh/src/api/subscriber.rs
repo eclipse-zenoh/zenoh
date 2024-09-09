@@ -96,7 +96,7 @@ impl<'a> SubscriberInner<'a> {
     /// use zenoh::{prelude::*, sample::Sample};
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
-    /// # fn data_handler(_sample: Sample) { };
+    /// # fn data_handler(_sample: &Sample) { };
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
     ///     .callback(data_handler)
