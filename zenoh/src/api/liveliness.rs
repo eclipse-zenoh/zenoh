@@ -15,7 +15,6 @@
 use std::{
     convert::TryInto,
     future::{IntoFuture, Ready},
-    mem::size_of,
     sync::Arc,
     time::Duration,
 };
@@ -172,6 +171,7 @@ impl<'a> Liveliness<'a> {
             session: self.session,
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
             handler: DefaultHandler::default(),
+            undeclare_on_drop: true,
         }
     }
 
@@ -435,6 +435,7 @@ pub struct LivelinessSubscriberBuilder<'a, 'b, Handler> {
     pub session: &'a Session,
     pub key_expr: ZResult<KeyExpr<'b>>,
     pub handler: Handler,
+    pub undeclare_on_drop: bool,
 }
 
 #[zenoh_macros::unstable]
@@ -469,11 +470,13 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
             session,
             key_expr,
             handler: _,
+            undeclare_on_drop: _,
         } = self;
         LivelinessSubscriberBuilder {
             session,
             key_expr,
             handler: callback,
+            undeclare_on_drop: false,
         }
     }
 
@@ -540,11 +543,13 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
             session,
             key_expr,
             handler: _,
+            undeclare_on_drop: _,
         } = self;
         LivelinessSubscriberBuilder {
             session,
             key_expr,
             handler,
+            undeclare_on_drop: true,
         }
     }
 }
@@ -581,8 +586,7 @@ where
                     session: self.session.downgrade(),
                     state: sub_state,
                     kind: SubscriberKind::LivelinessSubscriber,
-                    // `size_of::<Handler::Handler>() == 0` means callback-only subscriber
-                    undeclare_on_drop: size_of::<Handler::Handler>() > 0,
+                    undeclare_on_drop: self.undeclare_on_drop,
                 },
                 handler,
             })

@@ -14,7 +14,6 @@
 use std::{
     fmt,
     future::{IntoFuture, Ready},
-    mem::size_of,
     ops::{Deref, DerefMut},
     sync::Arc,
 };
@@ -604,6 +603,7 @@ pub struct QueryableBuilder<'a, 'b, Handler> {
     pub(crate) complete: bool,
     pub(crate) origin: Locality,
     pub(crate) handler: Handler,
+    pub(crate) undeclare_on_drop: bool,
 }
 
 impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
@@ -634,6 +634,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
             complete,
             origin,
             handler: _,
+            undeclare_on_drop: _,
         } = self;
         QueryableBuilder {
             session,
@@ -641,6 +642,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
             complete,
             origin,
             handler: callback,
+            undeclare_on_drop: false,
         }
     }
 
@@ -705,6 +707,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
             complete,
             origin,
             handler: _,
+            undeclare_on_drop: _,
         } = self;
         QueryableBuilder {
             session,
@@ -712,6 +715,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
             complete,
             origin,
             handler,
+            undeclare_on_drop: true,
         }
     }
 
@@ -927,8 +931,7 @@ where
                     session_id: session.zid(),
                     session: self.session.downgrade(),
                     state: qable_state,
-                    // `size_of::<Handler::Handler>() == 0` means callback-only queryable
-                    undeclare_on_drop: size_of::<Handler::Handler>() > 0,
+                    undeclare_on_drop: self.undeclare_on_drop,
                 },
                 handler: receiver,
             })

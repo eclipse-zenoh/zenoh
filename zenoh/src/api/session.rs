@@ -740,6 +740,7 @@ impl Session {
             reliability: Reliability::DEFAULT,
             origin: Locality::default(),
             handler: DefaultHandler::default(),
+            undeclare_on_drop: true,
         }
     }
 
@@ -784,6 +785,7 @@ impl Session {
             complete: false,
             origin: Locality::default(),
             handler: DefaultHandler::default(),
+            undeclare_on_drop: true,
         }
     }
 

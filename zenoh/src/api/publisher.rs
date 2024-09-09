@@ -12,8 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#[cfg(feature = "unstable")]
-use std::mem::size_of;
 use std::{
     convert::TryFrom,
     fmt,
@@ -284,6 +282,7 @@ impl<'a> Publisher<'a> {
         MatchingListenerBuilder {
             publisher: self,
             handler: DefaultHandler::default(),
+            undeclare_on_drop: true,
         }
     }
 
@@ -639,6 +638,7 @@ impl MatchingStatus {
 pub struct MatchingListenerBuilder<'a, 'b, Handler> {
     pub(crate) publisher: &'a Publisher<'b>,
     pub handler: Handler,
+    pub undeclare_on_drop: bool,
 }
 
 #[zenoh_macros::unstable]
@@ -675,10 +675,12 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
         let MatchingListenerBuilder {
             publisher,
             handler: _,
+            undeclare_on_drop: _,
         } = self;
         MatchingListenerBuilder {
             publisher,
             handler: callback,
+            undeclare_on_drop: false,
         }
     }
 
@@ -745,8 +747,13 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
         let MatchingListenerBuilder {
             publisher,
             handler: _,
+            undeclare_on_drop: _,
         } = self;
-        MatchingListenerBuilder { publisher, handler }
+        MatchingListenerBuilder {
+            publisher,
+            handler,
+            undeclare_on_drop: true,
+        }
     }
 }
 
@@ -777,7 +784,7 @@ where
             inner: MatchingListenerInner {
                 publisher: self.publisher.clone(),
                 state,
-                undeclare_on_drop: size_of::<Handler::Handler>() > 0,
+                undeclare_on_drop: self.undeclare_on_drop,
             },
             handler,
         })
