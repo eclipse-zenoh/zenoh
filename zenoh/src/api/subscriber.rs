@@ -15,7 +15,6 @@
 use std::{
     fmt,
     future::{IntoFuture, Ready},
-    mem::size_of,
     ops::{Deref, DerefMut},
     sync::Arc,
 };
@@ -150,6 +149,11 @@ pub struct SubscriberBuilder<'a, 'b, Handler> {
     pub handler: Handler,
     #[cfg(not(feature = "unstable"))]
     pub(crate) handler: Handler,
+
+    #[cfg(feature = "unstable")]
+    pub undeclare_on_drop: bool,
+    #[cfg(not(feature = "unstable"))]
+    pub(crate) undeclare_on_drop: bool,
 }
 
 impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
@@ -181,6 +185,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
             reliability,
             origin,
             handler: _,
+            undeclare_on_drop: _,
         } = self;
         SubscriberBuilder {
             session,
@@ -189,6 +194,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
             reliability,
             origin,
             handler: callback,
+            undeclare_on_drop: false,
         }
     }
 
@@ -254,6 +260,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
             reliability,
             origin,
             handler: _,
+            undeclare_on_drop: _,
         } = self;
         SubscriberBuilder {
             session,
@@ -262,6 +269,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
             reliability,
             origin,
             handler,
+            undeclare_on_drop: true,
         }
     }
 }
@@ -339,8 +347,7 @@ where
                     session: session.downgrade(),
                     state: sub_state,
                     kind: SubscriberKind::Subscriber,
-                    // `size_of::<Handler::Handler>() == 0` means callback-only subscriber
-                    undeclare_on_drop: size_of::<Handler::Handler>() > 0,
+                    undeclare_on_drop: self.undeclare_on_drop,
                 },
                 handler: receiver,
             })
