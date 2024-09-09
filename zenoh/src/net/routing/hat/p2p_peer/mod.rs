@@ -443,9 +443,9 @@ fn get_routes_entries() -> RoutesIndexes {
 
 // In p2p, at connection, while no interest is sent on the network,
 // peers act as if they received an interest CurrentFuture with id 0
-// and send back a ReplyFinal with interest_id 0.
+// and send back a DeclareFinal with interest_id 0.
 // This 'ghost' interest is registered locally to allow tracking if
-// the reply final has been received or not (finalized).
+// the DeclareFinal has been received or not (finalized).
 
 const INITIAL_INTEREST_ID: u32 = 0;
 
