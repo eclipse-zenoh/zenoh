@@ -232,9 +232,9 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    pub fn callback<Callback>(self, callback: Callback) -> SubscriberBuilder<'a, 'b, Callback>
+    pub fn callback<F>(self, callback: F) -> SubscriberBuilder<'a, 'b, Callback<Sample>>
     where
-        Callback: Fn(Sample) + Send + Sync + 'static,
+        F: Fn(&Sample) + Send + Sync + 'static,
     {
         let SubscriberBuilder {
             session,
@@ -250,7 +250,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
             #[cfg(feature = "unstable")]
             reliability,
             origin,
-            handler: callback,
+            handler: Callback::new(Arc::new(callback)),
         }
     }
 
@@ -275,12 +275,9 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    pub fn callback_mut<CallbackMut>(
-        self,
-        callback: CallbackMut,
-    ) -> SubscriberBuilder<'a, 'b, impl Fn(Sample) + Send + Sync + 'static>
+    pub fn callback_mut<F>(self, callback: F) -> SubscriberBuilder<'a, 'b, Callback<Sample>>
     where
-        CallbackMut: FnMut(Sample) + Send + Sync + 'static,
+        F: FnMut(&Sample) + Send + Sync + 'static,
     {
         self.callback(locked(callback))
     }

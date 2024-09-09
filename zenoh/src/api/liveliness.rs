@@ -31,6 +31,7 @@ use super::{
     subscriber::{Subscriber, SubscriberInner},
     Id,
 };
+use crate::handlers::Callback;
 
 /// A structure with functions to declare a
 /// [`LivelinessToken`](LivelinessToken), query
@@ -464,12 +465,9 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
-    pub fn callback<Callback>(
-        self,
-        callback: Callback,
-    ) -> LivelinessSubscriberBuilder<'a, 'b, Callback>
+    pub fn callback<F>(self, callback: F) -> LivelinessSubscriberBuilder<'a, 'b, Callback<Sample>>
     where
-        Callback: Fn(Sample) + Send + Sync + 'static,
+        F: Fn(&Sample) + Send + Sync + 'static,
     {
         let LivelinessSubscriberBuilder {
             session,
@@ -480,7 +478,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
         LivelinessSubscriberBuilder {
             session,
             key_expr,
-            handler: callback,
+            handler: Callback::new(Arc::new(callback)),
             history,
         }
     }
@@ -508,12 +506,12 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
-    pub fn callback_mut<CallbackMut>(
+    pub fn callback_mut<F>(
         self,
-        callback: CallbackMut,
-    ) -> LivelinessSubscriberBuilder<'a, 'b, impl Fn(Sample) + Send + Sync + 'static>
+        callback: F,
+    ) -> LivelinessSubscriberBuilder<'a, 'b, Callback<Sample>>
     where
-        CallbackMut: FnMut(Sample) + Send + Sync + 'static,
+        F: FnMut(&Sample) + Send + Sync + 'static,
     {
         self.callback(locked(callback))
     }
@@ -686,9 +684,9 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    pub fn callback<Callback>(self, callback: Callback) -> LivelinessGetBuilder<'a, 'b, Callback>
+    pub fn callback<F>(self, callback: F) -> LivelinessGetBuilder<'a, 'b, Callback<Reply>>
     where
-        Callback: Fn(Reply) + Send + Sync + 'static,
+        F: Fn(&Reply) + Send + Sync + 'static,
     {
         let LivelinessGetBuilder {
             session,
@@ -700,7 +698,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
             session,
             key_expr,
             timeout,
-            handler: callback,
+            handler: Callback::new(Arc::new(callback)),
         }
     }
 
@@ -726,12 +724,9 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    pub fn callback_mut<CallbackMut>(
-        self,
-        callback: CallbackMut,
-    ) -> LivelinessGetBuilder<'a, 'b, impl Fn(Reply) + Send + Sync + 'static>
+    pub fn callback_mut<F>(self, callback: F) -> LivelinessGetBuilder<'a, 'b, Callback<Reply>>
     where
-        CallbackMut: FnMut(Reply) + Send + Sync + 'static,
+        F: FnMut(&Reply) + Send + Sync + 'static,
     {
         self.callback(locked(callback))
     }

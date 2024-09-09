@@ -80,7 +80,7 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     /// # }
     /// ```
     fn fetching<
-        Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
+        Fetch: FnOnce(Box<dyn Fn(&TryIntoSample) + Send + Sync>) -> ZResult<()>,
         TryIntoSample,
     >(
         self,
@@ -158,7 +158,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
     /// # }
     /// ```
     fn fetching<
-        Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
+        Fetch: FnOnce(Box<dyn Fn(&TryIntoSample) + Send + Sync>) -> ZResult<()>,
         TryIntoSample,
     >(
         self,
@@ -270,7 +270,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     /// # }
     /// ```
     fn fetching<
-        Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
+        Fetch: FnOnce(Box<dyn Fn(&TryIntoSample) + Send + Sync>) -> ZResult<()>,
         TryIntoSample,
     >(
         self,

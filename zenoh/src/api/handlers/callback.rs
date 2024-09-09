@@ -20,7 +20,7 @@ use super::{IntoHandler, RingChannelSender};
 
 /// A function that can transform a [`FnMut`]`(T)` to
 /// a [`Fn`]`(T)` with the help of a [`Mutex`](std::sync::Mutex).
-pub fn locked<T>(fnmut: impl FnMut(T)) -> impl Fn(T) {
+pub fn locked<T>(fnmut: impl FnMut(&T)) -> impl Fn(&T) {
     let lock = std::sync::Mutex::new(fnmut);
     move |x| zlock!(lock)(x)
 }
@@ -73,7 +73,7 @@ impl<T> Callback<T> {
     }
 
     #[inline]
-    pub(crate) fn call_by_value(&self, arg: T) {
+    pub fn call_by_value(&self, arg: T) {
         match &self.0 {
             CallbackInner::Dyn(cb) => cb(&arg),
             CallbackInner::Flume(tx) => {

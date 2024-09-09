@@ -824,9 +824,9 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
-    pub fn callback<Callback>(self, callback: Callback) -> MatchingListenerBuilder<'a, Callback>
+    pub fn callback<F>(self, callback: F) -> MatchingListenerBuilder<'a, Callback<MatchingStatus>>
     where
-        Callback: Fn(MatchingStatus) + Send + Sync + 'static,
+        F: Fn(&MatchingStatus) + Send + Sync + 'static,
     {
         let MatchingListenerBuilder {
             publisher,
@@ -834,7 +834,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
         } = self;
         MatchingListenerBuilder {
             publisher,
-            handler: callback,
+            handler: Callback::new(Arc::new(callback)),
         }
     }
 
@@ -858,12 +858,12 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
-    pub fn callback_mut<CallbackMut>(
+    pub fn callback_mut<F>(
         self,
-        callback: CallbackMut,
-    ) -> MatchingListenerBuilder<'a, impl Fn(MatchingStatus) + Send + Sync + 'static>
+        callback: F,
+    ) -> MatchingListenerBuilder<'a, Callback<MatchingStatus>>
     where
-        CallbackMut: FnMut(MatchingStatus) + Send + Sync + 'static,
+        F: FnMut(&MatchingStatus) + Send + Sync + 'static,
     {
         self.callback(crate::api::handlers::locked(callback))
     }

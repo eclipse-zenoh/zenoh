@@ -666,9 +666,9 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    pub fn callback<Callback>(self, callback: Callback) -> QueryableBuilder<'a, 'b, Callback>
+    pub fn callback<F>(self, callback: F) -> QueryableBuilder<'a, 'b, Callback<Query>>
     where
-        Callback: Fn(Query) + Send + Sync + 'static,
+        F: Fn(&Query) + Send + Sync + 'static,
     {
         let QueryableBuilder {
             session,
@@ -682,7 +682,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
             key_expr,
             complete,
             origin,
-            handler: callback,
+            handler: Callback::new(Arc::new(callback)),
         }
     }
 
@@ -707,12 +707,9 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    pub fn callback_mut<CallbackMut>(
-        self,
-        callback: CallbackMut,
-    ) -> QueryableBuilder<'a, 'b, impl Fn(Query) + Send + Sync + 'static>
+    pub fn callback_mut<F>(self, callback: F) -> QueryableBuilder<'a, 'b, Callback<Query>>
     where
-        CallbackMut: FnMut(Query) + Send + Sync + 'static,
+        F: FnMut(&Query) + Send + Sync + 'static,
     {
         self.callback(locked(callback))
     }

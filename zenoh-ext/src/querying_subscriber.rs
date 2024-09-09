@@ -21,7 +21,7 @@ use std::{
 };
 
 use zenoh::{
-    handlers::{locked, DefaultHandler, IntoHandler},
+    handlers::{locked, Callback, DefaultHandler, IntoHandler},
     internal::zlock,
     key_expr::KeyExpr,
     prelude::Wait,
@@ -54,12 +54,12 @@ pub struct QueryingSubscriberBuilder<'a, 'b, KeySpace, Handler> {
 impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandler> {
     /// Add callback to [`FetchingSubscriber`].
     #[inline]
-    pub fn callback<Callback>(
+    pub fn callback<F>(
         self,
-        callback: Callback,
-    ) -> QueryingSubscriberBuilder<'a, 'b, KeySpace, Callback>
+        callback: F,
+    ) -> QueryingSubscriberBuilder<'a, 'b, KeySpace, Callback<Sample>>
     where
-        Callback: Fn(Sample) + Send + Sync + 'static,
+        F: Fn(&Sample) + Send + Sync + 'static,
     {
         let QueryingSubscriberBuilder {
             session,
@@ -85,7 +85,7 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
             query_consolidation,
             query_accept_replies,
             query_timeout,
-            handler: callback,
+            handler: Callback::new(Arc::new(callback)),
         }
     }
 
@@ -95,12 +95,12 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
     /// If your callback is also accepted by the [`callback`](QueryingSubscriberBuilder::callback)
     /// method, we suggest you use it instead of `callback_mut`
     #[inline]
-    pub fn callback_mut<CallbackMut>(
+    pub fn callback_mut<F>(
         self,
-        callback: CallbackMut,
-    ) -> QueryingSubscriberBuilder<'a, 'b, KeySpace, impl Fn(Sample) + Send + Sync + 'static>
+        callback: F,
+    ) -> QueryingSubscriberBuilder<'a, 'b, KeySpace, Callback<Sample>>
     where
-        CallbackMut: FnMut(Sample) + Send + Sync + 'static,
+        F: FnMut(&Sample) + Send + Sync + 'static,
     {
         self.callback(locked(callback))
     }
@@ -357,7 +357,7 @@ pub struct FetchingSubscriberBuilder<
     'b,
     KeySpace,
     Handler,
-    Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
+    Fetch: FnOnce(Box<dyn Fn(&TryIntoSample) + Send + Sync>) -> ZResult<()>,
     TryIntoSample,
 > where
     TryIntoSample: ExtractSample,
@@ -377,7 +377,7 @@ impl<
         'b,
         KeySpace,
         Handler,
-        Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
+        Fetch: FnOnce(Box<dyn Fn(&TryIntoSample) + Send + Sync>) -> ZResult<()>,
         TryIntoSample,
     > FetchingSubscriberBuilder<'a, 'b, KeySpace, Handler, Fetch, TryIntoSample>
 where
@@ -403,7 +403,7 @@ impl<
         'a,
         'b,
         KeySpace,
-        Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
+        Fetch: FnOnce(Box<dyn Fn(&TryIntoSample) + Send + Sync>) -> ZResult<()>,
         TryIntoSample,
     > FetchingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandler, Fetch, TryIntoSample>
 where
@@ -411,12 +411,12 @@ where
 {
     /// Add callback to [`FetchingSubscriber`].
     #[inline]
-    pub fn callback<Callback>(
+    pub fn callback<F>(
         self,
-        callback: Callback,
-    ) -> FetchingSubscriberBuilder<'a, 'b, KeySpace, Callback, Fetch, TryIntoSample>
+        callback: F,
+    ) -> FetchingSubscriberBuilder<'a, 'b, KeySpace, Callback<Sample>, Fetch, TryIntoSample>
     where
-        Callback: Fn(Sample) + Send + Sync + 'static,
+        F: Fn(&Sample) + Send + Sync + 'static,
     {
         let FetchingSubscriberBuilder {
             session,
@@ -435,7 +435,7 @@ where
             reliability,
             origin,
             fetch,
-            handler: callback,
+            handler: Callback::new(Arc::new(callback)),
             phantom,
         }
     }
@@ -446,19 +446,12 @@ where
     /// If your callback is also accepted by the [`callback`](FetchingSubscriberBuilder::callback)
     /// method, we suggest you use it instead of `callback_mut`
     #[inline]
-    pub fn callback_mut<CallbackMut>(
+    pub fn callback_mut<F>(
         self,
-        callback: CallbackMut,
-    ) -> FetchingSubscriberBuilder<
-        'a,
-        'b,
-        KeySpace,
-        impl Fn(Sample) + Send + Sync + 'static,
-        Fetch,
-        TryIntoSample,
-    >
+        callback: F,
+    ) -> FetchingSubscriberBuilder<'a, 'b, KeySpace, Callback<Sample>, Fetch, TryIntoSample>
     where
-        CallbackMut: FnMut(Sample) + Send + Sync + 'static,
+        F: FnMut(&Sample) + Send + Sync + 'static,
     {
         self.callback(locked(callback))
     }
@@ -499,7 +492,7 @@ impl<
         'a,
         'b,
         Handler,
-        Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
+        Fetch: FnOnce(Box<dyn Fn(&TryIntoSample) + Send + Sync>) -> ZResult<()>,
         TryIntoSample,
     > FetchingSubscriberBuilder<'a, 'b, crate::UserSpace, Handler, Fetch, TryIntoSample>
 where
@@ -540,7 +533,7 @@ impl<
         'a,
         KeySpace,
         Handler,
-        Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
+        Fetch: FnOnce(Box<dyn Fn(&TryIntoSample) + Send + Sync>) -> ZResult<()>,
         TryIntoSample,
     > Resolvable for FetchingSubscriberBuilder<'a, '_, KeySpace, Handler, Fetch, TryIntoSample>
 where
@@ -554,7 +547,7 @@ where
 impl<
         KeySpace,
         Handler,
-        Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()> + Send + Sync,
+        Fetch: FnOnce(Box<dyn Fn(&TryIntoSample) + Send + Sync>) -> ZResult<()> + Send + Sync,
         TryIntoSample,
     > Wait for FetchingSubscriberBuilder<'_, '_, KeySpace, Handler, Fetch, TryIntoSample>
 where
@@ -572,7 +565,7 @@ impl<
         'a,
         KeySpace,
         Handler,
-        Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()> + Send + Sync,
+        Fetch: FnOnce(Box<dyn Fn(&TryIntoSample) + Send + Sync>) -> ZResult<()> + Send + Sync,
         TryIntoSample,
     > IntoFuture for FetchingSubscriberBuilder<'a, '_, KeySpace, Handler, Fetch, TryIntoSample>
 where
@@ -622,7 +615,7 @@ where
 /// ```
 pub struct FetchingSubscriber<'a, Handler> {
     subscriber: Subscriber<'a, ()>,
-    callback: Arc<dyn Fn(Sample) + Send + Sync + 'static>,
+    callback: Callback<Sample>,
     state: Arc<Mutex<InnerState>>,
     handler: Handler,
 }
@@ -644,7 +637,7 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
     fn new<
         KeySpace,
         InputHandler,
-        Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()> + Send + Sync,
+        Fetch: FnOnce(Box<dyn Fn(&TryIntoSample) + Send + Sync>) -> ZResult<()> + Send + Sync,
         TryIntoSample,
     >(
         conf: FetchingSubscriberBuilder<'a, 'a, KeySpace, InputHandler, Fetch, TryIntoSample>,
@@ -665,10 +658,10 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
         let sub_callback = {
             let state = state.clone();
             let callback = callback.clone();
-            move |s| {
+            move |s: &Sample| {
                 let state = &mut zlock!(state);
                 if state.pending_fetches == 0 {
-                    callback(s);
+                    callback.call(s);
                 } else {
                     tracing::trace!(
                         "Sample received while fetch in progress: push it to merge_queue"
@@ -683,7 +676,7 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
                         .unwrap_or(Timestamp::new(now, session_id.into()));
                     state
                         .merge_queue
-                        .push(SampleBuilder::from(s).timestamp(timestamp).into());
+                        .push(SampleBuilder::from(s.clone()).timestamp(timestamp).into());
                 }
             }
         };
@@ -772,7 +765,7 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
     /// ```
     #[inline]
     pub fn fetch<
-        Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()> + Send + Sync,
+        Fetch: FnOnce(Box<dyn Fn(&TryIntoSample) + Send + Sync>) -> ZResult<()> + Send + Sync,
         TryIntoSample,
     >(
         &self,
@@ -792,7 +785,7 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
 
 struct RepliesHandler {
     state: Arc<Mutex<InnerState>>,
-    callback: Arc<dyn Fn(Sample) + Send + Sync>,
+    callback: Callback<Sample>,
 }
 
 impl Drop for RepliesHandler {
@@ -809,7 +802,7 @@ impl Drop for RepliesHandler {
                 state.merge_queue.len()
             );
             for s in state.merge_queue.drain() {
-                (self.callback)(s);
+                self.callback.call_by_value(s);
             }
         }
     }
@@ -849,7 +842,7 @@ impl Drop for RepliesHandler {
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct FetchBuilder<
-    Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
+    Fetch: FnOnce(Box<dyn Fn(&TryIntoSample) + Send + Sync>) -> ZResult<()>,
     TryIntoSample,
 > where
     TryIntoSample: ExtractSample,
@@ -857,10 +850,10 @@ pub struct FetchBuilder<
     fetch: Fetch,
     phantom: std::marker::PhantomData<TryIntoSample>,
     state: Arc<Mutex<InnerState>>,
-    callback: Arc<dyn Fn(Sample) + Send + Sync>,
+    callback: Callback<Sample>,
 }
 
-impl<Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>, TryIntoSample>
+impl<Fetch: FnOnce(Box<dyn Fn(&TryIntoSample) + Send + Sync>) -> ZResult<()>, TryIntoSample>
     Resolvable for FetchBuilder<Fetch, TryIntoSample>
 where
     TryIntoSample: ExtractSample,
@@ -868,7 +861,7 @@ where
     type To = ZResult<()>;
 }
 
-impl<Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>, TryIntoSample> Wait
+impl<Fetch: FnOnce(Box<dyn Fn(&TryIntoSample) + Send + Sync>) -> ZResult<()>, TryIntoSample> Wait
     for FetchBuilder<Fetch, TryIntoSample>
 where
     TryIntoSample: ExtractSample,
@@ -879,7 +872,7 @@ where
     }
 }
 
-impl<Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>, TryIntoSample>
+impl<Fetch: FnOnce(Box<dyn Fn(&TryIntoSample) + Send + Sync>) -> ZResult<()>, TryIntoSample>
     IntoFuture for FetchBuilder<Fetch, TryIntoSample>
 where
     TryIntoSample: ExtractSample,
@@ -892,17 +885,14 @@ where
     }
 }
 
-fn register_handler(
-    state: Arc<Mutex<InnerState>>,
-    callback: Arc<dyn Fn(Sample) + Send + Sync>,
-) -> RepliesHandler {
+fn register_handler(state: Arc<Mutex<InnerState>>, callback: Callback<Sample>) -> RepliesHandler {
     zlock!(state).pending_fetches += 1;
     // pending fetches will be decremented in RepliesHandler drop()
     RepliesHandler { state, callback }
 }
 
 fn run_fetch<
-    Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
+    Fetch: FnOnce(Box<dyn Fn(&TryIntoSample) + Send + Sync>) -> ZResult<()>,
     TryIntoSample,
 >(
     fetch: Fetch,
@@ -912,7 +902,7 @@ where
     TryIntoSample: ExtractSample,
 {
     tracing::debug!("Fetch data for FetchingSubscriber");
-    (fetch)(Box::new(move |s: TryIntoSample| match s.extract() {
+    (fetch)(Box::new(move |s: &TryIntoSample| match s.extract() {
         Ok(s) => {
             let mut state = zlock!(handler.state);
             tracing::trace!("Fetched sample received: push it to merge_queue");

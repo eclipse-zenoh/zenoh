@@ -53,11 +53,13 @@ impl From<LivelinessSpace> for KeySpace {
 }
 
 pub trait ExtractSample {
-    fn extract(self) -> ZResult<Sample>;
+    fn extract(&self) -> ZResult<Sample>;
 }
 
 impl ExtractSample for Reply {
-    fn extract(self) -> ZResult<Sample> {
-        self.into_result().map_err(|e| zerror!("{:?}", e).into())
+    fn extract(&self) -> ZResult<Sample> {
+        self.result()
+            .cloned()
+            .map_err(|e| zerror!("{:?}", e).into())
     }
 }

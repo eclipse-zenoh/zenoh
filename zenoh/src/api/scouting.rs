@@ -16,6 +16,7 @@ use std::{
     future::{IntoFuture, Ready},
     net::SocketAddr,
     ops::Deref,
+    sync::Arc,
     time::Duration,
 };
 
@@ -71,9 +72,9 @@ impl ScoutBuilder<DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    pub fn callback<Callback>(self, callback: Callback) -> ScoutBuilder<Callback>
+    pub fn callback<F>(self, callback: F) -> ScoutBuilder<Callback<Hello>>
     where
-        Callback: Fn(Hello) + Send + Sync + 'static,
+        F: Fn(&Hello) + Send + Sync + 'static,
     {
         let ScoutBuilder {
             what,
@@ -83,7 +84,7 @@ impl ScoutBuilder<DefaultHandler> {
         ScoutBuilder {
             what,
             config,
-            handler: callback,
+            handler: Callback::new(Arc::new(callback)),
         }
     }
 
@@ -106,12 +107,9 @@ impl ScoutBuilder<DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    pub fn callback_mut<CallbackMut>(
-        self,
-        callback: CallbackMut,
-    ) -> ScoutBuilder<impl Fn(Hello) + Send + Sync + 'static>
+    pub fn callback_mut<F>(self, callback: F) -> ScoutBuilder<Callback<Hello>>
     where
-        CallbackMut: FnMut(Hello) + Send + Sync + 'static,
+        F: FnMut(&Hello) + Send + Sync + 'static,
     {
         self.callback(locked(callback))
     }

@@ -15,6 +15,7 @@
 use std::{
     collections::HashMap,
     future::{IntoFuture, Ready},
+    sync::Arc,
     time::Duration,
 };
 
@@ -275,9 +276,9 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    pub fn callback<Callback>(self, callback: Callback) -> SessionGetBuilder<'a, 'b, Callback>
+    pub fn callback<F>(self, callback: F) -> SessionGetBuilder<'a, 'b, Callback<Reply>>
     where
-        Callback: Fn(Reply) + Send + Sync + 'static,
+        F: Fn(&Reply) + Send + Sync + 'static,
     {
         let SessionGetBuilder {
             session,
@@ -305,7 +306,7 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
             attachment,
             #[cfg(feature = "unstable")]
             source_info,
-            handler: callback,
+            handler: Callback::new(Arc::new(callback)),
         }
     }
 
@@ -330,12 +331,9 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    pub fn callback_mut<CallbackMut>(
-        self,
-        callback: CallbackMut,
-    ) -> SessionGetBuilder<'a, 'b, impl Fn(Reply) + Send + Sync + 'static>
+    pub fn callback_mut<F>(self, callback: F) -> SessionGetBuilder<'a, 'b, Callback<Reply>>
     where
-        CallbackMut: FnMut(Reply) + Send + Sync + 'static,
+        F: FnMut(&Reply) + Send + Sync + 'static,
     {
         self.callback(locked(callback))
     }
