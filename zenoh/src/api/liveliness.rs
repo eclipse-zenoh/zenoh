@@ -172,6 +172,7 @@ impl<'a> Liveliness<'a> {
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
             handler: DefaultHandler::default(),
             undeclare_on_drop: true,
+            history: false,
         }
     }
 
@@ -436,6 +437,7 @@ pub struct LivelinessSubscriberBuilder<'a, 'b, Handler> {
     pub key_expr: ZResult<KeyExpr<'b>>,
     pub handler: Handler,
     pub undeclare_on_drop: bool,
+    pub history: bool,
 }
 
 #[zenoh_macros::unstable]
@@ -471,12 +473,14 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
             key_expr,
             handler: _,
             undeclare_on_drop: _,
+            history,
         } = self;
         LivelinessSubscriberBuilder {
             session,
             key_expr,
             handler: callback,
             undeclare_on_drop: false,
+            history,
         }
     }
 
@@ -544,12 +548,36 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
             key_expr,
             handler: _,
             undeclare_on_drop: _,
+            history,
         } = self;
         LivelinessSubscriberBuilder {
             session,
             key_expr,
             handler,
             undeclare_on_drop: true,
+            history,
+        }
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> LivelinessSubscriberBuilder<'_, '_, Handler> {
+    #[inline]
+    #[zenoh_macros::unstable]
+    pub fn history(self, history: bool) -> Self {
+        let LivelinessSubscriberBuilder {
+            session,
+            key_expr,
+            handler,
+            undeclare_on_drop,
+            history: _,
+        } = self;
+        LivelinessSubscriberBuilder {
+            session,
+            key_expr,
+            handler,
+            undeclare_on_drop,
+            history,
         }
     }
 }
@@ -578,7 +606,12 @@ where
         let (callback, handler) = self.handler.into_handler();
         session
             .0
-            .declare_liveliness_subscriber_inner(&key_expr, Locality::default(), callback)
+            .declare_liveliness_subscriber_inner(
+                &key_expr,
+                Locality::default(),
+                self.history,
+                callback,
+            )
             .map(|sub_state| Subscriber {
                 inner: SubscriberInner {
                     #[cfg(feature = "unstable")]

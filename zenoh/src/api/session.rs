@@ -1542,6 +1542,7 @@ impl SessionInner {
         &self,
         key_expr: &KeyExpr,
         origin: Locality,
+        history: bool,
         callback: Callback<'static, Sample>,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
@@ -1589,7 +1590,11 @@ impl SessionInner {
 
         primitives.send_interest(Interest {
             id,
-            mode: InterestMode::Future,
+            mode: if history {
+                InterestMode::CurrentFuture
+            } else {
+                InterestMode::Future
+            },
             options: InterestOptions::KEYEXPRS + InterestOptions::TOKENS,
             wire_expr: Some(key_expr.to_wire(self).to_owned()),
             ext_qos: declare::ext::QoSType::DECLARE,
