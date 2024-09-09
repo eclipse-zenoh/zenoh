@@ -425,7 +425,7 @@ impl fmt::Debug for SessionInner {
 /// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
-/// session.put("key/expression", "value").res().await.unwrap();
+/// session.put("key/expression", "value").await.unwrap();
 /// # }
 pub struct Session(pub(crate) Arc<SessionInner>);
 
