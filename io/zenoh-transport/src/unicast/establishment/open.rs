@@ -20,7 +20,7 @@ use zenoh_core::zasynclock;
 use zenoh_core::{zcondfeat, zerror};
 use zenoh_link::{EndPoint, LinkUnicast};
 use zenoh_protocol::{
-    core::{Field, Reliability, Resolution, WhatAmI, ZenohIdProto},
+    core::{Field, Resolution, WhatAmI, ZenohIdProto},
     transport::{
         batch_size, close, BatchSize, Close, InitSyn, OpenSyn, TransportBody, TransportMessage,
         TransportSn,
@@ -556,7 +556,7 @@ pub(crate) async fn open_link(
             is_compression: false, // Perform the exchange Init/Open exchange with no compression
         },
         priorities: None,
-        reliability: Reliability::from(link.is_reliable()),
+        reliability: None,
     };
     let mut link = TransportLinkUnicast::new(link, config);
     let mut fsm = OpenLink {
@@ -680,11 +680,7 @@ pub(crate) async fn open_link(
             is_compression: state.link.ext_compression.is_compression(),
         },
         priorities: state.transport.ext_qos.priorities(),
-        reliability: state
-            .transport
-            .ext_qos
-            .reliability()
-            .unwrap_or_else(|| Reliability::from(link.link.is_reliable())),
+        reliability: state.transport.ext_qos.reliability(),
     };
     let o_link = link.reconfigure(o_config);
     let s_link = format!("{:?}", o_link);

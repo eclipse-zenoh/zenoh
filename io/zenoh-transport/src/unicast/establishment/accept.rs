@@ -22,7 +22,7 @@ use zenoh_core::{zasynclock, zcondfeat, zerror};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::LinkUnicast;
 use zenoh_protocol::{
-    core::{Field, Reliability, Resolution, WhatAmI, ZenohIdProto},
+    core::{Field, Resolution, WhatAmI, ZenohIdProto},
     transport::{
         batch_size,
         close::{self, Close},
@@ -659,7 +659,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
             is_compression: false,
         },
         priorities: None,
-        reliability: Reliability::from(link.is_reliable()),
+        reliability: None,
     };
     let mut link = TransportLinkUnicast::new(link, config);
     let mut fsm = AcceptLink {
@@ -797,11 +797,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
             is_compression: state.link.ext_compression.is_compression(),
         },
         priorities: state.transport.ext_qos.priorities(),
-        reliability: state
-            .transport
-            .ext_qos
-            .reliability()
-            .unwrap_or_else(|| Reliability::from(link.link.is_reliable())),
+        reliability: state.transport.ext_qos.reliability(),
     };
     let a_link = link.reconfigure(a_config);
     let s_link = format!("{:?}", a_link);

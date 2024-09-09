@@ -76,7 +76,10 @@ impl TransportUnicastUniversal {
         let Some(transport_link_index) = Self::select(
             transport_links.iter().map(|tl| {
                 (
-                    tl.link.config.reliability,
+                    tl.link
+                        .config
+                        .reliability
+                        .unwrap_or(Reliability::from(tl.link.link.is_reliable())),
                     tl.link.config.priorities.clone(),
                 )
             }),

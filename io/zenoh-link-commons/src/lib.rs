@@ -55,7 +55,7 @@ pub struct Link {
     pub interfaces: Vec<String>,
     pub auth_identifier: LinkAuthId,
     pub priorities: Option<PriorityRange>,
-    pub reliability: Reliability,
+    pub reliability: Option<Reliability>,
 }
 
 #[async_trait]
@@ -78,7 +78,7 @@ impl Link {
     pub fn new_unicast(
         link: &LinkUnicast,
         priorities: Option<PriorityRange>,
-        reliability: Reliability,
+        reliability: Option<Reliability>,
     ) -> Self {
         Link {
             src: Self::to_patched_locator(link.get_src(), priorities.as_ref(), reliability),
@@ -103,7 +103,7 @@ impl Link {
             interfaces: vec![],
             auth_identifier: LinkAuthId::default(),
             priorities: None,
-            reliability: Reliability::from(link.is_reliable()),
+            reliability: None,
         }
     }
 
@@ -111,24 +111,19 @@ impl Link {
     fn to_patched_locator(
         locator: &Locator,
         priorities: Option<&PriorityRange>,
-        reliability: Reliability,
+        reliability: Option<Reliability>,
     ) -> Locator {
         let mut locator = locator.clone();
         let mut metadata = locator.metadata_mut();
-        metadata
-            .insert(Metadata::RELIABILITY, reliability.as_str())
+        reliability
+            .map(|r| metadata.insert(Metadata::RELIABILITY, r.as_str()))
+            .transpose()
             .expect("adding `reliability` to Locator metadata should not fail");
         priorities
             .map(|ps| metadata.insert(Metadata::PRIORITIES, ps.to_string()))
             .transpose()
             .expect("adding `priorities` to Locator metadata should not fail");
         locator
-    }
-}
-
-impl PartialEq<LinkUnicast> for Link {
-    fn eq(&self, other: &LinkUnicast) -> bool {
-        self.src == *other.get_src() && self.dst == *other.get_dst()
     }
 }
 

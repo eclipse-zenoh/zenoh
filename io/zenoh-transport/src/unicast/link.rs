@@ -36,7 +36,7 @@ pub(crate) struct TransportLinkUnicastConfig {
     pub(crate) direction: TransportLinkUnicastDirection,
     pub(crate) batch: BatchConfig,
     pub(crate) priorities: Option<PriorityRange>,
-    pub(crate) reliability: Reliability,
+    pub(crate) reliability: Option<Reliability>,
 }
 
 #[derive(Clone, PartialEq, Eq)]
