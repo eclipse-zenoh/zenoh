@@ -24,8 +24,8 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 use super::{
-    face_hat, face_hat_mut, pubsub::declare_sub_interest, queries::declare_qabl_interest,
-    token::declare_token_interest, HatCode, HatFace,
+    face_hat, face_hat_mut, initial_interest, pubsub::declare_sub_interest,
+    queries::declare_qabl_interest, token::declare_token_interest, HatCode, HatFace,
 };
 use crate::net::routing::{
     dispatcher::{
@@ -136,11 +136,7 @@ impl HatInterestTrait for HatCode {
             f.whatami == WhatAmI::Router
                 || (options.tokens()
                     && f.whatami == WhatAmI::Peer
-                    && !f
-                        .local_interests
-                        .get(&0)
-                        .map(|i| i.finalized)
-                        .unwrap_or(true))
+                    && !initial_interest(f).map(|i| i.finalized).unwrap_or(true))
         }) {
             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
             get_mut_unchecked(dst_face).local_interests.insert(
