@@ -12,11 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#[cfg(feature = "unstable")]
+use std::mem::size_of;
 use std::{
     convert::TryFrom,
     fmt,
     future::{IntoFuture, Ready},
-    mem::size_of,
     pin::Pin,
     task::{Context, Poll},
 };
