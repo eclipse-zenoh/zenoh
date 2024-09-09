@@ -27,7 +27,7 @@ use zenoh::{
     prelude::Wait,
     pubsub::{Reliability, Subscriber},
     query::{QueryConsolidation, QueryTarget, ReplyKeyExpr, Selector},
-    sample::{Locality, Sample, SampleBuilder, TimestampBuilderTrait},
+    sample::{Locality, Sample, SampleBuilder},
     time::Timestamp,
     Error, Resolvable, Resolve, Result as ZResult, Session,
 };

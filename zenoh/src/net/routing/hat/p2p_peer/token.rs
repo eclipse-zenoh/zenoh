@@ -152,11 +152,30 @@ fn declare_simple_token(
     face: &mut Arc<FaceState>,
     id: TokenId,
     res: &mut Arc<Resource>,
+    interest_id: Option<InterestId>,
     send_declare: &mut SendDeclare,
 ) {
-    register_simple_token(tables, face, id, res);
-
-    propagate_simple_token(tables, res, face, send_declare);
+    if let Some(interest_id) = interest_id {
+        if let Some((interest, _)) = face.pending_current_interests.get(&interest_id) {
+            let wire_expr = Resource::get_best_key(res, "", interest.src_face.id);
+            send_declare(
+                &interest.src_face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        interest_id: Some(interest.src_interest_id),
+                        ext_qos: ext::QoSType::default(),
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::default(),
+                        body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
+                    },
+                    res.expr(),
+                ),
+            )
+        }
+    } else {
+        register_simple_token(tables, face, id, res);
+        propagate_simple_token(tables, res, face, send_declare);
+    }
 }
 
 #[inline]
@@ -411,7 +430,7 @@ pub(crate) fn declare_token_interest(
     aggregate: bool,
     send_declare: &mut SendDeclare,
 ) {
-    if mode.current() && face.whatami == WhatAmI::Client {
+    if mode.current() {
         let interest_id = (!mode.future()).then_some(id);
         if let Some(res) = res.as_ref() {
             if aggregate {
@@ -525,10 +544,10 @@ impl HatTokenTrait for HatCode {
         id: TokenId,
         res: &mut Arc<Resource>,
         _node_id: NodeId,
-        _interest_id: Option<InterestId>,
+        interest_id: Option<InterestId>,
         send_declare: &mut SendDeclare,
     ) {
-        declare_simple_token(tables, face, id, res, send_declare)
+        declare_simple_token(tables, face, id, res, interest_id, send_declare)
     }
 
     fn undeclare_token(

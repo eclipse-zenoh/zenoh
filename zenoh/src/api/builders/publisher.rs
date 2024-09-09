@@ -18,13 +18,12 @@ use zenoh_core::{Resolvable, Result as ZResult, Wait};
 use zenoh_protocol::core::Reliability;
 use zenoh_protocol::{core::CongestionControl, network::Mapping};
 
+use super::sample::TimestampBuilderTrait;
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
 use crate::{
     api::{
-        builders::sample::{
-            EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
-        },
+        builders::sample::{EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait},
         bytes::{OptionZBytes, ZBytes},
         encoding::Encoding,
         key_expr::KeyExpr,
@@ -82,6 +81,7 @@ pub struct PublicationBuilder<P, T> {
     pub(crate) attachment: Option<ZBytes>,
 }
 
+#[zenoh_macros::internal_trait]
 impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
     #[inline]
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
@@ -128,6 +128,7 @@ impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
     }
 }
 
+#[zenoh_macros::internal_trait]
 impl EncodingBuilderTrait for PublisherBuilder<'_, '_> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
@@ -137,6 +138,7 @@ impl EncodingBuilderTrait for PublisherBuilder<'_, '_> {
     }
 }
 
+#[zenoh_macros::internal_trait]
 impl<P> EncodingBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
@@ -149,6 +151,7 @@ impl<P> EncodingBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
     }
 }
 
+#[zenoh_macros::internal_trait]
 impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
     #[cfg(feature = "unstable")]
     fn source_info(self, source_info: SourceInfo) -> Self {
@@ -166,6 +169,7 @@ impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
     }
 }
 
+#[zenoh_macros::internal_trait]
 impl<P, T> TimestampBuilderTrait for PublicationBuilder<P, T> {
     fn timestamp<TS: Into<Option<uhlc::Timestamp>>>(self, timestamp: TS) -> Self {
         Self {
@@ -278,6 +282,7 @@ impl<'a, 'b> Clone for PublisherBuilder<'a, 'b> {
     }
 }
 
+#[zenoh_macros::internal_trait]
 impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
     /// Change the `congestion_control` to apply when routing the data.
     #[inline]

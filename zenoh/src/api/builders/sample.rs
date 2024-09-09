@@ -166,6 +166,7 @@ impl<T> SampleBuilder<T> {
     }
 }
 
+#[zenoh_macros::internal_trait]
 impl<T> TimestampBuilderTrait for SampleBuilder<T> {
     fn timestamp<U: Into<Option<Timestamp>>>(self, timestamp: U) -> Self {
         Self {
@@ -178,6 +179,7 @@ impl<T> TimestampBuilderTrait for SampleBuilder<T> {
     }
 }
 
+#[zenoh_macros::internal_trait]
 impl<T> SampleBuilderTrait for SampleBuilder<T> {
     #[zenoh_macros::unstable]
     fn source_info(self, source_info: SourceInfo) -> Self {
@@ -202,6 +204,7 @@ impl<T> SampleBuilderTrait for SampleBuilder<T> {
     }
 }
 
+#[zenoh_macros::internal_trait]
 impl<T> QoSBuilderTrait for SampleBuilder<T> {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let qos: QoSBuilder = self.sample.qos.into();
@@ -229,6 +232,7 @@ impl<T> QoSBuilderTrait for SampleBuilder<T> {
     }
 }
 
+#[zenoh_macros::internal_trait]
 impl EncodingBuilderTrait for SampleBuilder<SampleBuilderPut> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {

@@ -14,11 +14,7 @@
 use std::time::Duration;
 
 use clap::{arg, Command};
-use zenoh::{
-    config::Config,
-    key_expr::keyexpr,
-    qos::{CongestionControl, QoSBuilderTrait},
-};
+use zenoh::{config::Config, key_expr::keyexpr, qos::CongestionControl};
 
 const HTML: &str = r#"
 <div id="result"></div>

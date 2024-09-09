@@ -172,7 +172,7 @@ impl HatBaseTrait for HatCode {
         }
         if face.state.whatami == WhatAmI::Peer {
             get_mut_unchecked(&mut face.state).local_interests.insert(
-                0,
+                INITIAL_INTEREST_ID,
                 InterestState {
                     options: InterestOptions::ALL,
                     res: None,
@@ -418,7 +418,7 @@ struct HatFace {
 impl HatFace {
     fn new() -> Self {
         Self {
-            next_id: AtomicU32::new(0),
+            next_id: AtomicU32::new(1), // In p2p, id 0 is erserved for initial interest
             remote_interests: HashMap::new(),
             local_subs: HashMap::new(),
             remote_subs: HashMap::new(),
@@ -439,4 +439,17 @@ fn get_routes_entries() -> RoutesIndexes {
         peers: vec![0],
         clients: vec![0],
     }
+}
+
+// In p2p, at connection, while no interest is sent on the network,
+// peers act as if they received an interest CurrentFuture with id 0
+// and send back a DeclareFinal with interest_id 0.
+// This 'ghost' interest is registered locally to allow tracking if
+// the DeclareFinal has been received or not (finalized).
+
+const INITIAL_INTEREST_ID: u32 = 0;
+
+#[inline]
+fn initial_interest(face: &FaceState) -> Option<&InterestState> {
+    face.local_interests.get(&INITIAL_INTEREST_ID)
 }
