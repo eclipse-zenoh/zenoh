@@ -15,7 +15,6 @@ use std::time::Duration;
 
 use zenoh::{
     bytes::Encoding,
-    prelude::*,
     qos::{CongestionControl, Priority},
 };
 use zenoh_core::ztimeout;

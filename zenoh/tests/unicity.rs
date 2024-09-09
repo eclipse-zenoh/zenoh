@@ -24,7 +24,6 @@ use zenoh::{
     config,
     config::{EndPoint, WhatAmI},
     key_expr::KeyExpr,
-    prelude::*,
     qos::CongestionControl,
     Session,
 };

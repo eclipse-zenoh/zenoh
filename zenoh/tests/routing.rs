@@ -22,7 +22,6 @@ use std::{
 use tokio_util::sync::CancellationToken;
 use zenoh::{
     config::{ModeDependentValue, WhatAmI, WhatAmIMatcher},
-    prelude::*,
     qos::CongestionControl,
     Config, Result, Session,
 };
