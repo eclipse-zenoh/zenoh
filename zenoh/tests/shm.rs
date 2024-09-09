@@ -22,7 +22,6 @@ use std::{
 
 use zenoh::{
     config,
-    prelude::*,
     pubsub::Reliability,
     qos::CongestionControl,
     shm::{

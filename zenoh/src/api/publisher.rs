@@ -12,8 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#[cfg(feature = "unstable")]
-use std::mem::size_of;
 use std::{
     convert::TryFrom,
     fmt,
@@ -765,7 +763,7 @@ where
     Handler: IntoHandler<'static, MatchingStatus> + Send,
     Handler::Handler: Send,
 {
-    type To = ZResult<MatchingListener<'a, Handler::Handler>>;
+    type To = ZResult<MatchingListener<Handler::Handler>>;
 }
 
 #[zenoh_macros::unstable]
@@ -784,7 +782,8 @@ where
         zlock!(self.publisher.matching_listeners).insert(state.id);
         Ok(MatchingListener {
             inner: MatchingListenerInner {
-                publisher: self.publisher.clone(),
+                session: self.publisher.session.clone(),
+                matching_listeners: self.publisher.matching_listeners.clone(),
                 state,
                 undeclare_on_drop: self.undeclare_on_drop,
             },
@@ -828,8 +827,9 @@ impl fmt::Debug for MatchingListenerState {
 }
 
 #[zenoh_macros::unstable]
-pub(crate) struct MatchingListenerInner<'a> {
-    pub(crate) publisher: Publisher<'a>,
+pub(crate) struct MatchingListenerInner {
+    pub(crate) session: WeakSession,
+    pub(crate) matching_listeners: Arc<Mutex<HashSet<Id>>>,
     pub(crate) state: Arc<MatchingListenerState>,
     pub(crate) undeclare_on_drop: bool,
 }
@@ -860,13 +860,13 @@ pub(crate) struct MatchingListenerInner<'a> {
 /// # }
 /// ```
 #[zenoh_macros::unstable]
-pub struct MatchingListener<'a, Handler> {
-    pub(crate) inner: MatchingListenerInner<'a>,
+pub struct MatchingListener<Handler> {
+    pub(crate) inner: MatchingListenerInner,
     pub(crate) handler: Handler,
 }
 
 #[zenoh_macros::unstable]
-impl<'a, Handler> MatchingListener<'a, Handler> {
+impl<Handler> MatchingListener<Handler> {
     /// Undeclare the [`MatchingListener`].
     ///
     /// # Examples
@@ -882,7 +882,7 @@ impl<'a, Handler> MatchingListener<'a, Handler> {
     /// # }
     /// ```
     #[inline]
-    pub fn undeclare(self) -> MatchingListenerUndeclaration<'a, Handler>
+    pub fn undeclare(self) -> MatchingListenerUndeclaration<Handler>
     where
         Handler: Send,
     {
@@ -892,17 +892,16 @@ impl<'a, Handler> MatchingListener<'a, Handler> {
     fn undeclare_impl(&mut self) -> ZResult<()> {
         // set the flag first to avoid double panic if this function panic
         self.inner.undeclare_on_drop = false;
-        zlock!(self.inner.publisher.matching_listeners).remove(&self.inner.state.id);
+        zlock!(self.inner.matching_listeners).remove(&self.inner.state.id);
         self.inner
-            .publisher
             .session
             .undeclare_matches_listener_inner(self.inner.state.id)
     }
 }
 
 #[zenoh_macros::unstable]
-impl<'a, Handler: Send> UndeclarableSealed<()> for MatchingListener<'a, Handler> {
-    type Undeclaration = MatchingListenerUndeclaration<'a, Handler>;
+impl<Handler: Send> UndeclarableSealed<()> for MatchingListener<Handler> {
+    type Undeclaration = MatchingListenerUndeclaration<Handler>;
 
     fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
         MatchingListenerUndeclaration(self)
@@ -910,7 +909,7 @@ impl<'a, Handler: Send> UndeclarableSealed<()> for MatchingListener<'a, Handler>
 }
 
 #[zenoh_macros::unstable]
-impl<Handler> std::ops::Deref for MatchingListener<'_, Handler> {
+impl<Handler> std::ops::Deref for MatchingListener<Handler> {
     type Target = Handler;
 
     fn deref(&self) -> &Self::Target {
@@ -918,29 +917,29 @@ impl<Handler> std::ops::Deref for MatchingListener<'_, Handler> {
     }
 }
 #[zenoh_macros::unstable]
-impl<Handler> std::ops::DerefMut for MatchingListener<'_, Handler> {
+impl<Handler> std::ops::DerefMut for MatchingListener<Handler> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.handler
     }
 }
 
 #[zenoh_macros::unstable]
-pub struct MatchingListenerUndeclaration<'a, Handler>(MatchingListener<'a, Handler>);
+pub struct MatchingListenerUndeclaration<Handler>(MatchingListener<Handler>);
 
 #[zenoh_macros::unstable]
-impl<Handler> Resolvable for MatchingListenerUndeclaration<'_, Handler> {
+impl<Handler> Resolvable for MatchingListenerUndeclaration<Handler> {
     type To = ZResult<()>;
 }
 
 #[zenoh_macros::unstable]
-impl<Handler> Wait for MatchingListenerUndeclaration<'_, Handler> {
+impl<Handler> Wait for MatchingListenerUndeclaration<Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.0.undeclare_impl()
     }
 }
 
 #[zenoh_macros::unstable]
-impl<Handler> IntoFuture for MatchingListenerUndeclaration<'_, Handler> {
+impl<Handler> IntoFuture for MatchingListenerUndeclaration<Handler> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
