@@ -35,6 +35,10 @@ impl ZenohId {
     pub fn into_keyexpr(self) -> OwnedKeyExpr {
         self.into()
     }
+
+    pub fn to_le_bytes(self) -> [u8; uhlc::ID::MAX_SIZE] {
+        self.0.to_le_bytes()
+    }
 }
 
 impl fmt::Debug for ZenohId {
@@ -78,13 +82,6 @@ impl From<ZenohId> for uhlc::ID {
 impl From<ZenohId> for OwnedKeyExpr {
     fn from(zid: ZenohId) -> Self {
         zid.0.into()
-    }
-}
-
-impl From<ZenohId> for [u8; ZenohIdProto::MAX_SIZE] {
-    fn from(value: ZenohId) -> Self {
-        let proto: ZenohIdProto = value.into();
-        proto.to_le_bytes()
     }
 }
 
