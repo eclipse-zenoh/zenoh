@@ -333,7 +333,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         nix::fcntl::flock(lock_fd, nix::fcntl::FlockArg::LockExclusiveNonblock).map_err(|e| {
             let _ = nix::unistd::close(lock_fd);
             let e = zerror!(
-                "Can not create a new UnixSocketStream listener on {} - Unable to acquire look: {}",
+                "Can not create a new UnixSocketStream listener on {} - Unable to acquire lock: {}",
                 path,
                 e
             );
