@@ -106,7 +106,7 @@ impl fmt::Debug for PublisherState {
 /// subscriber.stream().map(Ok).forward(publisher).await.unwrap();
 /// # }
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Publisher<'a> {
     #[cfg(feature = "unstable")]
     pub(crate) session_id: ZenohId,

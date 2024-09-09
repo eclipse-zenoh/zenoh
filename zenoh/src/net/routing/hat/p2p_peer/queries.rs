@@ -17,6 +17,7 @@ use std::{
     sync::{atomic::Ordering, Arc},
 };
 
+use ordered_float::OrderedFloat;
 use zenoh_protocol::{
     core::{
         key_expr::{
@@ -42,7 +43,7 @@ use crate::net::routing::{
         resource::{NodeId, Resource, SessionContext},
         tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
     },
-    hat::{p2p_peer::initial_interest, CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
+    hat::{CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
     router::{update_query_routes_from, RoutesIndexes},
     RoutingContext,
 };
@@ -596,18 +597,24 @@ impl HatQueriesTrait for HatCode {
                 let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
                 route.push(QueryTargetQabl {
                     direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
-                    info: None,
+                    complete: 0,
+                    distance: f64::MAX,
                 });
             }
 
             for face in tables.faces.values().filter(|f| {
                 f.whatami == WhatAmI::Peer
-                    && !initial_interest(f).map(|i| i.finalized).unwrap_or(true)
+                    && !f
+                        .local_interests
+                        .get(&0)
+                        .map(|i| i.finalized)
+                        .unwrap_or(true)
             }) {
                 let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
                 route.push(QueryTargetQabl {
                     direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
-                    info: None,
+                    complete: 0,
+                    distance: 0.5,
                 });
             }
         }
@@ -632,16 +639,18 @@ impl HatQueriesTrait for HatCode {
                                 key_expr.to_owned(),
                                 NodeId::default(),
                             ),
-                            info: Some(QueryableInfoType {
-                                complete: complete && qabl_info.complete,
-                                distance: 1,
-                            }),
+                            complete: if complete {
+                                qabl_info.complete as u64
+                            } else {
+                                0
+                            },
+                            distance: 0.5,
                         });
                     }
                 }
             }
         }
-        route.sort_by_key(|qabl| qabl.info.map_or(u16::MAX, |i| i.distance));
+        route.sort_by_key(|qabl| OrderedFloat(qabl.distance));
         Arc::new(route)
     }
 

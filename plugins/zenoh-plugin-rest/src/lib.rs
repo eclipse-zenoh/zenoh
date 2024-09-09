@@ -53,7 +53,7 @@ use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginCont
 
 mod config;
 pub use config::Config;
-use zenoh::query::ReplyError;
+use zenoh::{bytes::EncodingBuilderTrait, query::ReplyError};
 
 const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 lazy_static::lazy_static! {

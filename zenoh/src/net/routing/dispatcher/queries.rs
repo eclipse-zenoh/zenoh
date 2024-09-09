@@ -327,7 +327,7 @@ fn compute_final_route(
         TargetType::AllComplete => {
             let mut route = HashMap::new();
             for qabl in qabls.iter() {
-                if qabl.info.map(|info| info.complete).unwrap_or(true)
+                if qabl.complete > 0
                     && tables
                         .hat_code
                         .egress_filter(tables, src_face, &qabl.direction.0, expr)
@@ -342,9 +342,10 @@ fn compute_final_route(
             route
         }
         TargetType::BestMatching => {
-            if let Some(qabl) = qabls.iter().find(|qabl| {
-                qabl.direction.0.id != src_face.id && qabl.info.is_some_and(|info| info.complete)
-            }) {
+            if let Some(qabl) = qabls
+                .iter()
+                .find(|qabl| qabl.direction.0.id != src_face.id && qabl.complete > 0)
+            {
                 let mut route = HashMap::new();
 
                 let mut direction = qabl.direction.clone();

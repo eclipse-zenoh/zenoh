@@ -44,6 +44,7 @@ use super::{routing::dispatcher::face::Face, Runtime};
 use crate::api::plugins::PluginsManager;
 use crate::{
     api::{
+        builders::sample::EncodingBuilderTrait,
         bytes::ZBytes,
         key_expr::KeyExpr,
         queryable::{Query, QueryInner},
