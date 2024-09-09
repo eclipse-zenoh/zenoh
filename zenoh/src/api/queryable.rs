@@ -304,7 +304,6 @@ pub struct ReplyBuilder<'a, 'b, T> {
     attachment: Option<ZBytes>,
 }
 
-#[zenoh_macros::internal_trait]
 impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
     fn timestamp<U: Into<Option<Timestamp>>>(self, timestamp: U) -> Self {
         Self {
@@ -314,7 +313,6 @@ impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
     }
 }
 
-#[zenoh_macros::internal_trait]
 impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
     fn attachment<U: Into<OptionZBytes>>(self, attachment: U) -> Self {
         let attachment: OptionZBytes = attachment.into();
@@ -350,7 +348,6 @@ impl<T> QoSBuilderTrait for ReplyBuilder<'_, '_, T> {
     }
 }
 
-#[zenoh_macros::internal_trait]
 impl EncodingBuilderTrait for ReplyBuilder<'_, '_, ReplyBuilderPut> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
@@ -474,7 +471,6 @@ pub struct ReplyErrBuilder<'a> {
     value: Value,
 }
 
-#[zenoh_macros::internal_trait]
 impl EncodingBuilderTrait for ReplyErrBuilder<'_> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         let mut value = self.value.clone();

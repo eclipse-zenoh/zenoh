@@ -17,6 +17,7 @@ use std::{
     sync::{atomic::Ordering, Arc},
 };
 
+use ordered_float::OrderedFloat;
 use zenoh_protocol::{
     core::{
         key_expr::{
@@ -353,7 +354,8 @@ impl HatQueriesTrait for HatCode {
                 let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
                 route.push(QueryTargetQabl {
                     direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
-                    info: None,
+                    complete: 0,
+                    distance: f64::MAX,
                 });
             }
         }
@@ -373,15 +375,17 @@ impl HatQueriesTrait for HatCode {
                 if let Some(qabl_info) = context.qabl.as_ref() {
                     route.push(QueryTargetQabl {
                         direction: (context.face.clone(), key_expr.to_owned(), NodeId::default()),
-                        info: Some(QueryableInfoType {
-                            complete: complete && qabl_info.complete,
-                            distance: 1,
-                        }),
+                        complete: if complete {
+                            qabl_info.complete as u64
+                        } else {
+                            0
+                        },
+                        distance: 0.5,
                     });
                 }
             }
         }
-        route.sort_by_key(|qabl| qabl.info.map_or(u16::MAX, |i| i.distance));
+        route.sort_by_key(|qabl| OrderedFloat(qabl.distance));
         Arc::new(route)
     }
 

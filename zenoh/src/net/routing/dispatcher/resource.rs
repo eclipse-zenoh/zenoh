@@ -46,7 +46,8 @@ pub(crate) type Route = HashMap<usize, Direction>;
 pub(crate) type QueryRoute = HashMap<usize, (Direction, RequestId)>;
 pub(crate) struct QueryTargetQabl {
     pub(crate) direction: Direction,
-    pub(crate) info: Option<QueryableInfoType>,
+    pub(crate) complete: u64,
+    pub(crate) distance: f64,
 }
 pub(crate) type QueryTargetQablSet = Vec<QueryTargetQabl>;
 

@@ -28,7 +28,7 @@ use zenoh_protocol::core::{CongestionControl, Parameters};
 use zenoh_result::ZResult;
 
 use super::{
-    builders::sample::{EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait},
+    builders::sample::{EncodingBuilderTrait, QoSBuilderTrait},
     bytes::ZBytes,
     encoding::Encoding,
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
@@ -41,7 +41,7 @@ use super::{
 };
 #[cfg(feature = "unstable")]
 use super::{sample::SourceInfo, selector::ZenohParameters};
-use crate::bytes::OptionZBytes;
+use crate::{bytes::OptionZBytes, sample::SampleBuilderTrait};
 
 /// The [`Queryable`](crate::query::Queryable)s that should be target of a [`get`](Session::get).
 pub type QueryTarget = zenoh_protocol::network::request::ext::TargetType;
@@ -209,7 +209,6 @@ pub struct SessionGetBuilder<'a, 'b, Handler> {
     pub(crate) source_info: SourceInfo,
 }
 
-#[zenoh_macros::internal_trait]
 impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
     #[zenoh_macros::unstable]
     fn source_info(self, source_info: SourceInfo) -> Self {
@@ -245,7 +244,6 @@ impl QoSBuilderTrait for SessionGetBuilder<'_, '_, DefaultHandler> {
     }
 }
 
-#[zenoh_macros::internal_trait]
 impl<Handler> EncodingBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         let mut value = self.value.unwrap_or_default();
