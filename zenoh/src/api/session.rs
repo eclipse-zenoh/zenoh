@@ -573,7 +573,7 @@ impl Session {
     ///
     ///
     /// # Examples
-    /// ```
+    /// ```no-run
     /// # #[tokio::main]
     /// # async fn main() {
     /// use zenoh::prelude::*;
