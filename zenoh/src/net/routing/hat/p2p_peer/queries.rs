@@ -43,7 +43,7 @@ use crate::net::routing::{
         resource::{NodeId, Resource, SessionContext},
         tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
     },
-    hat::{CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
+    hat::{p2p_peer::initial_interest, CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
     router::{update_query_routes_from, RoutesIndexes},
     RoutingContext,
 };
@@ -604,11 +604,7 @@ impl HatQueriesTrait for HatCode {
 
             for face in tables.faces.values().filter(|f| {
                 f.whatami == WhatAmI::Peer
-                    && !f
-                        .local_interests
-                        .get(&0)
-                        .map(|i| i.finalized)
-                        .unwrap_or(true)
+                    && !initial_interest(f).map(|i| i.finalized).unwrap_or(true)
             }) {
                 let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
                 route.push(QueryTargetQabl {
