@@ -329,6 +329,7 @@ impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
     }
 }
 
+#[zenoh_macros::internal_trait]
 impl<T> QoSBuilderTrait for ReplyBuilder<'_, '_, T> {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let qos = self.qos.congestion_control(congestion_control);
