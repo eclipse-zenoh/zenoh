@@ -413,7 +413,7 @@ impl fmt::Debug for SessionInner {
 /// The entrypoint of the zenoh API.
 ///
 /// Zenoh session is instantiated using [`zenoh::open`], and can be used to declares various
-/// entities like publishers, subscribers, or querybables, as well as making queries.
+/// entities like publishers, subscribers, or querybables, as well as issuing queries.
 ///
 /// Session is an `Arc`-like type, it can be cloned, and it is closed when the last instance
 /// is dropped (see [`Session::closed`]).
