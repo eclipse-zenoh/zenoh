@@ -564,7 +564,7 @@ impl Session {
     /// entity after session closing is a no-op. Session state can be checked with
     /// [`Session::is_closed`].
     ///
-    /// Session are automatically closed when all of its instances are dropped, same as `Arc`.
+    /// Session are automatically closed when all its instances are dropped, same as `Arc`.
     /// You may still want to use this function to handle errors or close the session
     /// asynchronously.
     /// <br>
