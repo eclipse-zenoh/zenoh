@@ -19,7 +19,7 @@ use zenoh_ext::SubscriberForward;
 #[tokio::main]
 async fn main() {
     // Initiate logging
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
 
     let (config, key_expr, forward) = parse_args();
 

@@ -304,7 +304,7 @@ mod tests {
     #[cfg(feature = "transport_tcp")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn transport_tcp_simultaneous() {
-        zenoh_util::try_init_log_from_env();
+        zenoh_util::init_log_from_env_or("error");
         let endpoint01: Vec<EndPoint> = vec![
             format!("tcp/127.0.0.1:{}", 15000).parse().unwrap(),
             format!("tcp/127.0.0.1:{}", 15001).parse().unwrap(),
@@ -325,7 +325,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     #[ignore]
     async fn transport_unixpipe_simultaneous() {
-        zenoh_util::try_init_log_from_env();
+        zenoh_util::init_log_from_env_or("error");
         let endpoint01: Vec<EndPoint> = vec![
             "unixpipe/transport_unixpipe_simultaneous".parse().unwrap(),
             "unixpipe/transport_unixpipe_simultaneous2".parse().unwrap(),
@@ -346,7 +346,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     #[ignore]
     async fn transport_ws_simultaneous() {
-        zenoh_util::try_init_log_from_env();
+        zenoh_util::init_log_from_env_or("error");
 
         let endpoint01: Vec<EndPoint> = vec![
             format!("ws/127.0.0.1:{}", 15020).parse().unwrap(),

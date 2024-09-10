@@ -26,7 +26,7 @@ use zenoh_examples::CommonArgs;
 
 fn main() {
     // Initiate logging
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
 
     let (config, warmup, size, n) = parse_args();
 

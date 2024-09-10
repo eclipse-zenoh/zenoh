@@ -231,7 +231,7 @@ async fn time_lowlatency_transport(endpoint: &EndPoint) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn time_tcp_only() {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 13000).parse().unwrap();
     time_universal_transport(&endpoint).await;
 }
@@ -240,7 +240,7 @@ async fn time_tcp_only() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn time_tcp_only_with_lowlatency_transport() {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 13100).parse().unwrap();
     time_lowlatency_transport(&endpoint).await;
 }
@@ -249,7 +249,7 @@ async fn time_tcp_only_with_lowlatency_transport() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn time_udp_only() {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
     let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 13010).parse().unwrap();
     time_universal_transport(&endpoint).await;
 }
@@ -258,7 +258,7 @@ async fn time_udp_only() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn time_udp_only_with_lowlatency_transport() {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
     let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 13110).parse().unwrap();
     time_lowlatency_transport(&endpoint).await;
 }
@@ -267,7 +267,7 @@ async fn time_udp_only_with_lowlatency_transport() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn time_ws_only() {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 13020).parse().unwrap();
     time_universal_transport(&endpoint).await;
 }
@@ -276,7 +276,7 @@ async fn time_ws_only() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn time_ws_only_with_lowlatency_transport() {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 13120).parse().unwrap();
     time_lowlatency_transport(&endpoint).await;
 }
@@ -285,7 +285,7 @@ async fn time_ws_only_with_lowlatency_transport() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn time_unixpipe_only() {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
     let endpoint: EndPoint = "unixpipe/time_unixpipe_only".parse().unwrap();
     time_universal_transport(&endpoint).await;
 }
@@ -294,7 +294,7 @@ async fn time_unixpipe_only() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn time_unixpipe_only_with_lowlatency_transport() {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
     let endpoint: EndPoint = "unixpipe/time_unixpipe_only_with_lowlatency_transport"
         .parse()
         .unwrap();
@@ -305,7 +305,7 @@ async fn time_unixpipe_only_with_lowlatency_transport() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn time_unix_only() {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
     let f1 = "zenoh-test-unix-socket-9.sock";
     let _ = std::fs::remove_file(f1);
     let endpoint: EndPoint = format!("unixsock-stream/{f1}").parse().unwrap();
@@ -319,7 +319,7 @@ async fn time_unix_only() {
 #[ignore]
 async fn time_tls_only() {
     use zenoh_link::tls::config::*;
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real
     //       mapping to any existing domain. The certificate and key
@@ -515,7 +515,7 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn time_vsock_only() {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
     let endpoint: EndPoint = "vsock/VMADDR_CID_LOCAL:17000".parse().unwrap();
     time_lowlatency_transport(&endpoint).await;
 }

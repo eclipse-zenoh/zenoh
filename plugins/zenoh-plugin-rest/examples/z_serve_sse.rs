@@ -32,7 +32,7 @@ if(typeof(EventSource) !== "undefined") {
 #[tokio::main]
 async fn main() {
     // initiate logging
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
 
     let config = parse_args();
     let key = keyexpr::new("demo/sse").unwrap();
