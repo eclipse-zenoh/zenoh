@@ -1137,10 +1137,15 @@ impl Runtime {
     }
 
     pub(super) fn closing_session(session: &RuntimeSession) {
+        if session.runtime.is_closed() {
+            return;
+        }
+
         match session.runtime.whatami() {
             WhatAmI::Client => {
                 let runtime = session.runtime.clone();
                 let cancellation_token = runtime.get_cancellation_token();
+
                 session.runtime.spawn(async move {
                     let retry_config = runtime.get_global_connect_retry_config();
                     let mut period = retry_config.period();
