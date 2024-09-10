@@ -289,6 +289,13 @@ impl Runtime {
         Ok(())
     }
 
+    pub fn is_closed(&self) -> bool {
+        self.state
+            .task_controller
+            .get_cancellation_token()
+            .is_cancelled()
+    }
+
     pub fn new_timestamp(&self) -> Option<uhlc::Timestamp> {
         self.state.hlc.as_ref().map(|hlc| hlc.new_timestamp())
     }
