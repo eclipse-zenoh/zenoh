@@ -12,12 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use zenoh::{
-    prelude::*,
     shm::{
         AllocAlignment, BlockOn, Deallocate, Defragment, GarbageCollect, PosixShmProviderBackend,
         ShmProviderBuilder, POSIX_PROTOCOL_ID,
     },
-    Config,
+    Config, Wait,
 };
 
 #[tokio::main]
@@ -27,7 +26,7 @@ async fn main() {
     run().await.unwrap()
 }
 
-async fn run() -> ZResult<()> {
+async fn run() -> zenoh::Result<()> {
     // create an SHM backend...
     // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
     let backend = PosixShmProviderBackend::builder()

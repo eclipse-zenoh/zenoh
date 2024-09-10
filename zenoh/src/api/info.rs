@@ -28,7 +28,6 @@ use crate::net::runtime::Runtime;
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let zid = session.info().zid().await;
@@ -66,7 +65,6 @@ impl<'a> IntoFuture for ZenohIdBuilder<'a> {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let mut routers_zid = session.info().routers_zid().await;
@@ -114,7 +112,6 @@ impl<'a> IntoFuture for RoutersZenohIdBuilder<'a> {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let zid = session.info().zid().await;
@@ -163,7 +160,6 @@ impl<'a> IntoFuture for PeersZenohIdBuilder<'a> {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let info = session.info();
@@ -181,7 +177,6 @@ impl SessionInfo {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let zid = session.info().zid().await;
@@ -200,7 +195,6 @@ impl SessionInfo {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let mut routers_zid = session.info().routers_zid().await;
@@ -219,7 +213,6 @@ impl SessionInfo {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let mut peers_zid = session.info().peers_zid().await;

@@ -178,7 +178,7 @@ impl QueryState {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::{prelude::*, query::{ConsolidationMode, QueryTarget}};
+/// use zenoh::{query::{ConsolidationMode, QueryTarget}};
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let replies = session
@@ -265,7 +265,6 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let queryable = session
@@ -292,7 +291,6 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let mut n = 0;
@@ -320,7 +318,6 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let replies = session

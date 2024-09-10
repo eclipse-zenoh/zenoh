@@ -17,10 +17,9 @@ use clap::Parser;
 use zenoh::{
     bytes::ZBytes,
     key_expr::keyexpr,
-    prelude::*,
     qos::CongestionControl,
     shm::{PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID},
-    Config,
+    Config, Wait,
 };
 use zenoh_examples::CommonArgs;
 

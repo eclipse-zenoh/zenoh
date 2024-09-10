@@ -559,7 +559,6 @@ pub(crate) struct QueryableInner {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let queryable = session.declare_queryable("key/expression").await.unwrap();
@@ -594,7 +593,6 @@ impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let queryable = session.declare_queryable("key/expression").await.unwrap();
@@ -617,7 +615,6 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let queryable = session
@@ -644,7 +641,6 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let mut n = 0;
@@ -672,7 +668,6 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let queryable = session
@@ -740,7 +735,6 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 /// # #[tokio::main]
 /// # async fn main() {
 /// use futures::prelude::*;
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let (tx, rx) = flume::bounded(32);
@@ -763,7 +757,6 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let queryable = session
@@ -794,7 +787,6 @@ impl<Handler> Queryable<Handler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let queryable = session.declare_queryable("key/expression")
@@ -832,7 +824,6 @@ impl<Handler> Queryable<Handler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let queryable = session.declare_queryable("key/expression")

@@ -18,7 +18,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 #[cfg(feature = "loki")]
 use url::Url;
 use zenoh::{
-    config::{Config, EndPoint, ModeDependentValue, PermissionsConf, ValidatedMap, WhatAmI},
+    config::{Config, EndPoint, ModeDependentValue, PermissionsConf, WhatAmI},
     Result,
 };
 use zenoh_util::LibSearchDirs;

@@ -76,7 +76,6 @@ pub(crate) struct SubscriberInner {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let subscriber = session
@@ -114,7 +113,6 @@ impl<Handler> IntoFuture for SubscriberUndeclaration<Handler> {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let subscriber = session
@@ -158,7 +156,6 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let subscriber = session
@@ -185,7 +182,6 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let mut n = 0;
@@ -213,7 +209,6 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let subscriber = session
@@ -358,7 +353,6 @@ where
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// session
@@ -374,7 +368,6 @@ where
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let subscriber = session
@@ -402,7 +395,6 @@ impl<Handler> Subscriber<Handler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let subscriber = session.declare_subscriber("key/expression")
@@ -445,7 +437,6 @@ impl<Handler> Subscriber<Handler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let subscriber = session.declare_subscriber("key/expression")

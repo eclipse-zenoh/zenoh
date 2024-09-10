@@ -17,8 +17,8 @@ use std::convert::TryInto;
 use clap::Parser;
 use zenoh::{
     bytes::ZBytes,
-    prelude::*,
     qos::{CongestionControl, Priority},
+    Wait,
 };
 use zenoh_examples::CommonArgs;
 

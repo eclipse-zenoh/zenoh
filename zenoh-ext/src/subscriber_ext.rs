@@ -60,7 +60,6 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     /// use zenoh_ext::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
@@ -104,7 +103,6 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     /// use zenoh_ext::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
@@ -138,7 +136,6 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     /// use zenoh_ext::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
@@ -194,7 +191,6 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     /// use zenoh_ext::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
@@ -248,7 +244,6 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     /// use zenoh_ext::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
@@ -307,7 +302,6 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     /// use zenoh_ext::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();

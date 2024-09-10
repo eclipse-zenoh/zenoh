@@ -566,7 +566,6 @@ impl<'a> UndeclarableSealed<&'a Session> for KeyExpr<'a> {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let key_expr = session.declare_keyexpr("key/expression").await.unwrap();

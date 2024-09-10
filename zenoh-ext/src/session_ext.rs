@@ -22,7 +22,6 @@ pub trait SessionExt<'s, 'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     /// use zenoh::config::ModeDependentValue::Unique;
     /// use zenoh_ext::SessionExt;
     ///

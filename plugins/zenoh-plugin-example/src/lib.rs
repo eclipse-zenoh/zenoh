@@ -34,8 +34,8 @@ use zenoh::{
         zlock,
     },
     key_expr::{keyexpr, KeyExpr},
-    prelude::ZResult,
     sample::Sample,
+    Result as ZResult,
 };
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 

@@ -29,7 +29,7 @@
 //! ```
 //! use std::sync::Arc;
 //! use async_trait::async_trait;
-//! use zenoh::{key_expr::OwnedKeyExpr, prelude::*, time::Timestamp, internal::Value};
+//! use zenoh::{key_expr::OwnedKeyExpr, time::Timestamp, internal::Value};
 //! use zenoh_backend_traits::*;
 //! use zenoh_backend_traits::config::*;
 //!

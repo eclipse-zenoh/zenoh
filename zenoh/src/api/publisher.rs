@@ -81,7 +81,6 @@ impl fmt::Debug for PublisherState {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let publisher = session.declare_publisher("key/expression").await.unwrap();
@@ -96,7 +95,6 @@ impl fmt::Debug for PublisherState {
 /// # #[tokio::main]
 /// # async fn main() {
 /// use futures::StreamExt;
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let mut subscriber = session.declare_subscriber("key/expression").await.unwrap();
@@ -130,7 +128,6 @@ impl<'a> Publisher<'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression")
@@ -177,7 +174,6 @@ impl<'a> Publisher<'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
@@ -208,7 +204,6 @@ impl<'a> Publisher<'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
@@ -235,7 +230,6 @@ impl<'a> Publisher<'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
@@ -263,7 +257,6 @@ impl<'a> Publisher<'a> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
@@ -291,7 +284,6 @@ impl<'a> Publisher<'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
@@ -330,7 +322,6 @@ impl<'a> UndeclarableSealed<()> for Publisher<'a> {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let publisher = session.declare_publisher("key/expression").await.unwrap();
@@ -594,7 +585,6 @@ impl TryFrom<ProtocolPriority> for Priority {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let publisher = session.declare_publisher("key/expression").await.unwrap();
@@ -615,7 +605,6 @@ impl MatchingStatus {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
@@ -647,7 +636,6 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
@@ -679,7 +667,6 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let mut n = 0;
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
@@ -709,7 +696,6 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
@@ -829,7 +815,6 @@ pub(crate) struct MatchingListenerInner {
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let publisher = session.declare_publisher("key/expression").await.unwrap();
@@ -857,7 +842,6 @@ impl<Handler> MatchingListener<Handler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
