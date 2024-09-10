@@ -666,18 +666,18 @@ impl Config {
     where
         validated_struct::InsertionError: From<D::Error>,
     {
-        <Config as ValidatedMap>::insert(self, key, value)
+        <Self as ValidatedMap>::insert(self, key, value)
     }
 
     pub fn get(
         &self,
         key: &str,
     ) -> Result<<Self as ValidatedMapAssociatedTypes>::Accessor, GetError> {
-        <Config as ValidatedMap>::get(self, key)
+        <Self as ValidatedMap>::get(self, key)
     }
 
     pub fn get_json(&self, key: &str) -> Result<String, GetError> {
-        <Config as ValidatedMap>::get_json(self, key)
+        <Self as ValidatedMap>::get_json(self, key)
     }
 
     pub fn insert_json5(
@@ -685,11 +685,11 @@ impl Config {
         key: &str,
         value: &str,
     ) -> Result<(), validated_struct::InsertionError> {
-        <Config as ValidatedMap>::insert_json5(self, key, value)
+        <Self as ValidatedMap>::insert_json5(self, key, value)
     }
 
     pub fn keys(&self) -> impl Iterator<Item = String> {
-        <Config as ValidatedMap>::keys(self).into_iter()
+        <Self as ValidatedMap>::keys(self).into_iter()
     }
 
     pub fn set_plugin_validator<T: ConfigValidator + 'static>(&mut self, validator: Weak<T>) {
@@ -974,6 +974,52 @@ where
     type Keys = T::Keys;
     fn keys(&self) -> Self::Keys {
         self.lock().keys()
+    }
+}
+impl<T: ValidatedMap + 'static> Notifier<T>
+where
+    T: for<'a> ValidatedMapAssociatedTypes<'a, Accessor = &'a dyn Any>,
+{
+    pub fn insert<'d, D: serde::Deserializer<'d>>(
+        &self,
+        key: &str,
+        value: D,
+    ) -> Result<(), validated_struct::InsertionError>
+    where
+        validated_struct::InsertionError: From<D::Error>,
+    {
+        self.lock().insert(key, value)?;
+        self.notify(key);
+        Ok(())
+    }
+
+    pub fn get(
+        &self,
+        key: &str,
+    ) -> Result<<Self as ValidatedMapAssociatedTypes>::Accessor, GetError> {
+        let guard = zlock!(self.inner.inner);
+        // SAFETY: MutexGuard pins the mutex behind which the value is held.
+        let subref = guard.get(key.as_ref())? as *const _;
+        Ok(GetGuard {
+            _guard: guard,
+            subref,
+        })
+    }
+
+    pub fn get_json(&self, key: &str) -> Result<String, GetError> {
+        self.lock().get_json(key)
+    }
+
+    pub fn insert_json5(
+        &self,
+        key: &str,
+        value: &str,
+    ) -> Result<(), validated_struct::InsertionError> {
+        self.insert(key, &mut json5::Deserializer::from_str(value)?)
+    }
+
+    pub fn keys(&self) -> impl Iterator<Item = String> {
+        self.lock().keys().into_iter()
     }
 }
 
