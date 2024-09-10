@@ -228,6 +228,7 @@ impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
     }
 }
 
+#[zenoh_macros::internal_trait]
 impl QoSBuilderTrait for SessionGetBuilder<'_, '_, DefaultHandler> {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let qos = self.qos.congestion_control(congestion_control);
