@@ -556,6 +556,7 @@ where
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
+/// use zenoh::Wait;
 /// use zenoh_ext::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
@@ -698,6 +699,7 @@ impl<Handler> FetchingSubscriber<Handler> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
+    /// use zenoh::Wait;
     /// use zenoh_ext::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
@@ -775,6 +777,7 @@ impl Drop for RepliesHandler {
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
+/// # use zenoh::Wait;
 /// # use zenoh_ext::*;
 /// #
 /// # let session = zenoh::open(zenoh::config::peer()).await.unwrap();

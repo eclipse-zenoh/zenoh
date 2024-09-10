@@ -60,6 +60,7 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
+    /// use zenoh::Wait;
     /// use zenoh_ext::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
@@ -136,6 +137,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
+    /// use zenoh::Wait;
     /// use zenoh_ext::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
@@ -244,6 +246,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
+    /// use zenoh::Wait;
     /// use zenoh_ext::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
