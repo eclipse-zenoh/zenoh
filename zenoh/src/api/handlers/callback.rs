@@ -31,6 +31,7 @@ enum CallbackInner<T> {
     Ring(RingChannelSender<T>),
 }
 
+/// Callback type used by zenoh entities.
 pub struct Callback<T>(CallbackInner<T>);
 
 impl<T> Clone for Callback<T> {
@@ -44,6 +45,7 @@ impl<T> Clone for Callback<T> {
 }
 
 impl<T> Callback<T> {
+    /// Instantiate a `Callback` from a callback function.
     pub fn new(cb: Arc<dyn Fn(&T) + Send + Sync>) -> Self {
         Self(CallbackInner::Dyn(cb))
     }
@@ -56,6 +58,7 @@ impl<T> Callback<T> {
         Self(CallbackInner::Ring(sender))
     }
 
+    /// Call the inner callback.
     #[inline]
     pub fn call(&self, arg: &T)
     where
@@ -72,6 +75,9 @@ impl<T> Callback<T> {
         }
     }
 
+    /// Call the inner callback, passing the argument by value instead of by reference.
+    ///
+    /// The underlying implementation may benefit of moving the argument instead of cloning it.
     #[inline]
     pub fn call_by_value(&self, arg: T) {
         match &self.0 {
