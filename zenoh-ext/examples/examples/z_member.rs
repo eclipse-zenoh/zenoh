@@ -19,7 +19,7 @@ use zenoh_ext::group::*;
 
 #[tokio::main]
 async fn main() {
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
     let z = Arc::new(zenoh::open(Config::default()).await.unwrap());
     let member = Member::new(z.zid().to_string())
         .unwrap()
