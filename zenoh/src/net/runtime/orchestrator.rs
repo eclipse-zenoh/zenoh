@@ -378,7 +378,7 @@ impl Runtime {
             } else {
                 // try to connect in background
                 if let Err(e) = self.spawn_peer_connector(endpoint.clone()).await {
-                    tracing::error!("Error connecting to {}: {} ", endpoint, e,);
+                    tracing::error!("Error connecting to {}: {}", endpoint, e);
                     return Err(e);
                 }
             }
