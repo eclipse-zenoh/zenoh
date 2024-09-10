@@ -118,7 +118,7 @@ async fn run(endpoints: &[EndPoint]) {
 #[cfg(feature = "transport_tcp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_whitelist_tcp() {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
@@ -133,7 +133,7 @@ async fn transport_whitelist_tcp() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn transport_whitelist_unixpipe() {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
@@ -147,7 +147,7 @@ async fn transport_whitelist_unixpipe() {
 #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_whitelist_vsock() {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![

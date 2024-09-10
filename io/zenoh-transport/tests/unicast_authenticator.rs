@@ -629,7 +629,7 @@ async fn run_with_lowlatency_transport(endpoint: &EndPoint) {
 #[cfg(feature = "transport_tcp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn authenticator_tcp() {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 8000).parse().unwrap();
     run_with_universal_transport(&endpoint).await;
 }
@@ -637,7 +637,7 @@ async fn authenticator_tcp() {
 #[cfg(feature = "transport_tcp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn authenticator_tcp_with_lowlatency_transport() {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 8100).parse().unwrap();
     run_with_lowlatency_transport(&endpoint).await;
 }
@@ -645,7 +645,7 @@ async fn authenticator_tcp_with_lowlatency_transport() {
 #[cfg(feature = "transport_udp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn authenticator_udp() {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
     let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 8010).parse().unwrap();
     run_with_universal_transport(&endpoint).await;
 }
@@ -653,7 +653,7 @@ async fn authenticator_udp() {
 #[cfg(feature = "transport_udp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn authenticator_udp_with_lowlatency_transport() {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
     let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 8110).parse().unwrap();
     run_with_lowlatency_transport(&endpoint).await;
 }
@@ -662,7 +662,7 @@ async fn authenticator_udp_with_lowlatency_transport() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn authenticator_unixpipe() {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
     let endpoint: EndPoint = "unixpipe/authenticator_unixpipe_test".parse().unwrap();
     run_with_universal_transport(&endpoint).await;
 }
@@ -671,7 +671,7 @@ async fn authenticator_unixpipe() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn authenticator_unixpipe_with_lowlatency_transport() {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
     let endpoint: EndPoint = "unixpipe/authenticator_unixpipe_with_lowlatency_transport"
         .parse()
         .unwrap();
@@ -682,7 +682,7 @@ async fn authenticator_unixpipe_with_lowlatency_transport() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn authenticator_ws() {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 8020).parse().unwrap();
     run_with_universal_transport(&endpoint).await;
 }
@@ -691,7 +691,7 @@ async fn authenticator_ws() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn authenticator_ws_with_lowlatency_transport() {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 8120).parse().unwrap();
     run_with_lowlatency_transport(&endpoint).await;
 }
@@ -699,7 +699,7 @@ async fn authenticator_ws_with_lowlatency_transport() {
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn authenticator_unix() {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
     let f1 = "zenoh-test-unix-socket-10.sock";
     let _ = std::fs::remove_file(f1);
     let endpoint: EndPoint = format!("unixsock-stream/{f1}").parse().unwrap();
@@ -713,7 +713,7 @@ async fn authenticator_unix() {
 async fn authenticator_tls() {
     use zenoh_link::tls::config::*;
 
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real
@@ -813,7 +813,7 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 async fn authenticator_quic() {
     use zenoh_link::quic::config::*;
 
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real
