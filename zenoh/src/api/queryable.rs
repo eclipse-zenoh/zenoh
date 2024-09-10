@@ -608,7 +608,6 @@ pub struct QueryableBuilder<'a, 'b, Handler> {
     pub(crate) complete: bool,
     pub(crate) origin: Locality,
     pub(crate) handler: Handler,
-    pub(crate) undeclare_on_drop: bool,
 }
 
 impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
@@ -633,22 +632,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     where
         Callback: Fn(Query) + Send + Sync + 'static,
     {
-        let QueryableBuilder {
-            session,
-            key_expr,
-            complete,
-            origin,
-            handler: _,
-            undeclare_on_drop: _,
-        } = self;
-        QueryableBuilder {
-            session,
-            key_expr,
-            complete,
-            origin,
-            handler: callback,
-            undeclare_on_drop: false,
-        }
+        self.with(callback)
     }
 
     /// Receive the queries for this Queryable with a mutable callback.
@@ -712,7 +696,6 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
             complete,
             origin,
             handler: _,
-            undeclare_on_drop: _,
         } = self;
         QueryableBuilder {
             session,
@@ -720,7 +703,6 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
             complete,
             origin,
             handler,
-            undeclare_on_drop: true,
         }
     }
 
@@ -936,7 +918,7 @@ where
                     session_id: session.zid(),
                     session: self.session.downgrade(),
                     state: qable_state,
-                    undeclare_on_drop: self.undeclare_on_drop,
+                    undeclare_on_drop: !Handler::BACKGROUND,
                 },
                 handler: receiver,
             })

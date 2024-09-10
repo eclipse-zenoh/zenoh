@@ -75,16 +75,7 @@ impl ScoutBuilder<DefaultHandler> {
     where
         Callback: Fn(Hello) + Send + Sync + 'static,
     {
-        let ScoutBuilder {
-            what,
-            config,
-            handler: _,
-        } = self;
-        ScoutBuilder {
-            what,
-            config,
-            handler: callback,
-        }
+        self.with(callback)
     }
 
     /// Receive the [`Hello`] messages from this scout with a mutable callback.

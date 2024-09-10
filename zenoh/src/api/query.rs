@@ -280,34 +280,7 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     where
         Callback: Fn(Reply) + Send + Sync + 'static,
     {
-        let SessionGetBuilder {
-            session,
-            selector,
-            target,
-            consolidation,
-            qos,
-            destination,
-            timeout,
-            value,
-            attachment,
-            #[cfg(feature = "unstable")]
-            source_info,
-            handler: _,
-        } = self;
-        SessionGetBuilder {
-            session,
-            selector,
-            target,
-            consolidation,
-            qos,
-            destination,
-            timeout,
-            value,
-            attachment,
-            #[cfg(feature = "unstable")]
-            source_info,
-            handler: callback,
-        }
+        self.with(callback)
     }
 
     /// Receive the replies for this query with a mutable callback.

@@ -149,11 +149,6 @@ pub struct SubscriberBuilder<'a, 'b, Handler> {
     pub handler: Handler,
     #[cfg(not(feature = "unstable"))]
     pub(crate) handler: Handler,
-
-    #[cfg(feature = "unstable")]
-    pub undeclare_on_drop: bool,
-    #[cfg(not(feature = "unstable"))]
-    pub(crate) undeclare_on_drop: bool,
 }
 
 impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
@@ -178,24 +173,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     where
         Callback: Fn(Sample) + Send + Sync + 'static,
     {
-        let SubscriberBuilder {
-            session,
-            key_expr,
-            #[cfg(feature = "unstable")]
-            reliability,
-            origin,
-            handler: _,
-            undeclare_on_drop: _,
-        } = self;
-        SubscriberBuilder {
-            session,
-            key_expr,
-            #[cfg(feature = "unstable")]
-            reliability,
-            origin,
-            handler: callback,
-            undeclare_on_drop: false,
-        }
+        self.with(callback)
     }
 
     /// Receive the samples for this subscription with a mutable callback.
@@ -260,7 +238,6 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
             reliability,
             origin,
             handler: _,
-            undeclare_on_drop: _,
         } = self;
         SubscriberBuilder {
             session,
@@ -269,7 +246,6 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
             reliability,
             origin,
             handler,
-            undeclare_on_drop: true,
         }
     }
 }
@@ -347,7 +323,7 @@ where
                     session: session.downgrade(),
                     state: sub_state,
                     kind: SubscriberKind::Subscriber,
-                    undeclare_on_drop: self.undeclare_on_drop,
+                    undeclare_on_drop: !Handler::BACKGROUND,
                 },
                 handler: receiver,
             })

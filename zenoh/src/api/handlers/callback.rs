@@ -30,6 +30,9 @@ where
     F: Fn(T) + Send + Sync + 'a,
 {
     type Handler = ();
+
+    const BACKGROUND: bool = true;
+
     fn into_handler(self) -> (Callback<'a, T>, Self::Handler) {
         (Dyn::from(self), ())
     }
@@ -83,6 +86,8 @@ where
     DropFn: FnMut() + Send + Sync + 'static,
 {
     type Handler = ();
+
+    const BACKGROUND: bool = true;
 
     fn into_handler(self) -> (Callback<'a, Event>, Self::Handler) {
         (Dyn::from(move |evt| (self.callback)(evt)), ())

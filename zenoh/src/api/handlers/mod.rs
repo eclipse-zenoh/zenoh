@@ -35,6 +35,12 @@ pub type Dyn<T> = std::sync::Arc<T>;
 pub trait IntoHandler<'a, T> {
     type Handler;
 
+    /// If it makes sense to still run the callback in background
+    /// when the handler having been dropped.
+    /// This boolean may be used to determine if an entity declared
+    /// with the callback should be undeclared on drop.
+    const BACKGROUND: bool = false;
+
     fn into_handler(self) -> (Callback<'a, T>, Self::Handler);
 }
 

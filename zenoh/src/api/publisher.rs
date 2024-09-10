@@ -282,7 +282,6 @@ impl<'a> Publisher<'a> {
         MatchingListenerBuilder {
             publisher: self,
             handler: DefaultHandler::default(),
-            undeclare_on_drop: true,
         }
     }
 
@@ -638,7 +637,6 @@ impl MatchingStatus {
 pub struct MatchingListenerBuilder<'a, 'b, Handler> {
     pub(crate) publisher: &'a Publisher<'b>,
     pub handler: Handler,
-    pub undeclare_on_drop: bool,
 }
 
 #[zenoh_macros::unstable]
@@ -672,16 +670,7 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
     where
         Callback: Fn(MatchingStatus) + Send + Sync + 'static,
     {
-        let MatchingListenerBuilder {
-            publisher,
-            handler: _,
-            undeclare_on_drop: _,
-        } = self;
-        MatchingListenerBuilder {
-            publisher,
-            handler: callback,
-            undeclare_on_drop: false,
-        }
+        self.with(callback)
     }
 
     /// Receive the MatchingStatuses for this listener with a mutable callback.
@@ -747,13 +736,8 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
         let MatchingListenerBuilder {
             publisher,
             handler: _,
-            undeclare_on_drop: _,
         } = self;
-        MatchingListenerBuilder {
-            publisher,
-            handler,
-            undeclare_on_drop: true,
-        }
+        MatchingListenerBuilder { publisher, handler }
     }
 }
 
@@ -785,7 +769,7 @@ where
                 session: self.publisher.session.clone(),
                 matching_listeners: self.publisher.matching_listeners.clone(),
                 state,
-                undeclare_on_drop: self.undeclare_on_drop,
+                undeclare_on_drop: !Handler::BACKGROUND,
             },
             handler,
         })

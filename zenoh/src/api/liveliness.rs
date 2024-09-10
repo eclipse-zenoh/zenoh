@@ -171,7 +171,6 @@ impl<'a> Liveliness<'a> {
             session: self.session,
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
             handler: DefaultHandler::default(),
-            undeclare_on_drop: true,
             history: false,
         }
     }
@@ -436,7 +435,6 @@ pub struct LivelinessSubscriberBuilder<'a, 'b, Handler> {
     pub session: &'a Session,
     pub key_expr: ZResult<KeyExpr<'b>>,
     pub handler: Handler,
-    pub undeclare_on_drop: bool,
     pub history: bool,
 }
 
@@ -468,20 +466,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     where
         Callback: Fn(Sample) + Send + Sync + 'static,
     {
-        let LivelinessSubscriberBuilder {
-            session,
-            key_expr,
-            handler: _,
-            undeclare_on_drop: _,
-            history,
-        } = self;
-        LivelinessSubscriberBuilder {
-            session,
-            key_expr,
-            handler: callback,
-            undeclare_on_drop: false,
-            history,
-        }
+        self.with(callback)
     }
 
     /// Receive the samples for this liveliness subscription with a mutable callback.
@@ -547,14 +532,12 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
             session,
             key_expr,
             handler: _,
-            undeclare_on_drop: _,
             history,
         } = self;
         LivelinessSubscriberBuilder {
             session,
             key_expr,
             handler,
-            undeclare_on_drop: true,
             history,
         }
     }
@@ -569,14 +552,12 @@ impl<Handler> LivelinessSubscriberBuilder<'_, '_, Handler> {
             session,
             key_expr,
             handler,
-            undeclare_on_drop,
             history: _,
         } = self;
         LivelinessSubscriberBuilder {
             session,
             key_expr,
             handler,
-            undeclare_on_drop,
             history,
         }
     }
@@ -619,7 +600,7 @@ where
                     session: self.session.downgrade(),
                     state: sub_state,
                     kind: SubscriberKind::LivelinessSubscriber,
-                    undeclare_on_drop: self.undeclare_on_drop,
+                    undeclare_on_drop: !Handler::BACKGROUND,
                 },
                 handler,
             })
@@ -696,18 +677,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     where
         Callback: Fn(Reply) + Send + Sync + 'static,
     {
-        let LivelinessGetBuilder {
-            session,
-            key_expr,
-            timeout,
-            handler: _,
-        } = self;
-        LivelinessGetBuilder {
-            session,
-            key_expr,
-            timeout,
-            handler: callback,
-        }
+        self.with(callback)
     }
 
     /// Receive the replies for this liveliness query with a mutable callback.
