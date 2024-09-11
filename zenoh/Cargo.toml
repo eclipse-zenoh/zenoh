@@ -118,10 +118,10 @@ rustc_version = { workspace = true }
 [lib]
 name = "zenoh"
 
-# For doc generation on docs.rs, activate the "unstable" feature to generate their documentation
+# For doc generation on docs.rs, activate the "unstable" and "shared-memory" feature to generate their documentation
 # NOTE: if you change this, also change it in .github/workflows/release.yml in "doc" job.
 [package.metadata.docs.rs]
-features = ["unstable"]
+features = ["unstable", "shared-memory"]
 rustdoc-args = ["--cfg", "doc_auto_cfg"]
 
 [package.metadata.deb]

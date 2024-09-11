@@ -20,12 +20,14 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+#[cfg(feature = "unstable")]
+use zenoh::pubsub::Reliability;
 use zenoh::{
     handlers::{locked, DefaultHandler, IntoHandler},
     internal::zlock,
     key_expr::KeyExpr,
     prelude::Wait,
-    pubsub::{Reliability, Subscriber},
+    pubsub::Subscriber,
     query::{QueryConsolidation, QueryTarget, ReplyKeyExpr, Selector},
     sample::{Locality, Sample, SampleBuilder},
     time::Timestamp,
@@ -40,7 +42,6 @@ pub struct QueryingSubscriberBuilder<'a, 'b, KeySpace, Handler> {
     pub(crate) session: &'a Session,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) key_space: KeySpace,
-    pub(crate) reliability: Reliability,
     pub(crate) origin: Locality,
     pub(crate) query_selector: Option<ZResult<Selector<'b>>>,
     pub(crate) query_target: QueryTarget,
@@ -92,7 +93,6 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
             session,
             key_expr,
             key_space,
-            reliability,
             origin,
             query_selector,
             query_target,
@@ -105,7 +105,6 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
             session,
             key_expr,
             key_space,
-            reliability,
             origin,
             query_selector,
             query_target,
@@ -119,23 +118,35 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
 
 impl<'a, 'b, Handler> QueryingSubscriberBuilder<'a, 'b, crate::UserSpace, Handler> {
     /// Change the subscription reliability.
-    #[inline]
+    #[cfg(feature = "unstable")]
+    #[deprecated(
+        since = "1.0.0",
+        note = "please use `reliability` on `declare_publisher` or `put`"
+    )]
+    #[allow(unused_mut, unused_variables)]
     pub fn reliability(mut self, reliability: Reliability) -> Self {
-        self.reliability = reliability;
         self
     }
 
     /// Change the subscription reliability to Reliable.
-    #[inline]
+    #[cfg(feature = "unstable")]
+    #[deprecated(
+        since = "1.0.0",
+        note = "please use `reliability` on `declare_publisher` or `put`"
+    )]
+    #[allow(unused_mut)]
     pub fn reliable(mut self) -> Self {
-        self.reliability = Reliability::Reliable;
         self
     }
 
     /// Change the subscription reliability to BestEffort.
-    #[inline]
+    #[cfg(feature = "unstable")]
+    #[deprecated(
+        since = "1.0.0",
+        note = "please use `reliability` on `declare_publisher` or `put`"
+    )]
+    #[allow(unused_mut)]
     pub fn best_effort(mut self) -> Self {
-        self.reliability = Reliability::BestEffort;
         self
     }
 
@@ -223,7 +234,6 @@ where
             session: self.session,
             key_expr: Ok(key_expr.clone()),
             key_space: self.key_space,
-            reliability: self.reliability,
             origin: self.origin,
             fetch: |cb| match key_space {
                 crate::KeySpace::User => match query_selector {
@@ -339,7 +349,6 @@ pub struct FetchingSubscriberBuilder<
     pub(crate) session: &'a Session,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) key_space: KeySpace,
-    pub(crate) reliability: Reliability,
     pub(crate) origin: Locality,
     pub(crate) fetch: Fetch,
     pub(crate) handler: Handler,
@@ -364,7 +373,6 @@ where
             session: self.session,
             key_expr: self.key_expr.map(|s| s.into_owned()),
             key_space: self.key_space,
-            reliability: self.reliability,
             origin: self.origin,
             fetch: self.fetch,
             handler: self.handler,
@@ -431,7 +439,6 @@ where
             session,
             key_expr,
             key_space,
-            reliability,
             origin,
             fetch,
             handler: _,
@@ -441,7 +448,6 @@ where
             session,
             key_expr,
             key_space,
-            reliability,
             origin,
             fetch,
             handler,
@@ -461,23 +467,35 @@ where
     TryIntoSample: ExtractSample,
 {
     /// Change the subscription reliability.
-    #[inline]
+    #[cfg(feature = "unstable")]
+    #[deprecated(
+        since = "1.0.0",
+        note = "please use `reliability` on `declare_publisher` or `put`"
+    )]
+    #[allow(unused_mut, unused_variables)]
     pub fn reliability(mut self, reliability: Reliability) -> Self {
-        self.reliability = reliability;
         self
     }
 
     /// Change the subscription reliability to Reliable.
-    #[inline]
+    #[cfg(feature = "unstable")]
+    #[deprecated(
+        since = "1.0.0",
+        note = "please use `reliability` on `declare_publisher` or `put`"
+    )]
+    #[allow(unused_mut)]
     pub fn reliable(mut self) -> Self {
-        self.reliability = Reliability::Reliable;
         self
     }
 
     /// Change the subscription reliability to BestEffort.
-    #[inline]
+    #[cfg(feature = "unstable")]
+    #[deprecated(
+        since = "1.0.0",
+        note = "please use `reliability` on `declare_publisher` or `put`"
+    )]
+    #[allow(unused_mut)]
     pub fn best_effort(mut self) -> Self {
-        self.reliability = Reliability::BestEffort;
         self
     }
 
@@ -654,7 +672,6 @@ impl<Handler> FetchingSubscriber<Handler> {
                 .session
                 .declare_subscriber(&key_expr)
                 .callback(sub_callback)
-                .reliability(conf.reliability)
                 .allowed_origin(conf.origin)
                 .wait()?,
             crate::KeySpace::Liveliness => conf

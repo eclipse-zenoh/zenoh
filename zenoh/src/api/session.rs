@@ -45,9 +45,9 @@ use zenoh_protocol::{
     network::{
         self,
         declare::{
-            self, common::ext::WireExprType, queryable::ext::QueryableInfoType,
-            subscriber::ext::SubscriberInfo, Declare, DeclareBody, DeclareKeyExpr,
-            DeclareQueryable, DeclareSubscriber, UndeclareQueryable, UndeclareSubscriber,
+            self, common::ext::WireExprType, queryable::ext::QueryableInfoType, Declare,
+            DeclareBody, DeclareKeyExpr, DeclareQueryable, DeclareSubscriber, UndeclareQueryable,
+            UndeclareSubscriber,
         },
         interest::{InterestMode, InterestOptions},
         request::{self, ext::TargetType},
@@ -1228,7 +1228,6 @@ impl SessionInner {
         key_expr: &KeyExpr,
         origin: Locality,
         callback: Callback<'static, Sample>,
-        info: &SubscriberInfo,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
         tracing::trace!("declare_subscriber({:?})", key_expr);
@@ -1341,7 +1340,6 @@ impl SessionInner {
                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                     id,
                     wire_expr: key_expr.to_wire(self).to_owned(),
-                    ext_info: *info,
                 }),
             });
 
