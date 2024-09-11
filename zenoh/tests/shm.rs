@@ -28,7 +28,7 @@ use zenoh::{
         zshm, BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder,
         POSIX_PROTOCOL_ID,
     },
-    Session,
+    Session, Wait,
 };
 use zenoh_core::ztimeout;
 
