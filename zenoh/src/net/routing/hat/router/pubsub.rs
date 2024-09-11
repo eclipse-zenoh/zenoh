@@ -919,6 +919,21 @@ pub(super) fn pubsub_linkstate_change(
     }
 }
 
+#[inline]
+fn make_sub_id(res: &Arc<Resource>, face: &mut Arc<FaceState>, mode: InterestMode) -> u32 {
+    if mode.future() {
+        if let Some(id) = face_hat!(face).local_subs.get(res) {
+            *id
+        } else {
+            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+            face_hat_mut!(face).local_subs.insert(res.clone(), id);
+            id
+        }
+    } else {
+        0
+    }
+}
+
 pub(crate) fn declare_sub_interest(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
@@ -939,13 +954,7 @@ pub(crate) fn declare_sub_interest(
                             || remote_linkstatepeer_subs(tables, sub)
                             || remote_router_subs(tables, sub))
                 }) {
-                    let id = if mode.future() {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face).local_subs.insert((*res).clone(), id);
-                        id
-                    } else {
-                        0
-                    };
+                    let id = make_sub_id(res, face, mode);
                     let wire_expr =
                         Resource::decl_key(res, face, push_declaration_profile(tables, face));
                     send_declare(
@@ -984,13 +993,7 @@ pub(crate) fn declare_sub_interest(
                                                 .failover_brokering(s.face.zid, face.zid)))
                             }))
                     {
-                        let id = if mode.future() {
-                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                            face_hat_mut!(face).local_subs.insert(sub.clone(), id);
-                            id
-                        } else {
-                            0
-                        };
+                        let id = make_sub_id(sub, face, mode);
                         let wire_expr =
                             Resource::decl_key(sub, face, push_declaration_profile(tables, face));
                         send_declare(
@@ -1027,13 +1030,7 @@ pub(crate) fn declare_sub_interest(
                                     || hat!(tables).failover_brokering(s.face.zid, face.zid))
                         }))
                 {
-                    let id = if mode.future() {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face).local_subs.insert(sub.clone(), id);
-                        id
-                    } else {
-                        0
-                    };
+                    let id = make_sub_id(sub, face, mode);
                     let wire_expr =
                         Resource::decl_key(sub, face, push_declaration_profile(tables, face));
                     send_declare(

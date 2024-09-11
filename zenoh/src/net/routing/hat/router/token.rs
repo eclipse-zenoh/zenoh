@@ -954,6 +954,21 @@ pub(super) fn token_linkstate_change(
     }
 }
 
+#[inline]
+fn make_token_id(res: &Arc<Resource>, face: &mut Arc<FaceState>, mode: InterestMode) -> u32 {
+    if mode.future() {
+        if let Some(id) = face_hat!(face).local_tokens.get(res) {
+            *id
+        } else {
+            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+            face_hat_mut!(face).local_tokens.insert(res.clone(), id);
+            id
+        }
+    } else {
+        0
+    }
+}
+
 pub(crate) fn declare_token_interest(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
@@ -977,13 +992,7 @@ pub(crate) fn declare_token_interest(
                             || remote_linkstatepeer_tokens(tables, token)
                             || remote_router_tokens(tables, token))
                 }) {
-                    let id = if mode.future() {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face).local_tokens.insert((*res).clone(), id);
-                        id
-                    } else {
-                        0
-                    };
+                    let id = make_token_id(res, face, mode);
                     let wire_expr =
                         Resource::decl_key(res, face, push_declaration_profile(tables, face));
                     send_declare(
@@ -1022,13 +1031,7 @@ pub(crate) fn declare_token_interest(
                                                 .failover_brokering(s.face.zid, face.zid)))
                             }))
                     {
-                        let id = if mode.future() {
-                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                            face_hat_mut!(face).local_tokens.insert(token.clone(), id);
-                            id
-                        } else {
-                            0
-                        };
+                        let id = make_token_id(token, face, mode);
                         let wire_expr =
                             Resource::decl_key(token, face, push_declaration_profile(tables, face));
                         send_declare(
@@ -1065,13 +1068,7 @@ pub(crate) fn declare_token_interest(
                                     || hat!(tables).failover_brokering(s.face.zid, face.zid))
                         }))
                 {
-                    let id = if mode.future() {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face).local_tokens.insert(token.clone(), id);
-                        id
-                    } else {
-                        0
-                    };
+                    let id = make_token_id(token, face, mode);
                     let wire_expr =
                         Resource::decl_key(token, face, push_declaration_profile(tables, face));
                     send_declare(

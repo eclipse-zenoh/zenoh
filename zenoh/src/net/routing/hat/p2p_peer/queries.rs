@@ -380,6 +380,28 @@ lazy_static::lazy_static! {
     static ref EMPTY_ROUTE: Arc<QueryTargetQablSet> = Arc::new(Vec::new());
 }
 
+#[inline]
+fn make_qabl_id(
+    res: &Arc<Resource>,
+    face: &mut Arc<FaceState>,
+    mode: InterestMode,
+    info: QueryableInfoType,
+) -> u32 {
+    if mode.future() {
+        if let Some((id, _)) = face_hat!(face).local_qabls.get(res) {
+            *id
+        } else {
+            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+            face_hat_mut!(face)
+                .local_qabls
+                .insert(res.clone(), (id, info));
+            id
+        }
+    } else {
+        0
+    }
+}
+
 pub(super) fn declare_qabl_interest(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
@@ -401,15 +423,7 @@ pub(super) fn declare_qabl_interest(
                             .any(|qabl| qabl.context.is_some() && qabl.matches(res))
                 }) {
                     let info = local_qabl_info(tables, res, face);
-                    let id = if mode.future() {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face)
-                            .local_qabls
-                            .insert((*res).clone(), (id, info));
-                        id
-                    } else {
-                        0
-                    };
+                    let id = make_qabl_id(res, face, mode, info);
                     let wire_expr = Resource::decl_key(res, face, face.whatami != WhatAmI::Client);
                     send_declare(
                         &face.primitives,
@@ -440,15 +454,7 @@ pub(super) fn declare_qabl_interest(
                         for qabl in face_hat!(src_face).remote_qabls.values() {
                             if qabl.context.is_some() && qabl.matches(res) {
                                 let info = local_qabl_info(tables, qabl, face);
-                                let id = if mode.future() {
-                                    let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                                    face_hat_mut!(face)
-                                        .local_qabls
-                                        .insert(qabl.clone(), (id, info));
-                                    id
-                                } else {
-                                    0
-                                };
+                                let id = make_qabl_id(qabl, face, mode, info);
                                 let key_expr =
                                     Resource::decl_key(qabl, face, face.whatami != WhatAmI::Client);
                                 send_declare(
@@ -484,15 +490,7 @@ pub(super) fn declare_qabl_interest(
                     for qabl in face_hat!(src_face).remote_qabls.values() {
                         if qabl.context.is_some() {
                             let info = local_qabl_info(tables, qabl, face);
-                            let id = if mode.future() {
-                                let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                                face_hat_mut!(face)
-                                    .local_qabls
-                                    .insert(qabl.clone(), (id, info));
-                                id
-                            } else {
-                                0
-                            };
+                            let id = make_qabl_id(qabl, face, mode, info);
                             let key_expr =
                                 Resource::decl_key(qabl, face, face.whatami != WhatAmI::Client);
                             send_declare(
