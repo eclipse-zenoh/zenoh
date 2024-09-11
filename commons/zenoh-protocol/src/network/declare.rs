@@ -20,8 +20,8 @@ pub use subscriber::*;
 pub use token::*;
 
 use crate::{
-    common::{imsg, ZExtZ64, ZExtZBuf},
-    core::{ExprId, Reliability, WireExpr},
+    common::{ZExtZ64, ZExtZBuf},
+    core::{ExprId, WireExpr},
     network::Mapping,
     zextz64, zextzbuf,
 };
@@ -341,73 +341,6 @@ pub mod subscriber {
     pub struct DeclareSubscriber {
         pub id: SubscriberId,
         pub wire_expr: WireExpr<'static>,
-        pub ext_info: ext::SubscriberInfo,
-    }
-
-    pub mod ext {
-        use super::*;
-
-        pub type Info = zextz64!(0x01, false);
-
-        /// # The subscription mode.
-        ///
-        /// ```text
-        ///  7 6 5 4 3 2 1 0
-        /// +-+-+-+-+-+-+-+-+
-        /// |Z|0_1|    ID   |
-        /// +-+-+-+---------+
-        /// %  reserved   |R%
-        /// +---------------+
-        ///
-        /// - if R==1 then the subscription is reliable, else it is best effort
-        /// - rsv:  Reserved
-        /// ```        
-        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-        pub struct SubscriberInfo {
-            pub reliability: Reliability,
-        }
-
-        impl SubscriberInfo {
-            pub const R: u64 = 1;
-
-            pub const DEFAULT: Self = Self {
-                reliability: Reliability::DEFAULT,
-            };
-
-            #[cfg(feature = "test")]
-            pub fn rand() -> Self {
-                let reliability = Reliability::rand();
-
-                Self { reliability }
-            }
-        }
-
-        impl Default for SubscriberInfo {
-            fn default() -> Self {
-                Self::DEFAULT
-            }
-        }
-
-        impl From<Info> for SubscriberInfo {
-            fn from(ext: Info) -> Self {
-                let reliability = if imsg::has_option(ext.value, SubscriberInfo::R) {
-                    Reliability::Reliable
-                } else {
-                    Reliability::BestEffort
-                };
-                Self { reliability }
-            }
-        }
-
-        impl From<SubscriberInfo> for Info {
-            fn from(ext: SubscriberInfo) -> Self {
-                let mut v: u64 = 0;
-                if ext.reliability == Reliability::Reliable {
-                    v |= SubscriberInfo::R;
-                }
-                Info::new(v)
-            }
-        }
     }
 
     impl DeclareSubscriber {
@@ -418,13 +351,8 @@ pub mod subscriber {
 
             let id: SubscriberId = rng.gen();
             let wire_expr = WireExpr::rand();
-            let ext_info = ext::SubscriberInfo::rand();
 
-            Self {
-                id,
-                wire_expr,
-                ext_info,
-            }
+            Self { id, wire_expr }
         }
     }
 

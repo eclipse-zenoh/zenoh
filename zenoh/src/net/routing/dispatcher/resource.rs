@@ -23,10 +23,7 @@ use zenoh_config::WhatAmI;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr},
     network::{
-        declare::{
-            ext, queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, Declare,
-            DeclareBody, DeclareKeyExpr,
-        },
+        declare::{ext, queryable::ext::QueryableInfoType, Declare, DeclareBody, DeclareKeyExpr},
         interest::InterestId,
         Mapping, RequestId,
     },
@@ -35,6 +32,7 @@ use zenoh_sync::get_mut_unchecked;
 
 use super::{
     face::FaceState,
+    pubsub::SubscriberInfo,
     tables::{Tables, TablesLock},
 };
 use crate::net::routing::{dispatcher::face::Face, RoutingContext};
@@ -43,6 +41,7 @@ pub(crate) type NodeId = u16;
 
 pub(crate) type Direction = (Arc<FaceState>, WireExpr<'static>, NodeId);
 pub(crate) type Route = HashMap<usize, Direction>;
+
 pub(crate) type QueryRoute = HashMap<usize, (Direction, RequestId)>;
 pub(crate) struct QueryTargetQabl {
     pub(crate) direction: Direction,

@@ -23,10 +23,7 @@ use zenoh_config::{unwrap_or_default, Config, WhatAmI};
 use zenoh_protocol::{
     core::ZenohIdProto,
     network::{
-        declare::{
-            queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
-            SubscriberId, TokenId,
-        },
+        declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
         interest::{InterestId, InterestMode, InterestOptions},
         Declare, Oam,
     },
@@ -39,6 +36,7 @@ use {crate::key_expr::KeyExpr, std::collections::HashMap};
 use super::{
     dispatcher::{
         face::{Face, FaceState},
+        pubsub::SubscriberInfo,
         tables::{NodeId, QueryTargetQablSet, Resource, Route, RoutingExpr, Tables, TablesLock},
     },
     router::RoutesIndexes,

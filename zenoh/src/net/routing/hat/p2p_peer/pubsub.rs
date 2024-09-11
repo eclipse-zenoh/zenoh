@@ -18,11 +18,11 @@ use std::{
 };
 
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, Reliability, WhatAmI},
+    core::{key_expr::OwnedKeyExpr, WhatAmI},
     network::{
         declare::{
-            common::ext::WireExprType, ext, subscriber::ext::SubscriberInfo, Declare, DeclareBody,
-            DeclareSubscriber, SubscriberId, UndeclareSubscriber,
+            common::ext::WireExprType, ext, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
+            UndeclareSubscriber,
         },
         interest::{InterestId, InterestMode, InterestOptions},
     },
@@ -35,6 +35,7 @@ use crate::{
     net::routing::{
         dispatcher::{
             face::FaceState,
+            pubsub::SubscriberInfo,
             resource::{NodeId, Resource, SessionContext},
             tables::{Route, RoutingExpr, Tables},
         },
@@ -51,7 +52,7 @@ fn propagate_simple_subscription_to(
     _tables: &mut Tables,
     dst_face: &mut Arc<FaceState>,
     res: &Arc<Resource>,
-    sub_info: &SubscriberInfo,
+    _sub_info: &SubscriberInfo,
     src_face: &mut Arc<FaceState>,
     send_declare: &mut SendDeclare,
 ) {
@@ -74,7 +75,6 @@ fn propagate_simple_subscription_to(
                         body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                             id,
                             wire_expr: key_expr,
-                            ext_info: *sub_info,
                         }),
                     },
                     res.expr(),
@@ -112,7 +112,6 @@ fn propagate_simple_subscription_to(
                                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                     id,
                                     wire_expr: key_expr,
-                                    ext_info: *sub_info,
                                 }),
                             },
                             res.expr(),
@@ -202,7 +201,6 @@ fn declare_simple_subscription(
                     body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                         id: 0, // @TODO use proper SubscriberId
                         wire_expr: res.expr().into(),
-                        ext_info: *sub_info,
                     }),
                 },
                 res.expr(),
@@ -378,9 +376,7 @@ pub(super) fn pubsub_new_face(
     send_declare: &mut SendDeclare,
 ) {
     if face.whatami != WhatAmI::Client {
-        let sub_info = SubscriberInfo {
-            reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
-        };
+        let sub_info = SubscriberInfo;
         for src_face in tables
             .faces
             .values()
@@ -416,9 +412,6 @@ pub(super) fn declare_sub_interest(
 ) {
     if mode.current() && face.whatami == WhatAmI::Client {
         let interest_id = (!mode.future()).then_some(id);
-        let sub_info = SubscriberInfo {
-            reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
-        };
         if let Some(res) = res.as_ref() {
             if aggregate {
                 if tables.faces.values().any(|src_face| {
@@ -447,7 +440,6 @@ pub(super) fn declare_sub_interest(
                                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                     id,
                                     wire_expr,
-                                    ext_info: sub_info,
                                 }),
                             },
                             res.expr(),
@@ -482,11 +474,7 @@ pub(super) fn declare_sub_interest(
                                             ext_tstamp: None,
                                             ext_nodeid: ext::NodeIdType::DEFAULT,
                                             body: DeclareBody::DeclareSubscriber(
-                                                DeclareSubscriber {
-                                                    id,
-                                                    wire_expr,
-                                                    ext_info: sub_info,
-                                                },
+                                                DeclareSubscriber { id, wire_expr },
                                             ),
                                         },
                                         sub.expr(),
@@ -526,7 +514,6 @@ pub(super) fn declare_sub_interest(
                                     body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                         id,
                                         wire_expr,
-                                        ext_info: sub_info,
                                     }),
                                 },
                                 sub.expr(),

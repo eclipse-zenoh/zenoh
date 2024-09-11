@@ -17,7 +17,7 @@ use flume::r#async::RecvStream;
 use futures::stream::{Forward, Map};
 use zenoh::{
     liveliness::LivelinessSubscriberBuilder,
-    pubsub::{Reliability, Subscriber, SubscriberBuilder},
+    pubsub::{Subscriber, SubscriberBuilder},
     query::{QueryConsolidation, QueryTarget, ReplyKeyExpr},
     sample::{Locality, Sample},
     Result as ZResult,
@@ -171,7 +171,6 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
             session: self.session,
             key_expr: self.key_expr,
             key_space: crate::UserSpace,
-            reliability: self.reliability,
             origin: self.origin,
             fetch,
             handler: self.handler,
@@ -213,7 +212,6 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
             session: self.session,
             key_expr: self.key_expr,
             key_space: crate::UserSpace,
-            reliability: self.reliability,
             origin: self.origin,
             query_selector: None,
             // By default query all matching publication caches and storages
@@ -283,7 +281,6 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
             session: self.session,
             key_expr: self.key_expr,
             key_space: crate::LivelinessSpace,
-            reliability: Reliability::DEFAULT,
             origin: Locality::default(),
             fetch,
             handler: self.handler,
@@ -327,7 +324,6 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
             session: self.session,
             key_expr: self.key_expr,
             key_space: crate::LivelinessSpace,
-            reliability: Reliability::DEFAULT,
             origin: Locality::default(),
             query_selector: None,
             query_target: QueryTarget::DEFAULT,

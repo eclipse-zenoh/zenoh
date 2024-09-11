@@ -28,9 +28,7 @@ use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::{
     core::{key_expr::OwnedKeyExpr, ExprId, Reliability, WireExpr, EMPTY_EXPR_ID},
     network::{
-        declare::{
-            queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
-        },
+        declare::{queryable::ext::QueryableInfoType, QueryableId},
         ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Interest, Push, Request,
         Response, ResponseFinal,
     },
@@ -335,7 +333,6 @@ impl AdminSpace {
             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                 id: runtime.next_id(),
                 wire_expr: [&root_key, "/config/**"].concat().into(),
-                ext_info: SubscriberInfo::DEFAULT,
             }),
         });
     }

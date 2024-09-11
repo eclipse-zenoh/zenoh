@@ -25,16 +25,17 @@ use zenoh_protocol::{
         key_expr::keyexpr, Encoding, ExprId, Reliability, WhatAmI, WireExpr, ZenohIdProto,
         EMPTY_EXPR_ID,
     },
-    network::{
-        declare::subscriber::ext::SubscriberInfo, ext, Declare, DeclareBody, DeclareKeyExpr, Push,
-    },
+    network::{ext, Declare, DeclareBody, DeclareKeyExpr, Push},
     zenoh::{PushBody, Put},
 };
 
 use crate::net::{
     primitives::{DummyPrimitives, EPrimitives, Primitives},
     routing::{
-        dispatcher::tables::{self, Tables},
+        dispatcher::{
+            pubsub::SubscriberInfo,
+            tables::{self, Tables},
+        },
         router::*,
         RoutingContext,
     },
@@ -67,9 +68,7 @@ fn base_test() {
         &"one/deux/trois".into(),
     );
 
-    let sub_info = SubscriberInfo {
-        reliability: Reliability::Reliable,
-    };
+    let sub_info = SubscriberInfo;
 
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
@@ -194,9 +193,7 @@ fn multisub_test() {
     assert!(face0.upgrade().is_some());
 
     // --------------
-    let sub_info = SubscriberInfo {
-        reliability: Reliability::Reliable,
-    };
+    let sub_info = SubscriberInfo;
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
@@ -316,9 +313,7 @@ async fn clean_test() {
     let res1 = optres1.unwrap();
     assert!(res1.upgrade().is_some());
 
-    let sub_info = SubscriberInfo {
-        reliability: Reliability::Reliable,
-    };
+    let sub_info = SubscriberInfo;
 
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
@@ -594,9 +589,7 @@ fn client_test() {
     .unwrap();
     let tables = router.tables.clone();
 
-    let sub_info = SubscriberInfo {
-        reliability: Reliability::Reliable,
-    };
+    let sub_info = SubscriberInfo;
 
     let primitives0 = Arc::new(ClientPrimitives::new());
     let face0 = Arc::downgrade(&router.new_primitives(primitives0.clone()).state);
