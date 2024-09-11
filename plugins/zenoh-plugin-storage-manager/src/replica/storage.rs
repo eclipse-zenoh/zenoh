@@ -359,10 +359,9 @@ impl StorageService {
 
                 // If the Storage was declared as only keeping the Latest value, we ensure that, for
                 // each received Sample, it is indeed the Latest value that is processed.
+                let mut latest_updates_guard = self.latest_updates.lock().await;
                 if self.capability.history == History::Latest {
-                    if let Some(stored_timestamp) =
-                        self.latest_updates.lock().await.get(&stripped_key)
-                    {
+                    if let Some(stored_timestamp) = latest_updates_guard.get(&stripped_key) {
                         if sample_to_store_timestamp < *stored_timestamp {
                             tracing::debug!(
                                 "Skipping Sample for < {:?} >, a Value with a more recent \
@@ -407,11 +406,9 @@ impl StorageService {
                     // track of the Latest value, the timestamp is indeed more recent (it was
                     // checked before being processed): we update our internal structure.
                     if self.capability.history == History::Latest {
-                        self.latest_updates
-                            .lock()
-                            .await
-                            .insert(stripped_key, sample_to_store_timestamp);
+                        latest_updates_guard.insert(stripped_key, sample_to_store_timestamp);
                     }
+                    drop(latest_updates_guard);
 
                     if let Some(replication) = &self.replication {
                         if let Err(e) = replication
