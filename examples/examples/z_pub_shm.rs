@@ -17,7 +17,7 @@ use zenoh::{
     shm::{
         BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID,
     },
-    Config,
+    Config, Wait,
 };
 use zenoh_examples::CommonArgs;
 
@@ -39,13 +39,13 @@ async fn main() -> zenoh::Result<()> {
     let backend = PosixShmProviderBackend::builder()
         .with_size(N * 1024)
         .unwrap()
-        .res()
+        .wait()
         .unwrap();
     // ...and an SHM provider
     let provider = ShmProviderBuilder::builder()
         .protocol_id::<POSIX_PROTOCOL_ID>()
         .backend(backend)
-        .res();
+        .wait();
 
     let publisher = session.declare_publisher(&path).await.unwrap();
 

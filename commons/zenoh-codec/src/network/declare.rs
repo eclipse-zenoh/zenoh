@@ -19,7 +19,7 @@ use zenoh_buffers::{
     ZBuf,
 };
 use zenoh_protocol::{
-    common::{iext, imsg, ZExtZ64},
+    common::{iext, imsg},
     core::{ExprId, ExprLen, WireExpr},
     network::{
         declare::{self, common, keyexpr, queryable, subscriber, token, Declare, DeclareBody},
@@ -384,9 +384,6 @@ where
     }
 }
 
-// SubscriberInfo
-crate::impl_zextz64!(subscriber::ext::SubscriberInfo, subscriber::ext::Info::ID);
-
 // DeclareSubscriber
 impl<W> WCodec<&subscriber::DeclareSubscriber, &mut W> for Zenoh080
 where
@@ -395,18 +392,10 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &subscriber::DeclareSubscriber) -> Self::Output {
-        let subscriber::DeclareSubscriber {
-            id,
-            wire_expr,
-            ext_info,
-        } = x;
+        let subscriber::DeclareSubscriber { id, wire_expr } = x;
 
         // Header
         let mut header = declare::id::D_SUBSCRIBER;
-        let mut n_exts = (ext_info != &subscriber::ext::SubscriberInfo::DEFAULT) as u8;
-        if n_exts != 0 {
-            header |= subscriber::flag::Z;
-        }
         if wire_expr.mapping != Mapping::DEFAULT {
             header |= subscriber::flag::M;
         }
@@ -420,10 +409,6 @@ where
         self.write(&mut *writer, wire_expr)?;
 
         // Extensions
-        if ext_info != &subscriber::ext::SubscriberInfo::DEFAULT {
-            n_exts -= 1;
-            self.write(&mut *writer, (*ext_info, n_exts != 0))?;
-        }
 
         Ok(())
     }
@@ -465,30 +450,13 @@ where
         };
 
         // Extensions
-        let mut ext_info = subscriber::ext::SubscriberInfo::DEFAULT;
-
         let mut has_ext = imsg::has_flag(self.header, subscriber::flag::Z);
         while has_ext {
             let ext: u8 = self.codec.read(&mut *reader)?;
-            let eodec = Zenoh080Header::new(ext);
-            match iext::eid(ext) {
-                subscriber::ext::Info::ID => {
-                    let (i, ext): (subscriber::ext::SubscriberInfo, bool) =
-                        eodec.read(&mut *reader)?;
-                    ext_info = i;
-                    has_ext = ext;
-                }
-                _ => {
-                    has_ext = extension::skip(reader, "DeclareSubscriber", ext)?;
-                }
-            }
+            has_ext = extension::skip(reader, "DeclareSubscriber", ext)?;
         }
 
-        Ok(subscriber::DeclareSubscriber {
-            id,
-            wire_expr,
-            ext_info,
-        })
+        Ok(subscriber::DeclareSubscriber { id, wire_expr })
     }
 }
 

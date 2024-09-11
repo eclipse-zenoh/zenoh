@@ -168,6 +168,13 @@ impl<'a> Publisher<'a> {
         self.priority
     }
 
+    /// Get the reliability applied when routing the data
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn reliability(&self) -> Reliability {
+        self.reliability
+    }
+
     /// Put data.
     ///
     /// # Examples

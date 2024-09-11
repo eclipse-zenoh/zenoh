@@ -19,11 +19,11 @@ use std::{
 
 use petgraph::graph::NodeIndex;
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, Reliability, WhatAmI, ZenohIdProto},
+    core::{key_expr::OwnedKeyExpr, WhatAmI, ZenohIdProto},
     network::{
         declare::{
-            common::ext::WireExprType, ext, subscriber::ext::SubscriberInfo, Declare, DeclareBody,
-            DeclareSubscriber, SubscriberId, UndeclareSubscriber,
+            common::ext::WireExprType, ext, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
+            UndeclareSubscriber,
         },
         interest::{InterestId, InterestMode, InterestOptions},
     },
@@ -39,7 +39,7 @@ use crate::key_expr::KeyExpr;
 use crate::net::routing::{
     dispatcher::{
         face::FaceState,
-        pubsub::*,
+        pubsub::{update_data_routes_from, update_matches_data_routes, SubscriberInfo},
         resource::{NodeId, Resource, SessionContext},
         tables::{Route, RoutingExpr, Tables},
     },
@@ -55,7 +55,7 @@ fn send_sourced_subscription_to_net_children(
     children: &[NodeIndex],
     res: &Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
-    sub_info: &SubscriberInfo,
+    _sub_info: &SubscriberInfo,
     routing_context: NodeId,
 ) {
     for child in children {
@@ -80,7 +80,6 @@ fn send_sourced_subscription_to_net_children(
                                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                     id: 0, // Sourced subscriptions do not use ids
                                     wire_expr: key_expr,
-                                    ext_info: *sub_info,
                                 }),
                             },
                             res.expr(),
@@ -98,7 +97,7 @@ fn propagate_simple_subscription_to(
     _tables: &mut Tables,
     dst_face: &mut Arc<FaceState>,
     res: &Arc<Resource>,
-    sub_info: &SubscriberInfo,
+    _sub_info: &SubscriberInfo,
     src_face: &mut Arc<FaceState>,
     send_declare: &mut SendDeclare,
 ) {
@@ -121,7 +120,6 @@ fn propagate_simple_subscription_to(
                         body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                             id,
                             wire_expr: key_expr,
-                            ext_info: *sub_info,
                         }),
                     },
                     res.expr(),
@@ -159,7 +157,6 @@ fn propagate_simple_subscription_to(
                                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                     id,
                                     wire_expr: key_expr,
-                                    ext_info: *sub_info,
                                 }),
                             },
                             res.expr(),
@@ -654,9 +651,7 @@ pub(super) fn pubsub_tree_change(tables: &mut Tables, new_children: &[Vec<NodeIn
                     let subs = &res_hat!(res).linkstatepeer_subs;
                     for sub in subs {
                         if *sub == tree_id {
-                            let sub_info = SubscriberInfo {
-                                reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
-                            };
+                            let sub_info = SubscriberInfo;
                             send_sourced_subscription_to_net_children(
                                 tables,
                                 net,
@@ -688,9 +683,6 @@ pub(super) fn declare_sub_interest(
 ) {
     if mode.current() && face.whatami == WhatAmI::Client {
         let interest_id = (!mode.future()).then_some(id);
-        let sub_info = SubscriberInfo {
-            reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
-        };
         if let Some(res) = res.as_ref() {
             if aggregate {
                 if hat!(tables).linkstatepeer_subs.iter().any(|sub| {
@@ -717,7 +709,6 @@ pub(super) fn declare_sub_interest(
                                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                     id,
                                     wire_expr,
-                                    ext_info: sub_info,
                                 }),
                             },
                             res.expr(),
@@ -750,7 +741,6 @@ pub(super) fn declare_sub_interest(
                                     body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                         id,
                                         wire_expr,
-                                        ext_info: sub_info,
                                     }),
                                 },
                                 sub.expr(),
@@ -783,7 +773,6 @@ pub(super) fn declare_sub_interest(
                                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                     id,
                                     wire_expr,
-                                    ext_info: sub_info,
                                 }),
                             },
                             sub.expr(),

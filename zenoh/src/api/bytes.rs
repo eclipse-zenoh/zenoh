@@ -3263,8 +3263,6 @@ mod tests {
 
         use rand::Rng;
         use zenoh_buffers::{ZBuf, ZSlice};
-        #[cfg(feature = "shared-memory")]
-        use zenoh_core::Wait;
         use zenoh_protocol::core::Parameters;
         #[cfg(feature = "shared-memory")]
         use zenoh_shm::api::{
@@ -3277,6 +3275,8 @@ mod tests {
 
         use super::ZBytes;
         use crate::bytes::{Deserialize, Serialize, ZSerde};
+        #[cfg(feature = "shared-memory")]
+        use crate::zenoh_core::Wait;
 
         const NUM: usize = 1_000;
 
@@ -3439,13 +3439,13 @@ mod tests {
             let backend = PosixShmProviderBackend::builder()
                 .with_size(4096)
                 .unwrap()
-                .res()
+                .wait()
                 .unwrap();
             // ...and an SHM provider
             let provider = ShmProviderBuilder::builder()
                 .protocol_id::<POSIX_PROTOCOL_ID>()
                 .backend(backend)
-                .res();
+                .wait();
 
             // Prepare a layout for allocations
             let layout = provider.alloc(1024).into_layout().unwrap();

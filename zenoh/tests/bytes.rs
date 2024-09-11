@@ -27,13 +27,13 @@ fn shm_bytes_single_buf() {
     let backend = PosixShmProviderBackend::builder()
         .with_size(4096)
         .unwrap()
-        .res()
+        .wait()
         .unwrap();
     // ...and an SHM provider
     let provider = ShmProviderBuilder::builder()
         .protocol_id::<POSIX_PROTOCOL_ID>()
         .backend(backend)
-        .res();
+        .wait();
 
     // Prepare a layout for allocations
     let layout = provider.alloc(1024).into_layout().unwrap();
