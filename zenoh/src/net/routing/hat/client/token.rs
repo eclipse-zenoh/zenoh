@@ -339,6 +339,7 @@ pub(crate) fn declare_token_interest(
                 for src_face in tables
                     .faces
                     .values()
+                    .filter(|f| mode.future() || f.whatami == WhatAmI::Client)
                     .cloned()
                     .collect::<Vec<Arc<FaceState>>>()
                 {
@@ -370,6 +371,7 @@ pub(crate) fn declare_token_interest(
             for src_face in tables
                 .faces
                 .values()
+                .filter(|f| mode.future() || f.whatami == WhatAmI::Client)
                 .cloned()
                 .collect::<Vec<Arc<FaceState>>>()
             {
