@@ -3,7 +3,7 @@
 //! Check ../README.md for usage.
 //!
 
-use zenoh::config::{Config, ValidatedMap};
+use zenoh::config::Config;
 
 #[derive(clap::ValueEnum, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Wai {
