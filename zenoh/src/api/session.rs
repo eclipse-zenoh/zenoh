@@ -734,8 +734,6 @@ impl Session {
         SubscriberBuilder {
             session: self,
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
-            #[cfg(feature = "unstable")]
-            reliability: Reliability::DEFAULT,
             origin: Locality::default(),
             handler: DefaultHandler::default(),
         }
