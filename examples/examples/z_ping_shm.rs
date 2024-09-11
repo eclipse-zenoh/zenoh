@@ -51,13 +51,13 @@ fn main() {
     let backend = PosixShmProviderBackend::builder()
         .with_size(size)
         .unwrap()
-        .res()
+        .wait()
         .unwrap();
     // ...and an SHM provider
     let provider = ShmProviderBuilder::builder()
         .protocol_id::<POSIX_PROTOCOL_ID>()
         .backend(backend)
-        .res();
+        .wait();
 
     // Allocate an SHM buffer
     // NOTE: For allocation API please check z_alloc_shm.rs example

@@ -32,13 +32,13 @@ async fn run() -> zenoh::Result<()> {
     let backend = PosixShmProviderBackend::builder()
         .with_size(65536)
         .unwrap()
-        .res()
+        .wait()
         .unwrap();
     // ...and an SHM provider
     let provider = ShmProviderBuilder::builder()
         .protocol_id::<POSIX_PROTOCOL_ID>()
         .backend(backend)
-        .res();
+        .wait();
 
     // There are two API-defined ways of making shm buffer allocations: direct and through the layout...
 
