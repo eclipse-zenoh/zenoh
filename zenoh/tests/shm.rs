@@ -137,13 +137,13 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Re
         let backend = PosixShmProviderBackend::builder()
             .with_size(size * MSG_COUNT / 10)
             .unwrap()
-            .res()
+            .wait()
             .unwrap();
         // ...and SHM provider
         let shm01 = ShmProviderBuilder::builder()
             .protocol_id::<POSIX_PROTOCOL_ID>()
             .backend(backend)
-            .res();
+            .wait();
 
         // remember segment size that was allocated
         let shm_segment_size = shm01.available();

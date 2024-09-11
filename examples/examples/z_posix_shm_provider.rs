@@ -11,8 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh::shm::{
-    AllocAlignment, MemoryLayout, PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID,
+use zenoh::{
+    shm::{
+        AllocAlignment, MemoryLayout, PosixShmProviderBackend, ShmProviderBuilder,
+        POSIX_PROTOCOL_ID,
+    },
+    Wait,
 };
 
 fn main() {
@@ -34,7 +38,7 @@ fn main() {
         // Build a provider backend
         PosixShmProviderBackend::builder()
             .with_layout(provider_layout)
-            .res()
+            .wait()
             .unwrap()
     };
 
@@ -42,5 +46,5 @@ fn main() {
     let _shm_provider = ShmProviderBuilder::builder()
         .protocol_id::<POSIX_PROTOCOL_ID>()
         .backend(backend)
-        .res();
+        .wait();
 }

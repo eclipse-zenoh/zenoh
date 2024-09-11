@@ -23,7 +23,7 @@ use std::{
     },
 };
 
-use zenoh_core::zlock;
+use zenoh_core::{zlock, Resolvable, Wait};
 use zenoh_result::ZResult;
 
 use super::posix_shm_segment::PosixShmSegment;
@@ -108,10 +108,14 @@ pub struct LayoutedPosixShmProviderBackendBuilder<Layout: Borrow<MemoryLayout>> 
     layout: Layout,
 }
 
-impl<Layout: Borrow<MemoryLayout>> LayoutedPosixShmProviderBackendBuilder<Layout> {
-    /// try to create PosixShmProviderBackend
-    #[zenoh_macros::unstable_doc]
-    pub fn res(self) -> ZResult<PosixShmProviderBackend> {
+#[zenoh_macros::unstable_doc]
+impl<Layout: Borrow<MemoryLayout>> Resolvable for LayoutedPosixShmProviderBackendBuilder<Layout> {
+    type To = ZResult<PosixShmProviderBackend>;
+}
+
+#[zenoh_macros::unstable_doc]
+impl<Layout: Borrow<MemoryLayout>> Wait for LayoutedPosixShmProviderBackendBuilder<Layout> {
+    fn wait(self) -> <Self as Resolvable>::To {
         PosixShmProviderBackend::new(self.layout.borrow())
     }
 }

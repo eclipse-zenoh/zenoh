@@ -31,7 +31,7 @@ pub use zresult::{Error, ZResult as Result};
 
 /// A resolvable execution, either sync or async
 pub trait Resolvable {
-    type To: Sized + Send;
+    type To: Sized;
 }
 
 /// Trick used to mark `<Resolve as IntoFuture>::IntoFuture` bound as Send

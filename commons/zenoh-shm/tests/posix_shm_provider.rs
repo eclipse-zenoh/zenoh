@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use zenoh_core::Wait;
 use zenoh_shm::api::{
     client::shm_client::ShmClient,
     protocol_implementations::posix::{
@@ -31,7 +32,7 @@ fn posix_shm_provider_create() {
     let _backend = PosixShmProviderBackend::builder()
         .with_size(1024)
         .expect("Error creating Layout!")
-        .res()
+        .wait()
         .expect("Error creating PosixShmProviderBackend!");
 }
 
@@ -40,7 +41,7 @@ fn posix_shm_provider_alloc() {
     let backend = PosixShmProviderBackend::builder()
         .with_size(1024)
         .expect("Error creating Layout!")
-        .res()
+        .wait()
         .expect("Error creating PosixShmProviderBackend!");
 
     let layout = MemoryLayout::new(100, AllocAlignment::default()).unwrap();
@@ -55,7 +56,7 @@ fn posix_shm_provider_open() {
     let backend = PosixShmProviderBackend::builder()
         .with_size(1024)
         .expect("Error creating Layout!")
-        .res()
+        .wait()
         .expect("Error creating PosixShmProviderBackend!");
 
     let layout = MemoryLayout::new(100, AllocAlignment::default()).unwrap();
@@ -76,7 +77,7 @@ fn posix_shm_provider_allocator() {
     let backend = PosixShmProviderBackend::builder()
         .with_size(BUFFER_SIZE * BUFFER_NUM)
         .expect("Error creating Layout!")
-        .res()
+        .wait()
         .expect("Error creating PosixShmProviderBackend!");
 
     let layout = MemoryLayout::new(BUFFER_SIZE, AllocAlignment::default()).unwrap();
