@@ -478,7 +478,7 @@ mod tests {
     #[cfg(feature = "transport_tcp")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn multilink_tcp_only() {
-        zenoh_util::try_init_log_from_env();
+        zenoh_util::init_log_from_env_or("error");
 
         let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 18000).parse().unwrap();
         multilink_transport(&endpoint).await;
@@ -487,7 +487,7 @@ mod tests {
     #[cfg(feature = "transport_udp")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn multilink_udp_only() {
-        zenoh_util::try_init_log_from_env();
+        zenoh_util::init_log_from_env_or("error");
 
         let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 18010).parse().unwrap();
         multilink_transport(&endpoint).await;
@@ -497,7 +497,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     #[ignore]
     async fn multilink_ws_only() {
-        zenoh_util::try_init_log_from_env();
+        zenoh_util::init_log_from_env_or("error");
 
         let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 18020).parse().unwrap();
         multilink_transport(&endpoint).await;
@@ -507,7 +507,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     #[ignore]
     async fn multilink_unixpipe_only() {
-        zenoh_util::try_init_log_from_env();
+        zenoh_util::init_log_from_env_or("error");
 
         let endpoint: EndPoint = "unixpipe/multilink_unixpipe_only".parse().unwrap();
         multilink_transport(&endpoint).await;
@@ -517,7 +517,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     #[ignore]
     async fn multilink_unix_only() {
-        zenoh_util::try_init_log_from_env();
+        zenoh_util::init_log_from_env_or("error");
 
         let f1 = "zenoh-test-unix-socket-9.sock";
         let _ = std::fs::remove_file(f1);
@@ -532,7 +532,7 @@ mod tests {
     async fn multilink_tls_only() {
         use zenoh_link::tls::config::*;
 
-        zenoh_util::try_init_log_from_env();
+        zenoh_util::init_log_from_env_or("error");
 
         // NOTE: this an auto-generated pair of certificate and key.
         //       The target domain is localhost, so it has no real
@@ -727,7 +727,7 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
     #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn multilink_vsock_only() {
-        zenoh_util::try_init_log_from_env();
+        zenoh_util::init_log_from_env_or("error");
 
         let endpoint: EndPoint = "vsock/VMADDR_CID_LOCAL:17000".parse().unwrap();
         multilink_transport(&endpoint).await;

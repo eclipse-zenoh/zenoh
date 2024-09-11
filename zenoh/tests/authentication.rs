@@ -24,7 +24,6 @@ mod test {
     use zenoh::{
         config,
         config::{EndPoint, WhatAmI},
-        prelude::*,
         Config, Session,
     };
     use zenoh_core::{zlock, ztimeout};
@@ -38,7 +37,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_authentication_usrpwd() {
-        zenoh_util::try_init_log_from_env();
+        zenoh_util::init_log_from_env_or("error");
         create_new_files(TESTFILES_PATH.to_path_buf())
             .await
             .unwrap();
@@ -50,7 +49,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_authentication_tls() {
-        zenoh_util::try_init_log_from_env();
+        zenoh_util::init_log_from_env_or("error");
         create_new_files(TESTFILES_PATH.to_path_buf())
             .await
             .unwrap();
@@ -62,7 +61,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_authentication_quic() {
-        zenoh_util::try_init_log_from_env();
+        zenoh_util::init_log_from_env_or("error");
         create_new_files(TESTFILES_PATH.to_path_buf())
             .await
             .unwrap();
@@ -75,7 +74,7 @@ mod test {
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_authentication_lowlatency() {
         // Test link AuthIds accessibility for lowlatency transport
-        zenoh_util::try_init_log_from_env();
+        zenoh_util::init_log_from_env_or("error");
         create_new_files(TESTFILES_PATH.to_path_buf())
             .await
             .unwrap();
@@ -84,7 +83,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_authentication_subject_combinations() {
-        zenoh_util::try_init_log_from_env();
+        zenoh_util::init_log_from_env_or("error");
         create_new_files(TESTFILES_PATH.to_path_buf())
             .await
             .unwrap();

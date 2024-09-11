@@ -333,6 +333,7 @@ impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
     }
 }
 
+#[zenoh_macros::internal_trait]
 impl<T> QoSBuilderTrait for ReplyBuilder<'_, '_, T> {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let qos = self.qos.congestion_control(congestion_control);
@@ -558,7 +559,6 @@ pub(crate) struct QueryableInner {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let queryable = session.declare_queryable("key/expression").await.unwrap();
@@ -593,7 +593,6 @@ impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let queryable = session.declare_queryable("key/expression").await.unwrap();
@@ -607,7 +606,6 @@ pub struct QueryableBuilder<'a, 'b, Handler> {
     pub(crate) complete: bool,
     pub(crate) origin: Locality,
     pub(crate) handler: Handler,
-    pub(crate) undeclare_on_drop: bool,
 }
 
 impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
@@ -617,7 +615,6 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let queryable = session
@@ -632,22 +629,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     where
         Callback: Fn(Query) + Send + Sync + 'static,
     {
-        let QueryableBuilder {
-            session,
-            key_expr,
-            complete,
-            origin,
-            handler: _,
-            undeclare_on_drop: _,
-        } = self;
-        QueryableBuilder {
-            session,
-            key_expr,
-            complete,
-            origin,
-            handler: callback,
-            undeclare_on_drop: false,
-        }
+        self.with(callback)
     }
 
     /// Receive the queries for this Queryable with a mutable callback.
@@ -659,7 +641,6 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let mut n = 0;
@@ -687,7 +668,6 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let queryable = session
@@ -711,7 +691,6 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
             complete,
             origin,
             handler: _,
-            undeclare_on_drop: _,
         } = self;
         QueryableBuilder {
             session,
@@ -719,7 +698,6 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
             complete,
             origin,
             handler,
-            undeclare_on_drop: true,
         }
     }
 
@@ -757,7 +735,6 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 /// # #[tokio::main]
 /// # async fn main() {
 /// use futures::prelude::*;
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let (tx, rx) = flume::bounded(32);
@@ -780,7 +757,6 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let queryable = session
@@ -811,7 +787,6 @@ impl<Handler> Queryable<Handler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let queryable = session.declare_queryable("key/expression")
@@ -849,7 +824,6 @@ impl<Handler> Queryable<Handler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let queryable = session.declare_queryable("key/expression")
@@ -935,7 +909,7 @@ where
                     session_id: session.zid(),
                     session: self.session.downgrade(),
                     state: qable_state,
-                    undeclare_on_drop: self.undeclare_on_drop,
+                    undeclare_on_drop: !Handler::BACKGROUND,
                 },
                 handler: receiver,
             })

@@ -13,7 +13,7 @@
 //
 use std::{thread, time::Duration};
 
-use zenoh::{handlers::RingChannel, prelude::*, Config};
+use zenoh::{handlers::RingChannel, Config, Wait};
 
 #[test]
 fn pubsub_with_ringbuffer() {

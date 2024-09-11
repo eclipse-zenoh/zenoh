@@ -299,17 +299,13 @@ impl Runtime {
             self.connect_peers_impl(peers, single_link).await
         } else {
             let res = tokio::time::timeout(timeout, async {
-                self.connect_peers_impl(peers, single_link).await.ok()
+                self.connect_peers_impl(peers, single_link).await
             })
             .await;
             match res {
-                Ok(_) => Ok(()),
+                Ok(r) => r,
                 Err(_) => {
-                    let e = zerror!(
-                        "{:?} Unable to connect to any of {:?}! ",
-                        self.manager().get_locators(),
-                        peers
-                    );
+                    let e = zerror!("Unable to connect to any of {:?}. Timeout!", peers);
                     tracing::error!("{}", &e);
                     Err(e.into())
                 }
@@ -381,7 +377,10 @@ impl Runtime {
                 let _ = self.peer_connector_retry(endpoint).await;
             } else {
                 // try to connect in background
-                self.spawn_peer_connector(endpoint).await?
+                if let Err(e) = self.spawn_peer_connector(endpoint.clone()).await {
+                    tracing::error!("Error connecting to {}: {}", endpoint, e);
+                    return Err(e);
+                }
             }
         }
         Ok(())
@@ -1137,10 +1136,15 @@ impl Runtime {
     }
 
     pub(super) fn closing_session(session: &RuntimeSession) {
+        if session.runtime.is_closed() {
+            return;
+        }
+
         match session.runtime.whatami() {
             WhatAmI::Client => {
                 let runtime = session.runtime.clone();
                 let cancellation_token = runtime.get_cancellation_token();
+
                 session.runtime.spawn(async move {
                     let retry_config = runtime.get_global_connect_retry_config();
                     let mut period = retry_config.period();

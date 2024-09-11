@@ -29,10 +29,9 @@ use zenoh::{
     bytes::ZBytesReader,
     internal::{bail, Condition, TaskController},
     key_expr::{keyexpr, KeyExpr, OwnedKeyExpr},
-    prelude::*,
     pubsub::Publisher,
     qos::Priority,
-    Session,
+    Error as ZError, Result as ZResult, Session,
 };
 
 const GROUP_PREFIX: &str = "zenoh/ext/net/group";

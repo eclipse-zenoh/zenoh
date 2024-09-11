@@ -360,7 +360,7 @@ mod tests {
     #[cfg(feature = "transport_tcp")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn transport_tcp_shm() {
-        zenoh_util::try_init_log_from_env();
+        zenoh_util::init_log_from_env_or("error");
         let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14000).parse().unwrap();
         run(&endpoint, false).await;
     }
@@ -368,7 +368,7 @@ mod tests {
     #[cfg(feature = "transport_tcp")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn transport_tcp_shm_with_lowlatency_transport() {
-        zenoh_util::try_init_log_from_env();
+        zenoh_util::init_log_from_env_or("error");
         let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14001).parse().unwrap();
         run(&endpoint, true).await;
     }
@@ -376,7 +376,7 @@ mod tests {
     #[cfg(feature = "transport_ws")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn transport_ws_shm() {
-        zenoh_util::try_init_log_from_env();
+        zenoh_util::init_log_from_env_or("error");
         let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 14010).parse().unwrap();
         run(&endpoint, false).await;
     }
@@ -384,7 +384,7 @@ mod tests {
     #[cfg(feature = "transport_ws")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn transport_ws_shm_with_lowlatency_transport() {
-        zenoh_util::try_init_log_from_env();
+        zenoh_util::init_log_from_env_or("error");
         let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 14011).parse().unwrap();
         run(&endpoint, true).await;
     }
@@ -392,7 +392,7 @@ mod tests {
     #[cfg(feature = "transport_unixpipe")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn transport_unixpipe_shm() {
-        zenoh_util::try_init_log_from_env();
+        zenoh_util::init_log_from_env_or("error");
         let endpoint: EndPoint = "unixpipe/transport_unixpipe_shm".parse().unwrap();
         run(&endpoint, false).await;
     }
@@ -400,7 +400,7 @@ mod tests {
     #[cfg(feature = "transport_unixpipe")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn transport_unixpipe_shm_with_lowlatency_transport() {
-        zenoh_util::try_init_log_from_env();
+        zenoh_util::init_log_from_env_or("error");
         let endpoint: EndPoint = "unixpipe/transport_unixpipe_shm_with_lowlatency_transport"
             .parse()
             .unwrap();

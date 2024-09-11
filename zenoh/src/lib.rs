@@ -34,7 +34,6 @@
 //! ### Publishing Data
 //! The example below shows how to produce a value for a key expression.
 //! ```
-//! use zenoh::prelude::*;
 //!
 //! #[tokio::main]
 //! async fn main() {
@@ -48,7 +47,6 @@
 //! The example below shows how to consume values for a key expressions.
 //! ```no_run
 //! use futures::prelude::*;
-//! use zenoh::prelude::*;
 //!
 //! #[tokio::main]
 //! async fn main() {
@@ -65,7 +63,6 @@
 //! resources whose key match the given *key expression*.
 //! ```
 //! use futures::prelude::*;
-//! use zenoh::prelude::*;
 //!
 //! #[tokio::main]
 //! async fn main() {
@@ -128,6 +125,7 @@ pub use crate::{
     session::{open, Session},
 };
 
+#[deprecated(since = "1.0.0")]
 pub mod prelude;
 
 /// [Key expression](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md) are Zenoh's address space.
@@ -297,7 +295,6 @@ pub mod scouting {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let liveliness = session
@@ -312,7 +309,6 @@ pub mod scouting {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let replies = session.liveliness().get("key/**").await.unwrap();
@@ -328,7 +324,7 @@ pub mod scouting {
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::{prelude::*, sample::SampleKind};
+/// use zenoh::sample::SampleKind;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let subscriber = session.liveliness().declare_subscriber("key/**").await.unwrap();

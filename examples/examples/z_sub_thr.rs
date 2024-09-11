@@ -14,7 +14,7 @@
 use std::time::Instant;
 
 use clap::Parser;
-use zenoh::{prelude::*, Config};
+use zenoh::{Config, Wait};
 use zenoh_examples::CommonArgs;
 
 struct Stats {
@@ -69,7 +69,7 @@ impl Drop for Stats {
 
 fn main() {
     // initiate logging
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
 
     let (config, m, n) = parse_args();
 

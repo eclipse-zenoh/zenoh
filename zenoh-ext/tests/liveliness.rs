@@ -15,6 +15,7 @@
 use zenoh::{
     config::{self, EndPoint, WhatAmI},
     sample::SampleKind,
+    Wait,
 };
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -32,7 +33,7 @@ async fn test_liveliness_querying_subscriber_clique() {
     const LIVELINESS_KEYEXPR_2: &str = "test/liveliness/querying-subscriber/brokered/2";
     const LIVELINESS_KEYEXPR_ALL: &str = "test/liveliness/querying-subscriber/brokered/*";
 
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
 
     let peer1 = {
         let mut c = config::default();
@@ -110,7 +111,7 @@ async fn test_liveliness_querying_subscriber_brokered() {
     const LIVELINESS_KEYEXPR_2: &str = "test/liveliness/querying-subscriber/brokered/2";
     const LIVELINESS_KEYEXPR_ALL: &str = "test/liveliness/querying-subscriber/brokered/*";
 
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
 
     let router = {
         let mut c = config::default();
@@ -205,7 +206,7 @@ async fn test_liveliness_querying_subscriber_brokered() {
 async fn test_liveliness_fetching_subscriber_clique() {
     use std::time::Duration;
 
-    use zenoh::{internal::ztimeout, prelude::*};
+    use zenoh::internal::ztimeout;
     use zenoh_ext::SubscriberBuilderExt;
 
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -216,7 +217,7 @@ async fn test_liveliness_fetching_subscriber_clique() {
     const LIVELINESS_KEYEXPR_2: &str = "test/liveliness/querying-subscriber/brokered/2";
     const LIVELINESS_KEYEXPR_ALL: &str = "test/liveliness/querying-subscriber/brokered/*";
 
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
 
     let peer1 = {
         let mut c = config::default();
@@ -287,7 +288,7 @@ async fn test_liveliness_fetching_subscriber_clique() {
 async fn test_liveliness_fetching_subscriber_brokered() {
     use std::time::Duration;
 
-    use zenoh::{internal::ztimeout, prelude::*};
+    use zenoh::internal::ztimeout;
     use zenoh_ext::SubscriberBuilderExt;
 
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -298,7 +299,7 @@ async fn test_liveliness_fetching_subscriber_brokered() {
     const LIVELINESS_KEYEXPR_2: &str = "test/liveliness/querying-subscriber/brokered/2";
     const LIVELINESS_KEYEXPR_ALL: &str = "test/liveliness/querying-subscriber/brokered/*";
 
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
 
     let router = {
         let mut c = config::default();

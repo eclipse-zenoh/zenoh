@@ -60,32 +60,7 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
     where
         Callback: Fn(Sample) + Send + Sync + 'static,
     {
-        let QueryingSubscriberBuilder {
-            session,
-            key_expr,
-            key_space,
-            reliability,
-            origin,
-            query_selector,
-            query_target,
-            query_consolidation,
-            query_accept_replies,
-            query_timeout,
-            handler: _,
-        } = self;
-        QueryingSubscriberBuilder {
-            session,
-            key_expr,
-            key_space,
-            reliability,
-            origin,
-            query_selector,
-            query_target,
-            query_consolidation,
-            query_accept_replies,
-            query_timeout,
-            handler: callback,
-        }
+        self.with(callback)
     }
 
     /// Add callback to [`FetchingSubscriber`].
@@ -417,26 +392,7 @@ where
     where
         Callback: Fn(Sample) + Send + Sync + 'static,
     {
-        let FetchingSubscriberBuilder {
-            session,
-            key_expr,
-            key_space,
-            reliability,
-            origin,
-            fetch,
-            handler: _,
-            phantom,
-        } = self;
-        FetchingSubscriberBuilder {
-            session,
-            key_expr,
-            key_space,
-            reliability,
-            origin,
-            fetch,
-            handler: callback,
-            phantom,
-        }
+        self.with(callback)
     }
 
     /// Add callback to [`FetchingSubscriber`].
@@ -600,7 +556,7 @@ where
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
+/// use zenoh::Wait;
 /// use zenoh_ext::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
@@ -743,7 +699,7 @@ impl<Handler> FetchingSubscriber<Handler> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
+    /// use zenoh::Wait;
     /// use zenoh_ext::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
@@ -821,7 +777,7 @@ impl Drop for RepliesHandler {
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
-/// # use zenoh::prelude::*;
+/// # use zenoh::Wait;
 /// # use zenoh_ext::*;
 /// #
 /// # let session = zenoh::open(zenoh::config::peer()).await.unwrap();

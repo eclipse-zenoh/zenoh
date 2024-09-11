@@ -17,16 +17,15 @@ use clap::Parser;
 use zenoh::{
     bytes::ZBytes,
     key_expr::keyexpr,
-    prelude::*,
     qos::CongestionControl,
     shm::{PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID},
-    Config,
+    Config, Wait,
 };
 use zenoh_examples::CommonArgs;
 
 fn main() {
     // Initiate logging
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
 
     let (config, warmup, size, n) = parse_args();
 

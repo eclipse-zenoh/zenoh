@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "unstable")]
-use zenoh::{bytes::ZBytes, config::Config, prelude::*};
+use zenoh::{bytes::ZBytes, config::Config, Wait};
 
 #[test]
 fn attachment_pubsub() {
@@ -61,7 +61,6 @@ fn attachment_pubsub() {
 
 #[test]
 fn attachment_queries() {
-    use zenoh::prelude::*;
     let zenoh = zenoh::open(Config::default()).wait().unwrap();
     let _sub = zenoh
         .declare_queryable("test/attachment")

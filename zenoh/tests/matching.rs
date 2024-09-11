@@ -15,7 +15,7 @@
 use std::{str::FromStr, time::Duration};
 
 use flume::RecvTimeoutError;
-use zenoh::{config, config::Locator, prelude::*, sample::Locality, Session};
+use zenoh::{config, config::Locator, sample::Locality, Result as ZResult, Session};
 use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -41,7 +41,7 @@ async fn create_session_pair(locator: &str) -> (Session, Session) {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_matching_status_any() -> ZResult<()> {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
     let (session1, session2) = create_session_pair("tcp/127.0.0.1:18001").await;
 
     let publisher1 = ztimeout!(session1
@@ -93,7 +93,7 @@ async fn zenoh_matching_status_any() -> ZResult<()> {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_matching_status_remote() -> ZResult<()> {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
 
     let session1 = ztimeout!(zenoh::open(config::peer())).unwrap();
     let session2 = ztimeout!(zenoh::open(config::peer())).unwrap();
@@ -148,7 +148,7 @@ async fn zenoh_matching_status_remote() -> ZResult<()> {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_matching_status_local() -> ZResult<()> {
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
 
     let session1 = ztimeout!(zenoh::open(zenoh::config::peer())).unwrap();
     let session2 = ztimeout!(zenoh::open(zenoh::config::peer())).unwrap();

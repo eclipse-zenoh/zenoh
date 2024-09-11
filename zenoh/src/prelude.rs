@@ -21,19 +21,8 @@
 //! Examples:
 //!
 //! ```
-//!use zenoh::prelude::*;
+//! use zenoh::prelude::*;
 //! ```
-
-mod _prelude {
-    #[zenoh_macros::unstable]
-    pub use crate::api::selector::ZenohParameters;
-    pub use crate::{
-        api::session::Undeclarable, config::ValidatedMap, Error as ZError, Resolvable, Resolve,
-        Result as ZResult,
-    };
-}
-
-pub use _prelude::*;
 
 #[allow(deprecated)]
 pub use crate::AsyncResolve;
@@ -42,16 +31,14 @@ pub use crate::SyncResolve;
 pub use crate::Wait;
 
 /// Prelude to import when using Zenoh's sync API.
-#[deprecated(since = "1.0.0", note = "use `zenoh::prelude` instead")]
+#[deprecated(since = "1.0.0", note = "use `zenoh::Wait` instead")]
 pub mod sync {
-    pub use super::_prelude::*;
     #[allow(deprecated)]
     pub use crate::SyncResolve;
 }
 /// Prelude to import when using Zenoh's async API.
-#[deprecated(since = "1.0.0", note = "use `zenoh::prelude` instead")]
+#[deprecated(since = "1.0.0")]
 pub mod r#async {
-    pub use super::_prelude::*;
     #[allow(deprecated)]
     pub use crate::AsyncResolve;
 }

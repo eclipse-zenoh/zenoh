@@ -421,6 +421,7 @@ impl From<QoSBuilder> for QoS {
     }
 }
 
+#[zenoh_macros::internal_trait]
 impl QoSBuilderTrait for QoSBuilder {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let mut inner = self.0.inner;

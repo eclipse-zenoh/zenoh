@@ -178,7 +178,7 @@ impl QueryState {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::{prelude::*, query::{ConsolidationMode, QueryTarget}};
+/// use zenoh::{query::{ConsolidationMode, QueryTarget}};
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let replies = session
@@ -228,6 +228,7 @@ impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
     }
 }
 
+#[zenoh_macros::internal_trait]
 impl QoSBuilderTrait for SessionGetBuilder<'_, '_, DefaultHandler> {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let qos = self.qos.congestion_control(congestion_control);
@@ -264,7 +265,6 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let queryable = session
@@ -279,34 +279,7 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     where
         Callback: Fn(Reply) + Send + Sync + 'static,
     {
-        let SessionGetBuilder {
-            session,
-            selector,
-            target,
-            consolidation,
-            qos,
-            destination,
-            timeout,
-            value,
-            attachment,
-            #[cfg(feature = "unstable")]
-            source_info,
-            handler: _,
-        } = self;
-        SessionGetBuilder {
-            session,
-            selector,
-            target,
-            consolidation,
-            qos,
-            destination,
-            timeout,
-            value,
-            attachment,
-            #[cfg(feature = "unstable")]
-            source_info,
-            handler: callback,
-        }
+        self.with(callback)
     }
 
     /// Receive the replies for this query with a mutable callback.
@@ -318,7 +291,6 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let mut n = 0;
@@ -346,7 +318,6 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let replies = session

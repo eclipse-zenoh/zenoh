@@ -12,11 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use zenoh::{
-    config::{ConnectionRetryConf, EndPoint},
-    prelude::*,
-    Config,
+    config::{ConnectionRetryConf, EndPoint, ModeDependent},
+    Config, Wait,
 };
-use zenoh_config::ModeDependent;
 
 #[test]
 fn retry_config_overriding() {

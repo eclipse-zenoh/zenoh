@@ -276,7 +276,7 @@ async fn test_unicity_qryrep(s01: &Session, s02: &Session, s03: &Session) {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_unicity_p2p() {
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
 
     let (s01, s02, s03) = open_p2p_sessions().await;
     test_unicity_pubsub(&s01, &s02, &s03).await;
@@ -286,7 +286,7 @@ async fn zenoh_unicity_p2p() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_unicity_brokered() {
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
     let r = open_router_session().await;
 
     let (s01, s02, s03) = open_client_sessions().await;

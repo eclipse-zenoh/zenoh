@@ -22,7 +22,6 @@ mod test {
     use zenoh::{
         config,
         config::{EndPoint, WhatAmI},
-        prelude::*,
         sample::SampleKind,
         Config, Session,
     };
@@ -35,7 +34,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_acl_pub_sub() {
-        zenoh::try_init_log_from_env();
+        zenoh::init_log_from_env_or("error");
         test_pub_sub_deny(27447).await;
         test_pub_sub_allow(27447).await;
         test_pub_sub_deny_then_allow(27447).await;
@@ -44,7 +43,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_acl_get_queryable() {
-        zenoh::try_init_log_from_env();
+        zenoh::init_log_from_env_or("error");
         test_get_qbl_deny(27448).await;
         test_get_qbl_allow(27448).await;
         test_get_qbl_allow_then_deny(27448).await;
@@ -53,7 +52,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_acl_queryable_reply() {
-        zenoh::try_init_log_from_env();
+        zenoh::init_log_from_env_or("error");
         // Only test cases not covered by `test_acl_get_queryable`
         test_reply_deny(27449).await;
         test_reply_allow_then_deny(27449).await;

@@ -27,7 +27,7 @@ async fn test_liveliness_subscriber_clique() {
     const PEER1_ENDPOINT: &str = "tcp/localhost:47447";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/clique";
 
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
 
     let peer1 = {
         let mut c = config::default();
@@ -91,7 +91,7 @@ async fn test_liveliness_query_clique() {
     const PEER1_ENDPOINT: &str = "tcp/localhost:47448";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/query/clique";
 
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
 
     let peer1 = {
         let mut c = config::default();
@@ -149,7 +149,7 @@ async fn test_liveliness_subscriber_brokered() {
     const ROUTER_ENDPOINT: &str = "tcp/localhost:47449";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/brokered";
 
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
 
     let router = {
         let mut c = config::default();
@@ -227,7 +227,7 @@ async fn test_liveliness_query_brokered() {
     const ROUTER_ENDPOINT: &str = "tcp/localhost:47450";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/query/brokered";
 
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
 
     let router = {
         let mut c = config::default();
@@ -296,7 +296,7 @@ async fn test_liveliness_subscriber_local() {
     const SLEEP: Duration = Duration::from_secs(1);
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/local";
 
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
 
     let peer = {
         let mut c = config::default();
@@ -339,7 +339,7 @@ async fn test_liveliness_query_local() {
     const SLEEP: Duration = Duration::from_secs(1);
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/query/local";
 
-    zenoh_util::try_init_log_from_env();
+    zenoh_util::init_log_from_env_or("error");
 
     let peer = {
         let mut c = config::default();

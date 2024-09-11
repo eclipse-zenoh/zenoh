@@ -14,7 +14,6 @@
 use clap::Parser;
 use zenoh::{
     key_expr::KeyExpr,
-    prelude::*,
     shm::{
         BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID,
     },
@@ -25,9 +24,9 @@ use zenoh_examples::CommonArgs;
 const N: usize = 10;
 
 #[tokio::main]
-async fn main() -> Result<(), ZError> {
+async fn main() -> zenoh::Result<()> {
     // Initiate logging
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
 
     let (config, path, payload) = parse_args();
 
