@@ -199,6 +199,13 @@ impl<'a> Publisher<'a> {
         self.priority
     }
 
+    /// Get the reliability applied when routing the data
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn reliability(&self) -> Reliability {
+        self.reliability
+    }
+
     /// Consumes the given `Publisher`, returning a thread-safe reference-counting
     /// pointer to it (`Arc<Publisher>`). This is equivalent to `Arc::new(Publisher)`.
     ///
