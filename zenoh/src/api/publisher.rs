@@ -113,7 +113,7 @@ impl std::fmt::Debug for PublisherRef<'_> {
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+/// let session = zenoh::open(zenoh::config::default()).await.unwrap().into_arc();
 /// let publisher = session.declare_publisher("key/expression").await.unwrap();
 /// publisher.put("value").await.unwrap();
 /// # }
@@ -128,7 +128,7 @@ impl std::fmt::Debug for PublisherRef<'_> {
 /// use futures::StreamExt;
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+/// let session = zenoh::open(zenoh::config::default()).await.unwrap().into_arc();
 /// let mut subscriber = session.declare_subscriber("key/expression").await.unwrap();
 /// let publisher = session.declare_publisher("another/key/expression").await.unwrap();
 /// subscriber.stream().map(Ok).forward(publisher).await.unwrap();
@@ -160,7 +160,7 @@ impl<'a> Publisher<'a> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression")
     ///     .await
     ///     .unwrap();
@@ -222,7 +222,7 @@ impl<'a> Publisher<'a> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap().into_arc();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap().into_arc();
     /// let matching_listener = publisher.matching_listener().await.unwrap();
     ///
@@ -250,7 +250,7 @@ impl<'a> Publisher<'a> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap().into_arc();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
     /// publisher.put("value").await.unwrap();
     /// # }
@@ -281,7 +281,7 @@ impl<'a> Publisher<'a> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap().into_arc();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
     /// publisher.delete().await.unwrap();
     /// # }
@@ -308,7 +308,7 @@ impl<'a> Publisher<'a> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap().into_arc();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
     /// let matching_subscribers: bool = publisher
     ///     .matching_status()
@@ -336,7 +336,7 @@ impl<'a> Publisher<'a> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
     /// let matching_listener = publisher.matching_listener().await.unwrap();
     /// while let Ok(matching_status) = matching_listener.recv_async().await {
@@ -364,7 +364,7 @@ impl<'a> Publisher<'a> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
     /// publisher.undeclare().await.unwrap();
     /// # }
@@ -397,7 +397,7 @@ impl<'a> Publisher<'a> {
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+/// let session = zenoh::open(zenoh::config::default()).await.unwrap().into_arc();
 /// let publisher = session.declare_publisher("key/expression").await.unwrap().into_arc();
 /// let matching_listener = publisher.matching_listener().await.unwrap();
 ///
@@ -420,7 +420,7 @@ pub trait PublisherDeclarations {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap().into_arc();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap().into_arc();
     /// let matching_listener = publisher.matching_listener().await.unwrap();
     ///
@@ -447,7 +447,7 @@ impl PublisherDeclarations for std::sync::Arc<Publisher<'static>> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap().into_arc();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap().into_arc();
     /// let matching_listener = publisher.matching_listener().await.unwrap();
     ///
@@ -485,7 +485,7 @@ impl<'a> UndeclarableSealed<(), PublisherUndeclaration<'a>> for Publisher<'a> {
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::default()).await.unwrap();
 /// let publisher = session.declare_publisher("key/expression").await.unwrap();
 /// publisher.undeclare().await.unwrap();
 /// # }
@@ -761,7 +761,7 @@ impl TryFrom<ProtocolPriority> for Priority {
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+/// let session = zenoh::open(zenoh::config::default()).await.unwrap().into_arc();
 /// let publisher = session.declare_publisher("key/expression").await.unwrap();
 /// let matching_status = publisher.matching_status().await.unwrap();
 /// # }
@@ -782,7 +782,7 @@ impl MatchingStatus {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap().into_arc();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
     /// let matching_subscribers: bool = publisher
     ///     .matching_status()
@@ -814,7 +814,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
     /// let matching_listener = publisher
     ///     .matching_listener()
@@ -854,7 +854,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     /// use zenoh::prelude::*;
     ///
     /// let mut n = 0;
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
     /// let matching_listener = publisher
     ///     .matching_listener()
@@ -883,7 +883,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
     /// let matching_listener = publisher
     ///     .matching_listener()
@@ -1012,7 +1012,7 @@ impl<'a> UndeclarableSealed<(), MatchingListenerUndeclaration<'a>> for MatchingL
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::default()).await.unwrap();
 /// let publisher = session.declare_publisher("key/expression").await.unwrap();
 /// let matching_listener = publisher.matching_listener().await.unwrap();
 /// while let Ok(matching_status) = matching_listener.recv_async().await {
@@ -1043,7 +1043,7 @@ impl<'a, Receiver> MatchingListener<'a, Receiver> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
     /// let matching_listener = publisher.matching_listener().await.unwrap();
     /// matching_listener.undeclare().await.unwrap();

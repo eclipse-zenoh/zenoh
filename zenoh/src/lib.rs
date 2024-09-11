@@ -300,7 +300,7 @@ pub mod scouting {
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::default()).await.unwrap();
 /// let liveliness = session
 ///     .liveliness()
 ///     .declare_token("key/expression")
@@ -315,7 +315,7 @@ pub mod scouting {
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::default()).await.unwrap();
 /// let replies = session.liveliness().get("key/**").await.unwrap();
 /// while let Ok(reply) = replies.recv_async().await {
 ///     if let Ok(sample) = reply.result() {
@@ -331,7 +331,7 @@ pub mod scouting {
 /// # async fn main() {
 /// use zenoh::{prelude::*, sample::SampleKind};
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::default()).await.unwrap();
 /// let subscriber = session.liveliness().declare_subscriber("key/**").await.unwrap();
 /// while let Ok(sample) = subscriber.recv_async().await {
 ///     match sample.kind() {
@@ -356,11 +356,10 @@ pub mod time {
 
 /// Configuration to pass to [`open`] and [`scout`] functions and associated constants
 pub mod config {
-    // pub use zenoh_config::{
-    //     client, default, peer, Config, EndPoint, Locator, ModeDependentValue, PermissionsConf,
-    //     PluginLoad, ValidatedMap, ZenohId,
-    // };
-    pub use zenoh_config::*;
+    pub use zenoh_config::{
+        client, Config, EndPoint, Locator, ModeDependentValue, PermissionsConf, WhatAmI,
+        PluginLoad, ValidatedMap, ZenohId, unwrap_or_default, ModeDependent, Notifier
+    };
 }
 
 #[cfg(all(

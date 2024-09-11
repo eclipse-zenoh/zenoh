@@ -555,7 +555,7 @@ impl fmt::Debug for QueryableState {
 /// use futures::prelude::*;
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::default()).await.unwrap();
 /// let queryable = session.declare_queryable("key/expression").await.unwrap();
 /// while let Ok(query) = queryable.recv_async().await {
 ///     println!(">> Handling query '{}'", query.selector());
@@ -586,7 +586,7 @@ impl<'a> UndeclarableSealed<(), QueryableUndeclaration<'a>> for CallbackQueryabl
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::default()).await.unwrap();
 /// let queryable = session.declare_queryable("key/expression").await.unwrap();
 /// queryable.undeclare().await.unwrap();
 /// # }
@@ -635,7 +635,7 @@ impl Drop for CallbackQueryable<'_> {
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::default()).await.unwrap();
 /// let queryable = session.declare_queryable("key/expression").await.unwrap();
 /// # }
 /// ```
@@ -658,7 +658,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap();
     /// let queryable = session
     ///     .declare_queryable("key/expression")
     ///     .callback(|query| {println!(">> Handling query '{}'", query.selector());})
@@ -698,7 +698,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap();
     /// let mut n = 0;
     /// let queryable = session
     ///     .declare_queryable("key/expression")
@@ -726,7 +726,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap();
     /// let queryable = session
     ///     .declare_queryable("key/expression")
     ///     .with(flume::bounded(32))
@@ -791,7 +791,7 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::default()).await.unwrap();
 /// let queryable = session
 ///     .declare_queryable("key/expression")
 ///     .with(flume::bounded(32))
@@ -821,7 +821,7 @@ impl<'a, Handler> Queryable<'a, Handler> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap();
     /// let queryable = session.declare_queryable("key/expression")
     ///     .await
     ///     .unwrap();

@@ -566,7 +566,7 @@ impl<'a> UndeclarableSealed<&'a Session, KeyExprUndeclaration<'a>> for KeyExpr<'
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::default()).await.unwrap();
 /// let key_expr = session.declare_keyexpr("key/expression").await.unwrap();
 /// session.undeclare(key_expr).await.unwrap();
 /// # }

@@ -19,7 +19,7 @@ use zenoh_core::ztimeout;
 const TIMEOUT: Duration = Duration::from_secs(10);
 
 async fn open_session(listen: &[&str], connect: &[&str]) -> Session {
-    let mut config = config::peer();
+    let mut config = zenoh_config::peer();
     config
         .listen
         .endpoints

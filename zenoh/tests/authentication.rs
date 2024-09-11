@@ -475,7 +475,7 @@ client2name:client2passwd";
     async fn get_client_sessions_tls(port: u16, lowlatency: bool) -> (Session, Session) {
         let cert_path = TESTFILES_PATH.to_string_lossy();
         println!("Opening client sessions");
-        let mut config = config::client([format!("tls/127.0.0.1:{}", port)
+        let mut config = zenoh_config::client([format!("tls/127.0.0.1:{}", port)
             .parse::<EndPoint>()
             .unwrap()]);
         config
@@ -521,7 +521,7 @@ client2name:client2passwd";
             .unwrap();
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
 
-        let mut config = config::client([format!("tls/127.0.0.1:{}", port)
+        let mut config = zenoh_config::client([format!("tls/127.0.0.1:{}", port)
             .parse::<EndPoint>()
             .unwrap()]);
         config
@@ -572,7 +572,7 @@ client2name:client2passwd";
     async fn get_client_sessions_quic(port: u16) -> (Session, Session) {
         let cert_path = TESTFILES_PATH.to_string_lossy();
         println!("Opening client sessions");
-        let mut config = config::client([format!("quic/127.0.0.1:{}", port)
+        let mut config = zenoh_config::client([format!("quic/127.0.0.1:{}", port)
             .parse::<EndPoint>()
             .unwrap()]);
         config
@@ -610,7 +610,7 @@ client2name:client2passwd";
             .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
             .unwrap();
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
-        let mut config = config::client([format!("quic/127.0.0.1:{}", port)
+        let mut config = zenoh_config::client([format!("quic/127.0.0.1:{}", port)
             .parse::<EndPoint>()
             .unwrap()]);
         config
@@ -654,7 +654,7 @@ client2name:client2passwd";
     async fn get_client_sessions_usrpswd(port: u16) -> (Session, Session) {
         println!("Opening client sessions");
         let mut config =
-            config::client([format!("tcp/127.0.0.1:{port}").parse::<EndPoint>().unwrap()]);
+            zenoh_config::client([format!("tcp/127.0.0.1:{port}").parse::<EndPoint>().unwrap()]);
         config
             .insert_json5(
                 "transport",
@@ -670,7 +670,7 @@ client2name:client2passwd";
             .unwrap();
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
         let mut config =
-            config::client([format!("tcp/127.0.0.1:{port}").parse::<EndPoint>().unwrap()]);
+            zenoh_config::client([format!("tcp/127.0.0.1:{port}").parse::<EndPoint>().unwrap()]);
         config
             .insert_json5(
                 "transport",
@@ -691,7 +691,7 @@ client2name:client2passwd";
     async fn get_client_sessions_quic_usrpswd(port: u16) -> (Session, Session) {
         let cert_path = TESTFILES_PATH.to_string_lossy();
         println!("Opening client sessions");
-        let mut config = config::client([format!("quic/127.0.0.1:{port}")
+        let mut config = zenoh_config::client([format!("quic/127.0.0.1:{port}")
             .parse::<EndPoint>()
             .unwrap()]);
         config
@@ -736,7 +736,7 @@ client2name:client2passwd";
             .unwrap();
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
 
-        let mut config = config::client([format!("quic/127.0.0.1:{}", port)
+        let mut config = zenoh_config::client([format!("quic/127.0.0.1:{}", port)
             .parse::<EndPoint>()
             .unwrap()]);
         config

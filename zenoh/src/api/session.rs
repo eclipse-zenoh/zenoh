@@ -545,7 +545,7 @@ impl Session {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap().into_arc();
     /// let subscriber = session.declare_subscriber("key/expression")
     ///     .await
     ///     .unwrap();
@@ -578,7 +578,7 @@ impl Session {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::Session::leak(zenoh::open(zenoh::config::peer()).await.unwrap());
+    /// let session = zenoh::Session::leak(zenoh::open(zenoh::config::default()).await.unwrap());
     /// let subscriber = session.declare_subscriber("key/expression").await.unwrap();
     /// tokio::task::spawn(async move {
     ///     while let Ok(sample) = subscriber.recv_async().await {
@@ -612,7 +612,7 @@ impl Session {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap();
     /// session.close().await.unwrap();
     /// # }
     /// ```
@@ -657,7 +657,7 @@ impl Session {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap();
     /// let peers = session.config().get("connect/endpoints").unwrap();
     /// # }
     /// ```
@@ -668,7 +668,7 @@ impl Session {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap();
     /// let _ = session.config().insert_json5("connect/endpoints", r#"["tcp/127.0.0.1/7447"]"#);
     /// # }
     /// ```
@@ -687,7 +687,7 @@ impl Session {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap();
     /// let timestamp = session.new_timestamp();
     /// # }
     /// ```
@@ -756,7 +756,7 @@ impl Session {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap();
     /// let key_expr = session.declare_keyexpr("key/expression").await.unwrap();
     /// # }
     /// ```
@@ -818,7 +818,7 @@ impl Session {
     /// # async fn main() {
     /// use zenoh::{bytes::Encoding, prelude::*};
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap();
     /// session
     ///     .put("key/expression", "payload")
     ///     .encoding(Encoding::TEXT_PLAIN)
@@ -862,7 +862,7 @@ impl Session {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap();
     /// session.delete("key/expression").await.unwrap();
     /// # }
     /// ```
@@ -899,7 +899,7 @@ impl Session {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap();
     /// let replies = session.get("key/expression").await.unwrap();
     /// while let Ok(reply) = replies.recv_async().await {
     ///     println!(">> Received {:?}", reply.result());
@@ -2029,7 +2029,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap().into_arc();
     /// let subscriber = session.declare_subscriber("key/expression")
     ///     .await
     ///     .unwrap();
@@ -2069,7 +2069,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap().into_arc();
     /// let queryable = session.declare_queryable("key/expression")
     ///     .await
     ///     .unwrap();
@@ -2112,7 +2112,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap().into_arc();
     /// let publisher = session.declare_publisher("key/expression")
     ///     .await
     ///     .unwrap();
@@ -2148,7 +2148,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap().into_arc();
     /// let liveliness = session
     ///     .liveliness()
     ///     .declare_token("key/expression")
@@ -2692,7 +2692,7 @@ impl fmt::Debug for Session {
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+/// let session = zenoh::open(zenoh::config::default()).await.unwrap().into_arc();
 /// let subscriber = session.declare_subscriber("key/expression")
 ///     .await
 ///     .unwrap();
@@ -2716,7 +2716,7 @@ pub trait SessionDeclarations<'s, 'a> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap().into_arc();
     /// let subscriber = session.declare_subscriber("key/expression")
     ///     .await
     ///     .unwrap();
@@ -2748,7 +2748,7 @@ pub trait SessionDeclarations<'s, 'a> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap().into_arc();
     /// let queryable = session.declare_queryable("key/expression")
     ///     .await
     ///     .unwrap();
@@ -2782,7 +2782,7 @@ pub trait SessionDeclarations<'s, 'a> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap().into_arc();
     /// let publisher = session.declare_publisher("key/expression")
     ///     .await
     ///     .unwrap();
@@ -2805,7 +2805,7 @@ pub trait SessionDeclarations<'s, 'a> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap().into_arc();
     /// let liveliness = session
     ///     .liveliness()
     ///     .declare_token("key/expression")
@@ -2823,7 +2823,7 @@ pub trait SessionDeclarations<'s, 'a> {
     /// # async fn main() {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::config::default()).await.unwrap();
     /// let info = session.info();
     /// # }
     /// ```
@@ -2878,7 +2878,7 @@ impl crate::net::primitives::EPrimitives for Session {
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::default()).await.unwrap();
 /// # }
 /// ```
 ///
@@ -2888,7 +2888,7 @@ impl crate::net::primitives::EPrimitives for Session {
 /// use std::str::FromStr;
 /// use zenoh::{session::ZenohId, prelude::*};
 ///
-/// let mut config = zenoh::config::peer();
+/// let mut config = zenoh::config::default();
 /// config.set_id(ZenohId::from_str("221b72df20924c15b8794c6bdb471150").unwrap());
 /// config.connect.endpoints.set(
 ///     ["tcp/10.10.10.10:7447", "tcp/11.11.11.11:7447"].iter().map(|s|s.parse().unwrap()).collect());
@@ -2916,7 +2916,7 @@ where
 /// # async fn main() {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::config::default()).await.unwrap();
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]

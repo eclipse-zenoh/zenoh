@@ -38,7 +38,7 @@ const MSG_SIZE: [usize; 2] = [1_024, 100_000];
 
 async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
     // Open the sessions
-    let mut config = config::peer();
+    let mut config = zenoh_config::peer();
     config
         .listen
         .endpoints
@@ -53,7 +53,7 @@ async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
     println!("[  ][01a] Opening peer01 session: {:?}", endpoints);
     let peer01 = ztimeout!(zenoh::open(config)).unwrap();
 
-    let mut config = config::peer();
+    let mut config = zenoh_config::peer();
     config
         .connect
         .endpoints
@@ -73,7 +73,7 @@ async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
 
 async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session, Session) {
     // Open the sessions
-    let mut config = config::peer();
+    let mut config = zenoh_config::peer();
     config
         .listen
         .endpoints
@@ -83,7 +83,7 @@ async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session,
     println!("[  ][01a] Opening peer01 session: {}", endpoint01);
     let peer01 = ztimeout!(zenoh::open(config)).unwrap();
 
-    let mut config = config::peer();
+    let mut config = zenoh_config::peer();
     config
         .listen
         .endpoints
@@ -288,7 +288,7 @@ async fn zenoh_session_multicast() {
 #[cfg(feature = "internal")]
 async fn open_session_unicast_runtime(endpoints: &[&str]) -> (Runtime, Runtime) {
     // Open the sessions
-    let mut config = config::peer();
+    let mut config = zenoh_config::peer();
     config
         .listen
         .endpoints
@@ -304,7 +304,7 @@ async fn open_session_unicast_runtime(endpoints: &[&str]) -> (Runtime, Runtime) 
     let mut r1 = RuntimeBuilder::new(config).build().await.unwrap();
     r1.start().await.unwrap();
 
-    let mut config = config::peer();
+    let mut config = zenoh_config::peer();
     config
         .connect
         .endpoints

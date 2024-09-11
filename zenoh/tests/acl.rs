@@ -78,9 +78,9 @@ mod test {
 
     async fn get_client_sessions(port: u16) -> (Session, Session) {
         println!("Opening client sessions");
-        let config = config::client([format!("tcp/127.0.0.1:{port}").parse::<EndPoint>().unwrap()]);
+        let config = zenoh_config::client([format!("tcp/127.0.0.1:{port}").parse::<EndPoint>().unwrap()]);
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
-        let config = config::client([format!("tcp/127.0.0.1:{port}").parse::<EndPoint>().unwrap()]);
+        let config = zenoh_config::client([format!("tcp/127.0.0.1:{port}").parse::<EndPoint>().unwrap()]);
         let s02 = ztimeout!(zenoh::open(config)).unwrap();
         (s01, s02)
     }
