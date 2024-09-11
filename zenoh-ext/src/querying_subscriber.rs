@@ -128,7 +128,7 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
     }
 }
 
-impl<'a, 'b, Handler> QueryingSubscriberBuilder<'a, 'b, crate::UserSpace, Handler> {
+impl<'b, Handler> QueryingSubscriberBuilder<'_, 'b, crate::UserSpace, Handler> {
     /// Change the subscription reliability.
     #[cfg(feature = "unstable")]
     #[deprecated(
@@ -207,7 +207,7 @@ impl<'a, 'b, Handler> QueryingSubscriberBuilder<'a, 'b, crate::UserSpace, Handle
     }
 }
 
-impl<'a, 'b, KeySpace, Handler> QueryingSubscriberBuilder<'a, 'b, KeySpace, Handler> {
+impl<KeySpace, Handler> QueryingSubscriberBuilder<'_, '_, KeySpace, Handler> {
     /// Change the timeout to be used for queries.
     #[inline]
     pub fn query_timeout(mut self, query_timeout: Duration) -> Self {
@@ -228,7 +228,7 @@ impl<'a, 'b, KeySpace, Handler> QueryingSubscriberBuilder<'a, 'b, KeySpace, Hand
     }
 }
 
-impl<'a, KeySpace, Handler> Resolvable for QueryingSubscriberBuilder<'a, '_, KeySpace, Handler>
+impl<KeySpace, Handler> Resolvable for QueryingSubscriberBuilder<'_, '_, KeySpace, Handler>
 where
     Handler: IntoHandler<'static, Sample>,
     Handler::Handler: Send,
@@ -285,7 +285,7 @@ where
     }
 }
 
-impl<'a, KeySpace, Handler> IntoFuture for QueryingSubscriberBuilder<'a, '_, KeySpace, Handler>
+impl<KeySpace, Handler> IntoFuture for QueryingSubscriberBuilder<'_, '_, KeySpace, Handler>
 where
     KeySpace: Into<crate::KeySpace> + Clone,
     Handler: IntoHandler<'static, Sample> + Send,
@@ -495,12 +495,10 @@ where
 }
 
 impl<
-        'a,
-        'b,
         Handler,
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
         TryIntoSample,
-    > FetchingSubscriberBuilder<'a, 'b, crate::UserSpace, Handler, Fetch, TryIntoSample>
+    > FetchingSubscriberBuilder<'_, '_, crate::UserSpace, Handler, Fetch, TryIntoSample>
 where
     TryIntoSample: ExtractSample,
 {
@@ -548,13 +546,11 @@ where
 }
 
 impl<
-        'a,
-        'b,
         KeySpace,
         Handler,
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
         TryIntoSample,
-    > FetchingSubscriberBuilder<'a, 'b, KeySpace, Handler, Fetch, TryIntoSample>
+    > FetchingSubscriberBuilder<'_, '_, KeySpace, Handler, Fetch, TryIntoSample>
 where
     TryIntoSample: ExtractSample,
 {
@@ -572,12 +568,11 @@ where
 }
 
 impl<
-        'a,
         KeySpace,
         Handler,
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
         TryIntoSample,
-    > Resolvable for FetchingSubscriberBuilder<'a, '_, KeySpace, Handler, Fetch, TryIntoSample>
+    > Resolvable for FetchingSubscriberBuilder<'_, '_, KeySpace, Handler, Fetch, TryIntoSample>
 where
     Handler: IntoHandler<'static, Sample>,
     Handler::Handler: Send,
@@ -604,12 +599,11 @@ where
 }
 
 impl<
-        'a,
         KeySpace,
         Handler,
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()> + Send + Sync,
         TryIntoSample,
-    > IntoFuture for FetchingSubscriberBuilder<'a, '_, KeySpace, Handler, Fetch, TryIntoSample>
+    > IntoFuture for FetchingSubscriberBuilder<'_, '_, KeySpace, Handler, Fetch, TryIntoSample>
 where
     KeySpace: Into<crate::KeySpace>,
     Handler: IntoHandler<'static, Sample> + Send,

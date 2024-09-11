@@ -575,7 +575,7 @@ where
 }
 
 #[zenoh_macros::unstable]
-impl<'a, Handler> Wait for LivelinessSubscriberBuilder<'a, '_, Handler>
+impl<Handler> Wait for LivelinessSubscriberBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, Sample> + Send,
     Handler::Handler: Send,
@@ -610,7 +610,7 @@ where
 }
 
 #[zenoh_macros::unstable]
-impl<'a, Handler> IntoFuture for LivelinessSubscriberBuilder<'a, '_, Handler>
+impl<Handler> IntoFuture for LivelinessSubscriberBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, Sample> + Send,
     Handler::Handler: Send,
@@ -750,7 +750,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     }
 }
 
-impl<'a, 'b, Handler> LivelinessGetBuilder<'a, 'b, Handler> {
+impl<Handler> LivelinessGetBuilder<'_, '_, Handler> {
     /// Set query timeout.
     #[inline]
     pub fn timeout(mut self, timeout: Duration) -> Self {

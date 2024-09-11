@@ -756,7 +756,7 @@ impl<Handler> MatchingListenerBuilder<'_, '_, Handler> {
 }
 
 #[zenoh_macros::unstable]
-impl<'a, 'b, Handler> Resolvable for MatchingListenerBuilder<'a, 'b, Handler>
+impl<Handler> Resolvable for MatchingListenerBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, MatchingStatus> + Send,
     Handler::Handler: Send,
@@ -765,7 +765,7 @@ where
 }
 
 #[zenoh_macros::unstable]
-impl<'a, 'b, Handler> Wait for MatchingListenerBuilder<'a, 'b, Handler>
+impl<Handler> Wait for MatchingListenerBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, MatchingStatus> + Send,
     Handler::Handler: Send,
@@ -791,7 +791,7 @@ where
 }
 
 #[zenoh_macros::unstable]
-impl<'a, 'b, Handler> IntoFuture for MatchingListenerBuilder<'a, 'b, Handler>
+impl<Handler> IntoFuture for MatchingListenerBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, MatchingStatus> + Send,
     Handler::Handler: Send,

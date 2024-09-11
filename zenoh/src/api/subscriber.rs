@@ -252,7 +252,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     }
 }
 
-impl<'a, 'b, Handler> SubscriberBuilder<'a, 'b, Handler> {
+impl<Handler> SubscriberBuilder<'_, '_, Handler> {
     /// Change the subscription reliability.
     #[cfg(feature = "unstable")]
     #[deprecated(
@@ -309,7 +309,7 @@ impl<'a, 'b, Handler> SubscriberBuilder<'a, 'b, Handler> {
 }
 
 // Push mode
-impl<'a, Handler> Resolvable for SubscriberBuilder<'a, '_, Handler>
+impl<Handler> Resolvable for SubscriberBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, Sample> + Send,
     Handler::Handler: Send,
@@ -317,7 +317,7 @@ where
     type To = ZResult<Subscriber<Handler::Handler>>;
 }
 
-impl<'a, Handler> Wait for SubscriberBuilder<'a, '_, Handler>
+impl<Handler> Wait for SubscriberBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, Sample> + Send,
     Handler::Handler: Send,
@@ -343,7 +343,7 @@ where
     }
 }
 
-impl<'a, Handler> IntoFuture for SubscriberBuilder<'a, '_, Handler>
+impl<Handler> IntoFuture for SubscriberBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, Sample> + Send,
     Handler::Handler: Send,
