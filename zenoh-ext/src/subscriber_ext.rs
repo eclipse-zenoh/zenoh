@@ -173,6 +173,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
             origin: self.origin,
             fetch,
             handler: self.handler,
+            undeclare_on_drop: true,
             phantom: std::marker::PhantomData,
         }
     }
@@ -219,6 +220,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
             query_consolidation: QueryConsolidation::from(zenoh::query::ConsolidationMode::None),
             query_accept_replies: ReplyKeyExpr::default(),
             query_timeout: Duration::from_secs(10),
+            undeclare_on_drop: true,
             handler: self.handler,
         }
     }
@@ -282,6 +284,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
             origin: Locality::default(),
             fetch,
             handler: self.handler,
+            undeclare_on_drop: true,
             phantom: std::marker::PhantomData,
         }
     }
@@ -327,6 +330,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
             query_consolidation: QueryConsolidation::DEFAULT,
             query_accept_replies: ReplyKeyExpr::MatchingQuery,
             query_timeout: Duration::from_secs(10),
+            undeclare_on_drop: true,
             handler: self.handler,
         }
     }
