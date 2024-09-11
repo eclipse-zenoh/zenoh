@@ -741,6 +741,7 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
     }
 }
 
+#[zenoh_macros::unstable]
 impl<Handler> MatchingListenerBuilder<'_, '_, Handler> {
     /// Set whether the matching listener will be undeclared when dropped.
     ///
