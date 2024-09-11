@@ -357,8 +357,8 @@ pub mod time {
 /// Configuration to pass to [`open`] and [`scout`] functions and associated constants
 pub mod config {
     pub use zenoh_config::{
-        client, Config, EndPoint, Locator, ModeDependentValue, PermissionsConf, WhatAmI,
-        PluginLoad, ValidatedMap, ZenohId, unwrap_or_default, ModeDependent, Notifier
+        client, unwrap_or_default, Config, EndPoint, Locator, ModeDependent, ModeDependentValue,
+        Notifier, PermissionsConf, PluginLoad, ValidatedMap, WhatAmI, ZenohId,
     };
 }
 
