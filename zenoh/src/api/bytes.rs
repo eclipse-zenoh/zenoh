@@ -3259,12 +3259,11 @@ mod tests {
 
     #[test]
     fn serializer() {
-        use std::borrow::Cow;
-
-        use rand::Rng;
-        use zenoh_buffers::{ZBuf, ZSlice};
         #[cfg(feature = "shared-memory")]
-        use zenoh_core::Wait;
+        use crate::zenoh_core::Wait;
+        use rand::Rng;
+        use std::borrow::Cow;
+        use zenoh_buffers::{ZBuf, ZSlice};
         use zenoh_protocol::core::Parameters;
         #[cfg(feature = "shared-memory")]
         use zenoh_shm::api::{
@@ -3439,13 +3438,13 @@ mod tests {
             let backend = PosixShmProviderBackend::builder()
                 .with_size(4096)
                 .unwrap()
-                .res()
+                .wait()
                 .unwrap();
             // ...and an SHM provider
             let provider = ShmProviderBuilder::builder()
                 .protocol_id::<POSIX_PROTOCOL_ID>()
                 .backend(backend)
-                .res();
+                .wait();
 
             // Prepare a layout for allocations
             let layout = provider.alloc(1024).into_layout().unwrap();

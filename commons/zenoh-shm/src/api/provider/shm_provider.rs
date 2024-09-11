@@ -719,14 +719,23 @@ where
     backend: Backend,
     id: IDSource,
 }
-impl<IDSource, Backend> ShmProviderBuilderBackendID<IDSource, Backend>
+#[zenoh_macros::unstable_doc]
+impl<IDSource, Backend> Resolvable for ShmProviderBuilderBackendID<IDSource, Backend>
+where
+    IDSource: ProtocolIDSource,
+    Backend: ShmProviderBackend,
+{
+    type To = ShmProvider<IDSource, Backend>;
+}
+
+#[zenoh_macros::unstable_doc]
+impl<IDSource, Backend> Wait for ShmProviderBuilderBackendID<IDSource, Backend>
 where
     IDSource: ProtocolIDSource,
     Backend: ShmProviderBackend,
 {
     /// build ShmProvider
-    #[zenoh_macros::unstable_doc]
-    pub fn res(self) -> ShmProvider<IDSource, Backend> {
+    fn wait(self) -> <Self as Resolvable>::To {
         ShmProvider::new(self.backend, self.id)
     }
 }

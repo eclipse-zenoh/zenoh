@@ -24,7 +24,7 @@ mod tests {
     };
 
     use zenoh_buffers::buffer::SplitBuffer;
-    use zenoh_core::ztimeout;
+    use zenoh_core::{ztimeout, Wait};
     use zenoh_link::Link;
     use zenoh_protocol::{
         core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohIdProto},
@@ -161,12 +161,12 @@ mod tests {
         let backend = PosixShmProviderBackend::builder()
             .with_size(2 * MSG_SIZE)
             .unwrap()
-            .res()
+            .wait()
             .unwrap();
         let shm01 = ShmProviderBuilder::builder()
             .protocol_id::<POSIX_PROTOCOL_ID>()
             .backend(backend)
-            .res();
+            .wait();
 
         // Create a peer manager with shared-memory authenticator enabled
         let peer_shm01_handler = Arc::new(SHPeer::new(true));
