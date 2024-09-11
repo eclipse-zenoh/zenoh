@@ -34,7 +34,7 @@
 //! use zenoh_backend_traits::config::*;
 //!
 //! #[no_mangle]
-//! pub fn create_volume(config: VolumeConfig) -> ZResult<Box<dyn Volume>> {
+//! pub fn create_volume(config: VolumeConfig) -> zenoh::Result<Box<dyn Volume>> {
 //!     Ok(Box::new(MyVolumeType { config }))
 //! }
 //!
@@ -62,7 +62,7 @@
 //!         }
 //!     }
 //!
-//!     async fn create_storage(&self, properties: StorageConfig) -> ZResult<Box<dyn Storage>> {
+//!     async fn create_storage(&self, properties: StorageConfig) -> zenoh::Result<Box<dyn Storage>> {
 //!         // The properties are the ones passed via a PUT in the admin space for Storage creation.
 //!         Ok(Box::new(MyStorage::new(properties).await?))
 //!     }
@@ -74,7 +74,7 @@
 //! }
 //!
 //! impl MyStorage {
-//!     async fn new(config: StorageConfig) -> ZResult<MyStorage> {
+//!     async fn new(config: StorageConfig) -> zenoh::Result<MyStorage> {
 //!         Ok(MyStorage { config })
 //!     }
 //! }
@@ -88,7 +88,7 @@
 //!         self.config.to_json_value()
 //!     }
 //!
-//!     async fn put(&mut self, key: Option<OwnedKeyExpr>, value: Value, timestamp: Timestamp) -> ZResult<StorageInsertionResult> {
+//!     async fn put(&mut self, key: Option<OwnedKeyExpr>, value: Value, timestamp: Timestamp) -> zenoh::Result<StorageInsertionResult> {
 //!         // the key will be None if it exactly matched with the strip_prefix
 //!         // create a storage specific special structure to store it
 //!         // Store the data with timestamp
@@ -99,14 +99,14 @@
 //!         // return Ok(StorageInsertionResult::Outdated);
 //!     }
 //!
-//!     async fn delete(&mut self, key: Option<OwnedKeyExpr>, timestamp: Timestamp) -> ZResult<StorageInsertionResult> {
+//!     async fn delete(&mut self, key: Option<OwnedKeyExpr>, timestamp: Timestamp) -> zenoh::Result<StorageInsertionResult> {
 //!         // @TODO:
 //!         // delete the actual entry from storage
 //!         return Ok(StorageInsertionResult::Deleted);
 //!     }
 //!
 //!     // When receiving a GET operation
-//!     async fn get(&mut self, key_expr: Option<OwnedKeyExpr>, parameters: &str) -> ZResult<Vec<StoredData>> {
+//!     async fn get(&mut self, key_expr: Option<OwnedKeyExpr>, parameters: &str) -> zenoh::Result<Vec<StoredData>> {
 //!         // @TODO:
 //!         // get the data associated with key_expr and return it
 //!         // NOTE: in case parameters is not empty something smarter should be done with returned data...
@@ -114,7 +114,7 @@
 //!     }
 //!
 //!     // To get all entries in the datastore
-//!     async fn get_all_entries(&self) -> ZResult<Vec<(Option<OwnedKeyExpr>, Timestamp)>> {
+//!     async fn get_all_entries(&self) -> zenoh::Result<Vec<(Option<OwnedKeyExpr>, Timestamp)>> {
 //!         // @TODO: get the list of (key, timestamp) in the datastore
 //!         Ok(Vec::new())
 //!     }
