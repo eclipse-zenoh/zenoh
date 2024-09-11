@@ -3259,10 +3259,9 @@ mod tests {
 
     #[test]
     fn serializer() {
-        #[cfg(feature = "shared-memory")]
-        use crate::zenoh_core::Wait;
-        use rand::Rng;
         use std::borrow::Cow;
+
+        use rand::Rng;
         use zenoh_buffers::{ZBuf, ZSlice};
         use zenoh_protocol::core::Parameters;
         #[cfg(feature = "shared-memory")]
@@ -3276,6 +3275,8 @@ mod tests {
 
         use super::ZBytes;
         use crate::bytes::{Deserialize, Serialize, ZSerde};
+        #[cfg(feature = "shared-memory")]
+        use crate::zenoh_core::Wait;
 
         const NUM: usize = 1_000;
 
