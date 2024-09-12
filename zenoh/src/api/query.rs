@@ -178,7 +178,7 @@ impl QueryState {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::{prelude::*, query::{ConsolidationMode, QueryTarget}};
+/// use zenoh::{query::{ConsolidationMode, QueryTarget}};
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let replies = session
@@ -265,7 +265,6 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let queryable = session
@@ -280,46 +279,18 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     where
         Callback: Fn(Reply) + Send + Sync + 'static,
     {
-        let SessionGetBuilder {
-            session,
-            selector,
-            target,
-            consolidation,
-            qos,
-            destination,
-            timeout,
-            value,
-            attachment,
-            #[cfg(feature = "unstable")]
-            source_info,
-            handler: _,
-        } = self;
-        SessionGetBuilder {
-            session,
-            selector,
-            target,
-            consolidation,
-            qos,
-            destination,
-            timeout,
-            value,
-            attachment,
-            #[cfg(feature = "unstable")]
-            source_info,
-            handler: callback,
-        }
+        self.with(callback)
     }
 
     /// Receive the replies for this query with a mutable callback.
     ///
     /// Using this guarantees that your callback will never be called concurrently.
-    /// If your callback is also accepted by the [`callback`](crate::session::SessionGetBuilder::callback) method, we suggest you use it instead of `callback_mut`
+    /// If your callback is also accepted by the [`callback`](crate::session::SessionGetBuilder::callback) method, we suggest you use it instead of `callback_mut`.
     ///
     /// # Examples
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let mut n = 0;
@@ -347,7 +318,6 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let replies = session
@@ -492,6 +462,7 @@ where
             parameters,
         } = self.selector?;
         self.session
+            .0
             .query(
                 &key_expr,
                 &parameters,

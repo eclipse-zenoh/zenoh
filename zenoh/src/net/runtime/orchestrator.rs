@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
+    collections::HashSet,
     net::{IpAddr, Ipv6Addr, SocketAddr},
     time::Duration,
 };
@@ -911,8 +912,23 @@ impl Runtime {
     }
 
     #[must_use]
-    async fn connect(&self, zid: &ZenohIdProto, locators: &[Locator]) -> bool {
-        const ERR: &str = "Unable to connect to newly scouted peer ";
+    async fn connect(&self, zid: &ZenohIdProto, scouted_locators: &[Locator]) -> bool {
+        const ERR: &str = "Unable to connect to newly scouted peer";
+
+        let configured_locators = self
+            .state
+            .config
+            .lock()
+            .connect()
+            .endpoints()
+            .get(self.whatami())
+            .iter()
+            .flat_map(|e| e.iter().map(EndPoint::to_locator))
+            .collect::<HashSet<_>>();
+
+        let locators = scouted_locators
+            .iter()
+            .filter(|l| !configured_locators.contains(l));
 
         let inspector = LocatorInspector::default();
         for locator in locators {
@@ -968,7 +984,7 @@ impl Runtime {
             tracing::warn!(
                 "Unable to connect to any locator of scouted peer {}: {:?}",
                 zid,
-                locators
+                scouted_locators
             );
         } else {
             tracing::trace!(

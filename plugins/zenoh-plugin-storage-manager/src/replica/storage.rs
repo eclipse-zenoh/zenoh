@@ -35,7 +35,7 @@ use zenoh::{
     },
     query::{ConsolidationMode, QueryTarget},
     sample::{Sample, SampleBuilder, SampleKind},
-    session::{Session, SessionDeclarations},
+    session::Session,
     time::{Timestamp, NTP64},
 };
 use zenoh_backend_traits::{

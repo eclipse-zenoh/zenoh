@@ -19,7 +19,6 @@ use clap::Parser;
 use futures::select;
 use zenoh::{
     key_expr::{keyexpr, KeyExpr},
-    prelude::*,
     sample::{Sample, SampleKind},
     Config,
 };

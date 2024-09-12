@@ -25,14 +25,13 @@ use zenoh::{
     pubsub::FlumeSubscriber,
     query::{Query, Queryable, ZenohParameters},
     sample::{Locality, Sample},
-    session::{SessionDeclarations, SessionRef},
-    Error, Resolvable, Resolve, Result as ZResult,
+    Error, Resolvable, Resolve, Result as ZResult, Session,
 };
 
 /// The builder of PublicationCache, allowing to configure it.
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct PublicationCacheBuilder<'a, 'b, 'c> {
-    session: SessionRef<'a>,
+    session: &'a Session,
     pub_key_expr: ZResult<KeyExpr<'b>>,
     queryable_prefix: Option<ZResult<KeyExpr<'c>>>,
     queryable_origin: Option<Locality>,
@@ -43,7 +42,7 @@ pub struct PublicationCacheBuilder<'a, 'b, 'c> {
 
 impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
     pub(crate) fn new(
-        session: SessionRef<'a>,
+        session: &'a Session,
         pub_key_expr: ZResult<KeyExpr<'b>>,
     ) -> PublicationCacheBuilder<'a, 'b, 'c> {
         PublicationCacheBuilder {
@@ -95,8 +94,8 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
     }
 }
 
-impl<'a> Resolvable for PublicationCacheBuilder<'a, '_, '_> {
-    type To = ZResult<PublicationCache<'a>>;
+impl Resolvable for PublicationCacheBuilder<'_, '_, '_> {
+    type To = ZResult<PublicationCache>;
 }
 
 impl Wait for PublicationCacheBuilder<'_, '_, '_> {
@@ -105,7 +104,7 @@ impl Wait for PublicationCacheBuilder<'_, '_, '_> {
     }
 }
 
-impl<'a> IntoFuture for PublicationCacheBuilder<'a, '_, '_> {
+impl IntoFuture for PublicationCacheBuilder<'_, '_, '_> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
@@ -114,14 +113,14 @@ impl<'a> IntoFuture for PublicationCacheBuilder<'a, '_, '_> {
     }
 }
 
-pub struct PublicationCache<'a> {
-    local_sub: FlumeSubscriber<'a>,
-    _queryable: Queryable<'a, flume::Receiver<Query>>,
+pub struct PublicationCache {
+    local_sub: FlumeSubscriber,
+    _queryable: Queryable<flume::Receiver<Query>>,
     task: TerminatableTask,
 }
 
-impl<'a> PublicationCache<'a> {
-    fn new(conf: PublicationCacheBuilder<'a, '_, '_>) -> ZResult<PublicationCache<'a>> {
+impl PublicationCache {
+    fn new(conf: PublicationCacheBuilder<'_, '_, '_>) -> ZResult<PublicationCache> {
         let key_expr = conf.pub_key_expr?;
         // the queryable_prefix (optional), and the key_expr for PublicationCache's queryable ("[<queryable_prefix>]/<pub_key_expr>")
         let (queryable_prefix, queryable_key_expr): (Option<OwnedKeyExpr>, KeyExpr) =
@@ -258,7 +257,7 @@ impl<'a> PublicationCache<'a> {
 
     /// Undeclare this [`PublicationCache`]`.
     #[inline]
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
+    pub fn undeclare(self) -> impl Resolve<ZResult<()>> {
         ResolveFuture::new(async move {
             let PublicationCache {
                 _queryable,

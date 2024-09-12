@@ -30,8 +30,28 @@ where
     F: Fn(T) + Send + Sync + 'a,
 {
     type Handler = ();
+
     fn into_handler(self) -> (Callback<'a, T>, Self::Handler) {
         (Dyn::from(self), ())
+    }
+}
+
+impl<'a, T, F, H> IntoHandler<'a, T> for (F, H)
+where
+    F: Fn(T) + Send + Sync + 'a,
+{
+    type Handler = H;
+
+    fn into_handler(self) -> (Callback<'a, T>, Self::Handler) {
+        (Dyn::from(self.0), self.1)
+    }
+}
+
+impl<'a, T, H> IntoHandler<'a, T> for (Callback<'static, T>, H) {
+    type Handler = H;
+
+    fn into_handler(self) -> (Callback<'a, T>, Self::Handler) {
+        self
     }
 }
 

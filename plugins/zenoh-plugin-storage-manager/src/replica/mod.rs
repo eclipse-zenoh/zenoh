@@ -24,7 +24,7 @@ use std::{
 use flume::{Receiver, Sender};
 use futures::{pin_mut, select, FutureExt};
 use tokio::{sync::RwLock, time::interval};
-use zenoh::{key_expr::keyexpr, prelude::*};
+use zenoh::key_expr::keyexpr;
 use zenoh_backend_traits::config::{ReplicaConfig, StorageConfig};
 
 use crate::{backends_mgt::StoreIntercept, storages_mgt::StorageMessage};

@@ -37,7 +37,7 @@ use crate::{
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::{config::WhatAmI, prelude::*};
+/// use zenoh::config::WhatAmI;
 ///
 /// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::config::default())
 ///     .await
@@ -62,7 +62,7 @@ impl ScoutBuilder<DefaultHandler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::{config::WhatAmI, prelude::*};
+    /// use zenoh::config::WhatAmI;
     ///
     /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::config::default())
     ///     .callback(|hello| { println!("{}", hello); })
@@ -75,16 +75,7 @@ impl ScoutBuilder<DefaultHandler> {
     where
         Callback: Fn(Hello) + Send + Sync + 'static,
     {
-        let ScoutBuilder {
-            what,
-            config,
-            handler: _,
-        } = self;
-        ScoutBuilder {
-            what,
-            config,
-            handler: callback,
-        }
+        self.with(callback)
     }
 
     /// Receive the [`Hello`] messages from this scout with a mutable callback.
@@ -96,7 +87,7 @@ impl ScoutBuilder<DefaultHandler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::{config::WhatAmI, prelude::*};
+    /// use zenoh::config::WhatAmI;
     ///
     /// let mut n = 0;
     /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::config::default())
@@ -122,7 +113,7 @@ impl ScoutBuilder<DefaultHandler> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::{config::WhatAmI, prelude::*};
+    /// use zenoh::config::WhatAmI;
     ///
     /// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::config::default())
     ///     .with(flume::bounded(32))
@@ -189,7 +180,7 @@ where
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::{config::WhatAmI, prelude::*};
+/// use zenoh::config::WhatAmI;
 ///
 /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::config::default())
 ///     .callback(|hello| { println!("{}", hello); })
@@ -209,7 +200,7 @@ impl ScoutInner {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::{config::WhatAmI, prelude::*};
+    /// use zenoh::config::WhatAmI;
     ///
     /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::config::default())
     ///     .callback(|hello| { println!("{}", hello); })
@@ -244,7 +235,7 @@ impl fmt::Debug for ScoutInner {
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::{config::WhatAmI, prelude::*};
+/// use zenoh::config::WhatAmI;
 ///
 /// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::config::default())
 ///     .with(flume::bounded(32))
@@ -277,7 +268,7 @@ impl<Receiver> Scout<Receiver> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::{config::WhatAmI, prelude::*};
+    /// use zenoh::config::WhatAmI;
     ///
     /// let scout = zenoh::scout(WhatAmI::Router, zenoh::config::default())
     ///     .with(flume::bounded(32))
@@ -359,7 +350,7 @@ fn _scout(
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::{config::WhatAmI, prelude::*};
+/// use zenoh::config::WhatAmI;
 ///
 /// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::config::default())
 ///     .await

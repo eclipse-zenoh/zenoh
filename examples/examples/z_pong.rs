@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::{key_expr::keyexpr, prelude::*, qos::CongestionControl, Config};
+use zenoh::{key_expr::keyexpr, qos::CongestionControl, Config, Wait};
 use zenoh_examples::CommonArgs;
 
 fn main() {
@@ -21,7 +21,7 @@ fn main() {
 
     let (config, express) = parse_args();
 
-    let session = zenoh::open(config).wait().unwrap().into_arc();
+    let session = zenoh::open(config).wait().unwrap();
 
     // The key expression to read the data from
     let key_expr_ping = keyexpr::new("test/ping").unwrap();

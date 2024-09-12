@@ -24,8 +24,7 @@ use std::{
 use zenoh::{
     config::{DownsamplingItemConf, DownsamplingRuleConf, InterceptorFlow},
     key_expr::KeyExpr,
-    prelude::*,
-    Config,
+    Config, Wait,
 };
 
 // Tokio's time granularity on different platforms

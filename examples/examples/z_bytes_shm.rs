@@ -13,11 +13,11 @@
 //
 use zenoh::{
     bytes::ZBytes,
-    prelude::*,
     shm::{
         zshm, zshmmut, PosixShmProviderBackend, ShmProviderBuilder, ZShm, ZShmMut,
         POSIX_PROTOCOL_ID,
     },
+    Wait,
 };
 
 fn main() {
