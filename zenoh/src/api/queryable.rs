@@ -606,10 +606,17 @@ pub struct QueryableBuilder<'a, 'b, Handler> {
     pub(crate) complete: bool,
     pub(crate) origin: Locality,
     pub(crate) handler: Handler,
+    pub(crate) undeclare_on_drop: bool,
 }
 
 impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
-    /// Receive the queries for this Queryable with a callback.
+    /// Receive the queries for this queryable with a callback.
+    ///
+    /// Queryable will not be undeclared when dropped, with the callback running
+    /// in background until the session is closed.
+    ///
+    /// It is in fact just a convenient shortcut for
+    /// `.with(my_callback).undeclare_on_drop(false)`.
     ///
     /// # Examples
     /// ```
@@ -629,13 +636,16 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     where
         Callback: Fn(Query) + Send + Sync + 'static,
     {
-        self.with(callback)
+        self.with(callback).undeclare_on_drop(false)
     }
 
     /// Receive the queries for this Queryable with a mutable callback.
     ///
     /// Using this guarantees that your callback will never be called concurrently.
-    /// If your callback is also accepted by the [`callback`](QueryableBuilder::callback) method, we suggest you use it instead of `callback_mut`
+    /// If your callback is also accepted by the [`callback`](QueryableBuilder::callback) method, we suggest you use it instead of `callback_mut`.
+    ///
+    /// Queryable will not be undeclared when dropped, with the callback running
+    /// in background until the session is closed.
     ///
     /// # Examples
     /// ```
@@ -691,6 +701,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
             complete,
             origin,
             handler: _,
+            undeclare_on_drop,
         } = self;
         QueryableBuilder {
             session,
@@ -698,7 +709,17 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
             complete,
             origin,
             handler,
+            undeclare_on_drop,
         }
+    }
+}
+
+impl<Handler> QueryableBuilder<'_, '_, Handler> {
+    /// Change queryable completeness.
+    #[inline]
+    pub fn complete(mut self, complete: bool) -> Self {
+        self.complete = complete;
+        self
     }
 
     /// Restrict the matching queries that will be receive by this [`Queryable`]
@@ -709,12 +730,16 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
         self.origin = origin;
         self
     }
-}
-impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
-    /// Change queryable completeness.
+
+    /// Set whether the queryable will be undeclared when dropped.
+    ///
+    /// The method is usually used in combination with a callback like in
+    /// [`callback`](Self::callback) method, or a channel sender.
+    /// Be careful when using it, as queryables not undeclared will consume
+    /// resources until the session is closed.
     #[inline]
-    pub fn complete(mut self, complete: bool) -> Self {
-        self.complete = complete;
+    pub fn undeclare_on_drop(mut self, undeclare_on_drop: bool) -> Self {
+        self.undeclare_on_drop = undeclare_on_drop;
         self
     }
 }
@@ -909,7 +934,7 @@ where
                     session_id: session.zid(),
                     session: self.session.downgrade(),
                     state: qable_state,
-                    undeclare_on_drop: !Handler::BACKGROUND,
+                    undeclare_on_drop: self.undeclare_on_drop,
                 },
                 handler: receiver,
             })

@@ -282,6 +282,7 @@ impl<'a> Publisher<'a> {
         MatchingListenerBuilder {
             publisher: self,
             handler: DefaultHandler::default(),
+            undeclare_on_drop: true,
         }
     }
 
@@ -633,6 +634,7 @@ impl MatchingStatus {
 pub struct MatchingListenerBuilder<'a, 'b, Handler> {
     pub(crate) publisher: &'a Publisher<'b>,
     pub handler: Handler,
+    pub(crate) undeclare_on_drop: bool,
 }
 
 #[zenoh_macros::unstable]
@@ -665,7 +667,7 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
     where
         Callback: Fn(MatchingStatus) + Send + Sync + 'static,
     {
-        self.with(callback)
+        self.with(callback).undeclare_on_drop(false)
     }
 
     /// Receive the MatchingStatuses for this listener with a mutable callback.
@@ -729,13 +731,33 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
         let MatchingListenerBuilder {
             publisher,
             handler: _,
+            undeclare_on_drop,
         } = self;
-        MatchingListenerBuilder { publisher, handler }
+        MatchingListenerBuilder {
+            publisher,
+            handler,
+            undeclare_on_drop,
+        }
     }
 }
 
 #[zenoh_macros::unstable]
-impl<'a, 'b, Handler> Resolvable for MatchingListenerBuilder<'a, 'b, Handler>
+impl<Handler> MatchingListenerBuilder<'_, '_, Handler> {
+    /// Set whether the matching listener will be undeclared when dropped.
+    ///
+    /// The method is usually used in combination with a callback like in
+    /// [`callback`](Self::callback) method, or a channel sender.
+    /// Be careful when using it, as matching listeners not undeclared will consume
+    /// resources until the publisher is undeclared.
+    #[inline]
+    pub fn undeclare_on_drop(mut self, undeclare_on_drop: bool) -> Self {
+        self.undeclare_on_drop = undeclare_on_drop;
+        self
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> Resolvable for MatchingListenerBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, MatchingStatus> + Send,
     Handler::Handler: Send,
@@ -744,7 +766,7 @@ where
 }
 
 #[zenoh_macros::unstable]
-impl<'a, 'b, Handler> Wait for MatchingListenerBuilder<'a, 'b, Handler>
+impl<Handler> Wait for MatchingListenerBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, MatchingStatus> + Send,
     Handler::Handler: Send,
@@ -762,7 +784,7 @@ where
                 session: self.publisher.session.clone(),
                 matching_listeners: self.publisher.matching_listeners.clone(),
                 state,
-                undeclare_on_drop: !Handler::BACKGROUND,
+                undeclare_on_drop: self.undeclare_on_drop,
             },
             handler,
         })
@@ -770,7 +792,7 @@ where
 }
 
 #[zenoh_macros::unstable]
-impl<'a, 'b, Handler> IntoFuture for MatchingListenerBuilder<'a, 'b, Handler>
+impl<Handler> IntoFuture for MatchingListenerBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, MatchingStatus> + Send,
     Handler::Handler: Send,

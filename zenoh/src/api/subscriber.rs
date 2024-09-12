@@ -142,10 +142,21 @@ pub struct SubscriberBuilder<'a, 'b, Handler> {
     pub handler: Handler,
     #[cfg(not(feature = "unstable"))]
     pub(crate) handler: Handler,
+
+    #[cfg(feature = "unstable")]
+    pub undeclare_on_drop: bool,
+    #[cfg(not(feature = "unstable"))]
+    pub(crate) undeclare_on_drop: bool,
 }
 
 impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     /// Receive the samples for this subscription with a callback.
+    ///
+    /// Subscriber will not be undeclared when dropped, with the callback running
+    /// in background until the session is closed.
+    ///
+    /// It is in fact just a convenient shortcut for
+    /// `.with(my_callback).undeclare_on_drop(false)`.
     ///
     /// # Examples
     /// ```
@@ -165,13 +176,16 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     where
         Callback: Fn(Sample) + Send + Sync + 'static,
     {
-        self.with(callback)
+        self.with(callback).undeclare_on_drop(false)
     }
 
     /// Receive the samples for this subscription with a mutable callback.
     ///
     /// Using this guarantees that your callback will never be called concurrently.
-    /// If your callback is also accepted by the [`callback`](SubscriberBuilder::callback) method, we suggest you use it instead of `callback_mut`
+    /// If your callback is also accepted by the [`callback`](SubscriberBuilder::callback) method, we suggest you use it instead of `callback_mut`.
+    ///
+    /// Subscriber will not be undeclared when dropped, with the callback running
+    /// in background until the session is closed.
     ///
     /// # Examples
     /// ```
@@ -226,17 +240,19 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
             key_expr,
             origin,
             handler: _,
+            undeclare_on_drop,
         } = self;
         SubscriberBuilder {
             session,
             key_expr,
             origin,
             handler,
+            undeclare_on_drop,
         }
     }
 }
 
-impl<'a, 'b, Handler> SubscriberBuilder<'a, 'b, Handler> {
+impl<Handler> SubscriberBuilder<'_, '_, Handler> {
     /// Change the subscription reliability.
     #[cfg(feature = "unstable")]
     #[deprecated(
@@ -278,10 +294,22 @@ impl<'a, 'b, Handler> SubscriberBuilder<'a, 'b, Handler> {
         self.origin = origin;
         self
     }
+
+    /// Set whether the subscriber will be undeclared when dropped.
+    ///
+    /// The method is usually used in combination with a callback like in
+    /// [`callback`](Self::callback) method, or a channel sender.
+    /// Be careful when using it, as subscribers not undeclared will consume
+    /// resources until the session is closed.
+    #[inline]
+    pub fn undeclare_on_drop(mut self, undeclare_on_drop: bool) -> Self {
+        self.undeclare_on_drop = undeclare_on_drop;
+        self
+    }
 }
 
 // Push mode
-impl<'a, Handler> Resolvable for SubscriberBuilder<'a, '_, Handler>
+impl<Handler> Resolvable for SubscriberBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, Sample> + Send,
     Handler::Handler: Send,
@@ -289,7 +317,7 @@ where
     type To = ZResult<Subscriber<Handler::Handler>>;
 }
 
-impl<'a, Handler> Wait for SubscriberBuilder<'a, '_, Handler>
+impl<Handler> Wait for SubscriberBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, Sample> + Send,
     Handler::Handler: Send,
@@ -308,14 +336,14 @@ where
                     session: session.downgrade(),
                     state: sub_state,
                     kind: SubscriberKind::Subscriber,
-                    undeclare_on_drop: !Handler::BACKGROUND,
+                    undeclare_on_drop: self.undeclare_on_drop,
                 },
                 handler: receiver,
             })
     }
 }
 
-impl<'a, Handler> IntoFuture for SubscriberBuilder<'a, '_, Handler>
+impl<Handler> IntoFuture for SubscriberBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, Sample> + Send,
     Handler::Handler: Send,

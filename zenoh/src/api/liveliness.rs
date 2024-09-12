@@ -169,6 +169,7 @@ impl<'a> Liveliness<'a> {
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
             handler: DefaultHandler::default(),
             history: false,
+            undeclare_on_drop: true,
         }
     }
 
@@ -427,11 +428,18 @@ pub struct LivelinessSubscriberBuilder<'a, 'b, Handler> {
     pub key_expr: ZResult<KeyExpr<'b>>,
     pub handler: Handler,
     pub history: bool,
+    pub undeclare_on_drop: bool,
 }
 
 #[zenoh_macros::unstable]
 impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// Receive the samples for this liveliness subscription with a callback.
+    ///
+    /// Liveliness subscriber will not be undeclared when dropped,
+    /// with the callback running in background until the session is closed.
+    ///
+    /// It is in fact just a convenient shortcut for
+    /// `.with(my_callback).undeclare_on_drop(false)`.
     ///
     /// # Examples
     /// ```
@@ -456,13 +464,16 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     where
         Callback: Fn(Sample) + Send + Sync + 'static,
     {
-        self.with(callback)
+        self.with(callback).undeclare_on_drop(false)
     }
 
     /// Receive the samples for this liveliness subscription with a mutable callback.
     ///
     /// Using this guarantees that your callback will never be called concurrently.
-    /// If your callback is also accepted by the [`callback`](LivelinessSubscriberBuilder::callback) method, we suggest you use it instead of `callback_mut`
+    /// If your callback is also accepted by the [`callback`](LivelinessSubscriberBuilder::callback) method, we suggest you use it instead of `callback_mut`.
+    ///
+    /// Liveliness subscriber will not be undeclared when dropped,
+    /// with the callback running in background until the session is closed.
     ///
     /// # Examples
     /// ```
@@ -521,33 +532,36 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
             key_expr,
             handler: _,
             history,
+            undeclare_on_drop,
         } = self;
         LivelinessSubscriberBuilder {
             session,
             key_expr,
             handler,
             history,
+            undeclare_on_drop,
         }
     }
 }
 
-#[zenoh_macros::unstable]
 impl<Handler> LivelinessSubscriberBuilder<'_, '_, Handler> {
+    /// Set whether the liveliness subscriber will be undeclared when dropped.
+    ///
+    /// The method is usually used in combination with a callback like in
+    /// [`callback`](Self::callback) method, or a channel sender.
+    /// Be careful when using it, as liveliness subscribers not undeclared will consume
+    /// resources until the session is closed.
+    #[inline]
+    pub fn undeclare_on_drop(mut self, undeclare_on_drop: bool) -> Self {
+        self.undeclare_on_drop = undeclare_on_drop;
+        self
+    }
+
     #[inline]
     #[zenoh_macros::unstable]
-    pub fn history(self, history: bool) -> Self {
-        let LivelinessSubscriberBuilder {
-            session,
-            key_expr,
-            handler,
-            history: _,
-        } = self;
-        LivelinessSubscriberBuilder {
-            session,
-            key_expr,
-            handler,
-            history,
-        }
+    pub fn history(mut self, history: bool) -> Self {
+        self.history = history;
+        self
     }
 }
 
@@ -561,7 +575,7 @@ where
 }
 
 #[zenoh_macros::unstable]
-impl<'a, Handler> Wait for LivelinessSubscriberBuilder<'a, '_, Handler>
+impl<Handler> Wait for LivelinessSubscriberBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, Sample> + Send,
     Handler::Handler: Send,
@@ -588,7 +602,7 @@ where
                     session: self.session.downgrade(),
                     state: sub_state,
                     kind: SubscriberKind::LivelinessSubscriber,
-                    undeclare_on_drop: !Handler::BACKGROUND,
+                    undeclare_on_drop: self.undeclare_on_drop,
                 },
                 handler,
             })
@@ -596,7 +610,7 @@ where
 }
 
 #[zenoh_macros::unstable]
-impl<'a, Handler> IntoFuture for LivelinessSubscriberBuilder<'a, '_, Handler>
+impl<Handler> IntoFuture for LivelinessSubscriberBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<'static, Sample> + Send,
     Handler::Handler: Send,
@@ -669,7 +683,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     /// Receive the replies for this liveliness query with a mutable callback.
     ///
     /// Using this guarantees that your callback will never be called concurrently.
-    /// If your callback is also accepted by the [`callback`](LivelinessGetBuilder::callback) method, we suggest you use it instead of `callback_mut`
+    /// If your callback is also accepted by the [`callback`](LivelinessGetBuilder::callback) method, we suggest you use it instead of `callback_mut`.
     ///
     /// # Examples
     /// ```
@@ -736,7 +750,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     }
 }
 
-impl<'a, 'b, Handler> LivelinessGetBuilder<'a, 'b, Handler> {
+impl<Handler> LivelinessGetBuilder<'_, '_, Handler> {
     /// Set query timeout.
     #[inline]
     pub fn timeout(mut self, timeout: Duration) -> Self {

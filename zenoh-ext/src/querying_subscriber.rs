@@ -49,10 +49,17 @@ pub struct QueryingSubscriberBuilder<'a, 'b, KeySpace, Handler> {
     pub(crate) query_accept_replies: ReplyKeyExpr,
     pub(crate) query_timeout: Duration,
     pub(crate) handler: Handler,
+    pub(crate) undeclare_on_drop: bool,
 }
 
 impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandler> {
     /// Add callback to [`FetchingSubscriber`].
+    ///
+    /// Subscriber will not be undeclared when dropped, with the callback running
+    /// in background until the session is closed.
+    ///
+    /// It is in fact just a convenient shortcut for
+    /// `.with(my_callback).undeclare_on_drop(false)`.
     #[inline]
     pub fn callback<Callback>(
         self,
@@ -61,14 +68,17 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
     where
         Callback: Fn(Sample) + Send + Sync + 'static,
     {
-        self.with(callback)
+        self.with(callback).undeclare_on_drop(false)
     }
 
     /// Add callback to [`FetchingSubscriber`].
     ///
     /// Using this guarantees that your callback will never be called concurrently.
     /// If your callback is also accepted by the [`callback`](QueryingSubscriberBuilder::callback)
-    /// method, we suggest you use it instead of `callback_mut`
+    /// method, we suggest you use it instead of `callback_mut`.
+    ///
+    /// Subscriber will not be undeclared when dropped, with the callback running
+    /// in background until the session is closed.
     #[inline]
     pub fn callback_mut<CallbackMut>(
         self,
@@ -100,6 +110,7 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
             query_accept_replies,
             query_timeout,
             handler: _,
+            undeclare_on_drop,
         } = self;
         QueryingSubscriberBuilder {
             session,
@@ -112,11 +123,12 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
             query_accept_replies,
             query_timeout,
             handler,
+            undeclare_on_drop,
         }
     }
 }
 
-impl<'a, 'b, Handler> QueryingSubscriberBuilder<'a, 'b, crate::UserSpace, Handler> {
+impl<'b, Handler> QueryingSubscriberBuilder<'_, 'b, crate::UserSpace, Handler> {
     /// Change the subscription reliability.
     #[cfg(feature = "unstable")]
     #[deprecated(
@@ -195,16 +207,28 @@ impl<'a, 'b, Handler> QueryingSubscriberBuilder<'a, 'b, crate::UserSpace, Handle
     }
 }
 
-impl<'a, 'b, KeySpace, Handler> QueryingSubscriberBuilder<'a, 'b, KeySpace, Handler> {
+impl<KeySpace, Handler> QueryingSubscriberBuilder<'_, '_, KeySpace, Handler> {
     /// Change the timeout to be used for queries.
     #[inline]
     pub fn query_timeout(mut self, query_timeout: Duration) -> Self {
         self.query_timeout = query_timeout;
         self
     }
+
+    /// Set whether the subscriber will be undeclared when dropped.
+    ///
+    /// The method is usually used in combination with a callback like in
+    /// [`callback`](Self::callback) method, or a channel sender.
+    /// Be careful when using it, as subscribers not undeclared will consume
+    /// resources until the session is closed.
+    #[inline]
+    pub fn undeclare_on_drop(mut self, undeclare_on_drop: bool) -> Self {
+        self.undeclare_on_drop = undeclare_on_drop;
+        self
+    }
 }
 
-impl<'a, KeySpace, Handler> Resolvable for QueryingSubscriberBuilder<'a, '_, KeySpace, Handler>
+impl<KeySpace, Handler> Resolvable for QueryingSubscriberBuilder<'_, '_, KeySpace, Handler>
 where
     Handler: IntoHandler<'static, Sample>,
     Handler::Handler: Send,
@@ -254,13 +278,14 @@ where
                     .wait(),
             },
             handler: self.handler,
+            undeclare_on_drop: self.undeclare_on_drop,
             phantom: std::marker::PhantomData,
         }
         .wait()
     }
 }
 
-impl<'a, KeySpace, Handler> IntoFuture for QueryingSubscriberBuilder<'a, '_, KeySpace, Handler>
+impl<KeySpace, Handler> IntoFuture for QueryingSubscriberBuilder<'_, '_, KeySpace, Handler>
 where
     KeySpace: Into<crate::KeySpace> + Clone,
     Handler: IntoHandler<'static, Sample> + Send,
@@ -352,6 +377,7 @@ pub struct FetchingSubscriberBuilder<
     pub(crate) origin: Locality,
     pub(crate) fetch: Fetch,
     pub(crate) handler: Handler,
+    pub(crate) undeclare_on_drop: bool,
     pub(crate) phantom: std::marker::PhantomData<TryIntoSample>,
 }
 
@@ -376,6 +402,7 @@ where
             origin: self.origin,
             fetch: self.fetch,
             handler: self.handler,
+            undeclare_on_drop: self.undeclare_on_drop,
             phantom: std::marker::PhantomData,
         }
     }
@@ -392,6 +419,12 @@ where
     TryIntoSample: ExtractSample,
 {
     /// Add callback to [`FetchingSubscriber`].
+    ///
+    /// Subscriber will not be undeclared when dropped, with the callback running
+    /// in background until the session is closed.
+    ///
+    /// It is in fact just a convenient shortcut for
+    /// `.with(my_callback).undeclare_on_drop(false)`.
     #[inline]
     pub fn callback<Callback>(
         self,
@@ -400,14 +433,17 @@ where
     where
         Callback: Fn(Sample) + Send + Sync + 'static,
     {
-        self.with(callback)
+        self.with(callback).undeclare_on_drop(false)
     }
 
     /// Add callback to [`FetchingSubscriber`].
     ///
     /// Using this guarantees that your callback will never be called concurrently.
     /// If your callback is also accepted by the [`callback`](FetchingSubscriberBuilder::callback)
-    /// method, we suggest you use it instead of `callback_mut`
+    /// method, we suggest you use it instead of `callback_mut`.
+    ///
+    /// Subscriber will not be undeclared when dropped, with the callback running
+    /// in background until the session is closed.
     #[inline]
     pub fn callback_mut<CallbackMut>(
         self,
@@ -442,6 +478,7 @@ where
             origin,
             fetch,
             handler: _,
+            undeclare_on_drop,
             phantom,
         } = self;
         FetchingSubscriberBuilder {
@@ -451,18 +488,17 @@ where
             origin,
             fetch,
             handler,
+            undeclare_on_drop,
             phantom,
         }
     }
 }
 
 impl<
-        'a,
-        'b,
         Handler,
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
         TryIntoSample,
-    > FetchingSubscriberBuilder<'a, 'b, crate::UserSpace, Handler, Fetch, TryIntoSample>
+    > FetchingSubscriberBuilder<'_, '_, crate::UserSpace, Handler, Fetch, TryIntoSample>
 where
     TryIntoSample: ExtractSample,
 {
@@ -510,12 +546,33 @@ where
 }
 
 impl<
-        'a,
         KeySpace,
         Handler,
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
         TryIntoSample,
-    > Resolvable for FetchingSubscriberBuilder<'a, '_, KeySpace, Handler, Fetch, TryIntoSample>
+    > FetchingSubscriberBuilder<'_, '_, KeySpace, Handler, Fetch, TryIntoSample>
+where
+    TryIntoSample: ExtractSample,
+{
+    /// Set whether the subscriber will be undeclared when dropped.
+    ///
+    /// The method is usually used in combination with a callback like in
+    /// [`callback`](Self::callback) method, or a channel sender.
+    /// Be careful when using it, as subscribers not undeclared will consume
+    /// resources until the session is closed.
+    #[inline]
+    pub fn undeclare_on_drop(mut self, undeclare_on_drop: bool) -> Self {
+        self.undeclare_on_drop = undeclare_on_drop;
+        self
+    }
+}
+
+impl<
+        KeySpace,
+        Handler,
+        Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
+        TryIntoSample,
+    > Resolvable for FetchingSubscriberBuilder<'_, '_, KeySpace, Handler, Fetch, TryIntoSample>
 where
     Handler: IntoHandler<'static, Sample>,
     Handler::Handler: Send,
@@ -542,12 +599,11 @@ where
 }
 
 impl<
-        'a,
         KeySpace,
         Handler,
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()> + Send + Sync,
         TryIntoSample,
-    > IntoFuture for FetchingSubscriberBuilder<'a, '_, KeySpace, Handler, Fetch, TryIntoSample>
+    > IntoFuture for FetchingSubscriberBuilder<'_, '_, KeySpace, Handler, Fetch, TryIntoSample>
 where
     KeySpace: Into<crate::KeySpace>,
     Handler: IntoHandler<'static, Sample> + Send,
@@ -671,14 +727,16 @@ impl<Handler> FetchingSubscriber<Handler> {
             crate::KeySpace::User => conf
                 .session
                 .declare_subscriber(&key_expr)
-                .callback(sub_callback)
+                .with(sub_callback)
+                .undeclare_on_drop(conf.undeclare_on_drop)
                 .allowed_origin(conf.origin)
                 .wait()?,
             crate::KeySpace::Liveliness => conf
                 .session
                 .liveliness()
                 .declare_subscriber(&key_expr)
-                .callback(sub_callback)
+                .with(sub_callback)
+                .undeclare_on_drop(conf.undeclare_on_drop)
                 .wait()?,
         };
 
