@@ -34,7 +34,6 @@ use zenoh::{
         },
         KeyExpr, OwnedKeyExpr,
     },
-    query::{ConsolidationMode, QueryTarget},
     sample::{Sample, SampleBuilder, SampleKind},
     session::Session,
     time::{Timestamp, NTP64},
@@ -44,10 +43,7 @@ use zenoh_backend_traits::{
     Capability, History, Persistence, StorageInsertionResult, StoredData,
 };
 
-use crate::{
-    replica::ReplicationService,
-    storages_mgt::{StorageMessage, StoreIntercept},
-};
+use crate::storages_mgt::{StorageMessage, StoreIntercept};
 
 pub const WILDCARD_UPDATES_FILENAME: &str = "wildcard_updates";
 pub const TOMBSTONE_FILENAME: &str = "tombstones";
@@ -69,7 +65,6 @@ pub struct StorageService {
     tombstones: Arc<RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>>,
     wildcard_updates: Arc<RwLock<KeBoxTree<Update, UnknownWildness, KeyedSetProvider>>>,
     latest_updates: Arc<Mutex<HashMap<Option<OwnedKeyExpr>, Timestamp>>>,
-    replication: Option<ReplicationService>,
 }
 
 impl StorageService {
@@ -79,7 +74,6 @@ impl StorageService {
         name: &str,
         store_intercept: StoreIntercept,
         rx: Receiver<StorageMessage>,
-        replication: Option<ReplicationService>,
     ) {
         // @TODO: optimization: if read_cost is high for the storage, initialize a cache for the
         // latest value
@@ -94,7 +88,6 @@ impl StorageService {
             tombstones: Arc::new(RwLock::new(KeBoxTree::default())),
             wildcard_updates: Arc::new(RwLock::new(KeBoxTree::default())),
             latest_updates: Arc::new(Mutex::new(HashMap::new())),
-            replication,
         };
         if storage_service
             .capability
@@ -133,8 +126,6 @@ impl StorageService {
         rx: Receiver<StorageMessage>,
         gc_config: GarbageCollectionConfig,
     ) {
-        self.initialize_if_empty().await;
-
         // start periodic GC event
         let t = Timer::default();
         let gc = TimedEvent::periodic(
@@ -171,105 +162,49 @@ impl StorageService {
             }
         };
 
-        if self.replication.is_some() {
-            let aligner_updates = &self.replication.as_ref().unwrap().aligner_updates;
-            loop {
-                select!(
-                    // on sample for key_expr
-                    sample = storage_sub.recv_async() => {
-                        let sample = match sample {
-                            Ok(sample) => sample,
-                            Err(e) => {
-                                tracing::error!("Error in sample: {}", e);
-                                continue;
-                            }
-                        };
-                        // log error if the sample is not timestamped
-                        // This is to reduce down the line inconsistencies of having duplicate samples stored
-                        if sample.timestamp().is_none() {
-                            tracing::error!("Sample {:?} is not timestamped. Please timestamp samples meant for replicated storage.", sample);
+        loop {
+            select!(
+                // on sample for key_expr
+                sample = storage_sub.recv_async() => {
+                    let sample = match sample {
+                        Ok(sample) => sample,
+                        Err(e) => {
+                            tracing::error!("Error in sample: {}", e);
+                            continue;
                         }
-                        else {
-                            self.process_sample(sample).await;
+                    };
+                    let timestamp = sample.timestamp().cloned().unwrap_or(self.session.new_timestamp());
+                    let sample = SampleBuilder::from(sample).timestamp(timestamp).into();
+                    self.process_sample(sample).await;
+                },
+                // on query on key_expr
+                query = storage_queryable.recv_async() => {
+                    self.reply_query(query).await;
+                },
+                // on storage handle drop
+                message = rx.recv_async() => {
+                    match message {
+                        Ok(StorageMessage::Stop) => {
+                            tracing::trace!("Dropping storage '{}'", self.name);
+                            return
+                        },
+                        Ok(StorageMessage::GetStatus(tx)) => {
+                            let storage = self.storage.lock().await;
+                            std::mem::drop(tx.send(storage.get_admin_status()).await);
+                            drop(storage);
                         }
-                    },
-                    // on query on key_expr
-                    query = storage_queryable.recv_async() => {
-                        self.reply_query(query).await;
-                    },
-                    // on aligner update
-                    update = aligner_updates.recv_async() => {
-                        match update {
-                            Ok(sample) => self.process_sample(sample).await,
-                            Err(e) => {
-                                tracing::error!("Error in receiving aligner update: {}", e);
-                            }
-                        }
-                    },
-                    // on storage handle drop
-                    message = rx.recv_async() => {
-                        match message {
-                            Ok(StorageMessage::Stop) => {
-                                tracing::trace!("Dropping storage '{}'", self.name);
-                                return
-                            },
-                            Ok(StorageMessage::GetStatus(tx)) => {
-                                let storage = self.storage.lock().await;
-                                std::mem::drop(tx.send(storage.get_admin_status()).await);
-                                drop(storage);
-                            }
-                            Err(e) => {
-                                tracing::error!("Storage Message Channel Error: {}", e);
-                            },
-                        };
-                    }
-                );
-            }
-        } else {
-            loop {
-                select!(
-                    // on sample for key_expr
-                    sample = storage_sub.recv_async() => {
-                        let sample = match sample {
-                            Ok(sample) => sample,
-                            Err(e) => {
-                                tracing::error!("Error in sample: {}", e);
-                                continue;
-                            }
-                        };
-                        let timestamp = sample.timestamp().cloned().unwrap_or(self.session.new_timestamp());
-                        let sample = SampleBuilder::from(sample).timestamp(timestamp).into();
-                        self.process_sample(sample).await;
-                    },
-                    // on query on key_expr
-                    query = storage_queryable.recv_async() => {
-                        self.reply_query(query).await;
-                    },
-                    // on storage handle drop
-                    message = rx.recv_async() => {
-                        match message {
-                            Ok(StorageMessage::Stop) => {
-                                tracing::trace!("Dropping storage '{}'", self.name);
-                                return
-                            },
-                            Ok(StorageMessage::GetStatus(tx)) => {
-                                let storage = self.storage.lock().await;
-                                std::mem::drop(tx.send(storage.get_admin_status()).await);
-                                drop(storage);
-                            }
-                            Err(e) => {
-                                tracing::error!("Storage Message Channel Error: {}", e);
-                            },
-                        };
-                    },
-                );
-            }
+                        Err(e) => {
+                            tracing::error!("Storage Message Channel Error: {}", e);
+                        },
+                    };
+                },
+            );
         }
     }
 
     // The storage should only simply save the key, sample pair while put and retrieve the same
     // during get the trimming during PUT and GET should be handled by the plugin
-    async fn process_sample(&self, sample: Sample) {
+    pub(crate) async fn process_sample(&self, sample: Sample) {
         tracing::trace!("[STORAGE] Processing sample: {:?}", sample);
 
         // A Sample, in theory, will not arrive to a Storage without a Timestamp. This check (which,
@@ -378,7 +313,7 @@ impl StorageService {
                 }
 
                 let mut storage = self.storage.lock().await;
-                let result = match sample.kind() {
+                let storage_result = match sample.kind() {
                     SampleKind::Put => {
                         storage
                             .put(
@@ -399,26 +334,27 @@ impl StorageService {
                             .await
                     }
                 };
+
                 drop(storage);
 
-                if result.is_ok_and(|insertion_result| {
-                    !matches!(insertion_result, StorageInsertionResult::Outdated)
-                }) {
-                    // Insertion was successful (i.e. Ok + not Outdated), the Storage only keeps
-                    // track of the Latest value, the timestamp is indeed more recent (it was
-                    // checked before being processed): we update our internal structure.
-                    if self.capability.history == History::Latest {
-                        latest_updates_guard.insert(stripped_key, sample_to_store_timestamp);
+                match storage_result {
+                    Ok(StorageInsertionResult::Outdated) => {
+                        tracing::trace!(
+                            "Ignoring `Outdated` sample < {} >",
+                            sample_to_store.key_expr()
+                        );
                     }
-                    drop(latest_updates_guard);
-
-                    if let Some(replication) = &self.replication {
-                        if let Err(e) = replication
-                            .log_propagation
-                            .send((k.clone(), sample_to_store_timestamp))
-                        {
-                            tracing::error!("Error in sending the sample to the log: {}", e);
+                    Ok(_) => {
+                        if self.capability.history == History::Latest {
+                            latest_updates_guard.insert(stripped_key, sample_to_store_timestamp);
                         }
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            "`{}` on < {} > failed with: {e:?}",
+                            sample.kind(),
+                            sample_to_store.key_expr()
+                        );
                     }
                 }
             }
@@ -652,38 +588,6 @@ impl StorageService {
             ),
         }
         result
-    }
-
-    async fn initialize_if_empty(&mut self) {
-        if self.replication.is_some() && self.replication.as_ref().unwrap().empty_start {
-            // align with other storages, querying them on key_expr,
-            // with `_time=[..]` to get historical data (in case of time-series)
-            let replies = match self
-                .session
-                .get((&self.key_expr, "_time=[..]"))
-                .target(QueryTarget::All)
-                .consolidation(ConsolidationMode::None)
-                .await
-            {
-                Ok(replies) => replies,
-                Err(e) => {
-                    tracing::error!("Error aligning storage '{}': {}", self.name, e);
-                    return;
-                }
-            };
-            while let Ok(reply) = replies.recv_async().await {
-                match reply.into_result() {
-                    Ok(sample) => {
-                        self.process_sample(sample).await;
-                    }
-                    Err(e) => tracing::warn!(
-                        "Storage '{}' received an error to align query: {:?}",
-                        self.name,
-                        e
-                    ),
-                }
-            }
-        }
     }
 }
 
