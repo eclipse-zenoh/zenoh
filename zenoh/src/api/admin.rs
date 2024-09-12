@@ -34,7 +34,7 @@ use super::{
     sample::{DataInfo, Locality, SampleKind},
     subscriber::SubscriberKind,
 };
-use crate::api::session::WeakSession;
+use crate::{api::session::WeakSession, handlers::Callback};
 
 lazy_static::lazy_static!(
     static ref KE_STARSTAR: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("**") };
@@ -54,10 +54,10 @@ pub(crate) fn init(session: WeakSession) {
             &admin_key,
             true,
             Locality::SessionLocal,
-            Arc::new({
+            Callback::new(Arc::new({
                 let session = session.clone();
                 move |q| on_admin_query(&session, q)
-            }),
+            })),
         );
     }
 }

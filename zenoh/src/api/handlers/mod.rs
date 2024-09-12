@@ -23,19 +23,16 @@ pub use ring::*;
 
 use crate::api::session::API_DATA_RECEPTION_CHANNEL_SIZE;
 
-/// An alias for `Arc<T>`.
-pub type Dyn<T> = std::sync::Arc<T>;
-
 /// A type that can be converted into a [`Callback`]-Handler pair.
 ///
 /// When Zenoh functions accept types that implement these, it intends to use the [`Callback`] as just that,
 /// while granting you access to the handler through the returned value via [`std::ops::Deref`] and [`std::ops::DerefMut`].
 ///
 /// Any closure that accepts `T` can be converted into a pair of itself and `()`.
-pub trait IntoHandler<'a, T> {
+pub trait IntoHandler<T> {
     type Handler;
 
-    fn into_handler(self) -> (Callback<'a, T>, Self::Handler);
+    fn into_handler(self) -> (Callback<T>, Self::Handler);
 }
 
 /// The default handler in Zenoh is a FIFO queue.
@@ -43,10 +40,10 @@ pub trait IntoHandler<'a, T> {
 #[derive(Default)]
 pub struct DefaultHandler(FifoChannel);
 
-impl<T: Send + 'static> IntoHandler<'static, T> for DefaultHandler {
-    type Handler = <FifoChannel as IntoHandler<'static, T>>::Handler;
+impl<T: Send + 'static> IntoHandler<T> for DefaultHandler {
+    type Handler = <FifoChannel as IntoHandler<T>>::Handler;
 
-    fn into_handler(self) -> (Callback<'static, T>, Self::Handler) {
+    fn into_handler(self) -> (Callback<T>, Self::Handler) {
         self.0.into_handler()
     }
 }

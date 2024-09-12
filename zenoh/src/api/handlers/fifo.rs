@@ -13,7 +13,10 @@
 //
 
 //! Callback handler trait.
-use super::{callback::Callback, Dyn, IntoHandler, API_DATA_RECEPTION_CHANNEL_SIZE};
+
+use std::sync::Arc;
+
+use crate::api::handlers::{callback::Callback, IntoHandler, API_DATA_RECEPTION_CHANNEL_SIZE};
 
 /// The default handler in Zenoh is a FIFO queue.
 
@@ -34,27 +37,27 @@ impl Default for FifoChannel {
     }
 }
 
-impl<T: Send + 'static> IntoHandler<'static, T> for FifoChannel {
+impl<T: Send + 'static> IntoHandler<T> for FifoChannel {
     type Handler = flume::Receiver<T>;
 
-    fn into_handler(self) -> (Callback<'static, T>, Self::Handler) {
+    fn into_handler(self) -> (Callback<T>, Self::Handler) {
         flume::bounded(self.capacity).into_handler()
     }
 }
 
-impl<T: Send + Sync + 'static> IntoHandler<'static, T>
+impl<T: Clone + Send + Sync + 'static> IntoHandler<T>
     for (std::sync::mpsc::SyncSender<T>, std::sync::mpsc::Receiver<T>)
 {
     type Handler = std::sync::mpsc::Receiver<T>;
 
-    fn into_handler(self) -> (Callback<'static, T>, Self::Handler) {
+    fn into_handler(self) -> (Callback<T>, Self::Handler) {
         let (sender, receiver) = self;
         (
-            Dyn::new(move |t| {
-                if let Err(e) = sender.send(t) {
-                    tracing::error!("{}", e)
+            Callback::new(Arc::new(move |t| {
+                if let Err(error) = sender.send(t.clone()) {
+                    tracing::error!(%error)
                 }
-            }),
+            })),
             receiver,
         )
     }

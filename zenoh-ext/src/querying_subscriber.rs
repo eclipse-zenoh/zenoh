@@ -23,7 +23,7 @@ use std::{
 #[cfg(feature = "unstable")]
 use zenoh::pubsub::Reliability;
 use zenoh::{
-    handlers::{locked, DefaultHandler, IntoHandler},
+    handlers::{locked, Callback, DefaultHandler, IntoHandler},
     internal::zlock,
     key_expr::KeyExpr,
     prelude::Wait,
@@ -97,7 +97,7 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
         handler: Handler,
     ) -> QueryingSubscriberBuilder<'a, 'b, KeySpace, Handler>
     where
-        Handler: IntoHandler<'static, Sample>,
+        Handler: IntoHandler<Sample>,
     {
         let QueryingSubscriberBuilder {
             session,
@@ -230,7 +230,7 @@ impl<KeySpace, Handler> QueryingSubscriberBuilder<'_, '_, KeySpace, Handler> {
 
 impl<KeySpace, Handler> Resolvable for QueryingSubscriberBuilder<'_, '_, KeySpace, Handler>
 where
-    Handler: IntoHandler<'static, Sample>,
+    Handler: IntoHandler<Sample>,
     Handler::Handler: Send,
 {
     type To = ZResult<FetchingSubscriber<Handler::Handler>>;
@@ -239,7 +239,7 @@ where
 impl<KeySpace, Handler> Wait for QueryingSubscriberBuilder<'_, '_, KeySpace, Handler>
 where
     KeySpace: Into<crate::KeySpace> + Clone,
-    Handler: IntoHandler<'static, Sample> + Send,
+    Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
 {
     fn wait(self) -> <Self as Resolvable>::To {
@@ -288,7 +288,7 @@ where
 impl<KeySpace, Handler> IntoFuture for QueryingSubscriberBuilder<'_, '_, KeySpace, Handler>
 where
     KeySpace: Into<crate::KeySpace> + Clone,
-    Handler: IntoHandler<'static, Sample> + Send,
+    Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
 {
     type Output = <Self as Resolvable>::To;
@@ -469,7 +469,7 @@ where
         handler: Handler,
     ) -> FetchingSubscriberBuilder<'a, 'b, KeySpace, Handler, Fetch, TryIntoSample>
     where
-        Handler: IntoHandler<'static, Sample>,
+        Handler: IntoHandler<Sample>,
     {
         let FetchingSubscriberBuilder {
             session,
@@ -574,7 +574,7 @@ impl<
         TryIntoSample,
     > Resolvable for FetchingSubscriberBuilder<'_, '_, KeySpace, Handler, Fetch, TryIntoSample>
 where
-    Handler: IntoHandler<'static, Sample>,
+    Handler: IntoHandler<Sample>,
     Handler::Handler: Send,
     TryIntoSample: ExtractSample,
 {
@@ -589,7 +589,7 @@ impl<
     > Wait for FetchingSubscriberBuilder<'_, '_, KeySpace, Handler, Fetch, TryIntoSample>
 where
     KeySpace: Into<crate::KeySpace>,
-    Handler: IntoHandler<'static, Sample> + Send,
+    Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
     TryIntoSample: ExtractSample + Send + Sync,
 {
@@ -606,7 +606,7 @@ impl<
     > IntoFuture for FetchingSubscriberBuilder<'_, '_, KeySpace, Handler, Fetch, TryIntoSample>
 where
     KeySpace: Into<crate::KeySpace>,
-    Handler: IntoHandler<'static, Sample> + Send,
+    Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
     TryIntoSample: ExtractSample + Send + Sync,
 {
@@ -651,7 +651,7 @@ where
 /// ```
 pub struct FetchingSubscriber<Handler> {
     subscriber: Subscriber<()>,
-    callback: Arc<dyn Fn(Sample) + Send + Sync + 'static>,
+    callback: Callback<Sample>,
     state: Arc<Mutex<InnerState>>,
     handler: Handler,
 }
@@ -681,7 +681,7 @@ impl<Handler> FetchingSubscriber<Handler> {
     ) -> ZResult<Self>
     where
         KeySpace: Into<crate::KeySpace>,
-        InputHandler: IntoHandler<'static, Sample, Handler = Handler> + Send,
+        InputHandler: IntoHandler<Sample, Handler = Handler> + Send,
         TryIntoSample: ExtractSample + Send + Sync,
     {
         let session_id = conf.session.zid();
@@ -698,7 +698,7 @@ impl<Handler> FetchingSubscriber<Handler> {
             move |s| {
                 let state = &mut zlock!(state);
                 if state.pending_fetches == 0 {
-                    callback(s);
+                    callback.call(s);
                 } else {
                     tracing::trace!(
                         "Sample received while fetch in progress: push it to merge_queue"
@@ -823,7 +823,7 @@ impl<Handler> FetchingSubscriber<Handler> {
 
 struct RepliesHandler {
     state: Arc<Mutex<InnerState>>,
-    callback: Arc<dyn Fn(Sample) + Send + Sync>,
+    callback: Callback<Sample>,
 }
 
 impl Drop for RepliesHandler {
@@ -840,7 +840,7 @@ impl Drop for RepliesHandler {
                 state.merge_queue.len()
             );
             for s in state.merge_queue.drain() {
-                (self.callback)(s);
+                self.callback.call(s);
             }
         }
     }
@@ -888,7 +888,7 @@ pub struct FetchBuilder<
     fetch: Fetch,
     phantom: std::marker::PhantomData<TryIntoSample>,
     state: Arc<Mutex<InnerState>>,
-    callback: Arc<dyn Fn(Sample) + Send + Sync>,
+    callback: Callback<Sample>,
 }
 
 impl<Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>, TryIntoSample>
@@ -923,10 +923,7 @@ where
     }
 }
 
-fn register_handler(
-    state: Arc<Mutex<InnerState>>,
-    callback: Arc<dyn Fn(Sample) + Send + Sync>,
-) -> RepliesHandler {
+fn register_handler(state: Arc<Mutex<InnerState>>, callback: Callback<Sample>) -> RepliesHandler {
     zlock!(state).pending_fetches += 1;
     // pending fetches will be decremented in RepliesHandler drop()
     RepliesHandler { state, callback }
