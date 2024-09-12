@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "unstable")]
+use std::collections::hash_map::Entry;
 use std::{
     collections::HashMap,
     convert::TryInto,
@@ -2312,9 +2314,8 @@ impl Primitives for Session {
 
                                     (query.callback)(reply);
                                 }
-                            } else {
-                                state.remote_tokens.insert(m.id, key_expr.clone());
-
+                            } else if let Entry::Vacant(e) = state.remote_tokens.entry(m.id) {
+                                e.insert(key_expr.clone());
                                 drop(state);
 
                                 self.execute_subscriber_callbacks(
