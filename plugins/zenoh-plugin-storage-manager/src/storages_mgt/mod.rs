@@ -15,13 +15,11 @@
 use std::sync::Arc;
 
 use flume::Sender;
-use zenoh::{prelude::ZResult, session::Session};
+use zenoh::{session::Session, Result as ZResult};
 use zenoh_backend_traits::{config::StorageConfig, Capability, VolumeInstance};
 
-pub(crate) mod service;
-pub(crate) use service::StorageService;
-
-pub use super::replica::Replica;
+mod service;
+use service::StorageService;
 
 pub enum StorageMessage {
     Stop,
@@ -59,14 +57,7 @@ pub(crate) async fn create_and_start_storage(
     let (tx, rx) = flume::bounded(1);
 
     tokio::task::spawn(async move {
-        // If a configuration for replica is present, we initialize a replica, else only a storage
-        // service A replica contains a storage service and all metadata required for
-        // anti-entropy
-        if config.replica_config.is_some() {
-            Replica::start(zenoh.clone(), store_intercept, config, &name, rx).await;
-        } else {
-            StorageService::start(zenoh.clone(), config, &name, store_intercept, rx, None).await;
-        }
+        StorageService::start(zenoh.clone(), config, &name, store_intercept, rx).await;
     });
 
     Ok(tx)

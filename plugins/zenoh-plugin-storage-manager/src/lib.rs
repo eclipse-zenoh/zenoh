@@ -50,7 +50,6 @@ use zenoh_plugin_trait::{
 };
 
 mod memory_backend;
-mod replica;
 mod storages_mgt;
 use storages_mgt::*;
 
