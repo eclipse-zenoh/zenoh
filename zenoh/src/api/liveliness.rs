@@ -525,7 +525,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     #[zenoh_macros::unstable]
     pub fn with<Handler>(self, handler: Handler) -> LivelinessSubscriberBuilder<'a, 'b, Handler>
     where
-        Handler: crate::handlers::IntoHandler<'static, Sample>,
+        Handler: crate::handlers::IntoHandler<Sample>,
     {
         let LivelinessSubscriberBuilder {
             session,
@@ -568,7 +568,7 @@ impl<Handler> LivelinessSubscriberBuilder<'_, '_, Handler> {
 #[zenoh_macros::unstable]
 impl<'a, Handler> Resolvable for LivelinessSubscriberBuilder<'a, '_, Handler>
 where
-    Handler: IntoHandler<'static, Sample> + Send,
+    Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
 {
     type To = ZResult<Subscriber<Handler::Handler>>;
@@ -577,7 +577,7 @@ where
 #[zenoh_macros::unstable]
 impl<Handler> Wait for LivelinessSubscriberBuilder<'_, '_, Handler>
 where
-    Handler: IntoHandler<'static, Sample> + Send,
+    Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
 {
     #[zenoh_macros::unstable]
@@ -612,7 +612,7 @@ where
 #[zenoh_macros::unstable]
 impl<Handler> IntoFuture for LivelinessSubscriberBuilder<'_, '_, Handler>
 where
-    Handler: IntoHandler<'static, Sample> + Send,
+    Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
 {
     type Output = <Self as Resolvable>::To;
@@ -733,7 +733,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> LivelinessGetBuilder<'a, 'b, Handler>
     where
-        Handler: IntoHandler<'static, Reply>,
+        Handler: IntoHandler<Reply>,
     {
         let LivelinessGetBuilder {
             session,
@@ -761,7 +761,7 @@ impl<Handler> LivelinessGetBuilder<'_, '_, Handler> {
 
 impl<Handler> Resolvable for LivelinessGetBuilder<'_, '_, Handler>
 where
-    Handler: IntoHandler<'static, Reply> + Send,
+    Handler: IntoHandler<Reply> + Send,
     Handler::Handler: Send,
 {
     type To = ZResult<Handler::Handler>;
@@ -769,7 +769,7 @@ where
 
 impl<Handler> Wait for LivelinessGetBuilder<'_, '_, Handler>
 where
-    Handler: IntoHandler<'static, Reply> + Send,
+    Handler: IntoHandler<Reply> + Send,
     Handler::Handler: Send,
 {
     fn wait(self) -> <Self as Resolvable>::To {
@@ -783,7 +783,7 @@ where
 
 impl<Handler> IntoFuture for LivelinessGetBuilder<'_, '_, Handler>
 where
-    Handler: IntoHandler<'static, Reply> + Send,
+    Handler: IntoHandler<Reply> + Send,
     Handler::Handler: Send,
 {
     type Output = <Self as Resolvable>::To;

@@ -13,7 +13,10 @@
 //
 
 //! Callback handler trait.
-use super::{Dyn, IntoHandler};
+
+use std::sync::Arc;
+
+use crate::api::handlers::IntoHandler;
 
 /// A function that can transform a [`FnMut`]`(T)` to
 /// a [`Fn`]`(T)` with the help of a [`Mutex`](std::sync::Mutex).
@@ -22,50 +25,76 @@ pub fn locked<T>(fnmut: impl FnMut(T)) -> impl Fn(T) {
     move |x| zlock!(lock)(x)
 }
 
-/// An immutable callback function.
-pub type Callback<'a, T> = Dyn<dyn Fn(T) + Send + Sync + 'a>;
+/// Callback type used by zenoh entities.
+pub struct Callback<T>(Arc<dyn Fn(T) + Send + Sync>);
 
-impl<'a, T, F> IntoHandler<'a, T> for F
+impl<T> Clone for Callback<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<T> Callback<T> {
+    /// Instantiate a `Callback` from a callback function.
+    pub fn new(cb: Arc<dyn Fn(T) + Send + Sync>) -> Self {
+        Self(cb)
+    }
+
+    /// Call the inner callback.
+    #[inline]
+    pub fn call(&self, arg: T) {
+        self.0(arg)
+    }
+}
+
+impl<T> IntoHandler<T> for Callback<T> {
+    type Handler = ();
+    fn into_handler(self) -> (Callback<T>, Self::Handler) {
+        (self, ())
+    }
+}
+
+impl<T, F> IntoHandler<T> for F
 where
-    F: Fn(T) + Send + Sync + 'a,
+    F: Fn(T) + Send + Sync + 'static,
 {
     type Handler = ();
 
-    fn into_handler(self) -> (Callback<'a, T>, Self::Handler) {
-        (Dyn::from(self), ())
+    fn into_handler(self) -> (Callback<T>, Self::Handler) {
+        (Callback::new(Arc::new(self)), ())
     }
 }
 
-impl<'a, T, F, H> IntoHandler<'a, T> for (F, H)
+impl<T, F, H> IntoHandler<T> for (F, H)
 where
-    F: Fn(T) + Send + Sync + 'a,
+    F: Fn(T) + Send + Sync + 'static,
 {
     type Handler = H;
 
-    fn into_handler(self) -> (Callback<'a, T>, Self::Handler) {
-        (Dyn::from(self.0), self.1)
+    fn into_handler(self) -> (Callback<T>, Self::Handler) {
+        (self.0.into_handler().0, self.1)
     }
 }
 
-impl<'a, T, H> IntoHandler<'a, T> for (Callback<'static, T>, H) {
+impl<T, H> IntoHandler<T> for (Callback<T>, H) {
     type Handler = H;
 
-    fn into_handler(self) -> (Callback<'a, T>, Self::Handler) {
+    fn into_handler(self) -> (Callback<T>, Self::Handler) {
         self
     }
 }
 
-impl<T: Send + 'static> IntoHandler<'static, T> for (flume::Sender<T>, flume::Receiver<T>) {
+impl<T: Send + 'static> IntoHandler<T> for (flume::Sender<T>, flume::Receiver<T>) {
     type Handler = flume::Receiver<T>;
 
-    fn into_handler(self) -> (Callback<'static, T>, Self::Handler) {
+    fn into_handler(self) -> (Callback<T>, Self::Handler) {
         let (sender, receiver) = self;
         (
-            Dyn::new(move |t| {
+            Callback::new(Arc::new(move |t| {
                 if let Err(e) = sender.send(t) {
                     tracing::error!("{}", e)
                 }
-            }),
+            })),
             receiver,
         )
     }
@@ -97,14 +126,14 @@ where
     }
 }
 
-impl<'a, OnEvent, Event, DropFn> IntoHandler<'a, Event> for CallbackDrop<OnEvent, DropFn>
+impl<OnEvent, Event, DropFn> IntoHandler<Event> for CallbackDrop<OnEvent, DropFn>
 where
-    OnEvent: Fn(Event) + Send + Sync + 'a,
+    OnEvent: Fn(Event) + Send + Sync + 'static,
     DropFn: FnMut() + Send + Sync + 'static,
 {
     type Handler = ();
 
-    fn into_handler(self) -> (Callback<'a, Event>, Self::Handler) {
-        (Dyn::from(move |evt| (self.callback)(evt)), ())
+    fn into_handler(self) -> (Callback<Event>, Self::Handler) {
+        (move |evt| (self.callback)(evt)).into_handler()
     }
 }

@@ -53,6 +53,7 @@ use crate::{
         value::Value,
         Id,
     },
+    handlers::Callback,
     net::primitives::Primitives,
     Session,
 };
@@ -530,7 +531,7 @@ pub(crate) struct QueryableState {
     pub(crate) key_expr: WireExpr<'static>,
     pub(crate) complete: bool,
     pub(crate) origin: Locality,
-    pub(crate) callback: Arc<dyn Fn(Query) + Send + Sync>,
+    pub(crate) callback: Callback<Query>,
 }
 
 impl fmt::Debug for QueryableState {
@@ -693,7 +694,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> QueryableBuilder<'a, 'b, Handler>
     where
-        Handler: IntoHandler<'static, Query>,
+        Handler: IntoHandler<Query>,
     {
         let QueryableBuilder {
             session,
@@ -906,7 +907,7 @@ impl<Handler> DerefMut for Queryable<Handler> {
 
 impl<Handler> Resolvable for QueryableBuilder<'_, '_, Handler>
 where
-    Handler: IntoHandler<'static, Query> + Send,
+    Handler: IntoHandler<Query> + Send,
     Handler::Handler: Send,
 {
     type To = ZResult<Queryable<Handler::Handler>>;
@@ -914,7 +915,7 @@ where
 
 impl<Handler> Wait for QueryableBuilder<'_, '_, Handler>
 where
-    Handler: IntoHandler<'static, Query> + Send,
+    Handler: IntoHandler<Query> + Send,
     Handler::Handler: Send,
 {
     fn wait(self) -> <Self as Resolvable>::To {
@@ -943,7 +944,7 @@ where
 
 impl<Handler> IntoFuture for QueryableBuilder<'_, '_, Handler>
 where
-    Handler: IntoHandler<'static, Query> + Send,
+    Handler: IntoHandler<Query> + Send,
     Handler::Handler: Send,
 {
     type Output = <Self as Resolvable>::To;

@@ -726,7 +726,7 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
     #[zenoh_macros::unstable]
     pub fn with<Handler>(self, handler: Handler) -> MatchingListenerBuilder<'a, 'b, Handler>
     where
-        Handler: IntoHandler<'static, MatchingStatus>,
+        Handler: IntoHandler<MatchingStatus>,
     {
         let MatchingListenerBuilder {
             publisher,
@@ -759,7 +759,7 @@ impl<Handler> MatchingListenerBuilder<'_, '_, Handler> {
 #[zenoh_macros::unstable]
 impl<Handler> Resolvable for MatchingListenerBuilder<'_, '_, Handler>
 where
-    Handler: IntoHandler<'static, MatchingStatus> + Send,
+    Handler: IntoHandler<MatchingStatus> + Send,
     Handler::Handler: Send,
 {
     type To = ZResult<MatchingListener<Handler::Handler>>;
@@ -768,7 +768,7 @@ where
 #[zenoh_macros::unstable]
 impl<Handler> Wait for MatchingListenerBuilder<'_, '_, Handler>
 where
-    Handler: IntoHandler<'static, MatchingStatus> + Send,
+    Handler: IntoHandler<MatchingStatus> + Send,
     Handler::Handler: Send,
 {
     #[zenoh_macros::unstable]
@@ -794,7 +794,7 @@ where
 #[zenoh_macros::unstable]
 impl<Handler> IntoFuture for MatchingListenerBuilder<'_, '_, Handler>
 where
-    Handler: IntoHandler<'static, MatchingStatus> + Send,
+    Handler: IntoHandler<MatchingStatus> + Send,
     Handler::Handler: Send,
 {
     type Output = <Self as Resolvable>::To;
@@ -812,7 +812,7 @@ pub(crate) struct MatchingListenerState {
     pub(crate) current: Mutex<bool>,
     pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) destination: Locality,
-    pub(crate) callback: Callback<'static, MatchingStatus>,
+    pub(crate) callback: Callback<MatchingStatus>,
 }
 
 #[zenoh_macros::unstable]
