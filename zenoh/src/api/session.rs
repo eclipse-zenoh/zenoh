@@ -1077,11 +1077,14 @@ impl SessionInner {
             let mut state = zwrite!(self.state);
             state.queryables.clear();
             state.subscribers.clear();
-            state.matching_listeners.clear();
             state.liveliness_subscribers.clear();
             state.local_resources.clear();
             state.remote_resources.clear();
-            state.tokens.clear();
+            #[cfg(feature = "unstable")]
+            {
+                state.tokens.clear();
+                state.matching_listeners.clear();
+            }
             Ok(())
         })
     }
