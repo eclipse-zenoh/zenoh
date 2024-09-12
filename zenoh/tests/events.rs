@@ -13,7 +13,7 @@
 //
 use std::time::Duration;
 
-use zenoh::{config, query::Reply, sample::SampleKind, Session};
+use zenoh::{query::Reply, sample::SampleKind, Session};
 use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
