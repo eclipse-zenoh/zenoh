@@ -30,7 +30,7 @@ use zenoh_result::ZResult;
 #[zenoh_macros::unstable]
 use {
     crate::api::{query::ReplyKeyExpr, sample::SourceInfo},
-    zenoh_config::wrappers::{EntityGlobalId, ZenohId},
+    zenoh_config::wrappers::EntityGlobalId,
     zenoh_protocol::core::EntityGlobalIdProto,
 };
 
@@ -545,11 +545,8 @@ impl fmt::Debug for QueryableState {
 
 #[derive(Debug)]
 pub(crate) struct QueryableInner {
-    #[cfg(feature = "unstable")]
-    pub(crate) session_id: ZenohId,
     pub(crate) session: WeakSession,
-    pub(crate) state: Arc<QueryableState>,
-    // Queryable is undeclared on drop unless its handler is a ZST, i.e. it is callback-only
+    pub(crate) id: Id,
     pub(crate) undeclare_on_drop: bool,
 }
 
@@ -823,8 +820,8 @@ impl<Handler> Queryable<Handler> {
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
         EntityGlobalIdProto {
-            zid: self.inner.session_id.into(),
-            eid: self.inner.state.id,
+            zid: self.inner.session.zid().into(),
+            eid: self.inner.id,
         }
         .into()
     }
@@ -868,7 +865,7 @@ impl<Handler> Queryable<Handler> {
     fn undeclare_impl(&mut self) -> ZResult<()> {
         // set the flag first to avoid double panic if this function panic
         self.inner.undeclare_on_drop = false;
-        self.inner.session.close_queryable(self.inner.state.id)
+        self.inner.session.close_queryable(self.inner.id)
     }
 }
 
@@ -930,10 +927,8 @@ where
             )
             .map(|qable_state| Queryable {
                 inner: QueryableInner {
-                    #[cfg(feature = "unstable")]
-                    session_id: session.zid(),
                     session: self.session.downgrade(),
-                    state: qable_state,
+                    id: qable_state.id,
                     undeclare_on_drop: self.undeclare_on_drop,
                 },
                 handler: receiver,

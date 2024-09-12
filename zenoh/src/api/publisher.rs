@@ -37,7 +37,6 @@ use {
     },
     std::{collections::HashSet, sync::Arc, sync::Mutex},
     zenoh_config::wrappers::EntityGlobalId,
-    zenoh_config::ZenohId,
     zenoh_protocol::core::EntityGlobalIdProto,
 };
 
@@ -104,8 +103,6 @@ impl fmt::Debug for PublisherState {
 /// ```
 #[derive(Debug)]
 pub struct Publisher<'a> {
-    #[cfg(feature = "unstable")]
-    pub(crate) session_id: ZenohId,
     pub(crate) session: WeakSession,
     pub(crate) id: Id,
     pub(crate) key_expr: KeyExpr<'a>,
@@ -139,7 +136,7 @@ impl<'a> Publisher<'a> {
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
         EntityGlobalIdProto {
-            zid: self.session_id.into(),
+            zid: self.session.zid().into(),
             eid: self.id,
         }
         .into()
@@ -783,7 +780,7 @@ where
             inner: MatchingListenerInner {
                 session: self.publisher.session.clone(),
                 matching_listeners: self.publisher.matching_listeners.clone(),
-                state,
+                id: state.id,
                 undeclare_on_drop: self.undeclare_on_drop,
             },
             handler,
@@ -829,7 +826,7 @@ impl fmt::Debug for MatchingListenerState {
 pub(crate) struct MatchingListenerInner {
     pub(crate) session: WeakSession,
     pub(crate) matching_listeners: Arc<Mutex<HashSet<Id>>>,
-    pub(crate) state: Arc<MatchingListenerState>,
+    pub(crate) id: Id,
     pub(crate) undeclare_on_drop: bool,
 }
 
@@ -889,10 +886,10 @@ impl<Handler> MatchingListener<Handler> {
     fn undeclare_impl(&mut self) -> ZResult<()> {
         // set the flag first to avoid double panic if this function panic
         self.inner.undeclare_on_drop = false;
-        zlock!(self.inner.matching_listeners).remove(&self.inner.state.id);
+        zlock!(self.inner.matching_listeners).remove(&self.inner.id);
         self.inner
             .session
-            .undeclare_matches_listener_inner(self.inner.state.id)
+            .undeclare_matches_listener_inner(self.inner.id)
     }
 }
 

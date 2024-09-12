@@ -15,17 +15,13 @@ use std::{
     fmt,
     future::{IntoFuture, Ready},
     ops::{Deref, DerefMut},
-    sync::Arc,
 };
 
 use tracing::error;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
 #[cfg(feature = "unstable")]
-use {
-    zenoh_config::wrappers::{EntityGlobalId, ZenohId},
-    zenoh_protocol::core::EntityGlobalIdProto,
-};
+use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
 
 #[cfg(feature = "unstable")]
 use crate::pubsub::Reliability;
@@ -59,12 +55,10 @@ impl fmt::Debug for SubscriberState {
 
 #[derive(Debug)]
 pub(crate) struct SubscriberInner {
-    #[cfg(feature = "unstable")]
-    pub(crate) session_id: ZenohId,
     pub(crate) session: WeakSession,
-    pub(crate) state: Arc<SubscriberState>,
+    pub(crate) id: Id,
+    pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) kind: SubscriberKind,
-    // Subscriber is undeclared on drop unless its handler is a ZST, i.e. it is callback-only
     pub(crate) undeclare_on_drop: bool,
 }
 
@@ -115,7 +109,6 @@ impl<Handler> IntoFuture for SubscriberUndeclaration<Handler> {
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
-///     .best_effort()
 ///     .await
 ///     .unwrap();
 /// # }
@@ -331,10 +324,9 @@ where
             .declare_subscriber_inner(&key_expr, self.origin, callback)
             .map(|sub_state| Subscriber {
                 inner: SubscriberInner {
-                    #[cfg(feature = "unstable")]
-                    session_id: session.zid(),
                     session: session.downgrade(),
-                    state: sub_state,
+                    id: sub_state.id,
+                    key_expr: sub_state.key_expr.clone(),
                     kind: SubscriberKind::Subscriber,
                     undeclare_on_drop: self.undeclare_on_drop,
                 },
@@ -424,15 +416,15 @@ impl<Handler> Subscriber<Handler> {
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
         EntityGlobalIdProto {
-            zid: self.inner.session_id.into(),
-            eid: self.inner.state.id,
+            zid: self.inner.session.zid().into(),
+            eid: self.inner.id,
         }
         .into()
     }
 
-    /// Returns the [`KeyExpr`] this Subscriber subscribes to.
+    /// Returns the [`KeyExpr`] this subscriber subscribes to.
     pub fn key_expr(&self) -> &KeyExpr<'static> {
-        &self.inner.state.key_expr
+        &self.inner.key_expr
     }
 
     /// Returns a reference to this subscriber's handler.
@@ -476,7 +468,7 @@ impl<Handler> Subscriber<Handler> {
         self.inner.undeclare_on_drop = false;
         self.inner
             .session
-            .undeclare_subscriber_inner(self.inner.state.id, self.inner.kind)
+            .undeclare_subscriber_inner(self.inner.id, self.inner.kind)
     }
 }
 

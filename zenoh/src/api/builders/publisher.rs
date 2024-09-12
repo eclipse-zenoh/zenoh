@@ -333,8 +333,6 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
     // internal function for performing the publication
     fn create_one_shot_publisher(self) -> ZResult<Publisher<'b>> {
         Ok(Publisher {
-            #[cfg(feature = "unstable")]
-            session_id: self.session.0.runtime.zid(),
             session: self.session.downgrade(),
             id: 0, // This is a one shot Publisher
             key_expr: self.key_expr?,
@@ -394,8 +392,6 @@ impl<'a, 'b> Wait for PublisherBuilder<'a, 'b> {
             .0
             .declare_publisher_inner(key_expr.clone(), self.destination)?;
         Ok(Publisher {
-            #[cfg(feature = "unstable")]
-            session_id: self.session.0.runtime.zid(),
             session: self.session.downgrade(),
             id,
             key_expr,

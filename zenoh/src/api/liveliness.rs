@@ -597,10 +597,9 @@ where
             )
             .map(|sub_state| Subscriber {
                 inner: SubscriberInner {
-                    #[cfg(feature = "unstable")]
-                    session_id: session.zid(),
                     session: self.session.downgrade(),
-                    state: sub_state,
+                    id: sub_state.id,
+                    key_expr: sub_state.key_expr.clone(),
                     kind: SubscriberKind::LivelinessSubscriber,
                     undeclare_on_drop: self.undeclare_on_drop,
                 },
