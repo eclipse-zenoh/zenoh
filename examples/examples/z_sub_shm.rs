@@ -14,7 +14,7 @@
 use clap::Parser;
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
 use zenoh::shm::zshm;
-use zenoh::{bytes::ZBytes, config::Config, key_expr::KeyExpr, prelude::*};
+use zenoh::{bytes::ZBytes, config::Config, key_expr::KeyExpr};
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]

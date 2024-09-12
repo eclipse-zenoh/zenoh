@@ -21,8 +21,8 @@ use std::{
 };
 
 use zenoh::{
-    internal::Value, key_expr::OwnedKeyExpr, prelude::*, query::Parameters, sample::Sample,
-    time::Timestamp, Session,
+    internal::Value, key_expr::OwnedKeyExpr, query::Parameters, sample::Sample, time::Timestamp,
+    Session,
 };
 
 use super::{digest::*, Snapshotter};

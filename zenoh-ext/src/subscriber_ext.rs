@@ -32,7 +32,7 @@ pub trait SubscriberForward<'a, S> {
     type Output;
     fn forward(&'a mut self, sink: S) -> Self::Output;
 }
-impl<'a, S> SubscriberForward<'a, S> for Subscriber<'_, flume::Receiver<Sample>>
+impl<'a, S> SubscriberForward<'a, S> for Subscriber<flume::Receiver<Sample>>
 where
     S: futures::sink::Sink<Sample>,
 {
@@ -60,7 +60,7 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
+    /// use zenoh::Wait;
     /// use zenoh_ext::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
@@ -104,7 +104,6 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     /// use zenoh_ext::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
@@ -138,7 +137,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
+    /// use zenoh::Wait;
     /// use zenoh_ext::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
@@ -174,6 +173,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
             origin: self.origin,
             fetch,
             handler: self.handler,
+            undeclare_on_drop: true,
             phantom: std::marker::PhantomData,
         }
     }
@@ -193,7 +193,6 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     /// use zenoh_ext::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
@@ -221,6 +220,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
             query_consolidation: QueryConsolidation::from(zenoh::query::ConsolidationMode::None),
             query_accept_replies: ReplyKeyExpr::default(),
             query_timeout: Duration::from_secs(10),
+            undeclare_on_drop: true,
             handler: self.handler,
         }
     }
@@ -246,7 +246,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
+    /// use zenoh::Wait;
     /// use zenoh_ext::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
@@ -284,6 +284,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
             origin: Locality::default(),
             fetch,
             handler: self.handler,
+            undeclare_on_drop: true,
             phantom: std::marker::PhantomData,
         }
     }
@@ -304,7 +305,6 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     /// use zenoh_ext::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
@@ -330,6 +330,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
             query_consolidation: QueryConsolidation::DEFAULT,
             query_accept_replies: ReplyKeyExpr::MatchingQuery,
             query_timeout: Duration::from_secs(10),
+            undeclare_on_drop: true,
             handler: self.handler,
         }
     }

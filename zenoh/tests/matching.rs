@@ -15,7 +15,7 @@
 use std::{str::FromStr, time::Duration};
 
 use flume::RecvTimeoutError;
-use zenoh::{config, config::Locator, prelude::*, sample::Locality, Session};
+use zenoh::{config, config::Locator, sample::Locality, Result as ZResult, Session};
 use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);

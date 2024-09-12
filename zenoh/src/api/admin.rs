@@ -32,9 +32,9 @@ use super::{
     key_expr::KeyExpr,
     queryable::Query,
     sample::{DataInfo, Locality, SampleKind},
-    session::Session,
     subscriber::SubscriberKind,
 };
+use crate::api::session::WeakSession;
 
 lazy_static::lazy_static!(
     static ref KE_STARSTAR: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("**") };
@@ -44,10 +44,10 @@ lazy_static::lazy_static!(
     static ref KE_LINK: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("link") };
 );
 
-pub(crate) fn init(session: &Session) {
-    if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
+pub(crate) fn init(session: WeakSession) {
+    if let Ok(own_zid) = keyexpr::new(&session.runtime.zid().to_string()) {
         let admin_key = KeyExpr::from(*KE_PREFIX / own_zid / *KE_SESSION / *KE_STARSTAR)
-            .to_wire(session)
+            .to_wire(&session)
             .to_owned();
 
         let _admin_qabl = session.declare_queryable_inner(
@@ -56,13 +56,13 @@ pub(crate) fn init(session: &Session) {
             Locality::SessionLocal,
             Arc::new({
                 let session = session.clone();
-                move |q| super::admin::on_admin_query(&session, q)
+                move |q| on_admin_query(&session, q)
             }),
         );
     }
 }
 
-pub(crate) fn on_admin_query(session: &Session, query: Query) {
+pub(crate) fn on_admin_query(session: &WeakSession, query: Query) {
     fn reply_peer(own_zid: &keyexpr, query: &Query, peer: TransportPeer) {
         let zid = peer.zid.to_string();
         if let Ok(zid) = keyexpr::new(&zid) {
@@ -104,7 +104,7 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
         }
     }
 
-    if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
+    if let Ok(own_zid) = keyexpr::new(&session.runtime.zid().to_string()) {
         for transport in zenoh_runtime::ZRuntime::Net
             .block_in_place(session.runtime.manager().get_transports_unicast())
         {
@@ -124,14 +124,12 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
 
 #[derive(Clone)]
 pub(crate) struct Handler {
-    pub(crate) session: Arc<Session>,
+    pub(crate) session: WeakSession,
 }
 
 impl Handler {
-    pub(crate) fn new(session: Session) -> Self {
-        Self {
-            session: Arc::new(session),
-        }
+    pub(crate) fn new(session: WeakSession) -> Self {
+        Self { session }
     }
 }
 
@@ -157,7 +155,7 @@ impl TransportMulticastEventHandler for Handler {
         &self,
         peer: zenoh_transport::TransportPeer,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        if let Ok(own_zid) = keyexpr::new(&self.session.zid().to_string()) {
+        if let Ok(own_zid) = keyexpr::new(&self.session.runtime.zid().to_string()) {
             if let Ok(zid) = keyexpr::new(&peer.zid.to_string()) {
                 let expr = WireExpr::from(
                     &(*KE_PREFIX / own_zid / *KE_SESSION / *KE_TRANSPORT_UNICAST / zid),
@@ -200,7 +198,7 @@ impl TransportMulticastEventHandler for Handler {
 
 pub(crate) struct PeerHandler {
     pub(crate) expr: WireExpr<'static>,
-    pub(crate) session: Arc<Session>,
+    pub(crate) session: WeakSession,
 }
 
 impl TransportPeerEventHandler for PeerHandler {

@@ -19,12 +19,12 @@ use std::{
     ops::Deref,
     sync::{
         atomic::{AtomicU16, Ordering},
-        Arc, RwLock,
+        Arc, Mutex, RwLock,
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use tracing::{error, trace, warn};
+use tracing::{error, info, trace, warn};
 use uhlc::{Timestamp, HLC};
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
@@ -174,6 +174,14 @@ impl SessionState {
 }
 
 impl SessionState {
+    #[inline]
+    pub(crate) fn primitives(&self) -> ZResult<Arc<Face>> {
+        self.primitives
+            .as_ref()
+            .cloned()
+            .ok_or_else(|| zerror!("session closed").into())
+    }
+
     #[inline]
     fn get_local_res(&self, id: &ExprId) -> Option<&Resource> {
         self.local_resources.get(id)
@@ -359,110 +367,19 @@ impl Resource {
     }
 }
 
-#[derive(Clone)]
-pub enum SessionRef<'a> {
-    Borrow(&'a Session),
-    Shared(Arc<Session>),
+/// A trait implemented by types that can be undeclared.
+pub trait UndeclarableSealed<S> {
+    type Undeclaration: Resolve<ZResult<()>> + Send;
+    fn undeclare_inner(self, session: S) -> Self::Undeclaration;
 }
 
-impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
-    fn declare_subscriber<'b, TryIntoKeyExpr>(
-        &'s self,
-        key_expr: TryIntoKeyExpr,
-    ) -> SubscriberBuilder<'a, 'b, DefaultHandler>
-    where
-        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
-    {
-        SubscriberBuilder {
-            session: self.clone(),
-            key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
-            origin: Locality::default(),
-            handler: DefaultHandler::default(),
-        }
-    }
-    fn declare_queryable<'b, TryIntoKeyExpr>(
-        &'s self,
-        key_expr: TryIntoKeyExpr,
-    ) -> QueryableBuilder<'a, 'b, DefaultHandler>
-    where
-        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
-    {
-        QueryableBuilder {
-            session: self.clone(),
-            key_expr: key_expr.try_into().map_err(Into::into),
-            complete: false,
-            origin: Locality::default(),
-            handler: DefaultHandler::default(),
-        }
-    }
-    fn declare_publisher<'b, TryIntoKeyExpr>(
-        &'s self,
-        key_expr: TryIntoKeyExpr,
-    ) -> PublisherBuilder<'a, 'b>
-    where
-        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
-    {
-        PublisherBuilder {
-            session: self.clone(),
-            key_expr: key_expr.try_into().map_err(Into::into),
-            encoding: Encoding::default(),
-            congestion_control: CongestionControl::DEFAULT,
-            priority: Priority::DEFAULT,
-            is_express: false,
-            #[cfg(feature = "unstable")]
-            reliability: Reliability::DEFAULT,
-            destination: Locality::default(),
-        }
-    }
-    #[zenoh_macros::unstable]
-    fn liveliness(&'s self) -> Liveliness<'a> {
-        Liveliness {
-            session: self.clone(),
-        }
-    }
-    fn info(&'s self) -> SessionInfo<'a> {
-        SessionInfo {
-            session: self.clone(),
-        }
-    }
-}
-
-impl Deref for SessionRef<'_> {
-    type Target = Session;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            SessionRef::Borrow(b) => b,
-            SessionRef::Shared(s) => s,
-        }
-    }
-}
-
-impl fmt::Debug for SessionRef<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            SessionRef::Borrow(b) => Session::fmt(b, f),
-            SessionRef::Shared(s) => Session::fmt(s, f),
-        }
-    }
-}
-
-pub(crate) trait UndeclarableSealed<S, O, T = ZResult<()>>
+impl<'a, T> UndeclarableSealed<&'a Session> for T
 where
-    O: Resolve<T> + Send,
+    T: UndeclarableSealed<()>,
 {
-    fn undeclare_inner(self, session: S) -> O;
-}
+    type Undeclaration = <T as UndeclarableSealed<()>>::Undeclaration;
 
-impl<'a, O, T, G> UndeclarableSealed<&'a Session, O, T> for G
-where
-    O: Resolve<T> + Send,
-    G: UndeclarableSealed<(), O, T>,
-{
-    fn undeclare_inner(self, _: &'a Session) -> O {
+    fn undeclare_inner(self, _session: &'a Session) -> Self::Undeclaration {
         self.undeclare_inner(())
     }
 }
@@ -471,28 +388,128 @@ where
 // care about the `private_bounds` lint in this particular case.
 #[allow(private_bounds)]
 /// A trait implemented by types that can be undeclared.
-pub trait Undeclarable<S, O, T>: UndeclarableSealed<S, O, T>
-where
-    O: Resolve<T> + Send,
-{
-}
+pub trait Undeclarable<S = ()>: UndeclarableSealed<S> {}
 
-impl<S, O, T, U> Undeclarable<S, O, T> for U
-where
-    O: Resolve<T> + Send,
-    U: UndeclarableSealed<S, O, T>,
-{
-}
+impl<T, S> Undeclarable<S> for T where T: UndeclarableSealed<S> {}
 
-/// A zenoh session.
-///
-pub struct Session {
+pub(crate) struct SessionInner {
+    /// See [`WeakSession`] doc
+    weak_counter: Mutex<usize>,
     pub(crate) runtime: Runtime,
-    pub(crate) state: Arc<RwLock<SessionState>>,
+    pub(crate) state: RwLock<SessionState>,
     pub(crate) id: u16,
-    close_on_drop: bool,
     owns_runtime: bool,
     task_controller: TaskController,
+}
+
+impl fmt::Debug for SessionInner {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Session")
+            .field("id", &self.runtime.zid())
+            .finish()
+    }
+}
+
+/// The entrypoint of the zenoh API.
+///
+/// Zenoh session is instantiated using [`zenoh::open`](crate::open) and it can be used to declare various
+/// entities like publishers, subscribers, or querybables, as well as issuing queries.
+///
+/// Session is an `Arc`-like type, it can be cloned, and it is closed when the last instance
+/// is dropped (see [`Session::close`]).
+///
+/// # Examples
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+///
+/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// session.put("key/expression", "value").await.unwrap();
+/// # }
+pub struct Session(pub(crate) Arc<SessionInner>);
+
+impl Session {
+    pub(crate) fn downgrade(&self) -> WeakSession {
+        WeakSession::new(&self.0)
+    }
+}
+
+impl fmt::Debug for Session {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl Clone for Session {
+    fn clone(&self) -> Self {
+        let _weak = self.0.weak_counter.lock().unwrap();
+        Self(self.0.clone())
+    }
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        let weak = self.0.weak_counter.lock().unwrap();
+        if Arc::strong_count(&self.0) == *weak + /* the `Arc` currently dropped */ 1 {
+            drop(weak);
+            if let Err(error) = self.close().wait() {
+                tracing::error!(error)
+            }
+        }
+    }
+}
+
+/// `WeakSession` provides a weak-like semantic to the arc-like session, without using [`Weak`].
+/// It allows notably to establish reference cycles inside the session, for the primitive
+/// implementation.
+/// When all `Session` instance are dropped, [`Session::close`] is be called and cleans
+/// the reference cycles, allowing the underlying `Arc` to be properly reclaimed.
+///
+/// The pseudo-weak algorithm relies on a counter wrapped in a mutex. It was indeed the simplest
+/// to implement it, because atomic manipulations to achieve this semantic would not have been
+/// trivial at all — what could happen if a pseudo-weak is cloned while the last session instance
+/// is dropped? With a mutex, it's simple, and it works perfectly fine, as we don't care about the
+/// performance penalty when it comes to session entities cloning/dropping.
+///
+/// (Although it was planed to be used initially, `Weak` was in fact causing errors in the session
+/// closing, because the primitive implementation seemed to be used in the closing operation.)
+pub(crate) struct WeakSession(Arc<SessionInner>);
+
+impl WeakSession {
+    fn new(session: &Arc<SessionInner>) -> Self {
+        let mut weak = session.weak_counter.lock().unwrap();
+        *weak += 1;
+        Self(session.clone())
+    }
+}
+
+impl Clone for WeakSession {
+    fn clone(&self) -> Self {
+        let mut weak = self.0.weak_counter.lock().unwrap();
+        *weak += 1;
+        Self(self.0.clone())
+    }
+}
+
+impl fmt::Debug for WeakSession {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl Deref for WeakSession {
+    type Target = Arc<SessionInner>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Drop for WeakSession {
+    fn drop(&mut self) {
+        let mut weak = self.0.weak_counter.lock().unwrap();
+        *weak -= 1;
+    }
 }
 
 static SESSION_ID_COUNTER: AtomicU16 = AtomicU16::new(0);
@@ -501,94 +518,32 @@ impl Session {
         runtime: Runtime,
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         aggregated_publishers: Vec<OwnedKeyExpr>,
+        owns_runtime: bool,
     ) -> impl Resolve<Session> {
         ResolveClosure::new(move || {
             let router = runtime.router();
-            let state = Arc::new(RwLock::new(SessionState::new(
+            let state = RwLock::new(SessionState::new(
                 aggregated_subscribers,
                 aggregated_publishers,
-            )));
-            let session = Session {
+            ));
+            let session = Session(Arc::new(SessionInner {
+                weak_counter: Mutex::new(0),
                 runtime: runtime.clone(),
-                state: state.clone(),
+                state,
                 id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
-                close_on_drop: true,
-                owns_runtime: false,
+                owns_runtime,
                 task_controller: TaskController::default(),
-            };
+            }));
 
-            runtime.new_handler(Arc::new(admin::Handler::new(session.clone())));
+            runtime.new_handler(Arc::new(admin::Handler::new(session.downgrade())));
 
-            let primitives = Some(router.new_primitives(Arc::new(session.clone())));
-            zwrite!(state).primitives = primitives;
+            let primitives = Some(router.new_primitives(Arc::new(session.downgrade())));
+            zwrite!(session.0.state).primitives = primitives;
 
-            admin::init(&session);
+            admin::init(session.downgrade());
 
             session
         })
-    }
-
-    /// Consumes the given `Session`, returning a thread-safe reference-counting
-    /// pointer to it (`Arc<Session>`). This is equivalent to `Arc::new(session)`.
-    ///
-    /// This is useful to share ownership of the `Session` between several threads
-    /// and tasks. It also allows to create [`Subscriber`](crate::pubsub::Subscriber) and
-    /// [`Queryable`](crate::query::Queryable) with static lifetime that can be moved to several
-    /// threads and tasks
-    ///
-    /// Note: the given zenoh `Session` will be closed when the last reference to
-    /// it is dropped.
-    ///
-    /// # Examples
-    /// ```no_run
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
-    /// let subscriber = session.declare_subscriber("key/expression")
-    ///     .await
-    ///     .unwrap();
-    /// tokio::task::spawn(async move {
-    ///     while let Ok(sample) = subscriber.recv_async().await {
-    ///         println!("Received: {:?}", sample);
-    ///     }
-    /// }).await;
-    /// # }
-    /// ```
-    pub fn into_arc(self) -> Arc<Self> {
-        Arc::new(self)
-    }
-
-    /// Consumes and leaks the given `Session`, returning a `'static` mutable
-    /// reference to it. The given `Session` will live  for the remainder of
-    /// the program's life. Dropping the returned reference will cause a memory
-    /// leak.
-    ///
-    /// This is useful to move entities (like [`Subscriber`](crate::pubsub::Subscriber)) which
-    /// lifetimes are bound to the session lifetime in several threads or tasks.
-    ///
-    /// Note: the given zenoh `Session` cannot be closed any more. At process
-    /// termination the zenoh session will terminate abruptly. If possible prefer
-    /// using [`Session::into_arc()`](Session::into_arc).
-    ///
-    /// # Examples
-    /// ```no_run
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::Session::leak(zenoh::open(zenoh::config::peer()).await.unwrap());
-    /// let subscriber = session.declare_subscriber("key/expression").await.unwrap();
-    /// tokio::task::spawn(async move {
-    ///     while let Ok(sample) = subscriber.recv_async().await {
-    ///         println!("Received: {:?}", sample);
-    ///     }
-    /// }).await;
-    /// # }
-    /// ```
-    pub fn leak(s: Self) -> &'static mut Self {
-        Box::leak(Box::new(s))
     }
 
     /// Returns the identifier of the current session. `zid()` is a convenient shortcut.
@@ -598,47 +553,68 @@ impl Session {
     }
 
     pub fn hlc(&self) -> Option<&HLC> {
-        self.runtime.hlc()
+        self.0.runtime.hlc()
     }
 
     /// Close the zenoh [`Session`](Session).
     ///
-    /// Sessions are automatically closed when dropped, but you may want to use this function to handle errors or
-    /// close the Session asynchronously.
+    /// Every subscriber and queryable declared will stop receiving data, and further attempt to
+    /// publish or query with the session or publishers will result in an error. Undeclaring an
+    /// entity after session closing is a no-op. Session state can be checked with
+    /// [`Session::is_closed`].
+    ///
+    /// Session are automatically closed when all its instances are dropped, same as `Arc`.
+    /// You may still want to use this function to handle errors or close the session
+    /// asynchronously.
+    /// <br>
+    /// Closing the session can also save bandwidth, as it avoids propagating the undeclaration
+    /// of the remaining entities.
+    ///
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let subscriber = session
+    ///     .declare_subscriber("key/expression")
+    ///     .await
+    ///     .unwrap();
+    /// let subscriber_task = tokio::spawn(async move {
+    ///     while let Ok(sample) = subscriber.recv_async().await {
+    ///         println!("Received: {} {:?}", sample.key_expr(), sample.payload());
+    ///     }
+    /// });
+    /// session.close().await.unwrap();
+    /// // subscriber task will end as `subscriber.recv_async()` will return `Err`
+    /// // subscriber undeclaration has not been sent on the wire
+    /// subscriber_task.await.unwrap();
+    /// # }
+    /// ```
+    pub fn close(&self) -> impl Resolve<ZResult<()>> + '_ {
+        self.0.close()
+    }
+
+    /// Check if the session has been closed.
     ///
     /// # Examples
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// assert!(!session.is_closed());
     /// session.close().await.unwrap();
+    /// assert!(session.is_closed());
     /// # }
-    /// ```
-    pub fn close(mut self) -> impl Resolve<ZResult<()>> {
-        ResolveFuture::new(async move {
-            trace!("close()");
-            // set the flag first to avoid double panic if this function panic
-            self.close_on_drop = false;
-            self.task_controller.terminate_all(Duration::from_secs(10));
-            if self.owns_runtime {
-                self.runtime.close().await?;
-            }
-            let mut state = zwrite!(self.state);
-            // clean up to break cyclic references from self.state to itself
-            let primitives = state.primitives.take();
-            state.queryables.clear();
-            drop(state);
-            primitives.as_ref().unwrap().send_close();
-            Ok(())
-        })
+    pub fn is_closed(&self) -> bool {
+        zread!(self.0.state).primitives.is_none()
     }
 
-    pub fn undeclare<'a, T, O>(&'a self, decl: T) -> O
+    pub fn undeclare<'a, T>(&'a self, decl: T) -> impl Resolve<ZResult<()>> + 'a
     where
-        O: Resolve<ZResult<()>>,
-        T: Undeclarable<&'a Self, O, ZResult<()>>,
+        T: Undeclarable<&'a Session> + 'a,
     {
         UndeclarableSealed::undeclare_inner(decl, self)
     }
@@ -655,7 +631,6 @@ impl Session {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let peers = session.config().get("connect/endpoints").unwrap();
@@ -666,14 +641,13 @@ impl Session {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let _ = session.config().insert_json5("connect/endpoints", r#"["tcp/127.0.0.1/7447"]"#);
     /// # }
     /// ```
     pub fn config(&self) -> &Notifier<Config> {
-        self.runtime.config()
+        self.0.runtime.config()
     }
 
     /// Get a new Timestamp from a Zenoh session [`Session`](Session).
@@ -685,7 +659,6 @@ impl Session {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let timestamp = session.new_timestamp();
@@ -698,49 +671,176 @@ impl Session {
                 // Called in the case that the runtime is not initialized with an hlc
                 // UNIX_EPOCH is Returns a Timespec::zero(), Unwrap Should be permissable here
                 let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into();
-                Timestamp::new(now, self.runtime.zid().into())
+                Timestamp::new(now, self.0.runtime.zid().into())
             }
         }
     }
+
+    /// Wrap the session into an `Arc`.
+    #[deprecated(since = "1.0.0", note = "use `Session` directly instead")]
+    pub fn into_arc(self) -> Arc<Session> {
+        Arc::new(self)
+    }
 }
 
-impl<'a> SessionDeclarations<'a, 'a> for Session {
-    fn info(&self) -> SessionInfo {
-        SessionRef::Borrow(self).info()
+impl Session {
+    /// Get information about the zenoh [`Session`](Session).
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let info = session.info();
+    /// # }
+    /// ```
+    pub fn info(&self) -> SessionInfo {
+        SessionInfo {
+            runtime: self.0.runtime.clone(),
+        }
     }
-    fn declare_subscriber<'b, TryIntoKeyExpr>(
-        &'a self,
+
+    /// Create a [`Subscriber`](crate::pubsub::Subscriber) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The resourkey expression to subscribe to
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let subscriber = session.declare_subscriber("key/expression")
+    ///     .await
+    ///     .unwrap();
+    /// tokio::task::spawn(async move {
+    ///     while let Ok(sample) = subscriber.recv_async().await {
+    ///         println!("Received: {:?}", sample);
+    ///     }
+    /// }).await;
+    /// # }
+    /// ```
+    pub fn declare_subscriber<'b, TryIntoKeyExpr>(
+        &self,
         key_expr: TryIntoKeyExpr,
-    ) -> SubscriberBuilder<'a, 'b, DefaultHandler>
+    ) -> SubscriberBuilder<'_, 'b, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        SessionRef::Borrow(self).declare_subscriber(key_expr)
+        SubscriberBuilder {
+            session: self,
+            key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
+            origin: Locality::default(),
+            handler: DefaultHandler::default(),
+            undeclare_on_drop: true,
+        }
     }
-    fn declare_queryable<'b, TryIntoKeyExpr>(
-        &'a self,
+
+    /// Create a [`Queryable`](crate::query::Queryable) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression matching the queries the
+    ///   [`Queryable`](crate::query::Queryable) will reply to
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let queryable = session.declare_queryable("key/expression")
+    ///     .await
+    ///     .unwrap();
+    /// tokio::task::spawn(async move {
+    ///     while let Ok(query) = queryable.recv_async().await {
+    ///         query.reply(
+    ///             "key/expression",
+    ///             "value",
+    ///         ).await.unwrap();
+    ///     }
+    /// }).await;
+    /// # }
+    /// ```
+    pub fn declare_queryable<'b, TryIntoKeyExpr>(
+        &self,
         key_expr: TryIntoKeyExpr,
-    ) -> QueryableBuilder<'a, 'b, DefaultHandler>
+    ) -> QueryableBuilder<'_, 'b, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        SessionRef::Borrow(self).declare_queryable(key_expr)
+        QueryableBuilder {
+            session: self,
+            key_expr: key_expr.try_into().map_err(Into::into),
+            complete: false,
+            origin: Locality::default(),
+            handler: DefaultHandler::default(),
+            undeclare_on_drop: true,
+        }
     }
-    fn declare_publisher<'b, TryIntoKeyExpr>(
-        &'a self,
+
+    /// Create a [`Publisher`](crate::pubsub::Publisher) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression matching resources to write
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression")
+    ///     .await
+    ///     .unwrap();
+    /// publisher.put("value").await.unwrap();
+    /// # }
+    /// ```
+    pub fn declare_publisher<'b, TryIntoKeyExpr>(
+        &self,
         key_expr: TryIntoKeyExpr,
-    ) -> PublisherBuilder<'a, 'b>
+    ) -> PublisherBuilder<'_, 'b>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        SessionRef::Borrow(self).declare_publisher(key_expr)
+        PublisherBuilder {
+            session: self,
+            key_expr: key_expr.try_into().map_err(Into::into),
+            encoding: Encoding::default(),
+            congestion_control: CongestionControl::DEFAULT,
+            priority: Priority::DEFAULT,
+            is_express: false,
+            #[cfg(feature = "unstable")]
+            reliability: Reliability::DEFAULT,
+            destination: Locality::default(),
+        }
     }
+
+    /// Obtain a [`Liveliness`] struct tied to this Zenoh [`Session`].
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let liveliness = session
+    ///     .liveliness()
+    ///     .declare_token("key/expression")
+    ///     .await
+    ///     .unwrap();
+    /// # }
+    /// ```
     #[zenoh_macros::unstable]
-    fn liveliness(&'a self) -> Liveliness {
-        SessionRef::Borrow(self).liveliness()
+    pub fn liveliness(&self) -> Liveliness<'_> {
+        Liveliness { session: self }
     }
 }
 
@@ -754,7 +854,6 @@ impl Session {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let key_expr = session.declare_keyexpr("key/expression").await.unwrap();
@@ -769,18 +868,11 @@ impl Session {
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let key_expr: ZResult<KeyExpr> = key_expr.try_into().map_err(Into::into);
-        self._declare_keyexpr(key_expr)
-    }
-
-    fn _declare_keyexpr<'a, 'b: 'a>(
-        &'a self,
-        key_expr: ZResult<KeyExpr<'b>>,
-    ) -> impl Resolve<ZResult<KeyExpr<'b>>> + 'a {
-        let sid = self.id;
+        let sid = self.0.id;
         ResolveClosure::new(move || {
             let key_expr: KeyExpr = key_expr?;
             let prefix_len = key_expr.len() as u32;
-            let expr_id = self.declare_prefix(key_expr.as_str()).wait();
+            let expr_id = self.0.declare_prefix(key_expr.as_str()).wait()?;
             let key_expr = match key_expr.0 {
                 KeyExprInner::Borrowed(key_expr) | KeyExprInner::BorrowedWire { key_expr, .. } => {
                     KeyExpr(KeyExprInner::BorrowedWire {
@@ -816,7 +908,7 @@ impl Session {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::{bytes::Encoding, prelude::*};
+    /// use zenoh::bytes::Encoding;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// session
@@ -860,7 +952,6 @@ impl Session {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// session.delete("key/expression").await.unwrap();
@@ -897,7 +988,6 @@ impl Session {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
     /// let replies = session.get("key/expression").await.unwrap();
@@ -916,7 +1006,7 @@ impl Session {
     {
         let selector = selector.try_into().map_err(Into::into);
         let timeout = {
-            let conf = self.runtime.config().lock();
+            let conf = self.0.runtime.config().lock();
             Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout()))
         };
         let qos: QoS = request::ext::QoSType::REQUEST.into();
@@ -938,17 +1028,6 @@ impl Session {
 }
 
 impl Session {
-    pub(crate) fn clone(&self) -> Self {
-        Self {
-            runtime: self.runtime.clone(),
-            state: self.state.clone(),
-            id: self.id,
-            close_on_drop: false,
-            owns_runtime: self.owns_runtime,
-            task_controller: self.task_controller.clone(),
-        }
-    }
-
     #[allow(clippy::new_ret_no_self)]
     pub(super) fn new(
         config: Config,
@@ -966,28 +1045,52 @@ impl Session {
             }
             let mut runtime = runtime.build().await?;
 
-            let mut session = Self::init(
+            let session = Self::init(
                 runtime.clone(),
                 aggregated_subscribers,
                 aggregated_publishers,
+                true,
             )
             .await;
-            session.owns_runtime = true;
             runtime.start().await?;
             Ok(session)
         })
     }
+}
+impl SessionInner {
+    fn close(&self) -> impl Resolve<ZResult<()>> + '_ {
+        ResolveFuture::new(async move {
+            let Some(primitives) = zwrite!(self.state).primitives.take() else {
+                return Ok(());
+            };
+            if self.owns_runtime {
+                info!(zid = %self.runtime.zid(), "close session");
+            }
+            self.task_controller.terminate_all(Duration::from_secs(10));
+            if self.owns_runtime {
+                self.runtime.close().await?;
+            } else {
+                primitives.send_close();
+            }
+            zwrite!(self.state).queryables.clear();
+            Ok(())
+        })
+    }
 
-    pub(crate) fn declare_prefix<'a>(&'a self, prefix: &'a str) -> impl Resolve<ExprId> + 'a {
+    pub(crate) fn declare_prefix<'a>(
+        &'a self,
+        prefix: &'a str,
+    ) -> impl Resolve<ZResult<ExprId>> + 'a {
         ResolveClosure::new(move || {
             trace!("declare_prefix({:?})", prefix);
             let mut state = zwrite!(self.state);
+            let primitives = state.primitives()?;
             match state
                 .local_resources
                 .iter()
                 .find(|(_expr_id, res)| res.name() == prefix)
             {
-                Some((expr_id, _res)) => *expr_id,
+                Some((expr_id, _res)) => Ok(*expr_id),
                 None => {
                     let expr_id = state.expr_id_counter.fetch_add(1, Ordering::SeqCst);
                     let mut res = Resource::new(Box::from(prefix));
@@ -1004,7 +1107,6 @@ impl Session {
                         }
                     }
                     state.local_resources.insert(expr_id, res);
-                    let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
                     primitives.send_declare(Declare {
                         interest_id: None,
@@ -1020,7 +1122,7 @@ impl Session {
                             },
                         }),
                     });
-                    expr_id
+                    Ok(expr_id)
                 }
             }
         })
@@ -1077,7 +1179,7 @@ impl Session {
         state.publishers.insert(id, pub_state);
 
         if let Some(res) = declared_pub {
-            let primitives = state.primitives.as_ref().unwrap().clone();
+            let primitives = state.primitives()?;
             drop(state);
             primitives.send_interest(Interest {
                 id,
@@ -1102,7 +1204,7 @@ impl Session {
                 if !state.publishers.values().any(|p| {
                     p.destination != Locality::SessionLocal && p.remote_id == pub_state.remote_id
                 }) {
-                    let primitives = state.primitives.as_ref().unwrap().clone();
+                    let primitives = state.primitives()?;
                     drop(state);
                     primitives.send_interest(Interest {
                         id: pub_state.remote_id,
@@ -1122,7 +1224,7 @@ impl Session {
     }
 
     pub(crate) fn declare_subscriber_inner(
-        &self,
+        self: &Arc<Self>,
         key_expr: &KeyExpr,
         origin: Locality,
         callback: Callback<'static, Sample>,
@@ -1205,7 +1307,7 @@ impl Session {
         }
 
         if let Some(key_expr) = declared_sub {
-            let primitives = state.primitives.as_ref().unwrap().clone();
+            let primitives = state.primitives()?;
             drop(state);
             // If key_expr is a pure Expr, remap it to optimal Rid or RidWithSuffix
             // let key_expr = if !key_expr.is_optimized(self) {
@@ -1251,7 +1353,11 @@ impl Session {
         Ok(sub_state)
     }
 
-    pub(crate) fn undeclare_subscriber_inner(&self, sid: Id, kind: SubscriberKind) -> ZResult<()> {
+    pub(crate) fn undeclare_subscriber_inner(
+        self: &Arc<Self>,
+        sid: Id,
+        kind: SubscriberKind,
+    ) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(sub_state) = state.subscribers_mut(kind).remove(&sid) {
             trace!("undeclare_subscriber({:?})", sub_state);
@@ -1278,7 +1384,7 @@ impl Session {
                 if !state.subscribers(kind).values().any(|s| {
                     s.origin != Locality::SessionLocal && s.remote_id == sub_state.remote_id
                 }) {
-                    let primitives = state.primitives.as_ref().unwrap().clone();
+                    let primitives = state.primitives()?;
                     drop(state);
                     primitives.send_declare(Declare {
                         interest_id: None,
@@ -1301,7 +1407,7 @@ impl Session {
             } else {
                 #[cfg(feature = "unstable")]
                 if kind == SubscriberKind::LivelinessSubscriber {
-                    let primitives = state.primitives.as_ref().unwrap().clone();
+                    let primitives = state.primitives()?;
                     drop(state);
 
                     primitives.send_interest(Interest {
@@ -1343,7 +1449,7 @@ impl Session {
         state.queryables.insert(id, qable_state.clone());
 
         if origin != Locality::SessionLocal {
-            let primitives = state.primitives.as_ref().unwrap().clone();
+            let primitives = state.primitives()?;
             drop(state);
             let qabl_info = QueryableInfoType {
                 complete,
@@ -1369,7 +1475,7 @@ impl Session {
         if let Some(qable_state) = state.queryables.remove(&qid) {
             trace!("undeclare_queryable({:?})", qable_state);
             if qable_state.origin != Locality::SessionLocal {
-                let primitives = state.primitives.as_ref().unwrap().clone();
+                let primitives = state.primitives()?;
                 drop(state);
                 primitives.send_declare(Declare {
                     interest_id: None,
@@ -1404,7 +1510,7 @@ impl Session {
         });
 
         state.tokens.insert(tok_state.id, tok_state.clone());
-        let primitives = state.primitives.as_ref().unwrap().clone();
+        let primitives = state.primitives()?;
         drop(state);
         primitives.send_declare(Declare {
             interest_id: None,
@@ -1467,7 +1573,7 @@ impl Session {
             }
         }
 
-        let primitives = state.primitives.as_ref().unwrap().clone();
+        let primitives = state.primitives()?;
         drop(state);
 
         primitives.send_interest(Interest {
@@ -1496,7 +1602,7 @@ impl Session {
             let key_expr = &tok_state.key_expr;
             let twin_tok = state.tokens.values().any(|s| s.key_expr == *key_expr);
             if !twin_tok {
-                let primitives = state.primitives.as_ref().unwrap().clone();
+                let primitives = state.primitives()?;
                 drop(state);
                 primitives.send_declare(Declare {
                     interest_id: None,
@@ -1587,14 +1693,14 @@ impl Session {
     }
 
     #[zenoh_macros::unstable]
-    pub(crate) fn update_status_up(&self, state: &SessionState, key_expr: &KeyExpr) {
+    pub(crate) fn update_status_up(self: &Arc<Self>, state: &SessionState, key_expr: &KeyExpr) {
         for msub in state.matching_listeners.values() {
             if key_expr.intersects(&msub.key_expr) {
                 // Cannot hold session lock when calling tables (matching_status())
                 // TODO: check which ZRuntime should be used
                 self.task_controller
                     .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
-                        let session = self.clone();
+                        let session = WeakSession::new(self);
                         let msub = msub.clone();
                         async move {
                             match msub.current.lock() {
@@ -1625,14 +1731,14 @@ impl Session {
     }
 
     #[zenoh_macros::unstable]
-    pub(crate) fn update_status_down(&self, state: &SessionState, key_expr: &KeyExpr) {
+    pub(crate) fn update_status_down(self: &Arc<Self>, state: &SessionState, key_expr: &KeyExpr) {
         for msub in state.matching_listeners.values() {
             if key_expr.intersects(&msub.key_expr) {
                 // Cannot hold session lock when calling tables (matching_status())
                 // TODO: check which ZRuntime should be used
                 self.task_controller
                     .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
-                        let session = self.clone();
+                        let session = WeakSession::new(self);
                         let msub = msub.clone();
                         async move {
                             match msub.current.lock() {
@@ -1753,7 +1859,7 @@ impl Session {
 
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn query(
-        &self,
+        self: &Arc<Self>,
         key_expr: &KeyExpr<'_>,
         parameters: &Parameters<'_>,
         target: QueryTarget,
@@ -1788,13 +1894,13 @@ impl Session {
         let token = self.task_controller.get_cancellation_token();
         self.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
-                let state = self.state.clone();
+                let session = WeakSession::new(self);
                 #[cfg(feature = "unstable")]
                 let zid = self.runtime.zid();
                 async move {
                     tokio::select! {
                         _ = tokio::time::sleep(timeout) => {
-                            let mut state = zwrite!(state);
+                            let mut state = zwrite!(session.state);
                             if let Some(query) = state.queries.remove(&qid) {
                                 std::mem::drop(state);
                                 tracing::debug!("Timeout on query {}! Send error and close.", qid);
@@ -1829,7 +1935,7 @@ impl Session {
             },
         );
 
-        let primitives = state.primitives.as_ref().unwrap().clone();
+        let primitives = state.primitives()?;
         drop(state);
 
         if destination != Locality::SessionLocal {
@@ -1883,7 +1989,7 @@ impl Session {
 
     #[cfg(feature = "unstable")]
     pub(crate) fn liveliness_query(
-        &self,
+        self: &Arc<Self>,
         key_expr: &KeyExpr<'_>,
         timeout: Duration,
         callback: Callback<'static, Reply>,
@@ -1894,12 +2000,12 @@ impl Session {
         let token = self.task_controller.get_cancellation_token();
         self.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
-                let state = self.state.clone();
+                let session = WeakSession::new(self);
                 let zid = self.runtime.zid();
                 async move {
                     tokio::select! {
                         _ = tokio::time::sleep(timeout) => {
-                            let mut state = zwrite!(state);
+                            let mut state = zwrite!(session.state);
                             if let Some(query) = state.liveliness_queries.remove(&id) {
                                 std::mem::drop(state);
                                 tracing::debug!("Timeout on liveliness query {}! Send error and close.", id);
@@ -1921,7 +2027,7 @@ impl Session {
             .liveliness_queries
             .insert(id, LivelinessQueryState { callback });
 
-        let primitives = state.primitives.as_ref().unwrap().clone();
+        let primitives = state.primitives()?;
         drop(state);
 
         primitives.send_interest(Interest {
@@ -1939,7 +2045,7 @@ impl Session {
 
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn handle_query(
-        &self,
+        self: &Arc<Self>,
         local: bool,
         key_expr: &WireExpr,
         parameters: &str,
@@ -1951,6 +2057,9 @@ impl Session {
     ) {
         let (primitives, key_expr, queryables) = {
             let state = zread!(self.state);
+            let Ok(primitives) = state.primitives() else {
+                return;
+            };
             match state.wireexpr_to_keyexpr(key_expr, local) {
                 Ok(key_expr) => {
                     let queryables = state
@@ -1976,11 +2085,7 @@ impl Session {
                         )
                         .map(|(id, qable)| (*id, qable.callback.clone()))
                         .collect::<Vec<(u32, Arc<dyn Fn(Query) + Send + Sync>)>>();
-                    (
-                        state.primitives.as_ref().unwrap().clone(),
-                        key_expr.into_owned(),
-                        queryables,
-                    )
+                    (primitives, key_expr.into_owned(), queryables)
                 }
                 Err(err) => {
                     error!("Received Query for unknown key_expr: {}", err);
@@ -1997,7 +2102,7 @@ impl Session {
             qid,
             zid: zid.into(),
             primitives: if local {
-                Arc::new(self.clone())
+                Arc::new(WeakSession::new(self))
             } else {
                 primitives
             },
@@ -2016,161 +2121,7 @@ impl Session {
     }
 }
 
-impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
-    /// Create a [`Subscriber`](crate::pubsub::Subscriber) for the given key expression.
-    ///
-    /// # Arguments
-    ///
-    /// * `key_expr` - The resourkey expression to subscribe to
-    ///
-    /// # Examples
-    /// ```no_run
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
-    /// let subscriber = session.declare_subscriber("key/expression")
-    ///     .await
-    ///     .unwrap();
-    /// tokio::task::spawn(async move {
-    ///     while let Ok(sample) = subscriber.recv_async().await {
-    ///         println!("Received: {:?}", sample);
-    ///     }
-    /// }).await;
-    /// # }
-    /// ```
-    fn declare_subscriber<'b, TryIntoKeyExpr>(
-        &'s self,
-        key_expr: TryIntoKeyExpr,
-    ) -> SubscriberBuilder<'static, 'b, DefaultHandler>
-    where
-        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
-    {
-        SubscriberBuilder {
-            session: SessionRef::Shared(self.clone()),
-            key_expr: key_expr.try_into().map_err(Into::into),
-            origin: Locality::default(),
-            handler: DefaultHandler::default(),
-        }
-    }
-
-    /// Create a [`Queryable`](crate::query::Queryable) for the given key expression.
-    ///
-    /// # Arguments
-    ///
-    /// * `key_expr` - The key expression matching the queries the
-    ///   [`Queryable`](crate::query::Queryable) will reply to
-    ///
-    /// # Examples
-    /// ```no_run
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
-    /// let queryable = session.declare_queryable("key/expression")
-    ///     .await
-    ///     .unwrap();
-    /// tokio::task::spawn(async move {
-    ///     while let Ok(query) = queryable.recv_async().await {
-    ///         query.reply(
-    ///             "key/expression",
-    ///             "value",
-    ///         ).await.unwrap();
-    ///     }
-    /// }).await;
-    /// # }
-    /// ```
-    fn declare_queryable<'b, TryIntoKeyExpr>(
-        &'s self,
-        key_expr: TryIntoKeyExpr,
-    ) -> QueryableBuilder<'static, 'b, DefaultHandler>
-    where
-        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
-    {
-        QueryableBuilder {
-            session: SessionRef::Shared(self.clone()),
-            key_expr: key_expr.try_into().map_err(Into::into),
-            complete: false,
-            origin: Locality::default(),
-            handler: DefaultHandler::default(),
-        }
-    }
-
-    /// Create a [`Publisher`](crate::pubsub::Publisher) for the given key expression.
-    ///
-    /// # Arguments
-    ///
-    /// * `key_expr` - The key expression matching resources to write
-    ///
-    /// # Examples
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
-    /// let publisher = session.declare_publisher("key/expression")
-    ///     .await
-    ///     .unwrap();
-    /// publisher.put("value").await.unwrap();
-    /// # }
-    /// ```
-    fn declare_publisher<'b, TryIntoKeyExpr>(
-        &'s self,
-        key_expr: TryIntoKeyExpr,
-    ) -> PublisherBuilder<'static, 'b>
-    where
-        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
-    {
-        PublisherBuilder {
-            session: SessionRef::Shared(self.clone()),
-            key_expr: key_expr.try_into().map_err(Into::into),
-            encoding: Encoding::default(),
-            congestion_control: CongestionControl::DEFAULT,
-            priority: Priority::DEFAULT,
-            is_express: false,
-            #[cfg(feature = "unstable")]
-            reliability: Reliability::DEFAULT,
-            destination: Locality::default(),
-        }
-    }
-
-    /// Obtain a [`Liveliness`] struct tied to this Zenoh [`Session`].
-    ///
-    /// # Examples
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
-    /// let liveliness = session
-    ///     .liveliness()
-    ///     .declare_token("key/expression")
-    ///     .await
-    ///     .unwrap();
-    /// # }
-    /// ```
-    #[zenoh_macros::unstable]
-    fn liveliness(&'s self) -> Liveliness<'static> {
-        Liveliness {
-            session: SessionRef::Shared(self.clone()),
-        }
-    }
-
-    fn info(&'s self) -> SessionInfo<'static> {
-        SessionInfo {
-            session: SessionRef::Shared(self.clone()),
-        }
-    }
-}
-
-impl Primitives for Session {
+impl Primitives for WeakSession {
     fn send_interest(&self, msg: zenoh_protocol::network::Interest) {
         trace!("recv Interest {} {:?}", msg.id, msg.wire_expr);
     }
@@ -2663,174 +2614,7 @@ impl Primitives for Session {
     }
 }
 
-impl Drop for Session {
-    fn drop(&mut self) {
-        if self.close_on_drop {
-            let _ = self.clone().close().wait();
-        }
-    }
-}
-
-impl fmt::Debug for Session {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Session").field("id", &self.zid()).finish()
-    }
-}
-
-/// Functions to create zenoh entities
-///
-/// This trait contains functions to create zenoh entities like
-/// [`Subscriber`](crate::pubsub::Subscriber), and
-/// [`Queryable`](crate::query::Queryable)
-///
-/// This trait is implemented by [`Session`](crate::session::Session) itself and
-/// by wrappers [`SessionRef`](crate::session::SessionRef) and [`Arc<Session>`](std::sync::Arc)
-///
-/// # Examples
-/// ```no_run
-/// # #[tokio::main]
-/// # async fn main() {
-/// use zenoh::prelude::*;
-///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
-/// let subscriber = session.declare_subscriber("key/expression")
-///     .await
-///     .unwrap();
-/// tokio::task::spawn(async move {
-///     while let Ok(sample) = subscriber.recv_async().await {
-///         println!("Received: {:?}", sample);
-///     }
-/// }).await;
-/// # }
-/// ```
-pub trait SessionDeclarations<'s, 'a> {
-    /// Create a [`Subscriber`](crate::pubsub::Subscriber) for the given key expression.
-    ///
-    /// # Arguments
-    ///
-    /// * `key_expr` - The resourkey expression to subscribe to
-    ///
-    /// # Examples
-    /// ```no_run
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
-    /// let subscriber = session.declare_subscriber("key/expression")
-    ///     .await
-    ///     .unwrap();
-    /// tokio::task::spawn(async move {
-    ///     while let Ok(sample) = subscriber.recv_async().await {
-    ///         println!("Received: {:?}", sample);
-    ///     }
-    /// }).await;
-    /// # }
-    /// ```
-    fn declare_subscriber<'b, TryIntoKeyExpr>(
-        &'s self,
-        key_expr: TryIntoKeyExpr,
-    ) -> SubscriberBuilder<'a, 'b, DefaultHandler>
-    where
-        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>;
-
-    /// Create a [`Queryable`](crate::query::Queryable) for the given key expression.
-    ///
-    /// # Arguments
-    ///
-    /// * `key_expr` - The key expression matching the queries the
-    ///   [`Queryable`](crate::query::Queryable) will reply to
-    ///
-    /// # Examples
-    /// ```no_run
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
-    /// let queryable = session.declare_queryable("key/expression")
-    ///     .await
-    ///     .unwrap();
-    /// tokio::task::spawn(async move {
-    ///     while let Ok(query) = queryable.recv_async().await {
-    ///         query.reply(
-    ///             "key/expression",
-    ///             "value",
-    ///         ).await.unwrap();
-    ///     }
-    /// }).await;
-    /// # }
-    /// ```
-    fn declare_queryable<'b, TryIntoKeyExpr>(
-        &'s self,
-        key_expr: TryIntoKeyExpr,
-    ) -> QueryableBuilder<'a, 'b, DefaultHandler>
-    where
-        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>;
-
-    /// Create a [`Publisher`](crate::pubsub::Publisher) for the given key expression.
-    ///
-    /// # Arguments
-    ///
-    /// * `key_expr` - The key expression matching resources to write
-    ///
-    /// # Examples
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
-    /// let publisher = session.declare_publisher("key/expression")
-    ///     .await
-    ///     .unwrap();
-    /// publisher.put("value").await.unwrap();
-    /// # }
-    /// ```
-    fn declare_publisher<'b, TryIntoKeyExpr>(
-        &'s self,
-        key_expr: TryIntoKeyExpr,
-    ) -> PublisherBuilder<'a, 'b>
-    where
-        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>;
-
-    /// Obtain a [`Liveliness`] struct tied to this Zenoh [`Session`].
-    ///
-    /// # Examples
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
-    /// let liveliness = session
-    ///     .liveliness()
-    ///     .declare_token("key/expression")
-    ///     .await
-    ///     .unwrap();
-    /// # }
-    /// ```
-    #[zenoh_macros::unstable]
-    fn liveliness(&'s self) -> Liveliness<'a>;
-    /// Get information about the zenoh [`Session`](Session).
-    ///
-    /// # Examples
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
-    /// let info = session.info();
-    /// # }
-    /// ```
-    fn info(&'s self) -> SessionInfo<'a>;
-}
-
-impl crate::net::primitives::EPrimitives for Session {
+impl crate::net::primitives::EPrimitives for WeakSession {
     #[inline]
     fn send_interest(&self, ctx: crate::net::routing::RoutingContext<Interest>) {
         (self as &dyn Primitives).send_interest(ctx.msg)
@@ -2876,7 +2660,6 @@ impl crate::net::primitives::EPrimitives for Session {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// # }
@@ -2886,7 +2669,7 @@ impl crate::net::primitives::EPrimitives for Session {
 /// # #[tokio::main]
 /// # async fn main() {
 /// use std::str::FromStr;
-/// use zenoh::{session::ZenohId, prelude::*};
+/// use zenoh::session::ZenohId;
 ///
 /// let mut config = zenoh::config::peer();
 /// config.set_id(ZenohId::from_str("221b72df20924c15b8794c6bdb471150").unwrap());
@@ -2914,7 +2697,6 @@ where
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
 /// # }
@@ -3030,6 +2812,7 @@ impl Wait for InitBuilder {
             self.runtime,
             self.aggregated_subscribers,
             self.aggregated_publishers,
+            false,
         )
         .wait())
     }

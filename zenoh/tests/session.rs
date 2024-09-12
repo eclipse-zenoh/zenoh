@@ -23,9 +23,7 @@ use std::{
 use zenoh::internal::runtime::{Runtime, RuntimeBuilder};
 #[cfg(feature = "unstable")]
 use zenoh::pubsub::Reliability;
-use zenoh::{
-    config, key_expr::KeyExpr, prelude::*, qos::CongestionControl, sample::SampleKind, Session,
-};
+use zenoh::{config, key_expr::KeyExpr, qos::CongestionControl, sample::SampleKind, Session};
 use zenoh_core::ztimeout;
 #[cfg(not(feature = "unstable"))]
 use zenoh_protocol::core::Reliability;

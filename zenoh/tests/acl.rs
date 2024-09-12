@@ -22,7 +22,6 @@ mod test {
     use zenoh::{
         config,
         config::{EndPoint, WhatAmI},
-        prelude::*,
         sample::SampleKind,
         Config, Session,
     };

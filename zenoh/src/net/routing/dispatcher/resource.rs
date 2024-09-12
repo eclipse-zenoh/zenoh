@@ -339,6 +339,7 @@ impl Resource {
         r.parent.take();
         r.children.clear();
         r.nonwild_prefix.take();
+        r.context.take();
         r.session_ctxs.clear();
     }
 

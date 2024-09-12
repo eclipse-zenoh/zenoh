@@ -22,14 +22,13 @@ use std::{
 
 use zenoh::{
     config,
-    prelude::*,
     pubsub::Reliability,
     qos::CongestionControl,
     shm::{
         zshm, BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder,
         POSIX_PROTOCOL_ID,
     },
-    Session,
+    Session, Wait,
 };
 use zenoh_core::ztimeout;
 

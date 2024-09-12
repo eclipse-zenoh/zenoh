@@ -24,7 +24,6 @@ mod test {
     use zenoh::{
         config,
         config::{EndPoint, WhatAmI},
-        prelude::*,
         Config, Session,
     };
     use zenoh_core::{zlock, ztimeout};

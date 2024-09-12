@@ -14,7 +14,6 @@
 use clap::Parser;
 use zenoh::{
     bytes::ZBytes,
-    prelude::*,
     qos::CongestionControl,
     shm::{PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID},
     Config, Wait,
