@@ -404,9 +404,7 @@ pub(crate) struct SessionInner {
 
 impl fmt::Debug for SessionInner {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Session")
-            .field("id", &self.runtime.zid())
-            .finish()
+        f.debug_struct("Session").field("id", &self.zid()).finish()
     }
 }
 
@@ -671,7 +669,7 @@ impl Session {
                 // Called in the case that the runtime is not initialized with an hlc
                 // UNIX_EPOCH is Returns a Timespec::zero(), Unwrap Should be permissable here
                 let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into();
-                Timestamp::new(now, self.0.runtime.zid().into())
+                Timestamp::new(now, self.0.zid().into())
             }
         }
     }
@@ -1058,13 +1056,17 @@ impl Session {
     }
 }
 impl SessionInner {
+    pub fn zid(&self) -> ZenohId {
+        self.runtime.zid()
+    }
+
     fn close(&self) -> impl Resolve<ZResult<()>> + '_ {
         ResolveFuture::new(async move {
             let Some(primitives) = zwrite!(self.state).primitives.take() else {
                 return Ok(());
             };
             if self.owns_runtime {
-                info!(zid = %self.runtime.zid(), "close session");
+                info!(zid = %self.zid(), "close session");
             }
             self.task_controller.terminate_all(Duration::from_secs(10));
             if self.owns_runtime {
@@ -1072,7 +1074,14 @@ impl SessionInner {
             } else {
                 primitives.send_close();
             }
-            zwrite!(self.state).queryables.clear();
+            let mut state = zwrite!(self.state);
+            state.queryables.clear();
+            state.subscribers.clear();
+            state.matching_listeners.clear();
+            state.liveliness_subscribers.clear();
+            state.local_resources.clear();
+            state.remote_resources.clear();
+            state.tokens.clear();
             Ok(())
         })
     }
@@ -1196,6 +1205,9 @@ impl SessionInner {
 
     pub(crate) fn undeclare_publisher_inner(&self, pid: Id) -> ZResult<()> {
         let mut state = zwrite!(self.state);
+        let Ok(primitives) = state.primitives() else {
+            return Ok(());
+        };
         if let Some(pub_state) = state.publishers.remove(&pid) {
             trace!("undeclare_publisher({:?})", pub_state);
             if pub_state.destination != Locality::SessionLocal {
@@ -1204,7 +1216,6 @@ impl SessionInner {
                 if !state.publishers.values().any(|p| {
                     p.destination != Locality::SessionLocal && p.remote_id == pub_state.remote_id
                 }) {
-                    let primitives = state.primitives()?;
                     drop(state);
                     primitives.send_interest(Interest {
                         id: pub_state.remote_id,
@@ -1359,6 +1370,9 @@ impl SessionInner {
         kind: SubscriberKind,
     ) -> ZResult<()> {
         let mut state = zwrite!(self.state);
+        let Ok(primitives) = state.primitives() else {
+            return Ok(());
+        };
         if let Some(sub_state) = state.subscribers_mut(kind).remove(&sid) {
             trace!("undeclare_subscriber({:?})", sub_state);
             for res in state
@@ -1384,7 +1398,6 @@ impl SessionInner {
                 if !state.subscribers(kind).values().any(|s| {
                     s.origin != Locality::SessionLocal && s.remote_id == sub_state.remote_id
                 }) {
-                    let primitives = state.primitives()?;
                     drop(state);
                     primitives.send_declare(Declare {
                         interest_id: None,
@@ -1472,10 +1485,12 @@ impl SessionInner {
 
     pub(crate) fn close_queryable(&self, qid: Id) -> ZResult<()> {
         let mut state = zwrite!(self.state);
+        let Ok(primitives) = state.primitives() else {
+            return Ok(());
+        };
         if let Some(qable_state) = state.queryables.remove(&qid) {
             trace!("undeclare_queryable({:?})", qable_state);
             if qable_state.origin != Locality::SessionLocal {
-                let primitives = state.primitives()?;
                 drop(state);
                 primitives.send_declare(Declare {
                     interest_id: None,
@@ -1596,13 +1611,15 @@ impl SessionInner {
     #[zenoh_macros::unstable]
     pub(crate) fn undeclare_liveliness(&self, tid: Id) -> ZResult<()> {
         let mut state = zwrite!(self.state);
+        let Ok(primitives) = state.primitives() else {
+            return Ok(());
+        };
         if let Some(tok_state) = state.tokens.remove(&tid) {
             trace!("undeclare_liveliness({:?})", tok_state);
             // Note: there might be several Tokens on the same KeyExpr.
             let key_expr = &tok_state.key_expr;
             let twin_tok = state.tokens.values().any(|s| s.key_expr == *key_expr);
             if !twin_tok {
-                let primitives = state.primitives()?;
                 drop(state);
                 primitives.send_declare(Declare {
                     interest_id: None,
@@ -1771,6 +1788,9 @@ impl SessionInner {
     #[zenoh_macros::unstable]
     pub(crate) fn undeclare_matches_listener_inner(&self, sid: Id) -> ZResult<()> {
         let mut state = zwrite!(self.state);
+        if state.primitives.is_none() {
+            return Ok(());
+        }
         if let Some(state) = state.matching_listeners.remove(&sid) {
             trace!("undeclare_matches_listener_inner({:?})", state);
             Ok(())
@@ -1896,7 +1916,7 @@ impl SessionInner {
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
                 let session = WeakSession::new(self);
                 #[cfg(feature = "unstable")]
-                let zid = self.runtime.zid();
+                let zid = self.zid();
                 async move {
                     tokio::select! {
                         _ = tokio::time::sleep(timeout) => {
@@ -2001,7 +2021,7 @@ impl SessionInner {
         self.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
                 let session = WeakSession::new(self);
-                let zid = self.runtime.zid();
+                let zid = self.zid();
                 async move {
                     tokio::select! {
                         _ = tokio::time::sleep(timeout) => {
@@ -2094,7 +2114,7 @@ impl SessionInner {
             }
         };
 
-        let zid = self.runtime.zid();
+        let zid = self.zid();
 
         let query_inner = Arc::new(QueryInner {
             key_expr,

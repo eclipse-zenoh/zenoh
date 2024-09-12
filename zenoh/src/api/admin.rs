@@ -45,7 +45,7 @@ lazy_static::lazy_static!(
 );
 
 pub(crate) fn init(session: WeakSession) {
-    if let Ok(own_zid) = keyexpr::new(&session.runtime.zid().to_string()) {
+    if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
         let admin_key = KeyExpr::from(*KE_PREFIX / own_zid / *KE_SESSION / *KE_STARSTAR)
             .to_wire(&session)
             .to_owned();
@@ -104,7 +104,7 @@ pub(crate) fn on_admin_query(session: &WeakSession, query: Query) {
         }
     }
 
-    if let Ok(own_zid) = keyexpr::new(&session.runtime.zid().to_string()) {
+    if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
         for transport in zenoh_runtime::ZRuntime::Net
             .block_in_place(session.runtime.manager().get_transports_unicast())
         {
@@ -155,7 +155,7 @@ impl TransportMulticastEventHandler for Handler {
         &self,
         peer: zenoh_transport::TransportPeer,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        if let Ok(own_zid) = keyexpr::new(&self.session.runtime.zid().to_string()) {
+        if let Ok(own_zid) = keyexpr::new(&self.session.zid().to_string()) {
             if let Ok(zid) = keyexpr::new(&peer.zid.to_string()) {
                 let expr = WireExpr::from(
                     &(*KE_PREFIX / own_zid / *KE_SESSION / *KE_TRANSPORT_UNICAST / zid),
