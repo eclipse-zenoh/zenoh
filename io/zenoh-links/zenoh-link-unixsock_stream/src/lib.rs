@@ -68,7 +68,7 @@ impl LocatorInspector for UnixSockStreamLocatorInspector {
         if let Some(reliability) = locator
             .metadata()
             .get(Metadata::RELIABILITY)
-            .map(|r| Reliability::from_str(r))
+            .map(Reliability::from_str)
             .transpose()?
         {
             Ok(reliability == Reliability::Reliable)
