@@ -126,9 +126,8 @@ impl StorageRuntimeInner {
         } = config;
         let lib_loader = LibLoader::new(backend_search_dirs);
 
-        let plugins_manager =
-            PluginsManager::dynamic(lib_loader.clone(), BACKEND_LIB_PREFIX)
-                .declare_static_plugin::<MemoryBackend, &str>(MEMORY_BACKEND_NAME, true);
+        let mut plugins_manager = PluginsManager::dynamic(lib_loader.clone(), BACKEND_LIB_PREFIX);
+        plugins_manager.declare_static_plugin::<MemoryBackend, &str>(MEMORY_BACKEND_NAME, true);
 
         let session = Arc::new(zenoh::session::init(runtime.clone()).wait()?);
 
