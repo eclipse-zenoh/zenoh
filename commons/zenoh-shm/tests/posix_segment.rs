@@ -67,31 +67,31 @@ where
 /// UNSIGNED ///
 
 #[test]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn segment_u8_id() {
     test_segment::<u8>()
 }
 
 #[test]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn segment_u16_id() {
     test_segment::<u16>()
 }
 
 #[test]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn segment_u32_id() {
     test_segment::<u32>()
 }
 
 #[test]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn segment_u64_id() {
     test_segment::<u64>()
 }
 
 #[test]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn segment_u128_id() {
     test_segment::<u128>()
 }
@@ -99,31 +99,31 @@ async fn segment_u128_id() {
 /// SIGNED ///
 
 #[test]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn segment_i8_id() {
     test_segment::<i8>()
 }
 
 #[test]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn segment_i16_id() {
     test_segment::<i16>()
 }
 
 #[test]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn segment_i32_id() {
     test_segment::<i32>()
 }
 
 #[test]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn segment_i64_id() {
     test_segment::<i64>()
 }
 
 #[test]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn segment_i128_id() {
     test_segment::<i128>()
 }
@@ -131,7 +131,7 @@ async fn segment_i128_id() {
 /// Behaviour checks ///
 
 #[test]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn segment_open() {
     let created_segment: Segment<u8> =
         Segment::create(900, TEST_SEGMENT_PREFIX).expect("error creating new segment");
@@ -141,7 +141,7 @@ async fn segment_open() {
 }
 
 #[test]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn segment_open_error() {
     let id = {
         let created_segment: Segment<u8> =

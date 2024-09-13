@@ -28,7 +28,7 @@ static BUFFER_NUM: usize = 100;
 static BUFFER_SIZE: usize = 1024;
 
 #[test]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn posix_shm_provider_create() {
     let _backend = PosixShmProviderBackend::builder()
         .with_size(1024)
@@ -38,7 +38,7 @@ async fn posix_shm_provider_create() {
 }
 
 #[test]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn posix_shm_provider_alloc() {
     let backend = PosixShmProviderBackend::builder()
         .with_size(1024)
@@ -54,7 +54,7 @@ async fn posix_shm_provider_alloc() {
 }
 
 #[test]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn posix_shm_provider_open() {
     let backend = PosixShmProviderBackend::builder()
         .with_size(1024)
@@ -76,7 +76,7 @@ async fn posix_shm_provider_open() {
 }
 
 #[test]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn posix_shm_provider_allocator() {
     let backend = PosixShmProviderBackend::builder()
         .with_size(BUFFER_SIZE * BUFFER_NUM)

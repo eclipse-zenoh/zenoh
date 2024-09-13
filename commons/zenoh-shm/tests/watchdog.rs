@@ -36,13 +36,13 @@ fn watchdog_alloc_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + 
 }
 
 #[test]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn watchdog_alloc() {
     execute_concurrent(1, 10000, watchdog_alloc_fn());
 }
 
 #[test]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn watchdog_alloc_concurrent() {
     execute_concurrent(1000, 10000, watchdog_alloc_fn());
 }
@@ -66,14 +66,14 @@ fn watchdog_confirmed_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Sen
 
 #[test]
 #[ignore]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn watchdog_confirmed() {
     execute_concurrent(1, 10, watchdog_confirmed_fn());
 }
 
 #[test]
 #[ignore]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn watchdog_confirmed_concurrent() {
     execute_concurrent(1000, 10, watchdog_confirmed_fn());
 }
@@ -83,7 +83,7 @@ async fn watchdog_confirmed_concurrent() {
 // so we cannot run dangling test in parallel with anything else
 #[test]
 #[ignore]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn watchdog_confirmed_dangling() {
     let allocated = GLOBAL_STORAGE
         .read()
@@ -143,14 +143,14 @@ fn watchdog_validated_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Sen
 
 #[test]
 #[ignore]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn watchdog_validated() {
     execute_concurrent(1, 10, watchdog_validated_fn());
 }
 
 #[test]
 #[ignore]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn watchdog_validated_concurrent() {
     execute_concurrent(1000, 10, watchdog_validated_fn());
 }
@@ -185,14 +185,14 @@ fn watchdog_validated_invalid_without_confirmator_fn(
 
 #[test]
 #[ignore]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn watchdog_validated_invalid_without_confirmator() {
     execute_concurrent(1, 10, watchdog_validated_invalid_without_confirmator_fn());
 }
 
 #[test]
 #[ignore]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn watchdog_validated_invalid_without_confirmator_concurrent() {
     execute_concurrent(
         1000,
@@ -252,14 +252,14 @@ fn watchdog_validated_additional_confirmation_fn(
 
 #[test]
 #[ignore]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn watchdog_validated_additional_confirmation() {
     execute_concurrent(1, 10, watchdog_validated_additional_confirmation_fn());
 }
 
 #[test]
 #[ignore]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn watchdog_validated_additional_confirmation_concurrent() {
     execute_concurrent(1000, 10, watchdog_validated_additional_confirmation_fn());
 }
@@ -309,7 +309,7 @@ fn watchdog_validated_overloaded_system_fn(
 
 #[test]
 #[ignore]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn watchdog_validated_low_load() {
     let _load = CpuLoad::low();
     execute_concurrent(1000, 10, watchdog_validated_overloaded_system_fn());
@@ -317,7 +317,7 @@ async fn watchdog_validated_low_load() {
 
 #[test]
 #[ignore]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn watchdog_validated_high_load() {
     let _load = CpuLoad::optimal_high();
     execute_concurrent(1000, 10, watchdog_validated_overloaded_system_fn());
@@ -325,7 +325,7 @@ async fn watchdog_validated_high_load() {
 
 #[test]
 #[ignore]
-#[tokio::test(flavor = "single_thread")]
+#[tokio::test(flavor = "current_thread")]
 async fn watchdog_validated_overloaded_system() {
     let _load = CpuLoad::excessive();
     execute_concurrent(1000, 10, watchdog_validated_overloaded_system_fn());
