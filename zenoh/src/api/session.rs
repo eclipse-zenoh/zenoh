@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "unstable")]
+use std::collections::hash_map::Entry;
 use std::{
     collections::HashMap,
     convert::TryInto,
@@ -1560,7 +1562,7 @@ impl SessionInner {
             remote_id: id,
             key_expr: key_expr.clone().into_owned(),
             origin,
-            callback,
+            callback: callback.clone(),
         };
 
         let sub_state = Arc::new(sub_state);
@@ -1591,8 +1593,41 @@ impl SessionInner {
             }
         }
 
+        let known_tokens = if history {
+            state
+                .remote_tokens
+                .values()
+                .filter(|token| key_expr.intersects(token))
+                .cloned()
+                .collect::<Vec<KeyExpr<'static>>>()
+        } else {
+            vec![]
+        };
+
         let primitives = state.primitives()?;
         drop(state);
+
+        if !known_tokens.is_empty() {
+            self.task_controller
+                .spawn_with_rt(zenoh_runtime::ZRuntime::Net, async move {
+                    for token in known_tokens {
+                        callback(Sample {
+                            key_expr: token,
+                            payload: ZBytes::empty(),
+                            kind: SampleKind::Put,
+                            encoding: Encoding::default(),
+                            timestamp: None,
+                            qos: QoS::default(),
+                            #[cfg(feature = "unstable")]
+                            reliability: Reliability::Reliable,
+                            #[cfg(feature = "unstable")]
+                            source_info: SourceInfo::empty(),
+                            #[cfg(feature = "unstable")]
+                            attachment: None,
+                        })
+                    }
+                });
+        }
 
         primitives.send_interest(Interest {
             id,
@@ -2253,9 +2288,8 @@ impl Primitives for WeakSession {
 
                                     query.callback.call(reply);
                                 }
-                            } else {
-                                state.remote_tokens.insert(m.id, key_expr.clone());
-
+                            } else if let Entry::Vacant(e) = state.remote_tokens.entry(m.id) {
+                                e.insert(key_expr.clone());
                                 drop(state);
 
                                 self.execute_subscriber_callbacks(

@@ -401,6 +401,21 @@ pub(super) fn pubsub_new_face(
     update_data_routes_from(tables, &mut tables.root_res.clone());
 }
 
+#[inline]
+fn make_sub_id(res: &Arc<Resource>, face: &mut Arc<FaceState>, mode: InterestMode) -> u32 {
+    if mode.future() {
+        if let Some(id) = face_hat!(face).local_subs.get(res) {
+            *id
+        } else {
+            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+            face_hat_mut!(face).local_subs.insert(res.clone(), id);
+            id
+        }
+    } else {
+        0
+    }
+}
+
 pub(super) fn declare_sub_interest(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
@@ -421,13 +436,7 @@ pub(super) fn declare_sub_interest(
                             .values()
                             .any(|sub| sub.context.is_some() && sub.matches(res))
                 }) {
-                    let id = if mode.future() {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face).local_subs.insert((*res).clone(), id);
-                        id
-                    } else {
-                        0
-                    };
+                    let id = make_sub_id(res, face, mode);
                     let wire_expr = Resource::decl_key(res, face, face.whatami != WhatAmI::Client);
                     send_declare(
                         &face.primitives,
@@ -456,13 +465,7 @@ pub(super) fn declare_sub_interest(
                     if src_face.id != face.id {
                         for sub in face_hat!(src_face).remote_subs.values() {
                             if sub.context.is_some() && sub.matches(res) {
-                                let id = if mode.future() {
-                                    let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                                    face_hat_mut!(face).local_subs.insert(sub.clone(), id);
-                                    id
-                                } else {
-                                    0
-                                };
+                                let id = make_sub_id(sub, face, mode);
                                 let wire_expr =
                                     Resource::decl_key(sub, face, face.whatami != WhatAmI::Client);
                                 send_declare(
@@ -494,13 +497,7 @@ pub(super) fn declare_sub_interest(
             {
                 if src_face.id != face.id {
                     for sub in face_hat!(src_face).remote_subs.values() {
-                        let id = if mode.future() {
-                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                            face_hat_mut!(face).local_subs.insert(sub.clone(), id);
-                            id
-                        } else {
-                            0
-                        };
+                        let id = make_sub_id(sub, face, mode);
                         let wire_expr =
                             Resource::decl_key(sub, face, face.whatami != WhatAmI::Client);
                         send_declare(

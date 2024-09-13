@@ -672,6 +672,21 @@ pub(super) fn pubsub_tree_change(tables: &mut Tables, new_children: &[Vec<NodeIn
     update_data_routes_from(tables, &mut tables.root_res.clone());
 }
 
+#[inline]
+fn make_sub_id(res: &Arc<Resource>, face: &mut Arc<FaceState>, mode: InterestMode) -> u32 {
+    if mode.future() {
+        if let Some(id) = face_hat!(face).local_subs.get(res) {
+            *id
+        } else {
+            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+            face_hat_mut!(face).local_subs.insert(res.clone(), id);
+            id
+        }
+    } else {
+        0
+    }
+}
+
 pub(super) fn declare_sub_interest(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
@@ -690,13 +705,7 @@ pub(super) fn declare_sub_interest(
                         && sub.matches(res)
                         && (remote_simple_subs(sub, face) || remote_linkstatepeer_subs(tables, sub))
                 }) {
-                    let id = if mode.future() {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face).local_subs.insert((*res).clone(), id);
-                        id
-                    } else {
-                        0
-                    };
+                    let id = make_sub_id(res, face, mode);
                     let wire_expr = Resource::decl_key(res, face, face.whatami != WhatAmI::Client);
                     send_declare(
                         &face.primitives,
@@ -721,13 +730,7 @@ pub(super) fn declare_sub_interest(
                         && sub.matches(res)
                         && (remote_simple_subs(sub, face) || remote_linkstatepeer_subs(tables, sub))
                     {
-                        let id = if mode.future() {
-                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                            face_hat_mut!(face).local_subs.insert(sub.clone(), id);
-                            id
-                        } else {
-                            0
-                        };
+                        let id = make_sub_id(sub, face, mode);
                         let wire_expr =
                             Resource::decl_key(sub, face, face.whatami != WhatAmI::Client);
                         send_declare(
@@ -754,13 +757,7 @@ pub(super) fn declare_sub_interest(
                 if sub.context.is_some()
                     && (remote_simple_subs(sub, face) || remote_linkstatepeer_subs(tables, sub))
                 {
-                    let id = if mode.future() {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face).local_subs.insert(sub.clone(), id);
-                        id
-                    } else {
-                        0
-                    };
+                    let id = make_sub_id(sub, face, mode);
                     let wire_expr = Resource::decl_key(sub, face, face.whatami != WhatAmI::Client);
                     send_declare(
                         &face.primitives,

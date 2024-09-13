@@ -285,6 +285,21 @@ pub(super) fn token_new_face(
     }
 }
 
+#[inline]
+fn make_token_id(res: &Arc<Resource>, face: &mut Arc<FaceState>, mode: InterestMode) -> u32 {
+    if mode.future() {
+        if let Some(id) = face_hat!(face).local_tokens.get(res) {
+            *id
+        } else {
+            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+            face_hat_mut!(face).local_tokens.insert(res.clone(), id);
+            id
+        }
+    } else {
+        0
+    }
+}
+
 pub(crate) fn declare_token_interest(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
@@ -304,13 +319,7 @@ pub(crate) fn declare_token_interest(
                         .values()
                         .any(|token| token.context.is_some() && token.matches(res))
                 }) {
-                    let id = if mode.future() {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face).local_tokens.insert((*res).clone(), id);
-                        id
-                    } else {
-                        0
-                    };
+                    let id = make_token_id(res, face, mode);
                     let wire_expr = Resource::decl_key(res, face, true);
                     send_declare(
                         &face.primitives,
@@ -330,18 +339,13 @@ pub(crate) fn declare_token_interest(
                 for src_face in tables
                     .faces
                     .values()
+                    .filter(|f| f.whatami == WhatAmI::Client)
                     .cloned()
                     .collect::<Vec<Arc<FaceState>>>()
                 {
                     for token in face_hat!(src_face).remote_tokens.values() {
                         if token.context.is_some() && token.matches(res) {
-                            let id = if mode.future() {
-                                let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                                face_hat_mut!(face).local_tokens.insert(token.clone(), id);
-                                id
-                            } else {
-                                0
-                            };
+                            let id = make_token_id(token, face, mode);
                             let wire_expr = Resource::decl_key(token, face, true);
                             send_declare(
                                 &face.primitives,
@@ -367,17 +371,12 @@ pub(crate) fn declare_token_interest(
             for src_face in tables
                 .faces
                 .values()
+                .filter(|f| f.whatami == WhatAmI::Client)
                 .cloned()
                 .collect::<Vec<Arc<FaceState>>>()
             {
                 for token in face_hat!(src_face).remote_tokens.values() {
-                    let id = if mode.future() {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face).local_tokens.insert(token.clone(), id);
-                        id
-                    } else {
-                        0
-                    };
+                    let id = make_token_id(token, face, mode);
                     let wire_expr = Resource::decl_key(token, face, true);
                     send_declare(
                         &face.primitives,
