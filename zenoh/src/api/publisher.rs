@@ -22,12 +22,8 @@ use std::{
 
 use futures::Sink;
 use tracing::error;
-use zenoh_core::{zread, Resolvable, Resolve, Wait};
-use zenoh_protocol::{
-    core::{CongestionControl, Reliability},
-    network::{push::ext, Push},
-    zenoh::{Del, PushBody, Put},
-};
+use zenoh_core::{Resolvable, Resolve, Wait};
+use zenoh_protocol::core::CongestionControl;
 use zenoh_result::{Error, ZResult};
 #[cfg(feature = "unstable")]
 use {
@@ -38,6 +34,7 @@ use {
     std::{collections::HashSet, sync::Arc, sync::Mutex},
     zenoh_config::wrappers::EntityGlobalId,
     zenoh_protocol::core::EntityGlobalIdProto,
+    zenoh_protocol::core::Reliability,
 };
 
 use super::{
@@ -48,13 +45,10 @@ use super::{
     bytes::ZBytes,
     encoding::Encoding,
     key_expr::KeyExpr,
-    sample::{DataInfo, Locality, QoS, Sample, SampleFields, SampleKind},
+    sample::{Locality, Sample, SampleFields},
     session::UndeclarableSealed,
 };
-use crate::{
-    api::{session::WeakSession, subscriber::SubscriberKind, Id},
-    net::primitives::Primitives,
-};
+use crate::api::{session::WeakSession, Id};
 
 pub(crate) struct PublisherState {
     pub(crate) id: Id,
@@ -382,10 +376,17 @@ impl<'a> Sink<Sample> for Publisher<'a> {
             attachment,
             ..
         } = item.into();
-        self.resolve_put(
+        self.session.resolve_put(
+            &self.key_expr,
             payload,
             kind,
             encoding,
+            self.congestion_control,
+            self.priority,
+            self.is_express,
+            self.destination,
+            #[cfg(feature = "unstable")]
+            self.reliability,
             None,
             #[cfg(feature = "unstable")]
             SourceInfo::empty(),
@@ -401,95 +402,6 @@ impl<'a> Sink<Sample> for Publisher<'a> {
     #[inline]
     fn poll_close(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
-    }
-}
-
-impl Publisher<'_> {
-    #[allow(clippy::too_many_arguments)] // TODO fixme
-    pub(crate) fn resolve_put(
-        &self,
-        payload: ZBytes,
-        kind: SampleKind,
-        encoding: Encoding,
-        timestamp: Option<uhlc::Timestamp>,
-        #[cfg(feature = "unstable")] source_info: SourceInfo,
-        attachment: Option<ZBytes>,
-    ) -> ZResult<()> {
-        tracing::trace!("write({:?}, [...])", &self.key_expr);
-        let primitives = zread!(self.session.state).primitives()?;
-        let timestamp = if timestamp.is_none() {
-            self.session.runtime.new_timestamp()
-        } else {
-            timestamp
-        };
-        if self.destination != Locality::SessionLocal {
-            primitives.send_push(
-                Push {
-                    wire_expr: self.key_expr.to_wire(&self.session).to_owned(),
-                    ext_qos: ext::QoSType::new(
-                        self.priority.into(),
-                        self.congestion_control,
-                        self.is_express,
-                    ),
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                    payload: match kind {
-                        SampleKind::Put => PushBody::Put(Put {
-                            timestamp,
-                            encoding: encoding.clone().into(),
-                            #[cfg(feature = "unstable")]
-                            ext_sinfo: source_info.into(),
-                            #[cfg(not(feature = "unstable"))]
-                            ext_sinfo: None,
-                            #[cfg(feature = "shared-memory")]
-                            ext_shm: None,
-                            ext_attachment: attachment.clone().map(|a| a.into()),
-                            ext_unknown: vec![],
-                            payload: payload.clone().into(),
-                        }),
-                        SampleKind::Delete => PushBody::Del(Del {
-                            timestamp,
-                            #[cfg(feature = "unstable")]
-                            ext_sinfo: source_info.into(),
-                            #[cfg(not(feature = "unstable"))]
-                            ext_sinfo: None,
-                            ext_attachment: attachment.clone().map(|a| a.into()),
-                            ext_unknown: vec![],
-                        }),
-                    },
-                },
-                #[cfg(feature = "unstable")]
-                self.reliability,
-                #[cfg(not(feature = "unstable"))]
-                Reliability::DEFAULT,
-            );
-        }
-        if self.destination != Locality::Remote {
-            let data_info = DataInfo {
-                kind,
-                encoding: Some(encoding),
-                timestamp,
-                source_id: None,
-                source_sn: None,
-                qos: QoS::from(ext::QoSType::new(
-                    self.priority.into(),
-                    self.congestion_control,
-                    self.is_express,
-                )),
-            };
-
-            self.session.execute_subscriber_callbacks(
-                true,
-                &self.key_expr.to_wire(&self.session),
-                Some(data_info),
-                payload.into(),
-                SubscriberKind::Subscriber,
-                #[cfg(feature = "unstable")]
-                self.reliability,
-                attachment,
-            );
-        }
-        Ok(())
     }
 }
 

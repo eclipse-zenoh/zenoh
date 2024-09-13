@@ -50,6 +50,7 @@ use zenoh_protocol::{
             UndeclareSubscriber,
         },
         interest::{InterestMode, InterestOptions},
+        push,
         request::{self, ext::TargetType},
         AtomicRequestId, DeclareFinal, Interest, Mapping, Push, Request, RequestId, Response,
         ResponseFinal,
@@ -1876,6 +1877,96 @@ impl SessionInner {
             sample.key_expr = key_expr;
             cb.call(sample);
         }
+    }
+
+    #[allow(clippy::too_many_arguments)] // TODO fixme
+    pub(crate) fn resolve_put(
+        &self,
+        key_expr: &KeyExpr,
+        payload: ZBytes,
+        kind: SampleKind,
+        encoding: Encoding,
+        congestion_control: CongestionControl,
+        priority: Priority,
+        is_express: bool,
+        destination: Locality,
+        #[cfg(feature = "unstable")] reliability: Reliability,
+        timestamp: Option<uhlc::Timestamp>,
+        #[cfg(feature = "unstable")] source_info: SourceInfo,
+        attachment: Option<ZBytes>,
+    ) -> ZResult<()> {
+        trace!("write({:?}, [...])", key_expr);
+        let primitives = zread!(self.state).primitives()?;
+        let timestamp = timestamp.or_else(|| self.runtime.new_timestamp());
+        let wire_expr = key_expr.to_wire(self);
+        if destination != Locality::SessionLocal {
+            primitives.send_push(
+                Push {
+                    wire_expr: wire_expr.to_owned(),
+                    ext_qos: push::ext::QoSType::new(
+                        priority.into(),
+                        congestion_control,
+                        is_express,
+                    ),
+                    ext_tstamp: None,
+                    ext_nodeid: push::ext::NodeIdType::DEFAULT,
+                    payload: match kind {
+                        SampleKind::Put => PushBody::Put(Put {
+                            timestamp,
+                            encoding: encoding.clone().into(),
+                            #[cfg(feature = "unstable")]
+                            ext_sinfo: source_info.into(),
+                            #[cfg(not(feature = "unstable"))]
+                            ext_sinfo: None,
+                            #[cfg(feature = "shared-memory")]
+                            ext_shm: None,
+                            ext_attachment: attachment.clone().map(|a| a.into()),
+                            ext_unknown: vec![],
+                            payload: payload.clone().into(),
+                        }),
+                        SampleKind::Delete => PushBody::Del(Del {
+                            timestamp,
+                            #[cfg(feature = "unstable")]
+                            ext_sinfo: source_info.into(),
+                            #[cfg(not(feature = "unstable"))]
+                            ext_sinfo: None,
+                            ext_attachment: attachment.clone().map(|a| a.into()),
+                            ext_unknown: vec![],
+                        }),
+                    },
+                },
+                #[cfg(feature = "unstable")]
+                reliability,
+                #[cfg(not(feature = "unstable"))]
+                Reliability::DEFAULT,
+            );
+        }
+        if destination != Locality::Remote {
+            let data_info = DataInfo {
+                kind,
+                encoding: Some(encoding),
+                timestamp,
+                source_id: None,
+                source_sn: None,
+                qos: QoS::from(push::ext::QoSType::new(
+                    priority.into(),
+                    congestion_control,
+                    is_express,
+                )),
+            };
+
+            self.execute_subscriber_callbacks(
+                true,
+                &wire_expr,
+                Some(data_info),
+                payload.into(),
+                SubscriberKind::Subscriber,
+                #[cfg(feature = "unstable")]
+                reliability,
+                attachment,
+            );
+        }
+        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
