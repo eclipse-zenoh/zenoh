@@ -132,10 +132,10 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
         P: Plugin<StartArgs = StartArgs, Instance = Instance> + Send + Sync,
         S: Into<String>,
     >(
-        mut self,
+        &mut self,
         id: S,
         required: bool,
-    ) -> Self {
+    ) {
         let id = id.into();
         let plugin_loader: StaticPlugin<StartArgs, Instance, P> =
             StaticPlugin::new(id.clone(), required);
@@ -152,7 +152,6 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
             self.plugins.last().unwrap().id(),
             self.plugins.last().unwrap().name()
         );
-        self
     }
 
     /// Add dynamic plugin to the manager by name, automatically prepending the default library prefix
