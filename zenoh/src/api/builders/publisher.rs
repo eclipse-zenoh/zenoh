@@ -186,11 +186,17 @@ impl<P, T> Resolvable for PublicationBuilder<P, T> {
 impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut> {
     #[inline]
     fn wait(self) -> <Self as Resolvable>::To {
-        let publisher = self.publisher.create_one_shot_publisher()?;
-        publisher.resolve_put(
+        self.publisher.session.0.resolve_put(
+            &self.publisher.key_expr?,
             self.kind.payload,
             SampleKind::Put,
             self.kind.encoding,
+            self.publisher.congestion_control,
+            self.publisher.priority,
+            self.publisher.is_express,
+            self.publisher.destination,
+            #[cfg(feature = "unstable")]
+            self.publisher.reliability,
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
@@ -202,11 +208,17 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut
 impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDelete> {
     #[inline]
     fn wait(self) -> <Self as Resolvable>::To {
-        let publisher = self.publisher.create_one_shot_publisher()?;
-        publisher.resolve_put(
+        self.publisher.session.0.resolve_put(
+            &self.publisher.key_expr?,
             ZBytes::empty(),
             SampleKind::Delete,
             Encoding::ZENOH_BYTES,
+            self.publisher.congestion_control,
+            self.publisher.priority,
+            self.publisher.is_express,
+            self.publisher.destination,
+            #[cfg(feature = "unstable")]
+            self.publisher.reliability,
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
@@ -329,25 +341,6 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
             ..self
         }
     }
-
-    // internal function for performing the publication
-    fn create_one_shot_publisher(self) -> ZResult<Publisher<'b>> {
-        Ok(Publisher {
-            session: self.session.downgrade(),
-            id: 0, // This is a one shot Publisher
-            key_expr: self.key_expr?,
-            encoding: self.encoding,
-            congestion_control: self.congestion_control,
-            priority: self.priority,
-            is_express: self.is_express,
-            destination: self.destination,
-            #[cfg(feature = "unstable")]
-            reliability: self.reliability,
-            #[cfg(feature = "unstable")]
-            matching_listeners: Default::default(),
-            undeclare_on_drop: true,
-        })
-    }
 }
 
 impl<'a, 'b> Resolvable for PublisherBuilder<'a, 'b> {
@@ -420,10 +413,17 @@ impl<'a, 'b> IntoFuture for PublisherBuilder<'a, 'b> {
 
 impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
     fn wait(self) -> <Self as Resolvable>::To {
-        self.publisher.resolve_put(
+        self.publisher.session.resolve_put(
+            &self.publisher.key_expr,
             self.kind.payload,
             SampleKind::Put,
             self.kind.encoding,
+            self.publisher.congestion_control,
+            self.publisher.priority,
+            self.publisher.is_express,
+            self.publisher.destination,
+            #[cfg(feature = "unstable")]
+            self.publisher.reliability,
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
@@ -434,10 +434,17 @@ impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
 
 impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
     fn wait(self) -> <Self as Resolvable>::To {
-        self.publisher.resolve_put(
+        self.publisher.session.resolve_put(
+            &self.publisher.key_expr,
             ZBytes::empty(),
             SampleKind::Delete,
             Encoding::ZENOH_BYTES,
+            self.publisher.congestion_control,
+            self.publisher.priority,
+            self.publisher.is_express,
+            self.publisher.destination,
+            #[cfg(feature = "unstable")]
+            self.publisher.reliability,
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
