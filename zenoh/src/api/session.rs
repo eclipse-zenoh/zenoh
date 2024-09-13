@@ -1611,7 +1611,7 @@ impl SessionInner {
             self.task_controller
                 .spawn_with_rt(zenoh_runtime::ZRuntime::Net, async move {
                     for token in known_tokens {
-                        callback(Sample {
+                        callback.call(Sample {
                             key_expr: token,
                             payload: ZBytes::empty(),
                             kind: SampleKind::Put,
@@ -1624,7 +1624,7 @@ impl SessionInner {
                             source_info: SourceInfo::empty(),
                             #[cfg(feature = "unstable")]
                             attachment: None,
-                        })
+                        });
                     }
                 });
         }
