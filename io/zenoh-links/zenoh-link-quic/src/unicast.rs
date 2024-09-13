@@ -153,7 +153,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
 
     #[inline(always)]
     fn is_reliable(&self) -> bool {
-        true
+        super::IS_RELIABLE
     }
 
     #[inline(always)]

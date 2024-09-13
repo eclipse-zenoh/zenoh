@@ -217,7 +217,7 @@ impl LinkUnicastTrait for LinkUnicastUdp {
 
     #[inline(always)]
     fn is_reliable(&self) -> bool {
-        false
+        super::IS_RELIABLE
     }
 
     #[inline(always)]

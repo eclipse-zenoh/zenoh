@@ -26,7 +26,7 @@ pub use unicast::*;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
 use zenoh_protocol::{
-    core::{endpoint::Address, EndPoint, Locator},
+    core::{endpoint::Address, EndPoint, Locator, Metadata, Reliability},
     transport::BatchSize,
 };
 use zenoh_result::ZResult;
@@ -41,6 +41,8 @@ const DEFAULT_EXCLUSIVE: bool = true;
 pub const SERIAL_LOCATOR_PREFIX: &str = "serial";
 
 const SERIAL_MTU_LIMIT: BatchSize = SERIAL_MAX_MTU;
+
+const IS_RELIABLE: bool = false;
 
 zconfigurable! {
     // Default MTU (UDP PDU) in bytes.
@@ -60,6 +62,19 @@ impl LocatorInspector for SerialLocatorInspector {
 
     async fn is_multicast(&self, _locator: &Locator) -> ZResult<bool> {
         Ok(false)
+    }
+
+    fn is_reliable(&self, locator: &Locator) -> ZResult<bool> {
+        if let Some(reliability) = locator
+            .metadata()
+            .get(Metadata::RELIABILITY)
+            .map(|r| Reliability::from_str(r))
+            .transpose()?
+        {
+            Ok(reliability == Reliability::Reliable)
+        } else {
+            Ok(IS_RELIABLE)
+        }
     }
 }
 

@@ -205,7 +205,7 @@ impl LinkUnicastTrait for LinkUnicastSerial {
 
     #[inline(always)]
     fn is_reliable(&self) -> bool {
-        false
+        super::IS_RELIABLE
     }
 
     #[inline(always)]

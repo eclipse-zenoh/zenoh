@@ -19,15 +19,19 @@
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 pub mod unicast;
 
+use std::str::FromStr;
+
 use async_trait::async_trait;
 pub use unicast::*;
 use zenoh_config::Config;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
-use zenoh_protocol::core::{parameters, Locator};
+use zenoh_protocol::core::{parameters, Locator, Metadata, Reliability};
 use zenoh_result::ZResult;
 
 pub const UNIXPIPE_LOCATOR_PREFIX: &str = "unixpipe";
+
+const IS_RELIABLE: bool = true;
 
 #[derive(Default, Clone, Copy)]
 pub struct UnixPipeLocatorInspector;
@@ -39,6 +43,19 @@ impl LocatorInspector for UnixPipeLocatorInspector {
 
     async fn is_multicast(&self, _locator: &Locator) -> ZResult<bool> {
         Ok(false)
+    }
+
+    fn is_reliable(&self, locator: &Locator) -> ZResult<bool> {
+        if let Some(reliability) = locator
+            .metadata()
+            .get(Metadata::RELIABILITY)
+            .map(|r| Reliability::from_str(r))
+            .transpose()?
+        {
+            Ok(reliability == Reliability::Reliable)
+        } else {
+            Ok(IS_RELIABLE)
+        }
     }
 }
 

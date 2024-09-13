@@ -17,10 +17,15 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
+use std::str::FromStr;
+
 use async_trait::async_trait;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
-use zenoh_protocol::{core::Locator, transport::BatchSize};
+use zenoh_protocol::{
+    core::{Locator, Metadata, Reliability},
+    transport::BatchSize,
+};
 use zenoh_result::ZResult;
 
 mod unicast;
@@ -40,6 +45,8 @@ pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
 const QUIC_MAX_MTU: BatchSize = BatchSize::MAX;
 pub const QUIC_LOCATOR_PREFIX: &str = "quic";
 
+const IS_RELIABLE: bool = true;
+
 #[derive(Default, Clone, Copy, Debug)]
 pub struct QuicLocatorInspector;
 
@@ -51,6 +58,19 @@ impl LocatorInspector for QuicLocatorInspector {
 
     async fn is_multicast(&self, _locator: &Locator) -> ZResult<bool> {
         Ok(false)
+    }
+
+    fn is_reliable(&self, locator: &Locator) -> ZResult<bool> {
+        if let Some(reliability) = locator
+            .metadata()
+            .get(Metadata::RELIABILITY)
+            .map(|r| Reliability::from_str(r))
+            .transpose()?
+        {
+            Ok(reliability == Reliability::Reliable)
+        } else {
+            Ok(IS_RELIABLE)
+        }
     }
 }
 

@@ -62,6 +62,7 @@ pub struct Link {
 pub trait LocatorInspector: Default {
     fn protocol(&self) -> &str;
     async fn is_multicast(&self, locator: &Locator) -> ZResult<bool>;
+    fn is_reliable(&self, locator: &Locator) -> ZResult<bool>;
 }
 
 pub trait ConfigurationInspector<C>: Default {

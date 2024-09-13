@@ -17,11 +17,13 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
+use std::str::FromStr;
+
 use async_trait::async_trait;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
 use zenoh_protocol::{
-    core::{endpoint::Address, Locator},
+    core::{endpoint::Address, Locator, Metadata, Reliability},
     transport::BatchSize,
 };
 use zenoh_result::ZResult;
@@ -39,6 +41,8 @@ pub use unicast::*;
 const UNIXSOCKSTREAM_MAX_MTU: BatchSize = BatchSize::MAX;
 
 pub const UNIXSOCKSTREAM_LOCATOR_PREFIX: &str = "unixsock-stream";
+
+const IS_RELIABLE: bool = true;
 
 zconfigurable! {
     // Default MTU (UNIXSOCKSTREAM PDU) in bytes.
@@ -58,6 +62,19 @@ impl LocatorInspector for UnixSockStreamLocatorInspector {
 
     async fn is_multicast(&self, _locator: &Locator) -> ZResult<bool> {
         Ok(false)
+    }
+
+    fn is_reliable(&self, locator: &Locator) -> ZResult<bool> {
+        if let Some(reliability) = locator
+            .metadata()
+            .get(Metadata::RELIABILITY)
+            .map(|r| Reliability::from_str(r))
+            .transpose()?
+        {
+            Ok(reliability == Reliability::Reliable)
+        } else {
+            Ok(IS_RELIABLE)
+        }
     }
 }
 
