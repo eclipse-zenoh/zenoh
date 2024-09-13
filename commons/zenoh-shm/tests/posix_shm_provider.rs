@@ -27,7 +27,6 @@ use zenoh_shm::api::{
 static BUFFER_NUM: usize = 100;
 static BUFFER_SIZE: usize = 1024;
 
-#[test]
 #[tokio::test(flavor = "current_thread")]
 async fn posix_shm_provider_create() {
     let _backend = PosixShmProviderBackend::builder()
@@ -37,7 +36,6 @@ async fn posix_shm_provider_create() {
         .expect("Error creating PosixShmProviderBackend!");
 }
 
-#[test]
 #[tokio::test(flavor = "current_thread")]
 async fn posix_shm_provider_alloc() {
     let backend = PosixShmProviderBackend::builder()
@@ -53,7 +51,6 @@ async fn posix_shm_provider_alloc() {
         .expect("PosixShmProviderBackend: error allocating buffer");
 }
 
-#[test]
 #[tokio::test(flavor = "current_thread")]
 async fn posix_shm_provider_open() {
     let backend = PosixShmProviderBackend::builder()
@@ -75,7 +72,6 @@ async fn posix_shm_provider_open() {
         .expect("Error attaching to segment");
 }
 
-#[test]
 #[tokio::test(flavor = "current_thread")]
 async fn posix_shm_provider_allocator() {
     let backend = PosixShmProviderBackend::builder()
