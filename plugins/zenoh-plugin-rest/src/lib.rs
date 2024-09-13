@@ -290,7 +290,9 @@ impl Plugin for RestPlugin {
             timeout(Duration::from_millis(1), TOKIO_RUNTIME.spawn(task)).await
         });
 
-        if let Ok(Err(e)) = task {
+        // The spawn task (TOKIO_RUNTIME.spawn(task)) should not return immediately. The server should block inside.
+        // If it returns immediately (for example, address already in use), we can get the error inside Ok
+        if let Ok(Ok(Err(e))) = task {
             bail!("REST server failed within 1ms: {e}")
         }
         Ok(Box::new(RunningPlugin(conf)))
