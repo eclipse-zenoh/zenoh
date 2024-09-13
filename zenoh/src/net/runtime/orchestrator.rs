@@ -34,10 +34,7 @@ use zenoh_config::{
 };
 use zenoh_link::{Locator, LocatorInspector};
 use zenoh_protocol::{
-    core::{
-        whatami::WhatAmIMatcher, EndPoint, Metadata, PriorityRange, Reliability, WhatAmI,
-        ZenohIdProto,
-    },
+    core::{whatami::WhatAmIMatcher, EndPoint, Metadata, PriorityRange, WhatAmI, ZenohIdProto},
     scouting::{HelloProto, Scout, ScoutingBody, ScoutingMessage},
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -953,14 +950,13 @@ impl Runtime {
                 .metadata()
                 .get(Metadata::PRIORITIES)
                 .and_then(|p| PriorityRange::from_str(p).ok());
-            let reliability = locator
-                .metadata()
-                .get(Metadata::RELIABILITY)
-                .and_then(|r| Reliability::from_str(r).ok());
+            let reliability = inspector.is_reliable(locator).ok();
             if !transport.as_ref().is_some_and(|t| {
                 t.get_links().is_ok_and(|ls| {
-                    ls.iter()
-                        .any(|l| l.priorities == priorities && l.reliability == reliability)
+                    ls.iter().any(|l| {
+                        l.priorities == priorities
+                            && inspector.is_reliable(&l.dst).ok() == reliability
+                    })
                 })
             }) {
                 if is_multicast {
