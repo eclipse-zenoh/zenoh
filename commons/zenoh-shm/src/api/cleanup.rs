@@ -21,7 +21,7 @@ use crate::cleanup::CLEANUP;
 /// bypass it and terminate the process without cleanup. To eliminate this effect, Zenoh overrides SIGHUP, SIGTERM, SIGINT
 /// and SIGQUIT handlers and calls exit() inside to make graceful shutdown. If user is going to override these Zenoh's handlers,
 /// the workaround will break, and there are two ways to keep this workaround working:
-/// - execute overriden Zenoh handlers in overriding handler code
+/// - execute overridden Zenoh handlers in overriding handler code
 /// - call forced_cleanup() anywhere at any time before terminating the process
 #[zenoh_macros::unstable_doc]
 pub fn forced_cleanup() {

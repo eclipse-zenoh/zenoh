@@ -32,6 +32,7 @@ fn header_alloc_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sy
 }
 
 #[test]
+#[tokio::test(flavor = "single_thread")]
 fn header_alloc() {
     execute_concurrent(1, 1000, header_alloc_fn());
 }
