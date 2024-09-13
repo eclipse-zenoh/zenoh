@@ -53,12 +53,11 @@
 //!     }
 //!
 //!     fn get_capability(&self) -> Capability {
-//!         // This operation is used to confirm if the volume indeed supports  
+//!         // This operation is used to confirm if the volume indeed supports
 //!         // the capabilities requested by the configuration
 //!         Capability{
 //!             persistence: Persistence::Volatile,
 //!             history: History::Latest,
-//!             read_cost: 0,
 //!         }
 //!     }
 //!
@@ -145,10 +144,6 @@ const FEATURES: &str =
 pub struct Capability {
     pub persistence: Persistence,
     pub history: History,
-    /// `read_cost` is a parameter that hels the storage manager take a decision on optimizing database roundtrips
-    /// If the `read_cost` is higher than a given threshold, the storage manger will maintain a cache with the keys present in the database
-    /// This is a placeholder, not actually utilised in the current implementation
-    pub read_cost: u32,
 }
 
 /// Persistence is the guarantee expected from a storage in case of failures
@@ -185,7 +180,6 @@ pub struct StoredData {
 }
 
 /// Trait to be implemented by a Backend.
-///
 #[async_trait]
 pub trait Volume: Send + Sync {
     /// Returns the status that will be sent as a reply to a query

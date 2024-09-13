@@ -62,7 +62,6 @@ impl Volume for ExampleBackend {
         Capability {
             persistence: Persistence::Volatile,
             history: History::Latest,
-            read_cost: 0,
         }
     }
     async fn create_storage(&self, _props: StorageConfig) -> ZResult<Box<dyn Storage>> {
