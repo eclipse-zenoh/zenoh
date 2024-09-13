@@ -505,7 +505,7 @@
   //      http_port: 8000,
   //      /// The number of worker thread in TOKIO runtime (default: 2)
   //      /// The configuration only takes effect if running as a dynamic plugin, which can not reuse the current runtime.
-  //      work_thread_num: 0,
+  //      work_thread_num: 2,
   //      /// The number of blocking thread in TOKIO runtime (default: 50)
   //      /// The configuration only takes effect if running as a dynamic plugin, which can not reuse the current runtime.
   //      max_block_thread_num: 50,
