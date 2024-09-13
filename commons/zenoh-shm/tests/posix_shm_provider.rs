@@ -28,7 +28,8 @@ static BUFFER_NUM: usize = 100;
 static BUFFER_SIZE: usize = 1024;
 
 #[test]
-fn posix_shm_provider_create() {
+#[tokio::test(flavor = "single_thread")]
+async fn posix_shm_provider_create() {
     let _backend = PosixShmProviderBackend::builder()
         .with_size(1024)
         .expect("Error creating Layout!")
@@ -37,7 +38,8 @@ fn posix_shm_provider_create() {
 }
 
 #[test]
-fn posix_shm_provider_alloc() {
+#[tokio::test(flavor = "single_thread")]
+async fn posix_shm_provider_alloc() {
     let backend = PosixShmProviderBackend::builder()
         .with_size(1024)
         .expect("Error creating Layout!")
@@ -52,7 +54,8 @@ fn posix_shm_provider_alloc() {
 }
 
 #[test]
-fn posix_shm_provider_open() {
+#[tokio::test(flavor = "single_thread")]
+async fn posix_shm_provider_open() {
     let backend = PosixShmProviderBackend::builder()
         .with_size(1024)
         .expect("Error creating Layout!")
@@ -73,7 +76,8 @@ fn posix_shm_provider_open() {
 }
 
 #[test]
-fn posix_shm_provider_allocator() {
+#[tokio::test(flavor = "single_thread")]
+async fn posix_shm_provider_allocator() {
     let backend = PosixShmProviderBackend::builder()
         .with_size(BUFFER_SIZE * BUFFER_NUM)
         .expect("Error creating Layout!")

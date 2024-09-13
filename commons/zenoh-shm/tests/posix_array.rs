@@ -111,17 +111,20 @@ where
 /// MEMORY CHECKS ///
 
 #[test]
-fn arr_u8_index_memory_test() {
+#[tokio::test(flavor = "single_thread")]
+async fn arr_u8_index_memory_test() {
     test_array::<u8>();
 }
 
 #[test]
-fn arr_u16_index_memory_test() {
+#[tokio::test(flavor = "single_thread")]
+async fn arr_u16_index_memory_test() {
     test_array::<u16>();
 }
 
 #[test]
-fn arr_u32_index_memory_test() {
+#[tokio::test(flavor = "single_thread")]
+async fn arr_u32_index_memory_test() {
     test_array::<u32>();
 }
 
@@ -146,16 +149,19 @@ where
 }
 
 #[test]
-fn arr_u8_index_invalid_elem_count() {
+#[tokio::test(flavor = "single_thread")]
+async fn arr_u8_index_invalid_elem_count() {
     test_invalid_elem_index::<u8>();
 }
 
 #[test]
-fn arr_u16_index_invalid_elem_count() {
+#[tokio::test(flavor = "single_thread")]
+async fn arr_u16_index_invalid_elem_count() {
     test_invalid_elem_index::<u16>();
 }
 
 #[test]
-fn arr_u32_index_invalid_elem_count() {
+#[tokio::test(flavor = "single_thread")]
+async fn arr_u32_index_invalid_elem_count() {
     test_invalid_elem_index::<u32>();
 }

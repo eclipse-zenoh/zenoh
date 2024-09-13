@@ -67,61 +67,72 @@ where
 /// UNSIGNED ///
 
 #[test]
-fn segment_u8_id() {
+#[tokio::test(flavor = "single_thread")]
+async fn segment_u8_id() {
     test_segment::<u8>()
 }
 
 #[test]
-fn segment_u16_id() {
+#[tokio::test(flavor = "single_thread")]
+async fn segment_u16_id() {
     test_segment::<u16>()
 }
 
 #[test]
-fn segment_u32_id() {
+#[tokio::test(flavor = "single_thread")]
+async fn segment_u32_id() {
     test_segment::<u32>()
 }
 
 #[test]
-fn segment_u64_id() {
+#[tokio::test(flavor = "single_thread")]
+async fn segment_u64_id() {
     test_segment::<u64>()
 }
 
 #[test]
-fn segment_u128_id() {
+#[tokio::test(flavor = "single_thread")]
+async fn segment_u128_id() {
     test_segment::<u128>()
 }
 
 /// SIGNED ///
 
 #[test]
-fn segment_i8_id() {
+#[tokio::test(flavor = "single_thread")]
+async fn segment_i8_id() {
     test_segment::<i8>()
 }
 
 #[test]
-fn segment_i16_id() {
+#[tokio::test(flavor = "single_thread")]
+async fn segment_i16_id() {
     test_segment::<i16>()
 }
 
 #[test]
-fn segment_i32_id() {
+#[tokio::test(flavor = "single_thread")]
+async fn segment_i32_id() {
     test_segment::<i32>()
 }
 
 #[test]
-fn segment_i64_id() {
+#[tokio::test(flavor = "single_thread")]
+async fn segment_i64_id() {
     test_segment::<i64>()
 }
 
 #[test]
-fn segment_i128_id() {
+#[tokio::test(flavor = "single_thread")]
+async fn segment_i128_id() {
     test_segment::<i128>()
 }
 
 /// Behaviour checks ///
 
 #[test]
-fn segment_open() {
+#[tokio::test(flavor = "single_thread")]
+async fn segment_open() {
     let created_segment: Segment<u8> =
         Segment::create(900, TEST_SEGMENT_PREFIX).expect("error creating new segment");
 
@@ -130,7 +141,8 @@ fn segment_open() {
 }
 
 #[test]
-fn segment_open_error() {
+#[tokio::test(flavor = "single_thread")]
+async fn segment_open_error() {
     let id = {
         let created_segment: Segment<u8> =
             Segment::create(900, TEST_SEGMENT_PREFIX).expect("error creating new segment");
