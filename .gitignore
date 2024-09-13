@@ -22,3 +22,6 @@
 cargo-timing*.html
 
 ci/valgrind-check/*.log
+
+# A folder to store intentionally untracked changes for a less cluttered git-status
+.private
