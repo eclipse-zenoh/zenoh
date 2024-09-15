@@ -12,9 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use futures::stream::StreamExt;
 use signal_hook::consts::signal::*;
-use signal_hook_tokio::Signals;
 use static_init::dynamic;
 
 /// A global cleanup, that is guaranteed to be dropped at normal program exit and that will
@@ -31,13 +29,13 @@ impl Cleanup {
     fn new() -> Self {
         // todo: this is a workaround to make sure Cleanup will be executed even if process terminates via signal handlers
         // that execute std::terminate instead of exit
-        zenoh_runtime::ZRuntime::Acceptor.spawn(async {
-            let signals = Signals::new([SIGHUP, SIGTERM, SIGINT, SIGQUIT]).unwrap();
-            let mut signals = signals.fuse();
-            if let Some(_signal) = signals.next().await {
-                std::process::exit(0);
+        for signal in [SIGHUP, SIGTERM, SIGINT, SIGQUIT] {
+            unsafe {
+                let _ = signal_hook::low_level::register(signal, || {
+                    std::process::exit(0);
+                });
             }
-        });
+        }
 
         Self {
             cleanups: Default::default(),

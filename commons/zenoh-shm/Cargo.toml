@@ -41,7 +41,6 @@ zenoh-result = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-macros = { workspace = true }
 zenoh-buffers = { workspace = true }
-zenoh-runtime = { workspace = true }
 rand = { workspace = true }
 static_init = { workspace = true }
 num-traits = { workspace = true }
@@ -50,7 +49,6 @@ thread-priority = { workspace = true }
 lockfree = { workspace = true }
 stabby = { workspace = true }
 signal-hook = { workspace = true }
-signal-hook-tokio = { workspace = true, features = ["futures-v0_3"] }
 futures = { workspace = true }
 
 [dev-dependencies]
