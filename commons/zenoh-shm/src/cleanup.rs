@@ -30,6 +30,7 @@ impl Cleanup {
         // todo: this is a workaround to make sure Cleanup will be executed even if process terminates via signal handlers
         // that execute std::terminate instead of exit
         for signal in [
+            #[cfg(not(target_os = "windows"))]
             SIGHUP,
             SIGTERM,
             SIGINT,
