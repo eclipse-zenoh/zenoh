@@ -31,13 +31,13 @@ fn header_alloc_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sy
     }
 }
 
-#[tokio::test(flavor = "current_thread")]
-async fn header_alloc() {
+#[test]
+fn header_alloc() {
     execute_concurrent(1, 1000, header_alloc_fn());
 }
 
-#[tokio::test(flavor = "current_thread")]
-async fn header_alloc_concurrent() {
+#[test]
+fn header_alloc_concurrent() {
     execute_concurrent(100, 1000, header_alloc_fn());
 }
 
@@ -50,13 +50,13 @@ fn header_link_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Syn
     }
 }
 
-#[tokio::test(flavor = "current_thread")]
-async fn header_link() {
+#[test]
+fn header_link() {
     execute_concurrent(1, 1000, header_link_fn());
 }
 
-#[tokio::test(flavor = "current_thread")]
-async fn header_link_concurrent() {
+#[test]
+fn header_link_concurrent() {
     execute_concurrent(100, 1000, header_link_fn());
 }
 
@@ -78,13 +78,13 @@ fn header_link_failure_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Se
     }
 }
 
-#[tokio::test(flavor = "current_thread")]
-async fn header_link_failure() {
+#[test]
+fn header_link_failure() {
     execute_concurrent(1, 1000, header_link_failure_fn());
 }
 
-#[tokio::test(flavor = "current_thread")]
-async fn header_link_failure_concurrent() {
+#[test]
+fn header_link_failure_concurrent() {
     execute_concurrent(100, 1000, header_link_failure_fn());
 }
 
@@ -119,12 +119,12 @@ fn header_check_memory_fn(parallel_tasks: usize, iterations: usize) {
     execute_concurrent(parallel_tasks, iterations, task_fun);
 }
 
-#[tokio::test(flavor = "current_thread")]
-async fn header_check_memory() {
+#[test]
+fn header_check_memory() {
     header_check_memory_fn(1, 1000);
 }
 
-#[tokio::test(flavor = "current_thread")]
-async fn header_check_memory_concurrent() {
+#[test]
+fn header_check_memory_concurrent() {
     header_check_memory_fn(100, 100);
 }

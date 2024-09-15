@@ -31,7 +31,7 @@ impl Cleanup {
     fn new() -> Self {
         // todo: this is a workaround to make sure Cleanup will be executed even if process terminates via signal handlers
         // that execute std::terminate instead of exit
-        tokio::task::spawn(async {
+        zenoh_runtime::ZRuntime::Acceptor.spawn(async {
             let signals = Signals::new([SIGHUP, SIGTERM, SIGINT, SIGQUIT]).unwrap();
             let mut signals = signals.fuse();
             if let Some(_signal) = signals.next().await {

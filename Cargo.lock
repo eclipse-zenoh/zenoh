@@ -5882,6 +5882,7 @@ dependencies = [
  "zenoh-core",
  "zenoh-macros",
  "zenoh-result",
+ "zenoh-runtime",
 ]
 
 [[package]]
