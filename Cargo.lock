@@ -5852,7 +5852,6 @@ version = "1.0.0-dev"
 dependencies = [
  "async-trait",
  "crc",
- "futures",
  "libc",
  "lockfree",
  "num-traits",

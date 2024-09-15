@@ -29,7 +29,13 @@ impl Cleanup {
     fn new() -> Self {
         // todo: this is a workaround to make sure Cleanup will be executed even if process terminates via signal handlers
         // that execute std::terminate instead of exit
-        for signal in [SIGHUP, SIGTERM, SIGINT, SIGQUIT] {
+        for signal in [
+            SIGHUP,
+            SIGTERM,
+            SIGINT,
+            #[cfg(not(target_os = "windows"))]
+            SIGQUIT,
+        ] {
             unsafe {
                 let _ = signal_hook::low_level::register(signal, || {
                     std::process::exit(0);

@@ -49,7 +49,6 @@ thread-priority = { workspace = true }
 lockfree = { workspace = true }
 stabby = { workspace = true }
 signal-hook = { workspace = true }
-futures = { workspace = true }
 
 [dev-dependencies]
 libc = { workspace = true }
