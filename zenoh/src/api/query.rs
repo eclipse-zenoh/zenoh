@@ -25,6 +25,10 @@ use zenoh_keyexpr::OwnedKeyExpr;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::ZenohIdProto;
 use zenoh_protocol::core::{CongestionControl, Parameters};
+/// The [`Queryable`](crate::query::Queryable)s that should be target of a [`get`](Session::get).
+pub use zenoh_protocol::network::request::ext::QueryTarget;
+#[doc(inline)]
+pub use zenoh_protocol::zenoh::query::ConsolidationMode;
 use zenoh_result::ZResult;
 
 use super::{
@@ -42,12 +46,6 @@ use super::{
 #[cfg(feature = "unstable")]
 use super::{sample::SourceInfo, selector::ZenohParameters};
 use crate::bytes::OptionZBytes;
-
-/// The [`Queryable`](crate::query::Queryable)s that should be target of a [`get`](Session::get).
-pub type QueryTarget = zenoh_protocol::network::request::ext::TargetType;
-
-#[doc(inline)]
-pub use zenoh_protocol::zenoh::query::ConsolidationMode;
 
 /// The replies consolidation strategy to apply on replies to a [`get`](Session::get).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
