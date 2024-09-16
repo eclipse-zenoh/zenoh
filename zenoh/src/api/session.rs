@@ -77,7 +77,6 @@ use super::{
         SessionPutBuilder,
     },
     bytes::ZBytes,
-    config::Notifier,
     encoding::Encoding,
     handlers::{Callback, DefaultHandler},
     info::SessionInfo,
@@ -654,7 +653,8 @@ impl Session {
     /// let _ = session.config().insert_json5("connect/endpoints", r#"["tcp/127.0.0.1/7447"]"#);
     /// # }
     /// ```
-    pub fn config(&self) -> &Notifier<Config> {
+    #[zenoh_macros::unstable]
+    pub fn config(&self) -> &crate::config::Notifier<Config> {
         self.0.runtime.config()
     }
 

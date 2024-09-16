@@ -38,11 +38,13 @@ impl Config {
         .map_err(InsertionError)
     }
 
+    #[zenoh_macros::unstable]
     pub fn get<'a>(&'a self, key: &str) -> Result<&'a dyn Any, LookupError> {
         <zenoh_config::Config as validated_struct::ValidatedMap>::get(&self.0, key)
             .map_err(LookupError)
     }
 
+    #[zenoh_macros::unstable]
     pub fn remove<K: AsRef<str>>(&mut self, key: K) -> ZResult<()> {
         self.0.remove(key)
     }
@@ -98,9 +100,11 @@ struct NotifierInner<T> {
     inner: Mutex<T>,
     subscribers: Mutex<Vec<flume::Sender<Notification>>>,
 }
+
 pub struct Notifier<T> {
     inner: Arc<NotifierInner<T>>,
 }
+
 impl<T> Clone for Notifier<T> {
     fn clone(&self) -> Self {
         Self {
@@ -108,6 +112,7 @@ impl<T> Clone for Notifier<T> {
         }
     }
 }
+
 impl Notifier<Config> {
     pub fn new(inner: Config) -> Self {
         Notifier {
