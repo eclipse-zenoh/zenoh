@@ -195,8 +195,7 @@ pub fn unstable_config(args: TokenStream, tokens: TokenStream) -> TokenStream {
         Err(err) => return err.into_compile_error().into(),
     };
 
-    let feature_gate: Attribute =
-        parse_quote!(#[cfg(any(feature = "unstable", feature = "unstable_config"))]);
+    let feature_gate: Attribute = parse_quote!(#[cfg(feature = "unstable_config")]);
     attrs.push(feature_gate);
 
     TokenStream::from(item.to_token_stream())
