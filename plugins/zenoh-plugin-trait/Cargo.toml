@@ -34,4 +34,5 @@ git-version = { workspace = true }
 zenoh-macros = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-util = { workspace = true }
+zenoh-config = { workspace = true }
 zenoh-keyexpr = { workspace = true, features = ["internal", "unstable"] }

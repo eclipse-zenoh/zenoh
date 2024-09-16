@@ -5807,6 +5807,7 @@ dependencies = [
  "libloading",
  "serde",
  "tracing",
+ "zenoh-config",
  "zenoh-keyexpr",
  "zenoh-macros",
  "zenoh-result",

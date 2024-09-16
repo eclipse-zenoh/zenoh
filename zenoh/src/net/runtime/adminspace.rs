@@ -22,7 +22,7 @@ use zenoh_buffers::buffer::SplitBuffer;
 use zenoh_config::{unwrap_or_default, wrappers::ZenohId, ConfigValidator, WhatAmI};
 use zenoh_core::Wait;
 #[cfg(feature = "plugins")]
-use zenoh_plugin_trait::{PluginControl, PluginStatus};
+use zenoh_plugin_trait::{PluginControl, PluginDiff, PluginStatus};
 #[cfg(feature = "plugins")]
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::{
@@ -65,13 +65,6 @@ pub struct AdminSpace {
     mappings: Mutex<HashMap<ExprId, String>>,
     handlers: HashMap<OwnedKeyExpr, Handler>,
     context: Arc<AdminContext>,
-}
-
-#[cfg(feature = "plugins")]
-#[derive(Debug, Clone)]
-enum PluginDiff {
-    Delete(String),
-    Start(zenoh_config::PluginLoad),
 }
 
 impl ConfigValidator for AdminSpace {
@@ -237,7 +230,7 @@ impl AdminSpace {
 
         config.set_plugin_validator(Arc::downgrade(&admin));
 
-        #[cfg(feature = "plugins")]
+        #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
         {
             let cfg_rx = admin.context.runtime.state.config.subscribe();
 

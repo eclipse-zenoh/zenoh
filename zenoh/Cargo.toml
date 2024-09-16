@@ -45,6 +45,7 @@ default = [
 ]
 internal = ["zenoh-keyexpr/internal", "zenoh-config/internal"]
 plugins = []
+runtime_plugins = ["plugins"]
 shared-memory = [
     "zenoh-shm",
     "zenoh-protocol/shared-memory",
