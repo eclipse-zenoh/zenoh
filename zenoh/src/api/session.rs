@@ -58,7 +58,7 @@ use zenoh_protocol::{
         ResponseFinal,
     },
     zenoh::{
-        query::{self, ext::QueryBodyType, Consolidation},
+        query::{self, ext::QueryBodyType},
         reply::ReplyBody,
         Del, PushBody, Put, RequestBody, ResponseBody,
     },
@@ -2085,7 +2085,6 @@ impl SessionInner {
         let primitives = state.primitives()?;
         drop(state);
 
-        let consolidation: Consolidation = consolidation.into();
         if destination != Locality::SessionLocal {
             let ext_attachment = attachment.clone().map(Into::into);
             primitives.send_request(Request {
@@ -2199,7 +2198,7 @@ impl SessionInner {
         parameters: &str,
         qid: RequestId,
         _target: TargetType,
-        _consolidation: Consolidation,
+        _consolidation: ConsolidationMode,
         body: Option<QueryBodyType>,
         attachment: Option<ZBytes>,
     ) {
