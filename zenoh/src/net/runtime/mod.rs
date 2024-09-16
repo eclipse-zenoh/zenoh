@@ -251,7 +251,7 @@ impl Runtime {
 
     #[cfg(feature = "plugins")]
     #[inline(always)]
-    pub(crate) fn plugins_manager(&self) -> MutexGuard<'_, PluginsManager> {
+    pub fn plugins_manager(&self) -> MutexGuard<'_, PluginsManager> {
         zlock!(self.state.plugins_manager)
     }
 
