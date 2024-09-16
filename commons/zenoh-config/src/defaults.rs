@@ -34,6 +34,33 @@ pub const mode: WhatAmI = WhatAmI::Peer;
 
 #[allow(non_upper_case_globals)]
 #[allow(dead_code)]
+pub mod connect {
+    use super::{ModeDependentValue, ModeValues};
+
+    pub const timeout_ms: ModeDependentValue<i64> = ModeDependentValue::Dependent(ModeValues {
+        router: Some(-1),
+        peer: Some(-1),
+        client: Some(0),
+    });
+    pub const exit_on_failure: ModeDependentValue<bool> =
+        ModeDependentValue::Dependent(ModeValues {
+            router: Some(false),
+            peer: Some(false),
+            client: Some(true),
+        });
+}
+
+#[allow(non_upper_case_globals)]
+#[allow(dead_code)]
+pub mod listen {
+    use super::ModeDependentValue;
+
+    pub const timeout_ms: ModeDependentValue<i64> = ModeDependentValue::Unique(0);
+    pub const exit_on_failure: ModeDependentValue<bool> = ModeDependentValue::Unique(true);
+}
+
+#[allow(non_upper_case_globals)]
+#[allow(dead_code)]
 pub mod scouting {
     pub const timeout: u64 = 3000;
     pub const delay: u64 = 500;
@@ -260,23 +287,6 @@ impl Default for AclConfig {
         }
     }
 }
-
-pub const DEFAULT_CONNECT_TIMEOUT_MS: ModeDependentValue<i64> =
-    ModeDependentValue::Dependent(ModeValues {
-        client: Some(0),
-        peer: Some(-1),
-        router: Some(-1),
-    });
-
-pub const DEFAULT_CONNECT_EXIT_ON_FAIL: ModeDependentValue<bool> =
-    ModeDependentValue::Dependent(ModeValues {
-        client: Some(true),
-        peer: Some(false),
-        router: Some(false),
-    });
-
-pub const DEFAULT_LISTEN_TIMEOUT_MS: ModeDependentValue<i64> = ModeDependentValue::Unique(0);
-pub const DEFAULT_LISTEN_EXIT_ON_FAIL: ModeDependentValue<bool> = ModeDependentValue::Unique(true);
 
 impl Default for ConnectionRetryModeDependentConf {
     fn default() -> Self {
