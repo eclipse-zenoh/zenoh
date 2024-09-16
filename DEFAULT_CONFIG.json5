@@ -340,7 +340,7 @@
       ///
       /// ## Endpoint metadata
       ///
-      /// **priorities**: a range bounded inclusively below and above (e.g. `2..4` signifies
+      /// **priorities**: a range bounded inclusively below and above (e.g. `2..=4` signifies
       /// priorities 2, 3 and 4). This value is used to select the link used for transmission based
       /// on the Priority of the message in question.
       ///
