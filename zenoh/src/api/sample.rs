@@ -30,7 +30,7 @@ use super::{
     publisher::Priority, value::Value,
 };
 
-pub type SourceSn = u64;
+pub type SourceSn = u32;
 
 /// The locality of samples to be received by subscribers or targeted by publishers.
 #[zenoh_macros::unstable]
@@ -192,7 +192,7 @@ impl From<SourceInfo> for Option<zenoh_protocol::zenoh::put::ext::SourceInfoType
         } else {
             Some(zenoh_protocol::zenoh::put::ext::SourceInfoType {
                 id: source_info.source_id.unwrap_or_default().into(),
-                sn: source_info.source_sn.unwrap_or_default() as u32,
+                sn: source_info.source_sn.unwrap_or_default(),
             })
         }
     }

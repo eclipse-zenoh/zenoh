@@ -20,7 +20,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, EntityGlobalIdProto, EntityId, Locator, WhatAmI, ZenohIdProto},
+    core::{key_expr::OwnedKeyExpr, EntityGlobalIdProto, Locator, WhatAmI, ZenohIdProto},
     scouting::HelloProto,
 };
 
@@ -146,6 +146,7 @@ impl fmt::Display for Hello {
 #[derive(Default, Copy, Clone, Eq, Hash, PartialEq)]
 #[repr(transparent)]
 pub struct EntityGlobalId(EntityGlobalIdProto);
+pub type EntityId = u32;
 
 impl EntityGlobalId {
     pub fn zid(&self) -> ZenohId {

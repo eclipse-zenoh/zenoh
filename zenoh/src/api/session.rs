@@ -2483,7 +2483,7 @@ impl Primitives for WeakSession {
                     timestamp: m.timestamp,
                     qos: QoS::from(msg.ext_qos),
                     source_id: m.ext_sinfo.as_ref().map(|i| i.id.into()),
-                    source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
+                    source_sn: m.ext_sinfo.as_ref().map(|i| i.sn),
                 };
                 self.execute_subscriber_callbacks(
                     false,
@@ -2503,7 +2503,7 @@ impl Primitives for WeakSession {
                     timestamp: m.timestamp,
                     qos: QoS::from(msg.ext_qos),
                     source_id: m.ext_sinfo.as_ref().map(|i| i.id.into()),
-                    source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
+                    source_sn: m.ext_sinfo.as_ref().map(|i| i.sn),
                 };
                 self.execute_subscriber_callbacks(
                     false,
@@ -2608,7 +2608,7 @@ impl Primitives for WeakSession {
                                     timestamp,
                                     qos: QoS::from(msg.ext_qos),
                                     source_id: ext_sinfo.as_ref().map(|i| i.id.into()),
-                                    source_sn: ext_sinfo.as_ref().map(|i| i.sn as u64),
+                                    source_sn: ext_sinfo.as_ref().map(|i| i.sn),
                                 },
                                 attachment: _attachment.map(Into::into),
                             },
@@ -2625,7 +2625,7 @@ impl Primitives for WeakSession {
                                     timestamp,
                                     qos: QoS::from(msg.ext_qos),
                                     source_id: ext_sinfo.as_ref().map(|i| i.id.into()),
-                                    source_sn: ext_sinfo.as_ref().map(|i| i.sn as u64),
+                                    source_sn: ext_sinfo.as_ref().map(|i| i.sn),
                                 },
                                 attachment: _attachment.map(Into::into),
                             },
