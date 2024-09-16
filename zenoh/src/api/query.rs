@@ -24,7 +24,10 @@ use zenoh_core::{Resolvable, Wait};
 use zenoh_keyexpr::OwnedKeyExpr;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::ZenohIdProto;
-use zenoh_protocol::core::{CongestionControl, Parameters};
+use zenoh_protocol::{
+    core::{CongestionControl, Parameters},
+    zenoh::Consolidation,
+};
 use zenoh_result::ZResult;
 
 use super::{
@@ -47,7 +50,49 @@ use crate::bytes::OptionZBytes;
 pub type QueryTarget = zenoh_protocol::network::request::ext::TargetType;
 
 /// The kind of consolidation.
-pub type ConsolidationMode = zenoh_protocol::zenoh::query::Consolidation;
+#[repr(u8)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Copy)]
+pub enum ConsolidationMode {
+    /// Apply automatic consolidation based on queryable's preferences
+    #[default]
+    Auto,
+    /// No consolidation applied: multiple samples may be received for the same key-timestamp.
+    None,
+    /// Monotonic consolidation immediately forwards samples, except if one with an equal or more recent timestamp
+    /// has already been sent with the same key.
+    ///
+    /// This optimizes latency while potentially reducing bandwidth.
+    ///
+    /// Note that this doesn't cause re-ordering, but drops the samples for which a more recent timestamp has already
+    /// been observed with the same key.
+    Monotonic,
+    /// Holds back samples to only send the set of samples that had the highest timestamp for their key.    
+    Latest,
+}
+
+#[doc(hidden)]
+impl From<Consolidation> for ConsolidationMode {
+    fn from(value: Consolidation) -> Self {
+        match value {
+            Consolidation::Auto => ConsolidationMode::Auto,
+            Consolidation::Monotonic => ConsolidationMode::Monotonic,
+            Consolidation::Latest => ConsolidationMode::Latest,
+            Consolidation::None => ConsolidationMode::None,
+        }
+    }
+}
+
+#[doc(hidden)]
+impl From<ConsolidationMode> for Consolidation {
+    fn from(value: ConsolidationMode) -> Self {
+        match value {
+            ConsolidationMode::Auto => Consolidation::Auto,
+            ConsolidationMode::Monotonic => Consolidation::Monotonic,
+            ConsolidationMode::Latest => Consolidation::Latest,
+            ConsolidationMode::None => Consolidation::None,
+        }
+    }
+}
 
 /// The replies consolidation strategy to apply on replies to a [`get`](Session::get).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

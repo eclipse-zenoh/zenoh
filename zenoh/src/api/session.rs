@@ -2085,6 +2085,7 @@ impl SessionInner {
         let primitives = state.primitives()?;
         drop(state);
 
+        let consolidation: Consolidation = consolidation.into();
         if destination != Locality::SessionLocal {
             let ext_attachment = attachment.clone().map(Into::into);
             primitives.send_request(Request {
@@ -2685,7 +2686,7 @@ impl Primitives for WeakSession {
                                         }
                                     }
                                 }
-                                Consolidation::Auto | ConsolidationMode::Latest => {
+                                ConsolidationMode::Auto | ConsolidationMode::Latest => {
                                     match query.replies.as_ref().unwrap().get(
                                         new_reply.result.as_ref().unwrap().key_expr.as_keyexpr(),
                                     ) {
