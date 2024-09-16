@@ -2912,3 +2912,1196 @@ async fn test_liveliness_subscriber_double_clientviapeer_history_after() {
     peer_dummy.close().await.unwrap();
     router.close().await.unwrap();
 }
+
+/// -------------------------------------------------------
+/// SUBGET CLIENT
+/// -------------------------------------------------------
+
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_liveliness_subget_client_before() {
+    use std::time::Duration;
+
+    use zenoh::{config, sample::SampleKind};
+    use zenoh_config::WhatAmI;
+    use zenoh_link::EndPoint;
+
+    const TIMEOUT: Duration = Duration::from_secs(60);
+    const SLEEP: Duration = Duration::from_secs(1);
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:47487";
+    const LIVELINESS_KEYEXPR: &str = "test/liveliness/subget/client/before";
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let router = {
+        let mut c = config::default();
+        c.listen
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router ZID: {}", s.zid());
+        s
+    };
+
+    let client_tok = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Client));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Client (token) ZID: {}", s.zid());
+        s
+    };
+
+    let token = ztimeout!(client_tok.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let client_subget = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Client));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Client (subget) ZID: {}", s.zid());
+        s
+    };
+
+    let sub = ztimeout!(client_subget
+        .liveliness()
+        .declare_subscriber(LIVELINESS_KEYEXPR))
+    .unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    assert!(sub.try_recv().is_err());
+
+    let get = ztimeout!(client_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(get.recv_async()).unwrap().into_result().unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(get.try_recv().is_err());
+
+    token.undeclare().await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Delete);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    let get = ztimeout!(client_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+    assert!(get.try_recv().is_err());
+
+    sub.undeclare().await.unwrap();
+
+    client_tok.close().await.unwrap();
+    client_subget.close().await.unwrap();
+    router.close().await.unwrap();
+}
+
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_liveliness_subget_client_middle() {
+    use std::time::Duration;
+
+    use zenoh::{config, sample::SampleKind};
+    use zenoh_config::WhatAmI;
+    use zenoh_link::EndPoint;
+
+    const TIMEOUT: Duration = Duration::from_secs(60);
+    const SLEEP: Duration = Duration::from_secs(1);
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:47488";
+    const LIVELINESS_KEYEXPR: &str = "test/liveliness/subget/client/middle";
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let router = {
+        let mut c = config::default();
+        c.listen
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router ZID: {}", s.zid());
+        s
+    };
+
+    let client_subget = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Client));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Client (subget) ZID: {}", s.zid());
+        s
+    };
+
+    let sub = ztimeout!(client_subget
+        .liveliness()
+        .declare_subscriber(LIVELINESS_KEYEXPR))
+    .unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    assert!(sub.try_recv().is_err());
+
+    let client_tok = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Client));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Client (token) ZID: {}", s.zid());
+        s
+    };
+
+    let token = ztimeout!(client_tok.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    let get = ztimeout!(client_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(get.recv_async()).unwrap().into_result().unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(get.try_recv().is_err());
+
+    token.undeclare().await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Delete);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    let get = ztimeout!(client_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+    assert!(get.try_recv().is_err());
+
+    sub.undeclare().await.unwrap();
+
+    client_tok.close().await.unwrap();
+    client_subget.close().await.unwrap();
+    router.close().await.unwrap();
+}
+
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_liveliness_subget_client_history_before() {
+    use std::time::Duration;
+
+    use zenoh::{config, sample::SampleKind};
+    use zenoh_config::WhatAmI;
+    use zenoh_link::EndPoint;
+
+    const TIMEOUT: Duration = Duration::from_secs(60);
+    const SLEEP: Duration = Duration::from_secs(1);
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:47489";
+    const LIVELINESS_KEYEXPR: &str = "test/liveliness/subget/client/history/before";
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let router = {
+        let mut c = config::default();
+        c.listen
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router ZID: {}", s.zid());
+        s
+    };
+
+    let client_tok = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Client));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Client (token) ZID: {}", s.zid());
+        s
+    };
+
+    let token = ztimeout!(client_tok.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let client_subget = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Client));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Client (subget) ZID: {}", s.zid());
+        s
+    };
+
+    let sub = ztimeout!(client_subget
+        .liveliness()
+        .declare_subscriber(LIVELINESS_KEYEXPR)
+        .history(true))
+    .unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    let get = ztimeout!(client_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(get.recv_async()).unwrap().into_result().unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(get.try_recv().is_err());
+
+    token.undeclare().await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Delete);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    let get = ztimeout!(client_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+    assert!(get.try_recv().is_err());
+
+    sub.undeclare().await.unwrap();
+
+    client_tok.close().await.unwrap();
+    client_subget.close().await.unwrap();
+    router.close().await.unwrap();
+}
+
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_liveliness_subget_client_history_middle() {
+    use std::time::Duration;
+
+    use zenoh::{config, sample::SampleKind};
+    use zenoh_config::WhatAmI;
+    use zenoh_link::EndPoint;
+
+    const TIMEOUT: Duration = Duration::from_secs(60);
+    const SLEEP: Duration = Duration::from_secs(1);
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:47490";
+    const LIVELINESS_KEYEXPR: &str = "test/liveliness/subget/client/history/middle";
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let router = {
+        let mut c = config::default();
+        c.listen
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router ZID: {}", s.zid());
+        s
+    };
+
+    let client_subget = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Client));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Client (subget) ZID: {}", s.zid());
+        s
+    };
+
+    let sub = ztimeout!(client_subget
+        .liveliness()
+        .declare_subscriber(LIVELINESS_KEYEXPR)
+        .history(true))
+    .unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    assert!(sub.try_recv().is_err());
+
+    let client_tok = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Client));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Client (token) ZID: {}", s.zid());
+        s
+    };
+
+    let token = ztimeout!(client_tok.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    let get = ztimeout!(client_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(get.recv_async()).unwrap().into_result().unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(get.try_recv().is_err());
+
+    token.undeclare().await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Delete);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    let get = ztimeout!(client_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+    assert!(get.try_recv().is_err());
+
+    sub.undeclare().await.unwrap();
+
+    client_tok.close().await.unwrap();
+    client_subget.close().await.unwrap();
+    router.close().await.unwrap();
+}
+
+/// -------------------------------------------------------
+/// SUBGET PEER
+/// -------------------------------------------------------
+
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_liveliness_subget_peer_before() {
+    use std::time::Duration;
+
+    use zenoh::{config, sample::SampleKind};
+    use zenoh_config::WhatAmI;
+    use zenoh_link::EndPoint;
+
+    const TIMEOUT: Duration = Duration::from_secs(60);
+    const SLEEP: Duration = Duration::from_secs(1);
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:47491";
+    const LIVELINESS_KEYEXPR: &str = "test/liveliness/subget/peer/before";
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let router = {
+        let mut c = config::default();
+        c.listen
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router ZID: {}", s.zid());
+        s
+    };
+
+    let client_tok = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Client));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Client (token) ZID: {}", s.zid());
+        s
+    };
+
+    let token = ztimeout!(client_tok.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let peer_subget = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (subget) ZID: {}", s.zid());
+        s
+    };
+
+    let sub = ztimeout!(peer_subget
+        .liveliness()
+        .declare_subscriber(LIVELINESS_KEYEXPR))
+    .unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    assert!(sub.try_recv().is_err());
+
+    let get = ztimeout!(peer_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(get.recv_async()).unwrap().into_result().unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(get.try_recv().is_err());
+
+    token.undeclare().await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Delete);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    let get = ztimeout!(peer_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+    assert!(get.try_recv().is_err());
+
+    sub.undeclare().await.unwrap();
+
+    client_tok.close().await.unwrap();
+    peer_subget.close().await.unwrap();
+    router.close().await.unwrap();
+}
+
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_liveliness_subget_peer_middle() {
+    use std::time::Duration;
+
+    use zenoh::{config, sample::SampleKind};
+    use zenoh_config::WhatAmI;
+    use zenoh_link::EndPoint;
+
+    const TIMEOUT: Duration = Duration::from_secs(60);
+    const SLEEP: Duration = Duration::from_secs(1);
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:47492";
+    const LIVELINESS_KEYEXPR: &str = "test/liveliness/subget/peer/middle";
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let router = {
+        let mut c = config::default();
+        c.listen
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router ZID: {}", s.zid());
+        s
+    };
+
+    let peer_subget = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (subget) ZID: {}", s.zid());
+        s
+    };
+
+    let sub = ztimeout!(peer_subget
+        .liveliness()
+        .declare_subscriber(LIVELINESS_KEYEXPR))
+    .unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    assert!(sub.try_recv().is_err());
+
+    let client_tok = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Client));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Client (token) ZID: {}", s.zid());
+        s
+    };
+
+    let token = ztimeout!(client_tok.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    let get = ztimeout!(peer_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(get.recv_async()).unwrap().into_result().unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(get.try_recv().is_err());
+
+    token.undeclare().await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Delete);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    let get = ztimeout!(peer_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+    assert!(get.try_recv().is_err());
+
+    sub.undeclare().await.unwrap();
+
+    client_tok.close().await.unwrap();
+    peer_subget.close().await.unwrap();
+    router.close().await.unwrap();
+}
+
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_liveliness_subget_peer_history_before() {
+    use std::time::Duration;
+
+    use zenoh::{config, sample::SampleKind};
+    use zenoh_config::WhatAmI;
+    use zenoh_link::EndPoint;
+
+    const TIMEOUT: Duration = Duration::from_secs(60);
+    const SLEEP: Duration = Duration::from_secs(1);
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:47493";
+    const LIVELINESS_KEYEXPR: &str = "test/liveliness/subget/peer/history/before";
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let router = {
+        let mut c = config::default();
+        c.listen
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router ZID: {}", s.zid());
+        s
+    };
+
+    let client_tok = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Client));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Client (token) ZID: {}", s.zid());
+        s
+    };
+
+    let token = ztimeout!(client_tok.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let peer_subget = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (subget) ZID: {}", s.zid());
+        s
+    };
+
+    let sub = ztimeout!(peer_subget
+        .liveliness()
+        .declare_subscriber(LIVELINESS_KEYEXPR)
+        .history(true))
+    .unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    let get = ztimeout!(peer_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(get.recv_async()).unwrap().into_result().unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(get.try_recv().is_err());
+
+    token.undeclare().await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Delete);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    let get = ztimeout!(peer_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+    assert!(get.try_recv().is_err());
+
+    sub.undeclare().await.unwrap();
+
+    client_tok.close().await.unwrap();
+    peer_subget.close().await.unwrap();
+    router.close().await.unwrap();
+}
+
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_liveliness_subget_peer_history_middle() {
+    use std::time::Duration;
+
+    use zenoh::{config, sample::SampleKind};
+    use zenoh_config::WhatAmI;
+    use zenoh_link::EndPoint;
+
+    const TIMEOUT: Duration = Duration::from_secs(60);
+    const SLEEP: Duration = Duration::from_secs(1);
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:47494";
+    const LIVELINESS_KEYEXPR: &str = "test/liveliness/subget/peer/history/middle";
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let router = {
+        let mut c = config::default();
+        c.listen
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router ZID: {}", s.zid());
+        s
+    };
+
+    let peer_subget = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (subget) ZID: {}", s.zid());
+        s
+    };
+
+    let sub = ztimeout!(peer_subget
+        .liveliness()
+        .declare_subscriber(LIVELINESS_KEYEXPR)
+        .history(true))
+    .unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    assert!(sub.try_recv().is_err());
+
+    let client_tok = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Client));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Client (token) ZID: {}", s.zid());
+        s
+    };
+
+    let token = ztimeout!(client_tok.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    let get = ztimeout!(peer_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(get.recv_async()).unwrap().into_result().unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(get.try_recv().is_err());
+
+    token.undeclare().await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Delete);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    let get = ztimeout!(peer_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+    assert!(get.try_recv().is_err());
+
+    sub.undeclare().await.unwrap();
+
+    client_tok.close().await.unwrap();
+    peer_subget.close().await.unwrap();
+    router.close().await.unwrap();
+}
+
+/// -------------------------------------------------------
+/// SUBGET ROUTER
+/// -------------------------------------------------------
+
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_liveliness_subget_router_before() {
+    use std::time::Duration;
+
+    use zenoh::{config, sample::SampleKind};
+    use zenoh_config::WhatAmI;
+    use zenoh_link::EndPoint;
+
+    const TIMEOUT: Duration = Duration::from_secs(60);
+    const SLEEP: Duration = Duration::from_secs(1);
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:47495";
+    const ROUTER_SUBGET_ENDPOINT: &str = "tcp/localhost:47496";
+    const LIVELINESS_KEYEXPR: &str = "test/liveliness/subget/router/before";
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let router = {
+        let mut c = config::default();
+        c.listen
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router ZID: {}", s.zid());
+        s
+    };
+
+    let client_tok = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Client));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Client (token) ZID: {}", s.zid());
+        s
+    };
+
+    let token = ztimeout!(client_tok.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let router_subget = {
+        let mut c = config::default();
+        c.listen
+            .endpoints
+            .set(vec![ROUTER_SUBGET_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router (subget) ZID: {}", s.zid());
+        s
+    };
+
+    let sub = ztimeout!(router_subget
+        .liveliness()
+        .declare_subscriber(LIVELINESS_KEYEXPR))
+    .unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    assert!(sub.try_recv().is_err());
+
+    let get = ztimeout!(router_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(get.recv_async()).unwrap().into_result().unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(get.try_recv().is_err());
+
+    token.undeclare().await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Delete);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    let get = ztimeout!(router_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+    assert!(get.try_recv().is_err());
+
+    sub.undeclare().await.unwrap();
+
+    client_tok.close().await.unwrap();
+    router_subget.close().await.unwrap();
+    router.close().await.unwrap();
+}
+
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_liveliness_subget_router_middle() {
+    use std::time::Duration;
+
+    use zenoh::{config, sample::SampleKind};
+    use zenoh_config::WhatAmI;
+    use zenoh_link::EndPoint;
+
+    const TIMEOUT: Duration = Duration::from_secs(60);
+    const SLEEP: Duration = Duration::from_secs(1);
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:47497";
+    const ROUTER_SUBGET_ENDPOINT: &str = "tcp/localhost:47498";
+    const LIVELINESS_KEYEXPR: &str = "test/liveliness/subget/router/middle";
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let router = {
+        let mut c = config::default();
+        c.listen
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router ZID: {}", s.zid());
+        s
+    };
+
+    let router_subget = {
+        let mut c = config::default();
+        c.listen
+            .endpoints
+            .set(vec![ROUTER_SUBGET_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router (subget) ZID: {}", s.zid());
+        s
+    };
+
+    let sub = ztimeout!(router_subget
+        .liveliness()
+        .declare_subscriber(LIVELINESS_KEYEXPR))
+    .unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    assert!(sub.try_recv().is_err());
+
+    let client_tok = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Client));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Client (token) ZID: {}", s.zid());
+        s
+    };
+
+    let token = ztimeout!(client_tok.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    let get = ztimeout!(router_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(get.recv_async()).unwrap().into_result().unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(get.try_recv().is_err());
+
+    token.undeclare().await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Delete);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    let get = ztimeout!(router_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+    assert!(get.try_recv().is_err());
+
+    sub.undeclare().await.unwrap();
+
+    client_tok.close().await.unwrap();
+    router_subget.close().await.unwrap();
+    router.close().await.unwrap();
+}
+
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_liveliness_subget_router_history_before() {
+    use std::time::Duration;
+
+    use zenoh::{config, sample::SampleKind};
+    use zenoh_config::WhatAmI;
+    use zenoh_link::EndPoint;
+
+    const TIMEOUT: Duration = Duration::from_secs(60);
+    const SLEEP: Duration = Duration::from_secs(1);
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:47499";
+    const ROUTER_SUBGET_ENDPOINT: &str = "tcp/localhost:47500";
+    const LIVELINESS_KEYEXPR: &str = "test/liveliness/subget/router/history/before";
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let router = {
+        let mut c = config::default();
+        c.listen
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router ZID: {}", s.zid());
+        s
+    };
+
+    let client_tok = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Client));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Client (token) ZID: {}", s.zid());
+        s
+    };
+
+    let token = ztimeout!(client_tok.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let router_subget = {
+        let mut c = config::default();
+        c.listen
+            .endpoints
+            .set(vec![ROUTER_SUBGET_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router (subget) ZID: {}", s.zid());
+        s
+    };
+
+    let sub = ztimeout!(router_subget
+        .liveliness()
+        .declare_subscriber(LIVELINESS_KEYEXPR)
+        .history(true))
+    .unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    let get = ztimeout!(router_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(get.recv_async()).unwrap().into_result().unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(get.try_recv().is_err());
+
+    token.undeclare().await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Delete);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    let get = ztimeout!(router_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+    assert!(get.try_recv().is_err());
+
+    sub.undeclare().await.unwrap();
+
+    client_tok.close().await.unwrap();
+    router_subget.close().await.unwrap();
+    router.close().await.unwrap();
+}
+
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_liveliness_subget_router_history_middle() {
+    use std::time::Duration;
+
+    use zenoh::{config, sample::SampleKind};
+    use zenoh_config::WhatAmI;
+    use zenoh_link::EndPoint;
+
+    const TIMEOUT: Duration = Duration::from_secs(60);
+    const SLEEP: Duration = Duration::from_secs(1);
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:47501";
+    const ROUTER_SUBGET_ENDPOINT: &str = "tcp/localhost:47502";
+    const LIVELINESS_KEYEXPR: &str = "test/liveliness/subget/router/history/middle";
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let router = {
+        let mut c = config::default();
+        c.listen
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router ZID: {}", s.zid());
+        s
+    };
+
+    let router_subget = {
+        let mut c = config::default();
+        c.listen
+            .endpoints
+            .set(vec![ROUTER_SUBGET_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router (subget) ZID: {}", s.zid());
+        s
+    };
+
+    let sub = ztimeout!(router_subget
+        .liveliness()
+        .declare_subscriber(LIVELINESS_KEYEXPR)
+        .history(true))
+    .unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    assert!(sub.try_recv().is_err());
+
+    let client_tok = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Client));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Client (token) ZID: {}", s.zid());
+        s
+    };
+
+    let token = ztimeout!(client_tok.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    let get = ztimeout!(router_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(get.recv_async()).unwrap().into_result().unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(get.try_recv().is_err());
+
+    token.undeclare().await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Delete);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    let get = ztimeout!(router_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+    assert!(get.try_recv().is_err());
+
+    sub.undeclare().await.unwrap();
+
+    client_tok.close().await.unwrap();
+    router_subget.close().await.unwrap();
+    router.close().await.unwrap();
+}
