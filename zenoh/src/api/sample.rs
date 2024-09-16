@@ -30,6 +30,7 @@ use super::{
     publisher::Priority, value::Value,
 };
 
+/// The sequence number of the [`Sample`] from the source.
 pub type SourceSn = u32;
 
 /// The locality of samples to be received by subscribers or targeted by publishers.
