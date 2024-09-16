@@ -19,9 +19,8 @@ use zenoh_core::ztimeout;
 async fn test_liveliness_subscriber_clique() {
     use std::time::Duration;
 
-    use zenoh::{config, sample::SampleKind};
-    use zenoh_config::WhatAmI;
-    use zenoh_link::EndPoint;
+    use zenoh::{config::WhatAmI, sample::SampleKind};
+    use zenoh_config::EndPoint;
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
     const PEER1_ENDPOINT: &str = "tcp/localhost:47447";
@@ -30,10 +29,10 @@ async fn test_liveliness_subscriber_clique() {
     zenoh_util::init_log_from_env_or("error");
 
     let peer1 = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.listen
             .endpoints
-            .set(vec![PEER1_ENDPOINT.parse::<config::EndPoint>().unwrap()])
+            .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -43,7 +42,7 @@ async fn test_liveliness_subscriber_clique() {
     };
 
     let peer2 = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.connect
             .endpoints
             .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -83,7 +82,7 @@ async fn test_liveliness_subscriber_clique() {
 async fn test_liveliness_query_clique() {
     use std::time::Duration;
 
-    use zenoh::{config, sample::SampleKind};
+    use zenoh::sample::SampleKind;
     use zenoh_config::WhatAmI;
     use zenoh_link::EndPoint;
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -94,7 +93,7 @@ async fn test_liveliness_query_clique() {
     zenoh_util::init_log_from_env_or("error");
 
     let peer1 = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.listen
             .endpoints
             .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -107,7 +106,7 @@ async fn test_liveliness_query_clique() {
     };
 
     let peer2 = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.connect
             .endpoints
             .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -140,7 +139,7 @@ async fn test_liveliness_query_clique() {
 async fn test_liveliness_subscriber_brokered() {
     use std::time::Duration;
 
-    use zenoh::{config, sample::SampleKind};
+    use zenoh::sample::SampleKind;
     use zenoh_config::WhatAmI;
     use zenoh_link::EndPoint;
 
@@ -152,7 +151,7 @@ async fn test_liveliness_subscriber_brokered() {
     zenoh_util::init_log_from_env_or("error");
 
     let router = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.listen
             .endpoints
             .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -165,7 +164,7 @@ async fn test_liveliness_subscriber_brokered() {
     };
 
     let client1 = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.connect
             .endpoints
             .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -178,7 +177,7 @@ async fn test_liveliness_subscriber_brokered() {
     };
 
     let client2 = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.connect
             .endpoints
             .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -219,7 +218,7 @@ async fn test_liveliness_subscriber_brokered() {
 async fn test_liveliness_query_brokered() {
     use std::time::Duration;
 
-    use zenoh::{config, sample::SampleKind};
+    use zenoh::sample::SampleKind;
     use zenoh_config::WhatAmI;
     use zenoh_link::EndPoint;
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -230,7 +229,7 @@ async fn test_liveliness_query_brokered() {
     zenoh_util::init_log_from_env_or("error");
 
     let router = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.listen
             .endpoints
             .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -243,7 +242,7 @@ async fn test_liveliness_query_brokered() {
     };
 
     let client1 = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.connect
             .endpoints
             .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -256,7 +255,7 @@ async fn test_liveliness_query_brokered() {
     };
 
     let client2 = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.connect
             .endpoints
             .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -290,7 +289,7 @@ async fn test_liveliness_query_brokered() {
 async fn test_liveliness_subscriber_local() {
     use std::time::Duration;
 
-    use zenoh::{config, sample::SampleKind};
+    use zenoh::sample::SampleKind;
     use zenoh_config::WhatAmI;
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
@@ -299,7 +298,7 @@ async fn test_liveliness_subscriber_local() {
     zenoh_util::init_log_from_env_or("error");
 
     let peer = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
         let s = ztimeout!(zenoh::open(c)).unwrap();
@@ -333,8 +332,7 @@ async fn test_liveliness_subscriber_local() {
 async fn test_liveliness_query_local() {
     use std::time::Duration;
 
-    use zenoh::{config, sample::SampleKind};
-    use zenoh_config::WhatAmI;
+    use zenoh::{config::WhatAmI, sample::SampleKind};
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/query/local";
@@ -342,7 +340,7 @@ async fn test_liveliness_query_local() {
     zenoh_util::init_log_from_env_or("error");
 
     let peer = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
         let s = ztimeout!(zenoh::open(c)).unwrap();

@@ -20,13 +20,7 @@ pub mod wrappers;
 #[allow(unused_imports)]
 use std::convert::TryFrom; // This is a false positive from the rust analyser
 use std::{
-    any::Any,
-    collections::HashSet,
-    fmt,
-    io::Read,
-    net::SocketAddr,
-    path::Path,
-    sync::{Arc, Mutex, MutexGuard, Weak},
+    any::Any, collections::HashSet, fmt, io::Read, net::SocketAddr, ops, path::Path, sync::Weak,
 };
 
 use include::recursive_include;
@@ -36,7 +30,6 @@ use serde_json::{Map, Value};
 use validated_struct::ValidatedMapAssociatedTypes;
 pub use validated_struct::{GetError, ValidatedMap};
 pub use wrappers::ZenohId;
-use zenoh_core::zlock;
 pub use zenoh_protocol::core::{
     whatami, EndPoint, Locator, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor,
 };
@@ -57,7 +50,7 @@ pub use connection_retry::*;
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct SecretString(String);
 
-impl Deref for SecretString {
+impl ops::Deref for SecretString {
     type Target = String;
 
     fn deref(&self) -> &Self::Target {
@@ -229,16 +222,12 @@ fn config_keys() {
 }
 
 validated_struct::validator! {
-    /// The main configuration structure for Zenoh.
-    ///
-    /// Most fields are optional as a way to keep defaults flexible. Some of the fields have different default values depending on the rest of the configuration.
-    ///
-    /// To construct a configuration, we advise that you use a configuration file (JSON, JSON5 and YAML are currently supported, please use the proper extension for your format as the deserializer will be picked according to it).
     #[derive(Default)]
     #[recursive_attrs]
     #[derive(serde::Deserialize, serde::Serialize, Clone, Debug)]
     #[serde(default)]
     #[serde(deny_unknown_fields)]
+    #[doc(hidden)]
     Config {
         /// The Zenoh ID of the instance. This ID MUST be unique throughout your Zenoh infrastructure and cannot exceed 16 bytes of length. If left unset, a random u128 will be generated.
         id: ZenohId,
@@ -708,10 +697,7 @@ impl Config {
 
     pub fn remove<K: AsRef<str>>(&mut self, key: K) -> ZResult<()> {
         let key = key.as_ref();
-        self._remove(key)
-    }
 
-    fn _remove(&mut self, key: &str) -> ZResult<()> {
         let key = key.strip_prefix('/').unwrap_or(key);
         if !key.starts_with("plugins/") {
             bail!(
@@ -719,6 +705,14 @@ impl Config {
             )
         }
         self.plugins.remove(&key["plugins/".len()..])
+    }
+
+    pub fn get_retry_config(
+        &self,
+        endpoint: Option<&EndPoint>,
+        listen: bool,
+    ) -> ConnectionRetryConf {
+        get_retry_config(self, endpoint, listen)
     }
 }
 
@@ -818,227 +812,6 @@ fn config_from_json() {
         .unwrap();
     dbg!(std::mem::size_of_val(&config));
     println!("{}", serde_json::to_string_pretty(&config).unwrap());
-}
-
-pub type Notification = Arc<str>;
-
-struct NotifierInner<T> {
-    inner: Mutex<T>,
-    subscribers: Mutex<Vec<flume::Sender<Notification>>>,
-}
-pub struct Notifier<T> {
-    inner: Arc<NotifierInner<T>>,
-}
-impl<T> Clone for Notifier<T> {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-        }
-    }
-}
-impl Notifier<Config> {
-    pub fn remove<K: AsRef<str>>(&self, key: K) -> ZResult<()> {
-        let key = key.as_ref();
-        self._remove(key)
-    }
-
-    fn _remove(&self, key: &str) -> ZResult<()> {
-        {
-            let mut guard = zlock!(self.inner.inner);
-            guard.remove(key)?;
-        }
-        self.notify(key);
-        Ok(())
-    }
-}
-impl<T: ValidatedMap> Notifier<T> {
-    pub fn new(inner: T) -> Self {
-        Notifier {
-            inner: Arc::new(NotifierInner {
-                inner: Mutex::new(inner),
-                subscribers: Mutex::new(Vec::new()),
-            }),
-        }
-    }
-    pub fn subscribe(&self) -> flume::Receiver<Notification> {
-        let (tx, rx) = flume::unbounded();
-        {
-            zlock!(self.inner.subscribers).push(tx);
-        }
-        rx
-    }
-    pub fn notify<K: AsRef<str>>(&self, key: K) {
-        let key = key.as_ref();
-        self._notify(key);
-    }
-    fn _notify(&self, key: &str) {
-        let key: Arc<str> = Arc::from(key);
-        let mut marked = Vec::new();
-        let mut guard = zlock!(self.inner.subscribers);
-        for (i, sub) in guard.iter().enumerate() {
-            if sub.send(key.clone()).is_err() {
-                marked.push(i)
-            }
-        }
-        for i in marked.into_iter().rev() {
-            guard.swap_remove(i);
-        }
-    }
-
-    pub fn lock(&self) -> MutexGuard<T> {
-        zlock!(self.inner.inner)
-    }
-}
-
-impl<'a, T: 'a> ValidatedMapAssociatedTypes<'a> for Notifier<T> {
-    type Accessor = GetGuard<'a, T>;
-}
-impl<'a, T: 'a> ValidatedMapAssociatedTypes<'a> for &Notifier<T> {
-    type Accessor = GetGuard<'a, T>;
-}
-impl<T: ValidatedMap + 'static> ValidatedMap for Notifier<T>
-where
-    T: for<'a> ValidatedMapAssociatedTypes<'a, Accessor = &'a dyn Any>,
-{
-    fn insert<'d, D: serde::Deserializer<'d>>(
-        &mut self,
-        key: &str,
-        value: D,
-    ) -> Result<(), validated_struct::InsertionError>
-    where
-        validated_struct::InsertionError: From<D::Error>,
-    {
-        {
-            let mut guard = zlock!(self.inner.inner);
-            guard.insert(key, value)?;
-        }
-        self.notify(key);
-        Ok(())
-    }
-    fn get<'a>(
-        &'a self,
-        key: &str,
-    ) -> Result<<Self as validated_struct::ValidatedMapAssociatedTypes<'a>>::Accessor, GetError>
-    {
-        let guard: MutexGuard<'a, T> = zlock!(self.inner.inner);
-        // SAFETY: MutexGuard pins the mutex behind which the value is held.
-        let subref = guard.get(key.as_ref())? as *const _;
-        Ok(GetGuard {
-            _guard: guard,
-            subref,
-        })
-    }
-    fn get_json(&self, key: &str) -> Result<String, GetError> {
-        self.lock().get_json(key)
-    }
-    type Keys = T::Keys;
-    fn keys(&self) -> Self::Keys {
-        self.lock().keys()
-    }
-}
-impl<T: ValidatedMap + 'static> ValidatedMap for &Notifier<T>
-where
-    T: for<'a> ValidatedMapAssociatedTypes<'a, Accessor = &'a dyn Any>,
-{
-    fn insert<'d, D: serde::Deserializer<'d>>(
-        &mut self,
-        key: &str,
-        value: D,
-    ) -> Result<(), validated_struct::InsertionError>
-    where
-        validated_struct::InsertionError: From<D::Error>,
-    {
-        {
-            let mut guard = zlock!(self.inner.inner);
-            guard.insert(key, value)?;
-        }
-        self.notify(key);
-        Ok(())
-    }
-    fn get<'a>(
-        &'a self,
-        key: &str,
-    ) -> Result<<Self as validated_struct::ValidatedMapAssociatedTypes<'a>>::Accessor, GetError>
-    {
-        let guard: MutexGuard<'a, T> = zlock!(self.inner.inner);
-        // SAFETY: MutexGuard pins the mutex behind which the value is held.
-        let subref = guard.get(key.as_ref())? as *const _;
-        Ok(GetGuard {
-            _guard: guard,
-            subref,
-        })
-    }
-    fn get_json(&self, key: &str) -> Result<String, GetError> {
-        self.lock().get_json(key)
-    }
-    type Keys = T::Keys;
-    fn keys(&self) -> Self::Keys {
-        self.lock().keys()
-    }
-}
-impl<T: ValidatedMap + 'static> Notifier<T>
-where
-    T: for<'a> ValidatedMapAssociatedTypes<'a, Accessor = &'a dyn Any>,
-{
-    pub fn insert<'d, D: serde::Deserializer<'d>>(
-        &self,
-        key: &str,
-        value: D,
-    ) -> Result<(), validated_struct::InsertionError>
-    where
-        validated_struct::InsertionError: From<D::Error>,
-    {
-        self.lock().insert(key, value)?;
-        self.notify(key);
-        Ok(())
-    }
-
-    pub fn get(
-        &self,
-        key: &str,
-    ) -> Result<<Self as ValidatedMapAssociatedTypes>::Accessor, GetError> {
-        let guard = zlock!(self.inner.inner);
-        // SAFETY: MutexGuard pins the mutex behind which the value is held.
-        let subref = guard.get(key.as_ref())? as *const _;
-        Ok(GetGuard {
-            _guard: guard,
-            subref,
-        })
-    }
-
-    pub fn get_json(&self, key: &str) -> Result<String, GetError> {
-        self.lock().get_json(key)
-    }
-
-    pub fn insert_json5(
-        &self,
-        key: &str,
-        value: &str,
-    ) -> Result<(), validated_struct::InsertionError> {
-        self.insert(key, &mut json5::Deserializer::from_str(value)?)
-    }
-
-    pub fn keys(&self) -> impl Iterator<Item = String> {
-        self.lock().keys().into_iter()
-    }
-}
-
-pub struct GetGuard<'a, T> {
-    _guard: MutexGuard<'a, T>,
-    subref: *const dyn Any,
-}
-use std::ops::Deref;
-impl<'a, T> Deref for GetGuard<'a, T> {
-    type Target = dyn Any;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.subref }
-    }
-}
-impl<'a, T> AsRef<dyn Any> for GetGuard<'a, T> {
-    fn as_ref(&self) -> &dyn Any {
-        self.deref()
-    }
 }
 
 fn sequence_number_resolution_validator(b: &Bits) -> bool {

@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+#![cfg(any(feature = "unstable", feature = "unstable_config"))]
 #![cfg(target_family = "unix")]
 mod test {
     use std::{
@@ -19,12 +21,8 @@ mod test {
     };
 
     use tokio::runtime::Handle;
-    use zenoh::{
-        config,
-        config::{EndPoint, WhatAmI},
-        sample::SampleKind,
-        Config, Session,
-    };
+    use zenoh::{config::WhatAmI, sample::SampleKind, Config, Session};
+    use zenoh_config::{EndPoint, ModeDependentValue};
     use zenoh_core::{zlock, ztimeout};
 
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -59,7 +57,7 @@ mod test {
     }
 
     async fn get_basic_router_config(port: u16) -> Config {
-        let mut config = config::default();
+        let mut config = Config::default();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
         config
             .listen
@@ -77,9 +75,29 @@ mod test {
 
     async fn get_client_sessions(port: u16) -> (Session, Session) {
         println!("Opening client sessions");
-        let config = config::client([format!("tcp/127.0.0.1:{port}").parse::<EndPoint>().unwrap()]);
+        let mut config = zenoh::Config::default();
+        config.set_mode(Some(WhatAmI::Client)).unwrap();
+        config
+            .connect
+            .set_endpoints(ModeDependentValue::Unique(vec![format!(
+                "tcp/127.0.0.1:{port}"
+            )
+            .parse::<EndPoint>()
+            .unwrap()]))
+            .unwrap();
+
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
-        let config = config::client([format!("tcp/127.0.0.1:{port}").parse::<EndPoint>().unwrap()]);
+
+        let mut config = zenoh::Config::default();
+        config.set_mode(Some(WhatAmI::Client)).unwrap();
+        config
+            .connect
+            .set_endpoints(ModeDependentValue::Unique(vec![format!(
+                "tcp/127.0.0.1:{port}"
+            )
+            .parse::<EndPoint>()
+            .unwrap()]))
+            .unwrap();
         let s02 = ztimeout!(zenoh::open(config)).unwrap();
         (s01, s02)
     }

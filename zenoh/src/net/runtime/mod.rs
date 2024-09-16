@@ -36,7 +36,7 @@ use futures::{stream::StreamExt, Future};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
-use zenoh_config::wrappers::ZenohId;
+use zenoh_config::{unwrap_or_default, ModeDependent, ZenohId};
 use zenoh_link::{EndPoint, Link};
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_protocol::{
@@ -61,10 +61,7 @@ use super::{primitives::DeMux, routing, routing::router::Router};
 use crate::api::loader::{load_plugins, start_plugins};
 #[cfg(feature = "plugins")]
 use crate::api::plugins::PluginsManager;
-use crate::{
-    config::{unwrap_or_default, Config, ModeDependent, Notifier},
-    GIT_VERSION, LONG_VERSION,
-};
+use crate::{config::Notifier, Config, GIT_VERSION, LONG_VERSION};
 
 pub(crate) struct RuntimeState {
     zid: ZenohId,
@@ -93,7 +90,7 @@ impl WeakRuntime {
 }
 
 pub struct RuntimeBuilder {
-    config: Config,
+    config: zenoh_config::Config,
     #[cfg(feature = "plugins")]
     plugins_manager: Option<PluginsManager>,
     #[cfg(feature = "shared-memory")]
@@ -103,7 +100,7 @@ pub struct RuntimeBuilder {
 impl RuntimeBuilder {
     pub fn new(config: Config) -> Self {
         Self {
-            config,
+            config: config.0,
             #[cfg(feature = "plugins")]
             plugins_manager: None,
             #[cfg(feature = "shared-memory")]
@@ -166,7 +163,7 @@ impl RuntimeBuilder {
         // Admin space creation flag
         let start_admin_space = *config.adminspace.enabled();
 
-        let config = Notifier::new(config);
+        let config = Notifier::new(crate::config::Config(config));
         let runtime = Runtime {
             state: Arc::new(RuntimeState {
                 zid: zid.into(),

@@ -32,7 +32,7 @@ use uhlc::Timestamp;
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
-use zenoh_config::{unwrap_or_default, wrappers::ZenohId, Config, Notifier};
+use zenoh_config::{unwrap_or_default, wrappers::ZenohId};
 use zenoh_core::{zconfigurable, zread, Resolvable, Resolve, ResolveClosure, ResolveFuture, Wait};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::network::{
@@ -77,6 +77,7 @@ use super::{
         SessionPutBuilder,
     },
     bytes::ZBytes,
+    config::Notifier,
     encoding::Encoding,
     handlers::{Callback, DefaultHandler},
     info::SessionInfo,
@@ -102,10 +103,13 @@ use super::{
 };
 #[cfg(feature = "unstable")]
 use crate::api::selector::ZenohParameters;
-use crate::net::{
-    primitives::Primitives,
-    routing::dispatcher::face::Face,
-    runtime::{Runtime, RuntimeBuilder},
+use crate::{
+    net::{
+        primitives::Primitives,
+        routing::dispatcher::face::Face,
+        runtime::{Runtime, RuntimeBuilder},
+    },
+    Config,
 };
 
 zconfigurable! {
@@ -426,7 +430,7 @@ impl fmt::Debug for SessionInner {
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// session.put("key/expression", "value").await.unwrap();
 /// # }
 pub struct Session(pub(crate) Arc<SessionInner>);
@@ -580,7 +584,7 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
     ///     .await
@@ -607,7 +611,7 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// assert!(!session.is_closed());
     /// session.close().await.unwrap();
     /// assert!(session.is_closed());
@@ -636,7 +640,7 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let peers = session.config().get("connect/endpoints").unwrap();
     /// # }
     /// ```
@@ -646,7 +650,7 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let _ = session.config().insert_json5("connect/endpoints", r#"["tcp/127.0.0.1/7447"]"#);
     /// # }
     /// ```
@@ -664,7 +668,7 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let timestamp = session.new_timestamp();
     /// # }
     /// ```
@@ -695,7 +699,7 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let info = session.info();
     /// # }
     /// ```
@@ -716,7 +720,7 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let subscriber = session.declare_subscriber("key/expression")
     ///     .await
     ///     .unwrap();
@@ -756,7 +760,7 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let queryable = session.declare_queryable("key/expression")
     ///     .await
     ///     .unwrap();
@@ -799,7 +803,7 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression")
     ///     .await
     ///     .unwrap();
@@ -834,7 +838,7 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let liveliness = session
     ///     .liveliness()
     ///     .declare_token("key/expression")
@@ -859,7 +863,7 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let key_expr = session.declare_keyexpr("key/expression").await.unwrap();
     /// # }
     /// ```
@@ -914,7 +918,7 @@ impl Session {
     /// # async fn main() {
     /// use zenoh::bytes::Encoding;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// session
     ///     .put("key/expression", "payload")
     ///     .encoding(Encoding::TEXT_PLAIN)
@@ -957,7 +961,7 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// session.delete("key/expression").await.unwrap();
     /// # }
     /// ```
@@ -993,7 +997,7 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let replies = session.get("key/expression").await.unwrap();
     /// while let Ok(reply) = replies.recv_async().await {
     ///     println!(">> Received {:?}", reply.result());
@@ -1010,7 +1014,7 @@ impl Session {
     {
         let selector = selector.try_into().map_err(Into::into);
         let timeout = {
-            let conf = self.0.runtime.config().lock();
+            let conf = &self.0.runtime.config().lock().0;
             Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout()))
         };
         let qos: QoS = request::ext::QoSType::REQUEST.into();
@@ -1039,8 +1043,8 @@ impl Session {
     ) -> impl Resolve<ZResult<Session>> {
         ResolveFuture::new(async move {
             tracing::debug!("Config: {:?}", &config);
-            let aggregated_subscribers = config.aggregation().subscribers().clone();
-            let aggregated_publishers = config.aggregation().publishers().clone();
+            let aggregated_subscribers = config.0.aggregation().subscribers().clone();
+            let aggregated_publishers = config.0.aggregation().publishers().clone();
             #[allow(unused_mut)] // Required for shared-memory
             let mut runtime = RuntimeBuilder::new(config);
             #[cfg(feature = "shared-memory")]
@@ -2812,7 +2816,7 @@ impl crate::net::primitives::EPrimitives for WeakSession {
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// # }
 /// ```
 ///
@@ -2822,7 +2826,7 @@ impl crate::net::primitives::EPrimitives for WeakSession {
 /// use std::str::FromStr;
 /// use zenoh::session::ZenohId;
 ///
-/// let mut config = zenoh::config::peer();
+/// let mut config = zenoh::Config::default();
 /// config.set_id(ZenohId::from_str("221b72df20924c15b8794c6bdb471150").unwrap());
 /// config.connect.endpoints.set(
 ///     ["tcp/10.10.10.10:7447", "tcp/11.11.11.11:7447"].iter().map(|s|s.parse().unwrap()).collect());
@@ -2849,7 +2853,7 @@ where
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]

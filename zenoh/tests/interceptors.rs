@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+#![cfg(any(feature = "unstable", feature = "unstable_config"))]
 #![cfg(unix)]
 
 use std::{
@@ -21,11 +23,8 @@ use std::{
     },
 };
 
-use zenoh::{
-    config::{DownsamplingItemConf, DownsamplingRuleConf, InterceptorFlow},
-    key_expr::KeyExpr,
-    Config, Wait,
-};
+use zenoh::{key_expr::KeyExpr, Config, Wait};
+use zenoh_config::{DownsamplingItemConf, DownsamplingRuleConf, InterceptorFlow};
 
 // Tokio's time granularity on different platforms
 #[cfg(target_os = "windows")]

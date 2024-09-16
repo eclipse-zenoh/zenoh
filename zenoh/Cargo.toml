@@ -64,6 +64,7 @@ transport_unixsock-stream = ["zenoh-transport/transport_unixsock-stream"]
 transport_ws = ["zenoh-transport/transport_ws"]
 transport_vsock = ["zenoh-transport/transport_vsock"]
 unstable = ["zenoh-keyexpr/unstable"]
+unstable_config = []
 
 [dependencies]
 tokio = { workspace = true, features = ["rt", "macros", "time"] }
@@ -108,6 +109,7 @@ zenoh-util = { workspace = true }
 zenoh-runtime = { workspace = true }
 zenoh-task = { workspace = true }
 once_cell = { workspace = true }
+validated_struct = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }

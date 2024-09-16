@@ -11,15 +11,18 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+#![cfg(any(feature = "unstable", feature = "unstable_config"))]
+
 use std::time::Duration;
 
-use zenoh::{config, query::Reply, sample::SampleKind, Session};
+use zenoh::{query::Reply, sample::SampleKind, Session};
 use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
 async fn open_session(listen: &[&str], connect: &[&str]) -> Session {
-    let mut config = config::peer();
+    let mut config = zenoh::Config::default();
     config
         .listen
         .endpoints
