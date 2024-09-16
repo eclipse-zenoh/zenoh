@@ -168,8 +168,9 @@ fn source_info_stack_size() {
 
     assert_eq!(std::mem::size_of::<ZenohIdProto>(), 16);
     assert_eq!(std::mem::size_of::<Option<ZenohIdProto>>(), 17);
-    assert_eq!(std::mem::size_of::<Option<SourceSn>>(), 16);
-    assert_eq!(std::mem::size_of::<SourceInfo>(), 17 + 16 + 7);
+    assert_eq!(std::mem::size_of::<Option<SourceSn>>(), 8);
+    assert_eq!(std::mem::size_of::<Option<EntityGlobalId>>(), 24);
+    assert_eq!(std::mem::size_of::<SourceInfo>(), 24 + 8);
 }
 
 #[zenoh_macros::unstable]
