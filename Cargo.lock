@@ -5332,6 +5332,7 @@ dependencies = [
  "futures",
  "git-version",
  "itertools 0.13.0",
+ "json5",
  "lazy_static",
  "once_cell",
  "paste",

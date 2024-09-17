@@ -737,12 +737,6 @@ impl std::fmt::Display for ConfigOpenErr {
 }
 impl std::error::Error for ConfigOpenErr {}
 impl Config {
-    pub fn from_env() -> ZResult<Self> {
-        let path = std::env::var(defaults::ENV)
-            .map_err(|e| zerror!("Invalid ENV variable ({}): {}", defaults::ENV, e))?;
-        Self::from_file(path.as_str())
-    }
-
     pub fn from_file<P: AsRef<Path>>(path: P) -> ZResult<Self> {
         let path = path.as_ref();
         let mut config = Self::_from_file(path)?;

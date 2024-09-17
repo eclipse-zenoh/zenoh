@@ -1,5 +1,19 @@
+//
+// Copyright (c) 2024 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
 use std::{
     any::Any,
+    env,
     error::Error,
     fmt,
     ops::{self, Deref},
@@ -22,31 +36,40 @@ use zenoh_result::ZResult;
 pub struct Config(pub(crate) zenoh_config::Config);
 
 impl Config {
+    /// Default envrionment variable containing the file path used in [`Config::from_env`].
+    pub const DEFAULT_CONFIG_PATH_ENV: &'static str = "ZENOH_CONFIG";
+
+    /// Load configuration from the file path specified in the [`Self::DEFAULT_CONFIG_PATH_ENV`]
+    /// environment variable.
     pub fn from_env() -> ZResult<Self> {
-        Ok(Config(zenoh_config::Config::from_env()?))
+        let path = env::var(Self::DEFAULT_CONFIG_PATH_ENV)?;
+        Ok(Config(zenoh_config::Config::from_file(Path::new(&path)?)?))
     }
 
+    /// Load configuration from the file at `path`.
     pub fn from_file<P: AsRef<Path>>(path: P) -> ZResult<Self> {
         Ok(Config(zenoh_config::Config::from_file(path)?))
     }
 
+    /// Load configuration from the JSON5 string `input`.
+    pub fn from_json5(input: &str) -> ZResult<Config> {
+        match zenoh_config::Config::from_deserializer(&mut json5::Deserializer::from_str(input)?) {
+            Ok(config) => Ok(Config(config)),
+            Err(Ok(config)) => {
+                Err(zerror!("The config was correctly deserialized yet it's invalid").into())
+            }
+            Err(Err(err)) => Err(err.into()),
+        }
+    }
+
+    /// Inserts configuration value `value` at path `key`.
     pub fn insert_json5(&mut self, key: &str, value: &str) -> Result<(), InsertionError> {
         self.0.insert_json5(key, value).map_err(InsertionError)
     }
 
     #[zenoh_macros::unstable]
-    pub fn get<'a>(&'a self, key: &str) -> Result<&'a dyn Any, LookupError> {
-        self.0.get(key).map_err(LookupError)
-    }
-
-    #[zenoh_macros::unstable]
     pub fn get_json(&self, key: &str) -> Result<String, LookupError> {
         self.0.get_json(key).map_err(LookupError)
-    }
-
-    #[zenoh_macros::unstable]
-    pub fn remove<K: AsRef<str>>(&mut self, key: K) -> ZResult<()> {
-        self.0.remove(key)
     }
 
     // REVIEW(fuzzypixelz): the error variant of the Result is a Result because this does
