@@ -26,13 +26,14 @@ description = "The zenoh REST plugin"
 [features]
 default = ["dynamic_plugin"]
 dynamic_plugin = []
+static_plugin = ['async-std']
 
 [lib]
 name = "zenoh_plugin_rest"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-async-std = { workspace = true, features = ["tokio1"] }
+async-std = { workspace = true, features = ["tokio1"], optional = true}
 anyhow = { workspace = true, features = ["default"] }
 base64 = { workspace = true }
 flume = { workspace = true }
