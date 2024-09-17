@@ -30,6 +30,8 @@
     /// The list of endpoints to connect to.
     /// Accepts a single list (e.g. endpoints: ["tcp/10.10.10.10:7447", "tcp/11.11.11.11:7447"])
     /// or different lists for router, peer and client (e.g. endpoints: { router: ["tcp/10.10.10.10:7447"], peer: ["tcp/11.11.11.11:7447"] }).
+    ///
+    /// See https://docs.rs/zenoh/latest/zenoh/prelude/struct.EndPoint.html
     endpoints: [
       // "<proto>/<address>"
     ],
@@ -67,6 +69,8 @@
     /// The list of endpoints to listen on.
     /// Accepts a single list (e.g. endpoints: ["tcp/[::]:7447", "udp/[::]:7447"])
     /// or different lists for router, peer and client (e.g. endpoints: { router: ["tcp/[::]:7447"], peer: ["tcp/[::]:0"] }).
+    ///
+    /// See https://docs.rs/zenoh/latest/zenoh/prelude/struct.EndPoint.html
     endpoints: { router: ["tcp/[::]:7447"], peer: ["tcp/[::]:0"] },
 
     /// Global listen configuration,
@@ -337,15 +341,6 @@
       /// configured, all the supported protocols are automatically whitelisted. The supported
       /// protocols are: ["tcp" , "udp", "tls", "quic", "ws", "unixsock-stream", "vsock"] For
       /// example, to only enable "tls" and "quic": protocols: ["tls", "quic"],
-      ///
-      /// ## Endpoint metadata
-      ///
-      /// **priorities**: a range bounded inclusively below and above (e.g. `2..=4` signifies
-      /// priorities 2, 3 and 4). This value is used to select the link used for transmission based
-      /// on the Priority of the message in question.
-      ///
-      /// **reliability**: either "best_effort" or "reliable". This value is used to select the link
-      /// used for transmission based on the Reliability of the message in question.
       ///
       /// Configure the zenoh TX parameters of a link
       tx: {

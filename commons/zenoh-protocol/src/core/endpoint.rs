@@ -447,9 +447,18 @@ impl fmt::Debug for ConfigMut<'_> {
 /// A string that respects the [`EndPoint`] canon form: `<locator>[#<config>]`.
 ///
 /// `<locator>` is a valid [`Locator`] and `<config>` is of the form `<key1>=<value1>;...;<keyN>=<valueN>` where keys are alphabetically sorted.
-/// `<config>` is optional and can be provided to configure some aspectes for an [`EndPoint`], e.g. the interface to listen on or connect to.
+/// `<config>` is optional and can be provided to configure some aspects for an [`EndPoint`], e.g. the interface to listen on or connect to.
 ///
 /// A full [`EndPoint`] string is hence in the form of `<proto>/<address>[?<metadata>][#config]`.
+///
+/// ## Metadata
+///
+/// - **`priorities`**: a range bounded inclusively below and above (e.g. `2..=4` signifies
+/// priorities 2, 3 and 4). This value is used to select the link used for transmission based
+/// on the Priority of the message in question.
+///
+/// - **`reliability`**: either "best_effort" or "reliable". This value is used to select the link
+/// used for transmission based on the Reliability of the message in question.
 #[derive(Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(into = "String")]
 #[serde(try_from = "String")]
