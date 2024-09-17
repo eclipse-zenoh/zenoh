@@ -94,7 +94,7 @@ Zenoh's router is built as `target/release/zenohd`. All the examples are built i
 
 * **pub/sub**
   * run: `./target/release/examples/z_sub`
-  * in another shell run: `./target/release/examples/z_put`
+  * in another shell run: `./target/release/examples/z_pub`
   * the subscriber should receive the publication.
 
 * **get/queryable**
