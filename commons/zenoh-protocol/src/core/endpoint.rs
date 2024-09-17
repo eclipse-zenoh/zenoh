@@ -456,19 +456,19 @@ impl fmt::Debug for ConfigMut<'_> {
 /// ## Metadata
 ///
 /// - **`priorities`**: a range bounded inclusively below and above (e.g. `2..=4` signifies
-/// priorities 2, 3 and 4). This value is used to select the link used for transmission based on the
-/// Priority of the message in question.
+///   priorities 2, 3 and 4). This value is used to select the link used for transmission based on the
+///   Priority of the message in question.
 ///
 ///   For example, `tcp/localhost:7447?priorities=1..=3` assigns priorities
-/// [`crate::core::Priority::RealTime`], [`crate::core::Priority::InteractiveHigh`] and
-/// [`crate::core::Priority::InteractiveLow`] to the established link.
+///   [`crate::core::Priority::RealTime`], [`crate::core::Priority::InteractiveHigh`] and
+///   [`crate::core::Priority::InteractiveLow`] to the established link.
 ///
 /// - **`reliability`**: either "best_effort" or "reliable". This value is used to select the link
-/// used for transmission based on the Reliability of the message in question.
+///   used for transmission based on the Reliability of the message in question.
 ///
 ///   For example, `tcp/localhost:7447?priorities=6..=7;reliability=best_effort` assigns priorities
-/// [`crate::core::Priority::DataLow`] and [`crate::core::Priority::Background`], and
-/// [`crate::core::Reliability::BestEffort`] to the established link.
+///   [`crate::core::Priority::DataLow`] and [`crate::core::Priority::Background`], and
+///   [`crate::core::Reliability::BestEffort`] to the established link.
 #[derive(Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(into = "String")]
 #[serde(try_from = "String")]
