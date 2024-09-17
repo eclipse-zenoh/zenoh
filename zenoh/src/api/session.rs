@@ -652,9 +652,9 @@ impl Session {
         self.0.runtime.config()
     }
 
-    /// Get a new Timestamp from a Zenoh session [`Session`](Session).
+    /// Get a new Timestamp from a Zenoh [`Session`].
     ///
-    /// The returned timestamp has the current time, with the Session's runtime ZenohID
+    /// The returned timestamp has the current time, with the Session's runtime [`ZenohId`].
     ///
     /// # Examples
     /// ### Read current zenoh configuration
