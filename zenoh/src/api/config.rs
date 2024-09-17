@@ -31,18 +31,17 @@ impl Config {
     }
 
     pub fn insert_json5(&mut self, key: &str, value: &str) -> Result<(), InsertionError> {
-        <zenoh_config::Config as validated_struct::ValidatedMap>::insert_json5(
-            &mut self.0,
-            key,
-            value,
-        )
-        .map_err(InsertionError)
+        self.0.insert_json5(key, value).map_err(InsertionError)
     }
 
     #[zenoh_macros::unstable]
     pub fn get<'a>(&'a self, key: &str) -> Result<&'a dyn Any, LookupError> {
-        <zenoh_config::Config as validated_struct::ValidatedMap>::get(&self.0, key)
-            .map_err(LookupError)
+        self.0.get(key).map_err(LookupError)
+    }
+
+    #[zenoh_macros::unstable]
+    pub fn get_json(&self, key: &str) -> Result<String, LookupError> {
+        self.0.get_json(key).map_err(LookupError)
     }
 
     #[zenoh_macros::unstable]
