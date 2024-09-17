@@ -111,7 +111,7 @@ impl RuntimeBuilder {
         }
     }
 
-    #[cfg(feature = "plugins")]
+    #[cfg(all(feature = "plugins", feature = "internal"))]
     pub fn plugins_manager<T: Into<Option<PluginsManager>>>(mut self, plugins_manager: T) -> Self {
         self.plugins_manager = plugins_manager.into();
         self
@@ -251,7 +251,7 @@ impl Runtime {
 
     #[cfg(feature = "plugins")]
     #[inline(always)]
-    pub(crate) fn plugins_manager(&self) -> MutexGuard<'_, PluginsManager> {
+    pub fn plugins_manager(&self) -> MutexGuard<'_, PluginsManager> {
         zlock!(self.state.plugins_manager)
     }
 

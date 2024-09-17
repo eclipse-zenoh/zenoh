@@ -28,21 +28,26 @@ readme = "README.md"
 [features]
 default = ["zenoh/default"]
 shared-memory = ["zenoh/shared-memory"]
-loki = ["tracing-loki","url"]
+loki = ["tracing-loki", "url"]
 
 [dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 clap = { workspace = true, features = ["derive"] }
-zenoh-util = {workspace = true }
+zenoh-util = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
 json5 = { workspace = true }
 lazy_static = { workspace = true }
-tracing = {workspace = true}
-tracing-subscriber = {workspace = true}
-tracing-loki = {workspace = true, optional = true }
-url = {workspace = true, optional = true }
-zenoh = { workspace = true, features = ["unstable", "internal", "plugins"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-loki = { workspace = true, optional = true }
+url = { workspace = true, optional = true }
+zenoh = { workspace = true, features = [
+  "unstable",
+  "internal",
+  "plugins",
+  "runtime_plugins",
+] }
 zenoh-config = { workspace = true }
 
 [dev-dependencies]

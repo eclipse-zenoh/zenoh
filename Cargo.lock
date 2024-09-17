@@ -333,6 +333,7 @@ dependencies = [
  "blocking",
  "futures-lite 2.0.0",
  "once_cell",
+ "tokio",
 ]
 
 [[package]]
@@ -5351,7 +5352,6 @@ dependencies = [
  "tracing",
  "uhlc",
  "unwrap-infallible",
- "validated_struct",
  "vec_map",
  "zenoh-buffers",
  "zenoh-codec",
@@ -5759,6 +5759,7 @@ name = "zenoh-plugin-rest"
 version = "1.0.0-dev"
 dependencies = [
  "anyhow",
+ "async-std",
  "base64 0.22.1",
  "clap",
  "flume",
@@ -5810,6 +5811,7 @@ dependencies = [
  "libloading",
  "serde",
  "tracing",
+ "zenoh-config",
  "zenoh-keyexpr",
  "zenoh-macros",
  "zenoh-result",
