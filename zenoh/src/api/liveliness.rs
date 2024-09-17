@@ -278,8 +278,7 @@ pub(crate) struct LivelinessTokenState {
     pub(crate) key_expr: KeyExpr<'static>,
 }
 
-/// A token whose liveliness is tied to the Zenoh [`Session`](Session)
-/// and can be monitored by remote applications.
+/// A token whose liveliness is tied to the Zenoh [`Session`](Session).
 ///
 /// A declared liveliness token will be seen as alive by any other Zenoh
 /// application in the system that monitors it while the liveliness token
