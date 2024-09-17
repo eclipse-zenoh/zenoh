@@ -81,6 +81,7 @@ anyhow = { version = "1.0.86", default-features = false } # Default features are
 async-executor = "1.13.0"
 async-global-executor = "2.4.1"
 async-io = "2.3.4"
+async-std = { version = "1.6.5", features = ["tokio1"] }
 async-trait = "0.1.81"
 base64 = "0.22.1"
 bincode = "1.3.3"
