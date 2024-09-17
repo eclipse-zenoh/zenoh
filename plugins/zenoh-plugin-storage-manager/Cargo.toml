@@ -39,6 +39,7 @@ flume = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
 lazy_static = { workspace = true }
+rand = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

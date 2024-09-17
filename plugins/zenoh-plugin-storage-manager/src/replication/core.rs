@@ -12,8 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{collections::HashMap, sync::Arc, time::Instant};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant, SystemTime},
+};
 
+use rand::Rng;
 use tokio::{
     sync::{Mutex, RwLock},
     task::JoinHandle,
@@ -74,13 +79,66 @@ impl Replication {
                 }
             };
 
-            let replication_log_guard = replication_log.read().await;
-            let publication_interval = replication_log_guard.configuration().interval;
-            let propagation_delay = replication_log_guard.configuration().propagation_delay;
-            drop(replication_log_guard);
+            // Scope to not forget to release the lock.
+            let (publication_interval, propagation_delay, last_elapsed_interval) = {
+                let replication_log_guard = replication_log.read().await;
+                let configuration = replication_log_guard.configuration();
+                let last_elapsed_interval = match configuration.last_elapsed_interval() {
+                    Ok(idx) => idx,
+                    Err(e) => {
+                        tracing::error!(
+                            "Fatal error, call to `last_elapsed_interval` failed with: {e:?}"
+                        );
+                        return;
+                    }
+                };
+
+                (
+                    configuration.interval,
+                    configuration.propagation_delay,
+                    last_elapsed_interval,
+                )
+            };
+
+            // We have no control over when a replica is going to be started. The purpose is here
+            // is to try to align its publications and make it so that they happen more or less
+            // at every interval (+ δ).
+            let duration_until_next_interval = {
+                let millis_last_elapsed =
+                    *last_elapsed_interval as u128 * publication_interval.as_millis();
+
+                if millis_last_elapsed > u64::MAX as u128 {
+                    tracing::error!(
+                        "Fatal error, the last elapsed interval converted to milliseconds is \
+                         higher than u64::MAX. The host is likely misconfigured (internal clock \
+                         far ahead in the future?)."
+                    );
+                    return;
+                }
+
+                let millis_since_now =
+                    match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+                        Ok(duration) => duration.as_millis(),
+                        Err(e) => {
+                            tracing::error!(
+                                "Fatal error, failed to obtain the Duration until `now()`: {e:?}"
+                            );
+                            return;
+                        }
+                    };
+
+                Duration::from_millis(
+                    (publication_interval.as_millis() - (millis_since_now - millis_last_elapsed))
+                        as u64,
+                )
+            };
+            tokio::time::sleep(duration_until_next_interval).await;
 
             let mut serialization_buffer = Vec::default();
             let mut events = HashMap::default();
+
+            // Internal delay to avoid an "update storm".
+            let max_publication_delay = (publication_interval.as_millis() / 3) as u64;
 
             let mut digest_update_start: Instant;
             let mut digest: Digest;
@@ -116,6 +174,11 @@ impl Replication {
                     continue;
                 }
 
+                // We do not want to create a "coordinated update storm" with all replicas
+                // publishing at the same time, hence we wait some variable additional time.
+                let publication_delay = rand::thread_rng().gen_range(0..max_publication_delay);
+                tokio::time::sleep(Duration::from_millis(publication_delay)).await;
+
                 // To try to minimise the allocations performed, we extract the current capacity
                 // of the buffer (capacity >= len) to later call `std::mem::replace` with a
                 // buffer that, hopefully, has enough memory.
@@ -143,7 +206,7 @@ impl Replication {
                          the latter. Digest update: {} ms (incl. delay: {} ms)",
                         publication_interval.as_millis(),
                         digest_update_duration.as_millis(),
-                        propagation_delay.as_millis(),
+                        publication_delay + propagation_delay.as_millis() as u64
                     );
                 } else {
                     tokio::time::sleep(publication_interval - digest_update_duration).await;

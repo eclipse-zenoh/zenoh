@@ -5875,6 +5875,7 @@ dependencies = [
  "git-version",
  "jsonschema",
  "lazy_static",
+ "rand 0.8.5",
  "rustc_version 0.4.1",
  "schemars",
  "serde",
