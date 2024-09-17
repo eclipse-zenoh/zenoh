@@ -418,7 +418,7 @@ impl Query {
                 mapping: Mapping::Sender,
             },
             payload: ResponseBody::Reply(zenoh::Reply {
-                consolidation: zenoh::Consolidation::DEFAULT,
+                consolidation: zenoh::ConsolidationMode::DEFAULT,
                 ext_unknown: vec![],
                 payload: match sample.kind {
                     SampleKind::Put => ReplyBody::Put(Put {
