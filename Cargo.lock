@@ -333,6 +333,7 @@ dependencies = [
  "blocking",
  "futures-lite 2.0.0",
  "once_cell",
+ "tokio",
 ]
 
 [[package]]
@@ -5756,6 +5757,7 @@ name = "zenoh-plugin-rest"
 version = "1.0.0-dev"
 dependencies = [
  "anyhow",
+ "async-std",
  "base64 0.22.1",
  "clap",
  "flume",

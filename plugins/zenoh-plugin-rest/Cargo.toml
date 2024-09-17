@@ -32,6 +32,7 @@ name = "zenoh_plugin_rest"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+async-std = { version = "1.6.5", features = ["tokio1"] }
 anyhow = { workspace = true, features = ["default"] }
 base64 = { workspace = true }
 flume = { workspace = true }
