@@ -28,7 +28,7 @@ use zenoh_protocol::{
     network::{
         declare::{ext, queryable::ext::QueryableInfoType, QueryableId},
         request::{
-            ext::{BudgetType, TargetType, TimeoutType},
+            ext::{BudgetType, QueryTarget, TimeoutType},
             Request, RequestId,
         },
         response::{self, ext::ResponderIdType, Response, ResponseFinal},
@@ -304,11 +304,11 @@ fn compute_final_route(
     qabls: &Arc<QueryTargetQablSet>,
     src_face: &Arc<FaceState>,
     expr: &mut RoutingExpr,
-    target: &TargetType,
+    target: &QueryTarget,
     query: Arc<Query>,
 ) -> QueryRoute {
     match target {
-        TargetType::All => {
+        QueryTarget::All => {
             let mut route = HashMap::new();
             for qabl in qabls.iter() {
                 if tables
@@ -324,7 +324,7 @@ fn compute_final_route(
             }
             route
         }
-        TargetType::AllComplete => {
+        QueryTarget::AllComplete => {
             let mut route = HashMap::new();
             for qabl in qabls.iter() {
                 if qabl.info.map(|info| info.complete).unwrap_or(true)
@@ -341,7 +341,7 @@ fn compute_final_route(
             }
             route
         }
-        TargetType::BestMatching => {
+        QueryTarget::BestMatching => {
             if let Some(qabl) = qabls.iter().find(|qabl| {
                 qabl.direction.0.id != src_face.id && qabl.info.is_some_and(|info| info.complete)
             }) {
@@ -353,7 +353,7 @@ fn compute_final_route(
 
                 route
             } else {
-                compute_final_route(tables, qabls, src_face, expr, &TargetType::All, query)
+                compute_final_route(tables, qabls, src_face, expr, &QueryTarget::All, query)
             }
         }
     }
@@ -545,7 +545,7 @@ pub fn route_query(
     qid: RequestId,
     ext_qos: ext::QoSType,
     ext_tstamp: Option<ext::TimestampType>,
-    ext_target: TargetType,
+    ext_target: QueryTarget,
     ext_budget: Option<BudgetType>,
     ext_timeout: Option<TimeoutType>,
     body: RequestBody,
