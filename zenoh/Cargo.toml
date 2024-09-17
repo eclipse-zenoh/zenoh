@@ -110,7 +110,6 @@ zenoh-util = { workspace = true }
 zenoh-runtime = { workspace = true }
 zenoh-task = { workspace = true }
 once_cell = { workspace = true }
-validated_struct = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
