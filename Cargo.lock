@@ -5351,7 +5351,6 @@ dependencies = [
  "tracing",
  "uhlc",
  "unwrap-infallible",
- "validated_struct",
  "vec_map",
  "zenoh-buffers",
  "zenoh-codec",
@@ -5465,6 +5464,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "tokio",
+ "unwrap-infallible",
  "zenoh",
  "zenoh-ext",
 ]

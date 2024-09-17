@@ -32,13 +32,14 @@ unstable = ["zenoh/unstable"]
 transport_unixpipe = ["zenoh/transport_unixpipe"]
 
 [dependencies]
-tokio = { workspace = true, features = ["rt-multi-thread", "time", "io-std"] }
 clap = { workspace = true, features = ["derive"] }
 futures = { workspace = true }
-zenoh = { workspace = true, default-features = true }
+prost = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
-prost = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "time", "io-std"] }
+unwrap-infallible = { workspace = true }
+zenoh = { workspace = true, default-features = true }
 zenoh-ext = { workspace = true }
 
 [dev-dependencies]
