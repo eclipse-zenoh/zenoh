@@ -353,9 +353,9 @@ pub mod time {
 pub mod config {
     pub use zenoh_config::{WhatAmI, WhatAmIMatcher};
 
-    pub use crate::api::config::{Config, InsertionError};
+    pub use crate::api::config::Config;
     #[zenoh_macros::unstable]
-    pub use crate::api::config::{LookupError, LookupGuard, Notifier};
+    pub use crate::api::config::Notifier;
 }
 
 #[cfg(all(

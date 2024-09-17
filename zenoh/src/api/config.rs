@@ -12,11 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    any::Any,
-    env,
-    error::Error,
-    fmt,
-    ops::{self, Deref},
+    env, fmt,
     path::Path,
     sync::{Arc, Mutex, MutexGuard},
 };
@@ -193,24 +189,5 @@ impl Notifier<Config> {
 
     pub fn insert_json5(&self, key: &str, value: &str) -> ZResult<()> {
         self.lock_config().insert_json5(key, value)
-    }
-}
-
-pub struct LookupGuard<'a, T> {
-    _guard: MutexGuard<'a, T>,
-    subref: *const dyn Any,
-}
-
-impl<'a, T> ops::Deref for LookupGuard<'a, T> {
-    type Target = dyn Any;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.subref }
-    }
-}
-
-impl<'a, T> AsRef<dyn Any> for LookupGuard<'a, T> {
-    fn as_ref(&self) -> &dyn Any {
-        self.deref()
     }
 }
