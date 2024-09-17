@@ -27,7 +27,9 @@ use std::{
 };
 
 use tracing::{error, info, trace, warn};
-use uhlc::{Timestamp, HLC};
+use uhlc::Timestamp;
+#[cfg(feature = "internal")]
+use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::{unwrap_or_default, wrappers::ZenohId, Config, Notifier};
@@ -553,6 +555,7 @@ impl Session {
         self.info().zid().wait()
     }
 
+    #[cfg(feature = "internal")]
     pub fn hlc(&self) -> Option<&HLC> {
         self.0.runtime.hlc()
     }
@@ -666,7 +669,7 @@ impl Session {
     /// # }
     /// ```
     pub fn new_timestamp(&self) -> Timestamp {
-        match self.hlc() {
+        match self.0.runtime.hlc() {
             Some(hlc) => hlc.new_timestamp(),
             None => {
                 // Called in the case that the runtime is not initialized with an hlc
