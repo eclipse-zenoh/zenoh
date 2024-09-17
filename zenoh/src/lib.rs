@@ -37,7 +37,7 @@
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     let session = zenoh::open(zenoh::config::default()).await.unwrap();
+//!     let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 //!     session.put("key/expression", "value").await.unwrap();
 //!     session.close().await.unwrap();
 //! }
@@ -50,7 +50,7 @@
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     let session = zenoh::open(zenoh::config::default()).await.unwrap();
+//!     let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 //!     let subscriber = session.declare_subscriber("key/expression").await.unwrap();
 //!     while let Ok(sample) = subscriber.recv_async().await {
 //!         println!("Received: {:?}", sample);
@@ -66,7 +66,7 @@
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     let session = zenoh::open(zenoh::config::default()).await.unwrap();
+//!     let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 //!     let replies = session.get("key/expression").await.unwrap();
 //!     while let Ok(reply) = replies.recv_async().await {
 //!         println!(">> Received {:?}", reply.result());
@@ -296,7 +296,7 @@ pub mod scouting {
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let liveliness = session
 ///     .liveliness()
 ///     .declare_token("key/expression")
@@ -310,7 +310,7 @@ pub mod scouting {
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let replies = session.liveliness().get("key/**").await.unwrap();
 /// while let Ok(reply) = replies.recv_async().await {
 ///     if let Ok(sample) = reply.result() {
@@ -326,7 +326,7 @@ pub mod scouting {
 /// # async fn main() {
 /// use zenoh::sample::SampleKind;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let subscriber = session.liveliness().declare_subscriber("key/**").await.unwrap();
 /// while let Ok(sample) = subscriber.recv_async().await {
 ///     match sample.kind() {
@@ -351,11 +351,11 @@ pub mod time {
 
 /// Configuration to pass to [`open`] and [`scout`] functions and associated constants
 pub mod config {
-    // pub use zenoh_config::{
-    //     client, default, peer, Config, EndPoint, Locator, ModeDependentValue, PermissionsConf,
-    //     PluginLoad, ValidatedMap, ZenohId,
-    // };
-    pub use zenoh_config::*;
+    pub use zenoh_config::{WhatAmI, WhatAmIMatcher};
+
+    pub use crate::api::config::Config;
+    #[zenoh_macros::unstable]
+    pub use crate::api::config::Notifier;
 }
 
 #[cfg(all(

@@ -11,6 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+#![cfg(feature = "unstable_config")]
+
 use std::{
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -20,13 +23,8 @@ use std::{
 };
 
 use tokio::runtime::Handle;
-use zenoh::{
-    config,
-    config::{EndPoint, WhatAmI},
-    key_expr::KeyExpr,
-    qos::CongestionControl,
-    Session,
-};
+use zenoh::{config::WhatAmI, key_expr::KeyExpr, qos::CongestionControl, Session};
+use zenoh_config::{EndPoint, ModeDependentValue};
 use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -36,7 +34,7 @@ const MSG_SIZE: [usize; 2] = [1_024, 100_000];
 
 async fn open_p2p_sessions() -> (Session, Session, Session) {
     // Open the sessions
-    let mut config = config::peer();
+    let mut config = zenoh::Config::default();
     config
         .listen
         .endpoints
@@ -46,7 +44,7 @@ async fn open_p2p_sessions() -> (Session, Session, Session) {
     println!("[  ][01a] Opening s01 session");
     let s01 = ztimeout!(zenoh::open(config)).unwrap();
 
-    let mut config = config::peer();
+    let mut config = zenoh::Config::default();
     config
         .listen
         .endpoints
@@ -61,7 +59,7 @@ async fn open_p2p_sessions() -> (Session, Session, Session) {
     println!("[  ][02a] Opening s02 session");
     let s02 = ztimeout!(zenoh::open(config)).unwrap();
 
-    let mut config = config::peer();
+    let mut config = zenoh::Config::default();
     config
         .connect
         .endpoints
@@ -79,7 +77,7 @@ async fn open_p2p_sessions() -> (Session, Session, Session) {
 
 async fn open_router_session() -> Session {
     // Open the sessions
-    let mut config = config::default();
+    let mut config = zenoh::Config::default();
     config.set_mode(Some(WhatAmI::Router)).unwrap();
     config
         .listen
@@ -98,15 +96,36 @@ async fn close_router_session(s: Session) {
 
 async fn open_client_sessions() -> (Session, Session, Session) {
     // Open the sessions
-    let config = config::client(["tcp/127.0.0.1:37447".parse::<EndPoint>().unwrap()]);
+    let mut config = zenoh::Config::default();
+    config.set_mode(Some(WhatAmI::Client)).unwrap();
+    config
+        .connect
+        .set_endpoints(ModeDependentValue::Unique(vec!["tcp/127.0.0.1:37447"
+            .parse::<EndPoint>()
+            .unwrap()]))
+        .unwrap();
     println!("[  ][01a] Opening s01 session");
     let s01 = ztimeout!(zenoh::open(config)).unwrap();
 
-    let config = config::client(["tcp/127.0.0.1:37447".parse::<EndPoint>().unwrap()]);
+    let mut config = zenoh::Config::default();
+    config.set_mode(Some(WhatAmI::Client)).unwrap();
+    config
+        .connect
+        .set_endpoints(ModeDependentValue::Unique(vec!["tcp/127.0.0.1:37447"
+            .parse::<EndPoint>()
+            .unwrap()]))
+        .unwrap();
     println!("[  ][02a] Opening s02 session");
     let s02 = ztimeout!(zenoh::open(config)).unwrap();
 
-    let config = config::client(["tcp/127.0.0.1:37447".parse::<EndPoint>().unwrap()]);
+    let mut config = zenoh::Config::default();
+    config.set_mode(Some(WhatAmI::Client)).unwrap();
+    config
+        .connect
+        .set_endpoints(ModeDependentValue::Unique(vec!["tcp/127.0.0.1:37447"
+            .parse::<EndPoint>()
+            .unwrap()]))
+        .unwrap();
     println!("[  ][03a] Opening s03 session");
     let s03 = ztimeout!(zenoh::open(config)).unwrap();
 

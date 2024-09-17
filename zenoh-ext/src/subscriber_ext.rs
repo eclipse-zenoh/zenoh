@@ -63,7 +63,7 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     /// use zenoh::Wait;
     /// use zenoh_ext::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expr")
     ///     .fetching( |cb| {
@@ -106,7 +106,7 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     /// # async fn main() {
     /// use zenoh_ext::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expr")
     ///     .querying()
@@ -140,7 +140,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
     /// use zenoh::Wait;
     /// use zenoh_ext::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expr")
     ///     .fetching( |cb| {
@@ -195,7 +195,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
     /// # async fn main() {
     /// use zenoh_ext::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expr")
     ///     .querying()
@@ -249,7 +249,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     /// use zenoh::Wait;
     /// use zenoh_ext::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let subscriber = session
     ///     .liveliness()
     ///     .declare_subscriber("key/expr")
@@ -307,7 +307,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     /// # async fn main() {
     /// use zenoh_ext::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let subscriber = session
     ///     .liveliness()
     ///     .declare_subscriber("key/expr")

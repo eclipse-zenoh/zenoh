@@ -43,6 +43,7 @@ tracing-subscriber = {workspace = true}
 tracing-loki = {workspace = true, optional = true }
 url = {workspace = true, optional = true }
 zenoh = { workspace = true, features = ["unstable", "internal", "plugins"] }
+zenoh-config = { workspace = true }
 
 [dev-dependencies]
 rand = { workspace = true, features = ["default"] }

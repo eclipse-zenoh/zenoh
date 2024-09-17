@@ -178,7 +178,7 @@ impl QueryState {
 /// # async fn main() {
 /// use zenoh::{query::{ConsolidationMode, QueryTarget}};
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let replies = session
 ///     .get("key/expression?value>1")
 ///     .target(QueryTarget::All)
@@ -264,7 +264,7 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let queryable = session
     ///     .get("key/expression")
     ///     .callback(|reply| {println!("Received {:?}", reply.result());})
@@ -290,7 +290,7 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let mut n = 0;
     /// let queryable = session
     ///     .get("key/expression")
@@ -317,7 +317,7 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let replies = session
     ///     .get("key/expression")
     ///     .with(flume::bounded(32))
