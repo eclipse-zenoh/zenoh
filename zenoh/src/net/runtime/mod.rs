@@ -61,7 +61,10 @@ use super::{primitives::DeMux, routing, routing::router::Router};
 use crate::api::loader::{load_plugins, start_plugins};
 #[cfg(feature = "plugins")]
 use crate::api::plugins::PluginsManager;
-use crate::{config::Notifier, Config, GIT_VERSION, LONG_VERSION};
+use crate::{
+    api::config::{Config, Notifier},
+    GIT_VERSION, LONG_VERSION,
+};
 
 pub(crate) struct RuntimeState {
     zid: ZenohId,

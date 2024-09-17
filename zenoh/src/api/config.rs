@@ -7,6 +7,7 @@ use std::{
     sync::{Arc, Mutex, MutexGuard},
 };
 
+use serde::{Deserialize, Serialize};
 use zenoh_result::ZResult;
 
 /// Zenoh configuration.
@@ -17,7 +18,7 @@ use zenoh_result::ZResult;
 /// To construct a configuration, we advise that you use a configuration file (JSON, JSON5 and YAML
 /// are currently supported, please use the proper extension for your format as the deserializer
 /// will be picked according to it).
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Config(pub(crate) zenoh_config::Config);
 
 impl Config {
@@ -47,6 +48,16 @@ impl Config {
     #[zenoh_macros::unstable]
     pub fn remove<K: AsRef<str>>(&mut self, key: K) -> ZResult<()> {
         self.0.remove(key)
+    }
+
+    #[zenoh_macros::unstable]
+    pub fn from_deserializer<'d, D: serde::Deserializer<'d>>(
+        d: D,
+    ) -> Result<Self, Result<Self, D::Error>>
+    where
+        Self: serde::Deserialize<'d>,
+    {
+        Ok(Config(zenoh_config::Config::from_deserializer(d)?))
     }
 }
 
@@ -165,7 +176,7 @@ impl Notifier<Config> {
     }
 
     pub fn remove<K: AsRef<str>>(&self, key: K) -> ZResult<()> {
-        self.lock_config().remove(key.as_ref())?;
+        self.lock_config().0.remove(key.as_ref())?;
         self.notify(key);
         Ok(())
     }
@@ -174,10 +185,11 @@ impl Notifier<Config> {
         self.lock_config().insert_json5(key, value)
     }
 
+    #[allow(dead_code)]
     pub fn get<'a>(&'a self, key: &str) -> Result<LookupGuard<'a, Config>, LookupError> {
         let config = self.lock_config();
         // SAFETY: MutexGuard pins the mutex behind which the value is held.
-        let subref = config.get(key.as_ref())? as *const _;
+        let subref = config.0.get(key.as_ref()).map_err(LookupError)? as *const _;
         Ok(LookupGuard {
             _guard: config,
             subref,
