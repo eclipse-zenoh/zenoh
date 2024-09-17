@@ -50,6 +50,8 @@ impl Config {
         self.0.remove(key)
     }
 
+    // REVIEW(fuzzypixelz): the error variant of the Result is a Result because this does
+    // deserialization AND validation.
     #[zenoh_macros::unstable]
     pub fn from_deserializer<'d, D: serde::Deserializer<'d>>(
         d: D,
@@ -57,7 +59,13 @@ impl Config {
     where
         Self: serde::Deserialize<'d>,
     {
-        Ok(Config(zenoh_config::Config::from_deserializer(d)?))
+        match zenoh_config::Config::from_deserializer(d) {
+            Ok(config) => Ok(Config(config)),
+            Err(result) => match result {
+                Ok(config) => Err(Ok(Config(config))),
+                Err(err) => Err(Err(err)),
+            },
+        }
     }
 }
 
