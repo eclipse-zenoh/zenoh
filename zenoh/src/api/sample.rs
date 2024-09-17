@@ -154,9 +154,21 @@ impl DataInfoIntoSample for Option<DataInfo> {
 #[derive(Debug, Clone)]
 pub struct SourceInfo {
     /// The [`EntityGlobalId`] of the zenoh entity that published the concerned [`Sample`].
-    pub source_id: Option<EntityGlobalId>,
+    pub(crate) source_id: Option<EntityGlobalId>,
     /// The sequence number of the [`Sample`] from the source.
-    pub source_sn: Option<SourceSn>,
+    pub(crate) source_sn: Option<SourceSn>,
+}
+
+impl SourceInfo {
+    /// The [`EntityGlobalId`] of the zenoh entity that published the concerned [`Sample`].
+    pub fn source_id(&self) -> Option<&EntityGlobalId> {
+        self.source_id.as_ref()
+    }
+
+    /// The sequence number of the [`Sample`] from the source.
+    pub fn source_sn(&self) -> Option<SourceSn> {
+        self.source_sn
+    }
 }
 
 #[test]
