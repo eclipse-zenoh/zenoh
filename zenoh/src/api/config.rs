@@ -56,7 +56,7 @@ impl Config {
         match zenoh_config::Config::from_deserializer(&mut json5::Deserializer::from_str(input)?) {
             Ok(config) => Ok(Config(config)),
             Err(Ok(_)) => {
-                Err(zerror!("The config was correctly deserialized yet it's invalid").into())
+                Err(zerror!("The config was correctly deserialized but it is invalid").into())
             }
             Err(Err(err)) => Err(err.into()),
         }
