@@ -36,7 +36,7 @@ use zenoh_result::ZResult;
 pub struct Config(pub(crate) zenoh_config::Config);
 
 impl Config {
-    /// Default envrionment variable containing the file path used in [`Config::from_env`].
+    /// Default environment variable containing the file path used in [`Config::from_env`].
     pub const DEFAULT_CONFIG_PATH_ENV: &'static str = "ZENOH_CONFIG";
 
     /// Load configuration from the file path specified in the [`Self::DEFAULT_CONFIG_PATH_ENV`]
