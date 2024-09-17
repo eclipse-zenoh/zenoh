@@ -62,14 +62,16 @@ impl Config {
         }
     }
 
-    /// Inserts configuration value `value` at path `key`.
-    pub fn insert_json5(&mut self, key: &str, value: &str) -> Result<(), InsertionError> {
-        self.0.insert_json5(key, value).map_err(InsertionError)
+    /// Inserts configuration value `value` at `key`.
+    pub fn insert_json5(&mut self, key: &str, value: &str) -> ZResult<()> {
+        self.0
+            .insert_json5(key, value)
+            .map_err(|err| zerror!("{err}").into())
     }
 
-    #[zenoh_macros::unstable]
-    pub fn get_json(&self, key: &str) -> Result<String, LookupError> {
-        self.0.get_json(key).map_err(LookupError)
+    /// Returns a JSON string containing the configuration at `key`.
+    pub fn get_json(&self, key: &str) -> ZResult<String> {
+        self.0.get_json(key).map_err(|err| zerror!("{err}").into())
     }
 
     // REVIEW(fuzzypixelz): the error variant of the Result is a Result because this does
@@ -90,28 +92,6 @@ impl Config {
         }
     }
 }
-
-#[derive(Debug)]
-pub struct InsertionError(validated_struct::InsertionError);
-
-impl fmt::Display for InsertionError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", &self.0)
-    }
-}
-
-impl Error for InsertionError {}
-
-#[derive(Debug)]
-pub struct LookupError(validated_struct::GetError);
-
-impl fmt::Display for LookupError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", &self.0)
-    }
-}
-
-impl Error for LookupError {}
 
 #[zenoh_macros::unstable_config]
 impl std::ops::Deref for Config {
@@ -211,19 +191,8 @@ impl Notifier<Config> {
         Ok(())
     }
 
-    pub fn insert_json5(&self, key: &str, value: &str) -> Result<(), InsertionError> {
+    pub fn insert_json5(&self, key: &str, value: &str) -> ZResult<()> {
         self.lock_config().insert_json5(key, value)
-    }
-
-    #[allow(dead_code)]
-    pub fn get<'a>(&'a self, key: &str) -> Result<LookupGuard<'a, Config>, LookupError> {
-        let config = self.lock_config();
-        // SAFETY: MutexGuard pins the mutex behind which the value is held.
-        let subref = config.0.get(key.as_ref()).map_err(LookupError)? as *const _;
-        Ok(LookupGuard {
-            _guard: config,
-            subref,
-        })
     }
 }
 
