@@ -15,7 +15,7 @@
 use crate::cleanup::CLEANUP;
 
 /// Make forced cleanup
-/// NOTE: this is a part of ugly on-exit-cleanup workaround and will be removed
+/// NOTE: this is a part of a temporary on-exit-cleanup workaround and it will be very likely removed in the future.
 /// In order to properly cleanup some SHM internals upon process exit, Zenoh installs exit handlers (see atexit() API).
 /// The bad thing is that atexit handler is executed only on process exit(), the terminating signal handlers (like SIGINT)
 /// bypass it and terminate the process without cleanup. To eliminate this effect, Zenoh overrides SIGHUP, SIGTERM, SIGINT
