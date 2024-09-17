@@ -5333,6 +5333,7 @@ dependencies = [
  "futures",
  "git-version",
  "itertools 0.13.0",
+ "json5",
  "lazy_static",
  "once_cell",
  "paste",
@@ -5414,7 +5415,6 @@ version = "1.0.0-dev"
 name = "zenoh-config"
 version = "1.0.0-dev"
 dependencies = [
- "flume",
  "json5",
  "num_cpus",
  "secrecy",
@@ -5480,6 +5480,7 @@ dependencies = [
  "tokio",
  "tracing",
  "zenoh",
+ "zenoh-config",
  "zenoh-macros",
  "zenoh-util",
 ]
@@ -5492,6 +5493,7 @@ dependencies = [
  "futures",
  "tokio",
  "zenoh",
+ "zenoh-config",
  "zenoh-ext",
 ]
 

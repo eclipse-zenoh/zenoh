@@ -64,7 +64,8 @@ transport_udp = ["zenoh-transport/transport_udp"]
 transport_unixsock-stream = ["zenoh-transport/transport_unixsock-stream"]
 transport_ws = ["zenoh-transport/transport_ws"]
 transport_vsock = ["zenoh-transport/transport_vsock"]
-unstable = ["zenoh-keyexpr/unstable"]
+unstable = ["unstable_config", "zenoh-keyexpr/unstable"]
+unstable_config = []
 
 [dependencies]
 tokio = { workspace = true, features = ["rt", "macros", "time"] }
@@ -76,6 +77,7 @@ flume = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
 itertools = { workspace = true }
+json5 = { workspace = true }
 lazy_static = { workspace = true }
 tracing = { workspace = true }
 paste = { workspace = true }

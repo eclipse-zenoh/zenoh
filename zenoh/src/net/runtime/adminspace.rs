@@ -150,7 +150,7 @@ impl AdminSpace {
     pub async fn start(runtime: &Runtime, version: String) {
         let zid_str = runtime.state.zid.to_string();
         let whatami_str = runtime.state.whatami.to_str();
-        let mut config = runtime.config().lock();
+        let config = &mut runtime.config().lock().0;
         let root_key: OwnedKeyExpr = format!("@/{zid_str}/{whatami_str}").try_into().unwrap();
 
         let mut handlers: HashMap<_, Handler> = HashMap::new();
@@ -367,7 +367,7 @@ impl Primitives for AdminSpace {
     fn send_push(&self, msg: Push, _reliability: Reliability) {
         trace!("recv Push {:?}", msg);
         {
-            let conf = self.context.runtime.state.config.lock();
+            let conf = &self.context.runtime.state.config.lock().0;
             if !conf.adminspace.permissions().write {
                 tracing::error!(
                     "Received PUT on '{}' but adminspace.permissions.write=false in configuration",
@@ -428,7 +428,7 @@ impl Primitives for AdminSpace {
             RequestBody::Query(query) => {
                 let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
                 {
-                    let conf = self.context.runtime.state.config.lock();
+                    let conf = &self.context.runtime.state.config.lock().0;
                     if !conf.adminspace.permissions().read {
                         tracing::error!(
                         "Received GET on '{}' but adminspace.permissions.read=false in configuration",
@@ -595,7 +595,7 @@ fn local_data(context: &AdminContext, query: Query) {
     let mut json = json!({
         "zid": context.runtime.state.zid,
         "version": context.version,
-        "metadata": context.runtime.config().lock().metadata(),
+        "metadata": context.runtime.config().lock().0.metadata(),
         "locators": locators,
         "sessions": transports,
         "plugins": plugins,
