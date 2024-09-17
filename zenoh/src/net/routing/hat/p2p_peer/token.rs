@@ -31,6 +31,22 @@ use crate::net::routing::{
     RoutingContext,
 };
 
+fn new_token(
+    tables: &Tables,
+    res: &Arc<Resource>,
+    src_face: &Arc<FaceState>,
+    dst_face: &mut Arc<FaceState>,
+) -> bool {
+    // Is there any face that
+    !res.session_ctxs.values().any(|ctx| {
+        ctx.token // declared the token
+            && (ctx.face.id != src_face.id) // is not the face that just registered it
+            && (ctx.face.id != dst_face.id || dst_face.zid == tables.zid) // is not the face we are propagating to (except for local)
+            && (ctx.face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
+        // don't forward from/to router/peers
+    })
+}
+
 #[inline]
 fn propagate_simple_token_to(
     tables: &mut Tables,
@@ -42,6 +58,7 @@ fn propagate_simple_token_to(
     if (src_face.id != dst_face.id || dst_face.zid == tables.zid)
         && !face_hat!(dst_face).local_tokens.contains_key(res)
         && (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
+        && new_token(tables, res, src_face, dst_face)
     {
         if dst_face.whatami != WhatAmI::Client {
             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
