@@ -14,20 +14,39 @@
 
 use std::{sync::Arc, time::Duration};
 
+use tokio::{
+    sync::{broadcast::Receiver, Mutex, RwLock},
+    task::JoinHandle,
+};
 use zenoh::{key_expr::OwnedKeyExpr, query::QueryTarget, sample::Locality, session::Session};
 
-use crate::storages_mgt::StorageService;
+use super::{core::Replication, LogLatest};
+use crate::storages_mgt::{LatestUpdates, StorageMessage, StorageService};
 
-pub(crate) struct ReplicationService;
+pub(crate) struct ReplicationService {
+    digest_publisher_handle: JoinHandle<()>,
+}
 
 const MAX_RETRY: usize = 2;
 const WAIT_PERIOD_SECS: u64 = 4;
 
 impl ReplicationService {
-    pub async fn start(
+    /// Starts the `ReplicationService`, spawning multiple tasks.
+    ///
+    /// # Tasks spawned
+    ///
+    /// This function will spawn two tasks:
+    /// 1. One to publish the [Digest].
+    /// 2. One to wait on the provided [Receiver] in order to stop the Replication Service,
+    ///    attempting to abort all the tasks that were spawned, once a Stop message has been
+    ///    received.
+    pub async fn spawn_start(
         zenoh_session: Arc<Session>,
         storage_service: StorageService,
         storage_key_expr: OwnedKeyExpr,
+        replication_log: Arc<RwLock<LogLatest>>,
+        latest_updates: Arc<Mutex<LatestUpdates>>,
+        mut rx: Receiver<StorageMessage>,
     ) {
         // We perform a "wait-try" policy because Zenoh needs some time to propagate the routing
         // information and, here, we need to have the queryables propagated.
@@ -76,5 +95,30 @@ impl ReplicationService {
                 "Found no Queryable matching '{storage_key_expr}'. Attempt {attempt}/{MAX_RETRY}."
             );
         }
+
+        tokio::task::spawn(async move {
+            let replication = Replication {
+                zenoh_session,
+                replication_log,
+                storage_key_expr,
+                latest_updates,
+            };
+
+            let replication_service = Self {
+                digest_publisher_handle: replication.spawn_digest_publisher(),
+            };
+
+            while let Ok(storage_message) = rx.recv().await {
+                if matches!(storage_message, StorageMessage::Stop) {
+                    replication_service.stop();
+                    return;
+                }
+            }
+        });
+    }
+
+    /// Stops all the tasks spawned by the `ReplicationService`.
+    pub fn stop(self) {
+        self.digest_publisher_handle.abort();
     }
 }

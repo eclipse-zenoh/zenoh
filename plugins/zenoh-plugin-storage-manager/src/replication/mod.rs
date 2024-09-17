@@ -26,5 +26,12 @@
 //!
 //! [History::Latest]: zenoh_backend_traits::History::Latest
 
+mod classification;
+mod configuration;
+mod core;
+mod digest;
+mod log;
 mod service;
+
+pub(crate) use log::{Event, LogLatest};
 pub(crate) use service::ReplicationService;

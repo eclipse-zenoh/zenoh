@@ -26,9 +26,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use flume::Sender;
 use memory_backend::MemoryBackend;
 use storages_mgt::StorageMessage;
+use tokio::sync::broadcast::Sender;
 use zenoh::{
     internal::{
         bail,
@@ -140,7 +140,8 @@ impl StorageRuntimeInner {
         //       Hence, in that scenario, we refuse to start the storage manager and any storage.
         if session.hlc().is_none() {
             tracing::error!(
-                "Cannot start storage manager (and thus any storage) without the 'timestamping' setting enabled in the Zenoh configuration"
+                "Cannot start storage manager (and thus any storage) without the 'timestamping' \
+                 setting enabled in the Zenoh configuration"
             );
             bail!("Cannot start storage manager, 'timestamping' is disabled in the configuration");
         }
