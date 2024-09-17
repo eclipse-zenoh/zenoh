@@ -66,12 +66,12 @@ pub struct Selector<'a> {
 }
 
 impl<'a> Selector<'a> {
-    /// Get the keyexpr of this selector.
+    /// Get the [`KeyExpr`] of this selector.
     pub fn key_expr(&'a self) -> &'a KeyExpr<'a> {
         &self.key_expr
     }
 
-    /// Get the keyexpr of this selector.
+    /// Get the [`KeyExpr`] of this selector.
     pub fn parameters(&'a self) -> &'a Parameters<'a> {
         &self.parameters
     }
