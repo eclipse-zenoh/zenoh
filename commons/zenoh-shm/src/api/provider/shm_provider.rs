@@ -118,8 +118,8 @@ where
 
     /// Set the allocation policy
     #[zenoh_macros::unstable_doc]
-    pub fn with_policy<Policy>(self) -> AllocBuilder2<'a, IDSource, Backend, Policy> {
-        AllocBuilder2 {
+    pub fn with_policy<Policy>(self) -> ProviderAllocBuilder<'a, IDSource, Backend, Policy> {
+        ProviderAllocBuilder {
             data: self.0,
             _phantom: PhantomData,
         }
@@ -142,7 +142,7 @@ where
     Backend: ShmProviderBackend,
 {
     fn wait(self) -> <Self as Resolvable>::To {
-        let builder = AllocBuilder2::<'a, IDSource, Backend, JustAlloc> {
+        let builder = ProviderAllocBuilder::<'a, IDSource, Backend, JustAlloc> {
             data: self.0,
             _phantom: PhantomData,
         };
@@ -172,8 +172,8 @@ where
 {
     /// Allocate the new buffer with this layout
     #[zenoh_macros::unstable_doc]
-    pub fn alloc(&'a self) -> AllocBuilder<'a, IDSource, Backend> {
-        AllocBuilder {
+    pub fn alloc(&'a self) -> LayoutAllocBuilder<'a, IDSource, Backend> {
+        LayoutAllocBuilder {
             layout: self,
             _phantom: PhantomData,
         }
@@ -514,9 +514,9 @@ unsafe impl<'a, Policy: AllocPolicy, IDSource, Backend: ShmProviderBackend>
     }
 }*/
 
-/// Builder for allocations
+/// Builder for making allocations with instant layout calculation
 #[zenoh_macros::unstable_doc]
-pub struct AllocBuilder2<
+pub struct ProviderAllocBuilder<
     'a,
     IDSource: ProtocolIDSource,
     Backend: ShmProviderBackend,
@@ -527,22 +527,25 @@ pub struct AllocBuilder2<
 }
 
 // Generic impl
-impl<'a, IDSource, Backend, Policy> AllocBuilder2<'a, IDSource, Backend, Policy>
+impl<'a, IDSource, Backend, Policy> ProviderAllocBuilder<'a, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
     Backend: ShmProviderBackend,
 {
     /// Set the allocation policy
     #[zenoh_macros::unstable_doc]
-    pub fn with_policy<OtherPolicy>(self) -> AllocBuilder2<'a, IDSource, Backend, OtherPolicy> {
-        AllocBuilder2 {
+    pub fn with_policy<OtherPolicy>(
+        self,
+    ) -> ProviderAllocBuilder<'a, IDSource, Backend, OtherPolicy> {
+        ProviderAllocBuilder {
             data: self.data,
             _phantom: PhantomData,
         }
     }
 }
 
-impl<'a, IDSource, Backend, Policy> Resolvable for AllocBuilder2<'a, IDSource, Backend, Policy>
+impl<'a, IDSource, Backend, Policy> Resolvable
+    for ProviderAllocBuilder<'a, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
     Backend: ShmProviderBackend,
@@ -551,7 +554,7 @@ where
 }
 
 // Sync alloc policy
-impl<'a, IDSource, Backend, Policy> Wait for AllocBuilder2<'a, IDSource, Backend, Policy>
+impl<'a, IDSource, Backend, Policy> Wait for ProviderAllocBuilder<'a, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
     Backend: ShmProviderBackend,
@@ -569,7 +572,8 @@ where
 }
 
 // Async alloc policy
-impl<'a, IDSource, Backend, Policy> IntoFuture for AllocBuilder2<'a, IDSource, Backend, Policy>
+impl<'a, IDSource, Backend, Policy> IntoFuture
+    for ProviderAllocBuilder<'a, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
     Backend: ShmProviderBackend + Sync,
@@ -593,9 +597,9 @@ where
     }
 }
 
-/// Builder for allocations
+/// Builder for making allocations through precalculated Layout
 #[zenoh_macros::unstable_doc]
-pub struct AllocBuilder<
+pub struct LayoutAllocBuilder<
     'a,
     IDSource: ProtocolIDSource,
     Backend: ShmProviderBackend,
@@ -606,22 +610,24 @@ pub struct AllocBuilder<
 }
 
 // Generic impl
-impl<'a, IDSource, Backend, Policy> AllocBuilder<'a, IDSource, Backend, Policy>
+impl<'a, IDSource, Backend, Policy> LayoutAllocBuilder<'a, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
     Backend: ShmProviderBackend,
 {
     /// Set the allocation policy
     #[zenoh_macros::unstable_doc]
-    pub fn with_policy<OtherPolicy>(self) -> AllocBuilder<'a, IDSource, Backend, OtherPolicy> {
-        AllocBuilder {
+    pub fn with_policy<OtherPolicy>(
+        self,
+    ) -> LayoutAllocBuilder<'a, IDSource, Backend, OtherPolicy> {
+        LayoutAllocBuilder {
             layout: self.layout,
             _phantom: PhantomData,
         }
     }
 }
 
-impl<'a, IDSource, Backend, Policy> Resolvable for AllocBuilder<'a, IDSource, Backend, Policy>
+impl<'a, IDSource, Backend, Policy> Resolvable for LayoutAllocBuilder<'a, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
     Backend: ShmProviderBackend,
@@ -630,7 +636,7 @@ where
 }
 
 // Sync alloc policy
-impl<'a, IDSource, Backend, Policy> Wait for AllocBuilder<'a, IDSource, Backend, Policy>
+impl<'a, IDSource, Backend, Policy> Wait for LayoutAllocBuilder<'a, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
     Backend: ShmProviderBackend,
@@ -644,7 +650,7 @@ where
 }
 
 // Async alloc policy
-impl<'a, IDSource, Backend, Policy> IntoFuture for AllocBuilder<'a, IDSource, Backend, Policy>
+impl<'a, IDSource, Backend, Policy> IntoFuture for LayoutAllocBuilder<'a, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
     Backend: ShmProviderBackend + Sync,

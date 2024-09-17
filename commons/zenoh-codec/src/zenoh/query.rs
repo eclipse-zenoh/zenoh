@@ -21,44 +21,44 @@ use zenoh_protocol::{
     common::{iext, imsg},
     zenoh::{
         id,
-        query::{ext, flag, Consolidation, Query},
+        query::{ext, flag, ConsolidationMode, Query},
     },
 };
 
 use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
 
 // Consolidation
-impl<W> WCodec<Consolidation, &mut W> for Zenoh080
+impl<W> WCodec<ConsolidationMode, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: Consolidation) -> Self::Output {
+    fn write(self, writer: &mut W, x: ConsolidationMode) -> Self::Output {
         let v: u64 = match x {
-            Consolidation::Auto => 0,
-            Consolidation::None => 1,
-            Consolidation::Monotonic => 2,
-            Consolidation::Latest => 3,
+            ConsolidationMode::Auto => 0,
+            ConsolidationMode::None => 1,
+            ConsolidationMode::Monotonic => 2,
+            ConsolidationMode::Latest => 3,
         };
         self.write(&mut *writer, v)
     }
 }
 
-impl<R> RCodec<Consolidation, &mut R> for Zenoh080
+impl<R> RCodec<ConsolidationMode, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<Consolidation, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<ConsolidationMode, Self::Error> {
         let v: u64 = self.read(&mut *reader)?;
         let c = match v {
-            0 => Consolidation::Auto,
-            1 => Consolidation::None,
-            2 => Consolidation::Monotonic,
-            3 => Consolidation::Latest,
-            _ => Consolidation::Auto, // Fallback on Auto if Consolidation is unknown
+            0 => ConsolidationMode::Auto,
+            1 => ConsolidationMode::None,
+            2 => ConsolidationMode::Monotonic,
+            3 => ConsolidationMode::Latest,
+            _ => ConsolidationMode::Auto, // Fallback on Auto if Consolidation is unknown
         };
         Ok(c)
     }
@@ -82,7 +82,7 @@ where
 
         // Header
         let mut header = id::QUERY;
-        if consolidation != &Consolidation::DEFAULT {
+        if consolidation != &ConsolidationMode::DEFAULT {
             header |= flag::C;
         }
         if !parameters.is_empty() {
@@ -98,7 +98,7 @@ where
         self.write(&mut *writer, header)?;
 
         // Body
-        if consolidation != &Consolidation::DEFAULT {
+        if consolidation != &ConsolidationMode::DEFAULT {
             self.write(&mut *writer, *consolidation)?;
         }
         if !parameters.is_empty() {
@@ -152,7 +152,7 @@ where
         }
 
         // Body
-        let mut consolidation = Consolidation::DEFAULT;
+        let mut consolidation = ConsolidationMode::DEFAULT;
         if imsg::has_flag(self.header, flag::C) {
             consolidation = self.codec.read(&mut *reader)?;
         }

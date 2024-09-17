@@ -425,6 +425,7 @@ pub mod shm {
             zshm::{zshm, ZShm},
             zshmmut::{zshmmut, ZShmMut},
         },
+        cleanup::force_cleanup_before_exit,
         client::{shm_client::ShmClient, shm_segment::ShmSegment},
         client_storage::{ShmClientStorage, GLOBAL_CLIENT_STORAGE},
         common::types::{ChunkID, ProtocolID, SegmentID},
@@ -439,11 +440,12 @@ pub mod shm {
         provider::{
             chunk::{AllocatedChunk, ChunkDescriptor},
             shm_provider::{
-                AllocBuilder, AllocBuilder2, AllocLayout, AllocLayoutSizedBuilder, AllocPolicy,
-                AsyncAllocPolicy, BlockOn, DeallocEldest, DeallocOptimal, DeallocYoungest,
-                Deallocate, Defragment, DynamicProtocolID, ForceDeallocPolicy, GarbageCollect,
-                JustAlloc, ProtocolIDSource, ShmProvider, ShmProviderBuilder,
-                ShmProviderBuilderBackendID, ShmProviderBuilderID, StaticProtocolID,
+                AllocLayout, AllocLayoutSizedBuilder, AllocPolicy, AsyncAllocPolicy, BlockOn,
+                DeallocEldest, DeallocOptimal, DeallocYoungest, Deallocate, Defragment,
+                DynamicProtocolID, ForceDeallocPolicy, GarbageCollect, JustAlloc,
+                LayoutAllocBuilder, ProtocolIDSource, ProviderAllocBuilder, ShmProvider,
+                ShmProviderBuilder, ShmProviderBuilderBackendID, ShmProviderBuilderID,
+                StaticProtocolID,
             },
             shm_provider_backend::ShmProviderBackend,
             types::{

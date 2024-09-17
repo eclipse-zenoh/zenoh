@@ -27,7 +27,9 @@ use std::{
 };
 
 use tracing::{error, info, trace, warn};
-use uhlc::{Timestamp, HLC};
+use uhlc::Timestamp;
+#[cfg(feature = "internal")]
+use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::{unwrap_or_default, wrappers::ZenohId, Config, Notifier};
@@ -52,13 +54,11 @@ use zenoh_protocol::{
             UndeclareSubscriber,
         },
         interest::{InterestMode, InterestOptions},
-        push,
-        request::{self, ext::TargetType},
-        AtomicRequestId, DeclareFinal, Interest, Mapping, Push, Request, RequestId, Response,
-        ResponseFinal,
+        push, request, AtomicRequestId, DeclareFinal, Interest, Mapping, Push, Request, RequestId,
+        Response, ResponseFinal,
     },
     zenoh::{
-        query::{self, ext::QueryBodyType, Consolidation},
+        query::{self, ext::QueryBodyType},
         reply::ReplyBody,
         Del, PushBody, Put, RequestBody, ResponseBody,
     },
@@ -553,6 +553,7 @@ impl Session {
         self.info().zid().wait()
     }
 
+    #[zenoh_macros::internal]
     pub fn hlc(&self) -> Option<&HLC> {
         self.0.runtime.hlc()
     }
@@ -651,9 +652,9 @@ impl Session {
         self.0.runtime.config()
     }
 
-    /// Get a new Timestamp from a Zenoh session [`Session`](Session).
+    /// Get a new Timestamp from a Zenoh [`Session`].
     ///
-    /// The returned timestamp has the current time, with the Session's runtime ZenohID
+    /// The returned timestamp has the current time, with the Session's runtime [`ZenohId`].
     ///
     /// # Examples
     /// ### Read current zenoh configuration
@@ -666,7 +667,7 @@ impl Session {
     /// # }
     /// ```
     pub fn new_timestamp(&self) -> Timestamp {
-        match self.hlc() {
+        match self.0.runtime.hlc() {
             Some(hlc) => hlc.new_timestamp(),
             None => {
                 // Called in the case that the runtime is not initialized with an hlc
@@ -2197,8 +2198,8 @@ impl SessionInner {
         key_expr: &WireExpr,
         parameters: &str,
         qid: RequestId,
-        _target: TargetType,
-        _consolidation: Consolidation,
+        _target: QueryTarget,
+        _consolidation: ConsolidationMode,
         body: Option<QueryBodyType>,
         attachment: Option<ZBytes>,
     ) {
@@ -2483,7 +2484,7 @@ impl Primitives for WeakSession {
                     timestamp: m.timestamp,
                     qos: QoS::from(msg.ext_qos),
                     source_id: m.ext_sinfo.as_ref().map(|i| i.id.into()),
-                    source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
+                    source_sn: m.ext_sinfo.as_ref().map(|i| i.sn),
                 };
                 self.execute_subscriber_callbacks(
                     false,
@@ -2503,7 +2504,7 @@ impl Primitives for WeakSession {
                     timestamp: m.timestamp,
                     qos: QoS::from(msg.ext_qos),
                     source_id: m.ext_sinfo.as_ref().map(|i| i.id.into()),
-                    source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
+                    source_sn: m.ext_sinfo.as_ref().map(|i| i.sn),
                 };
                 self.execute_subscriber_callbacks(
                     false,
@@ -2608,7 +2609,7 @@ impl Primitives for WeakSession {
                                     timestamp,
                                     qos: QoS::from(msg.ext_qos),
                                     source_id: ext_sinfo.as_ref().map(|i| i.id.into()),
-                                    source_sn: ext_sinfo.as_ref().map(|i| i.sn as u64),
+                                    source_sn: ext_sinfo.as_ref().map(|i| i.sn),
                                 },
                                 attachment: _attachment.map(Into::into),
                             },
@@ -2625,7 +2626,7 @@ impl Primitives for WeakSession {
                                     timestamp,
                                     qos: QoS::from(msg.ext_qos),
                                     source_id: ext_sinfo.as_ref().map(|i| i.id.into()),
-                                    source_sn: ext_sinfo.as_ref().map(|i| i.sn as u64),
+                                    source_sn: ext_sinfo.as_ref().map(|i| i.sn),
                                 },
                                 attachment: _attachment.map(Into::into),
                             },
@@ -2685,7 +2686,7 @@ impl Primitives for WeakSession {
                                         }
                                     }
                                 }
-                                Consolidation::Auto | ConsolidationMode::Latest => {
+                                ConsolidationMode::Auto | ConsolidationMode::Latest => {
                                     match query.replies.as_ref().unwrap().get(
                                         new_reply.result.as_ref().unwrap().key_expr.as_keyexpr(),
                                     ) {
