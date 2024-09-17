@@ -553,7 +553,7 @@ impl Session {
         self.info().zid().wait()
     }
 
-    #[cfg(feature = "internal")]
+    #[zenoh_macros::internal]
     pub fn hlc(&self) -> Option<&HLC> {
         self.0.runtime.hlc()
     }
