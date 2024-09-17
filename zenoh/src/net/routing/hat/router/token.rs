@@ -415,11 +415,14 @@ fn propagate_forget_simple_token(
         // undeclaration, otherwise the undeclaration would be duplicated at the source Face. In
         // cases where we don't have access to a Face as we didnt't receive an undeclaration and we
         // default to true.
-        } else if src_face.map_or(true, |src_face| src_face.id != face.id)
-            && face_hat!(face).remote_interests.values().any(|(r, o)| {
-                o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true) && !o.aggregate()
-            })
-        {
+        } else if src_face.map_or(true, |src_face| {
+            src_face.id != face.id
+                && (src_face.whatami != WhatAmI::Peer
+                    || face.whatami != WhatAmI::Peer
+                    || hat!(tables).failover_brokering(src_face.zid, face.zid))
+        }) && face_hat!(face).remote_interests.values().any(|(r, o)| {
+            o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true) && !o.aggregate()
+        }) {
             // Token has never been declared on this face.
             // Send an Undeclare with a one shot generated id and a WireExpr ext.
             send_declare(
@@ -476,6 +479,10 @@ fn propagate_forget_simple_token(
                     o.tokens()
                         && r.as_ref().map(|r| r.matches(&res)).unwrap_or(true)
                         && !o.aggregate()
+                }) && src_face.map_or(true, |src_face| {
+                    src_face.whatami != WhatAmI::Peer
+                        || face.whatami != WhatAmI::Peer
+                        || hat!(tables).failover_brokering(src_face.zid, face.zid)
                 }) {
                     // Token has never been declared on this face.
                     // Send an Undeclare with a one shot generated id and a WireExpr ext.
