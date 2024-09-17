@@ -12,7 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
+    any::Any,
     env, fmt,
+    ops::Deref,
     path::Path,
     sync::{Arc, Mutex, MutexGuard},
 };
@@ -189,5 +191,35 @@ impl Notifier<Config> {
 
     pub fn insert_json5(&self, key: &str, value: &str) -> ZResult<()> {
         self.lock_config().insert_json5(key, value)
+    }
+
+    #[allow(dead_code)]
+    pub fn get<'a>(&'a self, key: &str) -> ZResult<LookupGuard<'a, Config>> {
+        let config = self.lock_config();
+        let subref = config.0.get(key.as_ref()).map_err(|err| zerror!("{err}"))? as *const _;
+        Ok(LookupGuard {
+            _guard: config,
+            subref,
+        })
+    }
+}
+
+pub struct LookupGuard<'a, T> {
+    _guard: MutexGuard<'a, T>,
+    subref: *const dyn Any,
+}
+
+impl<'a, T> Deref for LookupGuard<'a, T> {
+    type Target = dyn Any;
+
+    fn deref(&self) -> &Self::Target {
+        // SAFETY: MutexGuard pins the mutex behind which the value is held.
+        unsafe { &*self.subref }
+    }
+}
+
+impl<'a, T> AsRef<dyn Any> for LookupGuard<'a, T> {
+    fn as_ref(&self) -> &dyn Any {
+        self.deref()
     }
 }
