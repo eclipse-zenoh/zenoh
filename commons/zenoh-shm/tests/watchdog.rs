@@ -62,14 +62,14 @@ fn watchdog_confirmed_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Sen
     }
 }
 
-#[test]
 #[ignore]
+#[test]
 fn watchdog_confirmed() {
     execute_concurrent(1, 10, watchdog_confirmed_fn());
 }
 
-#[test]
 #[ignore]
+#[test]
 fn watchdog_confirmed_concurrent() {
     execute_concurrent(1000, 10, watchdog_confirmed_fn());
 }
@@ -77,8 +77,8 @@ fn watchdog_confirmed_concurrent() {
 // TODO: confirmation to dangling watchdog actually writes to potentially-existing
 // other watchdog instance from other test running in the same process and changes it's behaviour,
 // so we cannot run dangling test in parallel with anything else
-#[test]
 #[ignore]
+#[test]
 fn watchdog_confirmed_dangling() {
     let allocated = GLOBAL_STORAGE
         .read()
@@ -136,14 +136,14 @@ fn watchdog_validated_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Sen
     }
 }
 
-#[test]
 #[ignore]
+#[test]
 fn watchdog_validated() {
     execute_concurrent(1, 10, watchdog_validated_fn());
 }
 
-#[test]
 #[ignore]
+#[test]
 fn watchdog_validated_concurrent() {
     execute_concurrent(1000, 10, watchdog_validated_fn());
 }
@@ -176,14 +176,14 @@ fn watchdog_validated_invalid_without_confirmator_fn(
     }
 }
 
-#[test]
 #[ignore]
+#[test]
 fn watchdog_validated_invalid_without_confirmator() {
     execute_concurrent(1, 10, watchdog_validated_invalid_without_confirmator_fn());
 }
 
-#[test]
 #[ignore]
+#[test]
 fn watchdog_validated_invalid_without_confirmator_concurrent() {
     execute_concurrent(
         1000,
@@ -241,14 +241,14 @@ fn watchdog_validated_additional_confirmation_fn(
     }
 }
 
-#[test]
 #[ignore]
+#[test]
 fn watchdog_validated_additional_confirmation() {
     execute_concurrent(1, 10, watchdog_validated_additional_confirmation_fn());
 }
 
-#[test]
 #[ignore]
+#[test]
 fn watchdog_validated_additional_confirmation_concurrent() {
     execute_concurrent(1000, 10, watchdog_validated_additional_confirmation_fn());
 }
@@ -296,22 +296,22 @@ fn watchdog_validated_overloaded_system_fn(
     }
 }
 
-#[test]
 #[ignore]
+#[test]
 fn watchdog_validated_low_load() {
     let _load = CpuLoad::low();
     execute_concurrent(1000, 10, watchdog_validated_overloaded_system_fn());
 }
 
-#[test]
 #[ignore]
+#[test]
 fn watchdog_validated_high_load() {
     let _load = CpuLoad::optimal_high();
     execute_concurrent(1000, 10, watchdog_validated_overloaded_system_fn());
 }
 
-#[test]
 #[ignore]
+#[test]
 fn watchdog_validated_overloaded_system() {
     let _load = CpuLoad::excessive();
     execute_concurrent(1000, 10, watchdog_validated_overloaded_system_fn());
