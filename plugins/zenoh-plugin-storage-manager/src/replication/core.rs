@@ -13,6 +13,7 @@
 //
 
 use std::{
+    borrow::Cow,
     collections::HashMap,
     sync::Arc,
     time::{Duration, Instant, SystemTime},
@@ -23,19 +24,26 @@ use tokio::{
     sync::{Mutex, RwLock},
     task::JoinHandle,
 };
+use tracing::{debug_span, Instrument};
 use zenoh::{
     key_expr::{
         format::{kedefine, keformat},
         OwnedKeyExpr,
     },
+    sample::Locality,
     Session,
 };
 
-use super::{digest::Digest, log::LogLatest};
+use super::{
+    digest::Digest,
+    log::LogLatest,
+    service::{MAX_RETRY, WAIT_PERIOD_SECS},
+};
 use crate::storages_mgt::LatestUpdates;
 
 kedefine!(
     pub digest_key_expr_formatter: "@-digest/${zid:*}/${storage_ke:**}",
+    pub aligner_key_expr_formatter: "@zid/${zid:*}/aligner",
 );
 
 #[derive(Clone)]
@@ -210,6 +218,166 @@ impl Replication {
                     );
                 } else {
                     tokio::time::sleep(publication_interval - digest_update_duration).await;
+                }
+            }
+        })
+    }
+
+    /// Spawns a task that subscribes to the [Digest] published by other Replicas.
+    ///
+    /// Upon reception of a [Digest], it is compared with the local Replication Log. If this
+    /// comparison generates a [DigestDiff], it is then published.
+    ///
+    /// # TODO [DigestDiff] processing
+    ///
+    /// The publication of the [DigestDiff] is a placeholder: its purpose is to be ingested by the
+    /// Aligner in order to trigger an alignment.
+    ///
+    /// [DigestDiff]: super::digest::DigestDiff
+    pub(crate) fn spawn_digest_subscriber(&self) -> JoinHandle<()> {
+        let zenoh_session = self.zenoh_session.clone();
+        let storage_key_expr = self.storage_key_expr.clone();
+        let replication_log = self.replication_log.clone();
+
+        tokio::task::spawn(async move {
+            let digest_key_sub = match keformat!(
+                digest_key_expr_formatter::formatter(),
+                zid = "*",
+                storage_ke = storage_key_expr
+            ) {
+                Ok(key) => key,
+                Err(e) => {
+                    tracing::error!(
+                        "Fatal error, failed to generate a key expression to subscribe to \
+                         Digests: {e:?}. The storage will not receive the Replication Digest of \
+                         other replicas."
+                    );
+                    return;
+                }
+            };
+
+            let mut retry = 0;
+            let subscriber = loop {
+                match zenoh_session
+                    .declare_subscriber(&digest_key_sub)
+                    // NOTE: We need to explicitly set the locality to `Remote` as otherwise the
+                    //       Digest subscriber will also receive the Digest published by its own
+                    //       Digest publisher.
+                    .allowed_origin(Locality::Remote)
+                    .await
+                {
+                    Ok(subscriber) => break subscriber,
+                    Err(e) => {
+                        if retry < MAX_RETRY {
+                            retry += 1;
+                            tracing::warn!(
+                                "Failed to declare Digest subscriber: {e:?}. Attempt \
+                                 {retry}/{MAX_RETRY}."
+                            );
+                            tokio::time::sleep(Duration::from_secs(WAIT_PERIOD_SECS)).await;
+                        } else {
+                            tracing::error!(
+                                "Could not declare Digest subscriber. The storage will not \
+                                 receive the Replication Digest of other replicas."
+                            );
+                            return;
+                        }
+                    }
+                }
+            };
+
+            tracing::debug!("Subscribed to {digest_key_sub}");
+
+            let mut serialization_buffer = Vec::new();
+            loop {
+                if let Ok(sample) = subscriber.recv_async().await {
+                    let parsed_ke = match digest_key_expr_formatter::parse(sample.key_expr()) {
+                        Ok(parsed_ke) => parsed_ke,
+                        Err(e) => {
+                            tracing::error!(
+                                "Failed to parse key expression associated with Digest \
+                                 publication < {} >: {e:?}",
+                                sample.key_expr()
+                            );
+                            continue;
+                        }
+                    };
+                    let source_zid = parsed_ke.zid();
+
+                    let span = debug_span!(
+                        "Digest subscriber",
+                        source_zid = source_zid.as_str(),
+                        request_id = uuid::Uuid::new_v4().simple().to_string()
+                    );
+
+                    // Async block such that we can `instrument` it in an asynchronous compatible
+                    // manner using the `span` we created just above.
+                    async {
+                        let other_digest = match bincode::deserialize::<Digest>(
+                            &sample.payload().into::<Cow<[u8]>>(),
+                        ) {
+                            Ok(other_digest) => other_digest,
+                            Err(e) => {
+                                tracing::warn!(
+                                    "Failed to deserialize Payload as Digest: {e:?}. Skipping."
+                                );
+                                return;
+                            }
+                        };
+
+                        tracing::debug!("Replication digest received");
+
+                        let digest = match replication_log.read().await.digest() {
+                            Ok(digest) => digest,
+                            Err(e) => {
+                                tracing::error!(
+                                    "Fatal error, failed to compute local Digest: {e:?}"
+                                );
+                                return;
+                            }
+                        };
+
+                        if let Some(digest_diff) = digest.diff(other_digest) {
+                            tracing::debug!("Potential misalignment detected");
+
+                            let aligner_ke = match keformat!(
+                                aligner_key_expr_formatter::formatter(),
+                                zid = source_zid,
+                            ) {
+                                Ok(key) => key,
+                                Err(e) => {
+                                    tracing::warn!(
+                                        "Failed to generate a key expression to contact aligner: \
+                                         {e:?}"
+                                    );
+                                    return;
+                                }
+                            };
+
+                            if let Err(e) =
+                                bincode::serialize_into(&mut serialization_buffer, &digest_diff)
+                            {
+                                tracing::warn!("Failed to serialise DigestDiff: {e:?}");
+                                return;
+                            }
+
+                            let serialized_buffer_size = serialization_buffer.capacity();
+                            if let Err(e) = zenoh_session
+                                .put(
+                                    aligner_ke,
+                                    std::mem::replace(
+                                        &mut serialization_buffer,
+                                        Vec::with_capacity(serialized_buffer_size),
+                                    ),
+                                )
+                                .await
+                            {
+                                tracing::warn!("Failed to send DigestDiff: {e:?}");
+                            }
+                        }
+                    }
+                    .instrument(span)
+                    .await;
                 }
             }
         })

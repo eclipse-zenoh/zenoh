@@ -5883,6 +5883,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uhlc",
+ "uuid",
  "xxhash-rust",
  "zenoh",
  "zenoh-plugin-trait",

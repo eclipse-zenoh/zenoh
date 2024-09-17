@@ -43,7 +43,8 @@ rand = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
-tracing = { workspace = true}
+tracing = { workspace = true }
+uuid = { workspace = true }
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
 zenoh = { workspace = true, features = [
     "default",

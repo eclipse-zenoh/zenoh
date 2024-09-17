@@ -13,7 +13,7 @@
 //
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ops::{BitXor, BitXorAssign, Deref},
 };
 
@@ -81,3 +81,90 @@ pub struct Digest {
     pub(crate) warm_era_fingerprints: HashMap<IntervalIdx, Fingerprint>,
     pub(crate) hot_era_fingerprints: HashMap<IntervalIdx, HashMap<SubIntervalIdx, Fingerprint>>,
 }
+
+/// The `DigestDiff` summarises the differences between two [Digest]s.
+///
+/// For the Cold Era, a pair `(IntervalIdx, bool)` is computed. The `bool` indicates if the two
+/// [Fingerprint]s differ. The [IntervalIdx] is the lower bound of the Warm Era of the [Digest] of
+/// the storage that computed the `DigestDiff`. This allows the replica that receives the
+/// `DigestDiff` to know where to stop when sending the [Fingerprint]s of its intervals.
+///
+/// For the Warm Era, the set of [IntervalIdx] that differ is kept.
+///
+/// For the Hot Era, the set of [SubIntervalIdx], grouped by their [IntervalIdx], that differ is
+/// kept.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct DigestDiff {
+    pub(crate) cold_eras_differ: bool,
+    pub(crate) warm_eras_differences: HashSet<IntervalIdx>,
+    pub(crate) hot_eras_differences: HashMap<IntervalIdx, HashSet<SubIntervalIdx>>,
+}
+
+impl Digest {
+    pub(crate) fn diff(&self, mut other: Digest) -> Option<DigestDiff> {
+        if self.configuration_fingerprint != other.configuration_fingerprint {
+            return None;
+        }
+
+        // Hot era. For all the intervals that are contained in `self`, we remove the sub-intervals
+        // in `other` that have the same fingerprints as their counterpart in `self` for the same
+        // sub-interval.
+        //
+        // The ultimate purpose if these loops is to keep in `other` only the intervals /
+        // sub-intervals that differ or that are only present in `other`.
+        for (interval_idx, sub_intervals_fingerprints) in &self.hot_era_fingerprints {
+            if let Some(other_sub_intervals_fingerprints) =
+                other.hot_era_fingerprints.get_mut(interval_idx)
+            {
+                other_sub_intervals_fingerprints.retain(|other_idx, other_fingerprint| {
+                    match sub_intervals_fingerprints.get(other_idx) {
+                        Some(fingerprint) => other_fingerprint != fingerprint,
+                        None => true,
+                    }
+                });
+            }
+        }
+        other
+            .hot_era_fingerprints
+            .retain(|_, sub_intervals| !sub_intervals.is_empty());
+
+        // Warm era. Same process as for the hot era, we want to keep only the values that differ or
+        // that are present only in `other`.
+        other
+            .warm_era_fingerprints
+            .retain(|other_idx, other_fingerprint| {
+                match self.warm_era_fingerprints.get(other_idx) {
+                    Some(fingerprint) => other_fingerprint != fingerprint,
+                    None => true,
+                }
+            });
+
+        if !other.hot_era_fingerprints.is_empty() || !other.warm_era_fingerprints.is_empty() {
+            return Some(DigestDiff {
+                cold_eras_differ: self.cold_era_fingerprint != other.cold_era_fingerprint,
+                warm_eras_differences: other.warm_era_fingerprints.into_keys().collect(),
+                hot_eras_differences: other
+                    .hot_era_fingerprints
+                    .into_iter()
+                    .map(|(interval_idx, sub_intervals)| {
+                        (interval_idx, sub_intervals.into_keys().collect())
+                    })
+                    .collect(),
+            });
+        }
+
+        if self.cold_era_fingerprint != other.cold_era_fingerprint {
+            return Some(DigestDiff {
+                cold_eras_differ: true,
+                warm_eras_differences: HashSet::default(),
+                hot_eras_differences: HashMap::default(),
+            });
+        }
+
+        None
+    }
+}
+
+#[cfg(test)]
+#[path = "tests/digest.test.rs"]
+mod tests;

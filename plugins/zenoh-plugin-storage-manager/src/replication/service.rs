@@ -25,10 +25,11 @@ use crate::storages_mgt::{LatestUpdates, StorageMessage, StorageService};
 
 pub(crate) struct ReplicationService {
     digest_publisher_handle: JoinHandle<()>,
+    digest_subscriber_handle: JoinHandle<()>,
 }
 
-const MAX_RETRY: usize = 2;
-const WAIT_PERIOD_SECS: u64 = 4;
+pub(crate) const MAX_RETRY: usize = 2;
+pub(crate) const WAIT_PERIOD_SECS: u64 = 4;
 
 impl ReplicationService {
     /// Starts the `ReplicationService`, spawning multiple tasks.
@@ -106,6 +107,7 @@ impl ReplicationService {
 
             let replication_service = Self {
                 digest_publisher_handle: replication.spawn_digest_publisher(),
+                digest_subscriber_handle: replication.spawn_digest_subscriber(),
             };
 
             while let Ok(storage_message) = rx.recv().await {
@@ -120,5 +122,6 @@ impl ReplicationService {
     /// Stops all the tasks spawned by the `ReplicationService`.
     pub fn stop(self) {
         self.digest_publisher_handle.abort();
+        self.digest_subscriber_handle.abort();
     }
 }
