@@ -43,7 +43,7 @@ impl Config {
     /// environment variable.
     pub fn from_env() -> ZResult<Self> {
         let path = env::var(Self::DEFAULT_CONFIG_PATH_ENV)?;
-        Ok(Config(zenoh_config::Config::from_file(Path::new(&path)?)?))
+        Ok(Config(zenoh_config::Config::from_file(Path::new(&path))?))
     }
 
     /// Load configuration from the file at `path`.
@@ -55,7 +55,7 @@ impl Config {
     pub fn from_json5(input: &str) -> ZResult<Config> {
         match zenoh_config::Config::from_deserializer(&mut json5::Deserializer::from_str(input)?) {
             Ok(config) => Ok(Config(config)),
-            Err(Ok(config)) => {
+            Err(Ok(_)) => {
                 Err(zerror!("The config was correctly deserialized yet it's invalid").into())
             }
             Err(Err(err)) => Err(err.into()),
