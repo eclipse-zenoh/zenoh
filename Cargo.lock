@@ -313,6 +313,7 @@ dependencies = [
  "blocking",
  "futures-lite 2.3.0",
  "once_cell",
+ "tokio",
 ]
 
 [[package]]
@@ -5396,6 +5397,7 @@ dependencies = [
  "futures",
  "git-version",
  "itertools 0.13.0",
+ "json5",
  "lazy_static",
  "once_cell",
  "paste",
@@ -5477,7 +5479,6 @@ version = "1.0.0-dev"
 name = "zenoh-config"
 version = "1.0.0-dev"
 dependencies = [
- "flume",
  "json5",
  "num_cpus",
  "secrecy",
@@ -5543,6 +5544,7 @@ dependencies = [
  "tokio",
  "tracing",
  "zenoh",
+ "zenoh-config",
  "zenoh-macros",
  "zenoh-util",
 ]
@@ -5555,6 +5557,7 @@ dependencies = [
  "futures",
  "tokio",
  "zenoh",
+ "zenoh-config",
  "zenoh-ext",
 ]
 
@@ -5820,6 +5823,7 @@ name = "zenoh-plugin-rest"
 version = "1.0.0-dev"
 dependencies = [
  "anyhow",
+ "async-std",
  "base64 0.22.1",
  "clap",
  "flume",
@@ -5871,6 +5875,7 @@ dependencies = [
  "libloading",
  "serde",
  "tracing",
+ "zenoh-config",
  "zenoh-keyexpr",
  "zenoh-macros",
  "zenoh-result",
@@ -5922,6 +5927,7 @@ dependencies = [
  "num_cpus",
  "rand 0.8.5",
  "shared_memory",
+ "signal-hook",
  "stabby",
  "static_init",
  "thread-priority",
@@ -6051,6 +6057,7 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "zenoh",
+ "zenoh-config",
  "zenoh-util",
 ]
 

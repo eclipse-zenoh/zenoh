@@ -27,10 +27,12 @@ use std::{
 };
 
 use tracing::{error, info, trace, warn};
-use uhlc::{Timestamp, HLC};
+use uhlc::Timestamp;
+#[cfg(feature = "internal")]
+use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
-use zenoh_config::{unwrap_or_default, wrappers::ZenohId, Config, Notifier};
+use zenoh_config::{unwrap_or_default, wrappers::ZenohId};
 use zenoh_core::{zconfigurable, zread, Resolvable, Resolve, ResolveClosure, ResolveFuture, Wait};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::network::{
@@ -52,13 +54,11 @@ use zenoh_protocol::{
             UndeclareSubscriber,
         },
         interest::{InterestMode, InterestOptions},
-        push,
-        request::{self, ext::TargetType},
-        AtomicRequestId, DeclareFinal, Interest, Mapping, Push, Request, RequestId, Response,
-        ResponseFinal,
+        push, request, AtomicRequestId, DeclareFinal, Interest, Mapping, Push, Request, RequestId,
+        Response, ResponseFinal,
     },
     zenoh::{
-        query::{self, ext::QueryBodyType, Consolidation},
+        query::{self, ext::QueryBodyType},
         reply::ReplyBody,
         Del, PushBody, Put, RequestBody, ResponseBody,
     },
@@ -100,10 +100,13 @@ use super::{
 };
 #[cfg(feature = "unstable")]
 use crate::api::selector::ZenohParameters;
-use crate::net::{
-    primitives::Primitives,
-    routing::dispatcher::face::Face,
-    runtime::{Runtime, RuntimeBuilder},
+use crate::{
+    net::{
+        primitives::Primitives,
+        routing::dispatcher::face::Face,
+        runtime::{Runtime, RuntimeBuilder},
+    },
+    Config,
 };
 
 zconfigurable! {
@@ -424,7 +427,7 @@ impl fmt::Debug for SessionInner {
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// session.put("key/expression", "value").await.unwrap();
 /// # }
 pub struct Session(pub(crate) Arc<SessionInner>);
@@ -553,6 +556,7 @@ impl Session {
         self.info().zid().wait()
     }
 
+    #[zenoh_macros::internal]
     pub fn hlc(&self) -> Option<&HLC> {
         self.0.runtime.hlc()
     }
@@ -577,7 +581,7 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
     ///     .await
@@ -604,7 +608,7 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// assert!(!session.is_closed());
     /// session.close().await.unwrap();
     /// assert!(session.is_closed());
@@ -633,7 +637,7 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let peers = session.config().get("connect/endpoints").unwrap();
     /// # }
     /// ```
@@ -643,17 +647,18 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let _ = session.config().insert_json5("connect/endpoints", r#"["tcp/127.0.0.1/7447"]"#);
     /// # }
     /// ```
-    pub fn config(&self) -> &Notifier<Config> {
+    #[zenoh_macros::unstable]
+    pub fn config(&self) -> &crate::config::Notifier<Config> {
         self.0.runtime.config()
     }
 
-    /// Get a new Timestamp from a Zenoh session [`Session`](Session).
+    /// Get a new Timestamp from a Zenoh [`Session`].
     ///
-    /// The returned timestamp has the current time, with the Session's runtime ZenohID
+    /// The returned timestamp has the current time, with the Session's runtime [`ZenohId`].
     ///
     /// # Examples
     /// ### Read current zenoh configuration
@@ -661,12 +666,12 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let timestamp = session.new_timestamp();
     /// # }
     /// ```
     pub fn new_timestamp(&self) -> Timestamp {
-        match self.hlc() {
+        match self.0.runtime.hlc() {
             Some(hlc) => hlc.new_timestamp(),
             None => {
                 // Called in the case that the runtime is not initialized with an hlc
@@ -692,7 +697,7 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let info = session.info();
     /// # }
     /// ```
@@ -713,7 +718,7 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let subscriber = session.declare_subscriber("key/expression")
     ///     .await
     ///     .unwrap();
@@ -753,7 +758,7 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let queryable = session.declare_queryable("key/expression")
     ///     .await
     ///     .unwrap();
@@ -796,7 +801,7 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression")
     ///     .await
     ///     .unwrap();
@@ -831,7 +836,7 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let liveliness = session
     ///     .liveliness()
     ///     .declare_token("key/expression")
@@ -856,7 +861,7 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let key_expr = session.declare_keyexpr("key/expression").await.unwrap();
     /// # }
     /// ```
@@ -911,7 +916,7 @@ impl Session {
     /// # async fn main() {
     /// use zenoh::bytes::Encoding;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// session
     ///     .put("key/expression", "payload")
     ///     .encoding(Encoding::TEXT_PLAIN)
@@ -954,7 +959,7 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// session.delete("key/expression").await.unwrap();
     /// # }
     /// ```
@@ -990,7 +995,7 @@ impl Session {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let replies = session.get("key/expression").await.unwrap();
     /// while let Ok(reply) = replies.recv_async().await {
     ///     println!(">> Received {:?}", reply.result());
@@ -1007,7 +1012,7 @@ impl Session {
     {
         let selector = selector.try_into().map_err(Into::into);
         let timeout = {
-            let conf = self.0.runtime.config().lock();
+            let conf = &self.0.runtime.config().lock().0;
             Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout()))
         };
         let qos: QoS = request::ext::QoSType::REQUEST.into();
@@ -1036,8 +1041,8 @@ impl Session {
     ) -> impl Resolve<ZResult<Session>> {
         ResolveFuture::new(async move {
             tracing::debug!("Config: {:?}", &config);
-            let aggregated_subscribers = config.aggregation().subscribers().clone();
-            let aggregated_publishers = config.aggregation().publishers().clone();
+            let aggregated_subscribers = config.0.aggregation().subscribers().clone();
+            let aggregated_publishers = config.0.aggregation().publishers().clone();
             #[allow(unused_mut)] // Required for shared-memory
             let mut runtime = RuntimeBuilder::new(config);
             #[cfg(feature = "shared-memory")]
@@ -2197,8 +2202,8 @@ impl SessionInner {
         key_expr: &WireExpr,
         parameters: &str,
         qid: RequestId,
-        _target: TargetType,
-        _consolidation: Consolidation,
+        _target: QueryTarget,
+        _consolidation: ConsolidationMode,
         body: Option<QueryBodyType>,
         attachment: Option<ZBytes>,
     ) {
@@ -2483,7 +2488,7 @@ impl Primitives for WeakSession {
                     timestamp: m.timestamp,
                     qos: QoS::from(msg.ext_qos),
                     source_id: m.ext_sinfo.as_ref().map(|i| i.id.into()),
-                    source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
+                    source_sn: m.ext_sinfo.as_ref().map(|i| i.sn),
                 };
                 self.execute_subscriber_callbacks(
                     false,
@@ -2503,7 +2508,7 @@ impl Primitives for WeakSession {
                     timestamp: m.timestamp,
                     qos: QoS::from(msg.ext_qos),
                     source_id: m.ext_sinfo.as_ref().map(|i| i.id.into()),
-                    source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
+                    source_sn: m.ext_sinfo.as_ref().map(|i| i.sn),
                 };
                 self.execute_subscriber_callbacks(
                     false,
@@ -2608,7 +2613,7 @@ impl Primitives for WeakSession {
                                     timestamp,
                                     qos: QoS::from(msg.ext_qos),
                                     source_id: ext_sinfo.as_ref().map(|i| i.id.into()),
-                                    source_sn: ext_sinfo.as_ref().map(|i| i.sn as u64),
+                                    source_sn: ext_sinfo.as_ref().map(|i| i.sn),
                                 },
                                 attachment: _attachment.map(Into::into),
                             },
@@ -2625,7 +2630,7 @@ impl Primitives for WeakSession {
                                     timestamp,
                                     qos: QoS::from(msg.ext_qos),
                                     source_id: ext_sinfo.as_ref().map(|i| i.id.into()),
-                                    source_sn: ext_sinfo.as_ref().map(|i| i.sn as u64),
+                                    source_sn: ext_sinfo.as_ref().map(|i| i.sn),
                                 },
                                 attachment: _attachment.map(Into::into),
                             },
@@ -2685,7 +2690,7 @@ impl Primitives for WeakSession {
                                         }
                                     }
                                 }
-                                Consolidation::Auto | ConsolidationMode::Latest => {
+                                ConsolidationMode::Auto | ConsolidationMode::Latest => {
                                     match query.replies.as_ref().unwrap().get(
                                         new_reply.result.as_ref().unwrap().key_expr.as_keyexpr(),
                                     ) {
@@ -2809,7 +2814,7 @@ impl crate::net::primitives::EPrimitives for WeakSession {
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// # }
 /// ```
 ///
@@ -2819,7 +2824,7 @@ impl crate::net::primitives::EPrimitives for WeakSession {
 /// use std::str::FromStr;
 /// use zenoh::session::ZenohId;
 ///
-/// let mut config = zenoh::config::peer();
+/// let mut config = zenoh::Config::default();
 /// config.set_id(ZenohId::from_str("221b72df20924c15b8794c6bdb471150").unwrap());
 /// config.connect.endpoints.set(
 ///     ["tcp/10.10.10.10:7447", "tcp/11.11.11.11:7447"].iter().map(|s|s.parse().unwrap()).collect());
@@ -2846,7 +2851,7 @@ where
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]

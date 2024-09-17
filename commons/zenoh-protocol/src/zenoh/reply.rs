@@ -15,7 +15,7 @@ use alloc::vec::Vec;
 
 use crate::{
     common::ZExtUnknown,
-    zenoh::{query::Consolidation, PushBody},
+    zenoh::{query::ConsolidationMode, PushBody},
 };
 
 /// # Reply message
@@ -45,7 +45,7 @@ pub mod flag {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Reply {
-    pub consolidation: Consolidation,
+    pub consolidation: ConsolidationMode,
     pub ext_unknown: Vec<ZExtUnknown>,
     pub payload: ReplyBody,
 }
@@ -59,7 +59,7 @@ impl Reply {
         let mut rng = rand::thread_rng();
 
         let payload = ReplyBody::rand();
-        let consolidation = Consolidation::rand();
+        let consolidation = ConsolidationMode::rand();
         let mut ext_unknown = Vec::new();
         for _ in 0..rng.gen_range(0..4) {
             ext_unknown.push(ZExtUnknown::rand2(1, false));

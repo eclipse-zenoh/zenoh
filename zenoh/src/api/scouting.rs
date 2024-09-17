@@ -29,6 +29,7 @@ use zenoh_task::TerminatableTask;
 use crate::{
     api::handlers::{locked, Callback, DefaultHandler, IntoHandler},
     net::runtime::{orchestrator::Loop, Runtime},
+    Config,
 };
 
 /// A builder for initializing a [`Scout`].
@@ -39,7 +40,7 @@ use crate::{
 /// # async fn main() {
 /// use zenoh::config::WhatAmI;
 ///
-/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::config::default())
+/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::Config::default())
 ///     .await
 ///     .unwrap();
 /// while let Ok(hello) = receiver.recv_async().await {
@@ -64,7 +65,7 @@ impl ScoutBuilder<DefaultHandler> {
     /// # async fn main() {
     /// use zenoh::config::WhatAmI;
     ///
-    /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::config::default())
+    /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::Config::default())
     ///     .callback(|hello| { println!("{}", hello); })
     ///     .await
     ///     .unwrap();
@@ -90,7 +91,7 @@ impl ScoutBuilder<DefaultHandler> {
     /// use zenoh::config::WhatAmI;
     ///
     /// let mut n = 0;
-    /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::config::default())
+    /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::Config::default())
     ///     .callback_mut(move |_hello| { n += 1; })
     ///     .await
     ///     .unwrap();
@@ -115,7 +116,7 @@ impl ScoutBuilder<DefaultHandler> {
     /// # async fn main() {
     /// use zenoh::config::WhatAmI;
     ///
-    /// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::config::default())
+    /// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::Config::default())
     ///     .with(flume::bounded(32))
     ///     .await
     ///     .unwrap();
@@ -182,7 +183,7 @@ where
 /// # async fn main() {
 /// use zenoh::config::WhatAmI;
 ///
-/// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::config::default())
+/// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::Config::default())
 ///     .callback(|hello| { println!("{}", hello); })
 ///     .await
 ///     .unwrap();
@@ -202,7 +203,7 @@ impl ScoutInner {
     /// # async fn main() {
     /// use zenoh::config::WhatAmI;
     ///
-    /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::config::default())
+    /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::Config::default())
     ///     .callback(|hello| { println!("{}", hello); })
     ///     .await
     ///     .unwrap();
@@ -237,7 +238,7 @@ impl fmt::Debug for ScoutInner {
 /// # async fn main() {
 /// use zenoh::config::WhatAmI;
 ///
-/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::config::default())
+/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::Config::default())
 ///     .with(flume::bounded(32))
 ///     .await
 ///     .unwrap();
@@ -270,7 +271,7 @@ impl<Receiver> Scout<Receiver> {
     /// # async fn main() {
     /// use zenoh::config::WhatAmI;
     ///
-    /// let scout = zenoh::scout(WhatAmI::Router, zenoh::config::default())
+    /// let scout = zenoh::scout(WhatAmI::Router, zenoh::Config::default())
     ///     .with(flume::bounded(32))
     ///     .await
     ///     .unwrap();
@@ -283,21 +284,23 @@ impl<Receiver> Scout<Receiver> {
     }
 }
 
-fn _scout(
-    what: WhatAmIMatcher,
-    config: zenoh_config::Config,
-    callback: Callback<Hello>,
-) -> ZResult<ScoutInner> {
+fn _scout(what: WhatAmIMatcher, config: Config, callback: Callback<Hello>) -> ZResult<ScoutInner> {
     tracing::trace!("scout({}, {})", what, &config);
     let default_addr = SocketAddr::from(zenoh_config::defaults::scouting::multicast::address);
-    let addr = config.scouting.multicast.address().unwrap_or(default_addr);
+    let addr = config
+        .0
+        .scouting
+        .multicast
+        .address()
+        .unwrap_or(default_addr);
     let default_multicast_ttl = zenoh_config::defaults::scouting::multicast::ttl;
     let multicast_ttl = config
+        .0
         .scouting
         .multicast
         .ttl
         .unwrap_or(default_multicast_ttl);
-    let ifaces = config.scouting.multicast.interface().as_ref().map_or(
+    let ifaces = config.0.scouting.multicast.interface().as_ref().map_or(
         zenoh_config::defaults::scouting::multicast::interface,
         |s| s.as_ref(),
     );
@@ -352,7 +355,7 @@ fn _scout(
 /// # async fn main() {
 /// use zenoh::config::WhatAmI;
 ///
-/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::config::default())
+/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::Config::default())
 ///     .await
 ///     .unwrap();
 /// while let Ok(hello) = receiver.recv_async().await {
