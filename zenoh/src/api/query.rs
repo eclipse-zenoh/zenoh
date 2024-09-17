@@ -138,6 +138,8 @@ impl Reply {
     }
 
     #[zenoh_macros::unstable]
+    // @TODO: maybe return an `Option<EntityGlobalId>`?
+    //
     /// Gets the id of the zenoh instance that answered this Reply.
     pub fn replier_id(&self) -> Option<ZenohId> {
         self.replier_id.map(Into::into)

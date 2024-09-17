@@ -132,7 +132,7 @@ impl Query {
         self.attachment.as_mut()
     }
 
-    /// Sends a reply in the form of [`Sample`] to this Query.
+    /// Send a reply in the form of [`Sample`] to this Query.
     ///
     /// By default, queries only accept replies whose key expression intersects with the query's.
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
@@ -147,7 +147,7 @@ impl Query {
         }
     }
 
-    /// Sends a reply to this Query.
+    /// Send a put as a reply to this Query.
     ///
     /// By default, queries only accept replies whose key expression intersects with the query's.
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
@@ -178,8 +178,7 @@ impl Query {
         }
     }
 
-    /// Sends a error reply to this Query.
-    ///
+    /// Send an error as a reply to this Query.    
     #[inline(always)]
     pub fn reply_err<IntoZBytes>(&self, payload: IntoZBytes) -> ReplyErrBuilder<'_>
     where
@@ -191,7 +190,7 @@ impl Query {
         }
     }
 
-    /// Sends a delete reply to this Query.
+    /// Send a delete as a reply to this Query.
     ///
     /// By default, queries only accept replies whose key expression intersects with the query's.
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
