@@ -5993,6 +5993,7 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "zenoh",
+ "zenoh-config",
  "zenoh-util",
 ]
 

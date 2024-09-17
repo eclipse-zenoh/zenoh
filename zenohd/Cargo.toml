@@ -48,6 +48,7 @@ zenoh = { workspace = true, features = [
   "plugins",
   "runtime_plugins",
 ] }
+zenoh-config = { workspace = true }
 
 [dev-dependencies]
 rand = { workspace = true, features = ["default"] }
