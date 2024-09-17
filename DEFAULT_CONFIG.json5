@@ -314,6 +314,13 @@
       },
     },
     multicast: {
+      /// WARNING: multicast communication does not perform any negotiation upon group joining.
+      ///   Because of that, it is important that all transport parameters are the same to make
+      ///   sure all your nodes in the system can communicate. One common parameter to configure
+      ///   is "transport/link/tx/batch_size" since its default value depends on the actual platform
+      ///   when operating on multicast. 
+      ///   E.g., batch size on Linux and Windows is 65535 bytes, on MacOsX is 9216, anything else is 8192.
+
       /// Enables QoS on multicast communication.
       /// Default to false for Zenoh-to-Zenoh-Pico out-of-the-box compatibility.
       qos: {
