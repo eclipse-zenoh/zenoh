@@ -75,3 +75,6 @@ copyright = "2024 ZettaScale Technology"
 section = "net"
 license-file = ["../../LICENSE", "0"]
 depends = "zenohd (=1.0.0~dev-1)"
+
+[package.metadata.cargo-machete]
+ignored = ["async-std"]
