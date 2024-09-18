@@ -1154,7 +1154,7 @@ pub(crate) fn declare_qabl_interest(
     send_declare: &mut SendDeclare,
 ) {
     if mode.current() {
-        let interest_id = (!mode.future()).then_some(id);
+        let interest_id = Some(id);
         if let Some(res) = res.as_ref() {
             if aggregate {
                 if hat!(tables).router_qabls.iter().any(|qabl| {
