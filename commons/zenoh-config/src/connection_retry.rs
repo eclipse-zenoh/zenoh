@@ -16,14 +16,7 @@ use serde::{Deserialize, Serialize};
 use zenoh_core::zparse_default;
 use zenoh_protocol::core::{EndPoint, WhatAmI};
 
-use crate::{
-    defaults::{
-        self, DEFAULT_CONNECT_EXIT_ON_FAIL, DEFAULT_CONNECT_TIMEOUT_MS,
-        DEFAULT_LISTEN_EXIT_ON_FAIL, DEFAULT_LISTEN_TIMEOUT_MS,
-    },
-    mode_dependent::*,
-    Config,
-};
+use crate::{defaults, mode_dependent::*, Config};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ConnectionRetryModeDependentConf {
@@ -128,7 +121,7 @@ pub fn get_global_listener_timeout(config: &Config) -> std::time::Duration {
             .listen()
             .timeout_ms()
             .get(whatami)
-            .unwrap_or(DEFAULT_LISTEN_TIMEOUT_MS.get(whatami).unwrap()),
+            .unwrap_or(defaults::listen::timeout_ms.get(whatami).unwrap()),
     )
 }
 
@@ -139,7 +132,7 @@ pub fn get_global_connect_timeout(config: &Config) -> std::time::Duration {
             .connect()
             .timeout_ms()
             .get(whatami)
-            .unwrap_or(DEFAULT_CONNECT_TIMEOUT_MS.get(whatami).unwrap()),
+            .unwrap_or(defaults::connect::timeout_ms.get(whatami).unwrap()),
     )
 }
 
@@ -164,7 +157,7 @@ pub fn get_retry_config(
             .listen()
             .exit_on_failure()
             .get(whatami)
-            .unwrap_or(DEFAULT_LISTEN_EXIT_ON_FAIL.get(whatami).unwrap());
+            .unwrap_or(defaults::listen::exit_on_failure.get(whatami).unwrap());
     } else {
         retry = config
             .connect()
@@ -176,7 +169,7 @@ pub fn get_retry_config(
             .connect()
             .exit_on_failure()
             .get(whatami)
-            .unwrap_or(DEFAULT_CONNECT_EXIT_ON_FAIL.get(whatami).unwrap());
+            .unwrap_or(defaults::connect::exit_on_failure.get(whatami).unwrap());
     }
 
     let mut res = ConnectionRetryConf::new(whatami, exit_on_failure, retry, default_retry);
