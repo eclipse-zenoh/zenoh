@@ -71,7 +71,7 @@ impl<'a> Selector<'a> {
         &self.key_expr
     }
 
-    /// Get the [`KeyExpr`] of this selector.
+    /// Get the [`Parameters`] of this selector.
     pub fn parameters(&'a self) -> &'a Parameters<'a> {
         &self.parameters
     }
