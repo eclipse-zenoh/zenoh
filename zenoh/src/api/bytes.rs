@@ -695,7 +695,7 @@ impl std::io::Write for ZBytesWriter<'_> {
 /// An iterator that implements [`std::iter::Iterator`] trait to iterate on [`&[u8]`].
 ///
 /// Example:
-///    ```rust
+/// ```rust
 /// use std::io::Write;
 /// use zenoh::bytes::ZBytes;
 ///
