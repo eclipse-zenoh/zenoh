@@ -23,7 +23,7 @@ use zenoh_protocol::network::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{face_hat, face_hat_mut, HatCode, HatFace};
+use super::{face_hat, face_hat_mut, HatCode, HatFace, INITIAL_INTEREST_ID};
 use crate::net::routing::{
     dispatcher::{face::FaceState, tables::Tables},
     hat::{CurrentFutureTrait, HatTokenTrait, SendDeclare},
@@ -53,7 +53,8 @@ fn propagate_simple_token_to(
     dst_face: &mut Arc<FaceState>,
     res: &Arc<Resource>,
     src_face: &mut Arc<FaceState>,
-    interest_id: Option<InterestId>,
+    src_interest_id: Option<InterestId>,
+    dst_interest_id: Option<InterestId>,
     send_declare: &mut SendDeclare,
 ) {
     if (src_face.id != dst_face.id || dst_face.zid == tables.zid)
@@ -69,7 +70,7 @@ fn propagate_simple_token_to(
                 &dst_face.primitives,
                 RoutingContext::with_expr(
                     Declare {
-                        interest_id: None,
+                        interest_id: dst_interest_id,
                         ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -88,7 +89,7 @@ fn propagate_simple_token_to(
                 .filter(|(r, m, o)| {
                     o.tokens()
                         && r.as_ref().map(|r| r.matches(res)).unwrap_or(true)
-                        && (m.current() || interest_id.is_none())
+                        && (m.current() || src_interest_id.is_none())
                 })
                 .cloned()
                 .collect::<Vec<(Option<Arc<Resource>>, InterestMode, InterestOptions)>>();
@@ -108,7 +109,7 @@ fn propagate_simple_token_to(
                         &dst_face.primitives,
                         RoutingContext::with_expr(
                             Declare {
-                                interest_id: None,
+                                interest_id: dst_interest_id,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -145,6 +146,7 @@ fn propagate_simple_token(
             res,
             src_face,
             interest_id,
+            None,
             send_declare,
         );
     }
@@ -447,7 +449,15 @@ pub(super) fn token_new_face(
             .collect::<Vec<Arc<FaceState>>>()
         {
             for token in face_hat!(src_face.clone()).remote_tokens.values() {
-                propagate_simple_token_to(tables, face, token, &mut src_face, None, send_declare);
+                propagate_simple_token_to(
+                    tables,
+                    face,
+                    token,
+                    &mut src_face,
+                    None,
+                    Some(INITIAL_INTEREST_ID),
+                    send_declare,
+                );
             }
         }
     }
