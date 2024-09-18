@@ -5529,6 +5529,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "tokio",
+ "unwrap-infallible",
  "zenoh",
  "zenoh-ext",
 ]
