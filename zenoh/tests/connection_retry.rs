@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#![cfg(feature = "unstable_config")]
+#![cfg(feature = "internal_config")]
 
 use zenoh::{Config, Wait};
 use zenoh_config::{ConnectionRetryConf, EndPoint, ModeDependent};

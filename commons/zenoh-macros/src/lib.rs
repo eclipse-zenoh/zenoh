@@ -183,7 +183,7 @@ pub fn unstable(attr: TokenStream, tokens: TokenStream) -> TokenStream {
 
 // FIXME(fuzzypixelz): refactor `unstable` macro to accept arguments
 #[proc_macro_attribute]
-pub fn unstable_config(args: TokenStream, tokens: TokenStream) -> TokenStream {
+pub fn internal_config(args: TokenStream, tokens: TokenStream) -> TokenStream {
     let tokens = unstable_doc(args, tokens);
     let mut item = match parse_annotable_item!(tokens) {
         Ok(item) => item,
@@ -195,7 +195,7 @@ pub fn unstable_config(args: TokenStream, tokens: TokenStream) -> TokenStream {
         Err(err) => return err.into_compile_error().into(),
     };
 
-    let feature_gate: Attribute = parse_quote!(#[cfg(feature = "unstable_config")]);
+    let feature_gate: Attribute = parse_quote!(#[cfg(feature = "internal_config")]);
     attrs.push(feature_gate);
 
     TokenStream::from(item.to_token_stream())
