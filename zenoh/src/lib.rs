@@ -352,10 +352,6 @@ pub mod time {
 /// Configuration to pass to [`open`] and [`scout`] functions and associated constants
 pub mod config {
     pub use zenoh_config::{EndPoint, Locator, WhatAmI, WhatAmIMatcher, ZenohId};
-    #[zenoh_macros::unstable_config]
-    pub use zenoh_config::{
-        ModeDependentValue, PermissionsConf, PluginsConfig, SecretValue, ValidatedMap,
-    };
 
     pub use crate::api::config::Config;
     #[zenoh_macros::unstable]
