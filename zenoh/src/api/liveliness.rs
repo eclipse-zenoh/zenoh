@@ -304,6 +304,7 @@ pub(crate) struct LivelinessTokenState {
 /// # }
 /// ```
 #[zenoh_macros::unstable]
+#[must_use = "Liveliness tokens will be immediately dropped and undeclared if not bound to a variable"]
 #[derive(Debug)]
 pub struct LivelinessToken {
     session: WeakSession,
