@@ -4109,7 +4109,7 @@ async fn test_liveliness_subget_router_history_middle() {
 async fn test_liveliness_regression_1() {
     use std::time::Duration;
 
-    use zenoh::{config, sample::SampleKind};
+    use zenoh::sample::SampleKind;
     use zenoh_config::WhatAmI;
     use zenoh_link::EndPoint;
 
@@ -4122,7 +4122,7 @@ async fn test_liveliness_regression_1() {
     zenoh_util::init_log_from_env_or("error");
 
     let router = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.listen
             .endpoints
             .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -4135,7 +4135,7 @@ async fn test_liveliness_regression_1() {
     };
 
     let peer_tok = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.listen
             .endpoints
             .set(vec![PEER_TOK_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -4155,7 +4155,7 @@ async fn test_liveliness_regression_1() {
     tokio::time::sleep(SLEEP).await;
 
     let peer_sub = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.connect
             .endpoints
             .set(vec![
@@ -4193,7 +4193,7 @@ async fn test_liveliness_regression_1() {
 async fn test_liveliness_regression_2() {
     use std::time::Duration;
 
-    use zenoh::{config, sample::SampleKind};
+    use zenoh::sample::SampleKind;
     use zenoh_config::WhatAmI;
     use zenoh_link::EndPoint;
 
@@ -4206,7 +4206,7 @@ async fn test_liveliness_regression_2() {
     zenoh_util::init_log_from_env_or("error");
 
     let peer_tok1 = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.listen
             .endpoints
             .set(vec![PEER_TOK1_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -4222,7 +4222,7 @@ async fn test_liveliness_regression_2() {
     tokio::time::sleep(SLEEP).await;
 
     let peer_sub = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.listen
             .endpoints
             .set(vec![PEER_SUB_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -4244,7 +4244,7 @@ async fn test_liveliness_regression_2() {
     assert!(sub.try_recv().is_err());
 
     let peer_tok2 = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.connect
             .endpoints
             .set(vec![
@@ -4287,7 +4287,7 @@ async fn test_liveliness_regression_2() {
 async fn test_liveliness_regression_2_history() {
     use std::time::Duration;
 
-    use zenoh::{config, sample::SampleKind};
+    use zenoh::sample::SampleKind;
     use zenoh_config::WhatAmI;
     use zenoh_link::EndPoint;
 
@@ -4300,7 +4300,7 @@ async fn test_liveliness_regression_2_history() {
     zenoh_util::init_log_from_env_or("error");
 
     let peer_tok1 = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.listen
             .endpoints
             .set(vec![PEER_TOK1_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -4316,7 +4316,7 @@ async fn test_liveliness_regression_2_history() {
     tokio::time::sleep(SLEEP).await;
 
     let peer_sub = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.listen
             .endpoints
             .set(vec![PEER_SUB_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -4345,7 +4345,7 @@ async fn test_liveliness_regression_2_history() {
     assert!(sub.try_recv().is_err());
 
     let peer_tok2 = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.connect
             .endpoints
             .set(vec![
@@ -4388,7 +4388,7 @@ async fn test_liveliness_regression_2_history() {
 async fn test_liveliness_regression_3() {
     use std::time::Duration;
 
-    use zenoh::{config, sample::SampleKind};
+    use zenoh::sample::SampleKind;
     use zenoh_config::WhatAmI;
     use zenoh_link::EndPoint;
 
@@ -4401,7 +4401,7 @@ async fn test_liveliness_regression_3() {
     zenoh_util::init_log_from_env_or("error");
 
     let router = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.listen
             .endpoints
             .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -4414,7 +4414,7 @@ async fn test_liveliness_regression_3() {
     };
 
     let peer_tok1 = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.listen
             .endpoints
             .set(vec![PEER_TOK_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -4434,7 +4434,7 @@ async fn test_liveliness_regression_3() {
     tokio::time::sleep(SLEEP).await;
 
     let client_tok2 = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.connect
             .endpoints
             .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -4450,7 +4450,7 @@ async fn test_liveliness_regression_3() {
     tokio::time::sleep(SLEEP).await;
 
     let peer_sub = {
-        let mut c = config::default();
+        let mut c = zenoh::Config::default();
         c.connect
             .endpoints
             .set(vec![
