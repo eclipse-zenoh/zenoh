@@ -676,6 +676,18 @@ impl<'a> Iterator for ZBytesSliceIterator<'a> {
 
 /// An iterator that implements [`std::iter::Iterator`] trait to iterate on values `T` in a [`ZBytes`].
 /// Note that [`ZBytes`] contains a serialized version of `T` and iterating over a [`ZBytes`] performs lazy deserialization.
+///
+/// Example:
+/// ```rust
+/// use zenoh::bytes::ZBytes;
+///
+/// let list: Vec<f32> = vec![1.1, 2.2, 3.3];
+/// let mut zbs = ZBytes::from_iter(list.iter());
+///
+/// for (index, elem) in zbs.iter::<f32>().enumerate() {
+///     assert_eq!(list[index], elem.unwrap());
+/// }
+/// ```
 #[repr(transparent)]
 #[derive(Debug)]
 pub struct ZBytesIterator<'a, T> {
