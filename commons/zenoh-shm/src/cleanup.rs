@@ -25,15 +25,50 @@ pub(crate) static mut CLEANUP: Cleanup = Cleanup::new();
 /// An RAII object that calls all registered routines upon destruction
 pub(crate) struct Cleanup {
     cleanups: lockfree::queue::Queue<Option<Box<dyn FnOnce() + Send>>>,
-    handle: Option<JoinHandle<()>>,
 }
 
 impl Cleanup {
     fn new() -> Self {
         // todo: this is a workaround to make sure Cleanup will be executed even if process terminates via signals
-        let handle = match ctrlc2::set_handler(|| {
+        let _ = SIGNAL_CLEANUP.read();
+
+        Self {
+            cleanups: Default::default(),
+        }
+    }
+
+    pub(crate) fn register_cleanup(&self, cleanup_fn: Box<dyn FnOnce() + Send>) {
+        self.cleanups.push(Some(cleanup_fn));
+    }
+
+    pub(crate) fn cleanup(&self) {
+        while let Some(cleanup) = self.cleanups.pop() {
+            if let Some(f) = cleanup {
+                f();
+            }
+        }
+    }
+}
+
+impl Drop for Cleanup {
+    fn drop(&mut self) {
+        self.cleanup();
+    }
+}
+
+#[dynamic(lazy)]
+static mut SIGNAL_CLEANUP: SignalCleanup = SignalCleanup::new();
+
+struct SignalCleanup {
+    _handle: Option<JoinHandle<()>>,
+}
+
+impl SignalCleanup {
+    fn new() -> Self {
+        // todo: this is a workaround to make sure Cleanup will be executed even if process terminates via signals
+        let _handle = match ctrlc2::set_handler(|| {
             tokio::task::spawn_blocking(|| std::process::exit(0));
-            true
+            false
         }) {
             Ok(h) => Some(h),
             Err(e) => {
@@ -55,28 +90,6 @@ impl Cleanup {
             }
         };
 
-        Self {
-            cleanups: Default::default(),
-            handle,
-        }
-    }
-
-    pub(crate) fn register_cleanup(&self, cleanup_fn: Box<dyn FnOnce() + Send>) {
-        self.cleanups.push(Some(cleanup_fn));
-    }
-
-    pub(crate) fn cleanup(&self) {
-        while let Some(cleanup) = self.cleanups.pop() {
-            if let Some(f) = cleanup {
-                f();
-            }
-        }
-    }
-}
-
-impl Drop for Cleanup {
-    fn drop(&mut self) {
-        self.handle.take();
-        self.cleanup();
+        Self { _handle }
     }
 }
