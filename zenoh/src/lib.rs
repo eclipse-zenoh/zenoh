@@ -186,7 +186,7 @@ pub mod key_expr {
 /// Zenoh [`Session`] and associated types
 pub mod session {
     #[zenoh_macros::unstable]
-    pub use zenoh_config::wrappers::{EntityGlobalId, ZenohId};
+    pub use zenoh_config::wrappers::EntityGlobalId;
     pub use zenoh_protocol::core::EntityId;
 
     #[zenoh_macros::internal]
@@ -351,7 +351,11 @@ pub mod time {
 
 /// Configuration to pass to [`open`] and [`scout`] functions and associated constants
 pub mod config {
-    pub use zenoh_config::{WhatAmI, WhatAmIMatcher};
+    pub use zenoh_config::{EndPoint, Locator, WhatAmI, WhatAmIMatcher, ZenohId};
+    #[zenoh_macros::unstable_config]
+    pub use zenoh_config::{
+        ModeDependentValue, PermissionsConf, PluginsConfig, SecretValue, ValidatedMap,
+    };
 
     pub use crate::api::config::Config;
     #[zenoh_macros::unstable]
