@@ -132,6 +132,11 @@ impl HatInterestTrait for HatCode {
             src_interest_id: id,
         });
 
+        let propagated_mode = if mode.future() {
+            InterestMode::CurrentFuture
+        } else {
+            mode
+        };
         for dst_face in tables.faces.values_mut().filter(|f| {
             f.whatami == WhatAmI::Router
                 || (options.tokens()
@@ -145,7 +150,7 @@ impl HatInterestTrait for HatCode {
                 InterestState {
                     options,
                     res: res.as_ref().map(|res| (*res).clone()),
-                    finalized: mode == InterestMode::Future,
+                    finalized: propagated_mode == InterestMode::Future,
                 },
             );
             if mode.current() {
@@ -162,7 +167,7 @@ impl HatInterestTrait for HatCode {
             dst_face.primitives.send_interest(RoutingContext::with_expr(
                 Interest {
                     id,
-                    mode,
+                    mode: propagated_mode,
                     options,
                     wire_expr,
                     ext_qos: ext::QoSType::DECLARE,
