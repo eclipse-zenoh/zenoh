@@ -187,17 +187,21 @@ pub mod key_expr {
 pub mod session {
     #[zenoh_macros::unstable]
     pub use zenoh_config::wrappers::EntityGlobalId;
-    pub use zenoh_config::wrappers::ZenohId;
+
+    #[zenoh_macros::unstable]
     pub use zenoh_protocol::core::EntityId;
 
     #[zenoh_macros::internal]
     pub use crate::api::session::{init, InitBuilder};
+
     pub use crate::api::{
         builders::publisher::{SessionDeleteBuilder, SessionPutBuilder},
         info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, SessionInfo, ZenohIdBuilder},
         query::SessionGetBuilder,
         session::{open, OpenBuilder, Session, Undeclarable},
     };
+
+    pub use zenoh_config::wrappers::ZenohId;
 }
 
 /// Sample primitives
