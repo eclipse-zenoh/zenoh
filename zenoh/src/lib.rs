@@ -186,7 +186,9 @@ pub mod key_expr {
 /// Zenoh [`Session`] and associated types
 pub mod session {
     #[zenoh_macros::unstable]
-    pub use zenoh_config::wrappers::{EntityGlobalId, ZenohId};
+    pub use zenoh_config::wrappers::EntityGlobalId;
+    pub use zenoh_config::wrappers::ZenohId;
+    #[zenoh_macros::unstable]
     pub use zenoh_protocol::core::EntityId;
 
     #[zenoh_macros::internal]
