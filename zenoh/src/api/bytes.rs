@@ -693,6 +693,32 @@ impl std::io::Write for ZBytesWriter<'_> {
 }
 
 /// An iterator that implements [`std::iter::Iterator`] trait to iterate on [`&[u8]`].
+///
+/// Example:
+///    ```rust
+/// use std::io::Write;
+/// use zenoh::bytes::ZBytes;
+///
+/// let buf1: Vec<u8> = vec![1, 2, 3];
+/// let buf2: Vec<u8> = vec![4, 5, 6, 7, 8];
+/// let mut zbs = ZBytes::empty();
+/// let mut writer = zbs.writer();
+/// writer.write(&buf1);
+/// writer.write(&buf2);
+///
+/// // Access the raw content
+/// for slice in zbs.slices() {
+///     println!("{:02x?}", slice);
+/// }
+///
+/// // Concatenate input in a single vector
+/// let buf: Vec<u8> = buf1.into_iter().chain(buf2.into_iter()).collect();
+/// // Concatenate raw bytes in a single vector
+/// let out: Vec<u8> = zbs.slices().fold(Vec::new(), |mut b, x| { b.extend_from_slice(x); b });
+/// // The previous line is the equivalent of
+/// // let out: Vec<u8> = zbs.into();
+/// assert_eq!(buf, out);    
+/// ```
 #[repr(transparent)]
 #[derive(Debug)]
 pub struct ZBytesSliceIterator<'a>(ZBytesSliceIteratorInner<'a>);
