@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use std::thread::JoinHandle;
+
 use static_init::dynamic;
 use zenoh_core::zerror;
 
@@ -23,33 +25,39 @@ pub(crate) static mut CLEANUP: Cleanup = Cleanup::new();
 /// An RAII object that calls all registered routines upon destruction
 pub(crate) struct Cleanup {
     cleanups: lockfree::queue::Queue<Option<Box<dyn FnOnce() + Send>>>,
+    handle: Option<JoinHandle<()>>,
 }
 
 impl Cleanup {
     fn new() -> Self {
         // todo: this is a workaround to make sure Cleanup will be executed even if process terminates via signals
-        if let Err(e) = ctrlc2::set_handler(|| {
+        let handle = match ctrlc2::set_handler(|| {
             tokio::task::spawn_blocking(|| std::process::exit(0));
-            false
+            true
         }) {
-            match e {
-                ctrlc2::Error::NoSuchSignal(signal_type) => {
-                    zerror!(
-                        "Error registering cleanup handler for signal {:?}: no such signal!",
-                        signal_type
-                    );
+            Ok(h) => Some(h),
+            Err(e) => {
+                match e {
+                    ctrlc2::Error::NoSuchSignal(signal_type) => {
+                        zerror!(
+                            "Error registering cleanup handler for signal {:?}: no such signal!",
+                            signal_type
+                        );
+                    }
+                    ctrlc2::Error::MultipleHandlers => {
+                        zerror!("Error registering cleanup handler: already registered!");
+                    }
+                    ctrlc2::Error::System(error) => {
+                        zerror!("Error registering cleanup handler: system error: {error}");
+                    }
                 }
-                ctrlc2::Error::MultipleHandlers => {
-                    zerror!("Error registering cleanup handler: already registered!");
-                }
-                ctrlc2::Error::System(error) => {
-                    zerror!("Error registering cleanup handler: system error: {error}");
-                }
+                None
             }
-        }
+        };
 
         Self {
             cleanups: Default::default(),
+            handle,
         }
     }
 
@@ -68,6 +76,7 @@ impl Cleanup {
 
 impl Drop for Cleanup {
     fn drop(&mut self) {
+        self.handle.take();
         self.cleanup();
     }
 }
