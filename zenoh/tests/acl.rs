@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#![cfg(feature = "unstable_config")]
+#![cfg(feature = "internal_config")]
 #![cfg(target_family = "unix")]
 mod test {
     use std::{

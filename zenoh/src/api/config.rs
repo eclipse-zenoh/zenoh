@@ -91,7 +91,7 @@ impl Config {
     }
 }
 
-#[zenoh_macros::unstable_config]
+#[zenoh_macros::internal_config]
 impl std::ops::Deref for Config {
     type Target = zenoh_config::Config;
 
@@ -100,7 +100,7 @@ impl std::ops::Deref for Config {
     }
 }
 
-#[zenoh_macros::unstable_config]
+#[zenoh_macros::internal_config]
 impl std::ops::DerefMut for Config {
     fn deref_mut(&mut self) -> &mut <Self as std::ops::Deref>::Target {
         &mut self.0
