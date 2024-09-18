@@ -153,10 +153,23 @@ impl DataInfoIntoSample for Option<DataInfo> {
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone)]
 pub struct SourceInfo {
+    pub(crate) source_id: Option<EntityGlobalId>,
+    pub(crate) source_sn: Option<SourceSn>,
+}
+
+#[zenoh_macros::unstable]
+impl SourceInfo {
+    #[zenoh_macros::unstable]
     /// The [`EntityGlobalId`] of the zenoh entity that published the concerned [`Sample`].
-    pub source_id: Option<EntityGlobalId>,
+    pub fn source_id(&self) -> Option<&EntityGlobalId> {
+        self.source_id.as_ref()
+    }
+
+    #[zenoh_macros::unstable]
     /// The sequence number of the [`Sample`] from the source.
-    pub source_sn: Option<SourceSn>,
+    pub fn source_sn(&self) -> Option<SourceSn> {
+        self.source_sn
+    }
 }
 
 #[test]

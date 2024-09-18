@@ -19,6 +19,15 @@ use zenoh_result::ZResult;
 
 use crate::StructVersion;
 
+/// The diff in the configuration when plugins are updated:
+/// - Delete: the plugin has been removed from the configuration at runtime
+/// - Start: the plugin has been added to the configuration at runtime
+#[derive(Debug, Clone)]
+pub enum PluginDiff {
+    Delete(String),
+    Start(zenoh_config::PluginLoad),
+}
+
 /// The plugin can be in one of these states:
 /// - Declared: the plugin is declared in the configuration file, but not loaded yet or failed to load
 /// - Loaded: the plugin is loaded, but not started yet or failed to start

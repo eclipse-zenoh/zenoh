@@ -127,7 +127,7 @@ impl Runtime {
 
     async fn start_client(&self) -> ZResult<()> {
         let (peers, scouting, addr, ifaces, timeout, multicast_ttl) = {
-            let guard = self.state.config.lock();
+            let guard = &self.state.config.lock().0;
             (
                 guard
                     .connect()
@@ -171,7 +171,7 @@ impl Runtime {
 
     async fn start_peer(&self) -> ZResult<()> {
         let (listeners, peers, scouting, listen, autoconnect, addr, ifaces, delay, linkstate) = {
-            let guard = &self.state.config.lock();
+            let guard = &self.state.config.lock().0;
             (
                 guard.listen().endpoints().peer().unwrap_or(&vec![]).clone(),
                 guard
@@ -213,7 +213,7 @@ impl Runtime {
 
     async fn start_router(&self) -> ZResult<()> {
         let (listeners, peers, scouting, listen, autoconnect, addr, ifaces, delay) = {
-            let guard = self.state.config.lock();
+            let guard = &self.state.config.lock().0;
             (
                 guard
                     .listen()
@@ -256,8 +256,9 @@ impl Runtime {
         ifaces: String,
     ) -> ZResult<()> {
         let multicast_ttl = {
-            let guard = self.state.config.lock();
-            unwrap_or_default!(guard.scouting().multicast().ttl())
+            let config_guard = self.config().lock();
+            let config = &config_guard.0;
+            unwrap_or_default!(config.scouting().multicast().ttl())
         };
         let ifaces = Runtime::get_interfaces(&ifaces);
         let mcast_socket = Runtime::bind_mcast_port(&addr, &ifaces, multicast_ttl).await?;
@@ -408,6 +409,7 @@ impl Runtime {
             self.state
                 .config
                 .lock()
+                .0
                 .connect()
                 .endpoints()
                 .get(self.state.whatami)
@@ -462,27 +464,27 @@ impl Runtime {
     }
 
     fn get_listen_retry_config(&self, endpoint: &EndPoint) -> zenoh_config::ConnectionRetryConf {
-        let guard = &self.state.config.lock();
+        let guard = &self.state.config.lock().0;
         zenoh_config::get_retry_config(guard, Some(endpoint), true)
     }
 
     fn get_connect_retry_config(&self, endpoint: &EndPoint) -> zenoh_config::ConnectionRetryConf {
-        let guard = &self.state.config.lock();
+        let guard = &self.state.config.lock().0;
         zenoh_config::get_retry_config(guard, Some(endpoint), false)
     }
 
     fn get_global_connect_retry_config(&self) -> zenoh_config::ConnectionRetryConf {
-        let guard = &self.state.config.lock();
+        let guard = &self.state.config.lock().0;
         zenoh_config::get_retry_config(guard, None, false)
     }
 
     fn get_global_listener_timeout(&self) -> std::time::Duration {
-        let guard = &self.state.config.lock();
+        let guard = &self.state.config.lock().0;
         get_global_listener_timeout(guard)
     }
 
     fn get_global_connect_timeout(&self) -> std::time::Duration {
-        let guard = &self.state.config.lock();
+        let guard = &self.state.config.lock().0;
         get_global_connect_timeout(guard)
     }
 
@@ -746,9 +748,10 @@ impl Runtime {
         {
             let this = self.clone();
             let idx = self.state.start_conditions.add_peer_connector().await;
-            let config = this.config().lock();
+            let config_guard = this.config().lock();
+            let config = &config_guard.0;
             let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
-            drop(config);
+            drop(config_guard);
             self.spawn(async move {
                 if let Ok(zid) = this.peer_connector_retry(peer).await {
                     this.state
@@ -919,6 +922,7 @@ impl Runtime {
             .state
             .config
             .lock()
+            .0
             .connect()
             .endpoints()
             .get(self.whatami())
@@ -1180,6 +1184,7 @@ impl Runtime {
                             .state
                             .config
                             .lock()
+                            .0
                             .connect()
                             .endpoints()
                             .get(session.runtime.state.whatami)
