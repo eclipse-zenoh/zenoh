@@ -52,14 +52,18 @@ impl Cleanup {
     pub(crate) fn register_cleanup(&self, cleanup_fn: Box<dyn FnOnce() + Send>) {
         self.cleanups.push(Some(cleanup_fn));
     }
-}
 
-impl Drop for Cleanup {
-    fn drop(&mut self) {
+    pub(crate) fn cleanup(&self) {
         while let Some(cleanup) = self.cleanups.pop() {
             if let Some(f) = cleanup {
                 f();
             }
         }
+    }
+}
+
+impl Drop for Cleanup {
+    fn drop(&mut self) {
+        self.cleanup();
     }
 }
