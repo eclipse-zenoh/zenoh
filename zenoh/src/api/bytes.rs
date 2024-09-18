@@ -107,10 +107,15 @@ pub trait Deserialize<T> {
 /// `ZBytes` provides convenient methods to the user for serialization/deserialization based on the default Zenoh serializer [`ZSerde`].
 ///
 /// **NOTE 1:** Zenoh semantic and protocol take care of sending and receiving bytes without restricting the actual data types.
-/// [`ZSerde`] is the default serializer/deserializer provided for convenience to the users to deal with primitives data types via
-/// a simple out-of-the-box encoding. [`ZSerde`] is **NOT** by any means the only serializer/deserializer users can use nor a limitation
-/// to the types supported by Zenoh. Users are free and encouraged to use any serializer/deserializer of their choice like *serde*,
-/// *protobuf*, *bincode*, *flatbuffers*, etc.
+///
+/// **NOTE 2:** [`ZSerde`] is the default serializer/deserializer provided for convenience to the users to deal with primitives data types via
+/// a simple out-of-the-box encoding. That is, [`ZSerde`] is provided as a facilitator for simple use cases that need to send/receive data
+/// over Zenoh, and doing so potentially to/from different programming languages. Make simple use cases simple and provide freedom for more
+/// advanced use cases.
+///
+/// **NOTE 3:** [`ZSerde`] is **NOT** by any means the only serializer/deserializer users can use nor a limitation to the types supported by Zenoh.
+/// [`ZSerde`] does not have the ambition nor the plan to be a full alternative of more complete seriliazation libraries like *serde*, *protobuf*,
+/// *bincode*, *flatbuffers*, etc. Users are free and encouraged to use any serializer/deserializer of their choice that better suits their use case.
 ///
 /// `ZBytes` can be used to serialize a single type:
 /// ```rust
@@ -185,7 +190,7 @@ pub trait Deserialize<T> {
 /// assert_eq!(start, end);
 /// ```
 ///
-/// **NOTE 2:** `ZBytes` may store data in non-contiguous regions of memory.
+/// **NOTE 4:** `ZBytes` may store data in non-contiguous regions of memory.
 /// The typical case for `ZBytes` to store data in different memory regions is when data is received fragmented from the network.
 /// The user then can decided to use [`ZBytes::deserialize`], [`ZBytes::reader`], [`ZBytes::into`], or [`ZBytes::slices`] depending
 /// on their needs.
