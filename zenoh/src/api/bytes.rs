@@ -253,6 +253,8 @@ impl ZBytes {
     }
 
     /// Get a [`ZBytesReader`] implementing [`std::io::Read`] trait.
+    ///
+    /// See [`ZBytesWriter`] on how to chain the deserialization of different types from a single [`ZBytes`].
     pub fn reader(&self) -> ZBytesReader<'_> {
         ZBytesReader(self.0.reader())
     }
@@ -473,7 +475,7 @@ impl ZBytes {
     }
 }
 
-/// A reader that implements [`std::io::Read`] trait to read from a [`ZBytes`].
+/// A reader that implements [`std::io::Read`] trait to deserialize from a [`ZBytes`]. See [`ZBytesWriter`] for an example.
 #[repr(transparent)]
 #[derive(Debug)]
 pub struct ZBytesReader<'a>(ZBufReader<'a>);
@@ -552,7 +554,40 @@ impl std::io::Seek for ZBytesReader<'_> {
     }
 }
 
-/// A writer that implements [`std::io::Write`] trait to write into a [`ZBytes`].
+/// A writer that implements [`std::io::Write`] trait to serialize into a [`ZBytes`].
+///
+/// Example:
+/// ```rust
+/// use zenoh::bytes::ZBytes;
+///
+/// #[derive(Debug, PartialEq)]
+/// struct Foo {
+///     one: usize,
+///     two: String,
+///     three: Vec<u8>,
+/// }
+///
+/// let start = Foo {
+///     one: 42,
+///     two: String::from("Forty-Two"),
+///     three: vec![42u8; 42],
+/// };
+///
+/// let mut bytes = ZBytes::empty();
+/// let mut writer = bytes.writer();
+///
+/// writer.serialize(&start.one);
+/// writer.serialize(&start.two);
+/// writer.serialize(&start.three);
+///
+/// let mut reader = bytes.reader();
+/// let end = Foo {
+///     one: reader.deserialize().unwrap(),
+///     two: reader.deserialize().unwrap(),
+///     three: reader.deserialize().unwrap(),
+/// };
+/// assert_eq!(start, end);
+/// ```
 #[repr(transparent)]
 #[derive(Debug)]
 pub struct ZBytesWriter<'a>(ZBufWriter<'a>);
