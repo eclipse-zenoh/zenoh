@@ -427,7 +427,6 @@ pub mod shm {
             zshm::{zshm, ZShm},
             zshmmut::{zshmmut, ZShmMut},
         },
-        cleanup::force_cleanup_before_exit,
         client::{shm_client::ShmClient, shm_segment::ShmSegment},
         client_storage::{ShmClientStorage, GLOBAL_CLIENT_STORAGE},
         common::types::{ChunkID, ProtocolID, SegmentID},
