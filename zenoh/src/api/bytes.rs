@@ -22,7 +22,7 @@ use uhlc::Timestamp;
 use unwrap_infallible::UnwrapInfallible;
 use zenoh_buffers::{
     buffer::{Buffer, SplitBuffer},
-    reader::{DidntRead, HasReader, Reader},
+    reader::{HasReader, Reader},
     writer::HasWriter,
     ZBuf, ZBufReader, ZBufWriter, ZSlice, ZSliceBuffer,
 };
@@ -474,12 +474,15 @@ impl ZBytes {
 pub struct ZBytesReader<'a>(ZBufReader<'a>);
 
 #[derive(Debug)]
+pub struct ReadError;
+
+#[derive(Debug)]
 pub enum ZReadOrDeserializeError<T>
 where
     T: TryFrom<ZBytes>,
     <T as TryFrom<ZBytes>>::Error: Debug,
 {
-    Read(DidntRead),
+    Read(ReadError),
     Deserialize(<T as TryFrom<ZBytes>>::Error),
 }
 
@@ -1778,18 +1781,18 @@ impl From<&mut Timestamp> for ZBytes {
 
 impl Deserialize<Timestamp> for ZSerde {
     type Input<'a> = &'a ZBytes;
-    type Error = zenoh_buffers::reader::DidntRead;
+    type Error = ReadError;
 
     fn deserialize(self, v: Self::Input<'_>) -> Result<Timestamp, Self::Error> {
         let codec = Zenoh080::new();
         let mut reader = v.0.reader();
-        let e: Timestamp = codec.read(&mut reader)?;
+        let e: Timestamp = codec.read(&mut reader).map_err(|_| ReadError)?;
         Ok(e)
     }
 }
 
 impl TryFrom<ZBytes> for Timestamp {
-    type Error = zenoh_buffers::reader::DidntRead;
+    type Error = ReadError;
 
     fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(&value)
@@ -1797,7 +1800,7 @@ impl TryFrom<ZBytes> for Timestamp {
 }
 
 impl TryFrom<&ZBytes> for Timestamp {
-    type Error = zenoh_buffers::reader::DidntRead;
+    type Error = ReadError;
 
     fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(value)
@@ -1805,7 +1808,7 @@ impl TryFrom<&ZBytes> for Timestamp {
 }
 
 impl TryFrom<&mut ZBytes> for Timestamp {
-    type Error = zenoh_buffers::reader::DidntRead;
+    type Error = ReadError;
 
     fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(&*value)
@@ -1867,18 +1870,18 @@ impl From<&mut Encoding> for ZBytes {
 
 impl Deserialize<Encoding> for ZSerde {
     type Input<'a> = &'a ZBytes;
-    type Error = zenoh_buffers::reader::DidntRead;
+    type Error = ReadError;
 
     fn deserialize(self, v: Self::Input<'_>) -> Result<Encoding, Self::Error> {
         let codec = Zenoh080::new();
         let mut reader = v.0.reader();
-        let e: EncodingProto = codec.read(&mut reader)?;
+        let e: EncodingProto = codec.read(&mut reader).map_err(|_| ReadError)?;
         Ok(e.into())
     }
 }
 
 impl TryFrom<ZBytes> for Encoding {
-    type Error = zenoh_buffers::reader::DidntRead;
+    type Error = ReadError;
 
     fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(&value)
@@ -1886,7 +1889,7 @@ impl TryFrom<ZBytes> for Encoding {
 }
 
 impl TryFrom<&ZBytes> for Encoding {
-    type Error = zenoh_buffers::reader::DidntRead;
+    type Error = ReadError;
 
     fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(value)
@@ -1894,7 +1897,7 @@ impl TryFrom<&ZBytes> for Encoding {
 }
 
 impl TryFrom<&mut ZBytes> for Encoding {
-    type Error = zenoh_buffers::reader::DidntRead;
+    type Error = ReadError;
 
     fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(&*value)
@@ -2628,17 +2631,17 @@ where
         let codec = Zenoh080::new();
         let mut reader = bytes.0.reader();
 
-        let abuf: ZBuf = codec
-            .read(&mut reader)
-            .map_err(|e| ZReadOrDeserializeErrorTuple2::One(ZReadOrDeserializeError::Read(e)))?;
+        let abuf: ZBuf = codec.read(&mut reader).map_err(|_| {
+            ZReadOrDeserializeErrorTuple2::One(ZReadOrDeserializeError::Read(ReadError))
+        })?;
         let apld = ZBytes::new(abuf);
         let a = A::try_from(apld).map_err(|e| {
             ZReadOrDeserializeErrorTuple2::One(ZReadOrDeserializeError::Deserialize(e))
         })?;
 
-        let bbuf: ZBuf = codec
-            .read(&mut reader)
-            .map_err(|e| ZReadOrDeserializeErrorTuple2::Two(ZReadOrDeserializeError::Read(e)))?;
+        let bbuf: ZBuf = codec.read(&mut reader).map_err(|_| {
+            ZReadOrDeserializeErrorTuple2::Two(ZReadOrDeserializeError::Read(ReadError))
+        })?;
         let bpld = ZBytes::new(bbuf);
         let b = B::try_from(bpld).map_err(|e| {
             ZReadOrDeserializeErrorTuple2::Two(ZReadOrDeserializeError::Deserialize(e))
@@ -2824,25 +2827,25 @@ where
         let codec = Zenoh080::new();
         let mut reader = bytes.0.reader();
 
-        let abuf: ZBuf = codec
-            .read(&mut reader)
-            .map_err(|e| ZReadOrDeserializeErrorTuple3::One(ZReadOrDeserializeError::Read(e)))?;
+        let abuf: ZBuf = codec.read(&mut reader).map_err(|_| {
+            ZReadOrDeserializeErrorTuple3::One(ZReadOrDeserializeError::Read(ReadError))
+        })?;
         let apld = ZBytes::new(abuf);
         let a = A::try_from(apld).map_err(|e| {
             ZReadOrDeserializeErrorTuple3::One(ZReadOrDeserializeError::Deserialize(e))
         })?;
 
-        let bbuf: ZBuf = codec
-            .read(&mut reader)
-            .map_err(|e| ZReadOrDeserializeErrorTuple3::Two(ZReadOrDeserializeError::Read(e)))?;
+        let bbuf: ZBuf = codec.read(&mut reader).map_err(|_| {
+            ZReadOrDeserializeErrorTuple3::Two(ZReadOrDeserializeError::Read(ReadError))
+        })?;
         let bpld = ZBytes::new(bbuf);
         let b = B::try_from(bpld).map_err(|e| {
             ZReadOrDeserializeErrorTuple3::Two(ZReadOrDeserializeError::Deserialize(e))
         })?;
 
-        let cbuf: ZBuf = codec
-            .read(&mut reader)
-            .map_err(|e| ZReadOrDeserializeErrorTuple3::Three(ZReadOrDeserializeError::Read(e)))?;
+        let cbuf: ZBuf = codec.read(&mut reader).map_err(|_| {
+            ZReadOrDeserializeErrorTuple3::Three(ZReadOrDeserializeError::Read(ReadError))
+        })?;
         let cpld = ZBytes::new(cbuf);
         let c = C::try_from(cpld).map_err(|e| {
             ZReadOrDeserializeErrorTuple3::Three(ZReadOrDeserializeError::Deserialize(e))
@@ -3053,33 +3056,33 @@ where
         let codec = Zenoh080::new();
         let mut reader = bytes.0.reader();
 
-        let abuf: ZBuf = codec
-            .read(&mut reader)
-            .map_err(|e| ZReadOrDeserializeErrorTuple4::One(ZReadOrDeserializeError::Read(e)))?;
+        let abuf: ZBuf = codec.read(&mut reader).map_err(|_| {
+            ZReadOrDeserializeErrorTuple4::One(ZReadOrDeserializeError::Read(ReadError))
+        })?;
         let apld = ZBytes::new(abuf);
         let a = A::try_from(apld).map_err(|e| {
             ZReadOrDeserializeErrorTuple4::One(ZReadOrDeserializeError::Deserialize(e))
         })?;
 
-        let bbuf: ZBuf = codec
-            .read(&mut reader)
-            .map_err(|e| ZReadOrDeserializeErrorTuple4::Two(ZReadOrDeserializeError::Read(e)))?;
+        let bbuf: ZBuf = codec.read(&mut reader).map_err(|_| {
+            ZReadOrDeserializeErrorTuple4::Two(ZReadOrDeserializeError::Read(ReadError))
+        })?;
         let bpld = ZBytes::new(bbuf);
         let b = B::try_from(bpld).map_err(|e| {
             ZReadOrDeserializeErrorTuple4::Two(ZReadOrDeserializeError::Deserialize(e))
         })?;
 
-        let cbuf: ZBuf = codec
-            .read(&mut reader)
-            .map_err(|e| ZReadOrDeserializeErrorTuple4::Three(ZReadOrDeserializeError::Read(e)))?;
+        let cbuf: ZBuf = codec.read(&mut reader).map_err(|_| {
+            ZReadOrDeserializeErrorTuple4::Three(ZReadOrDeserializeError::Read(ReadError))
+        })?;
         let cpld = ZBytes::new(cbuf);
         let c = C::try_from(cpld).map_err(|e| {
             ZReadOrDeserializeErrorTuple4::Three(ZReadOrDeserializeError::Deserialize(e))
         })?;
 
-        let dbuf: ZBuf = codec
-            .read(&mut reader)
-            .map_err(|e| ZReadOrDeserializeErrorTuple4::Four(ZReadOrDeserializeError::Read(e)))?;
+        let dbuf: ZBuf = codec.read(&mut reader).map_err(|_| {
+            ZReadOrDeserializeErrorTuple4::Four(ZReadOrDeserializeError::Read(ReadError))
+        })?;
         let dpld = ZBytes::new(dbuf);
         let d = D::try_from(dpld).map_err(|e| {
             ZReadOrDeserializeErrorTuple4::Four(ZReadOrDeserializeError::Deserialize(e))
