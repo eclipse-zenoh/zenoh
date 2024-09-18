@@ -160,6 +160,15 @@ pub struct SourceInfo {
 #[zenoh_macros::unstable]
 impl SourceInfo {
     #[zenoh_macros::unstable]
+    /// Build a new [`SourceInfo`].
+    pub fn new(source_id: Option<EntityGlobalId>, source_sn: Option<SourceSn>) -> Self {
+        Self {
+            source_id,
+            source_sn,
+        }
+    }
+
+    #[zenoh_macros::unstable]
     /// The [`EntityGlobalId`] of the zenoh entity that published the concerned [`Sample`].
     pub fn source_id(&self) -> Option<&EntityGlobalId> {
         self.source_id.as_ref()
