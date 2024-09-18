@@ -48,7 +48,7 @@ num_cpus = { workspace = true, optional = true }
 thread-priority = { workspace = true }
 lockfree = { workspace = true }
 stabby = { workspace = true }
-ctrlc = { workspace = true, features = ["termination"] }
+ctrlc2 = { workspace = true, features = ["termination"] }
 
 [dev-dependencies]
 libc = { workspace = true }

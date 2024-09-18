@@ -28,22 +28,26 @@ pub(crate) struct Cleanup {
 impl Cleanup {
     fn new() -> Self {
         // todo: this is a workaround to make sure Cleanup will be executed even if process terminates via signals
-        if let Err(e) = ctrlc::set_handler(|| std::process::exit(0)) {
+        if let Err(e) = ctrlc2::set_handler(|| {
+            tokio::task::spawn_blocking(|| std::process::exit(0));
+            false
+        }) {
             match e {
-                ctrlc::Error::NoSuchSignal(signal_type) => {
+                ctrlc2::Error::NoSuchSignal(signal_type) => {
                     zerror!(
                         "Error registering cleanup handler for signal {:?}: no such signal!",
                         signal_type
                     );
                 }
-                ctrlc::Error::MultipleHandlers => {
+                ctrlc2::Error::MultipleHandlers => {
                     zerror!("Error registering cleanup handler: already registered!");
                 }
-                ctrlc::Error::System(error) => {
+                ctrlc2::Error::System(error) => {
                     zerror!("Error registering cleanup handler: system error: {error}");
                 }
             }
         }
+
         Self {
             cleanups: Default::default(),
         }
