@@ -67,13 +67,18 @@ pub struct Selector<'a> {
 
 impl<'a> Selector<'a> {
     /// Get the [`KeyExpr`] of this selector.
-    pub fn key_expr(&'a self) -> &'a KeyExpr<'a> {
+    pub fn key_expr(&self) -> &KeyExpr<'a> {
         &self.key_expr
     }
 
-    /// Get the [`KeyExpr`] of this selector.
-    pub fn parameters(&'a self) -> &'a Parameters<'a> {
+    /// Get the [`Parameters`] of this selector.
+    pub fn parameters(&self) -> &Parameters<'a> {
         &self.parameters
+    }
+
+    /// Deconstruct the selector into ([`KeyExpr`], [`Parameters`])
+    pub fn split(self) -> (KeyExpr<'a>, Parameters<'a>) {
+        self.into()
     }
 
     /// Builds a new selector which owns keyexpr and parameters

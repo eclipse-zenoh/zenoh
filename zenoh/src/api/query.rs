@@ -14,6 +14,8 @@
 
 use std::{
     collections::HashMap,
+    error::Error,
+    fmt::Display,
     future::{IntoFuture, Ready},
     time::Duration,
 };
@@ -102,6 +104,19 @@ impl ReplyError {
         &self.encoding
     }
 }
+
+impl Display for ReplyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "query returned an error with a {} bytes payload and encoding {}",
+            self.payload.len(),
+            self.encoding
+        )
+    }
+}
+
+impl Error for ReplyError {}
 
 impl From<Value> for ReplyError {
     fn from(value: Value) -> Self {
