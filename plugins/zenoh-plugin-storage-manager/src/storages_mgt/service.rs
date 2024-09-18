@@ -20,7 +20,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use tokio::sync::{broadcast::Receiver, Mutex, MutexGuard, RwLock};
+use tokio::sync::{broadcast::Receiver, Mutex, RwLock, RwLockWriteGuard};
 use zenoh::{
     internal::{
         bail,
@@ -65,7 +65,7 @@ pub struct StorageService {
     complete: bool,
     name: String,
     strip_prefix: Option<OwnedKeyExpr>,
-    storage: Arc<Mutex<Box<dyn zenoh_backend_traits::Storage>>>,
+    pub(crate) storage: Arc<Mutex<Box<dyn zenoh_backend_traits::Storage>>>,
     capability: Capability,
     tombstones: Arc<RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>>,
     wildcard_updates: Arc<RwLock<KeBoxTree<Update, UnknownWildness, KeyedSetProvider>>>,
@@ -492,8 +492,8 @@ impl StorageService {
         &self,
         stripped_key: &Option<OwnedKeyExpr>,
         received_ts: &Timestamp,
-    ) -> Option<MutexGuard<'_, LatestUpdates>> {
-        let cache_guard = self.cache_latest.latest_updates.lock().await;
+    ) -> Option<RwLockWriteGuard<'_, LatestUpdates>> {
+        let cache_guard = self.cache_latest.latest_updates.write().await;
         if let Some(event) = cache_guard.get(stripped_key) {
             if received_ts > event.timestamp() {
                 return Some(cache_guard);
@@ -669,7 +669,7 @@ struct GarbageCollectionEvent {
     config: GarbageCollectionConfig,
     tombstones: Arc<RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>>,
     wildcard_updates: Arc<RwLock<KeBoxTree<Update, UnknownWildness, KeyedSetProvider>>>,
-    latest_updates: Option<Arc<Mutex<LatestUpdates>>>,
+    latest_updates: Option<Arc<RwLock<LatestUpdates>>>,
 }
 
 #[async_trait]
@@ -708,7 +708,7 @@ impl Timed for GarbageCollectionEvent {
 
         if let Some(latest_updates) = &self.latest_updates {
             latest_updates
-                .lock()
+                .write()
                 .await
                 .retain(|_, event| event.timestamp().get_time() < &time_limit);
         }

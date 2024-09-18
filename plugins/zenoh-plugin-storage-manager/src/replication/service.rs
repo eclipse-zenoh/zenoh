@@ -15,7 +15,7 @@
 use std::{sync::Arc, time::Duration};
 
 use tokio::{
-    sync::{broadcast::Receiver, Mutex, RwLock},
+    sync::{broadcast::Receiver, RwLock},
     task::JoinHandle,
 };
 use zenoh::{key_expr::OwnedKeyExpr, query::QueryTarget, sample::Locality, session::Session};
@@ -26,6 +26,7 @@ use crate::storages_mgt::{LatestUpdates, StorageMessage, StorageService};
 pub(crate) struct ReplicationService {
     digest_publisher_handle: JoinHandle<()>,
     digest_subscriber_handle: JoinHandle<()>,
+    aligner_queryable_handle: JoinHandle<()>,
 }
 
 pub(crate) const MAX_RETRY: usize = 2;
@@ -46,7 +47,7 @@ impl ReplicationService {
         storage_service: StorageService,
         storage_key_expr: OwnedKeyExpr,
         replication_log: Arc<RwLock<LogLatest>>,
-        latest_updates: Arc<Mutex<LatestUpdates>>,
+        latest_updates: Arc<RwLock<LatestUpdates>>,
         mut rx: Receiver<StorageMessage>,
     ) {
         // We perform a "wait-try" policy because Zenoh needs some time to propagate the routing
@@ -103,11 +104,13 @@ impl ReplicationService {
                 replication_log,
                 storage_key_expr,
                 latest_updates,
+                storage: storage_service.storage.clone(),
             };
 
             let replication_service = Self {
                 digest_publisher_handle: replication.spawn_digest_publisher(),
                 digest_subscriber_handle: replication.spawn_digest_subscriber(),
+                aligner_queryable_handle: replication.spawn_aligner_queryable(),
             };
 
             while let Ok(storage_message) = rx.recv().await {
@@ -123,5 +126,6 @@ impl ReplicationService {
     pub fn stop(self) {
         self.digest_publisher_handle.abort();
         self.digest_subscriber_handle.abort();
+        self.aligner_queryable_handle.abort();
     }
 }

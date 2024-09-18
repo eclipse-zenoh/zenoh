@@ -33,17 +33,18 @@ use zenoh::{
     sample::Locality,
     Session,
 };
+use zenoh_backend_traits::Storage;
 
 use super::{
     digest::Digest,
     log::LogLatest,
     service::{MAX_RETRY, WAIT_PERIOD_SECS},
 };
-use crate::storages_mgt::LatestUpdates;
+use crate::{replication::aligner::AlignmentQuery, storages_mgt::LatestUpdates};
 
 kedefine!(
     pub digest_key_expr_formatter: "@-digest/${zid:*}/${storage_ke:**}",
-    pub aligner_key_expr_formatter: "@zid/${zid:*}/aligner",
+    pub aligner_key_expr_formatter: "@zid/${zid:*}/${storage_ke:**}/aligner",
 );
 
 #[derive(Clone)]
@@ -51,7 +52,8 @@ pub(crate) struct Replication {
     pub(crate) zenoh_session: Arc<Session>,
     pub(crate) replication_log: Arc<RwLock<LogLatest>>,
     pub(crate) storage_key_expr: OwnedKeyExpr,
-    pub(crate) latest_updates: Arc<Mutex<LatestUpdates>>,
+    pub(crate) latest_updates: Arc<RwLock<LatestUpdates>>,
+    pub(crate) storage: Arc<Mutex<Box<dyn Storage>>>,
 }
 
 impl Replication {
@@ -161,7 +163,7 @@ impl Replication {
                 tokio::time::sleep(propagation_delay).await;
 
                 {
-                    let mut latest_updates_guard = latest_updates.lock().await;
+                    let mut latest_updates_guard = latest_updates.write().await;
                     std::mem::swap(&mut events, &mut latest_updates_guard);
                 }
 
@@ -226,24 +228,21 @@ impl Replication {
     /// Spawns a task that subscribes to the [Digest] published by other Replicas.
     ///
     /// Upon reception of a [Digest], it is compared with the local Replication Log. If this
-    /// comparison generates a [DigestDiff], it is then published.
-    ///
-    /// # TODO [DigestDiff] processing
-    ///
-    /// The publication of the [DigestDiff] is a placeholder: its purpose is to be ingested by the
-    /// Aligner in order to trigger an alignment.
+    /// comparison generates a [DigestDiff], the Aligner of the Replica that generated the [Digest]
+    /// that was processed is queried to start an alignment.
     ///
     /// [DigestDiff]: super::digest::DigestDiff
     pub(crate) fn spawn_digest_subscriber(&self) -> JoinHandle<()> {
         let zenoh_session = self.zenoh_session.clone();
         let storage_key_expr = self.storage_key_expr.clone();
         let replication_log = self.replication_log.clone();
+        let replication = self.clone();
 
         tokio::task::spawn(async move {
             let digest_key_sub = match keformat!(
                 digest_key_expr_formatter::formatter(),
                 zid = "*",
-                storage_ke = storage_key_expr
+                storage_ke = &storage_key_expr
             ) {
                 Ok(key) => key,
                 Err(e) => {
@@ -288,7 +287,6 @@ impl Replication {
 
             tracing::debug!("Subscribed to {digest_key_sub}");
 
-            let mut serialization_buffer = Vec::new();
             loop {
                 if let Ok(sample) = subscriber.recv_async().await {
                     let parsed_ke = match digest_key_expr_formatter::parse(sample.key_expr()) {
@@ -340,8 +338,9 @@ impl Replication {
                         if let Some(digest_diff) = digest.diff(other_digest) {
                             tracing::debug!("Potential misalignment detected");
 
-                            let aligner_ke = match keformat!(
+                            let replica_aligner_ke = match keformat!(
                                 aligner_key_expr_formatter::formatter(),
+                                storage_ke = &storage_key_expr,
                                 zid = source_zid,
                             ) {
                                 Ok(key) => key,
@@ -354,31 +353,85 @@ impl Replication {
                                 }
                             };
 
-                            if let Err(e) =
-                                bincode::serialize_into(&mut serialization_buffer, &digest_diff)
-                            {
-                                tracing::warn!("Failed to serialise DigestDiff: {e:?}");
-                                return;
-                            }
-
-                            let serialized_buffer_size = serialization_buffer.capacity();
-                            if let Err(e) = zenoh_session
-                                .put(
-                                    aligner_ke,
-                                    std::mem::replace(
-                                        &mut serialization_buffer,
-                                        Vec::with_capacity(serialized_buffer_size),
-                                    ),
-                                )
-                                .await
-                            {
-                                tracing::warn!("Failed to send DigestDiff: {e:?}");
-                            }
+                            replication.spawn_query_replica_aligner(
+                                replica_aligner_ke,
+                                AlignmentQuery::Diff(digest_diff),
+                            );
                         }
                     }
                     .instrument(span)
                     .await;
                 }
+            }
+        })
+    }
+
+    /// Spawns a task that handles alignment queries.
+    ///
+    /// An alignment query will always come from a Replica. Hence, as multiple Replicas could query
+    /// at the same time, for each received query a new task is spawned. This newly spawned task is
+    /// responsible for fetching in the Replication Log or in the Storage the relevant information
+    /// to send to the Replica such that it can align its own Storage.
+    pub(crate) fn spawn_aligner_queryable(&self) -> JoinHandle<()> {
+        let zenoh_session = self.zenoh_session.clone();
+        let storage_key_expr = self.storage_key_expr.clone();
+        let replication = self.clone();
+
+        tokio::task::spawn(async move {
+            let aligner_ke = match keformat!(
+                aligner_key_expr_formatter::formatter(),
+                zid = zenoh_session.zid(),
+                storage_ke = storage_key_expr,
+            ) {
+                Ok(ke) => ke,
+                Err(e) => {
+                    tracing::error!(
+                        "Fatal error, failed to generate a key expression for the Aligner \
+                         queryable: {e:?}. The storage will NOT align with other replicas."
+                    );
+                    return;
+                }
+            };
+
+            let mut retry = 0;
+            let queryable = loop {
+                match zenoh_session
+                    .declare_queryable(&aligner_ke)
+                    .allowed_origin(Locality::Remote)
+                    .await
+                {
+                    Ok(queryable) => break queryable,
+                    Err(e) => {
+                        if retry < MAX_RETRY {
+                            retry += 1;
+                            tracing::warn!(
+                                "Failed to declare the Aligner queryable: {e:?}. Attempt \
+                                 {retry}/{MAX_RETRY}."
+                            );
+                            tokio::time::sleep(Duration::from_secs(WAIT_PERIOD_SECS)).await;
+                        } else {
+                            tracing::error!(
+                                "Could not declare the Aligner queryable. This storage will NOT \
+                                 align with other replicas."
+                            );
+                            return;
+                        }
+                    }
+                }
+            };
+
+            tracing::debug!("Declared Aligner queryable: {aligner_ke}");
+
+            while let Ok(query) = queryable.recv_async().await {
+                if query.attachment().is_none() {
+                    tracing::debug!("Skipping query with empty Attachment");
+                    continue;
+                }
+
+                tracing::trace!("Received Alignment Query");
+
+                let replication = replication.clone();
+                tokio::task::spawn(async move { replication.aligner(query).await });
             }
         })
     }

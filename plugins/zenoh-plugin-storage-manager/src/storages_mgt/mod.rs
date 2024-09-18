@@ -35,13 +35,13 @@ pub(crate) type LatestUpdates = HashMap<Option<OwnedKeyExpr>, Event>;
 
 #[derive(Clone)]
 pub(crate) struct CacheLatest {
-    pub(crate) latest_updates: Arc<Mutex<LatestUpdates>>,
+    pub(crate) latest_updates: Arc<RwLock<LatestUpdates>>,
     pub(crate) replication_log: Option<Arc<RwLock<LogLatest>>>,
 }
 
 impl CacheLatest {
     pub fn new(
-        latest_updates: Arc<Mutex<LatestUpdates>>,
+        latest_updates: Arc<RwLock<LatestUpdates>>,
         replication_log: Option<Arc<RwLock<LogLatest>>>,
     ) -> Self {
         Self {
@@ -108,7 +108,7 @@ pub(crate) async fn create_and_start_storage(
         latest_updates = entries;
     }
 
-    let latest_updates = Arc::new(Mutex::new(latest_updates));
+    let latest_updates = Arc::new(RwLock::new(latest_updates));
 
     let storage = Arc::new(Mutex::new(storage));
     let storage_service = StorageService::start(

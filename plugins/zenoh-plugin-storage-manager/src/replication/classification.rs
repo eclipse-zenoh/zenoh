@@ -73,8 +73,8 @@ impl Sub<u64> for IntervalIdx {
 /// [Fingerprint] of all the [SubInterval]s it contains.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct Interval {
-    fingerprint: Fingerprint,
-    sub_intervals: HashMap<SubIntervalIdx, SubInterval>,
+    pub(crate) fingerprint: Fingerprint,
+    pub(crate) sub_intervals: HashMap<SubIntervalIdx, SubInterval>,
 }
 
 impl<const N: usize> From<[(SubIntervalIdx, SubInterval); N]> for Interval {
@@ -206,8 +206,8 @@ impl From<u64> for SubIntervalIdx {
 /// [Event]s it contains.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct SubInterval {
-    fingerprint: Fingerprint,
-    events: HashMap<Option<OwnedKeyExpr>, Event>,
+    pub(crate) fingerprint: Fingerprint,
+    pub(crate) events: HashMap<Option<OwnedKeyExpr>, Event>,
 }
 
 impl<const N: usize> From<[Event; N]> for SubInterval {

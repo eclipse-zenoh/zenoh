@@ -15,6 +15,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use bloomfilter::Bloom;
+use serde::{Deserialize, Serialize};
 use zenoh::{key_expr::OwnedKeyExpr, sample::SampleKind, time::Timestamp, Result};
 use zenoh_backend_traits::config::ReplicaConfig;
 
@@ -24,6 +25,38 @@ use super::{
     digest::{Digest, Fingerprint},
 };
 
+/// The `EventMetadata` structure contains all the information needed by a replica to assess if it
+/// is missing an [Event] in its log.
+///
+/// Associating the `action` allows only sending the metadata when the associate action is
+/// [SampleKind::Delete].
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct EventMetadata {
+    pub(crate) stripped_key: Option<OwnedKeyExpr>,
+    pub(crate) timestamp: Timestamp,
+    pub(crate) action: SampleKind,
+}
+
+impl EventMetadata {
+    pub fn key_expr(&self) -> &Option<OwnedKeyExpr> {
+        &self.stripped_key
+    }
+
+    pub fn timestamp(&self) -> &Timestamp {
+        &self.timestamp
+    }
+}
+
+impl From<&Event> for EventMetadata {
+    fn from(event: &Event) -> Self {
+        Self {
+            stripped_key: event.maybe_stripped_key.clone(),
+            timestamp: event.timestamp,
+            action: event.action,
+        }
+    }
+}
+
 /// An `Event` records the fact that a publication occurred on the associated key expression at the
 /// associated timestamp.
 ///
@@ -31,10 +64,16 @@ use super::{
 /// [Fingerprint] is used to construct the [Digest] associated with the replication log.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Event {
-    maybe_stripped_key: Option<OwnedKeyExpr>,
-    timestamp: Timestamp,
-    action: SampleKind,
-    fingerprint: Fingerprint,
+    pub(crate) maybe_stripped_key: Option<OwnedKeyExpr>,
+    pub(crate) timestamp: Timestamp,
+    pub(crate) action: SampleKind,
+    pub(crate) fingerprint: Fingerprint,
+}
+
+impl From<EventMetadata> for Event {
+    fn from(metadata: EventMetadata) -> Self {
+        Event::new(metadata.stripped_key, metadata.timestamp, metadata.action)
+    }
 }
 
 impl Event {

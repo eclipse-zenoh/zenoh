@@ -26,6 +26,7 @@
 //!
 //! [History::Latest]: zenoh_backend_traits::History::Latest
 
+mod aligner;
 mod classification;
 mod configuration;
 mod core;
