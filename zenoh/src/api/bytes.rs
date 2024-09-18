@@ -716,7 +716,7 @@ where
 }
 
 /// The default serializer for [`ZBytes`]. It supports primitives types, such as: `Vec<u8>`, `uX`, `iX`, `fX`, `String`, `bool`.
-/// It also supports common Rust serde values like [`serde_json::Value`].
+/// It also supports common Rust serde values like [`serde_json::Value`]. See [`ZBytes`] for examples.
 ///
 /// **NOTE 1:** Zenoh semantic and protocol take care of sending and receiving bytes without restricting the actual data types.
 ///
