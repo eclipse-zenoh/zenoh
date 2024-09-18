@@ -989,7 +989,7 @@ pub(crate) fn declare_token_interest(
         && (face.whatami == WhatAmI::Client
             || (face.whatami == WhatAmI::Peer && !hat!(tables).full_net(WhatAmI::Peer)))
     {
-        let interest_id = (!mode.future()).then_some(id);
+        let interest_id = Some(id);
         if let Some(res) = res.as_ref() {
             if aggregate {
                 if hat!(tables).router_tokens.iter().any(|token| {

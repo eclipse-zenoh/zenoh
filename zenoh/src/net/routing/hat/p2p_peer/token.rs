@@ -53,6 +53,7 @@ fn propagate_simple_token_to(
     dst_face: &mut Arc<FaceState>,
     res: &Arc<Resource>,
     src_face: &mut Arc<FaceState>,
+    interest_id: Option<InterestId>,
     send_declare: &mut SendDeclare,
 ) {
     if (src_face.id != dst_face.id || dst_face.zid == tables.zid)
@@ -84,11 +85,15 @@ fn propagate_simple_token_to(
             let matching_interests = face_hat!(dst_face)
                 .remote_interests
                 .values()
-                .filter(|(r, o)| o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true))
+                .filter(|(r, m, o)| {
+                    o.tokens()
+                        && r.as_ref().map(|r| r.matches(res)).unwrap_or(true)
+                        && (m.current() || interest_id.is_none())
+                })
                 .cloned()
-                .collect::<Vec<(Option<Arc<Resource>>, InterestOptions)>>();
+                .collect::<Vec<(Option<Arc<Resource>>, InterestMode, InterestOptions)>>();
 
-            for (int_res, options) in matching_interests {
+            for (int_res, _, options) in matching_interests {
                 let res = if options.aggregate() {
                     int_res.as_ref().unwrap_or(res)
                 } else {
@@ -125,6 +130,7 @@ fn propagate_simple_token(
     tables: &mut Tables,
     res: &Arc<Resource>,
     src_face: &mut Arc<FaceState>,
+    interest_id: Option<InterestId>,
     send_declare: &mut SendDeclare,
 ) {
     for mut dst_face in tables
@@ -133,7 +139,14 @@ fn propagate_simple_token(
         .cloned()
         .collect::<Vec<Arc<FaceState>>>()
     {
-        propagate_simple_token_to(tables, &mut dst_face, res, src_face, send_declare);
+        propagate_simple_token_to(
+            tables,
+            &mut dst_face,
+            res,
+            src_face,
+            interest_id,
+            send_declare,
+        );
     }
 }
 
@@ -174,25 +187,27 @@ fn declare_simple_token(
 ) {
     if let Some(interest_id) = interest_id {
         if let Some((interest, _)) = face.pending_current_interests.get(&interest_id) {
-            let wire_expr = Resource::get_best_key(res, "", interest.src_face.id);
-            send_declare(
-                &interest.src_face.primitives,
-                RoutingContext::with_expr(
-                    Declare {
-                        interest_id: Some(interest.src_interest_id),
-                        ext_qos: ext::QoSType::default(),
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::default(),
-                        body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
-                    },
-                    res.expr(),
-                ),
-            )
+            if interest.mode == InterestMode::Current {
+                let wire_expr = Resource::get_best_key(res, "", interest.src_face.id);
+                send_declare(
+                    &interest.src_face.primitives,
+                    RoutingContext::with_expr(
+                        Declare {
+                            interest_id: Some(interest.src_interest_id),
+                            ext_qos: ext::QoSType::default(),
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::default(),
+                            body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
+                        },
+                        res.expr(),
+                    ),
+                );
+                return;
+            }
         }
-    } else {
-        register_simple_token(tables, face, id, res);
-        propagate_simple_token(tables, res, face, send_declare);
     }
+    register_simple_token(tables, face, id, res);
+    propagate_simple_token(tables, res, face, interest_id, send_declare);
 }
 
 #[inline]
@@ -241,7 +256,7 @@ fn propagate_forget_simple_token(
                 ),
             );
         } else if src_face.id != face.id
-            && face_hat!(face).remote_interests.values().any(|(r, o)| {
+            && face_hat!(face).remote_interests.values().any(|(r, _, o)| {
                 o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true) && !o.aggregate()
             })
         {
@@ -293,7 +308,7 @@ fn propagate_forget_simple_token(
                             res.expr(),
                         ),
                     );
-                } else if face_hat!(face).remote_interests.values().any(|(r, o)| {
+                } else if face_hat!(face).remote_interests.values().any(|(r, _, o)| {
                     o.tokens()
                         && r.as_ref().map(|r| r.matches(&res)).unwrap_or(true)
                         && !o.aggregate()
@@ -432,7 +447,7 @@ pub(super) fn token_new_face(
             .collect::<Vec<Arc<FaceState>>>()
         {
             for token in face_hat!(src_face.clone()).remote_tokens.values() {
-                propagate_simple_token_to(tables, face, token, &mut src_face, send_declare);
+                propagate_simple_token_to(tables, face, token, &mut src_face, None, send_declare);
             }
         }
     }
@@ -463,7 +478,7 @@ pub(crate) fn declare_token_interest(
     send_declare: &mut SendDeclare,
 ) {
     if mode.current() {
-        let interest_id = (!mode.future()).then_some(id);
+        let interest_id = Some(id);
         if let Some(res) = res.as_ref() {
             if aggregate {
                 if tables.faces.values().any(|src_face| {

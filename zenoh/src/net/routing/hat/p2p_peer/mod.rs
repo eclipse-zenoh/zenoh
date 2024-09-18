@@ -33,7 +33,7 @@ use zenoh_protocol::{
             queryable::ext::QueryableInfoType,
             QueryableId, SubscriberId, TokenId,
         },
-        interest::{InterestId, InterestOptions},
+        interest::{InterestId, InterestMode, InterestOptions},
         oam::id::OAM_LINKSTATE,
         Declare, DeclareBody, DeclareFinal, Oam,
     },
@@ -406,7 +406,7 @@ impl HatContext {
 
 struct HatFace {
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
-    remote_interests: HashMap<InterestId, (Option<Arc<Resource>>, InterestOptions)>,
+    remote_interests: HashMap<InterestId, (Option<Arc<Resource>>, InterestMode, InterestOptions)>,
     local_subs: HashMap<Arc<Resource>, SubscriberId>,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
     local_tokens: HashMap<Arc<Resource>, TokenId>,

@@ -118,25 +118,27 @@ fn declare_simple_token(
 ) {
     if let Some(interest_id) = interest_id {
         if let Some((interest, _)) = face.pending_current_interests.get(&interest_id) {
-            let wire_expr = Resource::get_best_key(res, "", interest.src_face.id);
-            send_declare(
-                &interest.src_face.primitives,
-                RoutingContext::with_expr(
-                    Declare {
-                        interest_id: Some(interest.src_interest_id),
-                        ext_qos: ext::QoSType::default(),
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::default(),
-                        body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
-                    },
-                    res.expr(),
-                ),
-            )
+            if interest.mode == InterestMode::Current {
+                let wire_expr = Resource::get_best_key(res, "", interest.src_face.id);
+                send_declare(
+                    &interest.src_face.primitives,
+                    RoutingContext::with_expr(
+                        Declare {
+                            interest_id: Some(interest.src_interest_id),
+                            ext_qos: ext::QoSType::default(),
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::default(),
+                            body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
+                        },
+                        res.expr(),
+                    ),
+                );
+                return;
+            }
         }
-    } else {
-        register_simple_token(tables, face, id, res);
-        propagate_simple_token(tables, res, face, send_declare);
     }
+    register_simple_token(tables, face, id, res);
+    propagate_simple_token(tables, res, face, send_declare);
 }
 
 #[inline]

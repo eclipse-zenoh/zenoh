@@ -46,6 +46,7 @@ static INTEREST_TIMEOUT_MS: u64 = 10000;
 pub(crate) struct CurrentInterest {
     pub(crate) src_face: Arc<FaceState>,
     pub(crate) src_interest_id: InterestId,
+    pub(crate) mode: InterestMode,
 }
 
 pub(crate) fn declare_final(
