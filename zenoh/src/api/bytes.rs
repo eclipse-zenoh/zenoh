@@ -14,8 +14,8 @@
 
 //! ZBytes primitives.
 use std::{
-    borrow::Cow, collections::HashMap, convert::Infallible, fmt::Debug, marker::PhantomData,
-    str::Utf8Error, string::FromUtf8Error, sync::Arc,
+    borrow::Cow, collections::HashMap, convert::Infallible, error::Error, fmt::Debug,
+    marker::PhantomData, str::Utf8Error, string::FromUtf8Error, sync::Arc,
 };
 
 use uhlc::Timestamp;
@@ -718,12 +718,31 @@ where
 #[derive(Clone, Copy, Debug)]
 pub struct ZSerde;
 
-#[derive(Debug, Clone, Copy)]
-pub struct ZDeserializeError;
+#[derive(Debug, Clone, Default)]
+pub struct ZDeserializeError {
+    cause: Option<String>,
+}
+
+impl ZDeserializeError {
+    fn with_message(cause: &str) -> Self {
+        ZDeserializeError {
+            cause: Some(cause.to_string()),
+        }
+    }
+
+    fn with_context<E: Error>(cause: E) -> Self {
+        ZDeserializeError {
+            cause: Some(cause.to_string()),
+        }
+    }
+}
 
 impl std::fmt::Display for ZDeserializeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Deserialize error")
+        match &self.cause {
+            Some(cause) => write!(f, "deserialization error: {cause}"),
+            None => f.write_str("deserialization error"),
+        }
     }
 }
 
@@ -966,11 +985,13 @@ impl<const N: usize> Deserialize<[u8; N]> for ZSerde {
         use std::io::Read;
 
         if v.0.len() != N {
-            return Err(ZDeserializeError);
+            return Err(ZDeserializeError::default());
         }
         let mut dst = [0u8; N];
         let mut reader = v.reader();
-        reader.read_exact(&mut dst).map_err(|_| ZDeserializeError)?;
+        reader
+            .read_exact(&mut dst)
+            .map_err(ZDeserializeError::with_context)?;
         Ok(dst)
     }
 }
@@ -1425,10 +1446,10 @@ macro_rules! impl_num {
                 let mut r = v.reader();
                 let mut bs = (0 as $t).to_le_bytes();
                 if v.len() > bs.len() {
-                    return Err(ZDeserializeError);
+                    return Err(ZDeserializeError::default());
                 }
                 r.read_exact(&mut bs[..v.len()])
-                    .map_err(|_| ZDeserializeError)?;
+                    .map_err(ZDeserializeError::with_context)?;
                 let t = <$t>::from_le_bytes(bs);
                 Ok(t)
             }
@@ -1530,11 +1551,11 @@ impl Deserialize<bool> for ZSerde {
     type Error = ZDeserializeError;
 
     fn deserialize(self, v: Self::Input<'_>) -> Result<bool, Self::Error> {
-        let p = v.deserialize::<u8>().map_err(|_| ZDeserializeError)?;
+        let p = v.deserialize::<u8>()?;
         match p {
             0 => Ok(false),
             1 => Ok(true),
-            _ => Err(ZDeserializeError),
+            _ => Err(ZDeserializeError::default()),
         }
     }
 }
@@ -1614,7 +1635,7 @@ impl Deserialize<char> for ZSerde {
 
     fn deserialize(self, v: Self::Input<'_>) -> Result<char, Self::Error> {
         let c = v.deserialize::<u32>()?;
-        let c = char::try_from(c).map_err(|_| ZDeserializeError)?;
+        let c = char::try_from(c).map_err(ZDeserializeError::with_context)?;
         Ok(c)
     }
 }
@@ -1694,7 +1715,7 @@ impl<'a> Deserialize<Parameters<'a>> for ZSerde {
     fn deserialize(self, v: Self::Input<'a>) -> Result<Parameters<'a>, Self::Error> {
         let s = v
             .deserialize::<Cow<'a, str>>()
-            .map_err(|_| ZDeserializeError)?;
+            .map_err(ZDeserializeError::with_context)?;
         Ok(Parameters::from(s))
     }
 }
@@ -1703,7 +1724,9 @@ impl TryFrom<ZBytes> for Parameters<'static> {
     type Error = ZDeserializeError;
 
     fn try_from(v: ZBytes) -> Result<Self, Self::Error> {
-        let s = v.deserialize::<Cow<str>>().map_err(|_| ZDeserializeError)?;
+        let s = v
+            .deserialize::<Cow<str>>()
+            .map_err(ZDeserializeError::with_context)?;
         Ok(Parameters::from(s.into_owned()))
     }
 }
@@ -1778,18 +1801,20 @@ impl From<&mut Timestamp> for ZBytes {
 
 impl Deserialize<Timestamp> for ZSerde {
     type Input<'a> = &'a ZBytes;
-    type Error = zenoh_buffers::reader::DidntRead;
+    type Error = ZDeserializeError;
 
     fn deserialize(self, v: Self::Input<'_>) -> Result<Timestamp, Self::Error> {
         let codec = Zenoh080::new();
         let mut reader = v.0.reader();
-        let e: Timestamp = codec.read(&mut reader)?;
+        let e: Timestamp = codec
+            .read(&mut reader)
+            .map_err(|_| ZDeserializeError::with_message("codec error"))?;
         Ok(e)
     }
 }
 
 impl TryFrom<ZBytes> for Timestamp {
-    type Error = zenoh_buffers::reader::DidntRead;
+    type Error = ZDeserializeError;
 
     fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(&value)
@@ -1797,7 +1822,7 @@ impl TryFrom<ZBytes> for Timestamp {
 }
 
 impl TryFrom<&ZBytes> for Timestamp {
-    type Error = zenoh_buffers::reader::DidntRead;
+    type Error = ZDeserializeError;
 
     fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(value)
@@ -1805,7 +1830,7 @@ impl TryFrom<&ZBytes> for Timestamp {
 }
 
 impl TryFrom<&mut ZBytes> for Timestamp {
-    type Error = zenoh_buffers::reader::DidntRead;
+    type Error = ZDeserializeError;
 
     fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(&*value)
@@ -1867,18 +1892,20 @@ impl From<&mut Encoding> for ZBytes {
 
 impl Deserialize<Encoding> for ZSerde {
     type Input<'a> = &'a ZBytes;
-    type Error = zenoh_buffers::reader::DidntRead;
+    type Error = ZDeserializeError;
 
     fn deserialize(self, v: Self::Input<'_>) -> Result<Encoding, Self::Error> {
         let codec = Zenoh080::new();
         let mut reader = v.0.reader();
-        let e: EncodingProto = codec.read(&mut reader)?;
+        let e: EncodingProto = codec
+            .read(&mut reader)
+            .map_err(|_| ZDeserializeError::with_message("codec error"))?;
         Ok(e.into())
     }
 }
 
 impl TryFrom<ZBytes> for Encoding {
-    type Error = zenoh_buffers::reader::DidntRead;
+    type Error = ZDeserializeError;
 
     fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(&value)
@@ -1886,7 +1913,7 @@ impl TryFrom<ZBytes> for Encoding {
 }
 
 impl TryFrom<&ZBytes> for Encoding {
-    type Error = zenoh_buffers::reader::DidntRead;
+    type Error = ZDeserializeError;
 
     fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(value)
@@ -1894,7 +1921,7 @@ impl TryFrom<&ZBytes> for Encoding {
 }
 
 impl TryFrom<&mut ZBytes> for Encoding {
-    type Error = zenoh_buffers::reader::DidntRead;
+    type Error = ZDeserializeError;
 
     fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
         ZSerde.deserialize(&*value)
@@ -2446,7 +2473,7 @@ impl<'a> Deserialize<&'a zshm> for ZSerde {
                 return Ok(shmb.into());
             }
         }
-        Err(ZDeserializeError)
+        Err(ZDeserializeError::default())
     }
 }
 
@@ -2482,7 +2509,7 @@ impl<'a> Deserialize<&'a mut zshm> for ZSerde {
                 return Ok(shmb.into());
             }
         }
-        Err(ZDeserializeError)
+        Err(ZDeserializeError::default())
     }
 }
 
@@ -2497,10 +2524,10 @@ impl<'a> Deserialize<&'a mut zshmmut> for ZSerde {
         if let Some(zs) = zslices.next() {
             // SAFETY: ShmBufInner cannot change the size of the slice
             if let Some(shmb) = unsafe { zs.downcast_mut::<ShmBufInner>() } {
-                return shmb.try_into().map_err(|_| ZDeserializeError);
+                return shmb.try_into().map_err(|_| ZDeserializeError::default());
             }
         }
-        Err(ZDeserializeError)
+        Err(ZDeserializeError::default())
     }
 }
 
