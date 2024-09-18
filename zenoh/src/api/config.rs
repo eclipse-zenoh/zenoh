@@ -190,7 +190,9 @@ impl Notifier<Config> {
     }
 
     pub fn insert_json5(&self, key: &str, value: &str) -> ZResult<()> {
-        self.lock_config().insert_json5(key, value)
+        self.lock_config().insert_json5(key, value)?;
+        self.notify(key);
+        Ok(())
     }
 
     #[allow(dead_code)]
