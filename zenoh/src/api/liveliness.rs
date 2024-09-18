@@ -52,7 +52,7 @@ use crate::api::session::WeakSession;
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let liveliness = session
 ///     .liveliness()
 ///     .declare_token("key/expression")
@@ -66,7 +66,7 @@ use crate::api::session::WeakSession;
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let replies = session.liveliness().get("key/**").await.unwrap();
 /// while let Ok(reply) = replies.recv_async().await {
 ///     if let Ok(sample) = reply.result() {
@@ -82,7 +82,7 @@ use crate::api::session::WeakSession;
 /// # async fn main() {
 /// use zenoh::sample::SampleKind;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let subscriber = session.liveliness().declare_subscriber("key/**").await.unwrap();
 /// while let Ok(sample) = subscriber.recv_async().await {
 ///     match sample.kind() {
@@ -110,7 +110,7 @@ impl<'a> Liveliness<'a> {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let liveliness = session
     ///     .liveliness()
     ///     .declare_token("key/expression")
@@ -145,7 +145,7 @@ impl<'a> Liveliness<'a> {
     /// # async fn main() {
     /// use zenoh::sample::SampleKind;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let subscriber = session.liveliness().declare_subscriber("key/expression").await.unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
     ///     match sample.kind() {
@@ -184,7 +184,7 @@ impl<'a> Liveliness<'a> {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let replies = session.liveliness().get("key/expression").await.unwrap();
     /// while let Ok(reply) = replies.recv_async().await {
     ///     if let Ok(sample) = reply.result() {
@@ -223,7 +223,7 @@ impl<'a> Liveliness<'a> {
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let liveliness = session
 ///     .liveliness()
 ///     .declare_token("key/expression")
@@ -295,7 +295,7 @@ pub(crate) struct LivelinessTokenState {
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let liveliness = session
 ///     .liveliness()
 ///     .declare_token("key/expression")
@@ -304,6 +304,7 @@ pub(crate) struct LivelinessTokenState {
 /// # }
 /// ```
 #[zenoh_macros::unstable]
+#[must_use = "Liveliness tokens will be immediately dropped and undeclared if not bound to a variable"]
 #[derive(Debug)]
 pub struct LivelinessToken {
     session: WeakSession,
@@ -318,7 +319,7 @@ pub struct LivelinessToken {
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let liveliness = session
 ///     .liveliness()
 ///     .declare_token("key/expression")
@@ -363,7 +364,7 @@ impl LivelinessToken {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let liveliness = session
     ///     .liveliness()
     ///     .declare_token("key/expression")
@@ -412,7 +413,7 @@ impl Drop for LivelinessToken {
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let subscriber = session
 ///     .liveliness()
 ///     .declare_subscriber("key/expression")
@@ -446,7 +447,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let subscriber = session
     ///     .liveliness()
     ///     .declare_subscriber("key/expression")
@@ -480,7 +481,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let mut n = 0;
     /// let subscriber = session
     ///     .liveliness()
@@ -509,7 +510,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let subscriber = session
     ///     .liveliness()
     ///     .declare_subscriber("key/expression")
@@ -631,7 +632,7 @@ where
 /// # async fn main() {
 /// # use std::convert::TryFrom;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let tokens = session
 ///     .liveliness()
 ///     .get("key/expression")
@@ -662,7 +663,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let queryable = session
     ///     .liveliness()
     ///     .get("key/expression")
@@ -689,7 +690,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let mut n = 0;
     /// let queryable = session
     ///     .liveliness()
@@ -717,7 +718,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let replies = session
     ///     .liveliness()
     ///     .get("key/expression")

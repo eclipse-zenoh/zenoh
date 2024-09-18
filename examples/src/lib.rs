@@ -3,7 +3,7 @@
 //! Check ../README.md for usage.
 //!
 
-use zenoh::config::Config;
+use zenoh::{config::WhatAmI, Config};
 
 #[derive(clap::ValueEnum, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Wai {
@@ -59,9 +59,9 @@ impl From<&CommonArgs> for Config {
             None => Config::default(),
         };
         match args.mode {
-            Some(Wai::Peer) => config.set_mode(Some(zenoh::config::WhatAmI::Peer)),
-            Some(Wai::Client) => config.set_mode(Some(zenoh::config::WhatAmI::Client)),
-            Some(Wai::Router) => config.set_mode(Some(zenoh::config::WhatAmI::Router)),
+            Some(Wai::Peer) => config.set_mode(Some(WhatAmI::Peer)),
+            Some(Wai::Client) => config.set_mode(Some(WhatAmI::Client)),
+            Some(Wai::Router) => config.set_mode(Some(WhatAmI::Router)),
             None => Ok(None),
         }
         .unwrap();

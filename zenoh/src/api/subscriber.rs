@@ -69,7 +69,7 @@ pub(crate) struct SubscriberInner {
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
 ///     .await
@@ -106,7 +106,7 @@ impl<Handler> IntoFuture for SubscriberUndeclaration<Handler> {
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
 ///     .await
@@ -156,7 +156,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
     ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr(), sample.payload()); })
@@ -185,7 +185,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let mut n = 0;
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
@@ -212,7 +212,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
     ///     .with(flume::bounded(32))
@@ -364,7 +364,7 @@ where
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// session
 ///     .declare_subscriber("key/expression")
 ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr(), sample.payload()) })
@@ -379,7 +379,7 @@ where
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
 ///     .with(flume::bounded(32))
@@ -406,7 +406,7 @@ impl<Handler> Subscriber<Handler> {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let subscriber = session.declare_subscriber("key/expression")
     ///     .await
     ///     .unwrap();
@@ -448,7 +448,7 @@ impl<Handler> Subscriber<Handler> {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let subscriber = session.declare_subscriber("key/expression")
     ///     .await
     ///     .unwrap();
