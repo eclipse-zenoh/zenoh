@@ -4105,3 +4105,388 @@ async fn test_liveliness_subget_router_history_middle() {
     router_subget.close().await.unwrap();
     router.close().await.unwrap();
 }
+
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_liveliness_regression_1() {
+    use std::time::Duration;
+
+    use zenoh::{config, sample::SampleKind};
+    use zenoh_config::WhatAmI;
+    use zenoh_link::EndPoint;
+
+    const TIMEOUT: Duration = Duration::from_secs(60);
+    const SLEEP: Duration = Duration::from_secs(1);
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:47503";
+    const PEER_TOK_ENDPOINT: &str = "tcp/localhost:47504";
+    const LIVELINESS_KEYEXPR: &str = "test/liveliness/regression/1";
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let router = {
+        let mut c = config::default();
+        c.listen
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router ZID: {}", s.zid());
+        s
+    };
+
+    let peer_tok = {
+        let mut c = config::default();
+        c.listen
+            .endpoints
+            .set(vec![PEER_TOK_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (token) ZID: {}", s.zid());
+        s
+    };
+
+    let token = ztimeout!(peer_tok.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let peer_sub = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![
+                ROUTER_ENDPOINT.parse::<EndPoint>().unwrap(),
+                PEER_TOK_ENDPOINT.parse::<EndPoint>().unwrap(),
+            ])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (sub) ZID: {}", s.zid());
+        s
+    };
+
+    let sub = ztimeout!(peer_sub.liveliness().declare_subscriber(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    assert!(sub.try_recv().is_err());
+
+    token.undeclare().await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Delete);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    peer_tok.close().await.unwrap();
+    peer_sub.close().await.unwrap();
+    router.close().await.unwrap();
+}
+
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_liveliness_regression_2() {
+    use std::time::Duration;
+
+    use zenoh::{config, sample::SampleKind};
+    use zenoh_config::WhatAmI;
+    use zenoh_link::EndPoint;
+
+    const TIMEOUT: Duration = Duration::from_secs(60);
+    const SLEEP: Duration = Duration::from_secs(1);
+    const PEER_TOK1_ENDPOINT: &str = "tcp/localhost:47505";
+    const PEER_SUB_ENDPOINT: &str = "tcp/localhost:47506";
+    const LIVELINESS_KEYEXPR: &str = "test/liveliness/regression/2";
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let peer_tok1 = {
+        let mut c = config::default();
+        c.listen
+            .endpoints
+            .set(vec![PEER_TOK1_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (token 1) ZID: {}", s.zid());
+        s
+    };
+
+    let token1 = ztimeout!(peer_tok1.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let peer_sub = {
+        let mut c = config::default();
+        c.listen
+            .endpoints
+            .set(vec![PEER_SUB_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.connect
+            .endpoints
+            .set(vec![PEER_TOK1_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (sub) ZID: {}", s.zid());
+        s
+    };
+
+    let sub = ztimeout!(peer_sub.liveliness().declare_subscriber(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    assert!(sub.try_recv().is_err());
+
+    let peer_tok2 = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![
+                PEER_TOK1_ENDPOINT.parse::<EndPoint>().unwrap(),
+                PEER_SUB_ENDPOINT.parse::<EndPoint>().unwrap(),
+            ])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (token 2) ZID: {}", s.zid());
+        s
+    };
+
+    let token2 = ztimeout!(peer_tok2.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    assert!(sub.try_recv().is_err());
+
+    token1.undeclare().await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    assert!(sub.try_recv().is_err());
+
+    token2.undeclare().await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Delete);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    peer_tok1.close().await.unwrap();
+    peer_tok2.close().await.unwrap();
+    peer_sub.close().await.unwrap();
+}
+
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_liveliness_regression_2_history() {
+    use std::time::Duration;
+
+    use zenoh::{config, sample::SampleKind};
+    use zenoh_config::WhatAmI;
+    use zenoh_link::EndPoint;
+
+    const TIMEOUT: Duration = Duration::from_secs(60);
+    const SLEEP: Duration = Duration::from_secs(1);
+    const PEER_TOK1_ENDPOINT: &str = "tcp/localhost:47506";
+    const PEER_SUB_ENDPOINT: &str = "tcp/localhost:47507";
+    const LIVELINESS_KEYEXPR: &str = "test/liveliness/regression/2/history";
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let peer_tok1 = {
+        let mut c = config::default();
+        c.listen
+            .endpoints
+            .set(vec![PEER_TOK1_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (token 1) ZID: {}", s.zid());
+        s
+    };
+
+    let token1 = ztimeout!(peer_tok1.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let peer_sub = {
+        let mut c = config::default();
+        c.listen
+            .endpoints
+            .set(vec![PEER_SUB_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.connect
+            .endpoints
+            .set(vec![PEER_TOK1_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (sub) ZID: {}", s.zid());
+        s
+    };
+
+    let sub = ztimeout!(peer_sub
+        .liveliness()
+        .declare_subscriber(LIVELINESS_KEYEXPR)
+        .history(true))
+    .unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    let peer_tok2 = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![
+                PEER_TOK1_ENDPOINT.parse::<EndPoint>().unwrap(),
+                PEER_SUB_ENDPOINT.parse::<EndPoint>().unwrap(),
+            ])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (token 2) ZID: {}", s.zid());
+        s
+    };
+
+    let token2 = ztimeout!(peer_tok2.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    assert!(sub.try_recv().is_err());
+
+    token1.undeclare().await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    assert!(sub.try_recv().is_err());
+
+    token2.undeclare().await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Delete);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    peer_tok1.close().await.unwrap();
+    peer_tok2.close().await.unwrap();
+    peer_sub.close().await.unwrap();
+}
+
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_liveliness_regression_3() {
+    use std::time::Duration;
+
+    use zenoh::{config, sample::SampleKind};
+    use zenoh_config::WhatAmI;
+    use zenoh_link::EndPoint;
+
+    const TIMEOUT: Duration = Duration::from_secs(60);
+    const SLEEP: Duration = Duration::from_secs(1);
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:47508";
+    const PEER_TOK_ENDPOINT: &str = "tcp/localhost:47509";
+    const LIVELINESS_KEYEXPR: &str = "test/liveliness/regression/3";
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let router = {
+        let mut c = config::default();
+        c.listen
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router ZID: {}", s.zid());
+        s
+    };
+
+    let peer_tok1 = {
+        let mut c = config::default();
+        c.listen
+            .endpoints
+            .set(vec![PEER_TOK_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (token 1) ZID: {}", s.zid());
+        s
+    };
+
+    let token1 = ztimeout!(peer_tok1.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let client_tok2 = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Client (token 2) ZID: {}", s.zid());
+        s
+    };
+
+    let token2 = ztimeout!(client_tok2.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let peer_sub = {
+        let mut c = config::default();
+        c.connect
+            .endpoints
+            .set(vec![
+                ROUTER_ENDPOINT.parse::<EndPoint>().unwrap(),
+                PEER_TOK_ENDPOINT.parse::<EndPoint>().unwrap(),
+            ])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (sub) ZID: {}", s.zid());
+        s
+    };
+
+    let sub = ztimeout!(peer_sub.liveliness().declare_subscriber(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    assert!(sub.try_recv().is_err());
+
+    token1.undeclare().await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    assert!(sub.try_recv().is_err());
+
+    token2.undeclare().await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Delete);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+    assert!(sub.try_recv().is_err());
+
+    peer_tok1.close().await.unwrap();
+    client_tok2.close().await.unwrap();
+    peer_sub.close().await.unwrap();
+    router.close().await.unwrap();
+}
