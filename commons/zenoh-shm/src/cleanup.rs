@@ -12,8 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use signal_hook::{consts::signal::*, SigId};
 use static_init::dynamic;
+use zenoh_core::zerror;
 
 /// A global cleanup, that is guaranteed to be dropped at normal program exit and that will
 /// execute all registered cleanup routines at this moment
@@ -23,34 +23,29 @@ pub(crate) static mut CLEANUP: Cleanup = Cleanup::new();
 /// An RAII object that calls all registered routines upon destruction
 pub(crate) struct Cleanup {
     cleanups: lockfree::queue::Queue<Option<Box<dyn FnOnce() + Send>>>,
-    handlers: Vec<SigId>,
 }
 
 impl Cleanup {
     fn new() -> Self {
-        // todo: this is a workaround to make sure Cleanup will be executed even if process terminates via signal handlers
-        // that execute std::terminate instead of exit
-        let mut handlers: Vec<SigId> = Default::default();
-        for signal in [
-            #[cfg(not(target_os = "windows"))]
-            SIGHUP,
-            SIGTERM,
-            SIGINT,
-            #[cfg(not(target_os = "windows"))]
-            SIGQUIT,
-        ] {
-            if let Ok(sigid) = unsafe {
-                signal_hook::low_level::register(signal, || {
-                    std::process::exit(0);
-                })
-            } {
-                handlers.push(sigid);
+        // todo: this is a workaround to make sure Cleanup will be executed even if process terminates via signals
+        if let Err(e) = ctrlc::set_handler(|| std::process::exit(0)) {
+            match e {
+                ctrlc::Error::NoSuchSignal(signal_type) => {
+                    zerror!(
+                        "Error registering cleanup handler for signal {:?}: no such signal!",
+                        signal_type
+                    );
+                }
+                ctrlc::Error::MultipleHandlers => {
+                    zerror!("Error registering cleanup handler: already registered!");
+                }
+                ctrlc::Error::System(error) => {
+                    zerror!("Error registering cleanup handler: system error: {error}");
+                }
             }
         }
-
         Self {
             cleanups: Default::default(),
-            handlers,
         }
     }
 
@@ -69,9 +64,6 @@ impl Cleanup {
 
 impl Drop for Cleanup {
     fn drop(&mut self) {
-        for handler in &self.handlers {
-            signal_hook::low_level::unregister(*handler);
-        }
         self.cleanup();
     }
 }

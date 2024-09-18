@@ -162,7 +162,7 @@ stabby = "36.1.1"
 sha3 = "0.10.8"
 shared_memory = "0.12.4"
 shellexpand = "3.1.0"
-signal-hook = { version = "0.3.17", default-features = false }
+ctrlc = { version = "3.4.5" }
 socket2 = { version = "0.5.7", features = ["all"] }
 stop-token = "0.7.0"
 syn = "2.0"
