@@ -30,7 +30,8 @@ use super::{
     publisher::Priority, value::Value,
 };
 
-pub type SourceSn = u64;
+/// The sequence number of the [`Sample`] from the source.
+pub type SourceSn = u32;
 
 /// The locality of samples to be received by subscribers or targeted by publishers.
 #[zenoh_macros::unstable]
@@ -152,10 +153,23 @@ impl DataInfoIntoSample for Option<DataInfo> {
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone)]
 pub struct SourceInfo {
+    pub(crate) source_id: Option<EntityGlobalId>,
+    pub(crate) source_sn: Option<SourceSn>,
+}
+
+#[zenoh_macros::unstable]
+impl SourceInfo {
+    #[zenoh_macros::unstable]
     /// The [`EntityGlobalId`] of the zenoh entity that published the concerned [`Sample`].
-    pub source_id: Option<EntityGlobalId>,
+    pub fn source_id(&self) -> Option<&EntityGlobalId> {
+        self.source_id.as_ref()
+    }
+
+    #[zenoh_macros::unstable]
     /// The sequence number of the [`Sample`] from the source.
-    pub source_sn: Option<SourceSn>,
+    pub fn source_sn(&self) -> Option<SourceSn> {
+        self.source_sn
+    }
 }
 
 #[test]
@@ -167,8 +181,9 @@ fn source_info_stack_size() {
 
     assert_eq!(std::mem::size_of::<ZenohIdProto>(), 16);
     assert_eq!(std::mem::size_of::<Option<ZenohIdProto>>(), 17);
-    assert_eq!(std::mem::size_of::<Option<SourceSn>>(), 16);
-    assert_eq!(std::mem::size_of::<SourceInfo>(), 17 + 16 + 7);
+    assert_eq!(std::mem::size_of::<Option<SourceSn>>(), 8);
+    assert_eq!(std::mem::size_of::<Option<EntityGlobalId>>(), 24);
+    assert_eq!(std::mem::size_of::<SourceInfo>(), 24 + 8);
 }
 
 #[zenoh_macros::unstable]
@@ -192,7 +207,7 @@ impl From<SourceInfo> for Option<zenoh_protocol::zenoh::put::ext::SourceInfoType
         } else {
             Some(zenoh_protocol::zenoh::put::ext::SourceInfoType {
                 id: source_info.source_id.unwrap_or_default().into(),
-                sn: source_info.source_sn.unwrap_or_default() as u32,
+                sn: source_info.source_sn.unwrap_or_default(),
             })
         }
     }

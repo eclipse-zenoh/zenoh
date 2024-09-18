@@ -633,7 +633,7 @@ where
 /// use zenoh::Wait;
 /// use zenoh_ext::*;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expr")
 ///     .fetching( |cb| {
@@ -777,7 +777,7 @@ impl<Handler> FetchingSubscriber<Handler> {
     /// use zenoh::Wait;
     /// use zenoh_ext::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let mut subscriber = session
     ///     .declare_subscriber("key/expr")
     ///     .fetching( |cb| {
@@ -855,7 +855,7 @@ impl Drop for RepliesHandler {
 /// # use zenoh::Wait;
 /// # use zenoh_ext::*;
 /// #
-/// # let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// # let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// # let mut fetching_subscriber = session
 /// #     .declare_subscriber("key/expr")
 /// #     .fetching( |cb| {

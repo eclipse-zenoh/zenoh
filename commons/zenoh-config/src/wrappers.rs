@@ -20,7 +20,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, EntityGlobalIdProto, EntityId, Locator, WhatAmI, ZenohIdProto},
+    core::{key_expr::OwnedKeyExpr, EntityGlobalIdProto, Locator, WhatAmI, ZenohIdProto},
     scouting::HelloProto,
 };
 
@@ -143,15 +143,21 @@ impl fmt::Display for Hello {
     }
 }
 
+/// The ID globally identifying an entity in a zenoh system.
 #[derive(Default, Copy, Clone, Eq, Hash, PartialEq)]
 #[repr(transparent)]
 pub struct EntityGlobalId(EntityGlobalIdProto);
 
+/// The ID to locally identify an entity in a Zenoh session.
+pub type EntityId = u32;
+
 impl EntityGlobalId {
+    /// Returns the [`ZenohId`], i.e. the Zenoh session, this ID is associated to.
     pub fn zid(&self) -> ZenohId {
         self.0.zid.into()
     }
 
+    /// Returns the [`EntityId`] used to identify the entity in a Zenoh session.
     pub fn eid(&self) -> EntityId {
         self.0.eid
     }

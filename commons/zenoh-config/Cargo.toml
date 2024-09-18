@@ -28,7 +28,6 @@ internal = []
 
 [dependencies]
 tracing = { workspace = true }
-flume = { workspace = true }
 json5 = { workspace = true }
 num_cpus = { workspace = true }
 serde = { workspace = true, features = ["default"] }

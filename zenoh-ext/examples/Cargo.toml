@@ -39,6 +39,7 @@ clap = { workspace = true, features = ["derive"] }
 zenoh-ext = { workspace = true }
 
 [dev-dependencies]
+zenoh-config = { workspace = true }
 
 [[example]]
 name = "z_query_sub"

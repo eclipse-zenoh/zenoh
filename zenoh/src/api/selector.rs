@@ -57,16 +57,25 @@ use super::{key_expr::KeyExpr, queryable::Query};
 ///   this parameter must be readable by the [Zenoh Time DSL](zenoh_util::time_range::TimeRange) for the value to be considered valid.
 /// - **`[unstable]`** `_anyke`: used in queries to express interest in replies coming from any key expression. By default, only replies
 ///   whose key expression match query's key expression are accepted. `_anyke` disables the query-reply key expression matching check.
-#[non_exhaustive]
 #[derive(Clone, PartialEq, Eq)]
 pub struct Selector<'a> {
     /// The part of this selector identifying which keys should be part of the selection.
-    pub key_expr: Cow<'a, KeyExpr<'a>>,
+    pub(crate) key_expr: Cow<'a, KeyExpr<'a>>,
     /// the part of this selector identifying which values should be part of the selection.
-    pub parameters: Cow<'a, Parameters<'a>>,
+    pub(crate) parameters: Cow<'a, Parameters<'a>>,
 }
 
 impl<'a> Selector<'a> {
+    /// Get the [`KeyExpr`] of this selector.
+    pub fn key_expr(&'a self) -> &'a KeyExpr<'a> {
+        &self.key_expr
+    }
+
+    /// Get the [`KeyExpr`] of this selector.
+    pub fn parameters(&'a self) -> &'a Parameters<'a> {
+        &self.parameters
+    }
+
     /// Builds a new selector which owns keyexpr and parameters
     pub fn owned<K, P>(key_expr: K, parameters: P) -> Self
     where

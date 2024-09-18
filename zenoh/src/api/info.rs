@@ -29,7 +29,7 @@ use crate::net::runtime::Runtime;
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let zid = session.info().zid().await;
 /// # }
 /// ```
@@ -66,7 +66,7 @@ impl<'a> IntoFuture for ZenohIdBuilder<'a> {
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let mut routers_zid = session.info().routers_zid().await;
 /// while let Some(router_zid) = routers_zid.next() {}
 /// # }
@@ -113,7 +113,7 @@ impl<'a> IntoFuture for RoutersZenohIdBuilder<'a> {
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let zid = session.info().zid().await;
 /// let mut peers_zid = session.info().peers_zid().await;
 /// while let Some(peer_zid) = peers_zid.next() {}
@@ -161,7 +161,7 @@ impl<'a> IntoFuture for PeersZenohIdBuilder<'a> {
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let info = session.info();
 /// let zid = info.zid().await;
 /// # }
@@ -178,7 +178,7 @@ impl SessionInfo {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let zid = session.info().zid().await;
     /// # }
     /// ```
@@ -196,7 +196,7 @@ impl SessionInfo {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let mut routers_zid = session.info().routers_zid().await;
     /// while let Some(router_zid) = routers_zid.next() {}
     /// # }
@@ -214,7 +214,7 @@ impl SessionInfo {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let mut peers_zid = session.info().peers_zid().await;
     /// while let Some(peer_zid) = peers_zid.next() {}
     /// # }
