@@ -153,7 +153,7 @@ pub fn unstable_doc(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
 
     if attrs.iter().any(is_doc_attribute) {
         let mut pushed = false;
-        let oldattrs = attrs.drain(..).collect::<Vec<Attribute>>();
+        let oldattrs = std::mem::take(attrs);
         for attr in oldattrs {
             if is_doc_attribute(&attr) && !pushed {
                 attrs.push(attr);
