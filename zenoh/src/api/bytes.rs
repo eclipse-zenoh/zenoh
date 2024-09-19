@@ -235,6 +235,7 @@ impl ZBytes {
     }
 
     /// Create a [`ZBytes`] from any type `T` that implements [`Into<ZBuf>`].
+    #[doc(hidden)]
     pub fn new<T>(t: T) -> Self
     where
         T: Into<ZBuf>,
@@ -862,6 +863,7 @@ impl Deserialize<ZBytes> for ZSerde {
 }
 
 // ZBuf
+#[doc(hidden)]
 impl Serialize<ZBuf> for ZSerde {
     type Output = ZBytes;
 
@@ -870,12 +872,14 @@ impl Serialize<ZBuf> for ZSerde {
     }
 }
 
+#[doc(hidden)]
 impl From<ZBuf> for ZBytes {
     fn from(t: ZBuf) -> Self {
         ZSerde.serialize(t)
     }
 }
 
+#[doc(hidden)]
 impl Serialize<&ZBuf> for ZSerde {
     type Output = ZBytes;
 
@@ -884,12 +888,14 @@ impl Serialize<&ZBuf> for ZSerde {
     }
 }
 
+#[doc(hidden)]
 impl From<&ZBuf> for ZBytes {
     fn from(t: &ZBuf) -> Self {
         ZSerde.serialize(t)
     }
 }
 
+#[doc(hidden)]
 impl Serialize<&mut ZBuf> for ZSerde {
     type Output = ZBytes;
 
@@ -898,12 +904,14 @@ impl Serialize<&mut ZBuf> for ZSerde {
     }
 }
 
+#[doc(hidden)]
 impl From<&mut ZBuf> for ZBytes {
     fn from(t: &mut ZBuf) -> Self {
         ZSerde.serialize(t)
     }
 }
 
+#[doc(hidden)]
 impl Deserialize<ZBuf> for ZSerde {
     type Input<'a> = &'a ZBytes;
     type Error = Infallible;
@@ -913,18 +921,21 @@ impl Deserialize<ZBuf> for ZSerde {
     }
 }
 
+#[doc(hidden)]
 impl From<ZBytes> for ZBuf {
     fn from(value: ZBytes) -> Self {
         value.0
     }
 }
 
+#[doc(hidden)]
 impl From<&ZBytes> for ZBuf {
     fn from(value: &ZBytes) -> Self {
         ZSerde.deserialize(value).unwrap_infallible()
     }
 }
 
+#[doc(hidden)]
 impl From<&mut ZBytes> for ZBuf {
     fn from(value: &mut ZBytes) -> Self {
         ZSerde.deserialize(&*value).unwrap_infallible()
