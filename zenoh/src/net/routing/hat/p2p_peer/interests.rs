@@ -164,7 +164,7 @@ impl HatInterestTrait for HatCode {
             }
             let wire_expr = res
                 .as_ref()
-                .map(|res| Resource::decl_key(res, dst_face, dst_face.whatami == WhatAmI::Client));
+                .map(|res| Resource::decl_key(res, dst_face, dst_face.whatami != WhatAmI::Client));
             dst_face.primitives.send_interest(RoutingContext::with_expr(
                 Interest {
                     id,
