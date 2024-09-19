@@ -135,6 +135,14 @@ fn declare_simple_token(
                 );
                 return;
             }
+        } else if !face.local_interests.contains_key(&interest_id) {
+            tracing::debug!(
+                "Received DeclareToken for {} from {} with unknown interest_id {}. Ignore.",
+                res.expr(),
+                face,
+                interest_id,
+            );
+            return;
         }
     }
     register_simple_token(tables, face, id, res);
