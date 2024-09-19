@@ -101,6 +101,7 @@ impl HatInterestTrait for HatCode {
         let interest = Arc::new(CurrentInterest {
             src_face: face.clone(),
             src_interest_id: id,
+            mode,
         });
 
         for dst_face in tables

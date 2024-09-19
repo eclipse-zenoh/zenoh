@@ -2351,59 +2351,60 @@ impl Primitives for WeakSession {
             zenoh_protocol::network::DeclareBody::UndeclareQueryable(m) => {
                 trace!("recv UndeclareQueryable {:?}", m.id);
             }
+            #[cfg(not(feature = "unstable"))]
+            zenoh_protocol::network::DeclareBody::DeclareToken(_) => {}
+            #[cfg(feature = "unstable")]
             zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
-                trace!("recv DeclareToken {:?}", m.id);
-                #[cfg(feature = "unstable")]
+                let mut state = zwrite!(self.state);
+                match state
+                    .wireexpr_to_keyexpr(&m.wire_expr, false)
+                    .map(|e| e.into_owned())
                 {
-                    let mut state = zwrite!(self.state);
-                    match state
-                        .wireexpr_to_keyexpr(&m.wire_expr, false)
-                        .map(|e| e.into_owned())
-                    {
-                        Ok(key_expr) => {
-                            if let Some(interest_id) = msg.interest_id {
-                                if let Some(query) = state.liveliness_queries.get(&interest_id) {
-                                    let reply = Reply {
-                                        result: Ok(Sample {
-                                            key_expr,
-                                            payload: ZBytes::empty(),
-                                            kind: SampleKind::Put,
-                                            encoding: Encoding::default(),
-                                            timestamp: None,
-                                            qos: QoS::default(),
-                                            #[cfg(feature = "unstable")]
-                                            reliability: Reliability::Reliable,
-                                            #[cfg(feature = "unstable")]
-                                            source_info: SourceInfo::empty(),
-                                            #[cfg(feature = "unstable")]
-                                            attachment: None,
-                                        }),
+                    Ok(key_expr) => {
+                        if let Some(interest_id) = msg.interest_id {
+                            if let Some(query) = state.liveliness_queries.get(&interest_id) {
+                                let reply = Reply {
+                                    result: Ok(Sample {
+                                        key_expr,
+                                        payload: ZBytes::empty(),
+                                        kind: SampleKind::Put,
+                                        encoding: Encoding::default(),
+                                        timestamp: None,
+                                        qos: QoS::default(),
                                         #[cfg(feature = "unstable")]
-                                        replier_id: None,
-                                    };
-
-                                    query.callback.call(reply);
-                                }
-                            } else if let Entry::Vacant(e) = state.remote_tokens.entry(m.id) {
-                                e.insert(key_expr.clone());
-                                drop(state);
-
-                                self.execute_subscriber_callbacks(
-                                    false,
-                                    &m.wire_expr,
-                                    None,
-                                    ZBuf::default(),
-                                    SubscriberKind::LivelinessSubscriber,
+                                        reliability: Reliability::Reliable,
+                                        #[cfg(feature = "unstable")]
+                                        source_info: SourceInfo::empty(),
+                                        #[cfg(feature = "unstable")]
+                                        attachment: None,
+                                    }),
                                     #[cfg(feature = "unstable")]
-                                    Reliability::Reliable,
-                                    #[cfg(feature = "unstable")]
-                                    None,
-                                );
+                                    replier_id: None,
+                                };
+
+                                query.callback.call(reply);
+                                return;
                             }
                         }
-                        Err(err) => {
-                            tracing::error!("Received DeclareToken for unknown wire_expr: {}", err)
+                        if let Entry::Vacant(e) = state.remote_tokens.entry(m.id) {
+                            e.insert(key_expr.clone());
+                            drop(state);
+
+                            self.execute_subscriber_callbacks(
+                                false,
+                                &m.wire_expr,
+                                None,
+                                ZBuf::default(),
+                                SubscriberKind::LivelinessSubscriber,
+                                #[cfg(feature = "unstable")]
+                                Reliability::Reliable,
+                                #[cfg(feature = "unstable")]
+                                None,
+                            );
                         }
+                    }
+                    Err(err) => {
+                        tracing::error!("Received DeclareToken for unknown wire_expr: {}", err)
                     }
                 }
             }
