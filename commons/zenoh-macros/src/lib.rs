@@ -196,7 +196,9 @@ pub fn internal_config(args: TokenStream, tokens: TokenStream) -> TokenStream {
     };
 
     let feature_gate: Attribute = parse_quote!(#[cfg(feature = "internal_config")]);
+    let hide_doc: Attribute = parse_quote!(#[doc(hidden)]);
     attrs.push(feature_gate);
+    attrs.push(hide_doc);
 
     TokenStream::from(item.to_token_stream())
 }

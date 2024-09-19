@@ -107,10 +107,15 @@ pub trait Deserialize<T> {
 /// `ZBytes` provides convenient methods to the user for serialization/deserialization based on the default Zenoh serializer [`ZSerde`].
 ///
 /// **NOTE 1:** Zenoh semantic and protocol take care of sending and receiving bytes without restricting the actual data types.
-/// [`ZSerde`] is the default serializer/deserializer provided for convenience to the users to deal with primitives data types via
-/// a simple out-of-the-box encoding. [`ZSerde`] is **NOT** by any means the only serializer/deserializer users can use nor a limitation
-/// to the types supported by Zenoh. Users are free and encouraged to use any serializer/deserializer of their choice like *serde*,
-/// *protobuf*, *bincode*, *flatbuffers*, etc.
+///
+/// **NOTE 2:** [`ZSerde`] is the default serializer/deserializer provided for convenience to the users to deal with primitives data types via
+/// a simple out-of-the-box encoding. That is, [`ZSerde`] is provided as a facilitator for simple use cases that need to send/receive data
+/// over Zenoh, and doing so potentially to/from different programming languages. Make simple use cases simple and provide freedom for more
+/// advanced use cases.
+///
+/// **NOTE 3:** [`ZSerde`] is **NOT** by any means the only serializer/deserializer users can use nor a limitation to the types supported by Zenoh.
+/// [`ZSerde`] does not have the ambition nor the plan to be a full alternative of more complete seriliazation libraries like *serde*, *protobuf*,
+/// *bincode*, *flatbuffers*, etc. Users are free and encouraged to use any serializer/deserializer of their choice that better suits their use case.
 ///
 /// `ZBytes` can be used to serialize a single type:
 /// ```rust
@@ -185,7 +190,7 @@ pub trait Deserialize<T> {
 /// assert_eq!(start, end);
 /// ```
 ///
-/// **NOTE 2:** `ZBytes` may store data in non-contiguous regions of memory.
+/// **NOTE 4:** `ZBytes` may store data in non-contiguous regions of memory.
 /// The typical case for `ZBytes` to store data in different memory regions is when data is received fragmented from the network.
 /// The user then can decided to use [`ZBytes::deserialize`], [`ZBytes::reader`], [`ZBytes::into`], or [`ZBytes::slices`] depending
 /// on their needs.
@@ -237,17 +242,19 @@ impl ZBytes {
         Self(t.into())
     }
 
-    /// Returns whether the ZBytes is empty or not.
+    /// Returns whether the [`ZBytes`] is empty or not.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
-    /// Returns the total number of bytes in the ZBytes.
+    /// Returns the total number of bytes in the [`ZBytes`].
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
     /// Get a [`ZBytesReader`] implementing [`std::io::Read`] trait.
+    ///
+    /// See [`ZBytesWriter`] on how to chain the deserialization of different types from a single [`ZBytes`].
     pub fn reader(&self) -> ZBytesReader<'_> {
         ZBytesReader(self.0.reader())
     }
@@ -468,7 +475,7 @@ impl ZBytes {
     }
 }
 
-/// A reader that implements [`std::io::Read`] trait to read from a [`ZBytes`].
+/// A reader that implements [`std::io::Read`] trait to deserialize from a [`ZBytes`]. See [`ZBytesWriter`] for an example.
 #[repr(transparent)]
 #[derive(Debug)]
 pub struct ZBytesReader<'a>(ZBufReader<'a>);
@@ -547,7 +554,40 @@ impl std::io::Seek for ZBytesReader<'_> {
     }
 }
 
-/// A writer that implements [`std::io::Write`] trait to write into a [`ZBytes`].
+/// A writer that implements [`std::io::Write`] trait to serialize into a [`ZBytes`].
+///
+/// Example:
+/// ```rust
+/// use zenoh::bytes::ZBytes;
+///
+/// #[derive(Debug, PartialEq)]
+/// struct Foo {
+///     one: usize,
+///     two: String,
+///     three: Vec<u8>,
+/// }
+///
+/// let start = Foo {
+///     one: 42,
+///     two: String::from("Forty-Two"),
+///     three: vec![42u8; 42],
+/// };
+///
+/// let mut bytes = ZBytes::empty();
+/// let mut writer = bytes.writer();
+///
+/// writer.serialize(&start.one);
+/// writer.serialize(&start.two);
+/// writer.serialize(&start.three);
+///
+/// let mut reader = bytes.reader();
+/// let end = Foo {
+///     one: reader.deserialize().unwrap(),
+///     two: reader.deserialize().unwrap(),
+///     three: reader.deserialize().unwrap(),
+/// };
+/// assert_eq!(start, end);
+/// ```
 #[repr(transparent)]
 #[derive(Debug)]
 pub struct ZBytesWriter<'a>(ZBufWriter<'a>);
@@ -653,6 +693,32 @@ impl std::io::Write for ZBytesWriter<'_> {
 }
 
 /// An iterator that implements [`std::iter::Iterator`] trait to iterate on [`&[u8]`].
+///
+/// Example:
+/// ```rust
+/// use std::io::Write;
+/// use zenoh::bytes::ZBytes;
+///
+/// let buf1: Vec<u8> = vec![1, 2, 3];
+/// let buf2: Vec<u8> = vec![4, 5, 6, 7, 8];
+/// let mut zbs = ZBytes::empty();
+/// let mut writer = zbs.writer();
+/// writer.write(&buf1);
+/// writer.write(&buf2);
+///
+/// // Access the raw content
+/// for slice in zbs.slices() {
+///     println!("{:02x?}", slice);
+/// }
+///
+/// // Concatenate input in a single vector
+/// let buf: Vec<u8> = buf1.into_iter().chain(buf2.into_iter()).collect();
+/// // Concatenate raw bytes in a single vector
+/// let out: Vec<u8> = zbs.slices().fold(Vec::new(), |mut b, x| { b.extend_from_slice(x); b });
+/// // The previous line is the equivalent of
+/// // let out: Vec<u8> = zbs.into();
+/// assert_eq!(buf, out);    
+/// ```
 #[repr(transparent)]
 #[derive(Debug)]
 pub struct ZBytesSliceIterator<'a>(ZBytesSliceIteratorInner<'a>);
@@ -671,6 +737,18 @@ impl<'a> Iterator for ZBytesSliceIterator<'a> {
 
 /// An iterator that implements [`std::iter::Iterator`] trait to iterate on values `T` in a [`ZBytes`].
 /// Note that [`ZBytes`] contains a serialized version of `T` and iterating over a [`ZBytes`] performs lazy deserialization.
+///
+/// Example:
+/// ```rust
+/// use zenoh::bytes::ZBytes;
+///
+/// let list: Vec<f32> = vec![1.1, 2.2, 3.3];
+/// let mut zbs = ZBytes::from_iter(list.iter());
+///
+/// for (index, elem) in zbs.iter::<f32>().enumerate() {
+///     assert_eq!(list[index], elem.unwrap());
+/// }
+/// ```
 #[repr(transparent)]
 #[derive(Debug)]
 pub struct ZBytesIterator<'a, T> {
@@ -711,13 +789,18 @@ where
 }
 
 /// The default serializer for [`ZBytes`]. It supports primitives types, such as: `Vec<u8>`, `uX`, `iX`, `fX`, `String`, `bool`.
-/// It also supports common Rust serde values like [`serde_json::Value`].
+/// It also supports common Rust serde values like [`serde_json::Value`]. See [`ZBytes`] for examples.
 ///
-/// **NOTE:** Zenoh semantic and protocol take care of sending and receiving bytes without restricting the actual data types.
-/// [`ZSerde`] is the default serializer/deserializer provided for convenience to the users to deal with primitives data types via
-/// a simple out-of-the-box encoding. [`ZSerde`] is **NOT** by any means the only serializer/deserializer users can use nor a limitation
-/// to the types supported by Zenoh. Users are free and encouraged to use any serializer/deserializer of their choice like *serde*,
-/// *protobuf*, *bincode*, *flatbuffers*, etc.
+/// **NOTE 1:** Zenoh semantic and protocol take care of sending and receiving bytes without restricting the actual data types.
+///
+/// **NOTE 2:** [`ZSerde`] is the default serializer/deserializer provided for convenience to the users to deal with primitives data types via
+/// a simple out-of-the-box encoding. That is, [`ZSerde`] is provided as a facilitator for simple use cases that need to send/receive data
+/// over Zenoh, and doing so potentially to/from different programming languages. Make simple use cases simple and provide freedom for more
+/// advanced use cases.
+///
+/// **NOTE 3:** [`ZSerde`] is **NOT** by any means the only serializer/deserializer users can use nor a limitation to the types supported by Zenoh.
+/// [`ZSerde`] does not have the ambition nor the plan to be a full alternative of more complete seriliazation libraries like *serde*, *protobuf*,
+/// *bincode*, *flatbuffers*, etc. Users are free and encouraged to use any serializer/deserializer of their choice that better suits their use case.
 #[derive(Clone, Copy, Debug)]
 pub struct ZSerde;
 
