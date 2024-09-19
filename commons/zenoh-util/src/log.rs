@@ -20,10 +20,10 @@ use tracing_subscriber::{
     EnvFilter,
 };
 
-/// This is a utility function to enable the tracing formatting subscriber from
-/// the `RUST_LOG` environment variable. If `RUST_LOG` is not set, then logging is not enabled.
+/// Enables logging if the `RUST_LOG` environment variable is set.
 ///
 /// # Safety
+///
 /// Calling this function initializes a `lazy_static` in the `tracing` crate
 /// such static is not deallocated prior to process existing, thus tools such as `valgrind`
 /// will report a memory leak.
