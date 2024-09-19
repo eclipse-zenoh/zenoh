@@ -380,12 +380,15 @@ impl Channel {
     };
 }
 
-/// The kind of congestion control.
+/// Congestion control strategy.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CongestionControl {
     #[default]
+    /// When transmitting a message in a node with a full queue, the node may drop the message.
     Drop = 0,
+    /// When transmitting a message in a node with a full queue, the node will wait for queue to
+    /// progress.
     Block = 1,
 }
 
