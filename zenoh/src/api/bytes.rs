@@ -943,6 +943,7 @@ impl From<&mut ZBytes> for ZBuf {
 }
 
 // ZSlice
+#[doc(hidden)]
 impl Serialize<ZSlice> for ZSerde {
     type Output = ZBytes;
 
@@ -951,12 +952,14 @@ impl Serialize<ZSlice> for ZSerde {
     }
 }
 
+#[doc(hidden)]
 impl From<ZSlice> for ZBytes {
     fn from(t: ZSlice) -> Self {
         ZSerde.serialize(t)
     }
 }
 
+#[doc(hidden)]
 impl Serialize<&ZSlice> for ZSerde {
     type Output = ZBytes;
 
@@ -965,12 +968,14 @@ impl Serialize<&ZSlice> for ZSerde {
     }
 }
 
+#[doc(hidden)]
 impl From<&ZSlice> for ZBytes {
     fn from(t: &ZSlice) -> Self {
         ZSerde.serialize(t)
     }
 }
 
+#[doc(hidden)]
 impl Serialize<&mut ZSlice> for ZSerde {
     type Output = ZBytes;
 
@@ -979,12 +984,14 @@ impl Serialize<&mut ZSlice> for ZSerde {
     }
 }
 
+#[doc(hidden)]
 impl From<&mut ZSlice> for ZBytes {
     fn from(t: &mut ZSlice) -> Self {
         ZSerde.serialize(t)
     }
 }
 
+#[doc(hidden)]
 impl Deserialize<ZSlice> for ZSerde {
     type Input<'a> = &'a ZBytes;
     type Error = Infallible;
@@ -994,18 +1001,21 @@ impl Deserialize<ZSlice> for ZSerde {
     }
 }
 
+#[doc(hidden)]
 impl From<ZBytes> for ZSlice {
     fn from(value: ZBytes) -> Self {
         ZBuf::from(value).to_zslice()
     }
 }
 
+#[doc(hidden)]
 impl From<&ZBytes> for ZSlice {
     fn from(value: &ZBytes) -> Self {
         ZSerde.deserialize(value).unwrap_infallible()
     }
 }
 
+#[doc(hidden)]
 impl From<&mut ZBytes> for ZSlice {
     fn from(value: &mut ZBytes) -> Self {
         ZSerde.deserialize(&*value).unwrap_infallible()
