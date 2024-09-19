@@ -418,6 +418,7 @@ pub mod internal {
     pub use crate::api::value::Value;
 }
 
+/// Shared memory.
 #[zenoh_macros::unstable]
 #[cfg(feature = "shared-memory")]
 pub mod shm {

@@ -407,8 +407,10 @@ impl<'a, 'b, Handler> SessionGetBuilder<'a, 'b, Handler> {
         }
     }
 
+    ///
+    ///
     /// Restrict the matching queryables that will receive the query
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    /// to the ones that have the given [`Locality`](Locality).
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(self, destination: Locality) -> Self {
@@ -424,6 +426,8 @@ impl<'a, 'b, Handler> SessionGetBuilder<'a, 'b, Handler> {
         Self { timeout, ..self }
     }
 
+    ///
+    ///
     /// By default, `get` guarantees that it will only receive replies whose key expressions intersect
     /// with the queried key expression.
     ///

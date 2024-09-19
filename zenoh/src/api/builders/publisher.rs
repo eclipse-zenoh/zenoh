@@ -107,8 +107,10 @@ impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
 }
 
 impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
+    ///
+    ///
     /// Restrict the matching subscribers that will receive the published data
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    /// to the ones that have the given [`Locality`](Locality).
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
@@ -321,8 +323,10 @@ impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
 }
 
 impl<'a, 'b> PublisherBuilder<'a, 'b> {
+    ///
+    ///
     /// Restrict the matching subscribers that will receive the published data
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    /// to the ones that have the given [`Locality`](Locality).
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {

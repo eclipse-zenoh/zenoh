@@ -16,7 +16,7 @@
 //!
 //! This crate is intended for Zenoh's internal use.
 //!
-//! [Click here for Zenoh's documentation](../zenoh/index.html)
+//! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 //!
 //! Implements [vsock](https://man7.org/linux/man-pages/man7/vsock.7.html) link support.
 use async_trait::async_trait;
