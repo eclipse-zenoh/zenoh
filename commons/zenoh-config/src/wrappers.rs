@@ -24,7 +24,7 @@ use zenoh_protocol::{
     scouting::HelloProto,
 };
 
-/// The global unique id of a zenoh peer.
+/// The global unique id of a Zenoh session.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
 #[repr(transparent)]
 pub struct ZenohId(ZenohIdProto);

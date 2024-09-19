@@ -18,14 +18,18 @@ use std::sync::Arc;
 
 use crate::api::handlers::{callback::Callback, IntoHandler, API_DATA_RECEPTION_CHANNEL_SIZE};
 
-/// The default handler in Zenoh is a FIFO queue.
-
+/// An handler implementing FIFO semantics.
+///
+/// Note that pushing on a full [`FifoChannel`] that is full will block until a slot is available.
+/// E.g., a slow subscriber could block the underlying Zenoh thread because is not emptying the
+/// [`FifoChannel`] fast enough. In this case, you may want to look into [`crate::api::handlers::RingChannel`] that
+/// will drop samples when full.
 pub struct FifoChannel {
     capacity: usize,
 }
 
 impl FifoChannel {
-    /// Initialize the RingBuffer with the capacity size.
+    /// Initialize the [`FifoChannel`] with the capacity size.
     pub fn new(capacity: usize) -> Self {
         Self { capacity }
     }
