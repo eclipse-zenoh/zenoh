@@ -158,7 +158,7 @@ pub fn unstable_doc(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
             if is_doc_attribute(&attr) && !pushed {
                 attrs.push(attr);
                 // See: https://doc.rust-lang.org/rustdoc/how-to-write-documentation.html#adding-a-warning-block
-                let message = "<div class=\"warning\" style=\"background-color:#fff5d6;\">This API has been marked as <strong>unstable</strong>: it works as advertised, but it may be changed in a future release.</div>";
+                let message = "<div class=\"warning\">This API has been marked as <strong>unstable</strong>: it works as advertised, but it may be changed in a future release.</div>";
                 let note: Attribute = parse_quote!(#[doc = #message]);
                 attrs.push(note);
                 pushed = true;
