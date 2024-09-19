@@ -453,10 +453,10 @@ impl<'a, 'b, Handler> SessionGetBuilder<'a, 'b, Handler> {
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum ReplyKeyExpr {
-    /// Replies whose key expressions may not match the query key expression.
+    /// Accept replies whose key expressions may not match the query key expression.
     Any,
     #[default]
-    /// Replies whose key expressions match the query key expression.
+    /// Accept replies whose key expressions match the query key expression.
     MatchingQuery,
 }
 
