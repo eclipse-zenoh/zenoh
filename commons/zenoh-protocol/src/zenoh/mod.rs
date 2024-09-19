@@ -20,7 +20,7 @@ pub mod reply;
 pub use del::Del;
 pub use err::Err;
 pub use put::Put;
-pub use query::{Consolidation, Query};
+pub use query::{ConsolidationMode, Query};
 pub use reply::Reply;
 
 use crate::core::Encoding;

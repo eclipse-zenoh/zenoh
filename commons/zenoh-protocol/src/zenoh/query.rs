@@ -15,10 +15,10 @@ use alloc::{string::String, vec::Vec};
 
 use crate::common::ZExtUnknown;
 
-/// The kind of consolidation.
+/// The kind of consolidation to apply to a query.
 #[repr(u8)]
 #[derive(Debug, Default, Clone, PartialEq, Eq, Copy)]
-pub enum Consolidation {
+pub enum ConsolidationMode {
     /// Apply automatic consolidation based on queryable's preferences
     #[default]
     Auto,
@@ -38,7 +38,7 @@ pub enum Consolidation {
     // Unique,
 }
 
-impl Consolidation {
+impl ConsolidationMode {
     pub const DEFAULT: Self = Self::Auto;
 
     #[cfg(feature = "test")]
@@ -79,7 +79,7 @@ pub mod flag {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Query {
-    pub consolidation: Consolidation,
+    pub consolidation: ConsolidationMode,
     pub parameters: String,
     pub ext_sinfo: Option<ext::SourceInfoType>,
     pub ext_body: Option<ext::QueryBodyType>,
@@ -120,7 +120,7 @@ impl Query {
         const MIN: usize = 2;
         const MAX: usize = 16;
 
-        let consolidation = Consolidation::rand();
+        let consolidation = ConsolidationMode::rand();
         let parameters: String = if rng.gen_bool(0.5) {
             let len = rng.gen_range(MIN..MAX);
             Alphanumeric.sample_string(&mut rng, len)

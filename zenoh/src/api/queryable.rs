@@ -147,7 +147,7 @@ impl Query {
         }
     }
 
-    /// Sends a reply to this Query.
+    /// Sends a [`crate::sample::Sample`] of kind [`crate::sample::SampleKind::Put`] as a reply to this Query.
     ///
     /// By default, queries only accept replies whose key expression intersects with the query's.
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
@@ -178,8 +178,7 @@ impl Query {
         }
     }
 
-    /// Sends a error reply to this Query.
-    ///
+    /// Sends a [`crate::query::ReplyError`] as a reply to this Query.
     #[inline(always)]
     pub fn reply_err<IntoZBytes>(&self, payload: IntoZBytes) -> ReplyErrBuilder<'_>
     where
@@ -191,7 +190,7 @@ impl Query {
         }
     }
 
-    /// Sends a delete reply to this Query.
+    /// Sends a [`crate::sample::Sample`] of kind [`crate::sample::SampleKind::Delete`] as a reply to this Query.
     ///
     /// By default, queries only accept replies whose key expression intersects with the query's.
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
@@ -418,7 +417,7 @@ impl Query {
                 mapping: Mapping::Sender,
             },
             payload: ResponseBody::Reply(zenoh::Reply {
-                consolidation: zenoh::Consolidation::DEFAULT,
+                consolidation: zenoh::ConsolidationMode::DEFAULT,
                 ext_unknown: vec![],
                 payload: match sample.kind {
                     SampleKind::Put => ReplyBody::Put(Put {
@@ -558,7 +557,7 @@ pub(crate) struct QueryableInner {
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let queryable = session.declare_queryable("key/expression").await.unwrap();
 /// queryable.undeclare().await.unwrap();
 /// # }
@@ -592,7 +591,7 @@ impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let queryable = session.declare_queryable("key/expression").await.unwrap();
 /// # }
 /// ```
@@ -621,7 +620,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let queryable = session
     ///     .declare_queryable("key/expression")
     ///     .callback(|query| {println!(">> Handling query '{}'", query.selector());})
@@ -650,7 +649,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let mut n = 0;
     /// let queryable = session
     ///     .declare_queryable("key/expression")
@@ -677,7 +676,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let queryable = session
     ///     .declare_queryable("key/expression")
     ///     .with(flume::bounded(32))
@@ -759,7 +758,7 @@ impl<Handler> QueryableBuilder<'_, '_, Handler> {
 /// # async fn main() {
 /// use futures::prelude::*;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let (tx, rx) = flume::bounded(32);
 /// session
 ///     .declare_queryable("key/expression")
@@ -781,7 +780,7 @@ impl<Handler> QueryableBuilder<'_, '_, Handler> {
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let queryable = session
 ///     .declare_queryable("key/expression")
 ///     .with(flume::bounded(32))
@@ -811,7 +810,7 @@ impl<Handler> Queryable<Handler> {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let queryable = session.declare_queryable("key/expression")
     ///     .await
     ///     .unwrap();
@@ -848,7 +847,7 @@ impl<Handler> Queryable<Handler> {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let queryable = session.declare_queryable("key/expression")
     ///     .await
     ///     .unwrap();

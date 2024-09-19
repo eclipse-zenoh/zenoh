@@ -26,12 +26,14 @@ description = "The zenoh REST plugin"
 [features]
 default = ["dynamic_plugin"]
 dynamic_plugin = []
+static_plugin = ['async-std']
 
 [lib]
 name = "zenoh_plugin_rest"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+async-std = { workspace = true, features = ["tokio1"], optional = true}
 anyhow = { workspace = true, features = ["default"] }
 base64 = { workspace = true }
 flume = { workspace = true }
@@ -74,3 +76,6 @@ copyright = "2024 ZettaScale Technology"
 section = "net"
 license-file = ["../../LICENSE", "0"]
 depends = "zenohd (=1.0.0~dev-1)"
+
+[package.metadata.cargo-machete]
+ignored = ["async-std"]

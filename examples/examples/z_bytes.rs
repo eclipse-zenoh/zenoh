@@ -14,6 +14,7 @@
 
 use std::{borrow::Cow, collections::HashMap, io::Cursor};
 
+use unwrap_infallible::UnwrapInfallible;
 use zenoh::bytes::ZBytes;
 
 fn main() {
@@ -45,6 +46,12 @@ fn main() {
     // Vec<u8>: The deserialization should be infallible
     let input: Vec<u8> = vec![1, 2, 3, 4];
     let payload = ZBytes::from(&input);
+    let output: Vec<u8> = payload.deserialize().unwrap();
+    assert_eq!(input, output);
+    // Deserialization of Vec<u8> is infallible. See https://docs.rs/unwrap-infallible/latest/unwrap_infallible/.
+    let output: Vec<u8> = payload.deserialize().unwrap_infallible();
+    assert_eq!(input, output);
+    // Since the deserialization of `Vec<u8>` is infallible, then `ZBytes` can be infallibly converted into a `Vec<u8>`.
     let output: Vec<u8> = payload.into();
     assert_eq!(input, output);
     // Corresponding encoding to be used in operations like `.put()`, `.reply()`, etc.
@@ -54,7 +61,13 @@ fn main() {
     // See [`zenoh::bytes::ZBytes`] documentation for zero-copy behaviour.
     let input = Cow::from(vec![1, 2, 3, 4]);
     let payload = ZBytes::from(&input);
-    let output: Cow<[u8]> = payload.into();
+    let output: Cow<[u8]> = payload.deserialize().unwrap();
+    assert_eq!(input, output);
+    // Deserialization of `Cow<[u8]>` is infallible. See https://docs.rs/unwrap-infallible/latest/unwrap_infallible/.
+    let output: Cow<[u8]> = payload.deserialize().unwrap_infallible();
+    assert_eq!(input, output);
+    // Since the deserialization of `Cow<[u8]>` is infallible, then `ZBytes` can be infallibly converted into a `Cow<[u8]>`.
+    let output: Vec<u8> = payload.into();
     assert_eq!(input, output);
     // Corresponding encoding to be used in operations like `.put()`, `.reply()`, etc.
     // let encoding = Encoding::ZENOH_BYTES;

@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use signal_hook::consts::signal::*;
 use static_init::dynamic;
 
 /// A global cleanup, that is guaranteed to be dropped at normal program exit and that will
@@ -27,33 +26,8 @@ pub(crate) struct Cleanup {
 
 impl Cleanup {
     fn new() -> Self {
-        // todo: this is a workaround to make sure Cleanup will be executed even if process terminates via signal handlers
-        // that execute std::terminate instead of exit
-        for signal in [
-            #[cfg(not(target_os = "windows"))]
-            SIGHUP,
-            SIGTERM,
-            SIGINT,
-            #[cfg(not(target_os = "windows"))]
-            SIGQUIT,
-        ] {
-            unsafe {
-                let _ = signal_hook::low_level::register(signal, || {
-                    std::process::exit(0);
-                });
-            }
-        }
-
         Self {
             cleanups: Default::default(),
-        }
-    }
-
-    pub(crate) fn cleanup(&self) {
-        while let Some(cleanup) = self.cleanups.pop() {
-            if let Some(f) = cleanup {
-                f();
-            }
         }
     }
 
@@ -64,6 +38,10 @@ impl Cleanup {
 
 impl Drop for Cleanup {
     fn drop(&mut self) {
-        self.cleanup();
+        while let Some(cleanup) = self.cleanups.pop() {
+            if let Some(f) = cleanup {
+                f();
+            }
+        }
     }
 }

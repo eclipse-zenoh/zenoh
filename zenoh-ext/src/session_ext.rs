@@ -18,14 +18,16 @@ use super::PublicationCacheBuilder;
 
 /// Some extensions to the [`zenoh::Session`](zenoh::Session)
 pub trait SessionExt<'s, 'a> {
+    // REVIEW(fuzzypixelz): this doc test is the only one to use the programmatic configuration API..
     /// Examples:
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::config::ModeDependentValue::Unique;
     /// use zenoh_ext::SessionExt;
+    /// use zenoh_config::ModeDependentValue::Unique;
     ///
-    /// let mut config = zenoh::config::default();
+    ///
+    /// let mut config = zenoh::Config::default();
     /// config.timestamping.set_enabled(Some(Unique(true)));
     /// let session = zenoh::open(config).await.unwrap();
     /// let publication_cache = session.declare_publication_cache("key/expression").await.unwrap();

@@ -11,6 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+#![cfg(feature = "internal_config")]
+
 use std::{
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -20,11 +23,8 @@ use std::{
 };
 
 use tokio_util::sync::CancellationToken;
-use zenoh::{
-    config::{ModeDependentValue, WhatAmI, WhatAmIMatcher},
-    qos::CongestionControl,
-    Config, Result, Session,
-};
+use zenoh::{config::WhatAmI, qos::CongestionControl, Config, Result, Session};
+use zenoh_config::{ModeDependentValue, WhatAmIMatcher};
 use zenoh_core::ztimeout;
 use zenoh_result::bail;
 

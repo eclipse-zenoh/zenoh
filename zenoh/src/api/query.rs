@@ -14,6 +14,8 @@
 
 use std::{
     collections::HashMap,
+    error::Error,
+    fmt::Display,
     future::{IntoFuture, Ready},
     time::Duration,
 };
@@ -25,6 +27,10 @@ use zenoh_keyexpr::OwnedKeyExpr;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::ZenohIdProto;
 use zenoh_protocol::core::{CongestionControl, Parameters};
+/// The [`Queryable`](crate::query::Queryable)s that should be target of a [`get`](Session::get).
+pub use zenoh_protocol::network::request::ext::QueryTarget;
+#[doc(inline)]
+pub use zenoh_protocol::zenoh::query::ConsolidationMode;
 use zenoh_result::ZResult;
 
 use super::{
@@ -42,12 +48,6 @@ use super::{
 #[cfg(feature = "unstable")]
 use super::{sample::SourceInfo, selector::ZenohParameters};
 use crate::bytes::OptionZBytes;
-
-/// The [`Queryable`](crate::query::Queryable)s that should be target of a [`get`](Session::get).
-pub type QueryTarget = zenoh_protocol::network::request::ext::TargetType;
-
-/// The kind of consolidation.
-pub type ConsolidationMode = zenoh_protocol::zenoh::query::Consolidation;
 
 /// The replies consolidation strategy to apply on replies to a [`get`](Session::get).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -105,6 +105,19 @@ impl ReplyError {
     }
 }
 
+impl Display for ReplyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "query returned an error with a {} bytes payload and encoding {}",
+            self.payload.len(),
+            self.encoding
+        )
+    }
+}
+
+impl Error for ReplyError {}
+
 impl From<Value> for ReplyError {
     fn from(value: Value) -> Self {
         Self {
@@ -140,6 +153,8 @@ impl Reply {
     }
 
     #[zenoh_macros::unstable]
+    // @TODO: maybe return an `Option<EntityGlobalId>`?
+    //
     /// Gets the id of the zenoh instance that answered this Reply.
     pub fn replier_id(&self) -> Option<ZenohId> {
         self.replier_id.map(Into::into)
@@ -180,7 +195,7 @@ impl QueryState {
 /// # async fn main() {
 /// use zenoh::{query::{ConsolidationMode, QueryTarget}};
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let replies = session
 ///     .get("key/expression?value>1")
 ///     .target(QueryTarget::All)
@@ -266,7 +281,7 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let queryable = session
     ///     .get("key/expression")
     ///     .callback(|reply| {println!("Received {:?}", reply.result());})
@@ -292,7 +307,7 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let mut n = 0;
     /// let queryable = session
     ///     .get("key/expression")
@@ -319,7 +334,7 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     /// # #[tokio::main]
     /// # async fn main() {
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let replies = session
     ///     .get("key/expression")
     ///     .with(flume::bounded(32))

@@ -43,8 +43,8 @@ mod vtable;
 pub use compatibility::{Compatibility, PluginStructVersion, StructVersion};
 pub use manager::{DeclaredPlugin, LoadedPlugin, PluginsManager, StartedPlugin};
 pub use plugin::{
-    Plugin, PluginConditionSetter, PluginControl, PluginInstance, PluginReport, PluginStartArgs,
-    PluginState, PluginStatus, PluginStatusRec,
+    Plugin, PluginConditionSetter, PluginControl, PluginDiff, PluginInstance, PluginReport,
+    PluginStartArgs, PluginState, PluginStatus, PluginStatusRec,
 };
 pub use vtable::{PluginLoaderVersion, PluginVTable, PLUGIN_LOADER_VERSION};
 use zenoh_util::concat_enabled_features;
