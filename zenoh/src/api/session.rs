@@ -75,7 +75,6 @@ use super::{
         SessionPutBuilder,
     },
     bytes::ZBytes,
-    config::Notifier,
     encoding::Encoding,
     handlers::{Callback, DefaultHandler},
     info::SessionInfo,
@@ -627,7 +626,7 @@ impl Session {
 
     /// Get the current configuration of the zenoh [`Session`](Session).
     ///
-    /// The returned configuration [`Notifier`](Notifier) can be used to read the current
+    /// The returned configuration [`Notifier`](crate::config::Notifier) can be used to read the current
     /// zenoh configuration through the `get` function or
     /// modify the zenoh configuration through the `insert`,
     /// or `insert_json5` function.
@@ -653,7 +652,7 @@ impl Session {
     /// # }
     /// ```
     #[zenoh_macros::unstable]
-    pub fn config(&self) -> &Notifier<Config> {
+    pub fn config(&self) -> &crate::config::Notifier<Config> {
         self.0.runtime.config()
     }
 
