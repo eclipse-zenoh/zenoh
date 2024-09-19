@@ -21,7 +21,7 @@ use std::{
 };
 
 #[cfg(feature = "unstable")]
-use zenoh::pubsub::Reliability;
+use zenoh::qos::Reliability;
 use zenoh::{
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
     internal::zlock,

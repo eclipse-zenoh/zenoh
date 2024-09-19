@@ -229,9 +229,6 @@ pub mod bytes {
 /// Pub/sub primitives
 pub mod pubsub {
     #[zenoh_macros::unstable]
-    pub use zenoh_protocol::core::Reliability;
-
-    #[zenoh_macros::unstable]
     pub use crate::api::publisher::{
         MatchingListener, MatchingListenerBuilder, MatchingListenerUndeclaration, MatchingStatus,
     };
@@ -276,6 +273,8 @@ pub mod handlers {
 /// Quality of service primitives
 pub mod qos {
     pub use zenoh_protocol::core::CongestionControl;
+    #[zenoh_macros::unstable]
+    pub use zenoh_protocol::core::Reliability;
 
     pub use crate::api::publisher::Priority;
 }
