@@ -21,7 +21,7 @@ use zenoh_protocol::{
     common::imsg,
     zenoh::{
         id,
-        query::Consolidation,
+        query::ConsolidationMode,
         reply::{flag, Reply, ReplyBody},
     },
 };
@@ -43,7 +43,7 @@ where
 
         // Header
         let mut header = id::REPLY;
-        if consolidation != &Consolidation::DEFAULT {
+        if consolidation != &ConsolidationMode::DEFAULT {
             header |= flag::C;
         }
         let mut n_exts = ext_unknown.len() as u8;
@@ -53,7 +53,7 @@ where
         self.write(&mut *writer, header)?;
 
         // Body
-        if consolidation != &Consolidation::DEFAULT {
+        if consolidation != &ConsolidationMode::DEFAULT {
             self.write(&mut *writer, *consolidation)?;
         }
 
@@ -95,7 +95,7 @@ where
         }
 
         // Body
-        let mut consolidation = Consolidation::DEFAULT;
+        let mut consolidation = ConsolidationMode::DEFAULT;
         if imsg::has_flag(self.header, flag::C) {
             consolidation = self.codec.read(&mut *reader)?;
         }

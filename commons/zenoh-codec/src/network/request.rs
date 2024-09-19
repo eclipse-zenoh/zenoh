@@ -31,37 +31,37 @@ use crate::{
 };
 
 // Target
-impl<W> WCodec<(&ext::TargetType, bool), &mut W> for Zenoh080
+impl<W> WCodec<(&ext::QueryTarget, bool), &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: (&ext::TargetType, bool)) -> Self::Output {
+    fn write(self, writer: &mut W, x: (&ext::QueryTarget, bool)) -> Self::Output {
         let (x, more) = x;
 
         let v = match x {
-            ext::TargetType::BestMatching => 0,
-            ext::TargetType::All => 1,
-            ext::TargetType::AllComplete => 2,
+            ext::QueryTarget::BestMatching => 0,
+            ext::QueryTarget::All => 1,
+            ext::QueryTarget::AllComplete => 2,
         };
         let ext = ext::Target::new(v);
         self.write(&mut *writer, (&ext, more))
     }
 }
 
-impl<R> RCodec<(ext::TargetType, bool), &mut R> for Zenoh080Header
+impl<R> RCodec<(ext::QueryTarget, bool), &mut R> for Zenoh080Header
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<(ext::TargetType, bool), Self::Error> {
+    fn read(self, reader: &mut R) -> Result<(ext::QueryTarget, bool), Self::Error> {
         let (ext, more): (ext::Target, bool) = self.read(&mut *reader)?;
         let rt = match ext.value {
-            0 => ext::TargetType::BestMatching,
-            1 => ext::TargetType::All,
-            2 => ext::TargetType::AllComplete,
+            0 => ext::QueryTarget::BestMatching,
+            1 => ext::QueryTarget::All,
+            2 => ext::QueryTarget::AllComplete,
             _ => return Err(DidntRead),
         };
         Ok((rt, more))
@@ -91,7 +91,7 @@ where
         let mut header = id::REQUEST;
         let mut n_exts = ((ext_qos != &ext::QoSType::DEFAULT) as u8)
             + (ext_tstamp.is_some() as u8)
-            + ((ext_target != &ext::TargetType::DEFAULT) as u8)
+            + ((ext_target != &ext::QueryTarget::DEFAULT) as u8)
             + (ext_budget.is_some() as u8)
             + (ext_timeout.is_some() as u8)
             + ((ext_nodeid != &ext::NodeIdType::DEFAULT) as u8);
@@ -119,7 +119,7 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (ts, n_exts != 0))?;
         }
-        if ext_target != &ext::TargetType::DEFAULT {
+        if ext_target != &ext::QueryTarget::DEFAULT {
             n_exts -= 1;
             self.write(&mut *writer, (ext_target, n_exts != 0))?;
         }
@@ -184,7 +184,7 @@ where
         let mut ext_qos = ext::QoSType::DEFAULT;
         let mut ext_tstamp = None;
         let mut ext_nodeid = ext::NodeIdType::DEFAULT;
-        let mut ext_target = ext::TargetType::DEFAULT;
+        let mut ext_target = ext::QueryTarget::DEFAULT;
         let mut ext_limit = None;
         let mut ext_timeout = None;
 
@@ -209,7 +209,7 @@ where
                     has_ext = ext;
                 }
                 ext::Target::ID => {
-                    let (rt, ext): (ext::TargetType, bool) = eodec.read(&mut *reader)?;
+                    let (rt, ext): (ext::QueryTarget, bool) = eodec.read(&mut *reader)?;
                     ext_target = rt;
                     has_ext = ext;
                 }
