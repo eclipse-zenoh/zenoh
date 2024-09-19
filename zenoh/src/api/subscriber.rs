@@ -279,8 +279,10 @@ impl<Handler> SubscriberBuilder<'_, '_, Handler> {
         self
     }
 
+    ///
+    ///
     /// Restrict the matching publications that will be receive by this [`Subscriber`]
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    /// to the ones that have the given [`Locality`](Locality).
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {

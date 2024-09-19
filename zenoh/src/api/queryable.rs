@@ -719,8 +719,10 @@ impl<Handler> QueryableBuilder<'_, '_, Handler> {
         self
     }
 
+    ///
+    ///
     /// Restrict the matching queries that will be receive by this [`Queryable`]
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    /// to the ones that have the given [`Locality`](Locality).
     #[inline]
     #[zenoh_macros::unstable]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {

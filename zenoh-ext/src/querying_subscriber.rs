@@ -162,6 +162,8 @@ impl<'b, Handler> QueryingSubscriberBuilder<'_, 'b, crate::UserSpace, Handler> {
         self
     }
 
+    ///
+    ///
     /// Restrict the matching publications that will be receive by this [`Subscriber`]
     /// to the ones that have the given [`Locality`](zenoh::prelude::Locality).
     #[zenoh_macros::unstable]

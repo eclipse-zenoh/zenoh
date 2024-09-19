@@ -75,6 +75,7 @@ use super::{
         SessionPutBuilder,
     },
     bytes::ZBytes,
+    config::Notifier,
     encoding::Encoding,
     handlers::{Callback, DefaultHandler},
     info::SessionInfo,
@@ -652,7 +653,7 @@ impl Session {
     /// # }
     /// ```
     #[zenoh_macros::unstable]
-    pub fn config(&self) -> &crate::config::Notifier<Config> {
+    pub fn config(&self) -> &Notifier<Config> {
         self.0.runtime.config()
     }
 
