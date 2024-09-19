@@ -34,9 +34,8 @@ use super::{
 };
 use crate::api::session::WeakSession;
 
-/// A structure with functions to declare a
-/// [`LivelinessToken`](LivelinessToken), query
-/// existing [`LivelinessTokens`](LivelinessToken)
+/// A structure with functions to declare a [`LivelinessToken`](LivelinessToken),
+/// query existing [`LivelinessTokens`](LivelinessToken)
 /// and subscribe to liveliness changes.
 ///
 /// A [`LivelinessToken`](LivelinessToken) is a token which liveliness is tied
@@ -92,6 +91,7 @@ use crate::api::session::WeakSession;
 /// }
 /// # }
 /// ```
+
 #[zenoh_macros::unstable]
 pub struct Liveliness<'a> {
     pub(crate) session: &'a Session,
@@ -405,7 +405,7 @@ impl Drop for LivelinessToken {
     }
 }
 
-/// A builder for initializing a liveliness [`FlumeSubscriber`](FlumeSubscriber).
+/// A builder for initializing a liveliness.
 ///
 /// # Examples
 /// ```
@@ -502,7 +502,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the samples for this liveliness subscription with a [`Handler`](crate::prelude::IntoHandler).
+    /// Receive the samples for this liveliness subscription with a [`Handler`](IntoHandler).
     ///
     /// # Examples
     /// ```no_run

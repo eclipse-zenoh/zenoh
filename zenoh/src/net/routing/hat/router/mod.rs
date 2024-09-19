@@ -16,7 +16,7 @@
 //!
 //! This module is intended for Zenoh's internal use.
 //!
-//! [Click here for Zenoh's documentation](../zenoh/index.html)
+//! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 use std::{
     any::Any,
     collections::{hash_map::DefaultHasher, HashMap, HashSet},
