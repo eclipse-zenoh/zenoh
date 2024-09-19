@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
 use std::{
     collections::{HashMap, HashSet},
     str::{self, FromStr},
@@ -19,7 +20,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use flume::{Receiver, Sender};
+use flume::Receiver;
 use futures::select;
 use tokio::sync::{Mutex, RwLock};
 use zenoh::{
@@ -33,7 +34,6 @@ use zenoh::{
         },
         KeyExpr, OwnedKeyExpr,
     },
-    query::{ConsolidationMode, QueryTarget},
     sample::{Sample, SampleBuilder, SampleKind},
     session::Session,
     time::{Timestamp, NTP64},
@@ -43,7 +43,7 @@ use zenoh_backend_traits::{
     Capability, History, Persistence, StorageInsertionResult, StoredData,
 };
 
-use crate::{backends_mgt::StoreIntercept, storages_mgt::StorageMessage};
+use crate::storages_mgt::StorageMessage;
 
 pub const WILDCARD_UPDATES_FILENAME: &str = "wildcard_updates";
 pub const TOMBSTONE_FILENAME: &str = "tombstones";
@@ -54,24 +54,17 @@ struct Update {
     data: StoredData,
 }
 
-pub struct ReplicationService {
-    pub empty_start: bool,
-    pub aligner_updates: Receiver<Sample>,
-    pub log_propagation: Sender<(OwnedKeyExpr, Timestamp)>,
-}
-
 pub struct StorageService {
     session: Arc<Session>,
     key_expr: OwnedKeyExpr,
     complete: bool,
     name: String,
     strip_prefix: Option<OwnedKeyExpr>,
-    storage: Mutex<Box<dyn zenoh_backend_traits::Storage>>,
+    storage: Arc<Mutex<Box<dyn zenoh_backend_traits::Storage>>>,
     capability: Capability,
     tombstones: Arc<RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>>,
     wildcard_updates: Arc<RwLock<KeBoxTree<Update, UnknownWildness, KeyedSetProvider>>>,
     latest_updates: Arc<Mutex<HashMap<Option<OwnedKeyExpr>, Timestamp>>>,
-    replication: Option<ReplicationService>,
 }
 
 impl StorageService {
@@ -79,23 +72,23 @@ impl StorageService {
         session: Arc<Session>,
         config: StorageConfig,
         name: &str,
-        store_intercept: StoreIntercept,
+        storage: Arc<Mutex<Box<dyn zenoh_backend_traits::Storage>>>,
+        capability: Capability,
         rx: Receiver<StorageMessage>,
-        replication: Option<ReplicationService>,
     ) {
-        // @TODO: optimization: if read_cost is high for the storage, initialize a cache for the latest value
+        // @TODO: optimization: if read_cost is high for the storage, initialize a cache for the
+        // latest value
         let mut storage_service = StorageService {
             session,
             key_expr: config.key_expr,
             complete: config.complete,
             name: name.to_string(),
             strip_prefix: config.strip_prefix,
-            storage: Mutex::new(store_intercept.storage),
-            capability: store_intercept.capability,
+            storage,
+            capability,
             tombstones: Arc::new(RwLock::new(KeBoxTree::default())),
             wildcard_updates: Arc::new(RwLock::new(KeBoxTree::default())),
             latest_updates: Arc::new(Mutex::new(HashMap::new())),
-            replication,
         };
         if storage_service
             .capability
@@ -134,8 +127,6 @@ impl StorageService {
         rx: Receiver<StorageMessage>,
         gc_config: GarbageCollectionConfig,
     ) {
-        self.initialize_if_empty().await;
-
         // start periodic GC event
         let t = Timer::default();
         let gc = TimedEvent::periodic(
@@ -172,109 +163,54 @@ impl StorageService {
             }
         };
 
-        if self.replication.is_some() {
-            let aligner_updates = &self.replication.as_ref().unwrap().aligner_updates;
-            loop {
-                select!(
-                    // on sample for key_expr
-                    sample = storage_sub.recv_async() => {
-                        let sample = match sample {
-                            Ok(sample) => sample,
-                            Err(e) => {
-                                tracing::error!("Error in sample: {}", e);
-                                continue;
-                            }
-                        };
-                        // log error if the sample is not timestamped
-                        // This is to reduce down the line inconsistencies of having duplicate samples stored
-                        if sample.timestamp().is_none() {
-                            tracing::error!("Sample {:?} is not timestamped. Please timestamp samples meant for replicated storage.", sample);
+        loop {
+            select!(
+                // on sample for key_expr
+                sample = storage_sub.recv_async() => {
+                    let sample = match sample {
+                        Ok(sample) => sample,
+                        Err(e) => {
+                            tracing::error!("Error in sample: {}", e);
+                            continue;
                         }
-                        else {
-                            self.process_sample(sample).await;
+                    };
+                    let timestamp = sample.timestamp().cloned().unwrap_or(self.session.new_timestamp());
+                    let sample = SampleBuilder::from(sample).timestamp(timestamp).into();
+                    self.process_sample(sample).await;
+                },
+                // on query on key_expr
+                query = storage_queryable.recv_async() => {
+                    self.reply_query(query).await;
+                },
+                // on storage handle drop
+                message = rx.recv_async() => {
+                    match message {
+                        Ok(StorageMessage::Stop) => {
+                            tracing::trace!("Dropping storage '{}'", self.name);
+                            return
+                        },
+                        Ok(StorageMessage::GetStatus(tx)) => {
+                            let storage = self.storage.lock().await;
+                            std::mem::drop(tx.send(storage.get_admin_status()).await);
+                            drop(storage);
                         }
-                    },
-                    // on query on key_expr
-                    query = storage_queryable.recv_async() => {
-                        self.reply_query(query).await;
-                    },
-                    // on aligner update
-                    update = aligner_updates.recv_async() => {
-                        match update {
-                            Ok(sample) => self.process_sample(sample).await,
-                            Err(e) => {
-                                tracing::error!("Error in receiving aligner update: {}", e);
-                            }
-                        }
-                    },
-                    // on storage handle drop
-                    message = rx.recv_async() => {
-                        match message {
-                            Ok(StorageMessage::Stop) => {
-                                tracing::trace!("Dropping storage '{}'", self.name);
-                                return
-                            },
-                            Ok(StorageMessage::GetStatus(tx)) => {
-                                let storage = self.storage.lock().await;
-                                std::mem::drop(tx.send(storage.get_admin_status()).await);
-                                drop(storage);
-                            }
-                            Err(e) => {
-                                tracing::error!("Storage Message Channel Error: {}", e);
-                            },
-                        };
-                    }
-                );
-            }
-        } else {
-            loop {
-                select!(
-                    // on sample for key_expr
-                    sample = storage_sub.recv_async() => {
-                        let sample = match sample {
-                            Ok(sample) => sample,
-                            Err(e) => {
-                                tracing::error!("Error in sample: {}", e);
-                                continue;
-                            }
-                        };
-                        let timestamp = sample.timestamp().cloned().unwrap_or(self.session.new_timestamp());
-                        let sample = SampleBuilder::from(sample).timestamp(timestamp).into();
-                        self.process_sample(sample).await;
-                    },
-                    // on query on key_expr
-                    query = storage_queryable.recv_async() => {
-                        self.reply_query(query).await;
-                    },
-                    // on storage handle drop
-                    message = rx.recv_async() => {
-                        match message {
-                            Ok(StorageMessage::Stop) => {
-                                tracing::trace!("Dropping storage '{}'", self.name);
-                                return
-                            },
-                            Ok(StorageMessage::GetStatus(tx)) => {
-                                let storage = self.storage.lock().await;
-                                std::mem::drop(tx.send(storage.get_admin_status()).await);
-                                drop(storage);
-                            }
-                            Err(e) => {
-                                tracing::error!("Storage Message Channel Error: {}", e);
-                            },
-                        };
-                    },
-                );
-            }
+                        Err(e) => {
+                            tracing::error!("Storage Message Channel Error: {}", e);
+                        },
+                    };
+                },
+            );
         }
     }
 
-    // The storage should only simply save the key, sample pair while put and retrieve the same during get
-    // the trimming during PUT and GET should be handled by the plugin
-    async fn process_sample(&self, sample: Sample) {
+    // The storage should only simply save the key, sample pair while put and retrieve the same
+    // during get the trimming during PUT and GET should be handled by the plugin
+    pub(crate) async fn process_sample(&self, sample: Sample) {
         tracing::trace!("[STORAGE] Processing sample: {:?}", sample);
 
-        // A Sample, in theory, will not arrive to a Storage without a Timestamp. This check (which, again, should
-        // never enter the `None` branch) ensures that the Storage Manager does not panic even if it ever happens.
+        // A Sample, in theory, will not arrive to a Storage without a Timestamp. This check (which,
+        // again, should never enter the `None` branch) ensures that the Storage Manager
+        // does not panic even if it ever happens.
         let sample_timestamp = match sample.timestamp() {
             Some(timestamp) => timestamp,
             None => {
@@ -310,30 +246,31 @@ impl StorageService {
                     sample,
                     k
                 );
-                // there might be the case that the actual update was outdated due to a wild card update, but not stored yet in the storage.
-                // get the relevant wild card entry and use that value and timestamp to update the storage
-                let sample_to_store: Sample = if let Some(update) =
-                    self.ovderriding_wild_update(&k, sample_timestamp).await
-                {
-                    match update.kind {
-                        SampleKind::Put => {
-                            SampleBuilder::put(k.clone(), update.data.value.payload().clone())
-                                .encoding(update.data.value.encoding().clone())
+                // there might be the case that the actual update was outdated due to a wild card
+                // update, but not stored yet in the storage. get the relevant wild
+                // card entry and use that value and timestamp to update the storage
+                let sample_to_store: Sample =
+                    if let Some(update) = self.overriding_wild_update(&k, sample_timestamp).await {
+                        match update.kind {
+                            SampleKind::Put => {
+                                SampleBuilder::put(k.clone(), update.data.value.payload().clone())
+                                    .encoding(update.data.value.encoding().clone())
+                                    .timestamp(update.data.timestamp)
+                                    .into()
+                            }
+                            SampleKind::Delete => SampleBuilder::delete(k.clone())
                                 .timestamp(update.data.timestamp)
-                                .into()
+                                .into(),
                         }
-                        SampleKind::Delete => SampleBuilder::delete(k.clone())
-                            .timestamp(update.data.timestamp)
-                            .into(),
-                    }
-                } else {
-                    SampleBuilder::from(sample.clone())
-                        .keyexpr(k.clone())
-                        .into()
-                };
+                    } else {
+                        SampleBuilder::from(sample.clone())
+                            .keyexpr(k.clone())
+                            .into()
+                    };
 
-                // A Sample that is to be stored **must** have a Timestamp. In theory, the Sample generated should have
-                // a Timestamp and, in theory, this check is unneeded.
+                // A Sample that is to be stored **must** have a Timestamp. In theory, the Sample
+                // generated should have a Timestamp and, in theory, this check is
+                // unneeded.
                 let sample_to_store_timestamp = match sample_to_store.timestamp() {
                     Some(timestamp) => *timestamp,
                     None => {
@@ -376,7 +313,7 @@ impl StorageService {
                 }
 
                 let mut storage = self.storage.lock().await;
-                let result = match sample.kind() {
+                let storage_result = match sample.kind() {
                     SampleKind::Put => {
                         storage
                             .put(
@@ -397,26 +334,27 @@ impl StorageService {
                             .await
                     }
                 };
+
                 drop(storage);
 
-                if result.is_ok_and(|insertion_result| {
-                    !matches!(insertion_result, StorageInsertionResult::Outdated)
-                }) {
-                    // Insertion was successful (i.e. Ok + not Outdated), the Storage only keeps
-                    // track of the Latest value, the timestamp is indeed more recent (it was
-                    // checked before being processed): we update our internal structure.
-                    if self.capability.history == History::Latest {
-                        latest_updates_guard.insert(stripped_key, sample_to_store_timestamp);
+                match storage_result {
+                    Ok(StorageInsertionResult::Outdated) => {
+                        tracing::trace!(
+                            "Ignoring `Outdated` sample < {} >",
+                            sample_to_store.key_expr()
+                        );
                     }
-                    drop(latest_updates_guard);
-
-                    if let Some(replication) = &self.replication {
-                        if let Err(e) = replication
-                            .log_propagation
-                            .send((k.clone(), sample_to_store_timestamp))
-                        {
-                            tracing::error!("Error in sending the sample to the log: {}", e);
+                    Ok(_) => {
+                        if self.capability.history == History::Latest {
+                            latest_updates_guard.insert(stripped_key, sample_to_store_timestamp);
                         }
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            "`{}` on < {} > failed with: {e:?}",
+                            sample.kind(),
+                            sample_to_store.key_expr()
+                        );
                     }
                 }
             }
@@ -428,7 +366,7 @@ impl StorageService {
         let mut tombstones = self.tombstones.write().await;
         tombstones.insert(key_expr, timestamp);
         if self.capability.persistence.eq(&Persistence::Durable) {
-            // flush to disk to makeit durable
+            // flush to disk to make it durable
             let mut serialized_data = HashMap::new();
             for (k, ts) in tombstones.key_value_pairs() {
                 serialized_data.insert(k, *ts);
@@ -458,7 +396,7 @@ impl StorageService {
             },
         );
         if self.capability.persistence.eq(&Persistence::Durable) {
-            // flush to disk to makeit durable
+            // flush to disk to make it durable
             let mut serialized_data = HashMap::new();
             for (k, update) in wildcards.key_value_pairs() {
                 serialized_data.insert(k, serialize_update(update));
@@ -479,7 +417,7 @@ impl StorageService {
         weight.is_some() && weight.unwrap() > timestamp
     }
 
-    async fn ovderriding_wild_update(
+    async fn overriding_wild_update(
         &self,
         key_expr: &OwnedKeyExpr,
         timestamp: &Timestamp,
@@ -650,38 +588,6 @@ impl StorageService {
             ),
         }
         result
-    }
-
-    async fn initialize_if_empty(&mut self) {
-        if self.replication.is_some() && self.replication.as_ref().unwrap().empty_start {
-            // align with other storages, querying them on key_expr,
-            // with `_time=[..]` to get historical data (in case of time-series)
-            let replies = match self
-                .session
-                .get((&self.key_expr, "_time=[..]"))
-                .target(QueryTarget::All)
-                .consolidation(ConsolidationMode::None)
-                .await
-            {
-                Ok(replies) => replies,
-                Err(e) => {
-                    tracing::error!("Error aligning storage '{}': {}", self.name, e);
-                    return;
-                }
-            };
-            while let Ok(reply) = replies.recv_async().await {
-                match reply.into_result() {
-                    Ok(sample) => {
-                        self.process_sample(sample).await;
-                    }
-                    Err(e) => tracing::warn!(
-                        "Storage '{}' received an error to align query: {:?}",
-                        self.name,
-                        e
-                    ),
-                }
-            }
-        }
     }
 }
 
