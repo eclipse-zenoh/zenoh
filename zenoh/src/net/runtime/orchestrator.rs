@@ -308,7 +308,7 @@ impl Runtime {
                 Ok(r) => r,
                 Err(_) => {
                     let e = zerror!("Unable to connect to any of {:?}. Timeout!", peers);
-                    tracing::error!("{}", &e);
+                    tracing::warn!("{}", &e);
                     Err(e.into())
                 }
             }
@@ -348,12 +348,8 @@ impl Runtime {
                 return Ok(());
             }
         }
-        let e = zerror!(
-            "{:?} Unable to connect to any of {:?}! ",
-            self.manager().get_locators(),
-            peers
-        );
-        tracing::error!("{}", &e);
+        let e = zerror!("Unable to connect to any of {:?}! ", peers);
+        tracing::warn!("{}", &e);
         Err(e.into())
     }
 
@@ -380,7 +376,7 @@ impl Runtime {
             } else {
                 // try to connect in background
                 if let Err(e) = self.spawn_peer_connector(endpoint.clone()).await {
-                    tracing::error!("Error connecting to {}: {}", endpoint, e);
+                    tracing::warn!("Error connecting to {}: {}", endpoint, e);
                     return Err(e);
                 }
             }
