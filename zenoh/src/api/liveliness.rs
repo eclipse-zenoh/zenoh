@@ -34,9 +34,8 @@ use super::{
 };
 use crate::api::session::WeakSession;
 
-///
-///
-/// A structure with functions to declare a [`LivelinessToken`](LivelinessToken), query existing [`LivelinessTokens`](LivelinessToken)
+/// A structure with functions to declare a [`LivelinessToken`](LivelinessToken),
+/// query existing [`LivelinessTokens`](LivelinessToken)
 /// and subscribe to liveliness changes.
 ///
 /// A [`LivelinessToken`](LivelinessToken) is a token which liveliness is tied
