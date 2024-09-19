@@ -131,7 +131,8 @@ pub mod macro_support {
     use super::*;
     /// DO NOT USE THIS
     ///
-    /// This is a support structure for [`const_new`], which is only meant to be used through the `zenoh::keformat` macro
+    /// This is a support structure for [`const_new`], which is only meant to be used through the `zenoh::keformat` macro.
+    #[doc(hidden)]
     #[derive(Clone, Copy)]
     pub struct SegmentBuilder {
         pub segment_start: usize,
@@ -147,6 +148,7 @@ pub mod macro_support {
     /// DO NOT USE THIS, EVER
     ///
     /// This is a support function which is only meant to be used through the `zenoh::keformat` macro
+    #[doc(hidden)]
     pub unsafe fn specs<'s>(this: &KeFormat<'s, Vec<Segment<'s>>>) -> Vec<SegmentBuilder> {
         let segments = this.storage.segments();
         if segments.is_empty() {
@@ -177,6 +179,7 @@ pub mod macro_support {
     /// DO NOT USE THIS, EVER
     ///
     /// This is a support function which is only meant to be used through the `zenoh::keformat` macro
+    #[doc(hidden)]
     pub const unsafe fn const_new<const N: usize>(
         source: &'static str,
         segments: [SegmentBuilder; N],
