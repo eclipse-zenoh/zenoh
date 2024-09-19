@@ -574,20 +574,6 @@
   //            /// The duration is specified in seconds.
   //            lifespan: 86400,
   //          },
-  //          /// If multiple storages subscribing to the same key_expr should be synchronized, declare them as replicas.
-  //          /// In the absence of this configuration, a normal storage is initialized
-  //          /// Note: all the samples to be stored in replicas should be timestamped
-  //          replica_config: {
-  //            /// Specifying the parameters is optional, by default the values provided will be used.
-  //            /// Time interval between different synchronization attempts in seconds
-  //            publication_interval: 5,
-  //            /// Expected propagation delay of the network in milliseconds
-  //            propagation_delay: 200,
-  //            /// This is the chunk that you would like your data to be divide into in time, in milliseconds.
-  //            /// Higher the frequency of updates, lower the delta should be chosen
-  //            /// To be efficient, delta should be the time containing no more than 100,000 samples
-  //            delta: 1000,
-  //          }
   //        },
   //        demo3: {
   //          key_expr: "demo/memory3/**",

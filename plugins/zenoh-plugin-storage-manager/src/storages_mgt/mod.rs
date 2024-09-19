@@ -11,25 +11,34 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
 use std::sync::Arc;
 
+use flume::Sender;
+use tokio::sync::Mutex;
 use zenoh::{session::Session, Result as ZResult};
-use zenoh_backend_traits::config::StorageConfig;
+use zenoh_backend_traits::{config::StorageConfig, VolumeInstance};
 
-pub use super::replica::{Replica, StorageService};
+mod service;
+use service::StorageService;
 
 pub enum StorageMessage {
     Stop,
     GetStatus(tokio::sync::mpsc::Sender<serde_json::Value>),
 }
 
-pub(crate) async fn start_storage(
-    store_intercept: super::StoreIntercept,
-    config: StorageConfig,
+pub(crate) async fn create_and_start_storage(
     admin_key: String,
-    zenoh: Arc<Session>,
-) -> ZResult<flume::Sender<StorageMessage>> {
-    // Ex: @/390CEC11A1E34977A1C609A35BC015E6/router/status/plugins/storage_manager/storages/demo1 -> 390CEC11A1E34977A1C609A35BC015E6/demo1 (/<type> needed????)
+    config: StorageConfig,
+    backend: &VolumeInstance,
+    zenoh_session: Arc<Session>,
+) -> ZResult<Sender<StorageMessage>> {
+    tracing::trace!("Create storage '{}'", &admin_key);
+    let capability = backend.get_capability();
+    let storage = backend.create_storage(config.clone()).await?;
+
+    // Ex: @/390CEC11A1E34977A1C609A35BC015E6/router/status/plugins/storage_manager/storages/demo1
+    // -> 390CEC11A1E34977A1C609A35BC015E6/demo1 (/<type> needed????)
     let parts: Vec<&str> = admin_key.split('/').collect();
     let uuid = parts[2];
     let storage_name = parts[7];
@@ -39,14 +48,9 @@ pub(crate) async fn start_storage(
 
     let (tx, rx) = flume::bounded(1);
 
+    let storage = Arc::new(Mutex::new(storage));
     tokio::task::spawn(async move {
-        // If a configuration for replica is present, we initialize a replica, else only a storage service
-        // A replica contains a storage service and all metadata required for anti-entropy
-        if config.replica_config.is_some() {
-            Replica::start(zenoh.clone(), store_intercept, config, &name, rx).await;
-        } else {
-            StorageService::start(zenoh.clone(), config, &name, store_intercept, rx, None).await;
-        }
+        StorageService::start(zenoh_session, config, &name, storage, capability, rx).await;
     });
 
     Ok(tx)
