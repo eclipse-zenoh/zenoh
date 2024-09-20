@@ -147,7 +147,7 @@ impl Query {
         }
     }
 
-    /// Sends a reply to this Query.
+    /// Sends a [`crate::sample::Sample`] of kind [`crate::sample::SampleKind::Put`] as a reply to this Query.
     ///
     /// By default, queries only accept replies whose key expression intersects with the query's.
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
@@ -178,8 +178,7 @@ impl Query {
         }
     }
 
-    /// Sends a error reply to this Query.
-    ///
+    /// Sends a [`crate::query::ReplyError`] as a reply to this Query.
     #[inline(always)]
     pub fn reply_err<IntoZBytes>(&self, payload: IntoZBytes) -> ReplyErrBuilder<'_>
     where
@@ -191,7 +190,7 @@ impl Query {
         }
     }
 
-    /// Sends a delete reply to this Query.
+    /// Sends a [`crate::sample::Sample`] of kind [`crate::sample::SampleKind::Delete`] as a reply to this Query.
     ///
     /// By default, queries only accept replies whose key expression intersects with the query's.
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
@@ -720,8 +719,10 @@ impl<Handler> QueryableBuilder<'_, '_, Handler> {
         self
     }
 
+    ///
+    ///
     /// Restrict the matching queries that will be receive by this [`Queryable`]
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    /// to the ones that have the given [`Locality`](Locality).
     #[inline]
     #[zenoh_macros::unstable]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {

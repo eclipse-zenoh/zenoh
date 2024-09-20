@@ -27,6 +27,9 @@ use crate::api::{
 };
 
 /// A synchronous ring channel with a limited size that allows users to keep the last N data.
+///
+/// [`RingChannel`] implements FIFO semantics with a dropping strategy when full.
+/// The oldest elements will be dropped when newer arrive.
 pub struct RingChannel {
     capacity: usize,
 }

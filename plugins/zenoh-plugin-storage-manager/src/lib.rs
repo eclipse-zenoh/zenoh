@@ -16,7 +16,7 @@
 //!
 //! This crate is intended for Zenoh's internal use.
 //!
-//! [Click here for Zenoh's documentation](../zenoh/index.html)
+//! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 #![recursion_limit = "512"]
 
 use std::{
@@ -49,12 +49,9 @@ use zenoh_plugin_trait::{
     plugin_long_version, plugin_version, Plugin, PluginControl, PluginReport, PluginStatusRec,
 };
 
-mod backends_mgt;
-use backends_mgt::*;
-
 mod memory_backend;
-mod replica;
 mod storages_mgt;
+use storages_mgt::*;
 
 const WORKER_THREAD_NUM: usize = 2;
 const MAX_BLOCK_THREAD_NUM: usize = 50;
@@ -147,7 +144,7 @@ impl StorageRuntimeInner {
             bail!("Cannot start storage manager, 'timestamping' is disabled in the configuration");
         }
 
-        // After this moment result should be only Ok. Failure of loading of one voulme or storage should not affect others.
+        // After this moment result should be only Ok. Failure of loading of one volume or storage should not affect others.
 
         let mut new_self = StorageRuntimeInner {
             name,
@@ -342,7 +339,7 @@ impl RunningPluginTrait for StorageRuntime {
     ) -> ZResult<Vec<Response>> {
         let mut responses = Vec::new();
         let mut key = String::from(plugin_status_key);
-        // TODO: to be removed when "__version__" is implemented in admoin space
+        // TODO: to be removed when "__version__" is implemented in admin space
         with_extended_string(&mut key, &["/version"], |key| {
             if keyexpr::new(key.as_str()).unwrap().intersects(key_expr) {
                 responses.push(Response::new(

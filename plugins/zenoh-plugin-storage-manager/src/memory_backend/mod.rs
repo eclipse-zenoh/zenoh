@@ -53,7 +53,6 @@ impl Volume for MemoryBackend {
         Capability {
             persistence: Persistence::Volatile,
             history: History::Latest,
-            read_cost: 0,
         }
     }
 

@@ -20,8 +20,10 @@ use tracing_subscriber::{
     EnvFilter,
 };
 
-/// This is a utility function to enable the tracing formatting subscriber from
-/// the `RUST_LOG` environment variable. If `RUST_LOG` is not set, then logging is not enabled.
+/// A utility function to enable the tracing formatting subscriber.
+///
+/// The tracing formatting subscriber is initialized from the `RUST_LOG` environment variable.
+/// If `RUST_LOG` is not set, then logging is not enabled.
 ///
 /// # Safety
 /// Calling this function initializes a `lazy_static` in the `tracing` crate
@@ -34,8 +36,10 @@ pub fn try_init_log_from_env() {
     }
 }
 
-/// This is a utility function to enable the tracing formatting subscriber from
-/// the environment variable. If `RUST_LOG` is not set, then fallback directives are used.
+/// A utility function to enable the tracing formatting subscriber.
+///
+/// The tracing formatting subscriber is initialized from the `RUST_LOG` environment variable.
+/// If `RUST_LOG` is not set, then fallback directives are used.
 ///
 /// # Safety
 /// Calling this function initializes a `lazy_static` in the `tracing` crate
