@@ -246,41 +246,10 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
 }
 
 impl<Handler> SubscriberBuilder<'_, '_, Handler> {
-    /// Change the subscription reliability.
-    #[cfg(feature = "unstable")]
-    #[deprecated(
-        since = "1.0.0",
-        note = "please use `reliability` on `declare_publisher` or `put`"
-    )]
-    #[allow(unused_mut, unused_variables)]
-    pub fn reliability(mut self, reliability: Reliability) -> Self {
-        self
-    }
-
-    /// Change the subscription reliability to `Reliable`.
-    #[cfg(feature = "unstable")]
-    #[deprecated(
-        since = "1.0.0",
-        note = "please use `reliability` on `declare_publisher` or `put`"
-    )]
-    #[allow(unused_mut)]
-    pub fn reliable(mut self) -> Self {
-        self
-    }
-
-    /// Change the subscription reliability to `BestEffort`.
-    #[cfg(feature = "unstable")]
-    #[deprecated(
-        since = "1.0.0",
-        note = "please use `reliability` on `declare_publisher` or `put`"
-    )]
-    #[allow(unused_mut)]
-    pub fn best_effort(mut self) -> Self {
-        self
-    }
-
-    /// Restrict the matching publications that will be receive by this [`Subscriber`]
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    /// Changes the [`crate::sample::Locality`] of received publications.
+    ///
+    /// Restricts the matching publications that will be receive by this [`Subscriber`] to the ones
+    /// that have the given [`crate::sample::Locality`].
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
