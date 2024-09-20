@@ -20,7 +20,6 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-#[cfg(feature = "unstable")]
 use zenoh::{
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
     internal::zlock,
