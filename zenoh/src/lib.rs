@@ -124,9 +124,6 @@ pub use crate::{
     session::{open, Session},
 };
 
-#[deprecated(since = "1.0.0")]
-pub mod prelude;
-
 /// [Key expression](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md) are Zenoh's address space.
 ///
 /// In Zenoh, operations are performed on keys. To allow addressing multiple keys with a single operation, we use Key Expressions (KE).

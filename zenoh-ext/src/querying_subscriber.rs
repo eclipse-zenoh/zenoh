@@ -21,17 +21,15 @@ use std::{
 };
 
 #[cfg(feature = "unstable")]
-use zenoh::qos::Reliability;
 use zenoh::{
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
     internal::zlock,
     key_expr::KeyExpr,
-    prelude::Wait,
     pubsub::Subscriber,
     query::{QueryConsolidation, QueryTarget, ReplyKeyExpr, Selector},
     sample::{Locality, Sample, SampleBuilder},
     time::Timestamp,
-    Error, Resolvable, Resolve, Result as ZResult, Session,
+    Error, Resolvable, Resolve, Result as ZResult, Session, Wait,
 };
 
 use crate::ExtractSample;
@@ -129,39 +127,6 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
 }
 
 impl<'b, Handler> QueryingSubscriberBuilder<'_, 'b, crate::UserSpace, Handler> {
-    /// Change the subscription reliability.
-    #[cfg(feature = "unstable")]
-    #[deprecated(
-        since = "1.0.0",
-        note = "please use `reliability` on `declare_publisher` or `put`"
-    )]
-    #[allow(unused_mut, unused_variables)]
-    pub fn reliability(mut self, reliability: Reliability) -> Self {
-        self
-    }
-
-    /// Change the subscription reliability to Reliable.
-    #[cfg(feature = "unstable")]
-    #[deprecated(
-        since = "1.0.0",
-        note = "please use `reliability` on `declare_publisher` or `put`"
-    )]
-    #[allow(unused_mut)]
-    pub fn reliable(mut self) -> Self {
-        self
-    }
-
-    /// Change the subscription reliability to BestEffort.
-    #[cfg(feature = "unstable")]
-    #[deprecated(
-        since = "1.0.0",
-        note = "please use `reliability` on `declare_publisher` or `put`"
-    )]
-    #[allow(unused_mut)]
-    pub fn best_effort(mut self) -> Self {
-        self
-    }
-
     ///
     ///
     /// Restrict the matching publications that will be receive by this [`Subscriber`]
@@ -504,39 +469,6 @@ impl<
 where
     TryIntoSample: ExtractSample,
 {
-    /// Change the subscription reliability.
-    #[cfg(feature = "unstable")]
-    #[deprecated(
-        since = "1.0.0",
-        note = "please use `reliability` on `declare_publisher` or `put`"
-    )]
-    #[allow(unused_mut, unused_variables)]
-    pub fn reliability(mut self, reliability: Reliability) -> Self {
-        self
-    }
-
-    /// Change the subscription reliability to Reliable.
-    #[cfg(feature = "unstable")]
-    #[deprecated(
-        since = "1.0.0",
-        note = "please use `reliability` on `declare_publisher` or `put`"
-    )]
-    #[allow(unused_mut)]
-    pub fn reliable(mut self) -> Self {
-        self
-    }
-
-    /// Change the subscription reliability to BestEffort.
-    #[cfg(feature = "unstable")]
-    #[deprecated(
-        since = "1.0.0",
-        note = "please use `reliability` on `declare_publisher` or `put`"
-    )]
-    #[allow(unused_mut)]
-    pub fn best_effort(mut self) -> Self {
-        self
-    }
-
     /// Restrict the matching publications that will be receive by this [`FetchingSubscriber`]
     /// to the ones that have the given [`Locality`](Locality).
     #[zenoh_macros::unstable]

@@ -681,12 +681,6 @@ impl Session {
             }
         }
     }
-
-    /// Wrap the session into an `Arc`.
-    #[deprecated(since = "1.0.0", note = "use `Session` directly instead")]
-    pub fn into_arc(self) -> Arc<Session> {
-        Arc::new(self)
-    }
 }
 
 impl Session {

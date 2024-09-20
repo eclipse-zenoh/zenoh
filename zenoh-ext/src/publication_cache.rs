@@ -21,11 +21,10 @@ use std::{
 use zenoh::{
     internal::{bail, runtime::ZRuntime, ResolveFuture, TerminatableTask},
     key_expr::{keyexpr, KeyExpr, OwnedKeyExpr},
-    prelude::Wait,
     pubsub::FlumeSubscriber,
     query::{Query, Queryable, ZenohParameters},
     sample::{Locality, Sample},
-    Error, Resolvable, Resolve, Result as ZResult, Session,
+    Error, Resolvable, Resolve, Result as ZResult, Session, Wait,
 };
 
 /// The builder of PublicationCache, allowing to configure it.

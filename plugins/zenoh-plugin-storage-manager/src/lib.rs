@@ -37,9 +37,8 @@ use zenoh::{
         zlock, LibLoader,
     },
     key_expr::{keyexpr, KeyExpr, OwnedKeyExpr},
-    prelude::Wait,
     session::Session,
-    Result as ZResult,
+    Result as ZResult, Wait,
 };
 use zenoh_backend_traits::{
     config::{ConfigDiff, PluginConfig, StorageConfig, VolumeConfig},
