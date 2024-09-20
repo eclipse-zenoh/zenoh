@@ -90,7 +90,9 @@ impl From<OptionZBytes> for Option<ZBytes> {
 pub trait Serialize<T> {
     type Output;
 
-    /// The implementer should take care of serializing the type `T` and set the proper [`Encoding`].
+    /// The implementer should take care of serializing the type `T` into a [`ZBytes`].
+    /// If [`Encoding`] metadata is important in a given system, the caller should take care
+    /// of setting the proprer [`Encoding`] value when calling functions like [`crate::Session::put`].
     fn serialize(self, t: T) -> Self::Output;
 }
 
@@ -98,7 +100,9 @@ pub trait Deserialize<T> {
     type Input<'a>;
     type Error;
 
-    /// The implementer should take care of deserializing the type `T` based on the [`Encoding`] information.
+    /// The implementer should take care of deserializing a [`ZBytes`] into the type `T`.
+    /// If [`Encoding`] metadata is required in a given system, the caller should take care of checking the proprer
+    /// [`Encoding`] value (e.g. [`crate::sample::Sample::encoding`]) to select the right type `T` to deserialize into.
     fn deserialize(self, t: Self::Input<'_>) -> Result<T, Self::Error>;
 }
 
