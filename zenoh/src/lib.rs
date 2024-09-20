@@ -86,6 +86,7 @@ lazy_static::lazy_static!(
 );
 
 const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
+#[doc(hidden)]
 pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
     prefix = "zenoh",
     features = [
