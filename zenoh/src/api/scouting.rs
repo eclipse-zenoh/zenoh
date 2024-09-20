@@ -48,7 +48,7 @@ use crate::{
 /// }
 /// # }
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[derive(Debug)]
 pub struct ScoutBuilder<Handler> {
     pub(crate) what: WhatAmIMatcher,

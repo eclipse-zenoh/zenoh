@@ -207,7 +207,7 @@ impl QueryState {
 /// }
 /// # }
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[derive(Debug)]
 pub struct SessionGetBuilder<'a, 'b, Handler> {
     pub(crate) session: &'a Session,
@@ -453,11 +453,14 @@ impl<'a, 'b, Handler> SessionGetBuilder<'a, 'b, Handler> {
     }
 }
 
+/// The kind of accepted query replies.
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum ReplyKeyExpr {
+    /// Accept replies whose key expressions may not match the query key expression.
     Any,
     #[default]
+    /// Accept replies whose key expressions match the query key expression.
     MatchingQuery,
 }
 

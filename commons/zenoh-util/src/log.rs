@@ -26,6 +26,7 @@ use tracing_subscriber::{
 /// If `RUST_LOG` is not set, then logging is not enabled.
 ///
 /// # Safety
+///
 /// Calling this function initializes a `lazy_static` in the `tracing` crate
 /// such static is not deallocated prior to process existing, thus tools such as `valgrind`
 /// will report a memory leak.
