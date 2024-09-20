@@ -116,29 +116,29 @@ impl<Handler> IntoFuture for SubscriberUndeclaration<Handler> {
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
 pub struct SubscriberBuilder<'a, 'b, Handler> {
-    #[cfg(feature = "unstable")]
+    #[cfg(feature = "internal")]
     pub session: &'a Session,
-    #[cfg(not(feature = "unstable"))]
+    #[cfg(not(feature = "internal"))]
     pub(crate) session: &'a Session,
 
-    #[cfg(feature = "unstable")]
+    #[cfg(feature = "internal")]
     pub key_expr: ZResult<KeyExpr<'b>>,
-    #[cfg(not(feature = "unstable"))]
+    #[cfg(not(feature = "internal"))]
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
 
-    #[cfg(feature = "unstable")]
+    #[cfg(feature = "internal")]
     pub origin: Locality,
-    #[cfg(not(feature = "unstable"))]
+    #[cfg(not(feature = "internal"))]
     pub(crate) origin: Locality,
 
-    #[cfg(feature = "unstable")]
+    #[cfg(feature = "internal")]
     pub handler: Handler,
-    #[cfg(not(feature = "unstable"))]
+    #[cfg(not(feature = "internal"))]
     pub(crate) handler: Handler,
 
-    #[cfg(feature = "unstable")]
+    #[cfg(feature = "internal")]
     pub undeclare_on_drop: bool,
-    #[cfg(not(feature = "unstable"))]
+    #[cfg(not(feature = "internal"))]
     pub(crate) undeclare_on_drop: bool,
 }
 
