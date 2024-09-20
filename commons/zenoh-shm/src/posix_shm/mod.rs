@@ -14,3 +14,4 @@
 
 pub mod array;
 tested_crate_module!(segment);
+pub(crate) mod cleanup;

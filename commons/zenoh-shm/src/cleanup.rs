@@ -12,10 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::thread::JoinHandle;
-
 use static_init::dynamic;
-use zenoh_core::zerror;
+
+use crate::posix_shm::cleanup::cleanup_orphaned_segments;
 
 /// A global cleanup, that is guaranteed to be dropped at normal program exit and that will
 /// execute all registered cleanup routines at this moment
@@ -29,9 +28,8 @@ pub(crate) struct Cleanup {
 
 impl Cleanup {
     fn new() -> Self {
-        // todo: this is a workaround to make sure Cleanup will be executed even if process terminates via signals
-        let _ = SIGNAL_CLEANUP.read();
-
+        // on first cleanup subsystem touch we perform zenoh segment cleanup
+        cleanup_orphaned_segments();
         Self {
             cleanups: Default::default(),
         }
@@ -41,7 +39,7 @@ impl Cleanup {
         self.cleanups.push(Some(cleanup_fn));
     }
 
-    pub(crate) fn cleanup(&self) {
+    fn cleanup(&self) {
         while let Some(cleanup) = self.cleanups.pop() {
             if let Some(f) = cleanup {
                 f();
@@ -52,44 +50,8 @@ impl Cleanup {
 
 impl Drop for Cleanup {
     fn drop(&mut self) {
+        // on finalization stage we perform zenoh segment cleanup
+        cleanup_orphaned_segments();
         self.cleanup();
-    }
-}
-
-#[dynamic(lazy)]
-static mut SIGNAL_CLEANUP: SignalCleanup = SignalCleanup::new();
-
-struct SignalCleanup {
-    _handle: Option<JoinHandle<()>>,
-}
-
-impl SignalCleanup {
-    fn new() -> Self {
-        // todo: this is a workaround to make sure Cleanup will be executed even if process terminates via signals
-        let _handle = match ctrlc2::set_handler(|| {
-            tokio::task::spawn_blocking(|| std::process::exit(0));
-            false
-        }) {
-            Ok(h) => Some(h),
-            Err(e) => {
-                match e {
-                    ctrlc2::Error::NoSuchSignal(signal_type) => {
-                        zerror!(
-                            "Error registering cleanup handler for signal {:?}: no such signal!",
-                            signal_type
-                        );
-                    }
-                    ctrlc2::Error::MultipleHandlers => {
-                        zerror!("Error registering cleanup handler: already registered!");
-                    }
-                    ctrlc2::Error::System(error) => {
-                        zerror!("Error registering cleanup handler: system error: {error}");
-                    }
-                }
-                None
-            }
-        };
-
-        Self { _handle }
     }
 }

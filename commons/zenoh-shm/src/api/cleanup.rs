@@ -12,24 +12,20 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use crate::cleanup::CLEANUP;
+use crate::posix_shm::cleanup::cleanup_orphaned_segments;
 
-/// Make forced cleanup
-/// NOTE: this is a part of a temporary on-exit-cleanup workaround and it will be very likely removed in the future.
-/// WARN: The improper usage can break the application logic, impacting SHM-utilizing Sessions in other processes.
-/// Cleanup unlinks SHM segments _created_ by current process from filesystem with the following consequences:
-/// - Sessions that are not linked to this segment will fail to link it if they try. Such kind of errors are properly handled.
-/// - Already linked processes will still have this shared memory mapped and safely accessible
-/// - The actual memory will be reclaimed by the OS only after last process using it will close it or exit
+/// UNIX: Trigger cleanup for orphaned SHM segments
+/// If process that created named SHM segment crashes or exits by a signal, the segment persists in the system
+/// disregarding if it is used by other Zenoh processes or not. This is the detail of POSIX specification for
+/// shared memory that is hard to bypass. To deal with this we developed a cleanup routine that enumerates all
+/// segments and tries to find processes that are using it. If no such process found, segment will be removed.
+/// There is no ideal signal to trigger this cleanup, so by default, zenoh triggers it in the following moments:
+/// - first POSIX SHM segment creation
+/// - process exit via exit() call or return from maint function
+/// It is OK to additionally trigger this function at any time, but be aware that this can be costly.
 ///
-/// In order to properly cleanup some SHM internals upon process exit, Zenoh installs exit handlers (see atexit() API).
-/// The atexit handler is executed only on process exit(), the inconvenience is that terminating signal handlers
-/// (like SIGINT) bypass it and terminate the process without cleanup. To eliminate this effect, Zenoh overrides
-/// SIGHUP, SIGTERM, SIGINT and SIGQUIT handlers and calls exit() inside to make graceful shutdown. If user is going to
-/// override these Zenoh's handlers, the workaround will break, and there are two ways to keep this workaround working:
-/// - execute overridden Zenoh handlers in overriding handler code
-/// - call force_cleanup_before_exit() anywhere at any time before terminating the process
+/// For non-unix platforms this function currently does nothing
 #[zenoh_macros::unstable_doc]
-pub fn force_cleanup_before_exit() {
-    CLEANUP.read().cleanup();
+pub fn cleanup_orphaned_shm_segments() {
+    cleanup_orphaned_segments();
 }
