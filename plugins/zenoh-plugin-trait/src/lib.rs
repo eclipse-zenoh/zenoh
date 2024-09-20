@@ -14,6 +14,8 @@
 
 //! # The plugin infrastructure for Zenoh.
 //!
+//! <div class="warning" style="background-color:#fff5d6;">This API has been marked as <strong>unstable</strong>: it works as advertised, but it may be changed in a future release.</div>
+//!
 //! To build a plugin, implement [`Plugin`].
 //!
 //! If building a plugin for [`zenohd`](https://crates.io/crates/zenoh), you should use the types exported in [`zenoh::plugins`](https://docs.rs/zenoh/latest/zenoh/plugins) to fill [`Plugin`]'s associated types.  
@@ -41,8 +43,8 @@ mod vtable;
 pub use compatibility::{Compatibility, PluginStructVersion, StructVersion};
 pub use manager::{DeclaredPlugin, LoadedPlugin, PluginsManager, StartedPlugin};
 pub use plugin::{
-    Plugin, PluginConditionSetter, PluginControl, PluginInstance, PluginReport, PluginStartArgs,
-    PluginState, PluginStatus, PluginStatusRec,
+    Plugin, PluginConditionSetter, PluginControl, PluginDiff, PluginInstance, PluginReport,
+    PluginStartArgs, PluginState, PluginStatus, PluginStatusRec,
 };
 pub use vtable::{PluginLoaderVersion, PluginVTable, PLUGIN_LOADER_VERSION};
 use zenoh_util::concat_enabled_features;

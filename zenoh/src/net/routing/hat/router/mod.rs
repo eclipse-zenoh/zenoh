@@ -16,7 +16,7 @@
 //!
 //! This module is intended for Zenoh's internal use.
 //!
-//! [Click here for Zenoh's documentation](../zenoh/index.html)
+//! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 use std::{
     any::Any,
     collections::{hash_map::DefaultHasher, HashMap, HashSet},
@@ -307,7 +307,8 @@ pub(crate) struct HatCode {}
 
 impl HatBaseTrait for HatCode {
     fn init(&self, tables: &mut Tables, runtime: Runtime) {
-        let config = runtime.config().lock();
+        let config_guard = runtime.config().lock();
+        let config = &config_guard.0;
         let whatami = tables.whatami;
         let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
         let gossip_multihop = unwrap_or_default!(config.scouting().gossip().multihop());
@@ -322,7 +323,7 @@ impl HatBaseTrait for HatCode {
             unwrap_or_default!(config.routing().peer().mode()) == *"linkstate";
         let router_peers_failover_brokering =
             unwrap_or_default!(config.routing().router().peers_failover_brokering());
-        drop(config);
+        drop(config_guard);
 
         if router_full_linkstate | gossip {
             hat_mut!(tables).routers_net = Some(Network::new(

@@ -29,6 +29,10 @@ zenoh-buffers = { path = "../../commons/zenoh-buffers/", default-features = fals
 zenoh-codec = { path = "../../commons/zenoh-codec/", default-features = false }
 zenoh-protocol = { path = "../../commons/zenoh-protocol/", default-features = false }
 
+
 [[bin]]
 name = "nostd_check"
 path = "src/bin/nostd_check.rs"
+
+[package.metadata.cargo-machete]
+ignored = ["zenoh-buffers", "zenoh-codec", "zenoh-protocol"]

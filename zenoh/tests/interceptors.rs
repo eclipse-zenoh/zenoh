@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+#![cfg(feature = "internal_config")]
 #![cfg(unix)]
 
 use std::{
@@ -21,12 +23,8 @@ use std::{
     },
 };
 
-use zenoh::{
-    config::{DownsamplingItemConf, DownsamplingRuleConf, InterceptorFlow},
-    key_expr::KeyExpr,
-    prelude::*,
-    Config,
-};
+use zenoh::{key_expr::KeyExpr, Config, Wait};
+use zenoh_config::{DownsamplingItemConf, DownsamplingRuleConf, InterceptorFlow};
 
 // Tokio's time granularity on different platforms
 #[cfg(target_os = "windows")]
@@ -192,7 +190,7 @@ fn downsampling_by_keyexpr_impl(flow: InterceptorFlow) {
 
 #[test]
 fn downsampling_by_keyexpr() {
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
     downsampling_by_keyexpr_impl(InterceptorFlow::Ingress);
     downsampling_by_keyexpr_impl(InterceptorFlow::Egress);
 }
@@ -245,7 +243,7 @@ fn downsampling_by_interface_impl(flow: InterceptorFlow) {
 #[cfg(unix)]
 #[test]
 fn downsampling_by_interface() {
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
     downsampling_by_interface_impl(InterceptorFlow::Ingress);
     downsampling_by_interface_impl(InterceptorFlow::Egress);
 }
@@ -253,7 +251,7 @@ fn downsampling_by_interface() {
 #[test]
 #[should_panic(expected = "unknown variant `down`")]
 fn downsampling_config_error_wrong_strategy() {
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
 
     let mut config = Config::default();
     config

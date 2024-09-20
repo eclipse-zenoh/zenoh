@@ -20,17 +20,18 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+#[cfg(feature = "unstable")]
+use zenoh::qos::Reliability;
 use zenoh::{
-    handlers::{locked, DefaultHandler, IntoHandler},
+    handlers::{locked, Callback, DefaultHandler, IntoHandler},
     internal::zlock,
     key_expr::KeyExpr,
     prelude::Wait,
-    pubsub::{Reliability, Subscriber},
+    pubsub::Subscriber,
     query::{QueryConsolidation, QueryTarget, ReplyKeyExpr, Selector},
-    sample::{Locality, Sample, SampleBuilder, TimestampBuilderTrait},
-    session::{SessionDeclarations, SessionRef},
+    sample::{Locality, Sample, SampleBuilder},
     time::Timestamp,
-    Error, Resolvable, Resolve, Result as ZResult,
+    Error, Resolvable, Resolve, Result as ZResult, Session,
 };
 
 use crate::ExtractSample;
@@ -38,10 +39,9 @@ use crate::ExtractSample;
 /// The builder of [`FetchingSubscriber`], allowing to configure it.
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct QueryingSubscriberBuilder<'a, 'b, KeySpace, Handler> {
-    pub(crate) session: SessionRef<'a>,
+    pub(crate) session: &'a Session,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) key_space: KeySpace,
-    pub(crate) reliability: Reliability,
     pub(crate) origin: Locality,
     pub(crate) query_selector: Option<ZResult<Selector<'b>>>,
     pub(crate) query_target: QueryTarget,
@@ -49,10 +49,17 @@ pub struct QueryingSubscriberBuilder<'a, 'b, KeySpace, Handler> {
     pub(crate) query_accept_replies: ReplyKeyExpr,
     pub(crate) query_timeout: Duration,
     pub(crate) handler: Handler,
+    pub(crate) undeclare_on_drop: bool,
 }
 
 impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandler> {
     /// Add callback to [`FetchingSubscriber`].
+    ///
+    /// Subscriber will not be undeclared when dropped, with the callback running
+    /// in background until the session is closed.
+    ///
+    /// It is in fact just a convenient shortcut for
+    /// `.with(my_callback).undeclare_on_drop(false)`.
     #[inline]
     pub fn callback<Callback>(
         self,
@@ -61,39 +68,17 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
     where
         Callback: Fn(Sample) + Send + Sync + 'static,
     {
-        let QueryingSubscriberBuilder {
-            session,
-            key_expr,
-            key_space,
-            reliability,
-            origin,
-            query_selector,
-            query_target,
-            query_consolidation,
-            query_accept_replies,
-            query_timeout,
-            handler: _,
-        } = self;
-        QueryingSubscriberBuilder {
-            session,
-            key_expr,
-            key_space,
-            reliability,
-            origin,
-            query_selector,
-            query_target,
-            query_consolidation,
-            query_accept_replies,
-            query_timeout,
-            handler: callback,
-        }
+        self.with(callback).undeclare_on_drop(false)
     }
 
     /// Add callback to [`FetchingSubscriber`].
     ///
     /// Using this guarantees that your callback will never be called concurrently.
     /// If your callback is also accepted by the [`callback`](QueryingSubscriberBuilder::callback)
-    /// method, we suggest you use it instead of `callback_mut`
+    /// method, we suggest you use it instead of `callback_mut`.
+    ///
+    /// Subscriber will not be undeclared when dropped, with the callback running
+    /// in background until the session is closed.
     #[inline]
     pub fn callback_mut<CallbackMut>(
         self,
@@ -112,13 +97,12 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
         handler: Handler,
     ) -> QueryingSubscriberBuilder<'a, 'b, KeySpace, Handler>
     where
-        Handler: IntoHandler<'static, Sample>,
+        Handler: IntoHandler<Sample>,
     {
         let QueryingSubscriberBuilder {
             session,
             key_expr,
             key_space,
-            reliability,
             origin,
             query_selector,
             query_target,
@@ -126,12 +110,12 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
             query_accept_replies,
             query_timeout,
             handler: _,
+            undeclare_on_drop,
         } = self;
         QueryingSubscriberBuilder {
             session,
             key_expr,
             key_space,
-            reliability,
             origin,
             query_selector,
             query_target,
@@ -139,34 +123,49 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
             query_accept_replies,
             query_timeout,
             handler,
+            undeclare_on_drop,
         }
     }
 }
 
-impl<'a, 'b, Handler> QueryingSubscriberBuilder<'a, 'b, crate::UserSpace, Handler> {
+impl<'b, Handler> QueryingSubscriberBuilder<'_, 'b, crate::UserSpace, Handler> {
     /// Change the subscription reliability.
-    #[inline]
+    #[cfg(feature = "unstable")]
+    #[deprecated(
+        since = "1.0.0",
+        note = "please use `reliability` on `declare_publisher` or `put`"
+    )]
+    #[allow(unused_mut, unused_variables)]
     pub fn reliability(mut self, reliability: Reliability) -> Self {
-        self.reliability = reliability;
         self
     }
 
     /// Change the subscription reliability to Reliable.
-    #[inline]
+    #[cfg(feature = "unstable")]
+    #[deprecated(
+        since = "1.0.0",
+        note = "please use `reliability` on `declare_publisher` or `put`"
+    )]
+    #[allow(unused_mut)]
     pub fn reliable(mut self) -> Self {
-        self.reliability = Reliability::Reliable;
         self
     }
 
     /// Change the subscription reliability to BestEffort.
-    #[inline]
+    #[cfg(feature = "unstable")]
+    #[deprecated(
+        since = "1.0.0",
+        note = "please use `reliability` on `declare_publisher` or `put`"
+    )]
+    #[allow(unused_mut)]
     pub fn best_effort(mut self) -> Self {
-        self.reliability = Reliability::BestEffort;
         self
     }
 
+    ///
+    ///
     /// Restrict the matching publications that will be receive by this [`Subscriber`]
-    /// to the ones that have the given [`Locality`](zenoh::prelude::Locality).
+    /// to the ones that have the given [`Locality`](Locality).
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
@@ -210,27 +209,39 @@ impl<'a, 'b, Handler> QueryingSubscriberBuilder<'a, 'b, crate::UserSpace, Handle
     }
 }
 
-impl<'a, 'b, KeySpace, Handler> QueryingSubscriberBuilder<'a, 'b, KeySpace, Handler> {
+impl<KeySpace, Handler> QueryingSubscriberBuilder<'_, '_, KeySpace, Handler> {
     /// Change the timeout to be used for queries.
     #[inline]
     pub fn query_timeout(mut self, query_timeout: Duration) -> Self {
         self.query_timeout = query_timeout;
         self
     }
+
+    /// Set whether the subscriber will be undeclared when dropped.
+    ///
+    /// The method is usually used in combination with a callback like in
+    /// [`callback`](Self::callback) method, or a channel sender.
+    /// Be careful when using it, as subscribers not undeclared will consume
+    /// resources until the session is closed.
+    #[inline]
+    pub fn undeclare_on_drop(mut self, undeclare_on_drop: bool) -> Self {
+        self.undeclare_on_drop = undeclare_on_drop;
+        self
+    }
 }
 
-impl<'a, KeySpace, Handler> Resolvable for QueryingSubscriberBuilder<'a, '_, KeySpace, Handler>
+impl<KeySpace, Handler> Resolvable for QueryingSubscriberBuilder<'_, '_, KeySpace, Handler>
 where
-    Handler: IntoHandler<'static, Sample>,
+    Handler: IntoHandler<Sample>,
     Handler::Handler: Send,
 {
-    type To = ZResult<FetchingSubscriber<'a, Handler::Handler>>;
+    type To = ZResult<FetchingSubscriber<Handler::Handler>>;
 }
 
 impl<KeySpace, Handler> Wait for QueryingSubscriberBuilder<'_, '_, KeySpace, Handler>
 where
     KeySpace: Into<crate::KeySpace> + Clone,
-    Handler: IntoHandler<'static, Sample> + Send,
+    Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
 {
     fn wait(self) -> <Self as Resolvable>::To {
@@ -249,7 +260,6 @@ where
             session: self.session,
             key_expr: Ok(key_expr.clone()),
             key_space: self.key_space,
-            reliability: self.reliability,
             origin: self.origin,
             fetch: |cb| match key_space {
                 crate::KeySpace::User => match query_selector {
@@ -270,16 +280,17 @@ where
                     .wait(),
             },
             handler: self.handler,
+            undeclare_on_drop: self.undeclare_on_drop,
             phantom: std::marker::PhantomData,
         }
         .wait()
     }
 }
 
-impl<'a, KeySpace, Handler> IntoFuture for QueryingSubscriberBuilder<'a, '_, KeySpace, Handler>
+impl<KeySpace, Handler> IntoFuture for QueryingSubscriberBuilder<'_, '_, KeySpace, Handler>
 where
     KeySpace: Into<crate::KeySpace> + Clone,
-    Handler: IntoHandler<'static, Sample> + Send,
+    Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
 {
     type Output = <Self as Resolvable>::To;
@@ -362,13 +373,13 @@ pub struct FetchingSubscriberBuilder<
 > where
     TryIntoSample: ExtractSample,
 {
-    pub(crate) session: SessionRef<'a>,
+    pub(crate) session: &'a Session,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) key_space: KeySpace,
-    pub(crate) reliability: Reliability,
     pub(crate) origin: Locality,
     pub(crate) fetch: Fetch,
     pub(crate) handler: Handler,
+    pub(crate) undeclare_on_drop: bool,
     pub(crate) phantom: std::marker::PhantomData<TryIntoSample>,
 }
 
@@ -390,10 +401,10 @@ where
             session: self.session,
             key_expr: self.key_expr.map(|s| s.into_owned()),
             key_space: self.key_space,
-            reliability: self.reliability,
             origin: self.origin,
             fetch: self.fetch,
             handler: self.handler,
+            undeclare_on_drop: self.undeclare_on_drop,
             phantom: std::marker::PhantomData,
         }
     }
@@ -410,6 +421,12 @@ where
     TryIntoSample: ExtractSample,
 {
     /// Add callback to [`FetchingSubscriber`].
+    ///
+    /// Subscriber will not be undeclared when dropped, with the callback running
+    /// in background until the session is closed.
+    ///
+    /// It is in fact just a convenient shortcut for
+    /// `.with(my_callback).undeclare_on_drop(false)`.
     #[inline]
     pub fn callback<Callback>(
         self,
@@ -418,33 +435,17 @@ where
     where
         Callback: Fn(Sample) + Send + Sync + 'static,
     {
-        let FetchingSubscriberBuilder {
-            session,
-            key_expr,
-            key_space,
-            reliability,
-            origin,
-            fetch,
-            handler: _,
-            phantom,
-        } = self;
-        FetchingSubscriberBuilder {
-            session,
-            key_expr,
-            key_space,
-            reliability,
-            origin,
-            fetch,
-            handler: callback,
-            phantom,
-        }
+        self.with(callback).undeclare_on_drop(false)
     }
 
     /// Add callback to [`FetchingSubscriber`].
     ///
     /// Using this guarantees that your callback will never be called concurrently.
     /// If your callback is also accepted by the [`callback`](FetchingSubscriberBuilder::callback)
-    /// method, we suggest you use it instead of `callback_mut`
+    /// method, we suggest you use it instead of `callback_mut`.
+    ///
+    /// Subscriber will not be undeclared when dropped, with the callback running
+    /// in background until the session is closed.
     #[inline]
     pub fn callback_mut<CallbackMut>(
         self,
@@ -470,64 +471,74 @@ where
         handler: Handler,
     ) -> FetchingSubscriberBuilder<'a, 'b, KeySpace, Handler, Fetch, TryIntoSample>
     where
-        Handler: IntoHandler<'static, Sample>,
+        Handler: IntoHandler<Sample>,
     {
         let FetchingSubscriberBuilder {
             session,
             key_expr,
             key_space,
-            reliability,
             origin,
             fetch,
             handler: _,
+            undeclare_on_drop,
             phantom,
         } = self;
         FetchingSubscriberBuilder {
             session,
             key_expr,
             key_space,
-            reliability,
             origin,
             fetch,
             handler,
+            undeclare_on_drop,
             phantom,
         }
     }
 }
 
 impl<
-        'a,
-        'b,
         Handler,
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
         TryIntoSample,
-    > FetchingSubscriberBuilder<'a, 'b, crate::UserSpace, Handler, Fetch, TryIntoSample>
+    > FetchingSubscriberBuilder<'_, '_, crate::UserSpace, Handler, Fetch, TryIntoSample>
 where
     TryIntoSample: ExtractSample,
 {
     /// Change the subscription reliability.
-    #[inline]
+    #[cfg(feature = "unstable")]
+    #[deprecated(
+        since = "1.0.0",
+        note = "please use `reliability` on `declare_publisher` or `put`"
+    )]
+    #[allow(unused_mut, unused_variables)]
     pub fn reliability(mut self, reliability: Reliability) -> Self {
-        self.reliability = reliability;
         self
     }
 
     /// Change the subscription reliability to Reliable.
-    #[inline]
+    #[cfg(feature = "unstable")]
+    #[deprecated(
+        since = "1.0.0",
+        note = "please use `reliability` on `declare_publisher` or `put`"
+    )]
+    #[allow(unused_mut)]
     pub fn reliable(mut self) -> Self {
-        self.reliability = Reliability::Reliable;
         self
     }
 
     /// Change the subscription reliability to BestEffort.
-    #[inline]
+    #[cfg(feature = "unstable")]
+    #[deprecated(
+        since = "1.0.0",
+        note = "please use `reliability` on `declare_publisher` or `put`"
+    )]
+    #[allow(unused_mut)]
     pub fn best_effort(mut self) -> Self {
-        self.reliability = Reliability::BestEffort;
         self
     }
 
     /// Restrict the matching publications that will be receive by this [`FetchingSubscriber`]
-    /// to the ones that have the given [`Locality`](zenoh::prelude::Locality).
+    /// to the ones that have the given [`Locality`](Locality).
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
@@ -537,18 +548,39 @@ where
 }
 
 impl<
-        'a,
         KeySpace,
         Handler,
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
         TryIntoSample,
-    > Resolvable for FetchingSubscriberBuilder<'a, '_, KeySpace, Handler, Fetch, TryIntoSample>
+    > FetchingSubscriberBuilder<'_, '_, KeySpace, Handler, Fetch, TryIntoSample>
 where
-    Handler: IntoHandler<'static, Sample>,
+    TryIntoSample: ExtractSample,
+{
+    /// Set whether the subscriber will be undeclared when dropped.
+    ///
+    /// The method is usually used in combination with a callback like in
+    /// [`callback`](Self::callback) method, or a channel sender.
+    /// Be careful when using it, as subscribers not undeclared will consume
+    /// resources until the session is closed.
+    #[inline]
+    pub fn undeclare_on_drop(mut self, undeclare_on_drop: bool) -> Self {
+        self.undeclare_on_drop = undeclare_on_drop;
+        self
+    }
+}
+
+impl<
+        KeySpace,
+        Handler,
+        Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
+        TryIntoSample,
+    > Resolvable for FetchingSubscriberBuilder<'_, '_, KeySpace, Handler, Fetch, TryIntoSample>
+where
+    Handler: IntoHandler<Sample>,
     Handler::Handler: Send,
     TryIntoSample: ExtractSample,
 {
-    type To = ZResult<FetchingSubscriber<'a, Handler::Handler>>;
+    type To = ZResult<FetchingSubscriber<Handler::Handler>>;
 }
 
 impl<
@@ -559,7 +591,7 @@ impl<
     > Wait for FetchingSubscriberBuilder<'_, '_, KeySpace, Handler, Fetch, TryIntoSample>
 where
     KeySpace: Into<crate::KeySpace>,
-    Handler: IntoHandler<'static, Sample> + Send,
+    Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
     TryIntoSample: ExtractSample + Send + Sync,
 {
@@ -569,15 +601,14 @@ where
 }
 
 impl<
-        'a,
         KeySpace,
         Handler,
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()> + Send + Sync,
         TryIntoSample,
-    > IntoFuture for FetchingSubscriberBuilder<'a, '_, KeySpace, Handler, Fetch, TryIntoSample>
+    > IntoFuture for FetchingSubscriberBuilder<'_, '_, KeySpace, Handler, Fetch, TryIntoSample>
 where
     KeySpace: Into<crate::KeySpace>,
-    Handler: IntoHandler<'static, Sample> + Send,
+    Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
     TryIntoSample: ExtractSample + Send + Sync,
 {
@@ -601,10 +632,10 @@ where
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
+/// use zenoh::Wait;
 /// use zenoh_ext::*;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expr")
 ///     .fetching( |cb| {
@@ -620,28 +651,29 @@ where
 /// }
 /// # }
 /// ```
-pub struct FetchingSubscriber<'a, Handler> {
-    subscriber: Subscriber<'a, ()>,
-    callback: Arc<dyn Fn(Sample) + Send + Sync + 'static>,
+pub struct FetchingSubscriber<Handler> {
+    subscriber: Subscriber<()>,
+    callback: Callback<Sample>,
     state: Arc<Mutex<InnerState>>,
     handler: Handler,
 }
 
-impl<Handler> std::ops::Deref for FetchingSubscriber<'_, Handler> {
+impl<Handler> std::ops::Deref for FetchingSubscriber<Handler> {
     type Target = Handler;
     fn deref(&self) -> &Self::Target {
         &self.handler
     }
 }
 
-impl<Handler> std::ops::DerefMut for FetchingSubscriber<'_, Handler> {
+impl<Handler> std::ops::DerefMut for FetchingSubscriber<Handler> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.handler
     }
 }
 
-impl<'a, Handler> FetchingSubscriber<'a, Handler> {
+impl<Handler> FetchingSubscriber<Handler> {
     fn new<
+        'a,
         KeySpace,
         InputHandler,
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()> + Send + Sync,
@@ -651,7 +683,7 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
     ) -> ZResult<Self>
     where
         KeySpace: Into<crate::KeySpace>,
-        InputHandler: IntoHandler<'static, Sample, Handler = Handler> + Send,
+        InputHandler: IntoHandler<Sample, Handler = Handler> + Send,
         TryIntoSample: ExtractSample + Send + Sync,
     {
         let session_id = conf.session.zid();
@@ -668,7 +700,7 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
             move |s| {
                 let state = &mut zlock!(state);
                 if state.pending_fetches == 0 {
-                    callback(s);
+                    callback.call(s);
                 } else {
                     tracing::trace!(
                         "Sample received while fetch in progress: push it to merge_queue"
@@ -697,15 +729,16 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
             crate::KeySpace::User => conf
                 .session
                 .declare_subscriber(&key_expr)
-                .callback(sub_callback)
-                .reliability(conf.reliability)
+                .with(sub_callback)
+                .undeclare_on_drop(conf.undeclare_on_drop)
                 .allowed_origin(conf.origin)
                 .wait()?,
             crate::KeySpace::Liveliness => conf
                 .session
                 .liveliness()
                 .declare_subscriber(&key_expr)
-                .callback(sub_callback)
+                .with(sub_callback)
+                .undeclare_on_drop(conf.undeclare_on_drop)
                 .wait()?,
         };
 
@@ -724,7 +757,7 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
 
     /// Undeclare this [`FetchingSubscriber`]`.
     #[inline]
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
+    pub fn undeclare(self) -> impl Resolve<ZResult<()>> {
         self.subscriber.undeclare()
     }
 
@@ -743,10 +776,10 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
+    /// use zenoh::Wait;
     /// use zenoh_ext::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let mut subscriber = session
     ///     .declare_subscriber("key/expr")
     ///     .fetching( |cb| {
@@ -792,7 +825,7 @@ impl<'a, Handler> FetchingSubscriber<'a, Handler> {
 
 struct RepliesHandler {
     state: Arc<Mutex<InnerState>>,
-    callback: Arc<dyn Fn(Sample) + Send + Sync>,
+    callback: Callback<Sample>,
 }
 
 impl Drop for RepliesHandler {
@@ -809,7 +842,7 @@ impl Drop for RepliesHandler {
                 state.merge_queue.len()
             );
             for s in state.merge_queue.drain() {
-                (self.callback)(s);
+                self.callback.call(s);
             }
         }
     }
@@ -821,10 +854,10 @@ impl Drop for RepliesHandler {
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
-/// # use zenoh::prelude::*;
+/// # use zenoh::Wait;
 /// # use zenoh_ext::*;
 /// #
-/// # let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// # let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// # let mut fetching_subscriber = session
 /// #     .declare_subscriber("key/expr")
 /// #     .fetching( |cb| {
@@ -857,7 +890,7 @@ pub struct FetchBuilder<
     fetch: Fetch,
     phantom: std::marker::PhantomData<TryIntoSample>,
     state: Arc<Mutex<InnerState>>,
-    callback: Arc<dyn Fn(Sample) + Send + Sync>,
+    callback: Callback<Sample>,
 }
 
 impl<Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>, TryIntoSample>
@@ -892,10 +925,7 @@ where
     }
 }
 
-fn register_handler(
-    state: Arc<Mutex<InnerState>>,
-    callback: Arc<dyn Fn(Sample) + Send + Sync>,
-) -> RepliesHandler {
+fn register_handler(state: Arc<Mutex<InnerState>>, callback: Callback<Sample>) -> RepliesHandler {
     zlock!(state).pending_fetches += 1;
     // pending fetches will be decremented in RepliesHandler drop()
     RepliesHandler { state, callback }

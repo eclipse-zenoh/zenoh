@@ -14,6 +14,7 @@
 
 use std::{borrow::Cow, collections::HashMap, io::Cursor};
 
+use unwrap_infallible::UnwrapInfallible;
 use zenoh::bytes::ZBytes;
 
 fn main() {
@@ -33,7 +34,8 @@ fn main() {
     // Corresponding encoding to be used in operations like `.put()`, `.reply()`, etc.
     // let encoding = Encoding::ZENOH_STRING;
 
-    // Cow
+    // Cow<str>
+    // See [`zenoh::bytes::ZBytes`] documentation for zero-copy behaviour.
     let input = Cow::from("test");
     let payload = ZBytes::from(&input);
     let output: Cow<str> = payload.deserialize().unwrap();
@@ -44,6 +46,27 @@ fn main() {
     // Vec<u8>: The deserialization should be infallible
     let input: Vec<u8> = vec![1, 2, 3, 4];
     let payload = ZBytes::from(&input);
+    let output: Vec<u8> = payload.deserialize().unwrap();
+    assert_eq!(input, output);
+    // Deserialization of Vec<u8> is infallible. See https://docs.rs/unwrap-infallible/latest/unwrap_infallible/.
+    let output: Vec<u8> = payload.deserialize().unwrap_infallible();
+    assert_eq!(input, output);
+    // Since the deserialization of `Vec<u8>` is infallible, then `ZBytes` can be infallibly converted into a `Vec<u8>`.
+    let output: Vec<u8> = payload.into();
+    assert_eq!(input, output);
+    // Corresponding encoding to be used in operations like `.put()`, `.reply()`, etc.
+    // let encoding = Encoding::ZENOH_BYTES;
+
+    // Cow<[u8]>
+    // See [`zenoh::bytes::ZBytes`] documentation for zero-copy behaviour.
+    let input = Cow::from(vec![1, 2, 3, 4]);
+    let payload = ZBytes::from(&input);
+    let output: Cow<[u8]> = payload.deserialize().unwrap();
+    assert_eq!(input, output);
+    // Deserialization of `Cow<[u8]>` is infallible. See https://docs.rs/unwrap-infallible/latest/unwrap_infallible/.
+    let output: Cow<[u8]> = payload.deserialize().unwrap_infallible();
+    assert_eq!(input, output);
+    // Since the deserialization of `Cow<[u8]>` is infallible, then `ZBytes` can be infallibly converted into a `Cow<[u8]>`.
     let output: Vec<u8> = payload.into();
     assert_eq!(input, output);
     // Corresponding encoding to be used in operations like `.put()`, `.reply()`, etc.
@@ -79,6 +102,13 @@ fn main() {
     let payload = ZBytes::from_iter(input.iter());
     for (idx, value) in payload.iter::<i32>().enumerate() {
         assert_eq!(input[idx], value.unwrap());
+    }
+
+    // Iterator RAW
+    let input: [i32; 4] = [1, 2, 3, 4];
+    let payload = ZBytes::from_iter(input.iter());
+    for slice in payload.slices() {
+        println!("{:02x?}", slice);
     }
 
     // HashMap

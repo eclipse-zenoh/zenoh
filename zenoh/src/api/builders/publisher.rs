@@ -14,20 +14,23 @@
 use std::future::{IntoFuture, Ready};
 
 use zenoh_core::{Resolvable, Result as ZResult, Wait};
+#[cfg(feature = "unstable")]
+use zenoh_protocol::core::Reliability;
 use zenoh_protocol::{core::CongestionControl, network::Mapping};
 
+use super::sample::TimestampBuilderTrait;
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
-use crate::api::{
-    builders::sample::{
-        EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
+use crate::{
+    api::{
+        builders::sample::{EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait},
+        bytes::{OptionZBytes, ZBytes},
+        encoding::Encoding,
+        key_expr::KeyExpr,
+        publisher::{Priority, Publisher},
+        sample::{Locality, SampleKind},
     },
-    bytes::{OptionZBytes, ZBytes},
-    encoding::Encoding,
-    key_expr::KeyExpr,
-    publisher::{Priority, Publisher},
-    sample::{Locality, SampleKind},
-    session::SessionRef,
+    Session,
 };
 
 pub type SessionPutBuilder<'a, 'b> =
@@ -56,9 +59,9 @@ pub struct PublicationBuilderDelete;
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::{bytes::Encoding, prelude::*, qos::CongestionControl};
+/// use zenoh::{bytes::Encoding, qos::CongestionControl};
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// session
 ///     .put("key/expression", "payload")
 ///     .encoding(Encoding::TEXT_PLAIN)
@@ -78,6 +81,7 @@ pub struct PublicationBuilder<P, T> {
     pub(crate) attachment: Option<ZBytes>,
 }
 
+#[zenoh_macros::internal_trait]
 impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
     #[inline]
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
@@ -103,16 +107,30 @@ impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
 }
 
 impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
+    ///
+    ///
     /// Restrict the matching subscribers that will receive the published data
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    /// to the ones that have the given [`Locality`](Locality).
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
         self.publisher = self.publisher.allowed_destination(destination);
         self
     }
+    /// Change the `reliability` to apply when routing the data.
+    /// NOTE: Currently `reliability` does not trigger any data retransmission on the wire.
+    ///             It is rather used as a marker on the wire and it may be used to select the best link available (e.g. TCP for reliable data and UDP for best effort data).
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn reliability(self, reliability: Reliability) -> Self {
+        Self {
+            publisher: self.publisher.reliability(reliability),
+            ..self
+        }
+    }
 }
 
+#[zenoh_macros::internal_trait]
 impl EncodingBuilderTrait for PublisherBuilder<'_, '_> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
@@ -122,6 +140,7 @@ impl EncodingBuilderTrait for PublisherBuilder<'_, '_> {
     }
 }
 
+#[zenoh_macros::internal_trait]
 impl<P> EncodingBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
@@ -134,6 +153,7 @@ impl<P> EncodingBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
     }
 }
 
+#[zenoh_macros::internal_trait]
 impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
     #[cfg(feature = "unstable")]
     fn source_info(self, source_info: SourceInfo) -> Self {
@@ -151,6 +171,7 @@ impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
     }
 }
 
+#[zenoh_macros::internal_trait]
 impl<P, T> TimestampBuilderTrait for PublicationBuilder<P, T> {
     fn timestamp<TS: Into<Option<uhlc::Timestamp>>>(self, timestamp: TS) -> Self {
         Self {
@@ -167,11 +188,17 @@ impl<P, T> Resolvable for PublicationBuilder<P, T> {
 impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut> {
     #[inline]
     fn wait(self) -> <Self as Resolvable>::To {
-        let publisher = self.publisher.create_one_shot_publisher()?;
-        publisher.resolve_put(
+        self.publisher.session.0.resolve_put(
+            &self.publisher.key_expr?,
             self.kind.payload,
             SampleKind::Put,
             self.kind.encoding,
+            self.publisher.congestion_control,
+            self.publisher.priority,
+            self.publisher.is_express,
+            self.publisher.destination,
+            #[cfg(feature = "unstable")]
+            self.publisher.reliability,
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
@@ -183,11 +210,17 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut
 impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDelete> {
     #[inline]
     fn wait(self) -> <Self as Resolvable>::To {
-        let publisher = self.publisher.create_one_shot_publisher()?;
-        publisher.resolve_put(
+        self.publisher.session.0.resolve_put(
+            &self.publisher.key_expr?,
             ZBytes::empty(),
             SampleKind::Delete,
             Encoding::ZENOH_BYTES,
+            self.publisher.congestion_control,
+            self.publisher.priority,
+            self.publisher.is_express,
+            self.publisher.destination,
+            #[cfg(feature = "unstable")]
+            self.publisher.reliability,
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
@@ -220,9 +253,9 @@ impl IntoFuture for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuil
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::{prelude::*, qos::CongestionControl};
+/// use zenoh::qos::CongestionControl;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let publisher = session
 ///     .declare_publisher("key/expression")
 ///     .congestion_control(CongestionControl::Block)
@@ -232,20 +265,22 @@ impl IntoFuture for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuil
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
-pub struct PublisherBuilder<'a, 'b: 'a> {
-    pub(crate) session: SessionRef<'a>,
+pub struct PublisherBuilder<'a, 'b> {
+    pub(crate) session: &'a Session,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) encoding: Encoding,
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
     pub(crate) is_express: bool,
+    #[cfg(feature = "unstable")]
+    pub(crate) reliability: Reliability,
     pub(crate) destination: Locality,
 }
 
 impl<'a, 'b> Clone for PublisherBuilder<'a, 'b> {
     fn clone(&self) -> Self {
         Self {
-            session: self.session.clone(),
+            session: self.session,
             key_expr: match &self.key_expr {
                 Ok(k) => Ok(k.clone()),
                 Err(e) => Err(zerror!("Cloned KE Error: {}", e).into()),
@@ -254,11 +289,14 @@ impl<'a, 'b> Clone for PublisherBuilder<'a, 'b> {
             congestion_control: self.congestion_control,
             priority: self.priority,
             is_express: self.is_express,
+            #[cfg(feature = "unstable")]
+            reliability: self.reliability,
             destination: self.destination,
         }
     }
 }
 
+#[zenoh_macros::internal_trait]
 impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
     /// Change the `congestion_control` to apply when routing the data.
     #[inline]
@@ -285,8 +323,10 @@ impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
 }
 
 impl<'a, 'b> PublisherBuilder<'a, 'b> {
+    ///
+    ///
     /// Restrict the matching subscribers that will receive the published data
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    /// to the ones that have the given [`Locality`](Locality).
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
@@ -294,34 +334,29 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
         self
     }
 
-    // internal function for performing the publication
-    fn create_one_shot_publisher(self) -> ZResult<Publisher<'a>> {
-        Ok(Publisher {
-            session: self.session,
-            id: 0, // This is a one shot Publisher
-            key_expr: self.key_expr?,
-            encoding: self.encoding,
-            congestion_control: self.congestion_control,
-            priority: self.priority,
-            is_express: self.is_express,
-            destination: self.destination,
-            #[cfg(feature = "unstable")]
-            matching_listeners: Default::default(),
-            undeclare_on_drop: true,
-        })
+    /// Change the `reliability`` to apply when routing the data.
+    /// NOTE: Currently `reliability` does not trigger any data retransmission on the wire.
+    ///             It is rather used as a marker on the wire and it may be used to select the best link available (e.g. TCP for reliable data and UDP for best effort data).
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn reliability(self, reliability: Reliability) -> Self {
+        Self {
+            reliability,
+            ..self
+        }
     }
 }
 
 impl<'a, 'b> Resolvable for PublisherBuilder<'a, 'b> {
-    type To = ZResult<Publisher<'a>>;
+    type To = ZResult<Publisher<'b>>;
 }
 
 impl<'a, 'b> Wait for PublisherBuilder<'a, 'b> {
     fn wait(self) -> <Self as Resolvable>::To {
         let mut key_expr = self.key_expr?;
-        if !key_expr.is_fully_optimized(&self.session) {
-            let session_id = self.session.id;
-            let expr_id = self.session.declare_prefix(key_expr.as_str()).wait();
+        if !key_expr.is_fully_optimized(&self.session.0) {
+            let session_id = self.session.0.id;
+            let expr_id = self.session.0.declare_prefix(key_expr.as_str()).wait()?;
             let prefix_len = key_expr
                 .len()
                 .try_into()
@@ -349,21 +384,25 @@ impl<'a, 'b> Wait for PublisherBuilder<'a, 'b> {
                 }
             }
         }
-        self.session
-            .declare_publisher_inner(key_expr.clone(), self.destination)
-            .map(|id| Publisher {
-                session: self.session,
-                id,
-                key_expr,
-                encoding: self.encoding,
-                congestion_control: self.congestion_control,
-                priority: self.priority,
-                is_express: self.is_express,
-                destination: self.destination,
-                #[cfg(feature = "unstable")]
-                matching_listeners: Default::default(),
-                undeclare_on_drop: true,
-            })
+        let id = self
+            .session
+            .0
+            .declare_publisher_inner(key_expr.clone(), self.destination)?;
+        Ok(Publisher {
+            session: self.session.downgrade(),
+            id,
+            key_expr,
+            encoding: self.encoding,
+            congestion_control: self.congestion_control,
+            priority: self.priority,
+            is_express: self.is_express,
+            destination: self.destination,
+            #[cfg(feature = "unstable")]
+            reliability: self.reliability,
+            #[cfg(feature = "unstable")]
+            matching_listeners: Default::default(),
+            undeclare_on_drop: true,
+        })
     }
 }
 
@@ -378,10 +417,17 @@ impl<'a, 'b> IntoFuture for PublisherBuilder<'a, 'b> {
 
 impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
     fn wait(self) -> <Self as Resolvable>::To {
-        self.publisher.resolve_put(
+        self.publisher.session.resolve_put(
+            &self.publisher.key_expr,
             self.kind.payload,
             SampleKind::Put,
             self.kind.encoding,
+            self.publisher.congestion_control,
+            self.publisher.priority,
+            self.publisher.is_express,
+            self.publisher.destination,
+            #[cfg(feature = "unstable")]
+            self.publisher.reliability,
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
@@ -392,10 +438,17 @@ impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
 
 impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
     fn wait(self) -> <Self as Resolvable>::To {
-        self.publisher.resolve_put(
+        self.publisher.session.resolve_put(
+            &self.publisher.key_expr,
             ZBytes::empty(),
             SampleKind::Delete,
             Encoding::ZENOH_BYTES,
+            self.publisher.congestion_control,
+            self.publisher.priority,
+            self.publisher.is_express,
+            self.publisher.destination,
+            #[cfg(feature = "unstable")]
+            self.publisher.reliability,
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,

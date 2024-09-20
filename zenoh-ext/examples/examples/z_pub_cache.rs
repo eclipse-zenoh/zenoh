@@ -14,17 +14,15 @@
 use std::time::Duration;
 
 use clap::{arg, Parser};
-use zenoh::{
-    config::{Config, ModeDependentValue},
-    key_expr::KeyExpr,
-};
+use zenoh::{config::Config, key_expr::KeyExpr};
+use zenoh_config::ModeDependentValue;
 use zenoh_ext::*;
 use zenoh_ext_examples::CommonArgs;
 
 #[tokio::main]
 async fn main() {
     // Initiate logging
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
 
     let (config, key_expr, value, history, prefix, complete) = parse_args();
 

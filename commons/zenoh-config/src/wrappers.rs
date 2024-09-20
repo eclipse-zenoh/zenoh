@@ -20,11 +20,11 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, EntityGlobalIdProto, EntityId, Locator, WhatAmI, ZenohIdProto},
+    core::{key_expr::OwnedKeyExpr, EntityGlobalIdProto, Locator, WhatAmI, ZenohIdProto},
     scouting::HelloProto,
 };
 
-/// The global unique id of a zenoh peer.
+/// The global unique id of a Zenoh session.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
 #[repr(transparent)]
 pub struct ZenohId(ZenohIdProto);
@@ -34,6 +34,10 @@ impl ZenohId {
     #[zenoh_macros::internal]
     pub fn into_keyexpr(self) -> OwnedKeyExpr {
         self.into()
+    }
+
+    pub fn to_le_bytes(self) -> [u8; uhlc::ID::MAX_SIZE] {
+        self.0.to_le_bytes()
     }
 }
 
@@ -51,6 +55,15 @@ impl fmt::Display for ZenohId {
 impl From<ZenohIdProto> for ZenohId {
     fn from(id: ZenohIdProto) -> Self {
         Self(id)
+    }
+}
+
+impl TryFrom<&[u8]> for ZenohId {
+    type Error = zenoh_result::Error;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        let proto: ZenohIdProto = value.try_into()?;
+        Ok(ZenohId::from(proto))
     }
 }
 
@@ -87,6 +100,7 @@ impl FromStr for ZenohId {
 }
 
 /// A zenoh Hello message.
+#[derive(Clone)]
 #[repr(transparent)]
 pub struct Hello(HelloProto);
 
@@ -129,15 +143,21 @@ impl fmt::Display for Hello {
     }
 }
 
+/// The ID globally identifying an entity in a zenoh system.
 #[derive(Default, Copy, Clone, Eq, Hash, PartialEq)]
 #[repr(transparent)]
 pub struct EntityGlobalId(EntityGlobalIdProto);
 
+/// The ID to locally identify an entity in a Zenoh session.
+pub type EntityId = u32;
+
 impl EntityGlobalId {
+    /// Returns the [`ZenohId`], i.e. the Zenoh session, this ID is associated to.
     pub fn zid(&self) -> ZenohId {
         self.0.zid.into()
     }
 
+    /// Returns the [`EntityId`] used to identify the entity in a Zenoh session.
     pub fn eid(&self) -> EntityId {
         self.0.eid
     }

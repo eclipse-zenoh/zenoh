@@ -14,13 +14,13 @@
 use std::time::Duration;
 
 use clap::Parser;
-use zenoh::{bytes::Encoding, key_expr::KeyExpr, prelude::*, Config};
+use zenoh::{bytes::Encoding, key_expr::KeyExpr, Config};
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
 async fn main() {
     // Initiate logging
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
 
     let (config, key_expr, payload, attachment) = parse_args();
 

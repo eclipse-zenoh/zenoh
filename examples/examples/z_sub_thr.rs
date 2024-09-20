@@ -14,7 +14,7 @@
 use std::time::Instant;
 
 use clap::Parser;
-use zenoh::{prelude::*, Config};
+use zenoh::{Config, Wait};
 use zenoh_examples::CommonArgs;
 
 struct Stats {
@@ -69,7 +69,7 @@ impl Drop for Stats {
 
 fn main() {
     // initiate logging
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
 
     let (config, m, n) = parse_args();
 
@@ -78,7 +78,7 @@ fn main() {
     let key_expr = "test/thr";
 
     let mut stats = Stats::new(n);
-    let _sub = session
+    session
         .declare_subscriber(key_expr)
         .callback_mut(move |_sample| {
             stats.increment();

@@ -14,12 +14,12 @@
 use std::time::{Duration, Instant};
 
 use clap::Parser;
-use zenoh::{bytes::ZBytes, key_expr::keyexpr, prelude::*, qos::CongestionControl, Config};
+use zenoh::{bytes::ZBytes, key_expr::keyexpr, qos::CongestionControl, Config, Wait};
 use zenoh_examples::CommonArgs;
 
 fn main() {
     // initiate logging
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
 
     let (config, warmup, size, n, express) = parse_args();
     let session = zenoh::open(config).wait().unwrap();

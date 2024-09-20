@@ -17,16 +17,15 @@ use clap::Parser;
 use zenoh::{
     bytes::ZBytes,
     key_expr::keyexpr,
-    prelude::*,
     qos::CongestionControl,
     shm::{PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID},
-    Config,
+    Config, Wait,
 };
 use zenoh_examples::CommonArgs;
 
 fn main() {
     // Initiate logging
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
 
     let (config, warmup, size, n) = parse_args();
 
@@ -52,13 +51,13 @@ fn main() {
     let backend = PosixShmProviderBackend::builder()
         .with_size(size)
         .unwrap()
-        .res()
+        .wait()
         .unwrap();
     // ...and an SHM provider
     let provider = ShmProviderBuilder::builder()
         .protocol_id::<POSIX_PROTOCOL_ID>()
         .backend(backend)
-        .res();
+        .wait();
 
     // Allocate an SHM buffer
     // NOTE: For allocation API please check z_alloc_shm.rs example

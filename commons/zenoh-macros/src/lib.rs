@@ -16,10 +16,10 @@
 //!
 //! This crate is intended for Zenoh's internal use.
 //!
-//! [Click here for Zenoh's documentation](../zenoh/index.html)
+//! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
-use syn::{parse_macro_input, parse_quote, Attribute, Error, Item, LitStr, TraitItem};
+use syn::{parse_macro_input, parse_quote, Attribute, Error, Item, ItemImpl, LitStr, TraitItem};
 use zenoh_keyexpr::{
     format::{
         macro_support::{self, SegmentBuilder},
@@ -152,10 +152,20 @@ pub fn unstable_doc(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
     };
 
     if attrs.iter().any(is_doc_attribute) {
-        // See: https://doc.rust-lang.org/rustdoc/how-to-write-documentation.html#adding-a-warning-block
-        let message = "<div class=\"warning\">This API has been marked as <strong>unstable</strong>: it works as advertised, but it may be changed in a future release.</div>";
-        let note: Attribute = parse_quote!(#[doc = #message]);
-        attrs.push(note);
+        let mut pushed = false;
+        let oldattrs = std::mem::take(attrs);
+        for attr in oldattrs {
+            if is_doc_attribute(&attr) && !pushed {
+                attrs.push(attr);
+                // See: https://doc.rust-lang.org/rustdoc/how-to-write-documentation.html#adding-a-warning-block
+                let message = "<div class=\"warning\">This API has been marked as <strong>unstable</strong>: it works as advertised, but it may be changed in a future release.</div>";
+                let note: Attribute = parse_quote!(#[doc = #message]);
+                attrs.push(note);
+                pushed = true;
+            } else {
+                attrs.push(attr);
+            }
+        }
     }
 
     TokenStream::from(item.to_token_stream())
@@ -177,6 +187,28 @@ pub fn unstable(attr: TokenStream, tokens: TokenStream) -> TokenStream {
 
     let feature_gate: Attribute = parse_quote!(#[cfg(feature = "unstable")]);
     attrs.push(feature_gate);
+
+    TokenStream::from(item.to_token_stream())
+}
+
+// FIXME(fuzzypixelz): refactor `unstable` macro to accept arguments
+#[proc_macro_attribute]
+pub fn internal_config(args: TokenStream, tokens: TokenStream) -> TokenStream {
+    let tokens = unstable_doc(args, tokens);
+    let mut item = match parse_annotable_item!(tokens) {
+        Ok(item) => item,
+        Err(err) => return err.into_compile_error().into(),
+    };
+
+    let attrs = match item.attributes_mut() {
+        Ok(attrs) => attrs,
+        Err(err) => return err.into_compile_error().into(),
+    };
+
+    let feature_gate: Attribute = parse_quote!(#[cfg(feature = "internal_config")]);
+    let hide_doc: Attribute = parse_quote!(#[doc(hidden)]);
+    attrs.push(feature_gate);
+    attrs.push(hide_doc);
 
     TokenStream::from(item.to_token_stream())
 }
@@ -521,4 +553,82 @@ pub fn register_param(input: proc_macro::TokenStream) -> proc_macro::TokenStream
     derive_register_param(input)
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
+}
+
+/// Macro `#[internal_trait]` should precede
+/// `impl Trait for Struct { ... }`
+///
+/// This macro wraps the implementations of "internal" tratis.
+///
+/// These traits are used to group set of functions which should be implemented
+/// together and with the same portotyoe. E.g. `QoSBuilderTrait` provides set of
+/// setters (`congestion_control`, `priority`, `express`) and we should not
+/// forget to implement all these setters for each entity which supports
+/// QoS functionality.
+///
+/// The traits mechanism is a good way to group functions. But additional traits
+/// adds extra burden to end user who have to import it every time.
+///
+/// The macro `internal_trait` solves this problem by adding
+/// methods with same names as in trait to structure implementation itself,
+/// making them available to user without additional trait import.
+///
+#[proc_macro_attribute]
+pub fn internal_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as ItemImpl);
+    let trait_path = &input.trait_.as_ref().unwrap().1;
+    let struct_path = &input.self_ty;
+    let generics = &input.generics;
+    // let struct_lifetime = get_type_path_lifetime(struct_path);
+
+    let mut struct_methods = quote! {};
+    for item_fn in input.items.iter() {
+        if let syn::ImplItem::Fn(method) = item_fn {
+            let method_name = &method.sig.ident;
+            let method_generic_params = &method.sig.generics.params;
+            let method_generic_params = if method_generic_params.is_empty() {
+                quote! {}
+            } else {
+                quote! {<#method_generic_params>}
+            };
+            let method_args = &method.sig.inputs;
+            let method_output = &method.sig.output;
+            let where_clause = &method.sig.generics.where_clause;
+            let mut method_call_args = quote! {};
+            for arg in method_args.iter() {
+                match arg {
+                    syn::FnArg::Receiver(_) => {
+                        method_call_args.extend(quote! { self, });
+                    }
+                    syn::FnArg::Typed(pat_type) => {
+                        let pat = &pat_type.pat;
+                        method_call_args.extend(quote! { #pat, });
+                    }
+                }
+            }
+            let mut attributes = quote! {};
+            for attr in &method.attrs {
+                attributes.extend(quote! {
+                    #attr
+                });
+            }
+            // call corresponding trait method from struct method
+            struct_methods.extend(quote! {
+                #attributes
+                pub fn #method_name #method_generic_params (#method_args) #method_output #where_clause {
+                    <#struct_path as #trait_path>::#method_name(#method_call_args)
+                }
+            });
+        }
+    }
+    let struct_methods_output = quote! {
+        impl #generics #struct_path {
+            #struct_methods
+        }
+    };
+    (quote! {
+        #input
+        #struct_methods_output
+    })
+    .into()
 }

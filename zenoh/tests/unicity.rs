@@ -11,6 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+#![cfg(feature = "internal_config")]
+
 use std::{
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -20,14 +23,8 @@ use std::{
 };
 
 use tokio::runtime::Handle;
-use zenoh::{
-    config,
-    config::{EndPoint, WhatAmI},
-    key_expr::KeyExpr,
-    prelude::*,
-    qos::CongestionControl,
-    Session,
-};
+use zenoh::{config::WhatAmI, key_expr::KeyExpr, qos::CongestionControl, Session};
+use zenoh_config::{EndPoint, ModeDependentValue};
 use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -37,7 +34,7 @@ const MSG_SIZE: [usize; 2] = [1_024, 100_000];
 
 async fn open_p2p_sessions() -> (Session, Session, Session) {
     // Open the sessions
-    let mut config = config::peer();
+    let mut config = zenoh::Config::default();
     config
         .listen
         .endpoints
@@ -47,7 +44,7 @@ async fn open_p2p_sessions() -> (Session, Session, Session) {
     println!("[  ][01a] Opening s01 session");
     let s01 = ztimeout!(zenoh::open(config)).unwrap();
 
-    let mut config = config::peer();
+    let mut config = zenoh::Config::default();
     config
         .listen
         .endpoints
@@ -62,7 +59,7 @@ async fn open_p2p_sessions() -> (Session, Session, Session) {
     println!("[  ][02a] Opening s02 session");
     let s02 = ztimeout!(zenoh::open(config)).unwrap();
 
-    let mut config = config::peer();
+    let mut config = zenoh::Config::default();
     config
         .connect
         .endpoints
@@ -80,7 +77,7 @@ async fn open_p2p_sessions() -> (Session, Session, Session) {
 
 async fn open_router_session() -> Session {
     // Open the sessions
-    let mut config = config::default();
+    let mut config = zenoh::Config::default();
     config.set_mode(Some(WhatAmI::Router)).unwrap();
     config
         .listen
@@ -99,15 +96,36 @@ async fn close_router_session(s: Session) {
 
 async fn open_client_sessions() -> (Session, Session, Session) {
     // Open the sessions
-    let config = config::client(["tcp/127.0.0.1:37447".parse::<EndPoint>().unwrap()]);
+    let mut config = zenoh::Config::default();
+    config.set_mode(Some(WhatAmI::Client)).unwrap();
+    config
+        .connect
+        .set_endpoints(ModeDependentValue::Unique(vec!["tcp/127.0.0.1:37447"
+            .parse::<EndPoint>()
+            .unwrap()]))
+        .unwrap();
     println!("[  ][01a] Opening s01 session");
     let s01 = ztimeout!(zenoh::open(config)).unwrap();
 
-    let config = config::client(["tcp/127.0.0.1:37447".parse::<EndPoint>().unwrap()]);
+    let mut config = zenoh::Config::default();
+    config.set_mode(Some(WhatAmI::Client)).unwrap();
+    config
+        .connect
+        .set_endpoints(ModeDependentValue::Unique(vec!["tcp/127.0.0.1:37447"
+            .parse::<EndPoint>()
+            .unwrap()]))
+        .unwrap();
     println!("[  ][02a] Opening s02 session");
     let s02 = ztimeout!(zenoh::open(config)).unwrap();
 
-    let config = config::client(["tcp/127.0.0.1:37447".parse::<EndPoint>().unwrap()]);
+    let mut config = zenoh::Config::default();
+    config.set_mode(Some(WhatAmI::Client)).unwrap();
+    config
+        .connect
+        .set_endpoints(ModeDependentValue::Unique(vec!["tcp/127.0.0.1:37447"
+            .parse::<EndPoint>()
+            .unwrap()]))
+        .unwrap();
     println!("[  ][03a] Opening s03 session");
     let s03 = ztimeout!(zenoh::open(config)).unwrap();
 
@@ -277,7 +295,7 @@ async fn test_unicity_qryrep(s01: &Session, s02: &Session, s03: &Session) {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_unicity_p2p() {
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
 
     let (s01, s02, s03) = open_p2p_sessions().await;
     test_unicity_pubsub(&s01, &s02, &s03).await;
@@ -287,7 +305,7 @@ async fn zenoh_unicity_p2p() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_unicity_brokered() {
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
     let r = open_router_session().await;
 
     let (s01, s02, s03) = open_client_sessions().await;

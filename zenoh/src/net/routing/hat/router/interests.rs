@@ -24,8 +24,8 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 use super::{
-    face_hat_mut, pubsub::declare_sub_interest, queries::declare_qabl_interest,
-    token::declare_token_interest, HatCode, HatFace,
+    face_hat_mut, hat, pubsub::declare_sub_interest, queries::declare_qabl_interest,
+    token::declare_token_interest, HatCode, HatFace, HatTables,
 };
 use crate::net::routing::{
     dispatcher::{
@@ -111,4 +111,10 @@ impl HatInterestTrait for HatCode {
     fn undeclare_interest(&self, _tables: &mut Tables, face: &mut Arc<FaceState>, id: InterestId) {
         face_hat_mut!(face).remote_interests.remove(&id);
     }
+}
+
+#[inline]
+pub(super) fn push_declaration_profile(tables: &Tables, face: &FaceState) -> bool {
+    face.whatami == WhatAmI::Client
+        || (face.whatami == WhatAmI::Peer && !hat!(tables).full_net(WhatAmI::Peer))
 }

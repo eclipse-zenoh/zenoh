@@ -19,7 +19,6 @@ use clap::Parser;
 use futures::select;
 use zenoh::{
     key_expr::{keyexpr, KeyExpr},
-    prelude::*,
     sample::{Sample, SampleKind},
     Config,
 };
@@ -28,7 +27,7 @@ use zenoh_examples::CommonArgs;
 #[tokio::main]
 async fn main() {
     // initiate logging
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
 
     let (config, key_expr, complete) = parse_args();
 

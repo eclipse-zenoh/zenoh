@@ -65,15 +65,6 @@ pub struct StorageConfig {
     pub volume_id: String,
     pub volume_cfg: Value,
     pub garbage_collection_config: GarbageCollectionConfig,
-    // Note: ReplicaConfig is optional. Alignment will be performed only if it is a replica
-    pub replica_config: Option<ReplicaConfig>,
-}
-// Note: All parameters should be same for replicas, else will result on huge overhead
-#[derive(JsonSchema, Debug, Clone, PartialEq, Eq)]
-pub struct ReplicaConfig {
-    pub publication_interval: Duration,
-    pub propagation_delay: Duration,
-    pub delta: Duration,
 }
 
 impl StructVersion for VolumeConfig {
@@ -86,24 +77,6 @@ impl StructVersion for VolumeConfig {
 }
 
 impl PluginStartArgs for VolumeConfig {}
-
-impl Default for ReplicaConfig {
-    fn default() -> Self {
-        Self {
-            // Publication interval indicates the frequency of digest publications
-            // This will determine the time upto which replicas might be diverged
-            // This can be different for each replica if not used to compute hot and warm
-            publication_interval: Duration::from_secs(5),
-            // This indicates the uncertainty due to the network
-            // The messages might still be in transit in the network
-            propagation_delay: Duration::from_millis(200),
-            // This is the chunk that you would like your data to be divide into in time.
-            // Higher the frequency of updates, lower the delta should be chosen
-            // To be efficient, delta should be the time containing no more than 100,000 samples
-            delta: Duration::from_millis(1000),
-        }
-    }
-}
 
 // The configuration for periodic garbage collection of metadata in storage manager
 #[derive(JsonSchema, Debug, Clone, PartialEq, Eq)]
@@ -164,20 +137,30 @@ impl<S: Into<String> + AsRef<str>, V: AsObject> TryFrom<(S, &V)> for PluginConfi
                 })
             })
             .unwrap_or(Ok(true))?;
+        // TODO(fuzzypixelz): refactor this function's interface to get access to the configuration
+        // source, this we can support spec syntax in the lib search dir.
         let backend_search_dirs = match value.get("backend_search_dirs") {
             Some(serde_json::Value::String(path)) => LibSearchDirs::from_paths(&[path.clone()]),
             Some(serde_json::Value::Array(paths)) => {
                 let mut specs = Vec::with_capacity(paths.len());
                 for path in paths {
                     let serde_json::Value::String(path) = path else {
-                        bail!("`backend_search_dirs` field of {}'s configuration must be a string or array of strings", name.as_ref());
+                        bail!(
+                            "`backend_search_dirs` field of {}'s configuration must be a string \
+                             or array of strings",
+                            name.as_ref()
+                        );
                     };
                     specs.push(path.clone());
                 }
-                LibSearchDirs::from_specs(&specs)?
+                LibSearchDirs::from_paths(&specs)
             }
             None => LibSearchDirs::default(),
-            _ => bail!("`backend_search_dirs` field of {}'s configuration must be a string or array of strings", name.as_ref())
+            _ => bail!(
+                "`backend_search_dirs` field of {}'s configuration must be a string or array of \
+                 strings",
+                name.as_ref()
+            ),
         };
         let volumes = match value.get("volumes") {
             Some(configs) => VolumeConfig::try_from(name.as_ref(), configs)?,
@@ -303,12 +286,22 @@ impl VolumeConfig {
                         if let serde_json::Value::String(path) = path {
                             paths.push(path.clone());
                         } else {
-                            bail!("`path` field of `{}`'s `{}` volume configuration must be a string or array of string", plugin_name, name)
+                            bail!(
+                                "`path` field of `{}`'s `{}` volume configuration must be a \
+                                 string or array of string",
+                                plugin_name,
+                                name
+                            )
                         }
                     }
                     Some(paths)
                 }
-                _ => bail!("`path` field of `{}`'s `{}` volume configuration must be a string or array of string", plugin_name, name)
+                _ => bail!(
+                    "`path` field of `{}`'s `{}` volume configuration must be a string or array \
+                     of string",
+                    plugin_name,
+                    name
+                ),
             };
             let required = match config.get("__required__") {
                 Some(serde_json::Value::Bool(b)) => *b,
@@ -367,20 +360,24 @@ impl StorageConfig {
                 Err(e) => bail!("key_expr='{}' is not a valid key-expression: {}", s, e),
             },
             None => {
-                bail!("elements of the `storages` field of `{}`'s configuration must be objects with at least a `key_expr` string-typed field",
-            plugin_name,)
+                bail!(
+                    "elements of the `storages` field of `{}`'s configuration must be objects \
+                     with at least a `key_expr` string-typed field",
+                    plugin_name,
+                )
             }
         };
         let complete = match config.get("complete").and_then(|x| x.as_str()) {
-            Some(s) => {
-                match s {
-                    "true" => true,
-                    "false" => false,
-                    e => {
-                        bail!("complete='{}' is not a valid value. Accepted values: ['true', 'false']", e)
-                    }
+            Some(s) => match s {
+                "true" => true,
+                "false" => false,
+                e => {
+                    bail!(
+                        "complete='{}' is not a valid value. Accepted values: ['true', 'false']",
+                        e
+                    )
                 }
-            }
+            },
             None => false,
         };
         let strip_prefix: Option<OwnedKeyExpr> = match config.get("strip_prefix") {
@@ -425,13 +422,27 @@ impl StorageConfig {
                         }
                     }
                 }
-                (volume_id.ok_or_else(|| zerror!("`volume` value for storage `{}` is an object, but misses mandatory string-typed field `id`", storage_name))?, volume_cfg.into())
+                (
+                    volume_id.ok_or_else(|| {
+                        zerror!(
+                            "`volume` value for storage `{}` is an object, but misses mandatory \
+                             string-typed field `id`",
+                            storage_name
+                        )
+                    })?,
+                    volume_cfg.into(),
+                )
             }
             None => bail!(
-                "`volume` field missing for storage `{}`. This field is mandatory and accepts strings or objects with at least the `id` field",
+                "`volume` field missing for storage `{}`. This field is mandatory and accepts \
+                 strings or objects with at least the `id` field",
                 storage_name
             ),
-            _ => bail!("Invalid type for field `volume` of storage `{}`. Only strings or objects with at least the `id` field are accepted.", storage_name)
+            _ => bail!(
+                "Invalid type for field `volume` of storage `{}`. Only strings or objects with at \
+                 least the `id` field are accepted.",
+                storage_name
+            ),
         };
         let garbage_collection_config = match config.get("garbage_collection") {
             Some(s) => {
@@ -441,7 +452,11 @@ impl StorageConfig {
                     if let Ok(period) = period {
                         garbage_collection_config.period = Duration::from_secs(period)
                     } else {
-                        bail!("Invalid type for field `period` in `garbage_collection` of storage `{}`. Only integer values are accepted.", plugin_name)
+                        bail!(
+                            "Invalid type for field `period` in `garbage_collection` of storage \
+                             `{}`. Only integer values are accepted.",
+                            plugin_name
+                        )
                     }
                 }
                 if let Some(lifespan) = s.get("lifespan") {
@@ -449,44 +464,16 @@ impl StorageConfig {
                     if let Ok(lifespan) = lifespan {
                         garbage_collection_config.lifespan = Duration::from_secs(lifespan)
                     } else {
-                        bail!("Invalid type for field `lifespan` in `garbage_collection` of storage `{}`. Only integer values are accepted.", plugin_name)
+                        bail!(
+                            "Invalid type for field `lifespan` in `garbage_collection` of storage \
+                             `{}`. Only integer values are accepted.",
+                            plugin_name
+                        )
                     }
                 }
                 garbage_collection_config
             }
             None => GarbageCollectionConfig::default(),
-        };
-        let replica_config = match config.get("replica_config") {
-            Some(s) => {
-                let mut replica_config = ReplicaConfig::default();
-                // TODO: Discuss what to do in case of wrong configuration - exit or use default
-                if let Some(p) = s.get("publication_interval") {
-                    let p = p.to_string().parse::<u64>();
-                    if let Ok(p) = p {
-                        replica_config.publication_interval = Duration::from_secs(p)
-                    } else {
-                        bail!("Invalid type for field `publication_interval` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
-                    }
-                }
-                if let Some(p) = s.get("propagation_delay") {
-                    let p = p.to_string().parse::<u64>();
-                    if let Ok(p) = p {
-                        replica_config.propagation_delay = Duration::from_millis(p)
-                    } else {
-                        bail!("Invalid type for field `propagation_delay` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
-                    }
-                }
-                if let Some(d) = s.get("delta") {
-                    let d = d.to_string().parse::<u64>();
-                    if let Ok(d) = d {
-                        replica_config.delta = Duration::from_millis(d)
-                    } else {
-                        bail!("Invalid type for field `delta` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
-                    }
-                }
-                Some(replica_config)
-            }
-            None => None,
         };
         Ok(StorageConfig {
             name: storage_name.into(),
@@ -496,7 +483,6 @@ impl StorageConfig {
             volume_id,
             volume_cfg,
             garbage_collection_config,
-            replica_config,
         })
     }
 }

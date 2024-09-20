@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+#![cfg(feature = "internal_config")]
 #![allow(unused)]
 use std::{
     future::IntoFuture,
@@ -37,7 +39,7 @@ async fn time_open(
     lowlatency: bool,
 ) {
     /* [ROUTER] */
-    let mut router_config = Config::default();
+    let mut router_config = zenoh::Config::default();
     router_config.set_mode(Some(WhatAmI::Router)).unwrap();
     router_config
         .listen
@@ -67,7 +69,7 @@ async fn time_open(
     );
 
     /* [APP] */
-    let mut app_config = Config::default();
+    let mut app_config = zenoh::Config::default();
     app_config.set_mode(Some(connect_mode)).unwrap();
     app_config
         .connect
@@ -138,7 +140,7 @@ async fn time_lowlatency_open(endpoint: &EndPoint, mode: WhatAmI) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn time_tcp_only_open() {
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14000).parse().unwrap();
     time_universal_open(&endpoint, WhatAmI::Client).await;
 }
@@ -147,7 +149,7 @@ async fn time_tcp_only_open() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn time_tcp_only_with_lowlatency_open() {
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14100).parse().unwrap();
     time_lowlatency_open(&endpoint, WhatAmI::Client).await;
 }
@@ -156,7 +158,7 @@ async fn time_tcp_only_with_lowlatency_open() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn time_udp_only_open() {
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
     let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 14010).parse().unwrap();
     time_universal_open(&endpoint, WhatAmI::Client).await;
 }
@@ -165,7 +167,7 @@ async fn time_udp_only_open() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn time_udp_only_with_lowlatency_open() {
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
     let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 14110).parse().unwrap();
     time_lowlatency_open(&endpoint, WhatAmI::Client).await;
 }
@@ -174,7 +176,7 @@ async fn time_udp_only_with_lowlatency_open() {
 // #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 // #[ignore]
 // async fn time_ws_only_open() {
-//     zenoh::try_init_log_from_env();
+//     zenoh::init_log_from_env_or("error");
 //     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 14020).parse().unwrap();
 //     time_universal_open(&endpoint, WhatAmI::Client).await;
 // }
@@ -183,7 +185,7 @@ async fn time_udp_only_with_lowlatency_open() {
 // #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 // #[ignore]
 // async fn time_ws_only_with_lowlatency_open() {
-//     zenoh::try_init_log_from_env();
+//     zenoh::init_log_from_env_or("error");
 //     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 14120).parse().unwrap();
 //     time_lowlatency_open(&endpoint, WhatAmI::Client).await;
 // }
@@ -192,7 +194,7 @@ async fn time_udp_only_with_lowlatency_open() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn time_unixpipe_only_open() {
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
     let endpoint: EndPoint = "unixpipe/time_unixpipe_only_open".parse().unwrap();
     time_universal_open(&endpoint, WhatAmI::Client).await;
 }
@@ -201,7 +203,7 @@ async fn time_unixpipe_only_open() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn time_unixpipe_only_with_lowlatency_open() {
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
     let endpoint: EndPoint = "unixpipe/time_unixpipe_only_with_lowlatency_open"
         .parse()
         .unwrap();
@@ -212,7 +214,7 @@ async fn time_unixpipe_only_with_lowlatency_open() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn time_unix_only_open() {
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
     let f1 = "zenoh-test-unix-socket-9-open.sock";
     let _ = std::fs::remove_file(f1);
     let endpoint: EndPoint = format!("unixsock-stream/{f1}").parse().unwrap();
@@ -227,7 +229,7 @@ async fn time_unix_only_open() {
 async fn time_tls_only_open() {
     use zenoh_link::tls::config::*;
 
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real
     //       mapping to any existing domain. The certificate and key
@@ -423,7 +425,7 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn time_vsock_only_open() {
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
     let endpoint: EndPoint = "vsock/VMADDR_CID_LOCAL:18000".parse().unwrap();
     time_lowlatency_open(&endpoint, WhatAmI::Client).await;
 }

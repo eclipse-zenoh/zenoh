@@ -17,7 +17,6 @@ use std::{
     sync::{atomic::Ordering, Arc},
 };
 
-use ordered_float::OrderedFloat;
 use zenoh_protocol::{
     core::{
         key_expr::{
@@ -43,7 +42,7 @@ use crate::net::routing::{
         resource::{NodeId, Resource, SessionContext},
         tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
     },
-    hat::{CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
+    hat::{p2p_peer::initial_interest, CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
     router::{update_query_routes_from, RoutesIndexes},
     RoutingContext,
 };
@@ -98,7 +97,9 @@ fn propagate_simple_queryable_to(
             || face_hat!(dst_face)
                 .remote_interests
                 .values()
-                .any(|(r, o)| o.queryables() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true)))
+                .any(|(r, _, o)| {
+                    o.queryables() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true)
+                }))
         && src_face
             .as_ref()
             .map(|src_face| {
@@ -112,7 +113,7 @@ fn propagate_simple_queryable_to(
         face_hat_mut!(dst_face)
             .local_qabls
             .insert(res.clone(), (id, info));
-        let key_expr = Resource::decl_key(res, dst_face);
+        let key_expr = Resource::decl_key(res, dst_face, dst_face.whatami != WhatAmI::Client);
         send_declare(
             &dst_face.primitives,
             RoutingContext::with_expr(
@@ -381,6 +382,28 @@ lazy_static::lazy_static! {
     static ref EMPTY_ROUTE: Arc<QueryTargetQablSet> = Arc::new(Vec::new());
 }
 
+#[inline]
+fn make_qabl_id(
+    res: &Arc<Resource>,
+    face: &mut Arc<FaceState>,
+    mode: InterestMode,
+    info: QueryableInfoType,
+) -> u32 {
+    if mode.future() {
+        if let Some((id, _)) = face_hat!(face).local_qabls.get(res) {
+            *id
+        } else {
+            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+            face_hat_mut!(face)
+                .local_qabls
+                .insert(res.clone(), (id, info));
+            id
+        }
+    } else {
+        0
+    }
+}
+
 pub(super) fn declare_qabl_interest(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
@@ -391,7 +414,7 @@ pub(super) fn declare_qabl_interest(
     send_declare: &mut SendDeclare,
 ) {
     if mode.current() && face.whatami == WhatAmI::Client {
-        let interest_id = (!mode.future()).then_some(id);
+        let interest_id = Some(id);
         if let Some(res) = res.as_ref() {
             if aggregate {
                 if tables.faces.values().any(|src_face| {
@@ -402,16 +425,8 @@ pub(super) fn declare_qabl_interest(
                             .any(|qabl| qabl.context.is_some() && qabl.matches(res))
                 }) {
                     let info = local_qabl_info(tables, res, face);
-                    let id = if mode.future() {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face)
-                            .local_qabls
-                            .insert((*res).clone(), (id, info));
-                        id
-                    } else {
-                        0
-                    };
-                    let wire_expr = Resource::decl_key(res, face);
+                    let id = make_qabl_id(res, face, mode, info);
+                    let wire_expr = Resource::decl_key(res, face, face.whatami != WhatAmI::Client);
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -441,16 +456,9 @@ pub(super) fn declare_qabl_interest(
                         for qabl in face_hat!(src_face).remote_qabls.values() {
                             if qabl.context.is_some() && qabl.matches(res) {
                                 let info = local_qabl_info(tables, qabl, face);
-                                let id = if mode.future() {
-                                    let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                                    face_hat_mut!(face)
-                                        .local_qabls
-                                        .insert(qabl.clone(), (id, info));
-                                    id
-                                } else {
-                                    0
-                                };
-                                let key_expr = Resource::decl_key(qabl, face);
+                                let id = make_qabl_id(qabl, face, mode, info);
+                                let key_expr =
+                                    Resource::decl_key(qabl, face, face.whatami != WhatAmI::Client);
                                 send_declare(
                                     &face.primitives,
                                     RoutingContext::with_expr(
@@ -484,16 +492,9 @@ pub(super) fn declare_qabl_interest(
                     for qabl in face_hat!(src_face).remote_qabls.values() {
                         if qabl.context.is_some() {
                             let info = local_qabl_info(tables, qabl, face);
-                            let id = if mode.future() {
-                                let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                                face_hat_mut!(face)
-                                    .local_qabls
-                                    .insert(qabl.clone(), (id, info));
-                                id
-                            } else {
-                                0
-                            };
-                            let key_expr = Resource::decl_key(qabl, face);
+                            let id = make_qabl_id(qabl, face, mode, info);
+                            let key_expr =
+                                Resource::decl_key(qabl, face, face.whatami != WhatAmI::Client);
                             send_declare(
                                 &face.primitives,
                                 RoutingContext::with_expr(
@@ -595,24 +596,18 @@ impl HatQueriesTrait for HatCode {
                 let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
                 route.push(QueryTargetQabl {
                     direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
-                    complete: 0,
-                    distance: f64::MAX,
+                    info: None,
                 });
             }
 
             for face in tables.faces.values().filter(|f| {
                 f.whatami == WhatAmI::Peer
-                    && !f
-                        .local_interests
-                        .get(&0)
-                        .map(|i| i.finalized)
-                        .unwrap_or(true)
+                    && !initial_interest(f).map(|i| i.finalized).unwrap_or(true)
             }) {
                 let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
                 route.push(QueryTargetQabl {
                     direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
-                    complete: 0,
-                    distance: 0.5,
+                    info: None,
                 });
             }
         }
@@ -637,18 +632,16 @@ impl HatQueriesTrait for HatCode {
                                 key_expr.to_owned(),
                                 NodeId::default(),
                             ),
-                            complete: if complete {
-                                qabl_info.complete as u64
-                            } else {
-                                0
-                            },
-                            distance: 0.5,
+                            info: Some(QueryableInfoType {
+                                complete: complete && qabl_info.complete,
+                                distance: 1,
+                            }),
                         });
                     }
                 }
             }
         }
-        route.sort_by_key(|qabl| OrderedFloat(qabl.distance));
+        route.sort_by_key(|qabl| qabl.info.map_or(u16::MAX, |i| i.distance));
         Arc::new(route)
     }
 

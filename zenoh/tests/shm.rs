@@ -21,15 +21,12 @@ use std::{
 };
 
 use zenoh::{
-    config,
-    prelude::*,
-    pubsub::Reliability,
-    qos::CongestionControl,
+    qos::{CongestionControl, Reliability},
     shm::{
         zshm, BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder,
         POSIX_PROTOCOL_ID,
     },
-    Session,
+    Session, Wait,
 };
 use zenoh_core::ztimeout;
 
@@ -41,7 +38,7 @@ const MSG_SIZE: [usize; 2] = [1_024, 100_000];
 
 async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
     // Open the sessions
-    let mut config = config::peer();
+    let mut config = zenoh::Config::default();
     config
         .listen
         .endpoints
@@ -56,7 +53,7 @@ async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
     println!("[  ][01a] Opening peer01 session: {:?}", endpoints);
     let peer01 = ztimeout!(zenoh::open(config)).unwrap();
 
-    let mut config = config::peer();
+    let mut config = zenoh::Config::default();
     config
         .connect
         .endpoints
@@ -76,7 +73,7 @@ async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
 
 async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session, Session) {
     // Open the sessions
-    let mut config = config::peer();
+    let mut config = zenoh::Config::default();
     config
         .listen
         .endpoints
@@ -86,7 +83,7 @@ async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session,
     println!("[  ][01a] Opening peer01 session: {}", endpoint01);
     let peer01 = ztimeout!(zenoh::open(config)).unwrap();
 
-    let mut config = config::peer();
+    let mut config = zenoh::Config::default();
     config
         .listen
         .endpoints
@@ -137,13 +134,13 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Re
         let backend = PosixShmProviderBackend::builder()
             .with_size(size * MSG_COUNT / 10)
             .unwrap()
-            .res()
+            .wait()
             .unwrap();
         // ...and SHM provider
         let shm01 = ShmProviderBuilder::builder()
             .protocol_id::<POSIX_PROTOCOL_ID>()
             .backend(backend)
-            .res();
+            .wait();
 
         // remember segment size that was allocated
         let shm_segment_size = shm01.available();
@@ -199,7 +196,7 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Re
 fn zenoh_shm_unicast() {
     tokio::runtime::Runtime::new().unwrap().block_on(async {
         // Initiate logging
-        zenoh::try_init_log_from_env();
+        zenoh::init_log_from_env_or("error");
 
         let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:19447"]).await;
         test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;
@@ -211,7 +208,7 @@ fn zenoh_shm_unicast() {
 fn zenoh_shm_multicast() {
     tokio::runtime::Runtime::new().unwrap().block_on(async {
         // Initiate logging
-        zenoh::try_init_log_from_env();
+        zenoh::init_log_from_env_or("error");
 
         let (peer01, peer02) =
             open_session_multicast("udp/224.0.0.1:19448", "udp/224.0.0.1:19448").await;

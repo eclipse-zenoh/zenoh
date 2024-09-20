@@ -34,11 +34,10 @@
 //! ### Publishing Data
 //! The example below shows how to produce a value for a key expression.
 //! ```
-//! use zenoh::prelude::*;
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     let session = zenoh::open(zenoh::config::default()).await.unwrap();
+//!     let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 //!     session.put("key/expression", "value").await.unwrap();
 //!     session.close().await.unwrap();
 //! }
@@ -48,11 +47,10 @@
 //! The example below shows how to consume values for a key expressions.
 //! ```no_run
 //! use futures::prelude::*;
-//! use zenoh::prelude::*;
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     let session = zenoh::open(zenoh::config::default()).await.unwrap();
+//!     let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 //!     let subscriber = session.declare_subscriber("key/expression").await.unwrap();
 //!     while let Ok(sample) = subscriber.recv_async().await {
 //!         println!("Received: {:?}", sample);
@@ -65,11 +63,10 @@
 //! resources whose key match the given *key expression*.
 //! ```
 //! use futures::prelude::*;
-//! use zenoh::prelude::*;
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     let session = zenoh::open(zenoh::config::default()).await.unwrap();
+//!     let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 //!     let replies = session.get("key/expression").await.unwrap();
 //!     while let Ok(reply) = replies.recv_async().await {
 //!         println!(">> Received {:?}", reply.result());
@@ -128,6 +125,7 @@ pub use crate::{
     session::{open, Session},
 };
 
+#[deprecated(since = "1.0.0")]
 pub mod prelude;
 
 /// [Key expression](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md) are Zenoh's address space.
@@ -188,7 +186,9 @@ pub mod key_expr {
 /// Zenoh [`Session`] and associated types
 pub mod session {
     #[zenoh_macros::unstable]
-    pub use zenoh_config::wrappers::{EntityGlobalId, ZenohId};
+    pub use zenoh_config::wrappers::EntityGlobalId;
+    pub use zenoh_config::wrappers::ZenohId;
+    #[zenoh_macros::unstable]
     pub use zenoh_protocol::core::EntityId;
 
     #[zenoh_macros::internal]
@@ -197,7 +197,7 @@ pub mod session {
         builders::publisher::{SessionDeleteBuilder, SessionPutBuilder},
         info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, SessionInfo, ZenohIdBuilder},
         query::SessionGetBuilder,
-        session::{open, OpenBuilder, Session, SessionDeclarations, SessionRef, Undeclarable},
+        session::{open, OpenBuilder, Session, Undeclarable},
     };
 }
 
@@ -206,23 +206,21 @@ pub mod sample {
     #[zenoh_macros::unstable]
     pub use crate::api::sample::Locality;
     #[zenoh_macros::unstable]
-    pub use crate::api::sample::SourceInfo;
+    pub use crate::api::sample::{SourceInfo, SourceSn};
     pub use crate::api::{
         builders::sample::{
             SampleBuilder, SampleBuilderAny, SampleBuilderDelete, SampleBuilderPut,
-            SampleBuilderTrait, TimestampBuilderTrait,
         },
-        sample::{Sample, SampleFields, SampleKind, SourceSn},
+        sample::{Sample, SampleFields, SampleKind},
     };
 }
 
 /// Payload primitives
 pub mod bytes {
     pub use crate::api::{
-        builders::sample::EncodingBuilderTrait,
         bytes::{
             Deserialize, OptionZBytes, Serialize, ZBytes, ZBytesIterator, ZBytesReader,
-            ZBytesWriter, ZDeserializeError, ZSerde,
+            ZBytesSliceIterator, ZBytesWriter, ZDeserializeError, ZSerde,
         },
         encoding::Encoding,
     };
@@ -230,12 +228,9 @@ pub mod bytes {
 
 /// Pub/sub primitives
 pub mod pubsub {
-    pub use zenoh_protocol::core::Reliability;
-
     #[zenoh_macros::unstable]
     pub use crate::api::publisher::{
         MatchingListener, MatchingListenerBuilder, MatchingListenerUndeclaration, MatchingStatus,
-        PublisherDeclarations, PublisherRef,
     };
     pub use crate::api::{
         builders::publisher::{
@@ -278,8 +273,10 @@ pub mod handlers {
 /// Quality of service primitives
 pub mod qos {
     pub use zenoh_protocol::core::CongestionControl;
+    #[zenoh_macros::unstable]
+    pub use zenoh_protocol::core::Reliability;
 
-    pub use crate::api::{builders::sample::QoSBuilderTrait, publisher::Priority};
+    pub use crate::api::publisher::Priority;
 }
 
 /// Scouting primitives
@@ -299,9 +296,8 @@ pub mod scouting {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let liveliness = session
 ///     .liveliness()
 ///     .declare_token("key/expression")
@@ -314,9 +310,8 @@ pub mod scouting {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let replies = session.liveliness().get("key/**").await.unwrap();
 /// while let Ok(reply) = replies.recv_async().await {
 ///     if let Ok(sample) = reply.result() {
@@ -330,9 +325,9 @@ pub mod scouting {
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::{prelude::*, sample::SampleKind};
+/// use zenoh::sample::SampleKind;
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let subscriber = session.liveliness().declare_subscriber("key/**").await.unwrap();
 /// while let Ok(sample) = subscriber.recv_async().await {
 ///     match sample.kind() {
@@ -357,11 +352,11 @@ pub mod time {
 
 /// Configuration to pass to [`open`] and [`scout`] functions and associated constants
 pub mod config {
-    // pub use zenoh_config::{
-    //     client, default, peer, Config, EndPoint, Locator, ModeDependentValue, PermissionsConf,
-    //     PluginLoad, ValidatedMap, ZenohId,
-    // };
-    pub use zenoh_config::*;
+    pub use zenoh_config::{EndPoint, Locator, WhatAmI, WhatAmIMatcher, ZenohId};
+
+    pub use crate::api::config::Config;
+    #[zenoh_macros::unstable]
+    pub use crate::api::config::Notifier;
 }
 
 #[cfg(all(
@@ -374,6 +369,11 @@ compile_error!(
 
 #[zenoh_macros::internal]
 pub mod internal {
+    pub mod traits {
+        pub use crate::api::builders::sample::{
+            EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
+        };
+    }
     pub use zenoh_core::{
         zasync_executor_init, zasynclock, zerror, zlock, zread, ztimeout, zwrite, ResolveFuture,
     };
@@ -418,6 +418,7 @@ pub mod internal {
     pub use crate::api::value::Value;
 }
 
+/// Shared memory.
 #[zenoh_macros::unstable]
 #[cfg(feature = "shared-memory")]
 pub mod shm {
@@ -440,11 +441,12 @@ pub mod shm {
         provider::{
             chunk::{AllocatedChunk, ChunkDescriptor},
             shm_provider::{
-                AllocBuilder, AllocBuilder2, AllocLayout, AllocLayoutSizedBuilder, AllocPolicy,
-                AsyncAllocPolicy, BlockOn, DeallocEldest, DeallocOptimal, DeallocYoungest,
-                Deallocate, Defragment, DynamicProtocolID, ForceDeallocPolicy, GarbageCollect,
-                JustAlloc, ProtocolIDSource, ShmProvider, ShmProviderBuilder,
-                ShmProviderBuilderBackendID, ShmProviderBuilderID, StaticProtocolID,
+                AllocLayout, AllocLayoutSizedBuilder, AllocPolicy, AsyncAllocPolicy, BlockOn,
+                DeallocEldest, DeallocOptimal, DeallocYoungest, Deallocate, Defragment,
+                DynamicProtocolID, ForceDeallocPolicy, GarbageCollect, JustAlloc,
+                LayoutAllocBuilder, ProtocolIDSource, ProviderAllocBuilder, ShmProvider,
+                ShmProviderBuilder, ShmProviderBuilderBackendID, ShmProviderBuilderID,
+                StaticProtocolID,
             },
             shm_provider_backend::ShmProviderBackend,
             types::{

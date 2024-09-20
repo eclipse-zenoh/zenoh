@@ -19,18 +19,16 @@ use std::{
 use serde_json::json;
 use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
-use zenoh_config::{unwrap_or_default, wrappers::ZenohId, ConfigValidator, ValidatedMap, WhatAmI};
+use zenoh_config::{unwrap_or_default, wrappers::ZenohId, ConfigValidator, WhatAmI};
 use zenoh_core::Wait;
 #[cfg(feature = "plugins")]
-use zenoh_plugin_trait::{PluginControl, PluginStatus};
+use zenoh_plugin_trait::{PluginControl, PluginDiff, PluginStatus};
 #[cfg(feature = "plugins")]
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, ExprId, WireExpr, EMPTY_EXPR_ID},
+    core::{key_expr::OwnedKeyExpr, ExprId, Reliability, WireExpr, EMPTY_EXPR_ID},
     network::{
-        declare::{
-            queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, QueryableId,
-        },
+        declare::{queryable::ext::QueryableInfoType, QueryableId},
         ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Interest, Push, Request,
         Response, ResponseFinal,
     },
@@ -44,7 +42,6 @@ use super::{routing::dispatcher::face::Face, Runtime};
 use crate::api::plugins::PluginsManager;
 use crate::{
     api::{
-        builders::sample::EncodingBuilderTrait,
         bytes::ZBytes,
         key_expr::KeyExpr,
         queryable::{Query, QueryInner},
@@ -68,13 +65,6 @@ pub struct AdminSpace {
     mappings: Mutex<HashMap<ExprId, String>>,
     handlers: HashMap<OwnedKeyExpr, Handler>,
     context: Arc<AdminContext>,
-}
-
-#[cfg(feature = "plugins")]
-#[derive(Debug, Clone)]
-enum PluginDiff {
-    Delete(String),
-    Start(zenoh_config::PluginLoad),
 }
 
 impl ConfigValidator for AdminSpace {
@@ -160,7 +150,7 @@ impl AdminSpace {
     pub async fn start(runtime: &Runtime, version: String) {
         let zid_str = runtime.state.zid.to_string();
         let whatami_str = runtime.state.whatami.to_str();
-        let mut config = runtime.config().lock();
+        let config = &mut runtime.config().lock().0;
         let root_key: OwnedKeyExpr = format!("@/{zid_str}/{whatami_str}").try_into().unwrap();
 
         let mut handlers: HashMap<_, Handler> = HashMap::new();
@@ -240,7 +230,7 @@ impl AdminSpace {
 
         config.set_plugin_validator(Arc::downgrade(&admin));
 
-        #[cfg(feature = "plugins")]
+        #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
         {
             let cfg_rx = admin.context.runtime.state.config.subscribe();
 
@@ -336,7 +326,6 @@ impl AdminSpace {
             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                 id: runtime.next_id(),
                 wire_expr: [&root_key, "/config/**"].concat().into(),
-                ext_info: SubscriberInfo::DEFAULT,
             }),
         });
     }
@@ -375,10 +364,10 @@ impl Primitives for AdminSpace {
         }
     }
 
-    fn send_push(&self, msg: Push) {
+    fn send_push(&self, msg: Push, _reliability: Reliability) {
         trace!("recv Push {:?}", msg);
         {
-            let conf = self.context.runtime.state.config.lock();
+            let conf = &self.context.runtime.state.config.lock().0;
             if !conf.adminspace.permissions().write {
                 tracing::error!(
                     "Received PUT on '{}' but adminspace.permissions.write=false in configuration",
@@ -402,8 +391,7 @@ impl Primitives for AdminSpace {
                             key,
                             json
                         );
-                        if let Err(e) = (&self.context.runtime.state.config).insert_json5(key, json)
-                        {
+                        if let Err(e) = self.context.runtime.state.config.insert_json5(key, json) {
                             error!(
                                 "Error inserting conf value @/{}/{}/config/{} : {} - {}",
                                 self.context.runtime.state.zid,
@@ -440,7 +428,7 @@ impl Primitives for AdminSpace {
             RequestBody::Query(query) => {
                 let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
                 {
-                    let conf = self.context.runtime.state.config.lock();
+                    let conf = &self.context.runtime.state.config.lock().0;
                     if !conf.adminspace.permissions().read {
                         tracing::error!(
                         "Received GET on '{}' but adminspace.permissions.read=false in configuration",
@@ -516,8 +504,8 @@ impl crate::net::primitives::EPrimitives for AdminSpace {
     }
 
     #[inline]
-    fn send_push(&self, msg: Push) {
-        (self as &dyn Primitives).send_push(msg)
+    fn send_push(&self, msg: Push, reliability: Reliability) {
+        (self as &dyn Primitives).send_push(msg, reliability)
     }
 
     #[inline]
@@ -607,7 +595,7 @@ fn local_data(context: &AdminContext, query: Query) {
     let mut json = json!({
         "zid": context.runtime.state.zid,
         "version": context.version,
-        "metadata": context.runtime.config().lock().metadata(),
+        "metadata": context.runtime.config().lock().0.metadata(),
         "locators": locators,
         "sessions": transports,
         "plugins": plugins,

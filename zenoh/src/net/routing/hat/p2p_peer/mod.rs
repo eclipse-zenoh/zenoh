@@ -16,7 +16,7 @@
 //!
 //! This module is intended for Zenoh's internal use.
 //!
-//! [Click here for Zenoh's documentation](../zenoh/index.html)
+//! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 use std::{
     any::Any,
     collections::HashMap,
@@ -33,7 +33,7 @@ use zenoh_protocol::{
             queryable::ext::QueryableInfoType,
             QueryableId, SubscriberId, TokenId,
         },
-        interest::{InterestId, InterestOptions},
+        interest::{InterestId, InterestMode, InterestOptions},
         oam::id::OAM_LINKSTATE,
         Declare, DeclareBody, DeclareFinal, Oam,
     },
@@ -107,7 +107,8 @@ pub(crate) struct HatCode {}
 
 impl HatBaseTrait for HatCode {
     fn init(&self, tables: &mut Tables, runtime: Runtime) {
-        let config = runtime.config().lock();
+        let config_guard = runtime.config().lock();
+        let config = &config_guard.0;
         let whatami = tables.whatami;
         let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
         let gossip_multihop = unwrap_or_default!(config.scouting().gossip().multihop());
@@ -118,7 +119,7 @@ impl HatBaseTrait for HatCode {
         };
         let router_peers_failover_brokering =
             unwrap_or_default!(config.routing().router().peers_failover_brokering());
-        drop(config);
+        drop(config_guard);
 
         hat_mut!(tables).gossip = Some(Network::new(
             "[Gossip]".to_string(),
@@ -172,7 +173,7 @@ impl HatBaseTrait for HatCode {
         }
         if face.state.whatami == WhatAmI::Peer {
             get_mut_unchecked(&mut face.state).local_interests.insert(
-                0,
+                INITIAL_INTEREST_ID,
                 InterestState {
                     options: InterestOptions::ALL,
                     res: None,
@@ -406,7 +407,7 @@ impl HatContext {
 
 struct HatFace {
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
-    remote_interests: HashMap<InterestId, (Option<Arc<Resource>>, InterestOptions)>,
+    remote_interests: HashMap<InterestId, (Option<Arc<Resource>>, InterestMode, InterestOptions)>,
     local_subs: HashMap<Arc<Resource>, SubscriberId>,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
     local_tokens: HashMap<Arc<Resource>, TokenId>,
@@ -418,7 +419,7 @@ struct HatFace {
 impl HatFace {
     fn new() -> Self {
         Self {
-            next_id: AtomicU32::new(0),
+            next_id: AtomicU32::new(1), // In p2p, id 0 is erserved for initial interest
             remote_interests: HashMap::new(),
             local_subs: HashMap::new(),
             remote_subs: HashMap::new(),
@@ -439,4 +440,17 @@ fn get_routes_entries() -> RoutesIndexes {
         peers: vec![0],
         clients: vec![0],
     }
+}
+
+// In p2p, at connection, while no interest is sent on the network,
+// peers act as if they received an interest CurrentFuture with id 0
+// and send back a DeclareFinal with interest_id 0.
+// This 'ghost' interest is registered locally to allow tracking if
+// the DeclareFinal has been received or not (finalized).
+
+const INITIAL_INTEREST_ID: u32 = 0;
+
+#[inline]
+fn initial_interest(face: &FaceState) -> Option<&InterestState> {
+    face.local_interests.get(&INITIAL_INTEREST_ID)
 }

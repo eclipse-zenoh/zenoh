@@ -11,15 +11,18 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+#![cfg(feature = "internal_config")]
+
 use std::time::Duration;
 
-use zenoh::{config, query::Reply, sample::SampleKind, Session};
+use zenoh::{query::Reply, sample::SampleKind, Session};
 use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
 async fn open_session(listen: &[&str], connect: &[&str]) -> Session {
-    let mut config = config::peer();
+    let mut config = zenoh::Config::default();
     config
         .listen
         .endpoints
@@ -52,7 +55,6 @@ async fn close_session(session: Session) {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_events() {
-    use zenoh::prelude::SessionDeclarations;
     let session = open_session(&["tcp/127.0.0.1:18447"], &[]).await;
     let zid = session.zid();
     let sub1 =

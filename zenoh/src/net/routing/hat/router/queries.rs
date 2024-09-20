@@ -17,7 +17,6 @@ use std::{
     sync::{atomic::Ordering, Arc},
 };
 
-use ordered_float::OrderedFloat;
 use petgraph::graph::NodeIndex;
 use zenoh_protocol::{
     core::{
@@ -39,7 +38,8 @@ use zenoh_sync::get_mut_unchecked;
 
 use super::{
     face_hat, face_hat_mut, get_peer, get_router, get_routes_entries, hat, hat_mut,
-    network::Network, res_hat, res_hat_mut, HatCode, HatContext, HatFace, HatTables,
+    interests::push_declaration_profile, network::Network, res_hat, res_hat_mut, HatCode,
+    HatContext, HatFace, HatTables,
 };
 use crate::net::routing::{
     dispatcher::{
@@ -206,7 +206,8 @@ fn send_sourced_queryable_to_net_children(
                         .map(|src_face| someface.id != src_face.id)
                         .unwrap_or(true)
                     {
-                        let key_expr = Resource::decl_key(res, &mut someface);
+                        let push_declaration = push_declaration_profile(tables, &someface);
+                        let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
@@ -272,7 +273,8 @@ fn propagate_simple_queryable(
             face_hat_mut!(&mut dst_face)
                 .local_qabls
                 .insert(res.clone(), (id, info));
-            let key_expr = Resource::decl_key(res, &mut dst_face);
+            let push_declaration = push_declaration_profile(tables, &dst_face);
+            let key_expr = Resource::decl_key(res, &mut dst_face, push_declaration);
             send_declare(
                 &dst_face.primitives,
                 RoutingContext::with_expr(
@@ -515,7 +517,8 @@ fn send_forget_sourced_queryable_to_net_children(
                         .map(|src_face| someface.id != src_face.id)
                         .unwrap_or(true)
                     {
-                        let wire_expr = Resource::decl_key(res, &mut someface);
+                        let push_declaration = push_declaration_profile(tables, &someface);
+                        let wire_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
@@ -999,7 +1002,8 @@ pub(super) fn queries_linkstate_change(
                             face_hat_mut!(&mut dst_face)
                                 .local_qabls
                                 .insert(res.clone(), (id, info));
-                            let key_expr = Resource::decl_key(res, &mut dst_face);
+                            let push_declaration = push_declaration_profile(tables, &dst_face);
+                            let key_expr = Resource::decl_key(res, &mut dst_face, push_declaration);
                             send_declare(
                                 &dst_face.primitives,
                                 RoutingContext::with_expr(
@@ -1097,12 +1101,10 @@ fn insert_target_for_qabls(
                                         Resource::get_best_key(expr.prefix, expr.suffix, face.id);
                                     route.push(QueryTargetQabl {
                                         direction: (face.clone(), key_expr.to_owned(), source),
-                                        complete: if complete {
-                                            qabl_info.complete as u64
-                                        } else {
-                                            0
-                                        },
-                                        distance: net.distances[qabl_idx.index()],
+                                        info: Some(QueryableInfoType {
+                                            complete: complete && qabl_info.complete,
+                                            distance: net.distances[qabl_idx.index()] as u16,
+                                        }),
                                     });
                                 }
                             }
@@ -1120,6 +1122,28 @@ lazy_static::lazy_static! {
     static ref EMPTY_ROUTE: Arc<QueryTargetQablSet> = Arc::new(Vec::new());
 }
 
+#[inline]
+fn make_qabl_id(
+    res: &Arc<Resource>,
+    face: &mut Arc<FaceState>,
+    mode: InterestMode,
+    info: QueryableInfoType,
+) -> u32 {
+    if mode.future() {
+        if let Some((id, _)) = face_hat!(face).local_qabls.get(res) {
+            *id
+        } else {
+            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+            face_hat_mut!(face)
+                .local_qabls
+                .insert(res.clone(), (id, info));
+            id
+        }
+    } else {
+        0
+    }
+}
+
 pub(crate) fn declare_qabl_interest(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
@@ -1130,7 +1154,7 @@ pub(crate) fn declare_qabl_interest(
     send_declare: &mut SendDeclare,
 ) {
     if mode.current() {
-        let interest_id = (!mode.future()).then_some(id);
+        let interest_id = Some(id);
         if let Some(res) = res.as_ref() {
             if aggregate {
                 if hat!(tables).router_qabls.iter().any(|qabl| {
@@ -1152,16 +1176,9 @@ pub(crate) fn declare_qabl_interest(
                             }))
                 }) {
                     let info = local_qabl_info(tables, res, face);
-                    let id = if mode.future() {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face)
-                            .local_qabls
-                            .insert((*res).clone(), (id, info));
-                        id
-                    } else {
-                        0
-                    };
-                    let wire_expr = Resource::decl_key(res, face);
+                    let id = make_qabl_id(res, face, mode, info);
+                    let wire_expr =
+                        Resource::decl_key(res, face, push_declaration_profile(tables, face));
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -1197,16 +1214,9 @@ pub(crate) fn declare_qabl_interest(
                             }))
                     {
                         let info = local_qabl_info(tables, qabl, face);
-                        let id = if mode.future() {
-                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                            face_hat_mut!(face)
-                                .local_qabls
-                                .insert(qabl.clone(), (id, info));
-                            id
-                        } else {
-                            0
-                        };
-                        let key_expr = Resource::decl_key(qabl, face);
+                        let id = make_qabl_id(qabl, face, mode, info);
+                        let key_expr =
+                            Resource::decl_key(qabl, face, push_declaration_profile(tables, face));
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(
@@ -1235,16 +1245,9 @@ pub(crate) fn declare_qabl_interest(
                         || remote_router_qabls(tables, qabl))
                 {
                     let info = local_qabl_info(tables, qabl, face);
-                    let id = if mode.future() {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face)
-                            .local_qabls
-                            .insert(qabl.clone(), (id, info));
-                        id
-                    } else {
-                        0
-                    };
-                    let key_expr = Resource::decl_key(qabl, face);
+                    let id = make_qabl_id(qabl, face, mode, info);
+                    let key_expr =
+                        Resource::decl_key(qabl, face, push_declaration_profile(tables, face));
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -1474,19 +1477,17 @@ impl HatQueriesTrait for HatCode {
                                     key_expr.to_owned(),
                                     NodeId::default(),
                                 ),
-                                complete: if complete {
-                                    qabl_info.complete as u64
-                                } else {
-                                    0
-                                },
-                                distance: 0.5,
+                                info: Some(QueryableInfoType {
+                                    complete: complete && qabl_info.complete,
+                                    distance: 1,
+                                }),
                             });
                         }
                     }
                 }
             }
         }
-        route.sort_by_key(|qabl| OrderedFloat(qabl.distance));
+        route.sort_by_key(|qabl| qabl.info.map_or(u16::MAX, |i| i.distance));
         Arc::new(route)
     }
 

@@ -89,10 +89,10 @@
   },
   /// Configure the scouting mechanisms and their behaviours
   scouting: {
-    /// In client mode, the period dedicated to scouting for a router before failing
+    /// In client mode, the period in milliseconds dedicated to scouting for a router before failing.
     timeout: 3000,
-    /// In peer mode, the period dedicated to scouting remote peers before attempting other operations
-    delay: 200,
+    /// In peer mode, the maximum period in milliseconds dedicated to scouting remote peers before attempting other operations.
+    delay: 500,
     /// The multicast scouting configuration.
     multicast: {
       /// Whether multicast scouting is enabled or not
@@ -314,6 +314,13 @@
       },
     },
     multicast: {
+      /// WARNING: multicast communication does not perform any negotiation upon group joining.
+      ///   Because of that, it is important that all transport parameters are the same to make
+      ///   sure all your nodes in the system can communicate. One common parameter to configure
+      ///   is "transport/link/tx/batch_size" since its default value depends on the actual platform
+      ///   when operating on multicast. 
+      ///   E.g., the batch size on Linux and Windows is 65535 bytes, on Mac OS X is 9216, and anything else is 8192.
+
       /// Enables QoS on multicast communication.
       /// Default to false for Zenoh-to-Zenoh-Pico out-of-the-box compatibility.
       qos: {
@@ -353,8 +360,6 @@
         /// Therefore, the maximum batch size is 2^16-1 (i.e. 65535).
         /// The default batch size value is the maximum batch size: 65535.
         batch_size: 65535,
-        /// Perform batching of messages if they are smaller of the batch_size
-        batching: true,
         /// Each zenoh link has a transmission queue that can be configured
         queue: {
           /// The size of each priority queue indicates the number of batches a given queue can contain.
@@ -380,15 +385,22 @@
             /// The maximum time in microseconds to wait for an available batch before dropping the message if still no batch is available.
             wait_before_drop: 1000,
           },
-          /// The initial exponential backoff time in nanoseconds to allow the batching to eventually progress.
-          /// Higher values lead to a more aggressive batching but it will introduce additional latency.
-          backoff: 100,
+          /// Perform batching of messages if they are smaller of the batch_size
+          batching: {
+            /// Perform adaptive batching of messages if they are smaller of the batch_size.
+            /// When the network is detected to not be fast enough to transmit every message individually, many small messages may be
+            /// batched together and sent all at once on the wire reducing the overall network overhead. This is typically of a high-throughput
+            /// scenario mainly composed of small messages. In other words, batching is activated by the network back-pressure.
+            enabled: true,
+            /// The maximum time limit (in ms) a message should be retained for batching when back-pressure happens.
+            time_limit: 1,
+          }
         },
       },
       /// Configure the zenoh RX parameters of a link
       rx: {
         /// Receiving buffer size in bytes for each link
-        /// The default the rx_buffer_size value is the same as the default batch size: 65335.
+        /// The default the rx_buffer_size value is the same as the default batch size: 65535.
         /// For very high throughput scenarios, the rx_buffer_size can be increased to accommodate
         /// more in-flight data. This is particularly relevant when dealing with large messages.
         /// E.g. for 16MiB rx_buffer_size set the value to: 16777216.
@@ -500,7 +512,7 @@
   //      http_port: 8000,
   //      /// The number of worker thread in TOKIO runtime (default: 2)
   //      /// The configuration only takes effect if running as a dynamic plugin, which can not reuse the current runtime.
-  //      work_thread_num: 0,
+  //      work_thread_num: 2,
   //      /// The number of blocking thread in TOKIO runtime (default: 50)
   //      /// The configuration only takes effect if running as a dynamic plugin, which can not reuse the current runtime.
   //      max_block_thread_num: 50,
@@ -562,20 +574,6 @@
   //            /// The duration is specified in seconds.
   //            lifespan: 86400,
   //          },
-  //          /// If multiple storages subscribing to the same key_expr should be synchronized, declare them as replicas.
-  //          /// In the absence of this configuration, a normal storage is initialized
-  //          /// Note: all the samples to be stored in replicas should be timestamped
-  //          replica_config: {
-  //            /// Specifying the parameters is optional, by default the values provided will be used.
-  //            /// Time interval between different synchronization attempts in seconds
-  //            publication_interval: 5,
-  //            /// Expected propagation delay of the network in milliseconds
-  //            propagation_delay: 200,
-  //            /// This is the chunk that you would like your data to be divide into in time, in milliseconds.
-  //            /// Higher the frequency of updates, lower the delta should be chosen
-  //            /// To be efficient, delta should be the time containing no more than 100,000 samples
-  //            delta: 1000,
-  //          }
   //        },
   //        demo3: {
   //          key_expr: "demo/memory3/**",

@@ -16,6 +16,8 @@ use std::marker::PhantomData;
 use uhlc::Timestamp;
 use zenoh_core::zresult;
 use zenoh_protocol::core::CongestionControl;
+#[cfg(feature = "unstable")]
+use zenoh_protocol::core::Reliability;
 
 use crate::api::{
     bytes::{OptionZBytes, ZBytes},
@@ -87,6 +89,8 @@ impl SampleBuilder<SampleBuilderPut> {
                 timestamp: None,
                 qos: QoS::default(),
                 #[cfg(feature = "unstable")]
+                reliability: Reliability::DEFAULT,
+                #[cfg(feature = "unstable")]
                 source_info: SourceInfo::empty(),
                 attachment: None,
             },
@@ -116,6 +120,8 @@ impl SampleBuilder<SampleBuilderDelete> {
                 encoding: Encoding::default(),
                 timestamp: None,
                 qos: QoS::default(),
+                #[cfg(feature = "unstable")]
+                reliability: Reliability::DEFAULT,
                 #[cfg(feature = "unstable")]
                 source_info: SourceInfo::empty(),
                 attachment: None,
@@ -147,8 +153,20 @@ impl<T> SampleBuilder<T> {
             _t: PhantomData::<T>,
         }
     }
+
+    #[zenoh_macros::unstable]
+    pub fn reliability(self, reliability: Reliability) -> Self {
+        Self {
+            sample: Sample {
+                reliability,
+                ..self.sample
+            },
+            _t: PhantomData::<T>,
+        }
+    }
 }
 
+#[zenoh_macros::internal_trait]
 impl<T> TimestampBuilderTrait for SampleBuilder<T> {
     fn timestamp<U: Into<Option<Timestamp>>>(self, timestamp: U) -> Self {
         Self {
@@ -161,6 +179,7 @@ impl<T> TimestampBuilderTrait for SampleBuilder<T> {
     }
 }
 
+#[zenoh_macros::internal_trait]
 impl<T> SampleBuilderTrait for SampleBuilder<T> {
     #[zenoh_macros::unstable]
     fn source_info(self, source_info: SourceInfo) -> Self {
@@ -185,6 +204,7 @@ impl<T> SampleBuilderTrait for SampleBuilder<T> {
     }
 }
 
+#[zenoh_macros::internal_trait]
 impl<T> QoSBuilderTrait for SampleBuilder<T> {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let qos: QoSBuilder = self.sample.qos.into();
@@ -212,6 +232,7 @@ impl<T> QoSBuilderTrait for SampleBuilder<T> {
     }
 }
 
+#[zenoh_macros::internal_trait]
 impl EncodingBuilderTrait for SampleBuilder<SampleBuilderPut> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {

@@ -14,6 +14,8 @@
 
 use std::{
     collections::HashMap,
+    error::Error,
+    fmt::Display,
     future::{IntoFuture, Ready},
     time::Duration,
 };
@@ -25,10 +27,14 @@ use zenoh_keyexpr::OwnedKeyExpr;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::ZenohIdProto;
 use zenoh_protocol::core::{CongestionControl, Parameters};
+/// The [`Queryable`](crate::query::Queryable)s that should be target of a [`get`](Session::get).
+pub use zenoh_protocol::network::request::ext::QueryTarget;
+#[doc(inline)]
+pub use zenoh_protocol::zenoh::query::ConsolidationMode;
 use zenoh_result::ZResult;
 
 use super::{
-    builders::sample::{EncodingBuilderTrait, QoSBuilderTrait},
+    builders::sample::{EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait},
     bytes::ZBytes,
     encoding::Encoding,
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
@@ -41,13 +47,7 @@ use super::{
 };
 #[cfg(feature = "unstable")]
 use super::{sample::SourceInfo, selector::ZenohParameters};
-use crate::{bytes::OptionZBytes, sample::SampleBuilderTrait};
-
-/// The [`Queryable`](crate::query::Queryable)s that should be target of a [`get`](Session::get).
-pub type QueryTarget = zenoh_protocol::network::request::ext::TargetType;
-
-/// The kind of consolidation.
-pub type ConsolidationMode = zenoh_protocol::zenoh::query::Consolidation;
+use crate::bytes::OptionZBytes;
 
 /// The replies consolidation strategy to apply on replies to a [`get`](Session::get).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -105,6 +105,19 @@ impl ReplyError {
     }
 }
 
+impl Display for ReplyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "query returned an error with a {} bytes payload and encoding {}",
+            self.payload.len(),
+            self.encoding
+        )
+    }
+}
+
+impl Error for ReplyError {}
+
 impl From<Value> for ReplyError {
     fn from(value: Value) -> Self {
         Self {
@@ -140,6 +153,8 @@ impl Reply {
     }
 
     #[zenoh_macros::unstable]
+    // @TODO: maybe return an `Option<EntityGlobalId>`?
+    //
     /// Gets the id of the zenoh instance that answered this Reply.
     pub fn replier_id(&self) -> Option<ZenohId> {
         self.replier_id.map(Into::into)
@@ -154,7 +169,7 @@ impl From<Reply> for Result<Sample, ReplyError> {
 
 #[cfg(feature = "unstable")]
 pub(crate) struct LivelinessQueryState {
-    pub(crate) callback: Callback<'static, Reply>,
+    pub(crate) callback: Callback<Reply>,
 }
 
 pub(crate) struct QueryState {
@@ -163,7 +178,7 @@ pub(crate) struct QueryState {
     pub(crate) parameters: Parameters<'static>,
     pub(crate) reception_mode: ConsolidationMode,
     pub(crate) replies: Option<HashMap<OwnedKeyExpr, Reply>>,
-    pub(crate) callback: Callback<'static, Reply>,
+    pub(crate) callback: Callback<Reply>,
 }
 
 impl QueryState {
@@ -178,9 +193,9 @@ impl QueryState {
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use zenoh::{prelude::*, query::{ConsolidationMode, QueryTarget}};
+/// use zenoh::{query::{ConsolidationMode, QueryTarget}};
 ///
-/// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let replies = session
 ///     .get("key/expression?value>1")
 ///     .target(QueryTarget::All)
@@ -209,6 +224,7 @@ pub struct SessionGetBuilder<'a, 'b, Handler> {
     pub(crate) source_info: SourceInfo,
 }
 
+#[zenoh_macros::internal_trait]
 impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
     #[zenoh_macros::unstable]
     fn source_info(self, source_info: SourceInfo) -> Self {
@@ -227,6 +243,7 @@ impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
     }
 }
 
+#[zenoh_macros::internal_trait]
 impl QoSBuilderTrait for SessionGetBuilder<'_, '_, DefaultHandler> {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let qos = self.qos.congestion_control(congestion_control);
@@ -244,6 +261,7 @@ impl QoSBuilderTrait for SessionGetBuilder<'_, '_, DefaultHandler> {
     }
 }
 
+#[zenoh_macros::internal_trait]
 impl<Handler> EncodingBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         let mut value = self.value.unwrap_or_default();
@@ -262,9 +280,8 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let queryable = session
     ///     .get("key/expression")
     ///     .callback(|reply| {println!("Received {:?}", reply.result());})
@@ -277,48 +294,20 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     where
         Callback: Fn(Reply) + Send + Sync + 'static,
     {
-        let SessionGetBuilder {
-            session,
-            selector,
-            target,
-            consolidation,
-            qos,
-            destination,
-            timeout,
-            value,
-            attachment,
-            #[cfg(feature = "unstable")]
-            source_info,
-            handler: _,
-        } = self;
-        SessionGetBuilder {
-            session,
-            selector,
-            target,
-            consolidation,
-            qos,
-            destination,
-            timeout,
-            value,
-            attachment,
-            #[cfg(feature = "unstable")]
-            source_info,
-            handler: callback,
-        }
+        self.with(callback)
     }
 
     /// Receive the replies for this query with a mutable callback.
     ///
     /// Using this guarantees that your callback will never be called concurrently.
-    /// If your callback is also accepted by the [`callback`](crate::session::SessionGetBuilder::callback) method, we suggest you use it instead of `callback_mut`
+    /// If your callback is also accepted by the [`callback`](crate::session::SessionGetBuilder::callback) method, we suggest you use it instead of `callback_mut`.
     ///
     /// # Examples
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let mut n = 0;
     /// let queryable = session
     ///     .get("key/expression")
@@ -344,9 +333,8 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let replies = session
     ///     .get("key/expression")
     ///     .with(flume::bounded(32))
@@ -360,7 +348,7 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> SessionGetBuilder<'a, 'b, Handler>
     where
-        Handler: IntoHandler<'static, Reply>,
+        Handler: IntoHandler<Reply>,
     {
         let SessionGetBuilder {
             session,
@@ -419,8 +407,10 @@ impl<'a, 'b, Handler> SessionGetBuilder<'a, 'b, Handler> {
         }
     }
 
+    ///
+    ///
     /// Restrict the matching queryables that will receive the query
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    /// to the ones that have the given [`Locality`](Locality).
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(self, destination: Locality) -> Self {
@@ -436,6 +426,8 @@ impl<'a, 'b, Handler> SessionGetBuilder<'a, 'b, Handler> {
         Self { timeout, ..self }
     }
 
+    ///
+    ///
     /// By default, `get` guarantees that it will only receive replies whose key expressions intersect
     /// with the queried key expression.
     ///
@@ -471,7 +463,7 @@ pub enum ReplyKeyExpr {
 
 impl<Handler> Resolvable for SessionGetBuilder<'_, '_, Handler>
 where
-    Handler: IntoHandler<'static, Reply> + Send,
+    Handler: IntoHandler<Reply> + Send,
     Handler::Handler: Send,
 {
     type To = ZResult<Handler::Handler>;
@@ -479,7 +471,7 @@ where
 
 impl<Handler> Wait for SessionGetBuilder<'_, '_, Handler>
 where
-    Handler: IntoHandler<'static, Reply> + Send,
+    Handler: IntoHandler<Reply> + Send,
     Handler::Handler: Send,
 {
     fn wait(self) -> <Self as Resolvable>::To {
@@ -489,6 +481,7 @@ where
             parameters,
         } = self.selector?;
         self.session
+            .0
             .query(
                 &key_expr,
                 &parameters,
@@ -509,7 +502,7 @@ where
 
 impl<Handler> IntoFuture for SessionGetBuilder<'_, '_, Handler>
 where
-    Handler: IntoHandler<'static, Reply> + Send,
+    Handler: IntoHandler<Reply> + Send,
     Handler::Handler: Send,
 {
     type Output = <Self as Resolvable>::To;

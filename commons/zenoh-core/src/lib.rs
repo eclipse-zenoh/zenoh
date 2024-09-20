@@ -16,7 +16,7 @@
 //!
 //! This crate is intended for Zenoh's internal use.
 //!
-//! [Click here for Zenoh's documentation](../zenoh/index.html)
+//! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 pub use lazy_static::lazy_static;
 pub mod macros;
 
@@ -31,7 +31,7 @@ pub use zresult::{Error, ZResult as Result};
 
 /// A resolvable execution, either sync or async
 pub trait Resolvable {
-    type To: Sized + Send;
+    type To: Sized;
 }
 
 /// Trick used to mark `<Resolve as IntoFuture>::IntoFuture` bound as Send

@@ -59,11 +59,11 @@ pub mod flag {
 ///     |------------------>| -- This is a DeclareInterest e.g. for subscriber declarations/undeclarations.
 ///     |                   |
 ///     |  DECL SUBSCRIBER  |
-///     |<------------------| -- With interest_id field not set
+///     |<------------------| -- With interest_id field set
 ///     |  DECL SUBSCRIBER  |
-///     |<------------------| -- With interest_id field not set
+///     |<------------------| -- With interest_id field set
 ///     |  DECL SUBSCRIBER  |
-///     |<------------------| -- With interest_id field not set
+///     |<------------------| -- With interest_id field set
 ///     |                   |
 ///     |     DECL FINAL    |
 ///     |<------------------| -- With interest_id field set

@@ -19,11 +19,11 @@ use std::{
 
 use petgraph::graph::NodeIndex;
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, Reliability, WhatAmI, ZenohIdProto},
+    core::{key_expr::OwnedKeyExpr, WhatAmI, ZenohIdProto},
     network::{
         declare::{
-            common::ext::WireExprType, ext, subscriber::ext::SubscriberInfo, Declare, DeclareBody,
-            DeclareSubscriber, SubscriberId, UndeclareSubscriber,
+            common::ext::WireExprType, ext, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
+            UndeclareSubscriber,
         },
         interest::{InterestId, InterestMode, InterestOptions},
     },
@@ -32,14 +32,15 @@ use zenoh_sync::get_mut_unchecked;
 
 use super::{
     face_hat, face_hat_mut, get_peer, get_router, get_routes_entries, hat, hat_mut,
-    network::Network, res_hat, res_hat_mut, HatCode, HatContext, HatFace, HatTables,
+    interests::push_declaration_profile, network::Network, res_hat, res_hat_mut, HatCode,
+    HatContext, HatFace, HatTables,
 };
 #[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
 use crate::net::routing::{
     dispatcher::{
         face::FaceState,
-        pubsub::*,
+        pubsub::{update_data_routes_from, update_matches_data_routes, SubscriberInfo},
         resource::{NodeId, Resource, SessionContext},
         tables::{Route, RoutingExpr, Tables},
     },
@@ -55,7 +56,7 @@ fn send_sourced_subscription_to_net_children(
     children: &[NodeIndex],
     res: &Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
-    sub_info: &SubscriberInfo,
+    _sub_info: &SubscriberInfo,
     routing_context: NodeId,
 ) {
     for child in children {
@@ -66,7 +67,8 @@ fn send_sourced_subscription_to_net_children(
                         .map(|src_face| someface.id != src_face.id)
                         .unwrap_or(true)
                     {
-                        let key_expr = Resource::decl_key(res, &mut someface);
+                        let push_declaration = push_declaration_profile(tables, &someface);
+                        let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
@@ -79,7 +81,6 @@ fn send_sourced_subscription_to_net_children(
                                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                     id: 0, // Sourced subscriptions do not use ids
                                     wire_expr: key_expr,
-                                    ext_info: *sub_info,
                                 }),
                             },
                             res.expr(),
@@ -97,7 +98,7 @@ fn propagate_simple_subscription_to(
     tables: &mut Tables,
     dst_face: &mut Arc<FaceState>,
     res: &Arc<Resource>,
-    sub_info: &SubscriberInfo,
+    _sub_info: &SubscriberInfo,
     src_face: &mut Arc<FaceState>,
     full_peer_net: bool,
     send_declare: &mut SendDeclare,
@@ -129,7 +130,8 @@ fn propagate_simple_subscription_to(
             if !face_hat!(dst_face).local_subs.contains_key(res) {
                 let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
                 face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
-                let key_expr = Resource::decl_key(res, dst_face);
+                let key_expr =
+                    Resource::decl_key(res, dst_face, push_declaration_profile(tables, dst_face));
                 send_declare(
                     &dst_face.primitives,
                     RoutingContext::with_expr(
@@ -141,7 +143,6 @@ fn propagate_simple_subscription_to(
                             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                 id,
                                 wire_expr: key_expr,
-                                ext_info: *sub_info,
                             }),
                         },
                         res.expr(),
@@ -384,7 +385,8 @@ fn send_forget_sourced_subscription_to_net_children(
                         .map(|src_face| someface.id != src_face.id)
                         .unwrap_or(true)
                     {
-                        let wire_expr = Resource::decl_key(res, &mut someface);
+                        let push_declaration = push_declaration_profile(tables, &someface);
+                        let wire_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
@@ -812,9 +814,7 @@ pub(super) fn pubsub_tree_change(
                     };
                     for sub in subs {
                         if *sub == tree_id {
-                            let sub_info = SubscriberInfo {
-                                reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
-                            };
+                            let sub_info = SubscriberInfo;
                             send_sourced_subscription_to_net_children(
                                 tables,
                                 net,
@@ -883,18 +883,18 @@ pub(super) fn pubsub_linkstate_change(
                 }
             }
 
-            for dst_face in tables.faces.values_mut() {
+            for mut dst_face in tables.faces.values().cloned() {
                 if src_face.id != dst_face.id
                     && HatTables::failover_brokering_to(links, dst_face.zid)
                 {
                     for res in face_hat!(src_face).remote_subs.values() {
                         if !face_hat!(dst_face).local_subs.contains_key(res) {
                             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-                            face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
-                            let key_expr = Resource::decl_key(res, dst_face);
-                            let sub_info = SubscriberInfo {
-                                reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
-                            };
+                            face_hat_mut!(&mut dst_face)
+                                .local_subs
+                                .insert(res.clone(), id);
+                            let push_declaration = push_declaration_profile(tables, &dst_face);
+                            let key_expr = Resource::decl_key(res, &mut dst_face, push_declaration);
                             send_declare(
                                 &dst_face.primitives,
                                 RoutingContext::with_expr(
@@ -906,7 +906,6 @@ pub(super) fn pubsub_linkstate_change(
                                         body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                             id,
                                             wire_expr: key_expr,
-                                            ext_info: sub_info,
                                         }),
                                     },
                                     res.expr(),
@@ -920,6 +919,21 @@ pub(super) fn pubsub_linkstate_change(
     }
 }
 
+#[inline]
+fn make_sub_id(res: &Arc<Resource>, face: &mut Arc<FaceState>, mode: InterestMode) -> u32 {
+    if mode.future() {
+        if let Some(id) = face_hat!(face).local_subs.get(res) {
+            *id
+        } else {
+            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+            face_hat_mut!(face).local_subs.insert(res.clone(), id);
+            id
+        }
+    } else {
+        0
+    }
+}
+
 pub(crate) fn declare_sub_interest(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
@@ -930,10 +944,7 @@ pub(crate) fn declare_sub_interest(
     send_declare: &mut SendDeclare,
 ) {
     if mode.current() {
-        let interest_id = (!mode.future()).then_some(id);
-        let sub_info = SubscriberInfo {
-            reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
-        };
+        let interest_id = Some(id);
         if let Some(res) = res.as_ref() {
             if aggregate {
                 if hat!(tables).router_subs.iter().any(|sub| {
@@ -943,14 +954,9 @@ pub(crate) fn declare_sub_interest(
                             || remote_linkstatepeer_subs(tables, sub)
                             || remote_router_subs(tables, sub))
                 }) {
-                    let id = if mode.future() {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face).local_subs.insert((*res).clone(), id);
-                        id
-                    } else {
-                        0
-                    };
-                    let wire_expr = Resource::decl_key(res, face);
+                    let id = make_sub_id(res, face, mode);
+                    let wire_expr =
+                        Resource::decl_key(res, face, push_declaration_profile(tables, face));
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -962,7 +968,6 @@ pub(crate) fn declare_sub_interest(
                                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                     id,
                                     wire_expr,
-                                    ext_info: sub_info,
                                 }),
                             },
                             res.expr(),
@@ -988,14 +993,9 @@ pub(crate) fn declare_sub_interest(
                                                 .failover_brokering(s.face.zid, face.zid)))
                             }))
                     {
-                        let id = if mode.future() {
-                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                            face_hat_mut!(face).local_subs.insert(sub.clone(), id);
-                            id
-                        } else {
-                            0
-                        };
-                        let wire_expr = Resource::decl_key(sub, face);
+                        let id = make_sub_id(sub, face, mode);
+                        let wire_expr =
+                            Resource::decl_key(sub, face, push_declaration_profile(tables, face));
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(
@@ -1007,7 +1007,6 @@ pub(crate) fn declare_sub_interest(
                                     body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                         id,
                                         wire_expr,
-                                        ext_info: sub_info,
                                     }),
                                 },
                                 sub.expr(),
@@ -1031,14 +1030,9 @@ pub(crate) fn declare_sub_interest(
                                     || hat!(tables).failover_brokering(s.face.zid, face.zid))
                         }))
                 {
-                    let id = if mode.future() {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face).local_subs.insert(sub.clone(), id);
-                        id
-                    } else {
-                        0
-                    };
-                    let wire_expr = Resource::decl_key(sub, face);
+                    let id = make_sub_id(sub, face, mode);
+                    let wire_expr =
+                        Resource::decl_key(sub, face, push_declaration_profile(tables, face));
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -1050,7 +1044,6 @@ pub(crate) fn declare_sub_interest(
                                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                     id,
                                     wire_expr,
-                                    ext_info: sub_info,
                                 }),
                             },
                             sub.expr(),

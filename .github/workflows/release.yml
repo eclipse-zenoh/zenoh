@@ -95,7 +95,7 @@ jobs:
 
   debian:
     name: Publish Debian packages
-    needs: [tag, build-debian]
+    needs: [tag, build-debian, cargo]
     uses: eclipse-zenoh/ci/.github/workflows/release-crates-debian.yml@main
     with:
       no-build: true
@@ -107,7 +107,7 @@ jobs:
 
   homebrew:
     name: Publish Homebrew formulae
-    needs: [tag, build-standalone]
+    needs: [tag, build-standalone, cargo]
     uses: eclipse-zenoh/ci/.github/workflows/release-crates-homebrew.yml@main
     with:
       no-build: true
@@ -128,7 +128,7 @@ jobs:
 
   eclipse:
     name: Publish artifacts to Eclipse downloads
-    needs: [tag, build-standalone]
+    needs: [tag, build-standalone, cargo]
     uses: eclipse-zenoh/ci/.github/workflows/release-crates-eclipse.yml@main
     with:
       no-build: true
@@ -145,7 +145,7 @@ jobs:
 
   github:
     name: Publish artifacts to GitHub Releases
-    needs: [tag, build-standalone]
+    needs: [tag, build-standalone, cargo]
     uses: eclipse-zenoh/ci/.github/workflows/release-crates-github.yml@main
     with:
       no-build: true
@@ -161,7 +161,7 @@ jobs:
 
   dockerhub:
     name: Publish container image to DockerHub
-    needs: [tag, build-standalone]
+    needs: [tag, build-standalone, cargo]
     uses: eclipse-zenoh/ci/.github/workflows/release-crates-dockerhub.yml@main
     with:
       no-build: true

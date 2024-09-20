@@ -18,10 +18,10 @@ use std::{
 };
 
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, Reliability, WhatAmI},
+    core::{key_expr::OwnedKeyExpr, WhatAmI},
     network::declare::{
-        common::ext::WireExprType, ext, subscriber::ext::SubscriberInfo, Declare, DeclareBody,
-        DeclareSubscriber, SubscriberId, UndeclareSubscriber,
+        common::ext::WireExprType, ext, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
+        UndeclareSubscriber,
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -32,6 +32,7 @@ use crate::{
     net::routing::{
         dispatcher::{
             face::FaceState,
+            pubsub::SubscriberInfo,
             resource::{NodeId, Resource, SessionContext},
             tables::{Route, RoutingExpr, Tables},
         },
@@ -46,7 +47,7 @@ fn propagate_simple_subscription_to(
     _tables: &mut Tables,
     dst_face: &mut Arc<FaceState>,
     res: &Arc<Resource>,
-    sub_info: &SubscriberInfo,
+    _sub_info: &SubscriberInfo,
     src_face: &mut Arc<FaceState>,
     send_declare: &mut SendDeclare,
 ) {
@@ -56,7 +57,7 @@ fn propagate_simple_subscription_to(
     {
         let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
         face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
-        let key_expr = Resource::decl_key(res, dst_face);
+        let key_expr = Resource::decl_key(res, dst_face, true);
         send_declare(
             &dst_face.primitives,
             RoutingContext::with_expr(
@@ -68,7 +69,6 @@ fn propagate_simple_subscription_to(
                     body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                         id,
                         wire_expr: key_expr,
-                        ext_info: *sub_info,
                     }),
                 },
                 res.expr(),
@@ -241,9 +241,7 @@ pub(super) fn pubsub_new_face(
     face: &mut Arc<FaceState>,
     send_declare: &mut SendDeclare,
 ) {
-    let sub_info = SubscriberInfo {
-        reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
-    };
+    let sub_info = SubscriberInfo;
     for src_face in tables
         .faces
         .values()

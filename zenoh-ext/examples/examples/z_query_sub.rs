@@ -12,14 +12,14 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::{arg, Parser};
-use zenoh::{config::Config, prelude::*, query::ReplyKeyExpr};
+use zenoh::{config::Config, query::ReplyKeyExpr};
 use zenoh_ext::*;
 use zenoh_ext_examples::CommonArgs;
 
 #[tokio::main]
 async fn main() {
     // Initiate logging
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
 
     let (config, key_expr, query) = parse_args();
 

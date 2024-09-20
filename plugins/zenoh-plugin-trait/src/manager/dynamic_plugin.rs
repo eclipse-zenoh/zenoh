@@ -73,7 +73,7 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
         let mut host_compatibility_record =
             Compatibility::with_empty_plugin_version::<StartArgs, Instance>();
         tracing::debug!(
-            "Plugin compativilty record: {:?}",
+            "Plugin compatibility record: {:?}",
             &plugin_compatibility_record
         );
         if !plugin_compatibility_record.compare(&mut host_compatibility_record) {

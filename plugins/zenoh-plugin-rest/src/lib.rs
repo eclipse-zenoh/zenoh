@@ -16,7 +16,7 @@
 //!
 //! This crate is intended for Zenoh's internal use.
 //!
-//! [Click here for Zenoh's documentation](../zenoh/index.html)
+//! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 use std::{
     borrow::Cow,
     convert::TryFrom,
@@ -44,16 +44,16 @@ use zenoh::{
         zerror,
     },
     key_expr::{keyexpr, KeyExpr},
-    prelude::*,
     query::{Parameters, QueryConsolidation, Reply, Selector, ZenohParameters},
     sample::{Sample, SampleKind},
-    session::{Session, SessionDeclarations},
+    session::Session,
+    Result as ZResult,
 };
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 
 mod config;
 pub use config::Config;
-use zenoh::{bytes::EncodingBuilderTrait, query::ReplyError};
+use zenoh::query::ReplyError;
 
 const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 lazy_static::lazy_static! {
@@ -272,7 +272,7 @@ impl Plugin for RestPlugin {
         // Try to initiate login.
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
-        zenoh::try_init_log_from_env();
+        zenoh::init_log_from_env_or("error");
         tracing::debug!("REST plugin {}", LONG_VERSION.as_str());
 
         let runtime_conf = runtime.config().lock();
@@ -290,7 +290,9 @@ impl Plugin for RestPlugin {
             timeout(Duration::from_millis(1), TOKIO_RUNTIME.spawn(task)).await
         });
 
-        if let Ok(Err(e)) = task {
+        // The spawn task (TOKIO_RUNTIME.spawn(task)) should not return immediately. The server should block inside.
+        // If it returns immediately (for example, address already in use), we can get the error inside Ok
+        if let Ok(Ok(Err(e))) = task {
             bail!("REST server failed within 1ms: {e}")
         }
         Ok(Box::new(RunningPlugin(conf)))
@@ -510,7 +512,7 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
     // Try to initiate login.
     // Required in case of dynamic lib, otherwise no logs.
     // But cannot be done twice in case of static link.
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
 
     let zid = runtime.zid().to_string();
     let session = zenoh::session::init(runtime).await.unwrap();

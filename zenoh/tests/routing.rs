@@ -11,6 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+#![cfg(feature = "internal_config")]
+
 use std::{
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -21,12 +24,8 @@ use std::{
 
 use itertools::Itertools;
 use tokio_util::sync::CancellationToken;
-use zenoh::{
-    config::{ModeDependentValue, WhatAmI, WhatAmIMatcher},
-    prelude::*,
-    qos::CongestionControl,
-    Config, Result, Session,
-};
+use zenoh::{config::WhatAmI, qos::CongestionControl, Config, Result, Session};
+use zenoh_config::{ModeDependentValue, WhatAmIMatcher};
 use zenoh_core::ztimeout;
 use zenoh_result::bail;
 
@@ -57,7 +56,7 @@ enum Task {
 impl Task {
     async fn run(
         &self,
-        session: Arc<Session>,
+        session: Session,
         remaining_checkpoints: Arc<AtomicUsize>,
         token: CancellationToken,
     ) -> Result<()> {
@@ -396,7 +395,7 @@ impl Recipe {
                     // In case of client can't connect to some peers/routers
                     loop {
                         if let Ok(session) = ztimeout!(zenoh::open(config.clone())) {
-                            break session.into_arc();
+                            break session;
                         } else {
                             tokio::time::sleep(Duration::from_secs(1)).await;
                         }
@@ -431,7 +430,7 @@ impl Recipe {
                 // node_task_tracker.wait().await;
 
                 // Close the session once all the task associated with the node are done.
-                ztimeout!(Arc::try_unwrap(session).unwrap().close())?;
+                ztimeout!(session.close())?;
 
                 println!("Node: {} is closed.", &node.name);
                 Result::Ok(())
@@ -472,7 +471,7 @@ impl Recipe {
 // And the message transmission should work even if the common node disappears after a while.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn gossip() -> Result<()> {
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
 
     let locator = String::from("tcp/127.0.0.1:17446");
     let ke = String::from("testKeyExprGossip");
@@ -540,7 +539,7 @@ async fn gossip() -> Result<()> {
 // Simulate two peers connecting to a router but not directly reachable to each other can exchange messages via the brokering by the router.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn static_failover_brokering() -> Result<()> {
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
     let locator = String::from("tcp/127.0.0.1:17449");
     let ke = String::from("testKeyExprStaticFailoverBrokering");
     let msg_size = 8;
@@ -607,7 +606,7 @@ const PARALLEL_RECIPES: usize = 4;
 #[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 9)]
 async fn three_node_combination() -> Result<()> {
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
     let modes = [WhatAmI::Peer, WhatAmI::Client];
     let delay_in_secs = [
         (0, 1, 2),
@@ -784,7 +783,7 @@ async fn three_node_combination() -> Result<()> {
 #[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
 async fn two_node_combination() -> Result<()> {
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
 
     #[derive(Clone, Copy)]
     struct IsFirstListen(bool);

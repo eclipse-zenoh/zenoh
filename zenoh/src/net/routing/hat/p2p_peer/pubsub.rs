@@ -18,11 +18,11 @@ use std::{
 };
 
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, Reliability, WhatAmI},
+    core::{key_expr::OwnedKeyExpr, WhatAmI},
     network::{
         declare::{
-            common::ext::WireExprType, ext, subscriber::ext::SubscriberInfo, Declare, DeclareBody,
-            DeclareSubscriber, SubscriberId, UndeclareSubscriber,
+            common::ext::WireExprType, ext, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
+            UndeclareSubscriber,
         },
         interest::{InterestId, InterestMode, InterestOptions},
     },
@@ -35,10 +35,13 @@ use crate::{
     net::routing::{
         dispatcher::{
             face::FaceState,
+            pubsub::SubscriberInfo,
             resource::{NodeId, Resource, SessionContext},
             tables::{Route, RoutingExpr, Tables},
         },
-        hat::{CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources},
+        hat::{
+            p2p_peer::initial_interest, CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources,
+        },
         router::{update_data_routes_from, RoutesIndexes},
         RoutingContext,
     },
@@ -49,7 +52,7 @@ fn propagate_simple_subscription_to(
     _tables: &mut Tables,
     dst_face: &mut Arc<FaceState>,
     res: &Arc<Resource>,
-    sub_info: &SubscriberInfo,
+    _sub_info: &SubscriberInfo,
     src_face: &mut Arc<FaceState>,
     send_declare: &mut SendDeclare,
 ) {
@@ -60,7 +63,7 @@ fn propagate_simple_subscription_to(
         if dst_face.whatami != WhatAmI::Client {
             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
             face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
-            let key_expr = Resource::decl_key(res, dst_face);
+            let key_expr = Resource::decl_key(res, dst_face, dst_face.whatami != WhatAmI::Client);
             send_declare(
                 &dst_face.primitives,
                 RoutingContext::with_expr(
@@ -72,7 +75,6 @@ fn propagate_simple_subscription_to(
                         body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                             id,
                             wire_expr: key_expr,
-                            ext_info: *sub_info,
                         }),
                     },
                     res.expr(),
@@ -82,13 +84,13 @@ fn propagate_simple_subscription_to(
             let matching_interests = face_hat!(dst_face)
                 .remote_interests
                 .values()
-                .filter(|(r, o)| {
+                .filter(|(r, _, o)| {
                     o.subscribers() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true)
                 })
                 .cloned()
-                .collect::<Vec<(Option<Arc<Resource>>, InterestOptions)>>();
+                .collect::<Vec<(Option<Arc<Resource>>, InterestMode, InterestOptions)>>();
 
-            for (int_res, options) in matching_interests {
+            for (int_res, _, options) in matching_interests {
                 let res = if options.aggregate() {
                     int_res.as_ref().unwrap_or(res)
                 } else {
@@ -97,7 +99,8 @@ fn propagate_simple_subscription_to(
                 if !face_hat!(dst_face).local_subs.contains_key(res) {
                     let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
                     face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
-                    let key_expr = Resource::decl_key(res, dst_face);
+                    let key_expr =
+                        Resource::decl_key(res, dst_face, dst_face.whatami != WhatAmI::Client);
                     send_declare(
                         &dst_face.primitives,
                         RoutingContext::with_expr(
@@ -109,7 +112,6 @@ fn propagate_simple_subscription_to(
                                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                     id,
                                     wire_expr: key_expr,
-                                    ext_info: *sub_info,
                                 }),
                             },
                             res.expr(),
@@ -199,7 +201,6 @@ fn declare_simple_subscription(
                     body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                         id: 0, // @TODO use proper SubscriberId
                         wire_expr: res.expr().into(),
-                        ext_info: *sub_info,
                     }),
                 },
                 res.expr(),
@@ -375,9 +376,7 @@ pub(super) fn pubsub_new_face(
     send_declare: &mut SendDeclare,
 ) {
     if face.whatami != WhatAmI::Client {
-        let sub_info = SubscriberInfo {
-            reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
-        };
+        let sub_info = SubscriberInfo;
         for src_face in tables
             .faces
             .values()
@@ -402,6 +401,21 @@ pub(super) fn pubsub_new_face(
     update_data_routes_from(tables, &mut tables.root_res.clone());
 }
 
+#[inline]
+fn make_sub_id(res: &Arc<Resource>, face: &mut Arc<FaceState>, mode: InterestMode) -> u32 {
+    if mode.future() {
+        if let Some(id) = face_hat!(face).local_subs.get(res) {
+            *id
+        } else {
+            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+            face_hat_mut!(face).local_subs.insert(res.clone(), id);
+            id
+        }
+    } else {
+        0
+    }
+}
+
 pub(super) fn declare_sub_interest(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
@@ -412,10 +426,7 @@ pub(super) fn declare_sub_interest(
     send_declare: &mut SendDeclare,
 ) {
     if mode.current() && face.whatami == WhatAmI::Client {
-        let interest_id = (!mode.future()).then_some(id);
-        let sub_info = SubscriberInfo {
-            reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
-        };
+        let interest_id = Some(id);
         if let Some(res) = res.as_ref() {
             if aggregate {
                 if tables.faces.values().any(|src_face| {
@@ -425,14 +436,8 @@ pub(super) fn declare_sub_interest(
                             .values()
                             .any(|sub| sub.context.is_some() && sub.matches(res))
                 }) {
-                    let id = if mode.future() {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face).local_subs.insert((*res).clone(), id);
-                        id
-                    } else {
-                        0
-                    };
-                    let wire_expr = Resource::decl_key(res, face);
+                    let id = make_sub_id(res, face, mode);
+                    let wire_expr = Resource::decl_key(res, face, face.whatami != WhatAmI::Client);
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -444,7 +449,6 @@ pub(super) fn declare_sub_interest(
                                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                     id,
                                     wire_expr,
-                                    ext_info: sub_info,
                                 }),
                             },
                             res.expr(),
@@ -461,14 +465,9 @@ pub(super) fn declare_sub_interest(
                     if src_face.id != face.id {
                         for sub in face_hat!(src_face).remote_subs.values() {
                             if sub.context.is_some() && sub.matches(res) {
-                                let id = if mode.future() {
-                                    let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                                    face_hat_mut!(face).local_subs.insert(sub.clone(), id);
-                                    id
-                                } else {
-                                    0
-                                };
-                                let wire_expr = Resource::decl_key(sub, face);
+                                let id = make_sub_id(sub, face, mode);
+                                let wire_expr =
+                                    Resource::decl_key(sub, face, face.whatami != WhatAmI::Client);
                                 send_declare(
                                     &face.primitives,
                                     RoutingContext::with_expr(
@@ -478,11 +477,7 @@ pub(super) fn declare_sub_interest(
                                             ext_tstamp: None,
                                             ext_nodeid: ext::NodeIdType::DEFAULT,
                                             body: DeclareBody::DeclareSubscriber(
-                                                DeclareSubscriber {
-                                                    id,
-                                                    wire_expr,
-                                                    ext_info: sub_info,
-                                                },
+                                                DeclareSubscriber { id, wire_expr },
                                             ),
                                         },
                                         sub.expr(),
@@ -502,14 +497,9 @@ pub(super) fn declare_sub_interest(
             {
                 if src_face.id != face.id {
                     for sub in face_hat!(src_face).remote_subs.values() {
-                        let id = if mode.future() {
-                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                            face_hat_mut!(face).local_subs.insert(sub.clone(), id);
-                            id
-                        } else {
-                            0
-                        };
-                        let wire_expr = Resource::decl_key(sub, face);
+                        let id = make_sub_id(sub, face, mode);
+                        let wire_expr =
+                            Resource::decl_key(sub, face, face.whatami != WhatAmI::Client);
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(
@@ -521,7 +511,6 @@ pub(super) fn declare_sub_interest(
                                     body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                         id,
                                         wire_expr,
-                                        ext_info: sub_info,
                                     }),
                                 },
                                 sub.expr(),
@@ -651,11 +640,7 @@ impl HatPubSubTrait for HatCode {
 
             for face in tables.faces.values().filter(|f| {
                 f.whatami == WhatAmI::Peer
-                    && !f
-                        .local_interests
-                        .get(&0)
-                        .map(|i| i.finalized)
-                        .unwrap_or(true)
+                    && !initial_interest(f).map(|i| i.finalized).unwrap_or(true)
             }) {
                 route.entry(face.id).or_insert_with(|| {
                     let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);

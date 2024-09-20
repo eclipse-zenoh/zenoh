@@ -23,10 +23,7 @@ use zenoh_config::WhatAmI;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr},
     network::{
-        declare::{
-            ext, queryable::ext::QueryableInfoType, subscriber::ext::SubscriberInfo, Declare,
-            DeclareBody, DeclareKeyExpr,
-        },
+        declare::{ext, queryable::ext::QueryableInfoType, Declare, DeclareBody, DeclareKeyExpr},
         interest::InterestId,
         Mapping, RequestId,
     },
@@ -35,6 +32,7 @@ use zenoh_sync::get_mut_unchecked;
 
 use super::{
     face::FaceState,
+    pubsub::SubscriberInfo,
     tables::{Tables, TablesLock},
 };
 use crate::net::routing::{dispatcher::face::Face, RoutingContext};
@@ -43,11 +41,11 @@ pub(crate) type NodeId = u16;
 
 pub(crate) type Direction = (Arc<FaceState>, WireExpr<'static>, NodeId);
 pub(crate) type Route = HashMap<usize, Direction>;
+
 pub(crate) type QueryRoute = HashMap<usize, (Direction, RequestId)>;
 pub(crate) struct QueryTargetQabl {
     pub(crate) direction: Direction,
-    pub(crate) complete: u64,
-    pub(crate) distance: f64,
+    pub(crate) info: Option<QueryableInfoType>,
 }
 pub(crate) type QueryTargetQablSet = Vec<QueryTargetQabl>;
 
@@ -341,6 +339,7 @@ impl Resource {
         r.parent.take();
         r.children.clear();
         r.nonwild_prefix.take();
+        r.context.take();
         r.session_ctxs.clear();
     }
 
@@ -461,7 +460,11 @@ impl Resource {
     }
 
     #[inline]
-    pub fn decl_key(res: &Arc<Resource>, face: &mut Arc<FaceState>) -> WireExpr<'static> {
+    pub fn decl_key(
+        res: &Arc<Resource>,
+        face: &mut Arc<FaceState>,
+        push: bool,
+    ) -> WireExpr<'static> {
         let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(res);
         match nonwild_prefix {
             Some(mut nonwild_prefix) => {
@@ -484,11 +487,13 @@ impl Resource {
                         };
                     }
                 }
-                if face.remote_key_interests.values().any(|res| {
-                    res.as_ref()
-                        .map(|res| res.matches(&nonwild_prefix))
-                        .unwrap_or(true)
-                }) {
+                if push
+                    || face.remote_key_interests.values().any(|res| {
+                        res.as_ref()
+                            .map(|res| res.matches(&nonwild_prefix))
+                            .unwrap_or(true)
+                    })
+                {
                     let ctx = get_mut_unchecked(&mut nonwild_prefix)
                         .session_ctxs
                         .entry(face.id)

@@ -14,13 +14,13 @@
 use clap::Parser;
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
 use zenoh::shm::zshm;
-use zenoh::{bytes::ZBytes, config::Config, key_expr::KeyExpr, prelude::*};
+use zenoh::{bytes::ZBytes, config::Config, key_expr::KeyExpr};
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
 async fn main() {
     // Initiate logging
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
 
     let (config, key_expr) = parse_args();
 

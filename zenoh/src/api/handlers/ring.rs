@@ -21,10 +21,15 @@ use std::{
 use zenoh_collections::RingBuffer;
 use zenoh_result::ZResult;
 
-use super::{callback::Callback, Dyn, IntoHandler};
-use crate::api::session::API_DATA_RECEPTION_CHANNEL_SIZE;
+use crate::api::{
+    handlers::{callback::Callback, IntoHandler},
+    session::API_DATA_RECEPTION_CHANNEL_SIZE,
+};
 
 /// A synchronous ring channel with a limited size that allows users to keep the last N data.
+///
+/// [`RingChannel`] implements FIFO semantics with a dropping strategy when full.
+/// The oldest elements will be dropped when newer arrive.
 pub struct RingChannel {
     capacity: usize,
 }
@@ -140,10 +145,10 @@ impl<T> RingChannelHandler<T> {
     }
 }
 
-impl<T: Send + 'static> IntoHandler<'static, T> for RingChannel {
+impl<T: Send + 'static> IntoHandler<T> for RingChannel {
     type Handler = RingChannelHandler<T>;
 
-    fn into_handler(self) -> (Callback<'static, T>, Self::Handler) {
+    fn into_handler(self) -> (Callback<T>, Self::Handler) {
         let (sender, receiver) = flume::bounded(1);
         let inner = Arc::new(RingChannelInner {
             ring: std::sync::Mutex::new(RingBuffer::new(self.capacity)),
@@ -153,7 +158,7 @@ impl<T: Send + 'static> IntoHandler<'static, T> for RingChannel {
             ring: Arc::downgrade(&inner),
         };
         (
-            Dyn::new(move |t| match inner.ring.lock() {
+            Callback::new(Arc::new(move |t| match inner.ring.lock() {
                 Ok(mut g) => {
                     // Eventually drop the oldest element.
                     g.push_force(t);
@@ -161,7 +166,7 @@ impl<T: Send + 'static> IntoHandler<'static, T> for RingChannel {
                     let _ = sender.try_send(());
                 }
                 Err(e) => tracing::error!("{}", e),
-            }),
+            })),
             receiver,
         )
     }

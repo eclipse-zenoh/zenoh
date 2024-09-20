@@ -11,12 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh::{
-    config::{ConnectionRetryConf, EndPoint},
-    prelude::*,
-    Config,
-};
-use zenoh_config::ModeDependent;
+
+#![cfg(feature = "internal_config")]
+
+use zenoh::{Config, Wait};
+use zenoh_config::{ConnectionRetryConf, EndPoint, ModeDependent};
 
 #[test]
 fn retry_config_overriding() {
@@ -159,7 +158,7 @@ fn retry_config_infinite_period() {
         .unwrap();
 
     let endpoint: EndPoint = "tcp/[::]:0".parse().unwrap();
-    let retry_config = zenoh_config::get_retry_config(&config, Some(&endpoint), true);
+    let retry_config = &config.get_retry_config(Some(&endpoint), true);
 
     let mut period = retry_config.period();
 

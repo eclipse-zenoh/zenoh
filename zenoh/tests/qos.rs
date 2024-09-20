@@ -15,7 +15,6 @@ use std::time::Duration;
 
 use zenoh::{
     bytes::Encoding,
-    prelude::*,
     qos::{CongestionControl, Priority},
 };
 use zenoh_core::ztimeout;
@@ -25,8 +24,8 @@ const SLEEP: Duration = Duration::from_secs(1);
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn qos_pubsub() {
-    let session1 = ztimeout!(zenoh::open(zenoh_config::peer())).unwrap();
-    let session2 = ztimeout!(zenoh::open(zenoh_config::peer())).unwrap();
+    let session1 = ztimeout!(zenoh::open(zenoh::Config::default())).unwrap();
+    let session2 = ztimeout!(zenoh::open(zenoh::Config::default())).unwrap();
 
     let publisher1 = ztimeout!(session1
         .declare_publisher("test/qos")

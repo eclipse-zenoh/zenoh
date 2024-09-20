@@ -17,7 +17,7 @@ use flume::r#async::RecvStream;
 use futures::stream::{Forward, Map};
 use zenoh::{
     liveliness::LivelinessSubscriberBuilder,
-    pubsub::{Reliability, Subscriber, SubscriberBuilder},
+    pubsub::{Subscriber, SubscriberBuilder},
     query::{QueryConsolidation, QueryTarget, ReplyKeyExpr},
     sample::{Locality, Sample},
     Result as ZResult,
@@ -32,7 +32,7 @@ pub trait SubscriberForward<'a, S> {
     type Output;
     fn forward(&'a mut self, sink: S) -> Self::Output;
 }
-impl<'a, S> SubscriberForward<'a, S> for Subscriber<'_, flume::Receiver<Sample>>
+impl<'a, S> SubscriberForward<'a, S> for Subscriber<flume::Receiver<Sample>>
 where
     S: futures::sink::Sink<Sample>,
 {
@@ -60,10 +60,10 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
+    /// use zenoh::Wait;
     /// use zenoh_ext::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expr")
     ///     .fetching( |cb| {
@@ -104,10 +104,9 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     /// use zenoh_ext::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expr")
     ///     .querying()
@@ -138,10 +137,10 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
+    /// use zenoh::Wait;
     /// use zenoh_ext::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expr")
     ///     .fetching( |cb| {
@@ -171,10 +170,10 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
             session: self.session,
             key_expr: self.key_expr,
             key_space: crate::UserSpace,
-            reliability: self.reliability,
             origin: self.origin,
             fetch,
             handler: self.handler,
+            undeclare_on_drop: true,
             phantom: std::marker::PhantomData,
         }
     }
@@ -194,10 +193,9 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     /// use zenoh_ext::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expr")
     ///     .querying()
@@ -213,7 +211,6 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
             session: self.session,
             key_expr: self.key_expr,
             key_space: crate::UserSpace,
-            reliability: self.reliability,
             origin: self.origin,
             query_selector: None,
             // By default query all matching publication caches and storages
@@ -223,6 +220,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
             query_consolidation: QueryConsolidation::from(zenoh::query::ConsolidationMode::None),
             query_accept_replies: ReplyKeyExpr::default(),
             query_timeout: Duration::from_secs(10),
+            undeclare_on_drop: true,
             handler: self.handler,
         }
     }
@@ -248,10 +246,10 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
+    /// use zenoh::Wait;
     /// use zenoh_ext::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let subscriber = session
     ///     .liveliness()
     ///     .declare_subscriber("key/expr")
@@ -283,10 +281,10 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
             session: self.session,
             key_expr: self.key_expr,
             key_space: crate::LivelinessSpace,
-            reliability: Reliability::DEFAULT,
             origin: Locality::default(),
             fetch,
             handler: self.handler,
+            undeclare_on_drop: true,
             phantom: std::marker::PhantomData,
         }
     }
@@ -307,10 +305,9 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     /// use zenoh_ext::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let subscriber = session
     ///     .liveliness()
     ///     .declare_subscriber("key/expr")
@@ -327,13 +324,13 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
             session: self.session,
             key_expr: self.key_expr,
             key_space: crate::LivelinessSpace,
-            reliability: Reliability::DEFAULT,
             origin: Locality::default(),
             query_selector: None,
             query_target: QueryTarget::DEFAULT,
             query_consolidation: QueryConsolidation::DEFAULT,
             query_accept_replies: ReplyKeyExpr::MatchingQuery,
             query_timeout: Duration::from_secs(10),
+            undeclare_on_drop: true,
             handler: self.handler,
         }
     }

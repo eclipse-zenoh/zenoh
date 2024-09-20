@@ -43,16 +43,14 @@ bincode = { workspace = true }
 zenoh-util = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
-phf = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true, features = ["default"] }
-serde_cbor = { workspace = true }
-serde_json = { workspace = true }
 zenoh = { workspace = true, features = ["unstable", "internal"], default-features = false }
 zenoh-macros = { workspace = true }
 
 [dev-dependencies]
 zenoh = { workspace = true, features = ["unstable"], default-features = true }
+zenoh-config = { workspace = true }
 
 [package.metadata.docs.rs]
 features = ["unstable"]

@@ -348,7 +348,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
                     // Update the endpoint locator address
                     endpoint = EndPoint::new(
                         endpoint.protocol(),
-                        &format!("{local_addr}"),
+                        format!("{local_addr}"),
                         endpoint.metadata(),
                         endpoint.config(),
                     )?;

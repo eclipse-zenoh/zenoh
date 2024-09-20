@@ -12,15 +12,15 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::{key_expr::KeyExpr, prelude::*, sample::SampleKind, Config};
+use zenoh::{key_expr::KeyExpr, sample::SampleKind, Config};
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
 async fn main() {
     // Initiate logging
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
 
-    let (config, key_expr) = parse_args();
+    let (config, key_expr, history) = parse_args();
 
     println!("Opening session...");
     let session = zenoh::open(config).await.unwrap();
@@ -30,6 +30,7 @@ async fn main() {
     let subscriber = session
         .liveliness()
         .declare_subscriber(&key_expr)
+        .history(history)
         .await
         .unwrap();
 
@@ -51,13 +52,16 @@ async fn main() {
 #[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]
 struct Args {
     #[arg(short, long, default_value = "group1/**")]
-    /// The key expression to write to.
+    /// The key expression to subscribe to.
     key: KeyExpr<'static>,
+    #[arg(long)]
+    /// Get historical liveliness tokens.
+    history: bool,
     #[command(flatten)]
     common: CommonArgs,
 }
 
-fn parse_args() -> (Config, KeyExpr<'static>) {
+fn parse_args() -> (Config, KeyExpr<'static>, bool) {
     let args = Args::parse();
-    (args.common.into(), args.key)
+    (args.common.into(), args.key, args.history)
 }

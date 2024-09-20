@@ -20,7 +20,7 @@ use std::{
 
 use tokio_util::sync::CancellationToken;
 use zenoh_protocol::{
-    core::{ExprId, WhatAmI, ZenohIdProto},
+    core::{ExprId, Reliability, WhatAmI, ZenohIdProto},
     network::{
         interest::{InterestId, InterestMode, InterestOptions},
         Mapping, Push, Request, RequestId, Response, ResponseFinal,
@@ -257,7 +257,7 @@ impl Primitives for Face {
                     &mut self.state.clone(),
                     m.id,
                     &m.wire_expr,
-                    &m.ext_info,
+                    &SubscriberInfo,
                     msg.ext_nodeid.node_id,
                     &mut |p, m| declares.push((p.clone(), m)),
                 );
@@ -379,16 +379,8 @@ impl Primitives for Face {
     }
 
     #[inline]
-    fn send_push(&self, msg: Push) {
-        full_reentrant_route_data(
-            &self.tables,
-            &self.state,
-            &msg.wire_expr,
-            msg.ext_qos,
-            msg.ext_tstamp,
-            msg.payload,
-            msg.ext_nodeid.node_id,
-        );
+    fn send_push(&self, msg: Push, reliability: Reliability) {
+        route_data(&self.tables, &self.state, msg, reliability);
     }
 
     fn send_request(&self, msg: Request) {

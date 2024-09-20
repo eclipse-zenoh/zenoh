@@ -12,13 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::{prelude::*, session::ZenohId};
+use zenoh::session::ZenohId;
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
 async fn main() {
     // initiate logging
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
 
     let config = parse_args();
 

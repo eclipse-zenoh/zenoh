@@ -11,6 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+#![cfg(feature = "internal_config")]
+
 use std::{
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -21,11 +24,12 @@ use std::{
 
 #[cfg(feature = "internal")]
 use zenoh::internal::runtime::{Runtime, RuntimeBuilder};
-use zenoh::{
-    config, key_expr::KeyExpr, prelude::*, pubsub::Reliability, qos::CongestionControl,
-    sample::SampleKind, Session,
-};
+#[cfg(feature = "unstable")]
+use zenoh::qos::Reliability;
+use zenoh::{key_expr::KeyExpr, qos::CongestionControl, sample::SampleKind, Session};
 use zenoh_core::ztimeout;
+#[cfg(not(feature = "unstable"))]
+use zenoh_protocol::core::Reliability;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
@@ -35,7 +39,7 @@ const MSG_SIZE: [usize; 2] = [1_024, 100_000];
 
 async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
     // Open the sessions
-    let mut config = config::peer();
+    let mut config = zenoh::Config::default();
     config
         .listen
         .endpoints
@@ -50,7 +54,7 @@ async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
     println!("[  ][01a] Opening peer01 session: {:?}", endpoints);
     let peer01 = ztimeout!(zenoh::open(config)).unwrap();
 
-    let mut config = config::peer();
+    let mut config = zenoh::Config::default();
     config
         .connect
         .endpoints
@@ -70,7 +74,7 @@ async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
 
 async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session, Session) {
     // Open the sessions
-    let mut config = config::peer();
+    let mut config = zenoh::Config::default();
     config
         .listen
         .endpoints
@@ -80,7 +84,7 @@ async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session,
     println!("[  ][01a] Opening peer01 session: {}", endpoint01);
     let peer01 = ztimeout!(zenoh::open(config)).unwrap();
 
-    let mut config = config::peer();
+    let mut config = zenoh::Config::default();
     config
         .listen
         .endpoints
@@ -266,7 +270,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_session_unicast() {
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
     let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:17447"]).await;
     test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;
     test_session_qryrep(&peer01, &peer02, Reliability::Reliable).await;
@@ -275,7 +279,7 @@ async fn zenoh_session_unicast() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_session_multicast() {
-    zenoh::try_init_log_from_env();
+    zenoh::init_log_from_env_or("error");
     let (peer01, peer02) =
         open_session_multicast("udp/224.0.0.1:17448", "udp/224.0.0.1:17448").await;
     test_session_pubsub(&peer01, &peer02, Reliability::BestEffort).await;
@@ -285,7 +289,7 @@ async fn zenoh_session_multicast() {
 #[cfg(feature = "internal")]
 async fn open_session_unicast_runtime(endpoints: &[&str]) -> (Runtime, Runtime) {
     // Open the sessions
-    let mut config = config::peer();
+    let mut config = zenoh::Config::default();
     config
         .listen
         .endpoints
@@ -301,7 +305,7 @@ async fn open_session_unicast_runtime(endpoints: &[&str]) -> (Runtime, Runtime) 
     let mut r1 = RuntimeBuilder::new(config).build().await.unwrap();
     r1.start().await.unwrap();
 
-    let mut config = config::peer();
+    let mut config = zenoh::Config::default();
     config
         .connect
         .endpoints

@@ -17,7 +17,6 @@ use std::{
     sync::{atomic::Ordering, Arc},
 };
 
-use ordered_float::OrderedFloat;
 use zenoh_protocol::{
     core::{
         key_expr::{
@@ -104,7 +103,7 @@ fn propagate_simple_queryable(
             face_hat_mut!(&mut dst_face)
                 .local_qabls
                 .insert(res.clone(), (id, info));
-            let key_expr = Resource::decl_key(res, &mut dst_face);
+            let key_expr = Resource::decl_key(res, &mut dst_face, true);
             send_declare(
                 &dst_face.primitives,
                 RoutingContext::with_expr(
@@ -354,8 +353,7 @@ impl HatQueriesTrait for HatCode {
                 let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
                 route.push(QueryTargetQabl {
                     direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
-                    complete: 0,
-                    distance: f64::MAX,
+                    info: None,
                 });
             }
         }
@@ -375,17 +373,15 @@ impl HatQueriesTrait for HatCode {
                 if let Some(qabl_info) = context.qabl.as_ref() {
                     route.push(QueryTargetQabl {
                         direction: (context.face.clone(), key_expr.to_owned(), NodeId::default()),
-                        complete: if complete {
-                            qabl_info.complete as u64
-                        } else {
-                            0
-                        },
-                        distance: 0.5,
+                        info: Some(QueryableInfoType {
+                            complete: complete && qabl_info.complete,
+                            distance: 1,
+                        }),
                     });
                 }
             }
         }
-        route.sort_by_key(|qabl| OrderedFloat(qabl.distance));
+        route.sort_by_key(|qabl| qabl.info.map_or(u16::MAX, |i| i.distance));
         Arc::new(route)
     }
 

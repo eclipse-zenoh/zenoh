@@ -33,17 +33,13 @@ description = "Internal crate for zenoh."
 
 [dependencies]
 async-trait = { workspace = true }
-futures = { workspace = true }
 tracing = {workspace = true}
 tokio = { workspace = true, features = ["io-std", "macros", "net", "rt-multi-thread", "time"] }
 tokio-util = { workspace = true, features = ["rt"] }
 uuid = { workspace = true, default-features = true }
 z-serial = { workspace = true }
-zenoh-collections = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-link-commons = { workspace = true }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
-zenoh-sync = { workspace = true }
-zenoh-util = { workspace = true }
 zenoh-runtime = { workspace = true }

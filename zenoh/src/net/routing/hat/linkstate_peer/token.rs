@@ -54,7 +54,8 @@ fn send_sourced_token_to_net_clildren(
                         .map(|src_face| someface.id != src_face.id)
                         .unwrap_or(true)
                     {
-                        let key_expr = Resource::decl_key(res, &mut someface);
+                        let push_declaration = someface.whatami != WhatAmI::Client;
+                        let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
@@ -81,17 +82,20 @@ fn send_sourced_token_to_net_clildren(
 
 #[inline]
 fn propagate_simple_token_to(
-    _tables: &mut Tables,
+    tables: &mut Tables,
     dst_face: &mut Arc<FaceState>,
     res: &Arc<Resource>,
-    _src_face: &mut Arc<FaceState>,
+    src_face: &mut Arc<FaceState>,
     send_declare: &mut SendDeclare,
 ) {
-    if !face_hat!(dst_face).local_tokens.contains_key(res) && dst_face.whatami == WhatAmI::Client {
+    if (src_face.id != dst_face.id || dst_face.zid == tables.zid)
+        && !face_hat!(dst_face).local_tokens.contains_key(res)
+        && dst_face.whatami == WhatAmI::Client
+    {
         if dst_face.whatami != WhatAmI::Client {
             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
             face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
-            let key_expr = Resource::decl_key(res, dst_face);
+            let key_expr = Resource::decl_key(res, dst_face, dst_face.whatami != WhatAmI::Client);
             send_declare(
                 &dst_face.primitives,
                 RoutingContext::with_expr(
@@ -125,7 +129,8 @@ fn propagate_simple_token_to(
                 if !face_hat!(dst_face).local_tokens.contains_key(res) {
                     let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
                     face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
-                    let key_expr = Resource::decl_key(res, dst_face);
+                    let key_expr =
+                        Resource::decl_key(res, dst_face, dst_face.whatami != WhatAmI::Client);
                     send_declare(
                         &dst_face.primitives,
                         RoutingContext::with_expr(
@@ -294,10 +299,10 @@ fn simple_tokens(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 }
 
 #[inline]
-fn remote_simple_tokens(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
+fn remote_simple_tokens(tables: &Tables, res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
     res.session_ctxs
         .values()
-        .any(|ctx| ctx.face.id != face.id && ctx.token)
+        .any(|ctx| (ctx.face.id != face.id || face.zid == tables.zid) && ctx.token)
 }
 
 #[inline]
@@ -317,7 +322,8 @@ fn send_forget_sourced_token_to_net_clildren(
                         .map(|src_face| someface.id != src_face.id)
                         .unwrap_or(true)
                     {
-                        let wire_expr = Resource::decl_key(res, &mut someface);
+                        let push_declaration = someface.whatami != WhatAmI::Client;
+                        let wire_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
@@ -375,7 +381,7 @@ fn propagate_forget_simple_token(
             if !res.context().matches.iter().any(|m| {
                 m.upgrade().is_some_and(|m| {
                     m.context.is_some()
-                        && (remote_simple_tokens(&m, &face)
+                        && (remote_simple_tokens(tables, &m, &face)
                             || remote_linkstatepeer_tokens(tables, &m))
                 })
             }) {
@@ -530,7 +536,7 @@ pub(super) fn undeclare_simple_token(
                     if !res.context().matches.iter().any(|m| {
                         m.upgrade().is_some_and(|m| {
                             m.context.is_some()
-                                && (remote_simple_tokens(&m, face)
+                                && (remote_simple_tokens(tables, &m, face)
                                     || remote_linkstatepeer_tokens(tables, &m))
                         })
                     }) {
@@ -627,6 +633,21 @@ pub(super) fn token_tree_change(tables: &mut Tables, new_clildren: &[Vec<NodeInd
     }
 }
 
+#[inline]
+fn make_token_id(res: &Arc<Resource>, face: &mut Arc<FaceState>, mode: InterestMode) -> u32 {
+    if mode.future() {
+        if let Some(id) = face_hat!(face).local_tokens.get(res) {
+            *id
+        } else {
+            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+            face_hat_mut!(face).local_tokens.insert(res.clone(), id);
+            id
+        }
+    } else {
+        0
+    }
+}
+
 pub(crate) fn declare_token_interest(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
@@ -637,23 +658,17 @@ pub(crate) fn declare_token_interest(
     send_declare: &mut SendDeclare,
 ) {
     if mode.current() && face.whatami == WhatAmI::Client {
-        let interest_id = (!mode.future()).then_some(id);
+        let interest_id = Some(id);
         if let Some(res) = res.as_ref() {
             if aggregate {
                 if hat!(tables).linkstatepeer_tokens.iter().any(|token| {
                     token.context.is_some()
                         && token.matches(res)
-                        && (remote_simple_tokens(token, face)
+                        && (remote_simple_tokens(tables, token, face)
                             || remote_linkstatepeer_tokens(tables, token))
                 }) {
-                    let id = if mode.future() {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face).local_tokens.insert((*res).clone(), id);
-                        id
-                    } else {
-                        0
-                    };
-                    let wire_expr = Resource::decl_key(res, face);
+                    let id = make_token_id(res, face, mode);
+                    let wire_expr = Resource::decl_key(res, face, face.whatami != WhatAmI::Client);
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -672,17 +687,12 @@ pub(crate) fn declare_token_interest(
                 for token in &hat!(tables).linkstatepeer_tokens {
                     if token.context.is_some()
                         && token.matches(res)
-                        && (remote_simple_tokens(token, face)
+                        && (remote_simple_tokens(tables, token, face)
                             || remote_linkstatepeer_tokens(tables, token))
                     {
-                        let id = if mode.future() {
-                            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                            face_hat_mut!(face).local_tokens.insert(token.clone(), id);
-                            id
-                        } else {
-                            0
-                        };
-                        let wire_expr = Resource::decl_key(token, face);
+                        let id = make_token_id(token, face, mode);
+                        let wire_expr =
+                            Resource::decl_key(token, face, face.whatami != WhatAmI::Client);
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(
@@ -702,17 +712,12 @@ pub(crate) fn declare_token_interest(
         } else {
             for token in &hat!(tables).linkstatepeer_tokens {
                 if token.context.is_some()
-                    && (remote_simple_tokens(token, face)
+                    && (remote_simple_tokens(tables, token, face)
                         || remote_linkstatepeer_tokens(tables, token))
                 {
-                    let id = if mode.future() {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                        face_hat_mut!(face).local_tokens.insert(token.clone(), id);
-                        id
-                    } else {
-                        0
-                    };
-                    let wire_expr = Resource::decl_key(token, face);
+                    let id = make_token_id(token, face, mode);
+                    let wire_expr =
+                        Resource::decl_key(token, face, face.whatami != WhatAmI::Client);
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(

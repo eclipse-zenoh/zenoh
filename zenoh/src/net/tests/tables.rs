@@ -25,16 +25,17 @@ use zenoh_protocol::{
         key_expr::keyexpr, Encoding, ExprId, Reliability, WhatAmI, WireExpr, ZenohIdProto,
         EMPTY_EXPR_ID,
     },
-    network::{
-        declare::subscriber::ext::SubscriberInfo, ext, Declare, DeclareBody, DeclareKeyExpr,
-    },
+    network::{ext, Declare, DeclareBody, DeclareKeyExpr, Push},
     zenoh::{PushBody, Put},
 };
 
 use crate::net::{
     primitives::{DummyPrimitives, EPrimitives, Primitives},
     routing::{
-        dispatcher::tables::{self, Tables},
+        dispatcher::{
+            pubsub::SubscriberInfo,
+            tables::{self, Tables},
+        },
         router::*,
         RoutingContext,
     },
@@ -67,9 +68,7 @@ fn base_test() {
         &"one/deux/trois".into(),
     );
 
-    let sub_info = SubscriberInfo {
-        reliability: Reliability::Reliable,
-    };
+    let sub_info = SubscriberInfo;
 
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
@@ -194,9 +193,7 @@ fn multisub_test() {
     assert!(face0.upgrade().is_some());
 
     // --------------
-    let sub_info = SubscriberInfo {
-        reliability: Reliability::Reliable,
-    };
+    let sub_info = SubscriberInfo;
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
@@ -316,9 +313,7 @@ async fn clean_test() {
     let res1 = optres1.unwrap();
     assert!(res1.upgrade().is_some());
 
-    let sub_info = SubscriberInfo {
-        reliability: Reliability::Reliable,
-    };
+    let sub_info = SubscriberInfo;
 
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
@@ -534,7 +529,7 @@ impl Primitives for ClientPrimitives {
         }
     }
 
-    fn send_push(&self, msg: zenoh_protocol::network::Push) {
+    fn send_push(&self, msg: zenoh_protocol::network::Push, _reliability: Reliability) {
         *zlock!(self.data) = Some(msg.wire_expr.to_owned());
     }
 
@@ -563,7 +558,7 @@ impl EPrimitives for ClientPrimitives {
         }
     }
 
-    fn send_push(&self, msg: zenoh_protocol::network::Push) {
+    fn send_push(&self, msg: zenoh_protocol::network::Push, _reliability: Reliability) {
         *zlock!(self.data) = Some(msg.wire_expr.to_owned());
     }
 
@@ -594,9 +589,7 @@ fn client_test() {
     .unwrap();
     let tables = router.tables.clone();
 
-    let sub_info = SubscriberInfo {
-        reliability: Reliability::Reliable,
-    };
+    let sub_info = SubscriberInfo;
 
     let primitives0 = Arc::new(ClientPrimitives::new());
     let face0 = Arc::downgrade(&router.new_primitives(primitives0.clone()).state);
@@ -736,23 +729,26 @@ fn client_test() {
     primitives1.clear_data();
     primitives2.clear_data();
 
-    full_reentrant_route_data(
+    route_data(
         &tables,
         &face0.upgrade().unwrap(),
-        &"test/client/z1_wr1".into(),
-        ext::QoSType::DEFAULT,
-        None,
-        PushBody::Put(Put {
-            timestamp: None,
-            encoding: Encoding::empty(),
-            ext_sinfo: None,
-            #[cfg(feature = "shared-memory")]
-            ext_shm: None,
-            ext_unknown: vec![],
-            payload: ZBuf::empty(),
-            ext_attachment: None,
-        }),
-        0,
+        Push {
+            wire_expr: "test/client/z1_wr1".into(),
+            ext_qos: ext::QoSType::DEFAULT,
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType { node_id: 0 },
+            payload: PushBody::Put(Put {
+                timestamp: None,
+                encoding: Encoding::empty(),
+                ext_sinfo: None,
+                #[cfg(feature = "shared-memory")]
+                ext_shm: None,
+                ext_unknown: vec![],
+                payload: ZBuf::empty(),
+                ext_attachment: None,
+            }),
+        },
+        Reliability::Reliable,
     );
 
     // functional check
@@ -770,23 +766,26 @@ fn client_test() {
     primitives0.clear_data();
     primitives1.clear_data();
     primitives2.clear_data();
-    full_reentrant_route_data(
+    route_data(
         &router.tables,
         &face0.upgrade().unwrap(),
-        &WireExpr::from(11).with_suffix("/z1_wr2"),
-        ext::QoSType::DEFAULT,
-        None,
-        PushBody::Put(Put {
-            timestamp: None,
-            encoding: Encoding::empty(),
-            ext_sinfo: None,
-            #[cfg(feature = "shared-memory")]
-            ext_shm: None,
-            ext_unknown: vec![],
-            payload: ZBuf::empty(),
-            ext_attachment: None,
-        }),
-        0,
+        Push {
+            wire_expr: WireExpr::from(11).with_suffix("/z1_wr2"),
+            ext_qos: ext::QoSType::DEFAULT,
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType { node_id: 0 },
+            payload: PushBody::Put(Put {
+                timestamp: None,
+                encoding: Encoding::empty(),
+                ext_sinfo: None,
+                #[cfg(feature = "shared-memory")]
+                ext_shm: None,
+                ext_unknown: vec![],
+                payload: ZBuf::empty(),
+                ext_attachment: None,
+            }),
+        },
+        Reliability::Reliable,
     );
 
     // functional check
@@ -804,23 +803,26 @@ fn client_test() {
     primitives0.clear_data();
     primitives1.clear_data();
     primitives2.clear_data();
-    full_reentrant_route_data(
+    route_data(
         &router.tables,
         &face1.upgrade().unwrap(),
-        &"test/client/**".into(),
-        ext::QoSType::DEFAULT,
-        None,
-        PushBody::Put(Put {
-            timestamp: None,
-            encoding: Encoding::empty(),
-            ext_sinfo: None,
-            #[cfg(feature = "shared-memory")]
-            ext_shm: None,
-            ext_unknown: vec![],
-            payload: ZBuf::empty(),
-            ext_attachment: None,
-        }),
-        0,
+        Push {
+            wire_expr: "test/client/**".into(),
+            ext_qos: ext::QoSType::DEFAULT,
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType { node_id: 0 },
+            payload: PushBody::Put(Put {
+                timestamp: None,
+                encoding: Encoding::empty(),
+                ext_sinfo: None,
+                #[cfg(feature = "shared-memory")]
+                ext_shm: None,
+                ext_unknown: vec![],
+                payload: ZBuf::empty(),
+                ext_attachment: None,
+            }),
+        },
+        Reliability::Reliable,
     );
 
     // functional check
@@ -838,23 +840,26 @@ fn client_test() {
     primitives0.clear_data();
     primitives1.clear_data();
     primitives2.clear_data();
-    full_reentrant_route_data(
+    route_data(
         &router.tables,
         &face0.upgrade().unwrap(),
-        &12.into(),
-        ext::QoSType::DEFAULT,
-        None,
-        PushBody::Put(Put {
-            timestamp: None,
-            encoding: Encoding::empty(),
-            ext_sinfo: None,
-            #[cfg(feature = "shared-memory")]
-            ext_shm: None,
-            ext_unknown: vec![],
-            payload: ZBuf::empty(),
-            ext_attachment: None,
-        }),
-        0,
+        Push {
+            wire_expr: 12.into(),
+            ext_qos: ext::QoSType::DEFAULT,
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType { node_id: 0 },
+            payload: PushBody::Put(Put {
+                timestamp: None,
+                encoding: Encoding::empty(),
+                ext_sinfo: None,
+                #[cfg(feature = "shared-memory")]
+                ext_shm: None,
+                ext_unknown: vec![],
+                payload: ZBuf::empty(),
+                ext_attachment: None,
+            }),
+        },
+        Reliability::Reliable,
     );
 
     // functional check
@@ -872,23 +877,26 @@ fn client_test() {
     primitives0.clear_data();
     primitives1.clear_data();
     primitives2.clear_data();
-    full_reentrant_route_data(
+    route_data(
         &router.tables,
         &face1.upgrade().unwrap(),
-        &22.into(),
-        ext::QoSType::DEFAULT,
-        None,
-        PushBody::Put(Put {
-            timestamp: None,
-            encoding: Encoding::empty(),
-            ext_sinfo: None,
-            #[cfg(feature = "shared-memory")]
-            ext_shm: None,
-            ext_unknown: vec![],
-            payload: ZBuf::empty(),
-            ext_attachment: None,
-        }),
-        0,
+        Push {
+            wire_expr: 22.into(),
+            ext_qos: ext::QoSType::DEFAULT,
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType { node_id: 0 },
+            payload: PushBody::Put(Put {
+                timestamp: None,
+                encoding: Encoding::empty(),
+                ext_sinfo: None,
+                #[cfg(feature = "shared-memory")]
+                ext_shm: None,
+                ext_unknown: vec![],
+                payload: ZBuf::empty(),
+                ext_attachment: None,
+            }),
+        },
+        Reliability::Reliable,
     );
 
     // functional check
