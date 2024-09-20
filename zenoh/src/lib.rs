@@ -265,8 +265,10 @@ pub mod query {
 
 /// Callback handler trait
 pub mod handlers {
+    #[zenoh_macros::internal]
+    pub use crate::api::handlers::locked;
     pub use crate::api::handlers::{
-        locked, Callback, CallbackDrop, DefaultHandler, FifoChannel, IntoHandler, RingChannel,
+        Callback, CallbackDrop, DefaultHandler, FifoChannel, IntoHandler, RingChannel,
         RingChannelHandler,
     };
 }

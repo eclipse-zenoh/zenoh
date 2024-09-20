@@ -20,7 +20,6 @@ use crate::api::handlers::IntoHandler;
 
 /// A function that can transform a [`FnMut`]`(T)` to
 /// a [`Fn`]`(T)` with the help of a [`Mutex`](std::sync::Mutex).
-#[zenoh_macros::internal]
 pub fn locked<T>(fnmut: impl FnMut(T)) -> impl Fn(T) {
     let lock = std::sync::Mutex::new(fnmut);
     move |x| zlock!(lock)(x)
