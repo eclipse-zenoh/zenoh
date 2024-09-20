@@ -17,16 +17,15 @@ use std::{fmt::Display, num::NonZeroUsize};
 use super::chunk::AllocatedChunk;
 use crate::api::buffer::zshmmut::ZShmMut;
 
-/// Allocation errors
-///
-/// NeedDefragment: defragmentation needed
-/// OutOfMemory: the provider is out of memory
-/// Other: other error
+/// Allocation error.
 #[zenoh_macros::unstable_doc]
 #[derive(Debug)]
 pub enum ZAllocError {
+    /// Defragmentation is needed.
     NeedDefragment,
+    /// The provider is out of memory.
     OutOfMemory,
+    /// Uncategorized allocation error.
     Other(zenoh_result::Error),
 }
 
