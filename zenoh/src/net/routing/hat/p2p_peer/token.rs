@@ -23,7 +23,7 @@ use zenoh_protocol::network::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{face_hat, face_hat_mut, HatCode, HatFace};
+use super::{face_hat, face_hat_mut, HatCode, HatFace, INITIAL_INTEREST_ID};
 use crate::net::routing::{
     dispatcher::{face::FaceState, tables::Tables},
     hat::{CurrentFutureTrait, HatTokenTrait, SendDeclare},
@@ -31,17 +31,36 @@ use crate::net::routing::{
     RoutingContext,
 };
 
+fn new_token(
+    tables: &Tables,
+    res: &Arc<Resource>,
+    src_face: &Arc<FaceState>,
+    dst_face: &mut Arc<FaceState>,
+) -> bool {
+    // Is there any face that
+    !res.session_ctxs.values().any(|ctx| {
+        ctx.token // declared the token
+            && (ctx.face.id != src_face.id) // is not the face that just registered it
+            && (ctx.face.id != dst_face.id || dst_face.zid == tables.zid) // is not the face we are propagating to (except for local)
+            && (ctx.face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
+        // don't forward from/to router/peers
+    })
+}
+
 #[inline]
 fn propagate_simple_token_to(
     tables: &mut Tables,
     dst_face: &mut Arc<FaceState>,
     res: &Arc<Resource>,
     src_face: &mut Arc<FaceState>,
+    src_interest_id: Option<InterestId>,
+    dst_interest_id: Option<InterestId>,
     send_declare: &mut SendDeclare,
 ) {
     if (src_face.id != dst_face.id || dst_face.zid == tables.zid)
         && !face_hat!(dst_face).local_tokens.contains_key(res)
         && (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
+        && new_token(tables, res, src_face, dst_face)
     {
         if dst_face.whatami != WhatAmI::Client {
             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
@@ -51,7 +70,7 @@ fn propagate_simple_token_to(
                 &dst_face.primitives,
                 RoutingContext::with_expr(
                     Declare {
-                        interest_id: None,
+                        interest_id: dst_interest_id,
                         ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -67,11 +86,15 @@ fn propagate_simple_token_to(
             let matching_interests = face_hat!(dst_face)
                 .remote_interests
                 .values()
-                .filter(|(r, o)| o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true))
+                .filter(|(r, m, o)| {
+                    o.tokens()
+                        && r.as_ref().map(|r| r.matches(res)).unwrap_or(true)
+                        && (m.current() || src_interest_id.is_none())
+                })
                 .cloned()
-                .collect::<Vec<(Option<Arc<Resource>>, InterestOptions)>>();
+                .collect::<Vec<(Option<Arc<Resource>>, InterestMode, InterestOptions)>>();
 
-            for (int_res, options) in matching_interests {
+            for (int_res, _, options) in matching_interests {
                 let res = if options.aggregate() {
                     int_res.as_ref().unwrap_or(res)
                 } else {
@@ -86,7 +109,7 @@ fn propagate_simple_token_to(
                         &dst_face.primitives,
                         RoutingContext::with_expr(
                             Declare {
-                                interest_id: None,
+                                interest_id: dst_interest_id,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -108,6 +131,7 @@ fn propagate_simple_token(
     tables: &mut Tables,
     res: &Arc<Resource>,
     src_face: &mut Arc<FaceState>,
+    interest_id: Option<InterestId>,
     send_declare: &mut SendDeclare,
 ) {
     for mut dst_face in tables
@@ -116,7 +140,15 @@ fn propagate_simple_token(
         .cloned()
         .collect::<Vec<Arc<FaceState>>>()
     {
-        propagate_simple_token_to(tables, &mut dst_face, res, src_face, send_declare);
+        propagate_simple_token_to(
+            tables,
+            &mut dst_face,
+            res,
+            src_face,
+            interest_id,
+            None,
+            send_declare,
+        );
     }
 }
 
@@ -157,25 +189,35 @@ fn declare_simple_token(
 ) {
     if let Some(interest_id) = interest_id {
         if let Some((interest, _)) = face.pending_current_interests.get(&interest_id) {
-            let wire_expr = Resource::get_best_key(res, "", interest.src_face.id);
-            send_declare(
-                &interest.src_face.primitives,
-                RoutingContext::with_expr(
-                    Declare {
-                        interest_id: Some(interest.src_interest_id),
-                        ext_qos: ext::QoSType::default(),
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::default(),
-                        body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
-                    },
-                    res.expr(),
-                ),
-            )
+            if interest.mode == InterestMode::Current {
+                let wire_expr = Resource::get_best_key(res, "", interest.src_face.id);
+                send_declare(
+                    &interest.src_face.primitives,
+                    RoutingContext::with_expr(
+                        Declare {
+                            interest_id: Some(interest.src_interest_id),
+                            ext_qos: ext::QoSType::default(),
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::default(),
+                            body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
+                        },
+                        res.expr(),
+                    ),
+                );
+                return;
+            }
+        } else if !face.local_interests.contains_key(&interest_id) {
+            println!(
+                "Received DeclareToken for {} from {} with unknown interest_id {}. Ignore.",
+                res.expr(),
+                face,
+                interest_id,
+            );
+            return;
         }
-    } else {
-        register_simple_token(tables, face, id, res);
-        propagate_simple_token(tables, res, face, send_declare);
     }
+    register_simple_token(tables, face, id, res);
+    propagate_simple_token(tables, res, face, interest_id, send_declare);
 }
 
 #[inline]
@@ -224,7 +266,7 @@ fn propagate_forget_simple_token(
                 ),
             );
         } else if src_face.id != face.id
-            && face_hat!(face).remote_interests.values().any(|(r, o)| {
+            && face_hat!(face).remote_interests.values().any(|(r, _, o)| {
                 o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true) && !o.aggregate()
             })
         {
@@ -276,7 +318,7 @@ fn propagate_forget_simple_token(
                             res.expr(),
                         ),
                     );
-                } else if face_hat!(face).remote_interests.values().any(|(r, o)| {
+                } else if face_hat!(face).remote_interests.values().any(|(r, _, o)| {
                     o.tokens()
                         && r.as_ref().map(|r| r.matches(&res)).unwrap_or(true)
                         && !o.aggregate()
@@ -415,7 +457,15 @@ pub(super) fn token_new_face(
             .collect::<Vec<Arc<FaceState>>>()
         {
             for token in face_hat!(src_face.clone()).remote_tokens.values() {
-                propagate_simple_token_to(tables, face, token, &mut src_face, send_declare);
+                propagate_simple_token_to(
+                    tables,
+                    face,
+                    token,
+                    &mut src_face,
+                    None,
+                    Some(INITIAL_INTEREST_ID),
+                    send_declare,
+                );
             }
         }
     }
@@ -446,7 +496,7 @@ pub(crate) fn declare_token_interest(
     send_declare: &mut SendDeclare,
 ) {
     if mode.current() {
-        let interest_id = (!mode.future()).then_some(id);
+        let interest_id = Some(id);
         if let Some(res) = res.as_ref() {
             if aggregate {
                 if tables.faces.values().any(|src_face| {

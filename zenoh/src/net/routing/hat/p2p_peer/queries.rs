@@ -97,7 +97,9 @@ fn propagate_simple_queryable_to(
             || face_hat!(dst_face)
                 .remote_interests
                 .values()
-                .any(|(r, o)| o.queryables() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true)))
+                .any(|(r, _, o)| {
+                    o.queryables() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true)
+                }))
         && src_face
             .as_ref()
             .map(|src_face| {
@@ -412,7 +414,7 @@ pub(super) fn declare_qabl_interest(
     send_declare: &mut SendDeclare,
 ) {
     if mode.current() && face.whatami == WhatAmI::Client {
-        let interest_id = (!mode.future()).then_some(id);
+        let interest_id = Some(id);
         if let Some(res) = res.as_ref() {
             if aggregate {
                 if tables.faces.values().any(|src_face| {

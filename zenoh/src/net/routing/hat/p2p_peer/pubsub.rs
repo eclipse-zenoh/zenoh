@@ -84,13 +84,13 @@ fn propagate_simple_subscription_to(
             let matching_interests = face_hat!(dst_face)
                 .remote_interests
                 .values()
-                .filter(|(r, o)| {
+                .filter(|(r, _, o)| {
                     o.subscribers() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true)
                 })
                 .cloned()
-                .collect::<Vec<(Option<Arc<Resource>>, InterestOptions)>>();
+                .collect::<Vec<(Option<Arc<Resource>>, InterestMode, InterestOptions)>>();
 
-            for (int_res, options) in matching_interests {
+            for (int_res, _, options) in matching_interests {
                 let res = if options.aggregate() {
                     int_res.as_ref().unwrap_or(res)
                 } else {
@@ -426,7 +426,7 @@ pub(super) fn declare_sub_interest(
     send_declare: &mut SendDeclare,
 ) {
     if mode.current() && face.whatami == WhatAmI::Client {
-        let interest_id = (!mode.future()).then_some(id);
+        let interest_id = Some(id);
         if let Some(res) = res.as_ref() {
             if aggregate {
                 if tables.faces.values().any(|src_face| {

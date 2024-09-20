@@ -16,7 +16,7 @@
 //!
 //! This module is intended for Zenoh's internal use.
 //!
-//! [Click here for Zenoh's documentation](../zenoh/index.html)
+//! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 //!
 mod access_control;
 use access_control::acl_interceptor_factories;

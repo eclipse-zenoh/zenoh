@@ -21,8 +21,7 @@ use std::{
 };
 
 use zenoh::{
-    pubsub::Reliability,
-    qos::CongestionControl,
+    qos::{CongestionControl, Reliability},
     shm::{
         zshm, BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder,
         POSIX_PROTOCOL_ID,

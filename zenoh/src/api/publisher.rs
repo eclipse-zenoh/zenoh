@@ -612,7 +612,7 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
         self.callback(crate::api::handlers::locked(callback))
     }
 
-    /// Receive the MatchingStatuses for this listener with a [`Handler`](crate::prelude::IntoHandler).
+    /// Receive the MatchingStatuses for this listener with a [`Handler`](IntoHandler).
     ///
     /// # Examples
     /// ```no_run
