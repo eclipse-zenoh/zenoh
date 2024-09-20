@@ -230,14 +230,13 @@ pub type ChunkAllocResult = Result<AllocatedChunk, ZAllocError>;
 #[zenoh_macros::unstable_doc]
 pub type BufAllocResult = Result<ZShmMut, ZAllocError>;
 
-/// Layouting and allocation errors
-///
-/// Alloc: allocation error
-/// Layout: layouting error
+/// Layout or allocation error.
 #[zenoh_macros::unstable_doc]
 #[derive(Debug)]
 pub enum ZLayoutAllocError {
+    /// Allocation error.
     Alloc(ZAllocError),
+    /// Layout error.
     Layout(ZLayoutError),
 }
 
