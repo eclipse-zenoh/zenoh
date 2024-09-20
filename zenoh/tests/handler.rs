@@ -35,7 +35,7 @@ fn pubsub_with_ringbuffer() {
             sub.recv()
                 .unwrap()
                 .payload()
-                .deserialize::<String>()
+                .try_deserialize::<String>()
                 .unwrap(),
             format!("put{i}")
         );
@@ -67,7 +67,11 @@ fn query_with_ringbuffer() {
     let query = queryable.recv().unwrap();
     // Only receive the latest query
     assert_eq!(
-        query.payload().unwrap().deserialize::<String>().unwrap(),
+        query
+            .payload()
+            .unwrap()
+            .try_deserialize::<String>()
+            .unwrap(),
         "query2"
     );
 }

@@ -62,7 +62,7 @@ fn main() {
     // branch to illustrate immutable access to SHM data
     {
         // deserialize ZBytes as an immutably borrowed zshm (ZBytes -> &zshm)
-        let borrowed_shm_buf: &zshm = payload.deserialize().unwrap();
+        let borrowed_shm_buf: &zshm = payload.try_deserialize().unwrap();
 
         // immutable API
         let _data: &[u8] = borrowed_shm_buf;

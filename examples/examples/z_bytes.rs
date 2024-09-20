@@ -21,7 +21,7 @@ fn main() {
     // Numeric: u8, u16, u32, u128, usize, i8, i16, i32, i128, isize, f32, f64
     let input = 1234_u32;
     let payload = ZBytes::from(input);
-    let output: u32 = payload.deserialize().unwrap();
+    let output: u32 = payload.try_deserialize().unwrap();
     assert_eq!(input, output);
     // Corresponding encoding to be used in operations like `.put()`, `.reply()`, etc.
     // let encoding = Encoding::ZENOH_UINT32;
@@ -29,7 +29,7 @@ fn main() {
     // String
     let input = String::from("test");
     let payload = ZBytes::from(&input);
-    let output: String = payload.deserialize().unwrap();
+    let output: String = payload.try_deserialize().unwrap();
     assert_eq!(input, output);
     // Corresponding encoding to be used in operations like `.put()`, `.reply()`, etc.
     // let encoding = Encoding::ZENOH_STRING;
@@ -38,7 +38,7 @@ fn main() {
     // See [`zenoh::bytes::ZBytes`] documentation for zero-copy behaviour.
     let input = Cow::from("test");
     let payload = ZBytes::from(&input);
-    let output: Cow<str> = payload.deserialize().unwrap();
+    let output: Cow<str> = payload.try_deserialize().unwrap();
     assert_eq!(input, output);
     // Corresponding encoding to be used in operations like `.put()`, `.reply()`, etc.
     // let encoding = Encoding::ZENOH_STRING;
@@ -46,10 +46,10 @@ fn main() {
     // Vec<u8>: The deserialization should be infallible
     let input: Vec<u8> = vec![1, 2, 3, 4];
     let payload = ZBytes::from(&input);
-    let output: Vec<u8> = payload.deserialize().unwrap();
+    let output: Vec<u8> = payload.try_deserialize().unwrap();
     assert_eq!(input, output);
     // Deserialization of Vec<u8> is infallible. See https://docs.rs/unwrap-infallible/latest/unwrap_infallible/.
-    let output: Vec<u8> = payload.deserialize().unwrap_infallible();
+    let output: Vec<u8> = payload.try_deserialize().unwrap_infallible();
     assert_eq!(input, output);
     // Since the deserialization of `Vec<u8>` is infallible, then `ZBytes` can be infallibly converted into a `Vec<u8>`.
     let output: Vec<u8> = payload.into();
@@ -61,10 +61,10 @@ fn main() {
     // See [`zenoh::bytes::ZBytes`] documentation for zero-copy behaviour.
     let input = Cow::from(vec![1, 2, 3, 4]);
     let payload = ZBytes::from(&input);
-    let output: Cow<[u8]> = payload.deserialize().unwrap();
+    let output: Cow<[u8]> = payload.try_deserialize().unwrap();
     assert_eq!(input, output);
     // Deserialization of `Cow<[u8]>` is infallible. See https://docs.rs/unwrap-infallible/latest/unwrap_infallible/.
-    let output: Cow<[u8]> = payload.deserialize().unwrap_infallible();
+    let output: Cow<[u8]> = payload.try_deserialize().unwrap_infallible();
     assert_eq!(input, output);
     // Since the deserialization of `Cow<[u8]>` is infallible, then `ZBytes` can be infallibly converted into a `Cow<[u8]>`.
     let output: Vec<u8> = payload.into();
@@ -74,7 +74,7 @@ fn main() {
 
     // Writer & Reader
     // serialization
-    let mut bytes = ZBytes::empty();
+    let mut bytes = ZBytes::new();
     let mut writer = bytes.writer();
     let i1 = 1234_u32;
     let i2 = String::from("test");
@@ -94,7 +94,7 @@ fn main() {
     // Tuple
     let input = (1234_u32, String::from("test"));
     let payload = ZBytes::serialize(input.clone());
-    let output: (u32, String) = payload.deserialize().unwrap();
+    let output: (u32, String) = payload.try_deserialize().unwrap();
     assert_eq!(input, output);
 
     // Iterator
@@ -116,7 +116,7 @@ fn main() {
     input.insert(0, String::from("abc"));
     input.insert(1, String::from("def"));
     let payload = ZBytes::from(input.clone());
-    let output = payload.deserialize::<HashMap<usize, String>>().unwrap();
+    let output = payload.try_deserialize::<HashMap<usize, String>>().unwrap();
     assert_eq!(input, output);
 
     // JSON
@@ -131,7 +131,7 @@ fn main() {
     }"#;
     let input: serde_json::Value = serde_json::from_str(data).unwrap();
     let payload = ZBytes::try_serialize(input.clone()).unwrap();
-    let output: serde_json::Value = payload.deserialize().unwrap();
+    let output: serde_json::Value = payload.try_deserialize().unwrap();
     assert_eq!(input, output);
     // Corresponding encoding to be used in operations like `.put()`, `.reply()`, etc.
     // let encoding = Encoding::APPLICATION_JSON;
@@ -146,7 +146,7 @@ fn main() {
     "#;
     let input: serde_yaml::Value = serde_yaml::from_str(data).unwrap();
     let payload = ZBytes::try_serialize(input.clone()).unwrap();
-    let output: serde_yaml::Value = payload.deserialize().unwrap();
+    let output: serde_yaml::Value = payload.try_deserialize().unwrap();
     assert_eq!(input, output);
     // Corresponding encoding to be used in operations like `.put()`, `.reply()`, etc.
     // let encoding = Encoding::APPLICATION_YAML;
@@ -166,7 +166,7 @@ fn main() {
     };
     let payload = ZBytes::from(input.encode_to_vec());
     let output =
-        EntityInfo::decode(Cursor::new(payload.deserialize::<Cow<[u8]>>().unwrap())).unwrap();
+        EntityInfo::decode(Cursor::new(payload.try_deserialize::<Cow<[u8]>>().unwrap())).unwrap();
     assert_eq!(input, output);
     // Corresponding encoding to be used in operations like `.put()`, `.reply()`, etc.
     // let encoding = Encoding::APPLICATION_PROTOBUF;

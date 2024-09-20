@@ -69,9 +69,9 @@ pub(crate) fn on_admin_query(session: &WeakSession, query: Query) {
             let key_expr = *KE_PREFIX / own_zid / *KE_SESSION / *KE_TRANSPORT_UNICAST / zid;
             if query.key_expr().intersects(&key_expr) {
                 if let Ok(value) = serde_json::value::to_value(peer.clone()) {
-                    match ZBytes::try_from(value) {
-                        Ok(zbuf) => {
-                            let _ = query.reply(key_expr, zbuf).wait();
+                    match ZBytes::try_serialize(value) {
+                        Ok(zbytes) => {
+                            let _ = query.reply(key_expr, zbytes).wait();
                         }
                         Err(e) => tracing::debug!("Admin query error: {}", e),
                     }
@@ -91,9 +91,9 @@ pub(crate) fn on_admin_query(session: &WeakSession, query: Query) {
                         / lid;
                     if query.key_expr().intersects(&key_expr) {
                         if let Ok(value) = serde_json::value::to_value(link) {
-                            match ZBytes::try_from(value) {
-                                Ok(zbuf) => {
-                                    let _ = query.reply(key_expr, zbuf).wait();
+                            match ZBytes::try_serialize(value) {
+                                Ok(zbytes) => {
+                                    let _ = query.reply(key_expr, zbytes).wait();
                                 }
                                 Err(e) => tracing::debug!("Admin query error: {}", e),
                             }

@@ -78,7 +78,7 @@ async fn main() {
         match reply.result() {
             Ok(sample) => {
                 print!(">> Received ('{}': ", sample.key_expr().as_str());
-                match sample.payload().deserialize::<&zshm>() {
+                match sample.payload().try_deserialize::<&zshm>() {
                     Ok(payload) => println!("'{}')", String::from_utf8_lossy(payload),),
                     Err(e) => println!("'Not a ShmBufInner: {:?}')", e),
                 }
@@ -86,7 +86,7 @@ async fn main() {
             Err(err) => {
                 let payload = err
                     .payload()
-                    .deserialize::<String>()
+                    .try_deserialize::<String>()
                     .unwrap_or_else(|e| format!("{}", e));
                 println!(">> Received (ERROR: '{}')", payload);
             }

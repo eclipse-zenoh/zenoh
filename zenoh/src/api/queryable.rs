@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
+    convert::Infallible,
     fmt,
     future::{IntoFuture, Ready},
     ops::{Deref, DerefMut},
@@ -53,6 +54,7 @@ use crate::{
         value::Value,
         Id,
     },
+    bytes::Serialize,
     handlers::Callback,
     net::primitives::Primitives,
     Session,
@@ -153,7 +155,7 @@ impl Query {
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
     /// replying on a disjoint key expression will result in an error when resolving the reply.
     #[inline(always)]
-    pub fn reply<'b, TryIntoKeyExpr, IntoZBytes>(
+    pub fn reply<'p, 'b, TryIntoKeyExpr, IntoZBytes>(
         &self,
         key_expr: TryIntoKeyExpr,
         payload: IntoZBytes,
@@ -161,14 +163,14 @@ impl Query {
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
-        IntoZBytes: Into<ZBytes>,
+        IntoZBytes: Serialize<'p, Error = Infallible>,
     {
         ReplyBuilder {
             query: self,
             key_expr: key_expr.try_into().map_err(Into::into),
             qos: response::ext::QoSType::RESPONSE.into(),
             kind: ReplyBuilderPut {
-                payload: payload.into(),
+                payload: ZBytes::serialize(payload),
                 encoding: Encoding::default(),
             },
             timestamp: None,
@@ -180,9 +182,9 @@ impl Query {
 
     /// Sends a [`crate::query::ReplyError`] as a reply to this Query.
     #[inline(always)]
-    pub fn reply_err<IntoZBytes>(&self, payload: IntoZBytes) -> ReplyErrBuilder<'_>
+    pub fn reply_err<'p, IntoZBytes>(&self, payload: IntoZBytes) -> ReplyErrBuilder<'_>
     where
-        IntoZBytes: Into<ZBytes>,
+        IntoZBytes: Serialize<'p, Error = Infallible>,
     {
         ReplyErrBuilder {
             query: self,

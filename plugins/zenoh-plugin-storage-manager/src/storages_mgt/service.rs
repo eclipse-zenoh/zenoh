@@ -634,7 +634,7 @@ fn serialize_update(update: &Update) -> String {
         kind,
         data: StoredData { value, timestamp },
     } = update;
-    let zbuf: ZBuf = value.payload().into();
+    let zbuf: ZBuf = value.payload().deserialize();
 
     let result = (
         kind.to_string(),

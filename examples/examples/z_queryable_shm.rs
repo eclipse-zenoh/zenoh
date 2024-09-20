@@ -144,7 +144,7 @@ fn handle_bytes(bytes: &ZBytes) -> (&str, String) {
 
         // if Zenoh is built with SHM support and with SHM API  we can detect the exact buffer type
         #[cfg(all(feature = "shared-memory", feature = "unstable"))]
-        match bytes.deserialize::<&zshm>() {
+        match bytes.try_deserialize::<&zshm>() {
             Ok(_) => "SHM",
             Err(_) => "RAW",
         }
@@ -157,7 +157,7 @@ fn handle_bytes(bytes: &ZBytes) -> (&str, String) {
     //
     // Refer to z_bytes.rs to see how to deserialize different types of message
     let bytes_string = bytes
-        .deserialize::<String>()
+        .try_deserialize::<String>()
         .unwrap_or_else(|e| format!("{}", e));
 
     (bytes_type, bytes_string)

@@ -13,9 +13,11 @@
 //
 
 //! Sample primitives
-use std::{convert::TryFrom, fmt};
+use std::{
+    convert::{Infallible, TryFrom},
+    fmt,
+};
 
-use serde::{Deserialize, Serialize};
 use zenoh_config::wrappers::EntityGlobalId;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Reliability;
@@ -28,13 +30,14 @@ use super::{
     builders::sample::QoSBuilderTrait, bytes::ZBytes, encoding::Encoding, key_expr::KeyExpr,
     publisher::Priority, value::Value,
 };
+use crate::bytes::Serialize;
 
 /// The sequence number of the [`Sample`] from the source.
 pub type SourceSn = u32;
 
 /// The locality of samples to be received by subscribers or targeted by publishers.
 #[zenoh_macros::unstable]
-#[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, serde::Serialize, PartialEq, Eq)]
 pub enum Locality {
     SessionLocal,
     Remote,
@@ -61,7 +64,7 @@ pub(crate) struct DataInfo {
 }
 
 pub(crate) trait DataInfoIntoSample {
-    fn into_sample<IntoKeyExpr, IntoZBytes>(
+    fn into_sample<'p, IntoKeyExpr, IntoZBytes>(
         self,
         key_expr: IntoKeyExpr,
         payload: IntoZBytes,
@@ -70,7 +73,7 @@ pub(crate) trait DataInfoIntoSample {
     ) -> Sample
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
-        IntoZBytes: Into<ZBytes>;
+        IntoZBytes: Serialize<'p, Error = Infallible>;
 }
 
 impl DataInfoIntoSample for DataInfo {
@@ -79,7 +82,7 @@ impl DataInfoIntoSample for DataInfo {
     // The test for it is intentionally not added to avoid inserting extra "if" into hot path.
     // The correctness of the data should be ensured by the caller.
     #[inline]
-    fn into_sample<IntoKeyExpr, IntoZBytes>(
+    fn into_sample<'p, IntoKeyExpr, IntoZBytes>(
         self,
         key_expr: IntoKeyExpr,
         payload: IntoZBytes,
@@ -88,11 +91,11 @@ impl DataInfoIntoSample for DataInfo {
     ) -> Sample
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
-        IntoZBytes: Into<ZBytes>,
+        IntoZBytes: Serialize<'p, Error = Infallible>,
     {
         Sample {
             key_expr: key_expr.into(),
-            payload: payload.into(),
+            payload: ZBytes::serialize(payload),
             kind: self.kind,
             encoding: self.encoding.unwrap_or_default(),
             timestamp: self.timestamp,
@@ -111,7 +114,7 @@ impl DataInfoIntoSample for DataInfo {
 
 impl DataInfoIntoSample for Option<DataInfo> {
     #[inline]
-    fn into_sample<IntoKeyExpr, IntoZBytes>(
+    fn into_sample<'p, IntoKeyExpr, IntoZBytes>(
         self,
         key_expr: IntoKeyExpr,
         payload: IntoZBytes,
@@ -120,7 +123,7 @@ impl DataInfoIntoSample for Option<DataInfo> {
     ) -> Sample
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
-        IntoZBytes: Into<ZBytes>,
+        IntoZBytes: Serialize<'p, Error = Infallible>,
     {
         if let Some(data_info) = self {
             data_info.into_sample(
@@ -133,7 +136,7 @@ impl DataInfoIntoSample for Option<DataInfo> {
         } else {
             Sample {
                 key_expr: key_expr.into(),
-                payload: payload.into(),
+                payload: ZBytes::serialize(payload),
                 kind: SampleKind::Put,
                 encoding: Encoding::default(),
                 timestamp: None,
@@ -250,7 +253,7 @@ impl Default for SourceInfo {
 
 /// The kind of a `Sample`.
 #[repr(u8)]
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub enum SampleKind {
     /// if the `Sample` was issued by a `put` operation.
     #[default]

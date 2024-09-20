@@ -154,9 +154,7 @@ secrecy = { version = "0.8.0", features = ["serde", "alloc"] }
 serde = { version = "1.0.210", default-features = false, features = [
   "derive",
 ] } # Default features are disabled due to usage in no_std crates
-serde_cbor = "0.11.2"
 serde_json = "1.0.128"
-serde-pickle = "1.1.1"
 serde_yaml = "0.9.34"
 static_init = "1.0.3"
 stabby = "36.1.1"

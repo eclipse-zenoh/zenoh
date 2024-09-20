@@ -1,3 +1,4 @@
+use std::convert::Infallible;
 //
 // Copyright (c) 2024 ZettaScale Technology
 //
@@ -19,15 +20,18 @@ use zenoh_protocol::core::CongestionControl;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Reliability;
 
-use crate::api::{
-    bytes::{OptionZBytes, ZBytes},
-    encoding::Encoding,
-    key_expr::KeyExpr,
-    publisher::Priority,
-    sample::{QoS, QoSBuilder, Sample, SampleKind},
-};
 #[cfg(feature = "unstable")]
 use crate::sample::SourceInfo;
+use crate::{
+    api::{
+        bytes::{OptionZBytes, ZBytes},
+        encoding::Encoding,
+        key_expr::KeyExpr,
+        publisher::Priority,
+        sample::{QoS, QoSBuilder, Sample, SampleKind},
+    },
+    bytes::Serialize,
+};
 
 pub trait QoSBuilderTrait {
     /// Change the `congestion_control` to apply when routing the data.
@@ -72,18 +76,18 @@ pub struct SampleBuilder<T> {
 }
 
 impl SampleBuilder<SampleBuilderPut> {
-    pub fn put<IntoKeyExpr, IntoZBytes>(
+    pub fn put<'p, IntoKeyExpr, IntoZBytes>(
         key_expr: IntoKeyExpr,
         payload: IntoZBytes,
     ) -> SampleBuilder<SampleBuilderPut>
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
-        IntoZBytes: Into<ZBytes>,
+        IntoZBytes: Serialize<'p, Error = Infallible>,
     {
         Self {
             sample: Sample {
                 key_expr: key_expr.into(),
-                payload: payload.into(),
+                payload: ZBytes::serialize(payload),
                 kind: SampleKind::Put,
                 encoding: Encoding::default(),
                 timestamp: None,
@@ -98,11 +102,11 @@ impl SampleBuilder<SampleBuilderPut> {
         }
     }
 
-    pub fn payload<IntoZBytes>(mut self, payload: IntoZBytes) -> Self
+    pub fn payload<'p, IntoZBytes>(mut self, payload: IntoZBytes) -> Self
     where
-        IntoZBytes: Into<ZBytes>,
+        IntoZBytes: Serialize<'p, Error = Infallible>,
     {
-        self.sample.payload = payload.into();
+        self.sample.payload = ZBytes::serialize(payload);
         self
     }
 }
@@ -115,7 +119,7 @@ impl SampleBuilder<SampleBuilderDelete> {
         Self {
             sample: Sample {
                 key_expr: key_expr.into(),
-                payload: ZBytes::empty(),
+                payload: ZBytes::new(),
                 kind: SampleKind::Delete,
                 encoding: Encoding::default(),
                 timestamp: None,

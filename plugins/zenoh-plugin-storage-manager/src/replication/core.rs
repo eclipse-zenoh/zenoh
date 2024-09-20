@@ -312,7 +312,7 @@ impl Replication {
                     // manner using the `span` we created just above.
                     async {
                         let other_digest = match bincode::deserialize::<Digest>(
-                            &sample.payload().into::<Cow<[u8]>>(),
+                            &sample.payload().deserialize::<Cow<[u8]>>(),
                         ) {
                             Ok(other_digest) => other_digest,
                             Err(e) => {

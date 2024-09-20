@@ -38,7 +38,7 @@ async fn main() {
                 sample.key_expr().as_str(),
                 sample
                     .payload()
-                    .deserialize::<String>()
+                    .try_deserialize::<String>()
                     .unwrap_or_else(|e| format!("{}", e))
             );
         })

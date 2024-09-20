@@ -14,6 +14,7 @@
 
 use std::{
     collections::HashMap,
+    convert::Infallible,
     error::Error,
     fmt::Display,
     future::{IntoFuture, Ready},
@@ -47,7 +48,7 @@ use super::{
 };
 #[cfg(feature = "unstable")]
 use super::{sample::SourceInfo, selector::ZenohParameters};
-use crate::bytes::OptionZBytes;
+use crate::bytes::{OptionZBytes, Serialize};
 
 /// The replies consolidation strategy to apply on replies to a [`get`](Session::get).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -382,12 +383,12 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
 }
 impl<'a, 'b, Handler> SessionGetBuilder<'a, 'b, Handler> {
     #[inline]
-    pub fn payload<IntoZBytes>(mut self, payload: IntoZBytes) -> Self
+    pub fn payload<'p, IntoZBytes>(mut self, payload: IntoZBytes) -> Self
     where
-        IntoZBytes: Into<ZBytes>,
+        IntoZBytes: Serialize<'p, Error = Infallible>,
     {
         let mut value = self.value.unwrap_or_default();
-        value.payload = payload.into();
+        value.payload = ZBytes::serialize(payload);
         self.value = Some(value);
         self
     }

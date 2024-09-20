@@ -13,7 +13,7 @@
 //
 
 use std::{
-    convert::TryFrom,
+    convert::{Infallible, TryFrom},
     fmt,
     future::{IntoFuture, Ready},
     pin::Pin,
@@ -48,7 +48,10 @@ use super::{
     sample::{Locality, Sample, SampleFields},
     session::UndeclarableSealed,
 };
-use crate::api::{session::WeakSession, Id};
+use crate::{
+    api::{session::WeakSession, Id},
+    bytes::Serialize,
+};
 
 pub(crate) struct PublisherState {
     pub(crate) id: Id,
@@ -179,14 +182,14 @@ impl<'a> Publisher<'a> {
     /// # }
     /// ```
     #[inline]
-    pub fn put<IntoZBytes>(&self, payload: IntoZBytes) -> PublisherPutBuilder<'_>
+    pub fn put<'p, IntoZBytes>(&self, payload: IntoZBytes) -> PublisherPutBuilder<'_>
     where
-        IntoZBytes: Into<ZBytes>,
+        IntoZBytes: Serialize<'p, Error = Infallible>,
     {
         PublicationBuilder {
             publisher: self,
             kind: PublicationBuilderPut {
-                payload: payload.into(),
+                payload: ZBytes::serialize(payload),
                 encoding: self.encoding.clone(),
             },
             timestamp: None,
@@ -909,7 +912,7 @@ mod tests {
 
             assert_eq!(sample.kind, kind);
             if let SampleKind::Put = kind {
-                assert_eq!(sample.payload.deserialize::<String>().unwrap(), VALUE);
+                assert_eq!(sample.payload.try_deserialize::<String>().unwrap(), VALUE);
             }
         }
 
@@ -936,7 +939,7 @@ mod tests {
 
             assert_eq!(sample.kind, kind);
             if let SampleKind::Put = kind {
-                assert_eq!(sample.payload.deserialize::<String>().unwrap(), VALUE);
+                assert_eq!(sample.payload.try_deserialize::<String>().unwrap(), VALUE);
             }
         }
 

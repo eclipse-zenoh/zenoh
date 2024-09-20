@@ -966,14 +966,6 @@ impl EncodingMapping for serde_yaml::Value {
     const ENCODING: Encoding = Encoding::APPLICATION_YAML;
 }
 
-impl EncodingMapping for serde_cbor::Value {
-    const ENCODING: Encoding = Encoding::APPLICATION_CBOR;
-}
-
-impl EncodingMapping for serde_pickle::Value {
-    const ENCODING: Encoding = Encoding::APPLICATION_PYTHON_SERIALIZED_OBJECT;
-}
-
 impl Encoding {
     #[zenoh_macros::internal]
     pub fn id(&self) -> EncodingId {

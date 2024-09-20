@@ -901,7 +901,7 @@ client2name:client2passwd";
                 .declare_subscriber(KEY_EXPR)
                 .callback(move |sample| {
                     let mut temp_value = zlock!(temp_recv_value);
-                    *temp_value = sample.payload().deserialize::<String>().unwrap();
+                    *temp_value = sample.payload().try_deserialize::<String>().unwrap();
                 })
                 .await
                 .unwrap();
@@ -969,7 +969,7 @@ client2name:client2passwd";
                     .declare_subscriber(KEY_EXPR)
                     .callback(move |sample| {
                         let mut temp_value = zlock!(temp_recv_value);
-                        *temp_value = sample.payload().deserialize::<String>().unwrap();
+                        *temp_value = sample.payload().try_deserialize::<String>().unwrap();
                     }))
                 .unwrap();
 
@@ -1052,13 +1052,13 @@ client2name:client2passwd";
             while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
                 match reply.result() {
                     Ok(sample) => {
-                        received_value = sample.payload().deserialize::<String>().unwrap();
+                        received_value = sample.payload().try_deserialize::<String>().unwrap();
                         break;
                     }
                     Err(e) => println!(
                         "Error : {}",
                         e.payload()
-                            .deserialize::<String>()
+                            .try_deserialize::<String>()
                             .unwrap_or_else(|e| format!("{}", e))
                     ),
                 }
@@ -1137,13 +1137,13 @@ client2name:client2passwd";
             while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
                 match reply.result() {
                     Ok(sample) => {
-                        received_value = sample.payload().deserialize::<String>().unwrap();
+                        received_value = sample.payload().try_deserialize::<String>().unwrap();
                         break;
                     }
                     Err(e) => println!(
                         "Error : {}",
                         e.payload()
-                            .deserialize::<String>()
+                            .try_deserialize::<String>()
                             .unwrap_or_else(|e| format!("{}", e))
                     ),
                 }
@@ -1211,7 +1211,7 @@ client2name:client2passwd";
                 .declare_subscriber(KEY_EXPR)
                 .callback(move |sample| {
                     let mut temp_value = zlock!(temp_recv_value);
-                    *temp_value = sample.payload().deserialize::<String>().unwrap();
+                    *temp_value = sample.payload().try_deserialize::<String>().unwrap();
                 })
                 .await
                 .unwrap();
@@ -1281,7 +1281,7 @@ client2name:client2passwd";
                     .declare_subscriber(KEY_EXPR)
                     .callback(move |sample| {
                         let mut temp_value = zlock!(temp_recv_value);
-                        *temp_value = sample.payload().deserialize::<String>().unwrap();
+                        *temp_value = sample.payload().try_deserialize::<String>().unwrap();
                     }))
                 .unwrap();
 
@@ -1365,13 +1365,13 @@ client2name:client2passwd";
             while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
                 match reply.result() {
                     Ok(sample) => {
-                        received_value = sample.payload().deserialize::<String>().unwrap();
+                        received_value = sample.payload().try_deserialize::<String>().unwrap();
                         break;
                     }
                     Err(e) => println!(
                         "Error : {}",
                         e.payload()
-                            .deserialize::<String>()
+                            .try_deserialize::<String>()
                             .unwrap_or_else(|e| format!("{}", e))
                     ),
                 }
@@ -1451,13 +1451,13 @@ client2name:client2passwd";
             while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
                 match reply.result() {
                     Ok(sample) => {
-                        received_value = sample.payload().deserialize::<String>().unwrap();
+                        received_value = sample.payload().try_deserialize::<String>().unwrap();
                         break;
                     }
                     Err(e) => println!(
                         "Error : {}",
                         e.payload()
-                            .deserialize::<String>()
+                            .try_deserialize::<String>()
                             .unwrap_or_else(|e| format!("{}", e))
                     ),
                 }
@@ -1526,7 +1526,7 @@ client2name:client2passwd";
                 .declare_subscriber(KEY_EXPR)
                 .callback(move |sample| {
                     let mut temp_value = zlock!(temp_recv_value);
-                    *temp_value = sample.payload().deserialize::<String>().unwrap();
+                    *temp_value = sample.payload().try_deserialize::<String>().unwrap();
                 })
                 .await
                 .unwrap();
@@ -1596,7 +1596,7 @@ client2name:client2passwd";
                     .declare_subscriber(KEY_EXPR)
                     .callback(move |sample| {
                         let mut temp_value = zlock!(temp_recv_value);
-                        *temp_value = sample.payload().deserialize::<String>().unwrap();
+                        *temp_value = sample.payload().try_deserialize::<String>().unwrap();
                     }))
                 .unwrap();
 
@@ -1680,13 +1680,13 @@ client2name:client2passwd";
             while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
                 match reply.result() {
                     Ok(sample) => {
-                        received_value = sample.payload().deserialize::<String>().unwrap();
+                        received_value = sample.payload().try_deserialize::<String>().unwrap();
                         break;
                     }
                     Err(e) => println!(
                         "Error : {}",
                         e.payload()
-                            .deserialize::<String>()
+                            .try_deserialize::<String>()
                             .unwrap_or_else(|e| format!("{}", e))
                     ),
                 }
@@ -1766,13 +1766,13 @@ client2name:client2passwd";
             while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
                 match reply.result() {
                     Ok(sample) => {
-                        received_value = sample.payload().deserialize::<String>().unwrap();
+                        received_value = sample.payload().try_deserialize::<String>().unwrap();
                         break;
                     }
                     Err(e) => println!(
                         "Error : {}",
                         e.payload()
-                            .deserialize::<String>()
+                            .try_deserialize::<String>()
                             .unwrap_or_else(|e| format!("{}", e))
                     ),
                 }
@@ -1843,7 +1843,7 @@ client2name:client2passwd";
                     .declare_subscriber(KEY_EXPR)
                     .callback(move |sample| {
                         let mut temp_value = zlock!(temp_recv_value);
-                        *temp_value = sample.payload().deserialize::<String>().unwrap();
+                        *temp_value = sample.payload().try_deserialize::<String>().unwrap();
                     }))
                 .unwrap();
 
@@ -1866,7 +1866,7 @@ client2name:client2passwd";
                     .declare_subscriber(KEY_EXPR)
                     .callback(move |sample| {
                         let mut temp_value = zlock!(temp_recv_value);
-                        *temp_value = sample.payload().deserialize::<String>().unwrap();
+                        *temp_value = sample.payload().try_deserialize::<String>().unwrap();
                     }))
                 .unwrap();
 
@@ -1939,7 +1939,7 @@ client2name:client2passwd";
                     .declare_subscriber(KEY_EXPR)
                     .callback(move |sample| {
                         let mut temp_value = zlock!(temp_recv_value);
-                        *temp_value = sample.payload().deserialize::<String>().unwrap();
+                        *temp_value = sample.payload().try_deserialize::<String>().unwrap();
                     }))
                 .unwrap();
 
@@ -1962,7 +1962,7 @@ client2name:client2passwd";
                     .declare_subscriber(KEY_EXPR)
                     .callback(move |sample| {
                         let mut temp_value = zlock!(temp_recv_value);
-                        *temp_value = sample.payload().deserialize::<String>().unwrap();
+                        *temp_value = sample.payload().try_deserialize::<String>().unwrap();
                     }))
                 .unwrap();
 

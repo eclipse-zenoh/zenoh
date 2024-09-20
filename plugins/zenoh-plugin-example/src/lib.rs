@@ -196,7 +196,7 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
             // on sample received by the Subscriber
             sample = sub.recv_async() => {
                 let sample = sample.unwrap();
-                let payload = sample.payload().deserialize::<Cow<str>>().unwrap_or_else(|e| Cow::from(e.to_string()));
+                let payload = sample.payload().try_deserialize::<Cow<str>>().unwrap_or_else(|e| Cow::from(e.to_string()));
                 info!("Received data ('{}': '{}')", sample.key_expr(), payload);
                 stored.insert(sample.key_expr().to_string(), sample);
             },

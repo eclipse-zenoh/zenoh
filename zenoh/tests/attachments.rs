@@ -20,7 +20,7 @@ fn attachment_pubsub() {
     let _sub = zenoh
         .declare_subscriber("test/attachment")
         .callback(|sample| {
-            println!("{}", sample.payload().deserialize::<String>().unwrap());
+            println!("{}", sample.payload().try_deserialize::<String>().unwrap());
             for (k, v) in sample
                 .attachment()
                 .unwrap()
@@ -67,7 +67,7 @@ fn attachment_queries() {
         .callback(|query| {
             let s = query
                 .payload()
-                .map(|p| p.deserialize::<String>().unwrap())
+                .map(|p| p.try_deserialize::<String>().unwrap())
                 .unwrap_or_default();
             println!("Query value: {}", s);
 

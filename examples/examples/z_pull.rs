@@ -43,7 +43,7 @@ async fn main() {
             Ok(sample) => {
                 let payload = sample
                     .payload()
-                    .deserialize::<String>()
+                    .try_deserialize::<String>()
                     .unwrap_or_else(|e| format!("{}", e));
                 println!(
                     ">> [Subscriber] Pulled {} ('{}': '{}')... performing a computation of {:#?}",

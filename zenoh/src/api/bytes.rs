@@ -13,16 +13,12 @@
 //
 
 //! ZBytes primitives.
-use std::{
-    borrow::Cow, collections::HashMap, convert::Infallible, fmt::Debug, marker::PhantomData,
-    str::Utf8Error, string::FromUtf8Error, sync::Arc,
-};
+use std::{borrow::Cow, convert::Infallible, fmt::Debug, marker::PhantomData, mem::size_of};
 
 use uhlc::Timestamp;
-use unwrap_infallible::UnwrapInfallible;
 use zenoh_buffers::{
     buffer::{Buffer, SplitBuffer},
-    reader::{HasReader, Reader},
+    reader::{DidntRead, HasReader, Reader},
     writer::HasWriter,
     ZBuf, ZBufReader, ZBufWriter, ZSlice, ZSliceBuffer,
 };
@@ -31,12 +27,9 @@ use zenoh_protocol::{
     core::{Encoding as EncodingProto, Parameters},
     zenoh::ext::AttachmentType,
 };
-#[cfg(feature = "shared-memory")]
+#[cfg(all(feature = "shared-memory", feature = "unstable"))]
 use zenoh_shm::{
-    api::buffer::{
-        zshm::{zshm, ZShm},
-        zshmmut::{zshmmut, ZShmMut},
-    },
+    api::buffer::{zshm::zshm, zshmmut::zshmmut},
     ShmBufInner,
 };
 
@@ -86,24 +79,40 @@ impl From<OptionZBytes> for Option<ZBytes> {
     }
 }
 
-/// Trait to encode a type `T` into a [`ZBytes`].
-pub trait Serialize<T> {
-    type Output;
-
-    /// The implementer should take care of serializing the type `T` into a [`ZBytes`].
-    /// If [`Encoding`] metadata is important in a given system, the caller should take care
-    /// of setting the proprer [`Encoding`] value when calling functions like [`crate::Session::put`].
-    fn serialize(self, t: T) -> Self::Output;
+pub trait SerializedSize {
+    const FIXED_SIZE: Option<usize> = None;
+}
+impl<T: SerializedSize> SerializedSize for &T {
+    const FIXED_SIZE: Option<usize> = T::FIXED_SIZE;
 }
 
-pub trait Deserialize<T> {
-    type Input<'a>;
-    type Error;
+pub enum Serialized<'a> {
+    Slice(&'a [u8]),
+    ZBytes(ZBytes),
+}
 
-    /// The implementer should take care of deserializing a [`ZBytes`] into the type `T`.
-    /// If [`Encoding`] metadata is required in a given system, the caller should take care of checking the proprer
-    /// [`Encoding`] value (e.g. [`crate::sample::Sample::encoding`]) to select the right type `T` to deserialize into.
-    fn deserialize(self, t: Self::Input<'_>) -> Result<T, Self::Error>;
+impl<'a> From<&'a [u8]> for Serialized<'a> {
+    fn from(value: &'a [u8]) -> Self {
+        Self::Slice(value)
+    }
+}
+
+impl From<ZBytes> for Serialized<'_> {
+    fn from(value: ZBytes) -> Self {
+        Self::ZBytes(value)
+    }
+}
+
+pub trait Serialize<'a>: Sized + SerializedSize {
+    type Error;
+    fn write(self, writer: &mut ZBytesWriter) -> Result<(), Self::Error>;
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error>;
+}
+
+pub trait Deserialize<'a>: Sized + SerializedSize {
+    fn read(reader: &mut ZBytesReader) -> Result<Self, ZDeserializeError>;
+    fn deserialize(zbytes: &'a ZBytes) -> Result<Self, ZDeserializeError>;
+    fn try_from_zbytes(zbytes: ZBytes) -> Result<Self, ZDeserializeError>;
 }
 
 /// ZBytes contains the serialized bytes of user data.
@@ -111,15 +120,10 @@ pub trait Deserialize<T> {
 /// `ZBytes` provides convenient methods to the user for serialization/deserialization based on the default Zenoh serializer [`ZSerde`].
 ///
 /// **NOTE 1:** Zenoh semantic and protocol take care of sending and receiving bytes without restricting the actual data types.
-///
-/// **NOTE 2:** [`ZSerde`] is the default serializer/deserializer provided for convenience to the users to deal with primitives data types via
-/// a simple out-of-the-box encoding. That is, [`ZSerde`] is provided as a facilitator for simple use cases that need to send/receive data
-/// over Zenoh, and doing so potentially to/from different programming languages. Make simple use cases simple and provide freedom for more
-/// advanced use cases.
-///
-/// **NOTE 3:** [`ZSerde`] is **NOT** by any means the only serializer/deserializer users can use nor a limitation to the types supported by Zenoh.
-/// [`ZSerde`] does not have the ambition nor the plan to be a full alternative of more complete seriliazation libraries like *serde*, *protobuf*,
-/// *bincode*, *flatbuffers*, etc. Users are free and encouraged to use any serializer/deserializer of their choice that better suits their use case.
+/// [`ZSerde`] is the default serializer/deserializer provided for convenience to the users to deal with primitives data types via
+/// a simple out-of-the-box encoding. [`ZSerde`] is **NOT** by any means the only serializer/deserializer users can use nor a limitation
+/// to the types supported by Zenoh. Users are free and encouraged to use any serializer/deserializer of their choice like *serde*,
+/// *protobuf*, *bincode*, *flatbuffers*, etc.
 ///
 /// `ZBytes` can be used to serialize a single type:
 /// ```rust
@@ -127,7 +131,7 @@ pub trait Deserialize<T> {
 ///
 /// let start = String::from("abc");
 /// let bytes = ZBytes::serialize(start.clone());
-/// let end: String = bytes.deserialize().unwrap();
+/// let end: String = bytes.try_deserialize().unwrap();
 /// assert_eq!(start, end);
 /// ```
 ///
@@ -137,12 +141,12 @@ pub trait Deserialize<T> {
 ///
 /// let start = (String::from("abc"), String::from("def"));
 /// let bytes = ZBytes::serialize(start.clone());
-/// let end: (String, String) = bytes.deserialize().unwrap();
+/// let end: (String, String) = bytes.try_deserialize().unwrap();
 /// assert_eq!(start, end);
 ///
 /// let start = (1_u8, 3.14_f32, String::from("abc"));
 /// let bytes = ZBytes::serialize(start.clone());
-/// let end: (u8, f32, String) = bytes.deserialize().unwrap();
+/// let end: (u8, f32, String) = bytes.try_deserialize().unwrap();
 /// assert_eq!(start, end);
 /// ``````
 ///
@@ -178,7 +182,7 @@ pub trait Deserialize<T> {
 ///     three: vec![42u8; 42],
 /// };
 ///
-/// let mut bytes = ZBytes::empty();
+/// let mut bytes = ZBytes::new();
 /// let mut writer = bytes.writer();
 ///
 /// writer.serialize(&start.one);
@@ -194,9 +198,9 @@ pub trait Deserialize<T> {
 /// assert_eq!(start, end);
 /// ```
 ///
-/// **NOTE 4:** `ZBytes` may store data in non-contiguous regions of memory.
+/// **NOTE 2:** `ZBytes` may store data in non-contiguous regions of memory.
 /// The typical case for `ZBytes` to store data in different memory regions is when data is received fragmented from the network.
-/// The user then can decided to use [`ZBytes::deserialize`], [`ZBytes::reader`], [`ZBytes::into`], or [`ZBytes::slices`] depending
+/// The user then can decided to use [`ZBytes::try_deserialize`], [`ZBytes::reader`], [`ZBytes::deserialize`], or [`ZBytes::slices`] depending
 /// on their needs.
 ///
 /// To directly access raw data as contiguous slice it is preferred to convert `ZBytes` into a [`std::borrow::Cow<[u8]>`].
@@ -234,32 +238,21 @@ pub struct ZBytes(ZBuf);
 
 impl ZBytes {
     /// Create an empty ZBytes.
-    pub const fn empty() -> Self {
+    pub const fn new() -> Self {
         Self(ZBuf::empty())
     }
 
-    /// Create a [`ZBytes`] from any type `T` that implements [`Into<ZBuf>`].
-    #[doc(hidden)]
-    pub fn new<T>(t: T) -> Self
-    where
-        T: Into<ZBuf>,
-    {
-        Self(t.into())
-    }
-
-    /// Returns whether the [`ZBytes`] is empty or not.
+    /// Returns whether the ZBytes is empty or not.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
-    /// Returns the total number of bytes in the [`ZBytes`].
+    /// Returns the total number of bytes in the ZBytes.
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
     /// Get a [`ZBytesReader`] implementing [`std::io::Read`] trait.
-    ///
-    /// See [`ZBytesWriter`] on how to chain the deserialization of different types from a single [`ZBytes`].
     pub fn reader(&self) -> ZBytesReader<'_> {
         ZBytesReader(self.0.reader())
     }
@@ -271,7 +264,7 @@ impl ZBytes {
     {
         let mut buf: Vec<u8> = vec![];
         reader.read_to_end(&mut buf)?;
-        Ok(ZBytes::new(buf))
+        Ok(ZBytes(buf.into()))
     }
 
     /// Get a [`ZBytesWriter`] implementing [`std::io::Write`] trait.
@@ -294,13 +287,9 @@ impl ZBytes {
     ///     assert_eq!(list[index], elem.unwrap());
     /// }
     /// ```
-    pub fn iter<T>(&self) -> ZBytesIterator<'_, T>
-    where
-        for<'b> ZSerde: Deserialize<T, Input<'b> = &'b ZBytes>,
-        for<'b> <ZSerde as Deserialize<T>>::Error: Debug,
-    {
+    pub fn iter<T>(&self) -> ZBytesIterator<'_, T> {
         ZBytesIterator {
-            reader: self.0.reader(),
+            reader: self.reader(),
             _t: PhantomData::<T>,
         }
     }
@@ -320,7 +309,7 @@ impl ZBytes {
     ///
     /// let buf1: Vec<u8> = vec![1, 2, 3];
     /// let buf2: Vec<u8> = vec![4, 5, 6, 7, 8];
-    /// let mut zbs = ZBytes::empty();
+    /// let mut zbs = ZBytes::new();
     /// let mut writer = zbs.writer();
     /// writer.write(&buf1);
     /// writer.write(&buf2);
@@ -336,7 +325,7 @@ impl ZBytes {
     /// let out: Vec<u8> = zbs.slices().fold(Vec::new(), |mut b, x| { b.extend_from_slice(x); b });
     /// // The previous line is the equivalent of
     /// // let out: Vec<u8> = zbs.into();
-    /// assert_eq!(buf, out);    
+    /// assert_eq!(buf, out);
     /// ```
     ///
     /// The example below shows how the [`ZBytesWriter::append`] simply appends the slices of one [`ZBytes`]
@@ -348,7 +337,7 @@ impl ZBytes {
     /// let buf1: Vec<u8> = vec![1, 2, 3];
     /// let buf2: Vec<u8> = vec![4, 5, 6, 7, 8];
     ///
-    /// let mut zbs = ZBytes::empty();
+    /// let mut zbs = ZBytes::new();
     /// let mut writer = zbs.writer();
     /// writer.append(ZBytes::from(buf1.clone()));
     /// writer.append(ZBytes::from(buf2.clone()));
@@ -368,14 +357,11 @@ impl ZBytes {
     ///
     /// let start = String::from("abc");
     /// let bytes = ZBytes::serialize(start.clone());
-    /// let end: String = bytes.deserialize().unwrap();
+    /// let end: String = bytes.try_deserialize().unwrap();
     /// assert_eq!(start, end);
     /// ```
-    pub fn serialize<T>(t: T) -> Self
-    where
-        ZSerde: Serialize<T, Output = Self>,
-    {
-        ZSerde.serialize(t)
+    pub fn serialize<'a, T: Serialize<'a, Error = Infallible>>(t: T) -> Self {
+        Self::try_serialize(t).unwrap()
     }
 
     /// Try serializing an object of type `T` as a [`ZBytes`] using the [`ZSerde`].
@@ -399,36 +385,33 @@ impl ZBytes {
     /// let start: Value = serde_json::from_str(data).unwrap();
     /// // The serialization of a serde_json::Value is faillable (see `serde_json::to_string()`).
     /// let bytes = ZBytes::try_serialize(start.clone()).unwrap();
-    /// let end: Value = bytes.deserialize().unwrap();
+    /// let end: Value = bytes.try_deserialize().unwrap();
     /// assert_eq!(start, end);
     /// ```
-    pub fn try_serialize<T, E>(t: T) -> Result<Self, E>
-    where
-        ZSerde: Serialize<T, Output = Result<Self, E>>,
-    {
-        ZSerde.serialize(t)
+    pub fn try_serialize<'a, T: Serialize<'a>>(t: T) -> Result<Self, T::Error> {
+        if T::FIXED_SIZE.is_some() {
+            let mut zbytes = ZBytes::new();
+            t.write(&mut zbytes.writer())?;
+            Ok(zbytes)
+        } else {
+            Ok(match t.serialize()? {
+                Serialized::Slice(s) => s.into(),
+                Serialized::ZBytes(zbytes) => zbytes,
+            })
+        }
     }
 
     /// Deserialize an object of type `T` using [`ZSerde`].
     ///
     /// See [`ZBytes::serialize`] and [`ZBytes::try_serialize`] for the examples.
     ///
-    /// See [`ZBytes::into`] for infallible conversion, e.g. to get raw bytes.
-    pub fn deserialize<'a, T>(&'a self) -> Result<T, <ZSerde as Deserialize<T>>::Error>
-    where
-        ZSerde: Deserialize<T, Input<'a> = &'a ZBytes>,
-        <ZSerde as Deserialize<T>>::Error: Debug,
-    {
-        ZSerde.deserialize(self)
-    }
-
-    /// Deserialize an object of type `T` using [`ZSerde`].
-    pub fn deserialize_mut<'a, T>(&'a mut self) -> Result<T, <ZSerde as Deserialize<T>>::Error>
-    where
-        ZSerde: Deserialize<T, Input<'a> = &'a mut ZBytes>,
-        <ZSerde as Deserialize<T>>::Error: Debug,
-    {
-        ZSerde.deserialize(self)
+    /// See [`ZBytes::deserialize`] for infallible conversion, e.g. to get raw bytes.
+    pub fn try_deserialize<'a, T: Deserialize<'a>>(&'a self) -> Result<T, ZDeserializeError> {
+        if T::FIXED_SIZE.is_some() {
+            T::read(&mut self.reader())
+        } else {
+            T::deserialize(self)
+        }
     }
 
     /// Infallibly deserialize an object of type `T` using [`ZSerde`].
@@ -456,69 +439,59 @@ impl ZBytes {
     ///
     /// let buf: Vec<u8> = vec![0, 1, 2, 3];
     /// let bytes = ZBytes::from(buf.clone());
-    /// let deser: Vec<u8> = bytes.into();
+    /// let deser: Vec<u8> = bytes.deserialize();
     /// assert_eq!(buf.as_slice(), deser.as_slice());
     /// ```
     ///
     /// If you want to be sure that no copy is performed at all, then you should use [`ZBytes::slices`].
     /// Please note that in this case data may not be contiguous in memory and it is the responsibility of the user to properly parse the raw slices.
-    pub fn into<'a, T>(&'a self) -> T
-    where
-        ZSerde: Deserialize<T, Input<'a> = &'a ZBytes, Error = Infallible>,
-        <ZSerde as Deserialize<T>>::Error: Debug,
-    {
-        ZSerde.deserialize(self).unwrap_infallible()
+    pub fn deserialize<'a, T: Deserialize<'a>>(&'a self) -> T {
+        self.try_deserialize().unwrap()
     }
 
-    /// Infallibly deserialize an object of type `T` using the [`ZSerde`].
-    pub fn into_mut<'a, T>(&'a mut self) -> T
-    where
-        ZSerde: Deserialize<T, Input<'a> = &'a mut ZBytes, Error = Infallible>,
-        <ZSerde as Deserialize<T>>::Error: Debug,
-    {
-        ZSerde.deserialize(self).unwrap_infallible()
+    #[cfg(all(feature = "shared-memory", feature = "unstable"))]
+    pub fn asz_shm(&self) -> Result<&zshm, ZDeserializeError> {
+        // A ZShm is expected to have only one slice
+        let mut zslices = self.0.zslices();
+        if let Some(zs) = zslices.next() {
+            if let Some(shmb) = zs.downcast_ref::<ShmBufInner>() {
+                return Ok(shmb.into());
+            }
+        }
+        Err(ZDeserializeError)
+    }
+
+    #[cfg(all(feature = "shared-memory", feature = "unstable"))]
+    pub fn as_mut_zshm(&mut self) -> Result<&mut zshm, ZDeserializeError> {
+        // A ZSliceShmBorrowMut is expected to have only one slice
+        let mut zslices = self.0.zslices_mut();
+        if let Some(zs) = zslices.next() {
+            // SAFETY: ShmBufInner cannot change the size of the slice
+            if let Some(shmb) = unsafe { zs.downcast_mut::<ShmBufInner>() } {
+                return Ok(shmb.into());
+            }
+        }
+        Err(ZDeserializeError)
+    }
+
+    #[cfg(all(feature = "shared-memory", feature = "unstable"))]
+    pub fn as_zshm_mut(&mut self) -> Result<&mut zshmmut, ZDeserializeError> {
+        // A ZSliceShmBorrowMut is expected to have only one slice
+        let mut zslices = self.0.zslices_mut();
+        if let Some(zs) = zslices.next() {
+            // SAFETY: ShmBufInner cannot change the size of the slice
+            if let Some(shmb) = unsafe { zs.downcast_mut::<ShmBufInner>() } {
+                return shmb.try_into().or(Err(ZDeserializeError));
+            }
+        }
+        Err(ZDeserializeError)
     }
 }
 
-/// A reader that implements [`std::io::Read`] trait to deserialize from a [`ZBytes`]. See [`ZBytesWriter`] for an example.
+/// A reader that implements [`std::io::Read`] trait to read from a [`ZBytes`].
 #[repr(transparent)]
 #[derive(Debug)]
 pub struct ZBytesReader<'a>(ZBufReader<'a>);
-
-#[derive(Debug)]
-pub struct ReadError;
-
-#[derive(Debug)]
-pub enum ZReadOrDeserializeError<T>
-where
-    T: TryFrom<ZBytes>,
-    <T as TryFrom<ZBytes>>::Error: Debug,
-{
-    Read(ReadError),
-    Deserialize(<T as TryFrom<ZBytes>>::Error),
-}
-
-impl<T> std::fmt::Display for ZReadOrDeserializeError<T>
-where
-    T: Debug,
-    T: TryFrom<ZBytes>,
-    <T as TryFrom<ZBytes>>::Error: Debug,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ZReadOrDeserializeError::Read(_) => f.write_str("Read error"),
-            ZReadOrDeserializeError::Deserialize(e) => f.write_fmt(format_args!("{:?}", e)),
-        }
-    }
-}
-
-impl<T> std::error::Error for ZReadOrDeserializeError<T>
-where
-    T: Debug,
-    T: TryFrom<ZBytes>,
-    <T as TryFrom<ZBytes>>::Error: Debug,
-{
-}
 
 impl ZBytesReader<'_> {
     /// Returns the number of bytes that can still be read
@@ -531,19 +504,20 @@ impl ZBytesReader<'_> {
         self.remaining() == 0
     }
 
+    pub fn deserialize<'a, T: Deserialize<'a>>(&mut self) -> T {
+        self.try_deserialize().unwrap()
+    }
+
     /// Deserialize an object of type `T` from a [`ZBytesReader`] using the [`ZSerde`].
     /// See [`ZBytesWriter::serialize`] for an example.
-    pub fn deserialize<T>(&mut self) -> Result<T, <ZSerde as Deserialize<T>>::Error>
-    where
-        for<'a> ZSerde: Deserialize<T, Input<'a> = &'a ZBytes>,
-        <ZSerde as Deserialize<T>>::Error: Debug,
-    {
-        let codec = Zenoh080::new();
-        let abuf: ZBuf = codec.read(&mut self.0).unwrap();
-        let apld = ZBytes::new(abuf);
-
-        let a = ZSerde.deserialize(&apld)?;
-        Ok(a)
+    pub fn try_deserialize<'a, T: Deserialize<'a>>(&mut self) -> Result<T, ZDeserializeError> {
+        if T::FIXED_SIZE.is_some() {
+            T::read(self).map_err(Into::into)
+        } else {
+            let codec = Zenoh080::new();
+            let buf: ZBuf = codec.read(&mut self.0).or(Err(ZDeserializeError))?;
+            T::try_from_zbytes(buf.into())
+        }
     }
 }
 
@@ -559,51 +533,20 @@ impl std::io::Seek for ZBytesReader<'_> {
     }
 }
 
-/// A writer that implements [`std::io::Write`] trait to serialize into a [`ZBytes`].
-///
-/// Example:
-/// ```rust
-/// use zenoh::bytes::ZBytes;
-///
-/// #[derive(Debug, PartialEq)]
-/// struct Foo {
-///     one: usize,
-///     two: String,
-///     three: Vec<u8>,
-/// }
-///
-/// let start = Foo {
-///     one: 42,
-///     two: String::from("Forty-Two"),
-///     three: vec![42u8; 42],
-/// };
-///
-/// let mut bytes = ZBytes::empty();
-/// let mut writer = bytes.writer();
-///
-/// writer.serialize(&start.one);
-/// writer.serialize(&start.two);
-/// writer.serialize(&start.three);
-///
-/// let mut reader = bytes.reader();
-/// let end = Foo {
-///     one: reader.deserialize().unwrap(),
-///     two: reader.deserialize().unwrap(),
-///     three: reader.deserialize().unwrap(),
-/// };
-/// assert_eq!(start, end);
-/// ```
+/// A writer that implements [`std::io::Write`] trait to write into a [`ZBytes`].
 #[repr(transparent)]
 #[derive(Debug)]
 pub struct ZBytesWriter<'a>(ZBufWriter<'a>);
 
 impl ZBytesWriter<'_> {
-    fn write(&mut self, bytes: &ZBuf) {
+    fn write_serialized(&mut self, serialized: Serialized) {
         let codec = Zenoh080::new();
-        // SAFETY: we are serializing slices on a ZBuf, so serialization will never
-        //         fail unless we run out of memory. In that case, Rust memory allocator
-        //         will panic before the serializer has any chance to fail.
-        unsafe { codec.write(&mut self.0, bytes).unwrap_unchecked() };
+        // Result can be ignored because writing on `ZBufWriter` only fails if there
+        // is no bytes written.
+        let _ = match serialized {
+            Serialized::Slice(s) => codec.write(&mut self.0, s),
+            Serialized::ZBytes(zbytes) => codec.write(&mut self.0, &zbytes.0),
+        };
     }
 
     /// Serialize a type `T` on the [`ZBytes`]. For simmetricity, every serialization
@@ -615,7 +558,7 @@ impl ZBytesWriter<'_> {
     /// use zenoh::bytes::ZBytes;
     ///
     /// // serialization
-    /// let mut bytes = ZBytes::empty();
+    /// let mut bytes = ZBytes::new();
     /// let mut writer = bytes.writer();
     /// let i1 = 1234_u32;
     /// let i2 = String::from("test");
@@ -632,23 +575,19 @@ impl ZBytesWriter<'_> {
     /// assert_eq!(i2, o2);
     /// assert_eq!(i3, o3);
     /// ```
-    pub fn serialize<T>(&mut self, t: T)
-    where
-        ZSerde: Serialize<T, Output = ZBytes>,
-    {
-        let tpld = ZSerde.serialize(t);
-        self.write(&tpld.0);
+    pub fn serialize<'a, T: Serialize<'a, Error = Infallible>>(&mut self, t: T) {
+        self.try_serialize(t).unwrap()
     }
 
     /// Try to serialize a type `T` on the [`ZBytes`]. Serialization works
     /// in the same way as [`ZBytesWriter::serialize`].
-    pub fn try_serialize<T, E>(&mut self, t: T) -> Result<(), E>
-    where
-        ZSerde: Serialize<T, Output = Result<ZBytes, E>>,
-    {
-        let tpld = ZSerde.serialize(t)?;
-        self.write(&tpld.0);
-        Ok(())
+    pub fn try_serialize<'a, T: Serialize<'a>>(&mut self, t: T) -> Result<(), T::Error> {
+        if T::FIXED_SIZE.is_some() {
+            t.write(self)
+        } else {
+            self.write_serialized(t.serialize()?);
+            Ok(())
+        }
     }
 
     /// Append a [`ZBytes`] to this [`ZBytes`] by taking ownership.
@@ -666,7 +605,7 @@ impl ZBytesWriter<'_> {
     /// let two = ZBytes::from(vec![2, 3, 4, 5]);
     /// let three = ZBytes::from(vec![6, 7]);
     ///
-    /// let mut bytes = ZBytes::empty();
+    /// let mut bytes = ZBytes::new();
     /// let mut writer = bytes.writer();
     /// // Append data without copying by passing ownership
     /// writer.append(one);
@@ -685,6 +624,10 @@ impl ZBytesWriter<'_> {
             unsafe { self.0.write_zslice(s).unwrap_unchecked() }
         }
     }
+
+    pub fn reserve(&mut self, additional: usize) {
+        self.0.reserve(additional)
+    }
 }
 
 impl std::io::Write for ZBytesWriter<'_> {
@@ -698,32 +641,6 @@ impl std::io::Write for ZBytesWriter<'_> {
 }
 
 /// An iterator that implements [`std::iter::Iterator`] trait to iterate on [`&[u8]`].
-///
-/// Example:
-/// ```rust
-/// use std::io::Write;
-/// use zenoh::bytes::ZBytes;
-///
-/// let buf1: Vec<u8> = vec![1, 2, 3];
-/// let buf2: Vec<u8> = vec![4, 5, 6, 7, 8];
-/// let mut zbs = ZBytes::empty();
-/// let mut writer = zbs.writer();
-/// writer.write(&buf1);
-/// writer.write(&buf2);
-///
-/// // Access the raw content
-/// for slice in zbs.slices() {
-///     println!("{:02x?}", slice);
-/// }
-///
-/// // Concatenate input in a single vector
-/// let buf: Vec<u8> = buf1.into_iter().chain(buf2.into_iter()).collect();
-/// // Concatenate raw bytes in a single vector
-/// let out: Vec<u8> = zbs.slices().fold(Vec::new(), |mut b, x| { b.extend_from_slice(x); b });
-/// // The previous line is the equivalent of
-/// // let out: Vec<u8> = zbs.into();
-/// assert_eq!(buf, out);    
-/// ```
 #[repr(transparent)]
 #[derive(Debug)]
 pub struct ZBytesSliceIterator<'a>(ZBytesSliceIteratorInner<'a>);
@@ -742,72 +659,48 @@ impl<'a> Iterator for ZBytesSliceIterator<'a> {
 
 /// An iterator that implements [`std::iter::Iterator`] trait to iterate on values `T` in a [`ZBytes`].
 /// Note that [`ZBytes`] contains a serialized version of `T` and iterating over a [`ZBytes`] performs lazy deserialization.
-///
-/// Example:
-/// ```rust
-/// use zenoh::bytes::ZBytes;
-///
-/// let list: Vec<f32> = vec![1.1, 2.2, 3.3];
-/// let mut zbs = ZBytes::from_iter(list.iter());
-///
-/// for (index, elem) in zbs.iter::<f32>().enumerate() {
-///     assert_eq!(list[index], elem.unwrap());
-/// }
-/// ```
 #[repr(transparent)]
 #[derive(Debug)]
 pub struct ZBytesIterator<'a, T> {
-    reader: ZBufReader<'a>,
+    reader: ZBytesReader<'a>,
     _t: PhantomData<T>,
 }
 
-impl<T> Iterator for ZBytesIterator<'_, T>
-where
-    for<'a> ZSerde: Deserialize<T, Input<'a> = &'a ZBytes>,
-    <ZSerde as Deserialize<T>>::Error: Debug,
-{
-    type Item = Result<T, <ZSerde as Deserialize<T>>::Error>;
+impl<'a, T: Deserialize<'a>> Iterator for ZBytesIterator<'_, T> {
+    type Item = Result<T, ZDeserializeError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let codec = Zenoh080::new();
-
-        let kbuf: ZBuf = codec.read(&mut self.reader).ok()?;
-        let kpld = ZBytes::new(kbuf);
-
-        Some(ZSerde.deserialize(&kpld))
+        Some(if T::FIXED_SIZE.is_some() {
+            if self.reader.is_empty() {
+                return None;
+            }
+            T::read(&mut self.reader).map_err(Into::into)
+        } else {
+            let codec = Zenoh080::new();
+            let buf: ZBuf = codec.read(&mut self.reader.0).ok()?;
+            T::try_from_zbytes(buf.into())
+        })
     }
 }
 
-impl<A> FromIterator<A> for ZBytes
-where
-    ZSerde: Serialize<A, Output = ZBytes>,
-{
+impl<'a, A: Serialize<'a, Error = Infallible>> FromIterator<A> for ZBytes {
     fn from_iter<T: IntoIterator<Item = A>>(iter: T) -> Self {
-        let mut bytes = ZBytes::empty();
+        let iter = iter.into_iter();
+        let mut bytes = ZBytes::new();
         let mut writer = bytes.writer();
-        for t in iter {
-            writer.serialize(t);
+        if let Some(size) = A::FIXED_SIZE {
+            writer.reserve(size * iter.size_hint().0);
+            for t in iter {
+                t.write(&mut writer).unwrap();
+            }
+        } else {
+            for t in iter {
+                writer.write_serialized(t.serialize().unwrap());
+            }
         }
-
-        ZBytes::new(bytes)
+        bytes
     }
 }
-
-/// The default serializer for [`ZBytes`]. It supports primitives types, such as: `Vec<u8>`, `uX`, `iX`, `fX`, `String`, `bool`.
-/// It also supports common Rust serde values like [`serde_json::Value`]. See [`ZBytes`] for examples.
-///
-/// **NOTE 1:** Zenoh semantic and protocol take care of sending and receiving bytes without restricting the actual data types.
-///
-/// **NOTE 2:** [`ZSerde`] is the default serializer/deserializer provided for convenience to the users to deal with primitives data types via
-/// a simple out-of-the-box encoding. That is, [`ZSerde`] is provided as a facilitator for simple use cases that need to send/receive data
-/// over Zenoh, and doing so potentially to/from different programming languages. Make simple use cases simple and provide freedom for more
-/// advanced use cases.
-///
-/// **NOTE 3:** [`ZSerde`] is **NOT** by any means the only serializer/deserializer users can use nor a limitation to the types supported by Zenoh.
-/// [`ZSerde`] does not have the ambition nor the plan to be a full alternative of more complete seriliazation libraries like *serde*, *protobuf*,
-/// *bincode*, *flatbuffers*, etc. Users are free and encouraged to use any serializer/deserializer of their choice that better suits their use case.
-#[derive(Clone, Copy, Debug)]
-pub struct ZSerde;
 
 #[derive(Debug, Clone, Copy)]
 pub struct ZDeserializeError;
@@ -819,1619 +712,627 @@ impl std::fmt::Display for ZDeserializeError {
 }
 
 impl std::error::Error for ZDeserializeError {}
+impl From<DidntRead> for ZDeserializeError {
+    fn from(_value: DidntRead) -> Self {
+        Self
+    }
+}
 
 // ZBytes
-impl Serialize<ZBytes> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: ZBytes) -> Self::Output {
-        t
-    }
-}
-
-impl From<&ZBytes> for ZBytes {
-    fn from(t: &ZBytes) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl From<&mut ZBytes> for ZBytes {
-    fn from(t: &mut ZBytes) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl Serialize<&ZBytes> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: &ZBytes) -> Self::Output {
-        t.clone()
-    }
-}
-
-impl Serialize<&mut ZBytes> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: &mut ZBytes) -> Self::Output {
-        t.clone()
-    }
-}
-
-impl Deserialize<ZBytes> for ZSerde {
-    type Input<'a> = &'a ZBytes;
+impl SerializedSize for ZBytes {}
+impl<'a> Serialize<'a> for ZBytes {
     type Error = Infallible;
-
-    fn deserialize(self, v: Self::Input<'_>) -> Result<ZBytes, Self::Error> {
-        Ok(v.clone())
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        Ok(self.into())
+    }
+}
+impl<'a> Serialize<'a> for &ZBytes {
+    type Error = Infallible;
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        self.clone().serialize()
+    }
+}
+impl Deserialize<'_> for ZBytes {
+    fn read(_reader: &mut ZBytesReader) -> Result<Self, ZDeserializeError> {
+        unimplemented!()
+    }
+    fn deserialize(zbytes: &'_ ZBytes) -> Result<Self, ZDeserializeError> {
+        Ok(zbytes.clone())
+    }
+    fn try_from_zbytes(zbytes: ZBytes) -> Result<Self, ZDeserializeError> {
+        Ok(zbytes)
     }
 }
 
 // ZBuf
-#[doc(hidden)]
-impl Serialize<ZBuf> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: ZBuf) -> Self::Output {
-        ZBytes::new(t)
-    }
-}
-
-#[doc(hidden)]
-impl From<ZBuf> for ZBytes {
-    fn from(t: ZBuf) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-#[doc(hidden)]
-impl Serialize<&ZBuf> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: &ZBuf) -> Self::Output {
-        ZBytes::new(t.clone())
-    }
-}
-
-#[doc(hidden)]
-impl From<&ZBuf> for ZBytes {
-    fn from(t: &ZBuf) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-#[doc(hidden)]
-impl Serialize<&mut ZBuf> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: &mut ZBuf) -> Self::Output {
-        ZBytes::new(t.clone())
-    }
-}
-
-#[doc(hidden)]
-impl From<&mut ZBuf> for ZBytes {
-    fn from(t: &mut ZBuf) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-#[doc(hidden)]
-impl Deserialize<ZBuf> for ZSerde {
-    type Input<'a> = &'a ZBytes;
+impl SerializedSize for ZBuf {}
+impl<'a> Serialize<'a> for ZBuf {
     type Error = Infallible;
-
-    fn deserialize(self, v: Self::Input<'_>) -> Result<ZBuf, Self::Error> {
-        Ok(v.0.clone())
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        Ok(ZBytes::from(self).into())
     }
 }
-
-#[doc(hidden)]
+impl<'a> Serialize<'a> for &ZBuf {
+    type Error = Infallible;
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        self.clone().serialize()
+    }
+}
+impl Deserialize<'_> for ZBuf {
+    fn read(_reader: &mut ZBytesReader) -> Result<Self, ZDeserializeError> {
+        unimplemented!()
+    }
+    fn deserialize(zbytes: &'_ ZBytes) -> Result<Self, ZDeserializeError> {
+        Ok(zbytes.clone().0)
+    }
+    fn try_from_zbytes(zbytes: ZBytes) -> Result<Self, ZDeserializeError> {
+        Ok(zbytes.0)
+    }
+}
+impl From<ZBuf> for ZBytes {
+    fn from(value: ZBuf) -> Self {
+        Self(value)
+    }
+}
 impl From<ZBytes> for ZBuf {
     fn from(value: ZBytes) -> Self {
         value.0
     }
 }
 
-#[doc(hidden)]
-impl From<&ZBytes> for ZBuf {
-    fn from(value: &ZBytes) -> Self {
-        ZSerde.deserialize(value).unwrap_infallible()
-    }
-}
-
-#[doc(hidden)]
-impl From<&mut ZBytes> for ZBuf {
-    fn from(value: &mut ZBytes) -> Self {
-        ZSerde.deserialize(&*value).unwrap_infallible()
-    }
-}
-
 // ZSlice
-#[doc(hidden)]
-impl Serialize<ZSlice> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: ZSlice) -> Self::Output {
-        ZBytes::new(t)
-    }
-}
-
-#[doc(hidden)]
-impl From<ZSlice> for ZBytes {
-    fn from(t: ZSlice) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-#[doc(hidden)]
-impl Serialize<&ZSlice> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: &ZSlice) -> Self::Output {
-        ZBytes::new(t.clone())
-    }
-}
-
-#[doc(hidden)]
-impl From<&ZSlice> for ZBytes {
-    fn from(t: &ZSlice) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-#[doc(hidden)]
-impl Serialize<&mut ZSlice> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: &mut ZSlice) -> Self::Output {
-        ZBytes::new(t.clone())
-    }
-}
-
-#[doc(hidden)]
-impl From<&mut ZSlice> for ZBytes {
-    fn from(t: &mut ZSlice) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-#[doc(hidden)]
-impl Deserialize<ZSlice> for ZSerde {
-    type Input<'a> = &'a ZBytes;
+impl SerializedSize for ZSlice {}
+impl<'a> Serialize<'a> for ZSlice {
     type Error = Infallible;
-
-    fn deserialize(self, v: Self::Input<'_>) -> Result<ZSlice, Self::Error> {
-        Ok(v.0.to_zslice())
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        Ok(ZBytes::from(self).into())
     }
 }
-
-#[doc(hidden)]
-impl From<ZBytes> for ZSlice {
-    fn from(value: ZBytes) -> Self {
-        ZBuf::from(value).to_zslice()
+impl<'a> Serialize<'a> for &ZSlice {
+    type Error = Infallible;
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        self.clone().serialize()
     }
 }
-
-#[doc(hidden)]
-impl From<&ZBytes> for ZSlice {
-    fn from(value: &ZBytes) -> Self {
-        ZSerde.deserialize(value).unwrap_infallible()
+impl Deserialize<'_> for ZSlice {
+    fn read(_reader: &mut ZBytesReader) -> Result<Self, ZDeserializeError> {
+        unimplemented!()
+    }
+    fn deserialize(zbytes: &'_ ZBytes) -> Result<Self, ZDeserializeError> {
+        Ok(zbytes.0.to_zslice())
+    }
+    fn try_from_zbytes(zbytes: ZBytes) -> Result<Self, ZDeserializeError> {
+        Self::deserialize(&zbytes)
     }
 }
-
-#[doc(hidden)]
-impl From<&mut ZBytes> for ZSlice {
-    fn from(value: &mut ZBytes) -> Self {
-        ZSerde.deserialize(&*value).unwrap_infallible()
+impl From<ZSlice> for ZBytes {
+    fn from(value: ZSlice) -> Self {
+        ZBytes(value.into())
     }
 }
 
 // [u8; N]
-impl<const N: usize> Serialize<[u8; N]> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: [u8; N]) -> Self::Output {
-        ZBytes::new(t)
+impl<const N: usize> SerializedSize for [u8; N] {
+    const FIXED_SIZE: Option<usize> = Some(N);
+}
+impl<'a, const N: usize> Serialize<'a> for [u8; N] {
+    type Error = Infallible;
+    fn write(self, writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        std::io::Write::write(writer, &self).unwrap();
+        Ok(())
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        unimplemented!()
     }
 }
-
+impl<const N: usize> Deserialize<'_> for [u8; N] {
+    fn read(reader: &mut ZBytesReader) -> Result<Self, ZDeserializeError> {
+        let mut buf = [0; N];
+        std::io::Read::read_exact(reader, &mut buf).or(Err(ZDeserializeError))?;
+        Ok(buf)
+    }
+    fn deserialize(_zbytes: &'_ ZBytes) -> Result<Self, ZDeserializeError> {
+        unimplemented!()
+    }
+    fn try_from_zbytes(_zbytes: ZBytes) -> Result<Self, ZDeserializeError> {
+        unimplemented!()
+    }
+}
 impl<const N: usize> From<[u8; N]> for ZBytes {
-    fn from(t: [u8; N]) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl<const N: usize> Serialize<&[u8; N]> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: &[u8; N]) -> Self::Output {
-        ZBytes::new(*t)
-    }
-}
-
-impl<const N: usize> From<&[u8; N]> for ZBytes {
-    fn from(t: &[u8; N]) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl<const N: usize> Serialize<&mut [u8; N]> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: &mut [u8; N]) -> Self::Output {
-        ZBytes::new(*t)
-    }
-}
-
-impl<const N: usize> From<&mut [u8; N]> for ZBytes {
-    fn from(t: &mut [u8; N]) -> Self {
-        ZSerde.serialize(*t)
-    }
-}
-
-impl<const N: usize> Deserialize<[u8; N]> for ZSerde {
-    type Input<'a> = &'a ZBytes;
-    type Error = ZDeserializeError;
-
-    fn deserialize(self, v: Self::Input<'_>) -> Result<[u8; N], Self::Error> {
-        use std::io::Read;
-
-        if v.0.len() != N {
-            return Err(ZDeserializeError);
-        }
-        let mut dst = [0u8; N];
-        let mut reader = v.reader();
-        reader.read_exact(&mut dst).map_err(|_| ZDeserializeError)?;
-        Ok(dst)
-    }
-}
-
-impl<const N: usize> TryFrom<ZBytes> for [u8; N] {
-    type Error = ZDeserializeError;
-
-    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&value)
-    }
-}
-
-impl<const N: usize> TryFrom<&ZBytes> for [u8; N] {
-    type Error = ZDeserializeError;
-
-    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(value)
-    }
-}
-
-impl<const N: usize> TryFrom<&mut ZBytes> for [u8; N] {
-    type Error = ZDeserializeError;
-
-    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&*value)
+    fn from(value: [u8; N]) -> Self {
+        ZBytes(value.into())
     }
 }
 
 // Vec<u8>
-impl Serialize<Vec<u8>> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: Vec<u8>) -> Self::Output {
-        ZBytes::new(t)
-    }
-}
-
-impl From<Vec<u8>> for ZBytes {
-    fn from(t: Vec<u8>) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl Serialize<&Vec<u8>> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: &Vec<u8>) -> Self::Output {
-        ZBytes::new(t.clone())
-    }
-}
-
-impl From<&Vec<u8>> for ZBytes {
-    fn from(t: &Vec<u8>) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl Serialize<&mut Vec<u8>> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: &mut Vec<u8>) -> Self::Output {
-        ZBytes::new(t.clone())
-    }
-}
-
-impl From<&mut Vec<u8>> for ZBytes {
-    fn from(t: &mut Vec<u8>) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl Deserialize<Vec<u8>> for ZSerde {
-    type Input<'a> = &'a ZBytes;
+impl SerializedSize for Vec<u8> {}
+impl<'a> Serialize<'a> for Vec<u8> {
     type Error = Infallible;
-
-    fn deserialize(self, v: Self::Input<'_>) -> Result<Vec<u8>, Self::Error> {
-        Ok(v.0.contiguous().to_vec())
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        Ok(ZBytes::from(self).into())
     }
 }
-
-impl From<ZBytes> for Vec<u8> {
-    fn from(value: ZBytes) -> Self {
-        ZSerde.deserialize(&value).unwrap_infallible()
+impl<'a> Serialize<'a> for &'a Vec<u8> {
+    type Error = Infallible;
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        Ok(self.as_slice().into())
     }
 }
-
-impl From<&ZBytes> for Vec<u8> {
-    fn from(value: &ZBytes) -> Self {
-        ZSerde.deserialize(value).unwrap_infallible()
+impl Deserialize<'_> for Vec<u8> {
+    fn read(_reader: &mut ZBytesReader) -> Result<Self, ZDeserializeError> {
+        unimplemented!()
+    }
+    fn deserialize(zbytes: &'_ ZBytes) -> Result<Self, ZDeserializeError> {
+        Ok(zbytes.0.contiguous().into())
+    }
+    fn try_from_zbytes(zbytes: ZBytes) -> Result<Self, ZDeserializeError> {
+        Self::deserialize(&zbytes)
     }
 }
-
-impl From<&mut ZBytes> for Vec<u8> {
-    fn from(value: &mut ZBytes) -> Self {
-        ZSerde.deserialize(&*value).unwrap_infallible()
+impl From<Vec<u8>> for ZBytes {
+    fn from(value: Vec<u8>) -> Self {
+        ZBytes(value.into())
     }
 }
 
 // &[u8]
-impl Serialize<&[u8]> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: &[u8]) -> Self::Output {
-        ZBytes::new(t.to_vec())
+impl SerializedSize for &[u8] {}
+impl<'a> Serialize<'a> for &'a [u8] {
+    type Error = Infallible;
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        Ok(self.into())
     }
 }
-
 impl From<&[u8]> for ZBytes {
-    fn from(t: &[u8]) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl Serialize<&mut [u8]> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: &mut [u8]) -> Self::Output {
-        ZSerde.serialize(&*t)
-    }
-}
-
-impl From<&mut [u8]> for ZBytes {
-    fn from(t: &mut [u8]) -> Self {
-        ZSerde.serialize(t)
+    fn from(value: &[u8]) -> Self {
+        ZBytes::serialize(value)
     }
 }
 
 // Cow<[u8]>
-impl<'a> Serialize<Cow<'a, [u8]>> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: Cow<'a, [u8]>) -> Self::Output {
-        ZBytes::new(t.to_vec())
-    }
-}
-
-impl From<Cow<'_, [u8]>> for ZBytes {
-    fn from(t: Cow<'_, [u8]>) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl<'a> Serialize<&Cow<'a, [u8]>> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: &Cow<'a, [u8]>) -> Self::Output {
-        ZBytes::new(t.to_vec())
-    }
-}
-
-impl From<&Cow<'_, [u8]>> for ZBytes {
-    fn from(t: &Cow<'_, [u8]>) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl<'a> Serialize<&mut Cow<'a, [u8]>> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: &mut Cow<'a, [u8]>) -> Self::Output {
-        ZSerde.serialize(&*t)
-    }
-}
-
-impl From<&mut Cow<'_, [u8]>> for ZBytes {
-    fn from(t: &mut Cow<'_, [u8]>) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl<'a> Deserialize<Cow<'a, [u8]>> for ZSerde {
-    type Input<'b> = &'a ZBytes;
+impl SerializedSize for Cow<'_, [u8]> {}
+impl<'a> Serialize<'a> for Cow<'a, [u8]> {
     type Error = Infallible;
-
-    fn deserialize(self, v: Self::Input<'a>) -> Result<Cow<'a, [u8]>, Self::Error> {
-        Ok(v.0.contiguous())
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        Ok(match self {
+            Cow::Borrowed(s) => Serialized::Slice(s),
+            Cow::Owned(vec) => Serialized::ZBytes(vec.into()),
+        })
     }
 }
-
-impl From<ZBytes> for Cow<'static, [u8]> {
-    fn from(v: ZBytes) -> Self {
-        match v.0.contiguous() {
-            Cow::Borrowed(s) => Cow::Owned(s.to_vec()),
-            Cow::Owned(s) => Cow::Owned(s),
-        }
+impl<'a> Serialize<'a> for &'a Cow<'a, [u8]> {
+    type Error = Infallible;
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        Ok(self.as_ref().into())
     }
 }
-
-impl<'a> From<&'a ZBytes> for Cow<'a, [u8]> {
-    fn from(value: &'a ZBytes) -> Self {
-        ZSerde.deserialize(value).unwrap_infallible()
+impl<'a> Deserialize<'a> for Cow<'a, [u8]> {
+    fn read(_reader: &mut ZBytesReader) -> Result<Self, ZDeserializeError> {
+        unimplemented!()
+    }
+    fn deserialize(zbytes: &'a ZBytes) -> Result<Self, ZDeserializeError> {
+        Ok(zbytes.0.contiguous())
+    }
+    fn try_from_zbytes(zbytes: ZBytes) -> Result<Self, ZDeserializeError> {
+        Vec::try_from_zbytes(zbytes).map(Cow::Owned)
     }
 }
-
-impl<'a> From<&'a mut ZBytes> for Cow<'a, [u8]> {
-    fn from(value: &'a mut ZBytes) -> Self {
-        ZSerde.deserialize(&*value).unwrap_infallible()
+impl From<Cow<'_, [u8]>> for ZBytes {
+    fn from(value: Cow<'_, [u8]>) -> Self {
+        ZBytes::serialize(value)
     }
 }
 
 // String
-impl Serialize<String> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, s: String) -> Self::Output {
-        ZBytes::new(s.into_bytes())
+impl SerializedSize for String {}
+impl<'a> Serialize<'a> for String {
+    type Error = Infallible;
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        self.into_bytes().serialize()
+    }
+}
+impl<'a> Serialize<'a> for &'a String {
+    type Error = Infallible;
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        self.as_bytes().serialize()
+    }
+}
+impl Deserialize<'_> for String {
+    fn read(_reader: &mut ZBytesReader) -> Result<Self, ZDeserializeError> {
+        unimplemented!()
+    }
+    fn deserialize(zbytes: &'_ ZBytes) -> Result<Self, ZDeserializeError> {
+        String::from_utf8(<Vec<u8>>::deserialize(zbytes)?).or(Err(ZDeserializeError))
+    }
+    fn try_from_zbytes(zbytes: ZBytes) -> Result<Self, ZDeserializeError> {
+        Self::deserialize(&zbytes)
+    }
+}
+// &[u8]
+impl SerializedSize for &str {}
+impl<'a> Serialize<'a> for &'a str {
+    type Error = Infallible;
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        Ok(self.as_bytes().into())
     }
 }
 
-impl From<String> for ZBytes {
-    fn from(t: String) -> Self {
-        ZSerde.serialize(t)
+// Cow<[u8]>
+impl SerializedSize for Cow<'_, str> {}
+impl<'a> Serialize<'a> for Cow<'a, str> {
+    type Error = Infallible;
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
     }
-}
-
-impl Serialize<&String> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, s: &String) -> Self::Output {
-        ZBytes::new(s.clone().into_bytes())
-    }
-}
-
-impl From<&String> for ZBytes {
-    fn from(t: &String) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl Serialize<&mut String> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, s: &mut String) -> Self::Output {
-        ZSerde.serialize(&*s)
-    }
-}
-
-impl From<&mut String> for ZBytes {
-    fn from(t: &mut String) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl Deserialize<String> for ZSerde {
-    type Input<'a> = &'a ZBytes;
-    type Error = FromUtf8Error;
-
-    fn deserialize(self, v: Self::Input<'_>) -> Result<String, Self::Error> {
-        let v: Vec<u8> = ZSerde.deserialize(v).unwrap_infallible();
-        String::from_utf8(v)
-    }
-}
-
-impl TryFrom<ZBytes> for String {
-    type Error = FromUtf8Error;
-
-    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&value)
-    }
-}
-
-impl TryFrom<&ZBytes> for String {
-    type Error = FromUtf8Error;
-
-    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(value)
-    }
-}
-
-impl TryFrom<&mut ZBytes> for String {
-    type Error = FromUtf8Error;
-
-    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&*value)
-    }
-}
-
-// &str
-impl Serialize<&str> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, s: &str) -> Self::Output {
-        ZSerde.serialize(s.to_string())
-    }
-}
-
-impl From<&str> for ZBytes {
-    fn from(t: &str) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl Serialize<&mut str> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, s: &mut str) -> Self::Output {
-        ZSerde.serialize(&*s)
-    }
-}
-
-impl From<&mut str> for ZBytes {
-    fn from(t: &mut str) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl<'a> Serialize<Cow<'a, str>> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, s: Cow<'a, str>) -> Self::Output {
-        Self.serialize(s.to_string())
-    }
-}
-
-impl From<Cow<'_, str>> for ZBytes {
-    fn from(t: Cow<'_, str>) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl<'a> Serialize<&Cow<'a, str>> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, s: &Cow<'a, str>) -> Self::Output {
-        ZSerde.serialize(s.to_string())
-    }
-}
-
-impl From<&Cow<'_, str>> for ZBytes {
-    fn from(t: &Cow<'_, str>) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl<'a> Serialize<&mut Cow<'a, str>> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, s: &mut Cow<'a, str>) -> Self::Output {
-        ZSerde.serialize(&*s)
-    }
-}
-
-impl From<&mut Cow<'_, str>> for ZBytes {
-    fn from(t: &mut Cow<'_, str>) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-/// See [`Deserialize<Cow<'a, [u8]>>`] for guarantees on copies.
-impl<'a> Deserialize<Cow<'a, str>> for ZSerde {
-    type Input<'b> = &'a ZBytes;
-    type Error = Utf8Error;
-
-    fn deserialize(self, v: Self::Input<'a>) -> Result<Cow<'a, str>, Self::Error> {
-        Cow::try_from(v)
-    }
-}
-
-impl TryFrom<ZBytes> for Cow<'static, str> {
-    type Error = Utf8Error;
-
-    fn try_from(v: ZBytes) -> Result<Self, Self::Error> {
-        Ok(match Cow::<[u8]>::from(v) {
-            Cow::Borrowed(s) => core::str::from_utf8(s)?.into(),
-            Cow::Owned(s) => String::from_utf8(s).map_err(|err| err.utf8_error())?.into(),
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        Ok(match self {
+            Cow::Borrowed(s) => Serialized::Slice(s.as_bytes()),
+            Cow::Owned(vec) => Serialized::ZBytes(vec.into_bytes().into()),
         })
     }
 }
-
-impl<'a> TryFrom<&'a ZBytes> for Cow<'a, str> {
-    type Error = Utf8Error;
-
-    fn try_from(v: &'a ZBytes) -> Result<Self, Self::Error> {
-        Ok(match Cow::<[u8]>::from(v) {
-            Cow::Borrowed(s) => core::str::from_utf8(s)?.into(),
-            Cow::Owned(s) => String::from_utf8(s).map_err(|err| err.utf8_error())?.into(),
+impl<'a> Serialize<'a> for &'a Cow<'a, str> {
+    type Error = Infallible;
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        Ok(self.as_bytes().into())
+    }
+}
+impl<'a> Deserialize<'a> for Cow<'a, str> {
+    fn read(_reader: &mut ZBytesReader) -> Result<Self, ZDeserializeError> {
+        unimplemented!()
+    }
+    fn deserialize(zbytes: &'a ZBytes) -> Result<Self, ZDeserializeError> {
+        Ok(match <Cow<'a, [u8]>>::deserialize(zbytes)? {
+            Cow::Borrowed(s) => std::str::from_utf8(s).or(Err(ZDeserializeError))?.into(),
+            Cow::Owned(vec) => String::from_utf8(vec).or(Err(ZDeserializeError))?.into(),
         })
+    }
+    fn try_from_zbytes(zbytes: ZBytes) -> Result<Self, ZDeserializeError> {
+        String::try_from_zbytes(zbytes).map(Cow::Owned)
     }
 }
 
-impl<'a> TryFrom<&'a mut ZBytes> for Cow<'a, str> {
-    type Error = Utf8Error;
-
-    fn try_from(v: &'a mut ZBytes) -> Result<Self, Self::Error> {
-        Ok(match Cow::<[u8]>::from(v) {
-            Cow::Borrowed(s) => core::str::from_utf8(s)?.into(),
-            Cow::Owned(s) => String::from_utf8(s).map_err(|err| err.utf8_error())?.into(),
-        })
-    }
-}
-
-// - Impl Serialize/Deserialize for numbers
+// numeric
 macro_rules! impl_num {
-    ($t:ty) => {
-        impl Serialize<$t> for ZSerde {
-            type Output = ZBytes;
-
-            fn serialize(self, t: $t) -> Self::Output {
-                let bs = t.to_le_bytes();
-                let mut end = 1;
-                if t != 0 as $t {
-                    end += bs.iter().rposition(|b| *b != 0).unwrap_or(bs.len() - 1);
-                };
-                // SAFETY:
-                // - 0 is a valid start index because bs is guaranteed to always have a length greater or equal than 1
-                // - end is a valid end index because is bounded between 0 and bs.len()
-                ZBytes::new(unsafe { ZSlice::new(Arc::new(bs), 0, end).unwrap_unchecked() })
+    ($($ty:ty),* $(,)?) => {$(
+        impl SerializedSize for $ty {
+            const FIXED_SIZE: Option<usize> = Some(size_of::<$ty>());
+        }
+        impl<'a> Serialize<'a> for $ty {
+            type Error = Infallible;
+            fn write(self, writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+                self.to_le_bytes().write(writer)
+            }
+            fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+                unimplemented!()
             }
         }
-
-        impl From<$t> for ZBytes {
-            fn from(t: $t) -> Self {
-                ZSerde.serialize(t)
+        impl<'a> Serialize<'a> for &$ty {
+            type Error = Infallible;
+            fn write(self, writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+                (*self).to_le_bytes().write(writer)
+            }
+            fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+                unimplemented!()
             }
         }
-
-        impl Serialize<&$t> for ZSerde {
-            type Output = ZBytes;
-
-            fn serialize(self, t: &$t) -> Self::Output {
-                Self.serialize(*t)
+        impl Deserialize<'_> for $ty {
+            fn read(reader: &mut ZBytesReader) -> Result<Self, ZDeserializeError> {
+                <[u8; {size_of::<$ty>()}]>::read(reader).map(<$ty>::from_le_bytes)
+            }
+            fn deserialize(_zbytes: &'_ ZBytes) -> Result<Self, ZDeserializeError> {
+                unimplemented!()
+            }
+            fn try_from_zbytes(_zbytes: ZBytes) -> Result<Self, ZDeserializeError> {
+                unimplemented!()
             }
         }
-
-        impl From<&$t> for ZBytes {
-            fn from(t: &$t) -> Self {
-                ZSerde.serialize(t)
-            }
-        }
-
-        impl Serialize<&mut $t> for ZSerde {
-            type Output = ZBytes;
-
-            fn serialize(self, t: &mut $t) -> Self::Output {
-                Self.serialize(*t)
-            }
-        }
-
-        impl From<&mut $t> for ZBytes {
-            fn from(t: &mut $t) -> Self {
-                ZSerde.serialize(t)
-            }
-        }
-
-        impl Deserialize<$t> for ZSerde {
-            type Input<'a> = &'a ZBytes;
-            type Error = ZDeserializeError;
-
-            fn deserialize(self, v: Self::Input<'_>) -> Result<$t, Self::Error> {
-                use std::io::Read;
-
-                let mut r = v.reader();
-                let mut bs = (0 as $t).to_le_bytes();
-                if v.len() > bs.len() {
-                    return Err(ZDeserializeError);
-                }
-                r.read_exact(&mut bs[..v.len()])
-                    .map_err(|_| ZDeserializeError)?;
-                let t = <$t>::from_le_bytes(bs);
-                Ok(t)
-            }
-        }
-
-        impl TryFrom<ZBytes> for $t {
-            type Error = ZDeserializeError;
-
-            fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
-                ZSerde.deserialize(&value)
-            }
-        }
-
-        impl TryFrom<&ZBytes> for $t {
-            type Error = ZDeserializeError;
-
-            fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
-                ZSerde.deserialize(value)
-            }
-        }
-
-        impl TryFrom<&mut ZBytes> for $t {
-            type Error = ZDeserializeError;
-
-            fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
-                ZSerde.deserialize(&*value)
-            }
-        }
-    };
+    )*};
 }
+impl_num!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize, f32, f64);
 
-// Zenoh unsigned integers
-impl_num!(u8);
-impl_num!(u16);
-impl_num!(u32);
-impl_num!(u64);
-impl_num!(u128);
-impl_num!(usize);
-
-// Zenoh signed integers
-impl_num!(i8);
-impl_num!(i16);
-impl_num!(i32);
-impl_num!(i64);
-impl_num!(i128);
-impl_num!(isize);
-
-// Zenoh floats
-impl_num!(f32);
-impl_num!(f64);
-
-// Zenoh bool
-impl Serialize<bool> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: bool) -> Self::Output {
-        // SAFETY: casting a bool into an integer is well-defined behaviour.
-        //      0 is false, 1 is true: https://doc.rust-lang.org/std/primitive.bool.html
-        ZBytes::new(ZBuf::from((t as u8).to_le_bytes()))
+impl SerializedSize for bool {
+    const FIXED_SIZE: Option<usize> = Some(size_of::<bool>());
+}
+impl<'a> Serialize<'a> for bool {
+    type Error = Infallible;
+    fn write(self, writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        (self as u8).write(writer)
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        unimplemented!()
     }
 }
-
-impl From<bool> for ZBytes {
-    fn from(t: bool) -> Self {
-        ZSerde.serialize(t)
+impl<'a> Serialize<'a> for &bool {
+    type Error = Infallible;
+    fn write(self, writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        (*self as u8).write(writer)
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        unimplemented!()
     }
 }
-
-impl Serialize<&bool> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: &bool) -> Self::Output {
-        ZSerde.serialize(*t)
-    }
-}
-
-impl From<&bool> for ZBytes {
-    fn from(t: &bool) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl Serialize<&mut bool> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: &mut bool) -> Self::Output {
-        ZSerde.serialize(*t)
-    }
-}
-
-impl From<&mut bool> for ZBytes {
-    fn from(t: &mut bool) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl Deserialize<bool> for ZSerde {
-    type Input<'a> = &'a ZBytes;
-    type Error = ZDeserializeError;
-
-    fn deserialize(self, v: Self::Input<'_>) -> Result<bool, Self::Error> {
-        let p = v.deserialize::<u8>().map_err(|_| ZDeserializeError)?;
-        match p {
+impl Deserialize<'_> for bool {
+    fn read(reader: &mut ZBytesReader) -> Result<Self, ZDeserializeError> {
+        match u8::read(reader)? {
             0 => Ok(false),
             1 => Ok(true),
             _ => Err(ZDeserializeError),
         }
     }
-}
-
-impl TryFrom<ZBytes> for bool {
-    type Error = ZDeserializeError;
-
-    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&value)
+    fn deserialize(_zbytes: &'_ ZBytes) -> Result<Self, ZDeserializeError> {
+        unimplemented!()
+    }
+    fn try_from_zbytes(_zbytes: ZBytes) -> Result<Self, ZDeserializeError> {
+        unimplemented!()
     }
 }
 
-impl TryFrom<&ZBytes> for bool {
-    type Error = ZDeserializeError;
-
-    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(value)
+// char
+impl SerializedSize for char {
+    const FIXED_SIZE: Option<usize> = Some(size_of::<char>());
+}
+impl<'a> Serialize<'a> for char {
+    type Error = Infallible;
+    fn write(self, writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        u32::from(self).write(writer)
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        unimplemented!()
+    }
+}
+impl<'a> Serialize<'a> for &char {
+    type Error = Infallible;
+    fn write(self, writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        u32::from(*self).write(writer)
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        unimplemented!()
+    }
+}
+impl Deserialize<'_> for char {
+    fn read(reader: &mut ZBytesReader) -> Result<Self, ZDeserializeError> {
+        u32::read(reader)?.try_into().or(Err(ZDeserializeError))
+    }
+    fn deserialize(_zbytes: &'_ ZBytes) -> Result<Self, ZDeserializeError> {
+        unimplemented!()
+    }
+    fn try_from_zbytes(_zbytes: ZBytes) -> Result<Self, ZDeserializeError> {
+        unimplemented!()
     }
 }
 
-impl TryFrom<&mut ZBytes> for bool {
-    type Error = ZDeserializeError;
-
-    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&*value)
-    }
-}
-
-// Zenoh char
-impl Serialize<char> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: char) -> Self::Output {
-        // We can convert char to u32 and encode it as such
-        // See https://doc.rust-lang.org/std/primitive.char.html#method.from_u32
-        ZSerde.serialize(t as u32)
-    }
-}
-
-impl From<char> for ZBytes {
-    fn from(t: char) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl Serialize<&char> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: &char) -> Self::Output {
-        ZSerde.serialize(*t)
-    }
-}
-
-impl From<&char> for ZBytes {
-    fn from(t: &char) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl Serialize<&mut char> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: &mut char) -> Self::Output {
-        ZSerde.serialize(*t)
-    }
-}
-
-impl From<&mut char> for ZBytes {
-    fn from(t: &mut char) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl Deserialize<char> for ZSerde {
-    type Input<'a> = &'a ZBytes;
-    type Error = ZDeserializeError;
-
-    fn deserialize(self, v: Self::Input<'_>) -> Result<char, Self::Error> {
-        let c = v.deserialize::<u32>()?;
-        let c = char::try_from(c).map_err(|_| ZDeserializeError)?;
-        Ok(c)
-    }
-}
-
-impl TryFrom<ZBytes> for char {
-    type Error = ZDeserializeError;
-
-    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&value)
-    }
-}
-
-impl TryFrom<&ZBytes> for char {
-    type Error = ZDeserializeError;
-
-    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(value)
-    }
-}
-
-impl TryFrom<&mut ZBytes> for char {
-    type Error = ZDeserializeError;
-
-    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&*value)
-    }
-}
-
-// - Zenoh advanced types serializer/deserializer
+/* Zenoh advanced types serializer/deserializer */
 // Parameters
-impl Serialize<Parameters<'_>> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: Parameters<'_>) -> Self::Output {
-        Self.serialize(t.as_str())
+impl SerializedSize for Parameters<'_> {}
+impl<'a> Serialize<'a> for Parameters<'a> {
+    type Error = Infallible;
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        <Cow<'a, str>>::from(self).serialize()
     }
 }
-
-impl From<Parameters<'_>> for ZBytes {
-    fn from(t: Parameters<'_>) -> Self {
-        ZSerde.serialize(t)
+impl<'a> Serialize<'a> for &'a Parameters<'a> {
+    type Error = Infallible;
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        Ok(self.as_str().as_bytes().into())
     }
 }
-
-impl Serialize<&Parameters<'_>> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: &Parameters<'_>) -> Self::Output {
-        Self.serialize(t.as_str())
+impl<'a> Deserialize<'a> for Parameters<'a> {
+    fn read(_reader: &mut ZBytesReader) -> Result<Self, ZDeserializeError> {
+        unimplemented!()
     }
-}
-
-impl<'s> From<&'s Parameters<'s>> for ZBytes {
-    fn from(t: &'s Parameters<'s>) -> Self {
-        ZSerde.serialize(t)
+    fn deserialize(zbytes: &'a ZBytes) -> Result<Self, ZDeserializeError> {
+        <Cow<'a, str>>::deserialize(zbytes).map(Into::into)
     }
-}
-
-impl Serialize<&mut Parameters<'_>> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: &mut Parameters<'_>) -> Self::Output {
-        Self.serialize(t.as_str())
-    }
-}
-
-impl<'s> From<&'s mut Parameters<'s>> for ZBytes {
-    fn from(t: &'s mut Parameters<'s>) -> Self {
-        ZSerde.serialize(&*t)
-    }
-}
-
-impl<'a> Deserialize<Parameters<'a>> for ZSerde {
-    type Input<'b> = &'a ZBytes;
-    type Error = ZDeserializeError;
-
-    fn deserialize(self, v: Self::Input<'a>) -> Result<Parameters<'a>, Self::Error> {
-        let s = v
-            .deserialize::<Cow<'a, str>>()
-            .map_err(|_| ZDeserializeError)?;
-        Ok(Parameters::from(s))
-    }
-}
-
-impl TryFrom<ZBytes> for Parameters<'static> {
-    type Error = ZDeserializeError;
-
-    fn try_from(v: ZBytes) -> Result<Self, Self::Error> {
-        let s = v.deserialize::<Cow<str>>().map_err(|_| ZDeserializeError)?;
-        Ok(Parameters::from(s.into_owned()))
-    }
-}
-
-impl<'s> TryFrom<&'s ZBytes> for Parameters<'s> {
-    type Error = ZDeserializeError;
-
-    fn try_from(value: &'s ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(value)
-    }
-}
-
-impl<'s> TryFrom<&'s mut ZBytes> for Parameters<'s> {
-    type Error = ZDeserializeError;
-
-    fn try_from(value: &'s mut ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&*value)
+    fn try_from_zbytes(zbytes: ZBytes) -> Result<Self, ZDeserializeError> {
+        String::try_from_zbytes(zbytes).map(Into::into)
     }
 }
 
 // Timestamp
-impl Serialize<Timestamp> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, s: Timestamp) -> Self::Output {
-        ZSerde.serialize(&s)
+impl SerializedSize for Timestamp {}
+impl<'a> Serialize<'a> for Timestamp {
+    type Error = Infallible;
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        (&self).serialize()
     }
 }
-
-impl From<Timestamp> for ZBytes {
-    fn from(t: Timestamp) -> Self {
-        ZSerde.serialize(t)
+impl<'a> Serialize<'a> for &Timestamp {
+    type Error = Infallible;
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
     }
-}
-
-impl Serialize<&Timestamp> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, s: &Timestamp) -> Self::Output {
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
         let codec = Zenoh080::new();
         let mut buffer = ZBuf::empty();
         let mut writer = buffer.writer();
-        // SAFETY: we are serializing slices on a ZBuf, so serialization will never
-        //         fail unless we run out of memory. In that case, Rust memory allocator
-        //         will panic before the serializer has any chance to fail.
-        unsafe {
-            codec.write(&mut writer, s).unwrap_unchecked();
-        }
-        ZBytes::from(buffer)
+        // Result can be ignored because writing on `ZBufWriter` only fails if there
+        // is no bytes written.
+        let _ = codec.write(&mut writer, self);
+        Ok(ZBytes::from(buffer).into())
     }
 }
-
-impl From<&Timestamp> for ZBytes {
-    fn from(t: &Timestamp) -> Self {
-        ZSerde.serialize(t)
+impl Deserialize<'_> for Timestamp {
+    fn read(_reader: &mut ZBytesReader) -> Result<Self, ZDeserializeError> {
+        unimplemented!()
     }
-}
-
-impl Serialize<&mut Timestamp> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, s: &mut Timestamp) -> Self::Output {
-        ZSerde.serialize(&*s)
-    }
-}
-
-impl From<&mut Timestamp> for ZBytes {
-    fn from(t: &mut Timestamp) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl Deserialize<Timestamp> for ZSerde {
-    type Input<'a> = &'a ZBytes;
-    type Error = ReadError;
-
-    fn deserialize(self, v: Self::Input<'_>) -> Result<Timestamp, Self::Error> {
+    fn deserialize(zbytes: &'_ ZBytes) -> Result<Self, ZDeserializeError> {
         let codec = Zenoh080::new();
-        let mut reader = v.0.reader();
-        let e: Timestamp = codec.read(&mut reader).map_err(|_| ReadError)?;
-        Ok(e)
+        let mut reader = zbytes.0.reader();
+        codec.read(&mut reader).or(Err(ZDeserializeError))
     }
-}
-
-impl TryFrom<ZBytes> for Timestamp {
-    type Error = ReadError;
-
-    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&value)
-    }
-}
-
-impl TryFrom<&ZBytes> for Timestamp {
-    type Error = ReadError;
-
-    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(value)
-    }
-}
-
-impl TryFrom<&mut ZBytes> for Timestamp {
-    type Error = ReadError;
-
-    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&*value)
+    fn try_from_zbytes(zbytes: ZBytes) -> Result<Self, ZDeserializeError> {
+        Self::deserialize(&zbytes)
     }
 }
 
 // Encoding
-impl Serialize<Encoding> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, s: Encoding) -> Self::Output {
-        let e: EncodingProto = s.into();
+impl SerializedSize for Encoding {}
+impl<'a> Serialize<'a> for Encoding {
+    type Error = Infallible;
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        let encoding: EncodingProto = self.into();
         let codec = Zenoh080::new();
         let mut buffer = ZBuf::empty();
         let mut writer = buffer.writer();
-        // SAFETY: we are serializing slices on a ZBuf, so serialization will never
-        //         fail unless we run out of memory. In that case, Rust memory allocator
-        //         will panic before the serializer has any chance to fail.
-        unsafe {
-            codec.write(&mut writer, &e).unwrap_unchecked();
-        }
-        ZBytes::from(buffer)
+        // Result can be ignored because writing on `ZBufWriter` only fails if there
+        // is no bytes written.
+        let _ = codec.write(&mut writer, &encoding);
+        Ok(ZBytes::from(buffer).into())
     }
 }
-
-impl From<Encoding> for ZBytes {
-    fn from(t: Encoding) -> Self {
-        ZSerde.serialize(t)
+impl<'a> Serialize<'a> for &Encoding {
+    type Error = Infallible;
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        self.clone().serialize()
     }
 }
-
-impl Serialize<&Encoding> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, s: &Encoding) -> Self::Output {
-        ZSerde.serialize(s.clone())
+impl Deserialize<'_> for Encoding {
+    fn read(_reader: &mut ZBytesReader) -> Result<Self, ZDeserializeError> {
+        unimplemented!()
     }
-}
-
-impl From<&Encoding> for ZBytes {
-    fn from(t: &Encoding) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl Serialize<&mut Encoding> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, s: &mut Encoding) -> Self::Output {
-        ZSerde.serialize(&*s)
-    }
-}
-
-impl From<&mut Encoding> for ZBytes {
-    fn from(t: &mut Encoding) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl Deserialize<Encoding> for ZSerde {
-    type Input<'a> = &'a ZBytes;
-    type Error = ReadError;
-
-    fn deserialize(self, v: Self::Input<'_>) -> Result<Encoding, Self::Error> {
+    fn deserialize(zbytes: &'_ ZBytes) -> Result<Self, ZDeserializeError> {
         let codec = Zenoh080::new();
-        let mut reader = v.0.reader();
-        let e: EncodingProto = codec.read(&mut reader).map_err(|_| ReadError)?;
-        Ok(e.into())
+        let mut reader = zbytes.0.reader();
+        let encoding: EncodingProto = codec.read(&mut reader).or(Err(ZDeserializeError))?;
+        Ok(encoding.into())
     }
-}
-
-impl TryFrom<ZBytes> for Encoding {
-    type Error = ReadError;
-
-    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&value)
-    }
-}
-
-impl TryFrom<&ZBytes> for Encoding {
-    type Error = ReadError;
-
-    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(value)
-    }
-}
-
-impl TryFrom<&mut ZBytes> for Encoding {
-    type Error = ReadError;
-
-    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&*value)
+    fn try_from_zbytes(zbytes: ZBytes) -> Result<Self, ZDeserializeError> {
+        Self::deserialize(&zbytes)
     }
 }
 
 // Value
-impl Serialize<Value> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, s: Value) -> Self::Output {
-        ZSerde.serialize((s.payload(), s.encoding()))
+impl SerializedSize for Value {}
+impl<'a> Serialize<'a> for Value {
+    type Error = Infallible;
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        (self.payload, self.encoding).serialize()
+    }
+}
+impl<'a> Serialize<'a> for &Value {
+    type Error = Infallible;
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        (&self.payload, &self.encoding).serialize()
+    }
+}
+impl Deserialize<'_> for Value {
+    fn read(_reader: &mut ZBytesReader) -> Result<Self, ZDeserializeError> {
+        unimplemented!()
+    }
+    fn deserialize(zbytes: &'_ ZBytes) -> Result<Self, ZDeserializeError> {
+        let (payload, encoding) = <_>::deserialize(zbytes)?;
+        Ok(Value { payload, encoding })
+    }
+    fn try_from_zbytes(zbytes: ZBytes) -> Result<Self, ZDeserializeError> {
+        Self::deserialize(&zbytes)
     }
 }
 
-impl From<Value> for ZBytes {
-    fn from(t: Value) -> Self {
-        ZSerde.serialize(t)
-    }
+// JSON/YAML
+macro_rules! impl_serde {
+    ($($package:ident),* $(,)?) => {$(
+        impl SerializedSize for $package::Value {}
+        impl<'a> Serialize<'a> for $package::Value {
+            type Error = $package::Error;
+            fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+                unimplemented!()
+            }
+            fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+                (&self).serialize()
+            }
+        }
+        impl<'a> Serialize<'a> for &$package::Value {
+            type Error = $package::Error;
+            fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+                unimplemented!()
+            }
+            fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+                let mut zbytes = ZBytes::new();
+                $package::to_writer(zbytes.writer(), self)?;
+                Ok(zbytes.into())
+            }
+        }
+        impl Deserialize<'_> for $package::Value {
+            fn read(_reader: &mut ZBytesReader) -> Result<Self, ZDeserializeError> {
+                unimplemented!()
+            }
+            fn deserialize(zbytes: &'_ ZBytes) -> Result<Self, ZDeserializeError> {
+                Ok($package::from_reader(zbytes.reader()).or(Err(ZDeserializeError))?)
+            }
+            fn try_from_zbytes(zbytes: ZBytes) -> Result<Self, ZDeserializeError> {
+                Self::deserialize(&zbytes)
+            }
+        }
+    )*};
 }
-
-impl Serialize<&Value> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, s: &Value) -> Self::Output {
-        ZSerde.serialize(s.clone())
-    }
-}
-
-impl From<&Value> for ZBytes {
-    fn from(t: &Value) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl Serialize<&mut Value> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, s: &mut Value) -> Self::Output {
-        ZSerde.serialize(&*s)
-    }
-}
-
-impl From<&mut Value> for ZBytes {
-    fn from(t: &mut Value) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl Deserialize<Value> for ZSerde {
-    type Input<'a> = &'a ZBytes;
-    type Error = ZReadOrDeserializeErrorTuple2<ZBytes, Encoding>;
-
-    fn deserialize(self, v: Self::Input<'_>) -> Result<Value, Self::Error> {
-        let (payload, encoding) = v.deserialize::<(ZBytes, Encoding)>()?;
-        Ok(Value::new(payload, encoding))
-    }
-}
-
-impl TryFrom<ZBytes> for Value {
-    type Error = ZReadOrDeserializeErrorTuple2<ZBytes, Encoding>;
-
-    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&value)
-    }
-}
-
-impl TryFrom<&ZBytes> for Value {
-    type Error = ZReadOrDeserializeErrorTuple2<ZBytes, Encoding>;
-
-    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(value)
-    }
-}
-
-impl TryFrom<&mut ZBytes> for Value {
-    type Error = ZReadOrDeserializeErrorTuple2<ZBytes, Encoding>;
-
-    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&*value)
-    }
-}
-
-// JSON
-impl Serialize<serde_json::Value> for ZSerde {
-    type Output = Result<ZBytes, serde_json::Error>;
-
-    fn serialize(self, t: serde_json::Value) -> Self::Output {
-        ZSerde.serialize(&t)
-    }
-}
-
-impl TryFrom<serde_json::Value> for ZBytes {
-    type Error = serde_json::Error;
-
-    fn try_from(value: serde_json::Value) -> Result<Self, Self::Error> {
-        ZSerde.serialize(&value)
-    }
-}
-
-impl Serialize<&serde_json::Value> for ZSerde {
-    type Output = Result<ZBytes, serde_json::Error>;
-
-    fn serialize(self, t: &serde_json::Value) -> Self::Output {
-        let mut bytes = ZBytes::empty();
-        serde_json::to_writer(bytes.writer(), t)?;
-        Ok(bytes)
-    }
-}
-
-impl TryFrom<&serde_json::Value> for ZBytes {
-    type Error = serde_json::Error;
-
-    fn try_from(value: &serde_json::Value) -> Result<Self, Self::Error> {
-        ZSerde.serialize(value)
-    }
-}
-
-impl Serialize<&mut serde_json::Value> for ZSerde {
-    type Output = Result<ZBytes, serde_json::Error>;
-
-    fn serialize(self, t: &mut serde_json::Value) -> Self::Output {
-        let mut bytes = ZBytes::empty();
-        serde_json::to_writer(bytes.writer(), t)?;
-        Ok(bytes)
-    }
-}
-
-impl TryFrom<&mut serde_json::Value> for ZBytes {
-    type Error = serde_json::Error;
-
-    fn try_from(value: &mut serde_json::Value) -> Result<Self, Self::Error> {
-        ZSerde.serialize(&*value)
-    }
-}
-
-impl Deserialize<serde_json::Value> for ZSerde {
-    type Input<'a> = &'a ZBytes;
-    type Error = serde_json::Error;
-
-    fn deserialize(self, v: Self::Input<'_>) -> Result<serde_json::Value, Self::Error> {
-        serde_json::from_reader(v.reader())
-    }
-}
-
-impl TryFrom<ZBytes> for serde_json::Value {
-    type Error = serde_json::Error;
-
-    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&value)
-    }
-}
-
-impl TryFrom<&ZBytes> for serde_json::Value {
-    type Error = serde_json::Error;
-
-    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(value)
-    }
-}
-
-impl TryFrom<&mut ZBytes> for serde_json::Value {
-    type Error = serde_json::Error;
-
-    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&*value)
-    }
-}
-
-// Yaml
-impl Serialize<serde_yaml::Value> for ZSerde {
-    type Output = Result<ZBytes, serde_yaml::Error>;
-
-    fn serialize(self, t: serde_yaml::Value) -> Self::Output {
-        Self.serialize(&t)
-    }
-}
-
-impl TryFrom<serde_yaml::Value> for ZBytes {
-    type Error = serde_yaml::Error;
-
-    fn try_from(value: serde_yaml::Value) -> Result<Self, Self::Error> {
-        ZSerde.serialize(value)
-    }
-}
-
-impl Serialize<&serde_yaml::Value> for ZSerde {
-    type Output = Result<ZBytes, serde_yaml::Error>;
-
-    fn serialize(self, t: &serde_yaml::Value) -> Self::Output {
-        let mut bytes = ZBytes::empty();
-        serde_yaml::to_writer(bytes.writer(), t)?;
-        Ok(bytes)
-    }
-}
-
-impl TryFrom<&serde_yaml::Value> for ZBytes {
-    type Error = serde_yaml::Error;
-
-    fn try_from(value: &serde_yaml::Value) -> Result<Self, Self::Error> {
-        ZSerde.serialize(value)
-    }
-}
-
-impl Serialize<&mut serde_yaml::Value> for ZSerde {
-    type Output = Result<ZBytes, serde_yaml::Error>;
-
-    fn serialize(self, t: &mut serde_yaml::Value) -> Self::Output {
-        let mut bytes = ZBytes::empty();
-        serde_yaml::to_writer(bytes.writer(), t)?;
-        Ok(bytes)
-    }
-}
-
-impl TryFrom<&mut serde_yaml::Value> for ZBytes {
-    type Error = serde_yaml::Error;
-
-    fn try_from(value: &mut serde_yaml::Value) -> Result<Self, Self::Error> {
-        ZSerde.serialize(value)
-    }
-}
-
-impl Deserialize<serde_yaml::Value> for ZSerde {
-    type Input<'a> = &'a ZBytes;
-    type Error = serde_yaml::Error;
-
-    fn deserialize(self, v: Self::Input<'_>) -> Result<serde_yaml::Value, Self::Error> {
-        serde_yaml::from_reader(v.reader())
-    }
-}
-
-impl TryFrom<ZBytes> for serde_yaml::Value {
-    type Error = serde_yaml::Error;
-
-    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&value)
-    }
-}
-
-impl TryFrom<&ZBytes> for serde_yaml::Value {
-    type Error = serde_yaml::Error;
-
-    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(value)
-    }
-}
-
-impl TryFrom<&mut ZBytes> for serde_yaml::Value {
-    type Error = serde_yaml::Error;
-
-    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&*value)
-    }
-}
-
-// CBOR
-impl Serialize<serde_cbor::Value> for ZSerde {
-    type Output = Result<ZBytes, serde_cbor::Error>;
-
-    fn serialize(self, t: serde_cbor::Value) -> Self::Output {
-        Self.serialize(&t)
-    }
-}
-
-impl TryFrom<serde_cbor::Value> for ZBytes {
-    type Error = serde_cbor::Error;
-
-    fn try_from(value: serde_cbor::Value) -> Result<Self, Self::Error> {
-        ZSerde.serialize(value)
-    }
-}
-
-impl Serialize<&serde_cbor::Value> for ZSerde {
-    type Output = Result<ZBytes, serde_cbor::Error>;
-
-    fn serialize(self, t: &serde_cbor::Value) -> Self::Output {
-        let mut bytes = ZBytes::empty();
-        serde_cbor::to_writer(bytes.0.writer(), t)?;
-        Ok(bytes)
-    }
-}
-
-impl TryFrom<&serde_cbor::Value> for ZBytes {
-    type Error = serde_cbor::Error;
-
-    fn try_from(value: &serde_cbor::Value) -> Result<Self, Self::Error> {
-        ZSerde.serialize(value)
-    }
-}
-
-impl Serialize<&mut serde_cbor::Value> for ZSerde {
-    type Output = Result<ZBytes, serde_cbor::Error>;
-
-    fn serialize(self, t: &mut serde_cbor::Value) -> Self::Output {
-        ZSerde.serialize(&*t)
-    }
-}
-
-impl TryFrom<&mut serde_cbor::Value> for ZBytes {
-    type Error = serde_cbor::Error;
-
-    fn try_from(value: &mut serde_cbor::Value) -> Result<Self, Self::Error> {
-        ZSerde.serialize(value)
-    }
-}
-
-impl Deserialize<serde_cbor::Value> for ZSerde {
-    type Input<'a> = &'a ZBytes;
-    type Error = serde_cbor::Error;
-
-    fn deserialize(self, v: Self::Input<'_>) -> Result<serde_cbor::Value, Self::Error> {
-        serde_cbor::from_reader(v.reader())
-    }
-}
-
-impl TryFrom<ZBytes> for serde_cbor::Value {
-    type Error = serde_cbor::Error;
-
-    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&value)
-    }
-}
-
-impl TryFrom<&ZBytes> for serde_cbor::Value {
-    type Error = serde_cbor::Error;
-
-    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(value)
-    }
-}
-
-impl TryFrom<&mut ZBytes> for serde_cbor::Value {
-    type Error = serde_cbor::Error;
-
-    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&*value)
-    }
-}
-
-// Pickle
-impl Serialize<serde_pickle::Value> for ZSerde {
-    type Output = Result<ZBytes, serde_pickle::Error>;
-
-    fn serialize(self, t: serde_pickle::Value) -> Self::Output {
-        Self.serialize(&t)
-    }
-}
-
-impl TryFrom<serde_pickle::Value> for ZBytes {
-    type Error = serde_pickle::Error;
-
-    fn try_from(value: serde_pickle::Value) -> Result<Self, Self::Error> {
-        ZSerde.serialize(value)
-    }
-}
-
-impl Serialize<&serde_pickle::Value> for ZSerde {
-    type Output = Result<ZBytes, serde_pickle::Error>;
-
-    fn serialize(self, t: &serde_pickle::Value) -> Self::Output {
-        let mut bytes = ZBytes::empty();
-        serde_pickle::value_to_writer(
-            &mut bytes.0.writer(),
-            t,
-            serde_pickle::SerOptions::default(),
-        )?;
-        Ok(bytes)
-    }
-}
-
-impl TryFrom<&serde_pickle::Value> for ZBytes {
-    type Error = serde_pickle::Error;
-
-    fn try_from(value: &serde_pickle::Value) -> Result<Self, Self::Error> {
-        ZSerde.serialize(value)
-    }
-}
-
-impl Serialize<&mut serde_pickle::Value> for ZSerde {
-    type Output = Result<ZBytes, serde_pickle::Error>;
-
-    fn serialize(self, t: &mut serde_pickle::Value) -> Self::Output {
-        ZSerde.serialize(&*t)
-    }
-}
-
-impl TryFrom<&mut serde_pickle::Value> for ZBytes {
-    type Error = serde_pickle::Error;
-
-    fn try_from(value: &mut serde_pickle::Value) -> Result<Self, Self::Error> {
-        ZSerde.serialize(value)
-    }
-}
-
-impl Deserialize<serde_pickle::Value> for ZSerde {
-    type Input<'a> = &'a ZBytes;
-    type Error = serde_pickle::Error;
-
-    fn deserialize(self, v: Self::Input<'_>) -> Result<serde_pickle::Value, Self::Error> {
-        serde_pickle::value_from_reader(v.reader(), serde_pickle::DeOptions::default())
-    }
-}
-
-impl TryFrom<ZBytes> for serde_pickle::Value {
-    type Error = serde_pickle::Error;
-
-    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&value)
-    }
-}
-
-impl TryFrom<&ZBytes> for serde_pickle::Value {
-    type Error = serde_pickle::Error;
-
-    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(value)
-    }
-}
-
-impl TryFrom<&mut ZBytes> for serde_pickle::Value {
-    type Error = serde_pickle::Error;
-
-    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&*value)
-    }
-}
+impl_serde!(serde_json, serde_yaml);
 
 // bytes::Bytes
 
@@ -2441,916 +1342,201 @@ impl TryFrom<&mut ZBytes> for serde_pickle::Value {
 #[repr(transparent)]
 #[derive(Debug)]
 struct BytesWrap(bytes::Bytes);
-
 impl ZSliceBuffer for BytesWrap {
     fn as_slice(&self) -> &[u8] {
         &self.0
     }
-
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
-
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
 }
 
-impl Serialize<bytes::Bytes> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, s: bytes::Bytes) -> Self::Output {
-        ZBytes::new(BytesWrap(s))
-    }
-}
-
-impl From<bytes::Bytes> for ZBytes {
-    fn from(t: bytes::Bytes) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-impl Deserialize<bytes::Bytes> for ZSerde {
-    type Input<'a> = &'a ZBytes;
+impl SerializedSize for bytes::Bytes {}
+impl<'a> Serialize<'a> for bytes::Bytes {
     type Error = Infallible;
-
-    fn deserialize(self, v: Self::Input<'_>) -> Result<bytes::Bytes, Self::Error> {
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        Ok(ZBytes::from(self).into())
+    }
+}
+impl<'a> Serialize<'a> for &bytes::Bytes {
+    type Error = Infallible;
+    fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+    fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+        self.clone().serialize()
+    }
+}
+impl Deserialize<'_> for bytes::Bytes {
+    fn read(_reader: &mut ZBytesReader) -> Result<Self, ZDeserializeError> {
+        unimplemented!()
+    }
+    fn deserialize(zbytes: &'_ ZBytes) -> Result<Self, ZDeserializeError> {
         // bytes::Bytes can be constructed only by passing ownership to the constructor.
         // Thereofore, here we are forced to allocate a vector and copy the whole ZBytes
         // content since bytes::Bytes does not support anything else than Box<u8> (and its
         // variants like Vec<u8> and String).
-        let v: Vec<u8> = ZSerde.deserialize(v).unwrap_infallible();
-        Ok(bytes::Bytes::from(v))
+        Ok(bytes::Bytes::from(<Vec<u8>>::deserialize(zbytes)?))
+    }
+    fn try_from_zbytes(zbytes: ZBytes) -> Result<Self, ZDeserializeError> {
+        Self::deserialize(&zbytes)
+    }
+}
+impl From<bytes::Bytes> for ZBytes {
+    fn from(value: bytes::Bytes) -> Self {
+        ZBytes(BytesWrap(value).into())
     }
 }
 
-impl TryFrom<ZBytes> for bytes::Bytes {
-    type Error = Infallible;
+// Shared memory
+#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+mod shm {
+    use zenoh_shm::api::buffer::{zshm::ZShm, zshmmut::ZShmMut};
 
-    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&value)
-    }
-}
+    use super::*;
 
-impl TryFrom<&ZBytes> for bytes::Bytes {
-    type Error = Infallible;
-
-    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(value)
-    }
-}
-
-impl TryFrom<&mut ZBytes> for bytes::Bytes {
-    type Error = Infallible;
-
-    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&*value)
-    }
-}
-
-// Shared memory conversion
-#[cfg(feature = "shared-memory")]
-impl Serialize<ZShm> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: ZShm) -> Self::Output {
-        let slice: ZSlice = t.into();
-        ZBytes::new(slice)
-    }
-}
-
-#[cfg(feature = "shared-memory")]
-impl From<ZShm> for ZBytes {
-    fn from(t: ZShm) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-// Shared memory conversion
-#[cfg(feature = "shared-memory")]
-impl Serialize<ZShmMut> for ZSerde {
-    type Output = ZBytes;
-
-    fn serialize(self, t: ZShmMut) -> Self::Output {
-        let slice: ZSlice = t.into();
-        ZBytes::new(slice)
-    }
-}
-
-#[cfg(feature = "shared-memory")]
-impl From<ZShmMut> for ZBytes {
-    fn from(t: ZShmMut) -> Self {
-        ZSerde.serialize(t)
-    }
-}
-
-#[cfg(feature = "shared-memory")]
-impl<'a> Deserialize<&'a zshm> for ZSerde {
-    type Input<'b> = &'a ZBytes;
-    type Error = ZDeserializeError;
-
-    fn deserialize(self, v: Self::Input<'a>) -> Result<&'a zshm, Self::Error> {
-        // A ZShm is expected to have only one slice
-        let mut zslices = v.0.zslices();
-        if let Some(zs) = zslices.next() {
-            if let Some(shmb) = zs.downcast_ref::<ShmBufInner>() {
-                return Ok(shmb.into());
-            }
+    impl SerializedSize for ZShm {}
+    impl<'a> Serialize<'a> for ZShm {
+        type Error = Infallible;
+        fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+            unimplemented!()
         }
-        Err(ZDeserializeError)
-    }
-}
-
-#[cfg(feature = "shared-memory")]
-impl<'a> TryFrom<&'a ZBytes> for &'a zshm {
-    type Error = ZDeserializeError;
-
-    fn try_from(value: &'a ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(value)
-    }
-}
-
-#[cfg(feature = "shared-memory")]
-impl<'a> TryFrom<&'a mut ZBytes> for &'a mut zshm {
-    type Error = ZDeserializeError;
-
-    fn try_from(value: &'a mut ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(value)
-    }
-}
-
-#[cfg(feature = "shared-memory")]
-impl<'a> Deserialize<&'a mut zshm> for ZSerde {
-    type Input<'b> = &'a mut ZBytes;
-    type Error = ZDeserializeError;
-
-    fn deserialize(self, v: Self::Input<'a>) -> Result<&'a mut zshm, Self::Error> {
-        // A ZSliceShmBorrowMut is expected to have only one slice
-        let mut zslices = v.0.zslices_mut();
-        if let Some(zs) = zslices.next() {
-            // SAFETY: ShmBufInner cannot change the size of the slice
-            if let Some(shmb) = unsafe { zs.downcast_mut::<ShmBufInner>() } {
-                return Ok(shmb.into());
-            }
+        fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+            Ok(ZBytes::from(self).into())
         }
-        Err(ZDeserializeError)
     }
-}
-
-#[cfg(feature = "shared-memory")]
-impl<'a> Deserialize<&'a mut zshmmut> for ZSerde {
-    type Input<'b> = &'a mut ZBytes;
-    type Error = ZDeserializeError;
-
-    fn deserialize(self, v: Self::Input<'a>) -> Result<&'a mut zshmmut, Self::Error> {
-        // A ZSliceShmBorrowMut is expected to have only one slice
-        let mut zslices = v.0.zslices_mut();
-        if let Some(zs) = zslices.next() {
-            // SAFETY: ShmBufInner cannot change the size of the slice
-            if let Some(shmb) = unsafe { zs.downcast_mut::<ShmBufInner>() } {
-                return shmb.try_into().map_err(|_| ZDeserializeError);
-            }
+    impl<'a> Serialize<'a> for &ZShm {
+        type Error = Infallible;
+        fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+            unimplemented!()
         }
-        Err(ZDeserializeError)
-    }
-}
-
-#[cfg(feature = "shared-memory")]
-impl<'a> TryFrom<&'a mut ZBytes> for &'a mut zshmmut {
-    type Error = ZDeserializeError;
-
-    fn try_from(value: &'a mut ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(value)
-    }
-}
-
-// Tuple (a, b)
-macro_rules! impl_tuple2 {
-    ($t:expr) => {{
-        let (a, b) = $t;
-
-        let codec = Zenoh080::new();
-        let mut buffer: ZBuf = ZBuf::empty();
-        let mut writer = buffer.writer();
-        let apld: ZBytes = a.into();
-        let bpld: ZBytes = b.into();
-
-        // SAFETY: we are serializing slices on a ZBuf, so serialization will never
-        //         fail unless we run out of memory. In that case, Rust memory allocator
-        //         will panic before the serializer has any chance to fail.
-        unsafe {
-            codec.write(&mut writer, &apld.0).unwrap_unchecked();
-            codec.write(&mut writer, &bpld.0).unwrap_unchecked();
+        fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+            self.clone().serialize()
         }
-
-        ZBytes::new(buffer)
-    }};
-}
-
-impl<A, B> Serialize<(A, B)> for ZSerde
-where
-    A: Into<ZBytes>,
-    B: Into<ZBytes>,
-{
-    type Output = ZBytes;
-
-    fn serialize(self, t: (A, B)) -> Self::Output {
-        impl_tuple2!(t)
     }
-}
-
-impl<A, B> Serialize<&(A, B)> for ZSerde
-where
-    for<'a> &'a A: Into<ZBytes>,
-    for<'b> &'b B: Into<ZBytes>,
-{
-    type Output = ZBytes;
-
-    fn serialize(self, t: &(A, B)) -> Self::Output {
-        impl_tuple2!(t)
+    impl From<ZShm> for ZBytes {
+        fn from(value: ZShm) -> Self {
+            ZBytes(value.into())
+        }
     }
-}
 
-impl<A, B> From<(A, B)> for ZBytes
-where
-    A: Into<ZBytes>,
-    B: Into<ZBytes>,
-{
-    fn from(value: (A, B)) -> Self {
-        ZSerde.serialize(value)
+    impl SerializedSize for ZShmMut {}
+    impl<'a> Serialize<'a> for ZShmMut {
+        type Error = Infallible;
+        fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+            unimplemented!()
+        }
+        fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+            Ok(ZBytes::from(self).into())
+        }
     }
-}
+    impl From<ZShmMut> for ZBytes {
+        fn from(value: ZShmMut) -> Self {
+            ZBytes(value.into())
+        }
+    }
 
-#[derive(Debug)]
-pub enum ZReadOrDeserializeErrorTuple2<A, B>
-where
-    A: TryFrom<ZBytes>,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: TryFrom<ZBytes>,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-{
-    One(ZReadOrDeserializeError<A>),
-    Two(ZReadOrDeserializeError<B>),
-}
-
-impl<A, B> std::fmt::Display for ZReadOrDeserializeErrorTuple2<A, B>
-where
-    A: Debug,
-    A: TryFrom<ZBytes>,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: Debug,
-    B: TryFrom<ZBytes>,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ZReadOrDeserializeErrorTuple2::One(e) => {
-                f.write_fmt(format_args!("1st tuple element: {}", e))
-            }
-            ZReadOrDeserializeErrorTuple2::Two(e) => {
-                f.write_fmt(format_args!("2nd tuple element: {}", e))
-            }
+    impl SerializedSize for &zshm {}
+    impl<'a> Serialize<'a> for &zshm {
+        type Error = Infallible;
+        fn write(self, _writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+            unimplemented!()
+        }
+        fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+            Ok(ZBytes::from(self).into())
+        }
+    }
+    impl From<&zshm> for ZBytes {
+        fn from(value: &zshm) -> Self {
+            value.to_owned().into()
         }
     }
 }
 
-impl<A, B> std::error::Error for ZReadOrDeserializeErrorTuple2<A, B>
-where
-    A: Debug,
-    A: TryFrom<ZBytes>,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: Debug,
-    B: TryFrom<ZBytes>,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-{
-}
-
-impl<A, B> Deserialize<(A, B)> for ZSerde
-where
-    A: TryFrom<ZBytes>,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: TryFrom<ZBytes>,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-{
-    type Input<'a> = &'a ZBytes;
-    type Error = ZReadOrDeserializeErrorTuple2<A, B>;
-
-    fn deserialize(self, bytes: Self::Input<'_>) -> Result<(A, B), Self::Error> {
-        let codec = Zenoh080::new();
-        let mut reader = bytes.0.reader();
-
-        let abuf: ZBuf = codec.read(&mut reader).map_err(|_| {
-            ZReadOrDeserializeErrorTuple2::One(ZReadOrDeserializeError::Read(ReadError))
-        })?;
-        let apld = ZBytes::new(abuf);
-        let a = A::try_from(apld).map_err(|e| {
-            ZReadOrDeserializeErrorTuple2::One(ZReadOrDeserializeError::Deserialize(e))
-        })?;
-
-        let bbuf: ZBuf = codec.read(&mut reader).map_err(|_| {
-            ZReadOrDeserializeErrorTuple2::Two(ZReadOrDeserializeError::Read(ReadError))
-        })?;
-        let bpld = ZBytes::new(bbuf);
-        let b = B::try_from(bpld).map_err(|e| {
-            ZReadOrDeserializeErrorTuple2::Two(ZReadOrDeserializeError::Deserialize(e))
-        })?;
-
-        Ok((a, b))
-    }
-}
-
-impl<A, B> TryFrom<ZBytes> for (A, B)
-where
-    A: TryFrom<ZBytes>,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: TryFrom<ZBytes>,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-{
-    type Error = ZReadOrDeserializeErrorTuple2<A, B>;
-
-    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&value)
-    }
-}
-
-impl<A, B> TryFrom<&ZBytes> for (A, B)
-where
-    A: TryFrom<ZBytes>,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: TryFrom<ZBytes>,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-{
-    type Error = ZReadOrDeserializeErrorTuple2<A, B>;
-
-    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(value)
-    }
-}
-
-impl<A, B> TryFrom<&mut ZBytes> for (A, B)
-where
-    A: TryFrom<ZBytes>,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: TryFrom<ZBytes>,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-{
-    type Error = ZReadOrDeserializeErrorTuple2<A, B>;
-
-    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&*value)
-    }
-}
-
-// Tuple (a, b, c)
-macro_rules! impl_tuple3 {
-    ($t:expr) => {{
-        let (a, b, c) = $t;
-
-        let codec = Zenoh080::new();
-        let mut buffer: ZBuf = ZBuf::empty();
-        let mut writer = buffer.writer();
-        let apld: ZBytes = a.into();
-        let bpld: ZBytes = b.into();
-        let cpld: ZBytes = c.into();
-
-        // SAFETY: we are serializing slices on a ZBuf, so serialization will never
-        //         fail unless we run out of memory. In that case, Rust memory allocator
-        //         will panic before the serializer has any chance to fail.
-        unsafe {
-            codec.write(&mut writer, &apld.0).unwrap_unchecked();
-            codec.write(&mut writer, &bpld.0).unwrap_unchecked();
-            codec.write(&mut writer, &cpld.0).unwrap_unchecked();
+macro_rules! impl_tuple {
+    ($($ty:ident/$i:tt),* $(,)?) => {
+        impl_tuple!(@;$($ty/$i),*);
+    };
+    (@$($ty:ident/$i:tt),*; $next:ident/$next_i:tt $(, $remain:ident/$remain_i:tt)*) => {
+        impl_tuple!(@@$($ty/$i),*);
+        impl_tuple!(@$($ty/$i,)* $next/$next_i; $($remain/$remain_i),*);
+    };
+    (@$($ty:ident/$i:tt),*;) => {
+        impl_tuple!(@@$($ty/$i),*);
+    };
+    (@@$($ty:ident/$i:tt),* $(,)?) => {
+        impl<$($ty: SerializedSize),*> SerializedSize for ($($ty,)*) {
+            const FIXED_SIZE: Option<usize> = loop {
+                $(if $ty::FIXED_SIZE.is_none() { break None; })*
+                break Some(0 $(+ match $ty::FIXED_SIZE { Some(s) => s, None => unreachable!()})*)
+            };
         }
-
-        ZBytes::new(buffer)
-    }};
-}
-
-impl<A, B, C> Serialize<(A, B, C)> for ZSerde
-where
-    A: Into<ZBytes>,
-    B: Into<ZBytes>,
-    C: Into<ZBytes>,
-{
-    type Output = ZBytes;
-
-    fn serialize(self, t: (A, B, C)) -> Self::Output {
-        impl_tuple3!(t)
-    }
-}
-
-impl<A, B, C> Serialize<&(A, B, C)> for ZSerde
-where
-    for<'a> &'a A: Into<ZBytes>,
-    for<'b> &'b B: Into<ZBytes>,
-    for<'b> &'b C: Into<ZBytes>,
-{
-    type Output = ZBytes;
-
-    fn serialize(self, t: &(A, B, C)) -> Self::Output {
-        impl_tuple3!(t)
-    }
-}
-
-impl<A, B, C> From<(A, B, C)> for ZBytes
-where
-    A: Into<ZBytes>,
-    B: Into<ZBytes>,
-    C: Into<ZBytes>,
-{
-    fn from(value: (A, B, C)) -> Self {
-        ZSerde.serialize(value)
-    }
-}
-
-#[derive(Debug)]
-pub enum ZReadOrDeserializeErrorTuple3<A, B, C>
-where
-    A: TryFrom<ZBytes>,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: TryFrom<ZBytes>,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-    C: TryFrom<ZBytes>,
-    <C as TryFrom<ZBytes>>::Error: Debug,
-{
-    One(ZReadOrDeserializeError<A>),
-    Two(ZReadOrDeserializeError<B>),
-    Three(ZReadOrDeserializeError<C>),
-}
-
-impl<A, B, C> std::fmt::Display for ZReadOrDeserializeErrorTuple3<A, B, C>
-where
-    A: Debug,
-    A: TryFrom<ZBytes>,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: Debug,
-    B: TryFrom<ZBytes>,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-    C: Debug,
-    C: TryFrom<ZBytes>,
-    <C as TryFrom<ZBytes>>::Error: Debug,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ZReadOrDeserializeErrorTuple3::One(e) => {
-                f.write_fmt(format_args!("1st tuple element: {}", e))
+        #[allow(unused)]
+        impl<'a, $($ty: Serialize<'a, Error=Infallible>),*> Serialize<'a> for ($($ty,)*) {
+            type Error = Infallible;
+            fn write(self, writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+                $(self.$i.write(writer)?;)*
+                Ok(())
             }
-            ZReadOrDeserializeErrorTuple3::Two(e) => {
-                f.write_fmt(format_args!("2nd tuple element: {}", e))
-            }
-            ZReadOrDeserializeErrorTuple3::Three(e) => {
-                f.write_fmt(format_args!("3rd tuple element: {}", e))
+            fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+                let mut zbytes = ZBytes::new();
+                let mut writer = zbytes.writer();
+                $(writer.serialize(self.$i);)*
+                Ok(zbytes.into())
             }
         }
-    }
-}
-
-impl<A, B, C> std::error::Error for ZReadOrDeserializeErrorTuple3<A, B, C>
-where
-    A: Debug,
-    A: TryFrom<ZBytes>,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: Debug,
-    B: TryFrom<ZBytes>,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-    C: Debug,
-    C: TryFrom<ZBytes>,
-    <C as TryFrom<ZBytes>>::Error: Debug,
-{
-}
-
-impl<A, B, C> Deserialize<(A, B, C)> for ZSerde
-where
-    A: TryFrom<ZBytes>,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: TryFrom<ZBytes>,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-    C: TryFrom<ZBytes>,
-    <C as TryFrom<ZBytes>>::Error: Debug,
-{
-    type Input<'a> = &'a ZBytes;
-    type Error = ZReadOrDeserializeErrorTuple3<A, B, C>;
-
-    fn deserialize(self, bytes: Self::Input<'_>) -> Result<(A, B, C), Self::Error> {
-        let codec = Zenoh080::new();
-        let mut reader = bytes.0.reader();
-
-        let abuf: ZBuf = codec.read(&mut reader).map_err(|_| {
-            ZReadOrDeserializeErrorTuple3::One(ZReadOrDeserializeError::Read(ReadError))
-        })?;
-        let apld = ZBytes::new(abuf);
-        let a = A::try_from(apld).map_err(|e| {
-            ZReadOrDeserializeErrorTuple3::One(ZReadOrDeserializeError::Deserialize(e))
-        })?;
-
-        let bbuf: ZBuf = codec.read(&mut reader).map_err(|_| {
-            ZReadOrDeserializeErrorTuple3::Two(ZReadOrDeserializeError::Read(ReadError))
-        })?;
-        let bpld = ZBytes::new(bbuf);
-        let b = B::try_from(bpld).map_err(|e| {
-            ZReadOrDeserializeErrorTuple3::Two(ZReadOrDeserializeError::Deserialize(e))
-        })?;
-
-        let cbuf: ZBuf = codec.read(&mut reader).map_err(|_| {
-            ZReadOrDeserializeErrorTuple3::Three(ZReadOrDeserializeError::Read(ReadError))
-        })?;
-        let cpld = ZBytes::new(cbuf);
-        let c = C::try_from(cpld).map_err(|e| {
-            ZReadOrDeserializeErrorTuple3::Three(ZReadOrDeserializeError::Deserialize(e))
-        })?;
-
-        Ok((a, b, c))
-    }
-}
-
-impl<A, B, C> TryFrom<ZBytes> for (A, B, C)
-where
-    A: TryFrom<ZBytes>,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: TryFrom<ZBytes>,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-    C: TryFrom<ZBytes>,
-    <C as TryFrom<ZBytes>>::Error: Debug,
-{
-    type Error = ZReadOrDeserializeErrorTuple3<A, B, C>;
-
-    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&value)
-    }
-}
-
-impl<A, B, C> TryFrom<&ZBytes> for (A, B, C)
-where
-    A: TryFrom<ZBytes>,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: TryFrom<ZBytes>,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-    C: TryFrom<ZBytes>,
-    <C as TryFrom<ZBytes>>::Error: Debug,
-{
-    type Error = ZReadOrDeserializeErrorTuple3<A, B, C>;
-
-    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(value)
-    }
-}
-
-impl<A, B, C> TryFrom<&mut ZBytes> for (A, B, C)
-where
-    A: TryFrom<ZBytes>,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: TryFrom<ZBytes>,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-    C: TryFrom<ZBytes>,
-    <C as TryFrom<ZBytes>>::Error: Debug,
-{
-    type Error = ZReadOrDeserializeErrorTuple3<A, B, C>;
-
-    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&*value)
-    }
-}
-
-// Tuple (a, b, c, d)
-macro_rules! impl_tuple4 {
-    ($t:expr) => {{
-        let (a, b, c, d) = $t;
-
-        let codec = Zenoh080::new();
-        let mut buffer: ZBuf = ZBuf::empty();
-        let mut writer = buffer.writer();
-        let apld: ZBytes = a.into();
-        let bpld: ZBytes = b.into();
-        let cpld: ZBytes = c.into();
-        let dpld: ZBytes = d.into();
-
-        // SAFETY: we are serializing slices on a ZBuf, so serialization will never
-        //         fail unless we run out of memory. In that case, Rust memory allocator
-        //         will panic before the serializer has any chance to fail.
-        unsafe {
-            codec.write(&mut writer, &apld.0).unwrap_unchecked();
-            codec.write(&mut writer, &bpld.0).unwrap_unchecked();
-            codec.write(&mut writer, &cpld.0).unwrap_unchecked();
-            codec.write(&mut writer, &dpld.0).unwrap_unchecked();
-        }
-
-        ZBytes::new(buffer)
-    }};
-}
-
-impl<A, B, C, D> Serialize<(A, B, C, D)> for ZSerde
-where
-    A: Into<ZBytes>,
-    B: Into<ZBytes>,
-    C: Into<ZBytes>,
-    D: Into<ZBytes>,
-{
-    type Output = ZBytes;
-
-    fn serialize(self, t: (A, B, C, D)) -> Self::Output {
-        impl_tuple4!(t)
-    }
-}
-
-impl<A, B, C, D> Serialize<&(A, B, C, D)> for ZSerde
-where
-    for<'a> &'a A: Into<ZBytes>,
-    for<'b> &'b B: Into<ZBytes>,
-    for<'b> &'b C: Into<ZBytes>,
-    for<'b> &'b D: Into<ZBytes>,
-{
-    type Output = ZBytes;
-
-    fn serialize(self, t: &(A, B, C, D)) -> Self::Output {
-        impl_tuple4!(t)
-    }
-}
-
-impl<A, B, C, D> From<(A, B, C, D)> for ZBytes
-where
-    A: Into<ZBytes>,
-    B: Into<ZBytes>,
-    C: Into<ZBytes>,
-    D: Into<ZBytes>,
-{
-    fn from(value: (A, B, C, D)) -> Self {
-        ZSerde.serialize(value)
-    }
-}
-
-#[derive(Debug)]
-pub enum ZReadOrDeserializeErrorTuple4<A, B, C, D>
-where
-    A: TryFrom<ZBytes>,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: TryFrom<ZBytes>,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-    C: TryFrom<ZBytes>,
-    <C as TryFrom<ZBytes>>::Error: Debug,
-    D: TryFrom<ZBytes>,
-    <D as TryFrom<ZBytes>>::Error: Debug,
-{
-    One(ZReadOrDeserializeError<A>),
-    Two(ZReadOrDeserializeError<B>),
-    Three(ZReadOrDeserializeError<C>),
-    Four(ZReadOrDeserializeError<D>),
-}
-
-impl<A, B, C, D> std::fmt::Display for ZReadOrDeserializeErrorTuple4<A, B, C, D>
-where
-    A: Debug,
-    A: TryFrom<ZBytes>,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: Debug,
-    B: TryFrom<ZBytes>,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-    C: Debug,
-    C: TryFrom<ZBytes>,
-    <C as TryFrom<ZBytes>>::Error: Debug,
-    D: Debug,
-    D: TryFrom<ZBytes>,
-    <D as TryFrom<ZBytes>>::Error: Debug,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ZReadOrDeserializeErrorTuple4::One(e) => {
-                f.write_fmt(format_args!("1st tuple element: {}", e))
+        #[allow(unused)]
+        impl<'a, $($ty: SerializedSize),*> Serialize<'a> for &'a ($($ty,)*) where $(&'a $ty: Serialize<'a, Error=Infallible>),* {
+            type Error = Infallible;
+            fn write(self, writer: &mut ZBytesWriter) -> Result<(), Self::Error> {
+                $(self.$i.write(writer)?;)*
+                Ok(())
             }
-            ZReadOrDeserializeErrorTuple4::Two(e) => {
-                f.write_fmt(format_args!("2nd tuple element: {}", e))
-            }
-            ZReadOrDeserializeErrorTuple4::Three(e) => {
-                f.write_fmt(format_args!("3rd tuple element: {}", e))
-            }
-            ZReadOrDeserializeErrorTuple4::Four(e) => {
-                f.write_fmt(format_args!("4th tuple element: {}", e))
+            fn serialize(self) -> Result<Serialized<'a>, Self::Error> {
+                let mut zbytes = ZBytes::new();
+                let mut writer = zbytes.writer();
+                $(writer.serialize(&self.$i);)*
+                Ok(zbytes.into())
             }
         }
-    }
-}
-
-impl<A, B, C, D> std::error::Error for ZReadOrDeserializeErrorTuple4<A, B, C, D>
-where
-    A: Debug,
-    A: TryFrom<ZBytes>,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: Debug,
-    B: TryFrom<ZBytes>,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-    C: Debug,
-    C: TryFrom<ZBytes>,
-    <C as TryFrom<ZBytes>>::Error: Debug,
-    D: Debug,
-    D: TryFrom<ZBytes>,
-    <D as TryFrom<ZBytes>>::Error: Debug,
-{
-}
-
-impl<A, B, C, D> Deserialize<(A, B, C, D)> for ZSerde
-where
-    A: TryFrom<ZBytes>,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: TryFrom<ZBytes>,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-    C: TryFrom<ZBytes>,
-    <C as TryFrom<ZBytes>>::Error: Debug,
-    D: TryFrom<ZBytes>,
-    <D as TryFrom<ZBytes>>::Error: Debug,
-{
-    type Input<'a> = &'a ZBytes;
-    type Error = ZReadOrDeserializeErrorTuple4<A, B, C, D>;
-
-    fn deserialize(self, bytes: Self::Input<'_>) -> Result<(A, B, C, D), Self::Error> {
-        let codec = Zenoh080::new();
-        let mut reader = bytes.0.reader();
-
-        let abuf: ZBuf = codec.read(&mut reader).map_err(|_| {
-            ZReadOrDeserializeErrorTuple4::One(ZReadOrDeserializeError::Read(ReadError))
-        })?;
-        let apld = ZBytes::new(abuf);
-        let a = A::try_from(apld).map_err(|e| {
-            ZReadOrDeserializeErrorTuple4::One(ZReadOrDeserializeError::Deserialize(e))
-        })?;
-
-        let bbuf: ZBuf = codec.read(&mut reader).map_err(|_| {
-            ZReadOrDeserializeErrorTuple4::Two(ZReadOrDeserializeError::Read(ReadError))
-        })?;
-        let bpld = ZBytes::new(bbuf);
-        let b = B::try_from(bpld).map_err(|e| {
-            ZReadOrDeserializeErrorTuple4::Two(ZReadOrDeserializeError::Deserialize(e))
-        })?;
-
-        let cbuf: ZBuf = codec.read(&mut reader).map_err(|_| {
-            ZReadOrDeserializeErrorTuple4::Three(ZReadOrDeserializeError::Read(ReadError))
-        })?;
-        let cpld = ZBytes::new(cbuf);
-        let c = C::try_from(cpld).map_err(|e| {
-            ZReadOrDeserializeErrorTuple4::Three(ZReadOrDeserializeError::Deserialize(e))
-        })?;
-
-        let dbuf: ZBuf = codec.read(&mut reader).map_err(|_| {
-            ZReadOrDeserializeErrorTuple4::Four(ZReadOrDeserializeError::Read(ReadError))
-        })?;
-        let dpld = ZBytes::new(dbuf);
-        let d = D::try_from(dpld).map_err(|e| {
-            ZReadOrDeserializeErrorTuple4::Four(ZReadOrDeserializeError::Deserialize(e))
-        })?;
-
-        Ok((a, b, c, d))
-    }
-}
-
-impl<A, B, C, D> TryFrom<ZBytes> for (A, B, C, D)
-where
-    A: TryFrom<ZBytes>,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: TryFrom<ZBytes>,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-    C: TryFrom<ZBytes>,
-    <C as TryFrom<ZBytes>>::Error: Debug,
-    D: TryFrom<ZBytes>,
-    <D as TryFrom<ZBytes>>::Error: Debug,
-{
-    type Error = ZReadOrDeserializeErrorTuple4<A, B, C, D>;
-
-    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&value)
-    }
-}
-
-impl<A, B, C, D> TryFrom<&ZBytes> for (A, B, C, D)
-where
-    A: TryFrom<ZBytes>,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: TryFrom<ZBytes>,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-    C: TryFrom<ZBytes>,
-    <C as TryFrom<ZBytes>>::Error: Debug,
-    D: TryFrom<ZBytes>,
-    <D as TryFrom<ZBytes>>::Error: Debug,
-{
-    type Error = ZReadOrDeserializeErrorTuple4<A, B, C, D>;
-
-    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(value)
-    }
-}
-
-impl<A, B, C, D> TryFrom<&mut ZBytes> for (A, B, C, D)
-where
-    A: TryFrom<ZBytes>,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: TryFrom<ZBytes>,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-    C: TryFrom<ZBytes>,
-    <C as TryFrom<ZBytes>>::Error: Debug,
-    D: TryFrom<ZBytes>,
-    <D as TryFrom<ZBytes>>::Error: Debug,
-{
-    type Error = ZReadOrDeserializeErrorTuple4<A, B, C, D>;
-
-    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&*value)
-    }
-}
-
-// HashMap
-impl<A, B> Serialize<HashMap<A, B>> for ZSerde
-where
-    A: Into<ZBytes>,
-    B: Into<ZBytes>,
-{
-    type Output = ZBytes;
-
-    fn serialize(self, mut t: HashMap<A, B>) -> Self::Output {
-        ZBytes::from_iter(t.drain())
-    }
-}
-
-impl<A, B> Serialize<&HashMap<A, B>> for ZSerde
-where
-    for<'a> &'a A: Into<ZBytes>,
-    for<'b> &'b B: Into<ZBytes>,
-{
-    type Output = ZBytes;
-
-    fn serialize(self, t: &HashMap<A, B>) -> Self::Output {
-        ZBytes::from_iter(t.iter())
-    }
-}
-
-impl<A, B> From<HashMap<A, B>> for ZBytes
-where
-    A: Into<ZBytes>,
-    B: Into<ZBytes>,
-{
-    fn from(value: HashMap<A, B>) -> Self {
-        ZSerde.serialize(value)
-    }
-}
-
-impl<A, B> Deserialize<HashMap<A, B>> for ZSerde
-where
-    A: TryFrom<ZBytes> + Debug + std::cmp::Eq + std::hash::Hash,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: TryFrom<ZBytes> + Debug,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-{
-    type Input<'a> = &'a ZBytes;
-    type Error = ZReadOrDeserializeErrorTuple2<A, B>;
-
-    fn deserialize(self, bytes: Self::Input<'_>) -> Result<HashMap<A, B>, Self::Error> {
-        let mut hm = HashMap::new();
-        for res in bytes.iter::<(A, B)>() {
-            let (k, v) = res?;
-            hm.insert(k, v);
+        #[allow(unused)]
+        impl<'a, $($ty: Deserialize<'a>),*> Deserialize<'a> for ($($ty,)*) {
+            fn read(reader: &mut ZBytesReader) -> Result<Self, ZDeserializeError> {
+                Ok(($($ty::read(reader)?,)*))
+            }
+            fn deserialize(zbytes: &'a ZBytes) -> Result<Self, ZDeserializeError> {
+                let mut reader = zbytes.reader();
+                Ok(($(reader.try_deserialize::<$ty>()?,)*))
+            }
+            fn try_from_zbytes(zbytes: ZBytes) -> Result<Self, ZDeserializeError> {
+                let mut reader = zbytes.reader();
+                Ok(($(reader.try_deserialize::<$ty>()?,)*))
+            }
         }
-        Ok(hm)
-    }
+    };
 }
+impl_tuple!(T0 / 0, T1 / 1, T2 / 2,);
+// T3 / 3,
+// T4 / 4,
+// T5 / 5,
+// T6 / 6,
+// T7 / 7,
+// T8 / 8,
+// T9 / 9,
+// T10 / 10,
+// T11 / 11,
+// T12 / 12,
+// T13 / 13,
+// T14 / 14,
+// T15 / 15
 
-impl<A, B> TryFrom<ZBytes> for HashMap<A, B>
-where
-    A: TryFrom<ZBytes> + Debug + std::cmp::Eq + std::hash::Hash,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: TryFrom<ZBytes> + Debug,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-{
-    type Error = ZReadOrDeserializeErrorTuple2<A, B>;
-
-    fn try_from(value: ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&value)
-    }
-}
-
-impl<A, B> TryFrom<&ZBytes> for HashMap<A, B>
-where
-    A: TryFrom<ZBytes> + Debug + std::cmp::Eq + std::hash::Hash,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: TryFrom<ZBytes> + Debug,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-{
-    type Error = ZReadOrDeserializeErrorTuple2<A, B>;
-
-    fn try_from(value: &ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(value)
-    }
-}
-
-impl<A, B> TryFrom<&mut ZBytes> for HashMap<A, B>
-where
-    A: TryFrom<ZBytes> + Debug + std::cmp::Eq + std::hash::Hash,
-    <A as TryFrom<ZBytes>>::Error: Debug,
-    B: TryFrom<ZBytes> + Debug,
-    <B as TryFrom<ZBytes>>::Error: Debug,
-{
-    type Error = ZReadOrDeserializeErrorTuple2<A, B>;
-
-    fn try_from(value: &mut ZBytes) -> Result<Self, Self::Error> {
-        ZSerde.deserialize(&*value)
-    }
-}
-
+// TODO do we really need this?
 // Protocol attachment extension
 impl<const ID: u8> From<ZBytes> for AttachmentType<ID> {
     fn from(this: ZBytes) -> Self {
@@ -3398,7 +1584,7 @@ mod tests {
                 println!("Serialize:\t{:?}", t);
                 let v = ZBytes::serialize(t);
                 println!("Deserialize:\t{:?}", v);
-                let o: $t = v.deserialize().unwrap();
+                let o: $t = v.try_deserialize().unwrap();
                 assert_eq!(i, o);
                 println!("");
             };
@@ -3513,7 +1699,7 @@ mod tests {
         // WARN: test function body produces stack overflow, so I split it into subroutines
         #[inline(never)]
         fn reader_writer() {
-            let mut bytes = ZBytes::empty();
+            let mut bytes = ZBytes::new();
             let mut writer = bytes.writer();
 
             let i1 = 1_u8;
@@ -3623,7 +1809,7 @@ mod tests {
             println!("Serialize:\t{:?}", hm);
             let p = ZBytes::from(hm.clone());
             println!("Deserialize:\t{:?}\n", p);
-            let o = p.deserialize::<HashMap<usize, usize>>().unwrap();
+            let o = p.try_deserialize::<HashMap<usize, usize>>().unwrap();
             assert_eq!(hm, o);
 
             let mut hm: HashMap<usize, Vec<u8>> = HashMap::new();
@@ -3632,7 +1818,7 @@ mod tests {
             println!("Serialize:\t{:?}", hm);
             let p = ZBytes::from(hm.clone());
             println!("Deserialize:\t{:?}\n", p);
-            let o = p.deserialize::<HashMap<usize, Vec<u8>>>().unwrap();
+            let o = p.try_deserialize::<HashMap<usize, Vec<u8>>>().unwrap();
             assert_eq!(hm, o);
 
             let mut hm: HashMap<usize, ZSlice> = HashMap::new();
@@ -3641,7 +1827,7 @@ mod tests {
             println!("Serialize:\t{:?}", hm);
             let p = ZBytes::from(hm.clone());
             println!("Deserialize:\t{:?}\n", p);
-            let o = p.deserialize::<HashMap<usize, ZSlice>>().unwrap();
+            let o = p.try_deserialize::<HashMap<usize, ZSlice>>().unwrap();
             assert_eq!(hm, o);
 
             let mut hm: HashMap<usize, ZBuf> = HashMap::new();
@@ -3650,7 +1836,7 @@ mod tests {
             println!("Serialize:\t{:?}", hm);
             let p = ZBytes::from(hm.clone());
             println!("Deserialize:\t{:?}\n", p);
-            let o = p.deserialize::<HashMap<usize, ZBuf>>().unwrap();
+            let o = p.try_deserialize::<HashMap<usize, ZBuf>>().unwrap();
             assert_eq!(hm, o);
 
             let mut hm: HashMap<String, String> = HashMap::new();
@@ -3659,7 +1845,7 @@ mod tests {
             println!("Serialize:\t{:?}", hm);
             let p = ZBytes::from(hm.clone());
             println!("Deserialize:\t{:?}\n", p);
-            let o = p.deserialize::<HashMap<String, String>>().unwrap();
+            let o = p.try_deserialize::<HashMap<String, String>>().unwrap();
             assert_eq!(hm, o);
 
             let mut hm: HashMap<Cow<'static, str>, Cow<'static, str>> = HashMap::new();
@@ -3668,7 +1854,7 @@ mod tests {
             println!("Serialize:\t{:?}", hm);
             let p = ZBytes::from(hm.clone());
             println!("Deserialize:\t{:?}\n", p);
-            let o = p.deserialize::<HashMap<Cow<str>, Cow<str>>>().unwrap();
+            let o = p.try_deserialize::<HashMap<Cow<str>, Cow<str>>>().unwrap();
             assert_eq!(hm, o);
         }
         hashmap();

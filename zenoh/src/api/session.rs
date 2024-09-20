@@ -15,7 +15,7 @@
 use std::collections::hash_map::Entry;
 use std::{
     collections::HashMap,
-    convert::TryInto,
+    convert::{Infallible, TryInto},
     fmt,
     future::{IntoFuture, Ready},
     ops::Deref,
@@ -101,6 +101,7 @@ use super::{
 #[cfg(feature = "unstable")]
 use crate::api::selector::ZenohParameters;
 use crate::{
+    bytes::Serialize,
     net::{
         primitives::Primitives,
         routing::dispatcher::face::Face,
@@ -919,7 +920,7 @@ impl Session {
     /// # }
     /// ```
     #[inline]
-    pub fn put<'a, 'b: 'a, TryIntoKeyExpr, IntoZBytes>(
+    pub fn put<'p, 'a, 'b: 'a, TryIntoKeyExpr, IntoZBytes>(
         &'a self,
         key_expr: TryIntoKeyExpr,
         payload: IntoZBytes,
@@ -927,12 +928,12 @@ impl Session {
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
-        IntoZBytes: Into<ZBytes>,
+        IntoZBytes: Serialize<'p, Error = Infallible>,
     {
         SessionPutBuilder {
             publisher: self.declare_publisher(key_expr),
             kind: PublicationBuilderPut {
-                payload: payload.into(),
+                payload: ZBytes::serialize(payload),
                 encoding: Encoding::default(),
             },
             timestamp: None,
@@ -1613,7 +1614,7 @@ impl SessionInner {
                     for token in known_tokens {
                         callback.call(Sample {
                             key_expr: token,
-                            payload: ZBytes::empty(),
+                            payload: ZBytes::new(),
                             kind: SampleKind::Put,
                             encoding: Encoding::default(),
                             timestamp: None,
@@ -2360,7 +2361,7 @@ impl Primitives for WeakSession {
                                 let reply = Reply {
                                     result: Ok(Sample {
                                         key_expr,
-                                        payload: ZBytes::empty(),
+                                        payload: ZBytes::new(),
                                         kind: SampleKind::Put,
                                         encoding: Encoding::default(),
                                         timestamp: None,

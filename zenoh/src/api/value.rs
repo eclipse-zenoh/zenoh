@@ -13,7 +13,11 @@
 //
 
 //! Value primitives.
+
+use std::convert::Infallible;
+
 use super::{bytes::ZBytes, encoding::Encoding};
+use crate::bytes::Serialize;
 
 /// A zenoh [`Value`] contains a `payload` and an [`Encoding`] that indicates how the payload's [`ZBytes`] should be interpreted.
 #[non_exhaustive]
@@ -25,20 +29,20 @@ pub struct Value {
 
 impl Value {
     /// Creates a new [`Value`] with specified [`ZBytes`] and  [`Encoding`].
-    pub fn new<T, E>(payload: T, encoding: E) -> Self
+    pub fn new<'a, T, E>(payload: T, encoding: E) -> Self
     where
-        T: Into<ZBytes>,
+        T: Serialize<'a, Error = Infallible>,
         E: Into<Encoding>,
     {
         Value {
-            payload: payload.into(),
+            payload: ZBytes::serialize(payload),
             encoding: encoding.into(),
         }
     }
     /// Creates an empty [`Value`].
     pub const fn empty() -> Self {
         Value {
-            payload: ZBytes::empty(),
+            payload: ZBytes::new(),
             encoding: Encoding::default(),
         }
     }

@@ -122,7 +122,7 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Re
             .declare_subscriber(&key_expr)
             .callback(move |sample| {
                 assert_eq!(sample.payload().len(), size);
-                let _ = sample.payload().deserialize::<&zshm>().unwrap();
+                let _ = sample.payload().try_deserialize::<&zshm>().unwrap();
                 c_msgs.fetch_add(1, Ordering::Relaxed);
             }))
         .unwrap();

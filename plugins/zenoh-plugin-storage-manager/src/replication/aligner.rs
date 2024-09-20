@@ -89,7 +89,7 @@ impl Replication {
         };
 
         let alignment_query =
-            match bincode::deserialize::<AlignmentQuery>(&attachment.into::<Cow<[u8]>>()) {
+            match bincode::deserialize::<AlignmentQuery>(&attachment.deserialize::<Cow<[u8]>>()) {
                 Ok(alignment) => alignment,
                 Err(e) => {
                     tracing::error!(
@@ -368,7 +368,7 @@ impl Replication {
                                 continue;
                             }
                             Some(attachment) => match bincode::deserialize::<AlignmentReply>(
-                                &attachment.into::<Cow<[u8]>>(),
+                                &attachment.deserialize::<Cow<[u8]>>(),
                             ) {
                                 Err(e) => {
                                     tracing::error!(
@@ -655,7 +655,7 @@ async fn reply_to_query(query: &Query, reply: AlignmentReply, value: Option<Valu
             .attachment(attachment)
     } else {
         query
-            .reply(query.key_expr(), ZBytes::empty())
+            .reply(query.key_expr(), ZBytes::new())
             .attachment(attachment)
     };
 

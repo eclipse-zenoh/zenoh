@@ -110,22 +110,22 @@ fn payload_to_json(payload: &ZBytes, encoding: &Encoding) -> serde_json::Value {
                 // If it is a JSON try to deserialize as json, if it fails fallback to base64
                 &Encoding::APPLICATION_JSON | &Encoding::TEXT_JSON | &Encoding::TEXT_JSON5 => {
                     payload
-                        .deserialize::<serde_json::Value>()
+                        .try_deserialize::<serde_json::Value>()
                         .unwrap_or_else(|e| {
                             tracing::warn!("Encoding is JSON but data is not JSON, converting to base64, Error: {e:?}");
-                            serde_json::Value::String(base64_encode(&Cow::from(payload)))
+                            serde_json::Value::String(base64_encode(&payload.deserialize::<Cow<[u8]>>()))
                         })
                 }
                 &Encoding::TEXT_PLAIN | &Encoding::ZENOH_STRING  => serde_json::Value::String(
                     payload
-                        .deserialize::<String>()
+                        .try_deserialize::<String>()
                         .unwrap_or_else(|e| {
                             tracing::warn!("Encoding is String but data is not String, converting to base64, Error: {e:?}");
-                            base64_encode(&Cow::from(payload))
+                            base64_encode(&payload.deserialize::<Cow<[u8]>>())
                         }),
                 ),
                 // otherwise convert to JSON string
-                _ => serde_json::Value::String(base64_encode(&Cow::from(payload))),
+                _ => serde_json::Value::String(base64_encode(&payload.deserialize::<Cow<[u8]>>())),
             }
         }
     }
@@ -172,7 +172,7 @@ fn sample_to_html(sample: &Sample) -> String {
         sample.key_expr().as_str(),
         sample
             .payload()
-            .deserialize::<Cow<str>>()
+            .try_deserialize::<Cow<str>>()
             .unwrap_or_default()
     )
 }
@@ -183,7 +183,9 @@ fn result_to_html(sample: Result<&Sample, &ReplyError>) -> String {
         Err(err) => {
             format!(
                 "<dt>ERROR</dt>\n<dd>{}</dd>\n",
-                err.payload().deserialize::<Cow<str>>().unwrap_or_default()
+                err.payload()
+                    .try_deserialize::<Cow<str>>()
+                    .unwrap_or_default()
             )
         }
     }
@@ -211,7 +213,7 @@ async fn to_raw_response(results: flume::Receiver<Reply>) -> Response {
                 Cow::from(sample.encoding()).as_ref(),
                 &sample
                     .payload()
-                    .deserialize::<Cow<str>>()
+                    .try_deserialize::<Cow<str>>()
                     .unwrap_or_default(),
             ),
             Err(value) => response(
@@ -219,7 +221,7 @@ async fn to_raw_response(results: flume::Receiver<Reply>) -> Response {
                 Cow::from(value.encoding()).as_ref(),
                 &value
                     .payload()
-                    .deserialize::<Cow<str>>()
+                    .try_deserialize::<Cow<str>>()
                     .unwrap_or_default(),
             ),
         },

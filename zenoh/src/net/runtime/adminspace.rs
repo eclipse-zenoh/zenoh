@@ -616,7 +616,7 @@ fn local_data(context: &AdminContext, query: Query) {
     }
 
     tracing::trace!("AdminSpace router_data: {:?}", json);
-    let payload = match ZBytes::try_from(json) {
+    let payload = match ZBytes::try_serialize(json) {
         Ok(p) => p,
         Err(e) => {
             tracing::error!("Error serializing AdminSpace reply: {:?}", e);
@@ -716,8 +716,9 @@ fn subscribers_data(context: &AdminContext, query: Query) {
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            let payload =
-                ZBytes::from(serde_json::to_string(&sub.1).unwrap_or_else(|_| "{}".to_string()));
+            let payload = ZBytes::serialize(
+                serde_json::to_string(&sub.1).unwrap_or_else(|_| "{}".to_string()),
+            );
             if let Err(e) = query
                 .reply(key, payload)
                 .encoding(Encoding::APPLICATION_JSON)
@@ -740,8 +741,9 @@ fn queryables_data(context: &AdminContext, query: Query) {
         ))
         .unwrap();
         if query.key_expr().intersects(&key) {
-            let payload =
-                ZBytes::from(serde_json::to_string(&qabl.1).unwrap_or_else(|_| "{}".to_string()));
+            let payload = ZBytes::serialize(
+                serde_json::to_string(&qabl.1).unwrap_or_else(|_| "{}".to_string()),
+            );
             if let Err(e) = query
                 .reply(key, payload)
                 .encoding(Encoding::APPLICATION_JSON)
@@ -768,10 +770,10 @@ fn plugins_data(context: &AdminContext, query: Query) {
             tracing::debug!("plugin status: {:?}", status);
             let key = root_key.join(status.id()).unwrap();
             let status = serde_json::to_value(status).unwrap();
-            match ZBytes::try_from(status) {
-                Ok(zbuf) => {
+            match ZBytes::try_serialize(status) {
+                Ok(zbytes) => {
                     if let Err(e) = query
-                        .reply(key, zbuf)
+                        .reply(key, zbytes)
                         .encoding(Encoding::APPLICATION_JSON)
                         .wait()
                     {
@@ -825,12 +827,12 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 Ok(Ok(responses)) => {
                     for response in responses {
                         if let Ok(key_expr) = KeyExpr::try_from(response.key) {
-                            match ZBytes::try_from(response.value) {
-                                Ok(zbuf) => {
-                                    if let Err(e) = query.reply(key_expr, zbuf).encoding(Encoding::APPLICATION_JSON).wait() {
+                            match ZBytes::try_serialize(response.value) {
+                                Ok(zbytes) => {
+                                    if let Err(e) = query.reply(key_expr, zbytes).encoding(Encoding::APPLICATION_JSON).wait() {
                                         tracing::error!("Error sending AdminSpace reply: {:?}", e);
                                     }
-                                },
+                                }
                                 Err(e) => tracing::debug!("Admin query error: {}", e),
                             }
                         } else {

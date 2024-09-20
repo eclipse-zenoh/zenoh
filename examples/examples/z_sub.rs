@@ -33,7 +33,7 @@ async fn main() {
         // Refer to z_bytes.rs to see how to deserialize different types of message
         let payload = sample
             .payload()
-            .deserialize::<String>()
+            .try_deserialize::<String>()
             .unwrap_or_else(|e| format!("{}", e));
 
         print!(
@@ -44,7 +44,7 @@ async fn main() {
         );
         if let Some(att) = sample.attachment() {
             let att = att
-                .deserialize::<String>()
+                .try_deserialize::<String>()
                 .unwrap_or_else(|e| format!("{}", e));
             print!(" ({})", att);
         }

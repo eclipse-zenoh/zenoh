@@ -374,6 +374,11 @@ impl<'s> From<Cow<'s, str>> for Parameters<'s> {
         }
     }
 }
+impl<'s> From<Parameters<'s>> for Cow<'s, str> {
+    fn from(value: Parameters<'s>) -> Self {
+        value.0
+    }
+}
 
 impl<'a> From<Parameters<'a>> for Cow<'_, Parameters<'a>> {
     fn from(props: Parameters<'a>) -> Self {

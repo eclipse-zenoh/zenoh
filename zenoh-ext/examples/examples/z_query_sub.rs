@@ -51,7 +51,7 @@ async fn main() {
     while let Ok(sample) = subscriber.recv_async().await {
         let payload = sample
             .payload()
-            .deserialize::<String>()
+            .try_deserialize::<String>()
             .unwrap_or_else(|e| format!("{}", e));
         println!(
             ">> [Subscriber] Received {} ('{}': '{}')",

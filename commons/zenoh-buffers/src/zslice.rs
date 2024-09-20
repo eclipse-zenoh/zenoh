@@ -143,10 +143,11 @@ impl ZSlice {
     // See https://github.com/eclipse-zenoh/zenoh/pull/1289#discussion_r1701796640
     #[inline]
     pub(crate) fn writer(&mut self) -> Option<ZSliceWriter> {
+        const MAX_REALLOC_SIZE: usize = 64;
         let vec = Arc::get_mut(&mut self.buf)?
             .as_any_mut()
             .downcast_mut::<Vec<u8>>()?;
-        if self.end == vec.len() {
+        if self.end == vec.len() && (vec.len() < vec.capacity() || vec.len() <= MAX_REALLOC_SIZE) {
             Some(ZSliceWriter {
                 vec,
                 end: &mut self.end,
@@ -292,6 +293,12 @@ impl SplitBuffer for ZSlice {
 pub(crate) struct ZSliceWriter<'a> {
     vec: &'a mut Vec<u8>,
     end: &'a mut usize,
+}
+
+impl ZSliceWriter<'_> {
+    pub(crate) fn reserve(&mut self, additional: usize) {
+        self.vec.reserve(additional)
+    }
 }
 
 impl Writer for ZSliceWriter<'_> {

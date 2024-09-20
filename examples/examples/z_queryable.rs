@@ -43,7 +43,7 @@ async fn main() {
             Some(query_payload) => {
                 // Refer to z_bytes.rs to see how to deserialize different types of message
                 let deserialized_payload = query_payload
-                    .deserialize::<String>()
+                    .try_deserialize::<String>()
                     .unwrap_or_else(|e| format!("{}", e));
                 println!(
                     ">> [Queryable ] Received Query '{}' with payload '{}'",

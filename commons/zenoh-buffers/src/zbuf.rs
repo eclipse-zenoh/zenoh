@@ -494,6 +494,11 @@ impl<'a> ZBufWriter<'a> {
         self.zslice_writer = zbuf.slices.last_mut().unwrap().writer();
         self.zslice_writer.as_mut().unwrap()
     }
+
+    #[inline]
+    pub fn reserve(&mut self, additional: usize) {
+        self.zslice_writer().reserve(additional)
+    }
 }
 
 impl<'a> HasWriter for &'a mut ZBuf {

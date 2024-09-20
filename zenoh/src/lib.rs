@@ -216,7 +216,7 @@ pub mod bytes {
     pub use crate::api::{
         bytes::{
             Deserialize, OptionZBytes, Serialize, ZBytes, ZBytesIterator, ZBytesReader,
-            ZBytesSliceIterator, ZBytesWriter, ZDeserializeError, ZSerde,
+            ZBytesSliceIterator, ZBytesWriter, ZDeserializeError,
         },
         encoding::Encoding,
     };

@@ -141,7 +141,7 @@ mod test {
                 .callback(move |sample| {
                     if sample.kind() == SampleKind::Put {
                         let mut temp_value = zlock!(temp_recv_value);
-                        *temp_value = sample.payload().deserialize::<String>().unwrap();
+                        *temp_value = sample.payload().try_deserialize::<String>().unwrap();
                     } else if sample.kind() == SampleKind::Delete {
                         let mut deleted = zlock!(deleted_clone);
                         *deleted = true;
@@ -195,7 +195,7 @@ mod test {
                 .callback(move |sample| {
                     if sample.kind() == SampleKind::Put {
                         let mut temp_value = zlock!(temp_recv_value);
-                        *temp_value = sample.payload().deserialize::<String>().unwrap();
+                        *temp_value = sample.payload().try_deserialize::<String>().unwrap();
                     } else if sample.kind() == SampleKind::Delete {
                         let mut deleted = zlock!(deleted_clone);
                         *deleted = true;
@@ -277,7 +277,7 @@ mod test {
                 .callback(move |sample| {
                     if sample.kind() == SampleKind::Put {
                         let mut temp_value = zlock!(temp_recv_value);
-                        *temp_value = sample.payload().deserialize::<String>().unwrap();
+                        *temp_value = sample.payload().try_deserialize::<String>().unwrap();
                     } else if sample.kind() == SampleKind::Delete {
                         let mut deleted = zlock!(deleted_clone);
                         *deleted = true;
@@ -358,7 +358,7 @@ mod test {
                 .callback(move |sample| {
                     if sample.kind() == SampleKind::Put {
                         let mut temp_value = zlock!(temp_recv_value);
-                        *temp_value = sample.payload().deserialize::<String>().unwrap();
+                        *temp_value = sample.payload().try_deserialize::<String>().unwrap();
                     } else if sample.kind() == SampleKind::Delete {
                         let mut deleted = zlock!(deleted_clone);
                         *deleted = true;
@@ -436,7 +436,7 @@ mod test {
             while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
                 match reply.result() {
                     Ok(sample) => {
-                        received_value = sample.payload().deserialize::<String>().unwrap();
+                        received_value = sample.payload().try_deserialize::<String>().unwrap();
                         break;
                     }
                     Err(e) => println!("Error : {:?}", e),
@@ -490,7 +490,7 @@ mod test {
             while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
                 match reply.result() {
                     Ok(sample) => {
-                        received_value = sample.payload().deserialize::<String>().unwrap();
+                        received_value = sample.payload().try_deserialize::<String>().unwrap();
                         break;
                     }
                     Err(e) => println!("Error : {:?}", e),
@@ -571,7 +571,7 @@ mod test {
             while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
                 match reply.result() {
                     Ok(sample) => {
-                        received_value = sample.payload().deserialize::<String>().unwrap();
+                        received_value = sample.payload().try_deserialize::<String>().unwrap();
                         break;
                     }
                     Err(e) => println!("Error : {:?}", e),
@@ -650,7 +650,7 @@ mod test {
             while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
                 match reply.result() {
                     Ok(sample) => {
-                        received_value = sample.payload().deserialize::<String>().unwrap();
+                        received_value = sample.payload().try_deserialize::<String>().unwrap();
                         break;
                     }
                     Err(e) => println!("Error : {:?}", e),
@@ -718,7 +718,7 @@ mod test {
             while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
                 match reply.result() {
                     Ok(sample) => {
-                        received_value = sample.payload().deserialize::<String>().unwrap();
+                        received_value = sample.payload().try_deserialize::<String>().unwrap();
                         break;
                     }
                     Err(e) => println!("Error : {:?}", e),
@@ -792,7 +792,7 @@ mod test {
             while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
                 match reply.result() {
                     Ok(sample) => {
-                        received_value = sample.payload().deserialize::<String>().unwrap();
+                        received_value = sample.payload().try_deserialize::<String>().unwrap();
                         break;
                     }
                     Err(e) => println!("Error : {:?}", e),
