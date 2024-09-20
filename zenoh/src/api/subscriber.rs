@@ -21,10 +21,7 @@ use tracing::error;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
 #[cfg(feature = "unstable")]
-use {
-    crate::qos::Reliability, zenoh_config::wrappers::EntityGlobalId,
-    zenoh_protocol::core::EntityGlobalIdProto,
-};
+use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
 
 use crate::{
     api::{
