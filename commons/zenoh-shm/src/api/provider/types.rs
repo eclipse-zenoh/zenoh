@@ -211,14 +211,13 @@ impl MemoryLayout {
     }
 }
 
-/// Layouting errors
-///
-/// IncorrectLayoutArgs: layout arguments are incorrect
-/// ProviderIncompatibleLayout: layout incompatible with provider
+/// Layout error.
 #[zenoh_macros::unstable_doc]
 #[derive(Debug)]
 pub enum ZLayoutError {
+    /// Incorrect layout arguments.
     IncorrectLayoutArgs,
+    /// The layout is incompatible with the provider.
     ProviderIncompatibleLayout,
 }
 
