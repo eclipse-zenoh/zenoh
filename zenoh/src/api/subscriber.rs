@@ -75,7 +75,7 @@ pub(crate) struct SubscriberInner {
 /// subscriber.undeclare().await.unwrap();
 /// # }
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct SubscriberUndeclaration<Handler>(Subscriber<Handler>);
 
 impl<Handler> Resolvable for SubscriberUndeclaration<Handler> {
@@ -111,7 +111,7 @@ impl<Handler> IntoFuture for SubscriberUndeclaration<Handler> {
 ///     .unwrap();
 /// # }
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[derive(Debug)]
 pub struct SubscriberBuilder<'a, 'b, Handler> {
     #[cfg(feature = "internal")]

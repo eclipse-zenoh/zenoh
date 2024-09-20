@@ -2855,7 +2855,7 @@ where
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// # }
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct OpenBuilder<TryIntoConfig>
 where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
@@ -2930,7 +2930,7 @@ pub fn init(runtime: Runtime) -> InitBuilder {
 }
 
 /// A builder returned by [`init`] and used to initialize a Session with an existing Runtime.
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[doc(hidden)]
 #[zenoh_macros::internal]
 pub struct InitBuilder {

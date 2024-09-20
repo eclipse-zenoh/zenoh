@@ -207,7 +207,7 @@ impl QueryState {
 /// }
 /// # }
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[derive(Debug)]
 pub struct SessionGetBuilder<'a, 'b, Handler> {
     pub(crate) session: &'a Session,

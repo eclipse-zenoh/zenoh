@@ -291,7 +291,7 @@ pub struct ReplyBuilderPut {
 pub struct ReplyBuilderDelete;
 
 /// A builder returned by [`Query::reply()`](Query::reply) and [`Query::reply_del()`](Query::reply_del)
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[derive(Debug)]
 pub struct ReplyBuilder<'a, 'b, T> {
     query: &'a Query,
@@ -468,7 +468,7 @@ impl IntoFuture for ReplyBuilder<'_, '_, ReplyBuilderDelete> {
 }
 
 /// A builder returned by [`Query::reply_err()`](Query::reply_err).
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[derive(Debug)]
 pub struct ReplyErrBuilder<'a> {
     query: &'a Query,
@@ -562,7 +562,7 @@ pub(crate) struct QueryableInner {
 /// queryable.undeclare().await.unwrap();
 /// # }
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct QueryableUndeclaration<Handler>(Queryable<Handler>);
 
 impl<Handler> Resolvable for QueryableUndeclaration<Handler> {
@@ -595,7 +595,7 @@ impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
 /// let queryable = session.declare_queryable("key/expression").await.unwrap();
 /// # }
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[derive(Debug)]
 pub struct QueryableBuilder<'a, 'b, Handler> {
     pub(crate) session: &'a Session,

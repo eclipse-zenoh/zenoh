@@ -54,68 +54,12 @@ pub trait Wait: Resolvable {
     fn wait(self) -> Self::To;
 }
 
-#[deprecated(since = "1.0.0", note = "use `.await` directly instead")]
-pub trait AsyncResolve: Resolvable {
-    type Future: Future<Output = Self::To> + Send;
-
-    #[allow(deprecated)]
-    #[deprecated(since = "1.0.0", note = "use `.await` directly instead")]
-    fn res_async(self) -> Self::Future;
-
-    #[allow(deprecated)]
-    #[deprecated(since = "1.0.0", note = "use `zenoh::Wait::wait` instead")]
-    fn res(self) -> Self::Future
-    where
-        Self: Sized,
-    {
-        self.res_async()
-    }
-}
-
-#[allow(deprecated)]
-impl<T> AsyncResolve for T
-where
-    T: Resolvable + IntoFuture<Output = Self::To>,
-    T::IntoFuture: Send,
-{
-    type Future = T::IntoFuture;
-
-    fn res_async(self) -> Self::Future {
-        self.into_future()
-    }
-}
-
-#[deprecated(since = "1.0.0", note = "use `zenoh::Wait` instead")]
-pub trait SyncResolve: Resolvable {
-    #[deprecated(since = "1.0.0", note = "use `zenoh::Wait::wait` instead")]
-    fn res_sync(self) -> Self::To;
-
-    #[allow(deprecated)]
-    #[deprecated(since = "1.0.0", note = "use `zenoh::Wait::wait` instead")]
-    fn res(self) -> Self::To
-    where
-        Self: Sized,
-    {
-        self.res_sync()
-    }
-}
-
-#[allow(deprecated)]
-impl<T> SyncResolve for T
-where
-    T: Wait,
-{
-    fn res_sync(self) -> Self::To {
-        self.wait()
-    }
-}
-
 /// Zenoh's trait for resolving builder patterns.
 ///
 /// Builder patterns in Zenoh can be resolved by awaiting them, in async context,
 /// and [`Wait::wait`] in sync context.
 /// We advise to prefer the usage of asynchronous execution, and to use synchronous one with caution
-#[must_use = "Resolvables do nothing unless you resolve them using `.await` or synchronous `.wait()` method"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub trait Resolve<Output>:
     Resolvable<To = Output>
     + Wait
@@ -135,7 +79,7 @@ impl<T, Output> Resolve<Output> for T where
 }
 
 // Closure to wait
-#[must_use = "Resolvables do nothing unless you resolve them using `.await` or synchronous `.wait()` method"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct ResolveClosure<C, To>(C)
 where
     To: Sized + Send,
@@ -183,7 +127,7 @@ where
 }
 
 // Future to wait
-#[must_use = "Resolvables do nothing unless you resolve them using `.await` or synchronous `.wait()` method"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct ResolveFuture<F, To>(F)
 where
     To: Sized + Send,

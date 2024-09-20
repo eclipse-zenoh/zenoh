@@ -109,8 +109,6 @@ pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
     ]
 );
 
-#[allow(deprecated)]
-pub use zenoh_core::{AsyncResolve, SyncResolve};
 pub use zenoh_core::{Resolvable, Resolve, Wait};
 /// A zenoh error.
 pub use zenoh_result::Error;

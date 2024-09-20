@@ -327,7 +327,7 @@ impl<'a> UndeclarableSealed<()> for Publisher<'a> {
 /// publisher.undeclare().await.unwrap();
 /// # }
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct PublisherUndeclaration<'a>(Publisher<'a>);
 
 impl Resolvable for PublisherUndeclaration<'_> {
