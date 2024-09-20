@@ -63,7 +63,7 @@ pub trait AsyncResolve: Resolvable {
     fn res_async(self) -> Self::Future;
 
     #[allow(deprecated)]
-    #[deprecated(since = "1.0.0", note = "use `.wait()` instead`")]
+    #[deprecated(since = "1.0.0", note = "use `zenoh::Wait::wait` instead")]
     fn res(self) -> Self::Future
     where
         Self: Sized,
@@ -85,13 +85,13 @@ where
     }
 }
 
-#[deprecated(since = "1.0.0", note = "use `.wait()` instead`")]
+#[deprecated(since = "1.0.0", note = "use `zenoh::Wait` instead")]
 pub trait SyncResolve: Resolvable {
-    #[deprecated(since = "1.0.0", note = "use `.wait()` instead`")]
+    #[deprecated(since = "1.0.0", note = "use `zenoh::Wait::wait` instead")]
     fn res_sync(self) -> Self::To;
 
     #[allow(deprecated)]
-    #[deprecated(since = "1.0.0", note = "use `.wait()` instead`")]
+    #[deprecated(since = "1.0.0", note = "use `zenoh::Wait::wait` instead")]
     fn res(self) -> Self::To
     where
         Self: Sized,
