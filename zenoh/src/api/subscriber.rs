@@ -99,7 +99,7 @@ impl<Handler> IntoFuture for SubscriberUndeclaration<Handler> {
     }
 }
 
-/// A builder for initializing a [`FlumeSubscriber`].
+/// A builder for initializing a [`crate::pubsub::Subscriber<Handler>`].
 ///
 /// # Examples
 /// ```
