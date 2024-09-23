@@ -913,6 +913,11 @@ impl Runtime {
 
     #[must_use]
     async fn connect(&self, zid: &ZenohIdProto, scouted_locators: &[Locator]) -> bool {
+        if !self.insert_pending_connection(*zid).await {
+            tracing::debug!("Already connecting to {}. Ignore.", zid);
+            return false;
+        }
+
         const ERR: &str = "Unable to connect to newly scouted peer";
 
         let configured_locators = self
@@ -1015,9 +1020,11 @@ impl Runtime {
                 "Unable to connect to any locator of scouted peer {}: Already connected!",
                 zid
             );
+            self.remove_pending_connection(zid).await;
             return false;
         }
 
+        self.remove_pending_connection(zid).await;
         true
     }
 
