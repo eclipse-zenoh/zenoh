@@ -911,6 +911,7 @@ impl Runtime {
         }
     }
 
+    /// Returns `true` if a new Transport instance has been opened with `zid`.
     #[must_use]
     async fn connect(&self, zid: &ZenohIdProto, scouted_locators: &[Locator]) -> bool {
         if !self.insert_pending_connection(*zid).await {
@@ -1003,11 +1004,13 @@ impl Runtime {
                 }
             } else {
                 tracing::trace!(
-                    "Will not attempt to connect to {} via {}: already connected to this peer for this priority range",
+                    "Will not attempt to connect to {} via {}: already connected to this peer for this PriorityRange-Reliability pair",
                     zid, locator
                 );
             }
         }
+
+        self.remove_pending_connection(zid).await;
 
         if self.manager().get_transport_unicast(zid).await.is_none() {
             tracing::warn!(
@@ -1015,17 +1018,10 @@ impl Runtime {
                 zid,
                 scouted_locators
             );
+            false
         } else {
-            tracing::trace!(
-                "Unable to connect to any locator of scouted peer {}: Already connected!",
-                zid
-            );
-            self.remove_pending_connection(zid).await;
-            return false;
+            true
         }
-
-        self.remove_pending_connection(zid).await;
-        true
     }
 
     pub async fn connect_peer(&self, zid: &ZenohIdProto, locators: &[Locator]) {
