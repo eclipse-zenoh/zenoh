@@ -379,7 +379,8 @@ impl FromStr for PriorityRange {
     type Err = InvalidPriorityRange;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut metadata = s.split("..=");
+        const SEPARATOR: &str = "-";
+        let mut metadata = s.split(SEPARATOR);
 
         let start = metadata
             .next()
