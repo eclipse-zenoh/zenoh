@@ -932,7 +932,6 @@ impl Runtime {
             .filter(|l| !configured_locators.contains(l));
 
         let manager = self.manager();
-        let transport = manager.get_transport_unicast(zid).await;
 
         let inspector = LocatorInspector::default();
         for locator in locators {
@@ -951,14 +950,19 @@ impl Runtime {
                 .get(Metadata::PRIORITIES)
                 .and_then(|p| PriorityRange::from_str(p).ok());
             let reliability = inspector.is_reliable(locator).ok();
-            if !transport.as_ref().is_some_and(|t| {
-                t.get_links().is_ok_and(|ls| {
-                    ls.iter().any(|l| {
-                        l.priorities == priorities
-                            && inspector.is_reliable(&l.dst).ok() == reliability
+            if !manager
+                .get_transport_unicast(zid)
+                .await
+                .as_ref()
+                .is_some_and(|t| {
+                    t.get_links().is_ok_and(|ls| {
+                        ls.iter().any(|l| {
+                            l.priorities == priorities
+                                && inspector.is_reliable(&l.dst).ok() == reliability
+                        })
                     })
                 })
-            }) {
+            {
                 if is_multicast {
                     match tokio::time::timeout(
                         retry_config.timeout(),
