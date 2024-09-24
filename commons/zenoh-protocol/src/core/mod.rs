@@ -353,7 +353,7 @@ impl PriorityRange {
 
 impl Display for PriorityRange {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}..={}", *self.start() as u8, *self.end() as u8)
+        write!(f, "{}-{}", *self.start() as u8, *self.end() as u8)
     }
 }
 
@@ -366,7 +366,7 @@ pub enum InvalidPriorityRange {
 impl Display for InvalidPriorityRange {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            InvalidPriorityRange::InvalidSyntax { found } => write!(f, "invalid PriorityRange string, expected an range of the form `start..=end` but found {found}"),
+            InvalidPriorityRange::InvalidSyntax { found } => write!(f, "invalid PriorityRange string, expected an range of the form `start-end` but found {found}"),
             InvalidPriorityRange::InvalidBound { message } => write!(f, "invalid PriorityRange bound: {message}"),
         }
     }
