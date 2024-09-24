@@ -71,13 +71,12 @@ pub struct StorageService {
 }
 
 impl StorageService {
-    pub async fn start(
+    pub async fn new(
         session: Arc<Session>,
         config: StorageConfig,
         name: &str,
         storage: Arc<Mutex<Box<dyn zenoh_backend_traits::Storage>>>,
         capability: Capability,
-        rx: Receiver<StorageMessage>,
         cache_latest: CacheLatest,
     ) -> Self {
         let storage_service = StorageService {
@@ -117,15 +116,11 @@ impl StorageService {
                 }
             }
         }
-        storage_service
-            .clone()
-            .start_storage_queryable_subscriber(rx)
-            .await;
 
         storage_service
     }
 
-    async fn start_storage_queryable_subscriber(self, mut rx: Receiver<StorageMessage>) {
+    pub(crate) async fn start_storage_queryable_subscriber(self, mut rx: Receiver<StorageMessage>) {
         // start periodic GC event
         let t = Timer::default();
 
@@ -172,6 +167,12 @@ impl StorageService {
                 return;
             }
         };
+
+        tracing::debug!(
+            "Starting storage '{}' on keyexpr '{}'",
+            self.name,
+            storage_key_expr
+        );
 
         tokio::task::spawn(async move {
             loop {

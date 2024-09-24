@@ -44,7 +44,7 @@ impl ReplicationService {
     ///    received.
     pub async fn spawn_start(
         zenoh_session: Arc<Session>,
-        storage_service: StorageService,
+        storage_service: &StorageService,
         storage_key_expr: OwnedKeyExpr,
         replication_log: Arc<RwLock<LogLatest>>,
         latest_updates: Arc<RwLock<LatestUpdates>>,
@@ -98,13 +98,15 @@ impl ReplicationService {
             );
         }
 
+        let storage = storage_service.storage.clone();
+
         tokio::task::spawn(async move {
             let replication = Replication {
                 zenoh_session,
                 replication_log,
                 storage_key_expr,
                 latest_updates,
-                storage: storage_service.storage.clone(),
+                storage,
             };
 
             let replication_service = Self {
