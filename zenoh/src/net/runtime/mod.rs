@@ -459,7 +459,6 @@ impl TransportPeerEventHandler for RuntimeSession {
 
     fn closing(&self) {
         self.main_handler.closing();
-        Runtime::closing_session(self);
         for handler in &self.slave_handlers {
             handler.closing();
         }
@@ -467,6 +466,7 @@ impl TransportPeerEventHandler for RuntimeSession {
 
     fn closed(&self) {
         self.main_handler.closed();
+        Runtime::closed_session(self);
         for handler in &self.slave_handlers {
             handler.closed();
         }

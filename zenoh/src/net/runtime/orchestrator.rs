@@ -1180,7 +1180,7 @@ impl Runtime {
         }
     }
 
-    pub(super) fn closing_session(session: &RuntimeSession) {
+    pub(super) fn closed_session(session: &RuntimeSession) {
         if session.runtime.is_closed() {
             return;
         }
