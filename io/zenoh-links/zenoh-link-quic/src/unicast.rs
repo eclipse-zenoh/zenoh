@@ -153,7 +153,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
 
     #[inline(always)]
     fn is_reliable(&self) -> bool {
-        true
+        super::IS_RELIABLE
     }
 
     #[inline(always)]
@@ -332,11 +332,13 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
 
         // Spawn the accept loop for the listener
         let token = self.listeners.token.child_token();
-        let c_token = token.clone();
 
-        let c_manager = self.manager.clone();
+        let task = {
+            let token = token.clone();
+            let manager = self.manager.clone();
 
-        let task = async move { accept_task(quic_endpoint, c_token, c_manager).await };
+            async move { accept_task(quic_endpoint, token, manager).await }
+        };
 
         // Initialize the QuicAcceptor
         let locator = endpoint.to_locator();
@@ -364,7 +366,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
 }
 
 async fn accept_task(
-    endpoint: quinn::Endpoint,
+    quic_endpoint: quinn::Endpoint,
     token: CancellationToken,
     manager: NewLinkChannelSender,
 ) -> ZResult<()> {
@@ -382,7 +384,7 @@ async fn accept_task(
         Ok(conn)
     }
 
-    let src_addr = endpoint
+    let src_addr = quic_endpoint
         .local_addr()
         .map_err(|e| zerror!("Can not accept QUIC connections: {}", e))?;
 
@@ -393,7 +395,7 @@ async fn accept_task(
         tokio::select! {
             _ = token.cancelled() => break,
 
-            res = accept(endpoint.accept()) => {
+            res = accept(quic_endpoint.accept()) => {
                 match res {
                     Ok(quic_conn) => {
                         // Get the bideractional streams. Note that we don't allow unidirectional streams.

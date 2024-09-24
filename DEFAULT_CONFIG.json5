@@ -30,6 +30,8 @@
     /// The list of endpoints to connect to.
     /// Accepts a single list (e.g. endpoints: ["tcp/10.10.10.10:7447", "tcp/11.11.11.11:7447"])
     /// or different lists for router, peer and client (e.g. endpoints: { router: ["tcp/10.10.10.10:7447"], peer: ["tcp/11.11.11.11:7447"] }).
+    ///
+    /// See https://docs.rs/zenoh/latest/zenoh/config/struct.EndPoint.html
     endpoints: [
       // "<proto>/<address>"
     ],
@@ -67,6 +69,8 @@
     /// The list of endpoints to listen on.
     /// Accepts a single list (e.g. endpoints: ["tcp/[::]:7447", "udp/[::]:7447"])
     /// or different lists for router, peer and client (e.g. endpoints: { router: ["tcp/[::]:7447"], peer: ["tcp/[::]:0"] }).
+    ///
+    /// See https://docs.rs/zenoh/latest/zenoh/config/struct.EndPoint.html
     endpoints: { router: ["tcp/[::]:7447"], peer: ["tcp/[::]:0"] },
 
     /// Global listen configuration,
@@ -333,11 +337,11 @@
       },
     },
     link: {
-      /// An optional whitelist of protocols to be used for accepting and opening sessions.
-      /// If not configured, all the supported protocols are automatically whitelisted.
-      /// The supported protocols are: ["tcp" , "udp", "tls", "quic", "ws", "unixsock-stream", "vsock"]
-      /// For example, to only enable "tls" and "quic":
-      //   protocols: ["tls", "quic"],
+      /// An optional whitelist of protocols to be used for accepting and opening sessions. If not
+      /// configured, all the supported protocols are automatically whitelisted. The supported
+      /// protocols are: ["tcp" , "udp", "tls", "quic", "ws", "unixsock-stream", "vsock"] For
+      /// example, to only enable "tls" and "quic": protocols: ["tls", "quic"],
+      ///
       /// Configure the zenoh TX parameters of a link
       tx: {
         /// The resolution in bits to be used for the message sequence numbers.
@@ -394,7 +398,7 @@
             enabled: true,
             /// The maximum time limit (in ms) a message should be retained for batching when back-pressure happens.
             time_limit: 1,
-          }
+          },
         },
       },
       /// Configure the zenoh RX parameters of a link

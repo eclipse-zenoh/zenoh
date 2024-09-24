@@ -615,7 +615,7 @@ impl TransportManager {
             },
             {
                 tracing::debug!(
-            "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {}, multilink: {}, lowlatency: {}",
+            "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {:?}, multilink: {}, lowlatency: {}",
             self.config.zid,
             config.zid,
             config.whatami,
@@ -707,9 +707,9 @@ impl TransportManager {
         };
 
         // Create a new link associated by calling the Link Manager
-        let link = manager.new_link(endpoint).await?;
+        let link = manager.new_link(endpoint.clone()).await?;
         // Open the link
-        super::establishment::open::open_link(link, self).await
+        super::establishment::open::open_link(endpoint, link, self).await
     }
 
     pub async fn get_transport_unicast(&self, peer: &ZenohIdProto) -> Option<TransportUnicast> {

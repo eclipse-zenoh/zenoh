@@ -273,15 +273,15 @@ async fn handle_incoming_connections(
         endpoint.metadata(),
     )?;
 
+    let link = Arc::new(UnicastPipe {
+        r: UnsafeCell::new(dedicated_uplink),
+        w: UnsafeCell::new(dedicated_downlink),
+        local,
+        remote,
+    });
+
     // send newly established link to manager
-    manager
-        .send_async(LinkUnicast(Arc::new(UnicastPipe {
-            r: UnsafeCell::new(dedicated_uplink),
-            w: UnsafeCell::new(dedicated_downlink),
-            local,
-            remote,
-        })))
-        .await?;
+    manager.send_async(LinkUnicast(link)).await?;
 
     ZResult::Ok(())
 }
@@ -518,7 +518,7 @@ impl LinkUnicastTrait for UnicastPipe {
 
     #[inline(always)]
     fn is_reliable(&self) -> bool {
-        true
+        super::IS_RELIABLE
     }
 
     #[inline(always)]

@@ -219,7 +219,7 @@ impl LinkUnicastTrait for LinkUnicastWs {
 
     #[inline(always)]
     fn is_reliable(&self) -> bool {
-        true
+        super::IS_RELIABLE
     }
 
     #[inline(always)]
@@ -368,16 +368,19 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
 
         // Spawn the accept loop for the listener
         let token = CancellationToken::new();
-        let c_token = token.clone();
-        let c_manager = self.manager.clone();
-        let c_listeners = self.listeners.clone();
-        let c_addr = local_addr;
 
-        let task = async move {
-            // Wait for the accept loop to terminate
-            let res = accept_task(socket, c_token, c_manager).await;
-            zasyncwrite!(c_listeners).remove(&c_addr);
-            res
+        let task = {
+            let token = token.clone();
+            let manager = self.manager.clone();
+            let listeners = self.listeners.clone();
+            let addr = local_addr;
+
+            async move {
+                // Wait for the accept loop to terminate
+                let res = accept_task(socket, token, manager).await;
+                zasyncwrite!(listeners).remove(&addr);
+                res
+            }
         };
         let handle = zenoh_runtime::ZRuntime::Acceptor.spawn(task);
 
