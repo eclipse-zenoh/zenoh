@@ -61,10 +61,8 @@ struct Update {
 #[derive(Clone)]
 pub struct StorageService {
     session: Arc<Session>,
-    key_expr: OwnedKeyExpr,
-    complete: bool,
+    configuration: StorageConfig,
     name: String,
-    strip_prefix: Option<OwnedKeyExpr>,
     pub(crate) storage: Arc<Mutex<Box<dyn zenoh_backend_traits::Storage>>>,
     capability: Capability,
     tombstones: Arc<RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>>,
@@ -84,10 +82,8 @@ impl StorageService {
     ) -> Self {
         let storage_service = StorageService {
             session,
-            key_expr: config.key_expr,
-            complete: config.complete,
+            configuration: config,
             name: name.to_string(),
-            strip_prefix: config.strip_prefix,
             storage,
             capability,
             tombstones: Arc::new(RwLock::new(KeBoxTree::default())),
@@ -123,19 +119,17 @@ impl StorageService {
         }
         storage_service
             .clone()
-            .start_storage_queryable_subscriber(rx, config.garbage_collection_config)
+            .start_storage_queryable_subscriber(rx)
             .await;
 
         storage_service
     }
 
-    async fn start_storage_queryable_subscriber(
-        self,
-        mut rx: Receiver<StorageMessage>,
-        gc_config: GarbageCollectionConfig,
-    ) {
+    async fn start_storage_queryable_subscriber(self, mut rx: Receiver<StorageMessage>) {
         // start periodic GC event
         let t = Timer::default();
+
+        let gc_config = self.configuration.garbage_collection_config.clone();
 
         let latest_updates = if self.cache_latest.replication_log.is_none() {
             Some(self.cache_latest.latest_updates.clone())
@@ -154,8 +148,10 @@ impl StorageService {
         );
         t.add_async(gc).await;
 
+        let storage_key_expr = &self.configuration.key_expr;
+
         // subscribe on key_expr
-        let storage_sub = match self.session.declare_subscriber(&self.key_expr).await {
+        let storage_sub = match self.session.declare_subscriber(storage_key_expr).await {
             Ok(storage_sub) => storage_sub,
             Err(e) => {
                 tracing::error!("Error starting storage '{}': {}", self.name, e);
@@ -166,8 +162,8 @@ impl StorageService {
         // answer to queries on key_expr
         let storage_queryable = match self
             .session
-            .declare_queryable(&self.key_expr)
-            .complete(self.complete)
+            .declare_queryable(storage_key_expr)
+            .complete(self.configuration.complete)
             .await
         {
             Ok(storage_queryable) => storage_queryable,
@@ -249,6 +245,8 @@ impl StorageService {
             matching_keys
         );
 
+        let prefix = self.configuration.strip_prefix.as_ref();
+
         for k in matching_keys {
             if self.is_deleted(&k, sample_timestamp).await {
                 tracing::trace!("Skipping Sample < {} > deleted later on", k);
@@ -297,13 +295,12 @@ impl StorageService {
                 }
             };
 
-            let stripped_key =
-                match crate::strip_prefix(self.strip_prefix.as_ref(), sample_to_store.key_expr()) {
-                    Ok(stripped) => stripped,
-                    Err(e) => {
-                        bail!("{e:?}");
-                    }
-                };
+            let stripped_key = match crate::strip_prefix(prefix, sample_to_store.key_expr()) {
+                Ok(stripped) => stripped,
+                Err(e) => {
+                    bail!("{e:?}");
+                }
+            };
 
             // If the Storage was declared as only keeping the Latest value, we ensure that, for
             // each received Sample, it is indeed the Latest value that is processed.
@@ -436,19 +433,21 @@ impl StorageService {
         let wildcards = self.wildcard_updates.read().await;
         let mut ts = timestamp;
         let mut update = None;
+
+        let prefix = self.configuration.strip_prefix.as_ref();
+
         for node in wildcards.intersecting_keys(key_expr) {
             let weight = wildcards.weight_at(&node);
             if weight.is_some() && weight.unwrap().data.timestamp > *ts {
                 // if the key matches a wild card update, check whether it was saved in storage
                 // remember that wild card updates change only existing keys
-                let stripped_key =
-                    match crate::strip_prefix(self.strip_prefix.as_ref(), &key_expr.into()) {
-                        Ok(stripped) => stripped,
-                        Err(e) => {
-                            tracing::error!("{}", e);
-                            break;
-                        }
-                    };
+                let stripped_key = match crate::strip_prefix(prefix, &key_expr.into()) {
+                    Ok(stripped) => stripped,
+                    Err(e) => {
+                        tracing::error!("{}", e);
+                        break;
+                    }
+                };
                 let mut storage = self.storage.lock().await;
                 match storage.get(stripped_key, "").await {
                     Ok(stored_data) => {
@@ -531,20 +530,22 @@ impl StorageService {
             }
         };
         tracing::trace!("[STORAGE] Processing query on key_expr: {}", q.key_expr());
+
+        let prefix = self.configuration.strip_prefix.as_ref();
+
         if q.key_expr().is_wild() {
             // resolve key expr into individual keys
             let matching_keys = self.get_matching_keys(q.key_expr()).await;
             let mut storage = self.storage.lock().await;
             for key in matching_keys {
-                let stripped_key =
-                    match crate::strip_prefix(self.strip_prefix.as_ref(), &key.clone().into()) {
-                        Ok(k) => k,
-                        Err(e) => {
-                            tracing::error!("{}", e);
-                            // @TODO: return error when it is supported
-                            return;
-                        }
-                    };
+                let stripped_key = match crate::strip_prefix(prefix, &key.clone().into()) {
+                    Ok(k) => k,
+                    Err(e) => {
+                        tracing::error!("{}", e);
+                        // @TODO: return error when it is supported
+                        return;
+                    }
+                };
                 match storage.get(stripped_key, q.parameters().as_str()).await {
                     Ok(stored_data) => {
                         for entry in stored_data {
@@ -569,7 +570,7 @@ impl StorageService {
             }
             drop(storage);
         } else {
-            let stripped_key = match crate::strip_prefix(self.strip_prefix.as_ref(), q.key_expr()) {
+            let stripped_key = match crate::strip_prefix(prefix, q.key_expr()) {
                 Ok(k) => k,
                 Err(e) => {
                     tracing::error!("{}", e);
@@ -606,13 +607,26 @@ impl StorageService {
         let mut result = Vec::new();
         // @TODO: if cache exists, use that to get the list
         let storage = self.storage.lock().await;
+
+        let prefix = self.configuration.strip_prefix.as_ref();
+
         match storage.get_all_entries().await {
             Ok(entries) => {
                 for (k, _ts) in entries {
                     // @TODO: optimize adding back the prefix (possible inspiration from https://github.com/eclipse-zenoh/zenoh/blob/0.5.0-beta.9/backends/traits/src/utils.rs#L79)
                     let full_key = match k {
-                        Some(key) => crate::prefix(self.strip_prefix.as_ref(), &key),
-                        None => self.strip_prefix.clone().unwrap(),
+                        Some(key) => crate::prefix(prefix, &key),
+                        None => {
+                            let Some(prefix) = prefix else {
+                                // TODO Check if we have anything in place that would prevent such
+                                //      an error from happening.
+                                tracing::error!(
+                                    "Internal bug: empty key with no `strip_prefix` configured"
+                                );
+                                continue;
+                            };
+                            prefix.clone()
+                        }
                     };
                     if key_expr.intersects(&full_key.clone()) {
                         result.push(full_key);
