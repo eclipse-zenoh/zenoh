@@ -1852,6 +1852,9 @@ impl SessionInner {
     ) {
         let mut callbacks = SingleOrVec::default();
         let state = zread!(self.state);
+        if state.primitives.is_none() {
+            return; // Session closing or closed
+        }
         if key_expr.suffix.is_empty() {
             match state.get_res(&key_expr.scope, key_expr.mapping, local) {
                 Some(Resource::Node(res)) => {
@@ -2203,6 +2206,9 @@ impl SessionInner {
     ) {
         let (primitives, key_expr, queryables) = {
             let state = zread!(self.state);
+            if state.primitives.is_none() {
+                return; // Session closing or closed
+            }
             let Ok(primitives) = state.primitives() else {
                 return;
             };
@@ -2278,6 +2284,9 @@ impl Primitives for WeakSession {
             zenoh_protocol::network::DeclareBody::DeclareKeyExpr(m) => {
                 trace!("recv DeclareKeyExpr {} {:?}", m.id, m.wire_expr);
                 let state = &mut zwrite!(self.state);
+                if state.primitives.is_none() {
+                    return; // Session closing or closed
+                }
                 match state.remote_key_to_expr(&m.wire_expr) {
                     Ok(key_expr) => {
                         let mut res_node = ResourceNode::new(key_expr.clone().into());
@@ -2310,6 +2319,9 @@ impl Primitives for WeakSession {
                 #[cfg(feature = "unstable")]
                 {
                     let mut state = zwrite!(self.state);
+                    if state.primitives.is_none() {
+                        return; // Session closing or closed
+                    }
                     match state
                         .wireexpr_to_keyexpr(&m.wire_expr, false)
                         .map(|e| e.into_owned())
@@ -2332,6 +2344,9 @@ impl Primitives for WeakSession {
                 #[cfg(feature = "unstable")]
                 {
                     let mut state = zwrite!(self.state);
+                    if state.primitives.is_none() {
+                        return; // Session closing or closed
+                    }
                     if let Some(expr) = state.remote_subscribers.remove(&m.id) {
                         self.update_status_down(&state, &expr);
                     } else {
@@ -2350,6 +2365,9 @@ impl Primitives for WeakSession {
             #[cfg(feature = "unstable")]
             zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
                 let mut state = zwrite!(self.state);
+                if state.primitives.is_none() {
+                    return; // Session closing or closed
+                }
                 match state
                     .wireexpr_to_keyexpr(&m.wire_expr, false)
                     .map(|e| e.into_owned())
@@ -2407,6 +2425,9 @@ impl Primitives for WeakSession {
                 #[cfg(feature = "unstable")]
                 {
                     let mut state = zwrite!(self.state);
+                    if state.primitives.is_none() {
+                        return; // Session closing or closed
+                    }
                     if let Some(key_expr) = state.remote_tokens.remove(&m.id) {
                         drop(state);
 
@@ -2540,6 +2561,9 @@ impl Primitives for WeakSession {
         match msg.payload {
             ResponseBody::Err(e) => {
                 let mut state = zwrite!(self.state);
+                if state.primitives.is_none() {
+                    return; // Session closing or closed
+                }
                 match state.queries.get_mut(&msg.rid) {
                     Some(query) => {
                         let callback = query.callback.clone();
@@ -2562,6 +2586,9 @@ impl Primitives for WeakSession {
             }
             ResponseBody::Reply(m) => {
                 let mut state = zwrite!(self.state);
+                if state.primitives.is_none() {
+                    return; // Session closing or closed
+                }
                 let key_expr = match state.remote_key_to_expr(&msg.wire_expr) {
                     Ok(key) => key.into_owned(),
                     Err(e) => {
@@ -2737,6 +2764,9 @@ impl Primitives for WeakSession {
     fn send_response_final(&self, msg: ResponseFinal) {
         trace!("recv ResponseFinal {:?}", msg);
         let mut state = zwrite!(self.state);
+        if state.primitives.is_none() {
+            return; // Session closing or closed
+        }
         match state.queries.get_mut(&msg.rid) {
             Some(query) => {
                 query.nb_final -= 1;
