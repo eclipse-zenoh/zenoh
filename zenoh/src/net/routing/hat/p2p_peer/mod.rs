@@ -205,6 +205,7 @@ impl HatBaseTrait for HatCode {
     fn close_face(
         &self,
         tables: &TablesLock,
+        _tables_ref: &Arc<TablesLock>,
         face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
@@ -311,6 +312,14 @@ impl HatBaseTrait for HatCode {
             Resource::clean(&mut res);
         }
         wtables.faces.remove(&face.id);
+
+        if face.whatami != WhatAmI::Client {
+            hat_mut!(wtables)
+                .gossip
+                .as_mut()
+                .unwrap()
+                .remove_link(&face.zid);
+        };
         drop(wtables);
     }
 
@@ -352,24 +361,6 @@ impl HatBaseTrait for HatCode {
         _routing_context: NodeId,
     ) -> NodeId {
         0
-    }
-
-    fn closing(
-        &self,
-        tables: &mut Tables,
-        _tables_ref: &Arc<TablesLock>,
-        transport: &TransportUnicast,
-        _send_declare: &mut SendDeclare,
-    ) -> ZResult<()> {
-        match (transport.get_zid(), transport.get_whatami()) {
-            (Ok(zid), Ok(whatami)) => {
-                if whatami != WhatAmI::Client {
-                    hat_mut!(tables).gossip.as_mut().unwrap().remove_link(&zid);
-                };
-            }
-            (_, _) => tracing::error!("Closed transport in session closing!"),
-        }
-        Ok(())
     }
 
     #[inline]

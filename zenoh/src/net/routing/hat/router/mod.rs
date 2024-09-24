@@ -430,6 +430,7 @@ impl HatBaseTrait for HatCode {
     fn close_face(
         &self,
         tables: &TablesLock,
+        tables_ref: &Arc<TablesLock>,
         face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
@@ -536,6 +537,84 @@ impl HatBaseTrait for HatCode {
             Resource::clean(&mut res);
         }
         wtables.faces.remove(&face.id);
+
+        match face.whatami {
+            WhatAmI::Router => {
+                for (_, removed_node) in hat_mut!(wtables)
+                    .routers_net
+                    .as_mut()
+                    .unwrap()
+                    .remove_link(&face.zid)
+                {
+                    pubsub_remove_node(
+                        &mut wtables,
+                        &removed_node.zid,
+                        WhatAmI::Router,
+                        send_declare,
+                    );
+                    queries_remove_node(
+                        &mut wtables,
+                        &removed_node.zid,
+                        WhatAmI::Router,
+                        send_declare,
+                    );
+                    token_remove_node(
+                        &mut wtables,
+                        &removed_node.zid,
+                        WhatAmI::Router,
+                        send_declare,
+                    );
+                }
+
+                if hat!(wtables).full_net(WhatAmI::Peer) {
+                    hat_mut!(wtables).shared_nodes = shared_nodes(
+                        hat!(wtables).routers_net.as_ref().unwrap(),
+                        hat!(wtables).linkstatepeers_net.as_ref().unwrap(),
+                    );
+                }
+
+                hat_mut!(wtables).schedule_compute_trees(tables_ref.clone(), WhatAmI::Router);
+            }
+            WhatAmI::Peer => {
+                if hat!(wtables).full_net(WhatAmI::Peer) {
+                    for (_, removed_node) in hat_mut!(wtables)
+                        .linkstatepeers_net
+                        .as_mut()
+                        .unwrap()
+                        .remove_link(&face.zid)
+                    {
+                        pubsub_remove_node(
+                            &mut wtables,
+                            &removed_node.zid,
+                            WhatAmI::Peer,
+                            send_declare,
+                        );
+                        queries_remove_node(
+                            &mut wtables,
+                            &removed_node.zid,
+                            WhatAmI::Peer,
+                            send_declare,
+                        );
+                        token_remove_node(
+                            &mut wtables,
+                            &removed_node.zid,
+                            WhatAmI::Peer,
+                            send_declare,
+                        );
+                    }
+
+                    hat_mut!(wtables).shared_nodes = shared_nodes(
+                        hat!(wtables).routers_net.as_ref().unwrap(),
+                        hat!(wtables).linkstatepeers_net.as_ref().unwrap(),
+                    );
+
+                    hat_mut!(wtables).schedule_compute_trees(tables_ref.clone(), WhatAmI::Peer);
+                } else if let Some(net) = hat_mut!(wtables).linkstatepeers_net.as_mut() {
+                    net.remove_link(&face.zid);
+                }
+            }
+            _ => (),
+        };
         drop(wtables);
     }
 
@@ -687,100 +766,6 @@ impl HatBaseTrait for HatCode {
             }
             _ => 0,
         }
-    }
-
-    fn closing(
-        &self,
-        tables: &mut Tables,
-        tables_ref: &Arc<TablesLock>,
-        transport: &TransportUnicast,
-        send_declare: &mut SendDeclare,
-    ) -> ZResult<()> {
-        match (transport.get_zid(), transport.get_whatami()) {
-            (Ok(zid), Ok(whatami)) => {
-                match whatami {
-                    WhatAmI::Router => {
-                        for (_, removed_node) in hat_mut!(tables)
-                            .routers_net
-                            .as_mut()
-                            .unwrap()
-                            .remove_link(&zid)
-                        {
-                            pubsub_remove_node(
-                                tables,
-                                &removed_node.zid,
-                                WhatAmI::Router,
-                                send_declare,
-                            );
-                            queries_remove_node(
-                                tables,
-                                &removed_node.zid,
-                                WhatAmI::Router,
-                                send_declare,
-                            );
-                            token_remove_node(
-                                tables,
-                                &removed_node.zid,
-                                WhatAmI::Router,
-                                send_declare,
-                            );
-                        }
-
-                        if hat!(tables).full_net(WhatAmI::Peer) {
-                            hat_mut!(tables).shared_nodes = shared_nodes(
-                                hat!(tables).routers_net.as_ref().unwrap(),
-                                hat!(tables).linkstatepeers_net.as_ref().unwrap(),
-                            );
-                        }
-
-                        hat_mut!(tables)
-                            .schedule_compute_trees(tables_ref.clone(), WhatAmI::Router);
-                    }
-                    WhatAmI::Peer => {
-                        if hat!(tables).full_net(WhatAmI::Peer) {
-                            for (_, removed_node) in hat_mut!(tables)
-                                .linkstatepeers_net
-                                .as_mut()
-                                .unwrap()
-                                .remove_link(&zid)
-                            {
-                                pubsub_remove_node(
-                                    tables,
-                                    &removed_node.zid,
-                                    WhatAmI::Peer,
-                                    send_declare,
-                                );
-                                queries_remove_node(
-                                    tables,
-                                    &removed_node.zid,
-                                    WhatAmI::Peer,
-                                    send_declare,
-                                );
-                                token_remove_node(
-                                    tables,
-                                    &removed_node.zid,
-                                    WhatAmI::Peer,
-                                    send_declare,
-                                );
-                            }
-
-                            hat_mut!(tables).shared_nodes = shared_nodes(
-                                hat!(tables).routers_net.as_ref().unwrap(),
-                                hat!(tables).linkstatepeers_net.as_ref().unwrap(),
-                            );
-
-                            hat_mut!(tables)
-                                .schedule_compute_trees(tables_ref.clone(), WhatAmI::Peer);
-                        } else if let Some(net) = hat_mut!(tables).linkstatepeers_net.as_mut() {
-                            net.remove_link(&zid);
-                        }
-                    }
-                    _ => (),
-                };
-            }
-            (_, _) => tracing::error!("Closed transport in session closing!"),
-        }
-        Ok(())
     }
 
     #[inline]

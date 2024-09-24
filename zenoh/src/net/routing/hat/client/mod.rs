@@ -130,6 +130,7 @@ impl HatBaseTrait for HatCode {
     fn close_face(
         &self,
         tables: &TablesLock,
+        _tables_ref: &Arc<TablesLock>,
         face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
@@ -258,16 +259,6 @@ impl HatBaseTrait for HatCode {
         _routing_context: NodeId,
     ) -> NodeId {
         0
-    }
-
-    fn closing(
-        &self,
-        _tables: &mut Tables,
-        _tables_ref: &Arc<TablesLock>,
-        _transport: &TransportUnicast,
-        _send_declare: &mut SendDeclare,
-    ) -> ZResult<()> {
-        Ok(())
     }
 
     #[inline]
