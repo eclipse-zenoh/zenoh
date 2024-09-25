@@ -138,6 +138,13 @@ impl<T: Deserialize> Drop for ZReadIter<'_, '_, T> {
     }
 }
 
+impl Serialize for ZBytes {
+    fn serialize(&self, writer: &mut ZBytesWriter) {
+        writer.write_vle(self.len() as u64);
+        writer.append(self.clone())
+    }
+}
+
 macro_rules! impl_num {
     ($($ty:ty),* $(,)?) => {$(
         impl Serialize for $ty {
