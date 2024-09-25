@@ -207,21 +207,15 @@ const _: () = {
     impl ZBytes {
         pub fn as_shm(&self) -> Option<&zshm> {
             let mut zslices = self.0.zslices();
-            if zslices.by_ref().count() != 1 {
-                return None;
-            }
-            let zslice = zslices.next().unwrap();
-            zslice.downcast_ref::<ShmBufInner>().map(Into::into)
+            let buf = zslices.next()?.downcast_ref::<ShmBufInner>();
+            buf.map(Into::into).filter(|_| zslices.next().is_none())
         }
 
         pub fn as_shm_mut(&mut self) -> Option<&mut zshm> {
             let mut zslices = self.0.zslices_mut();
-            if zslices.by_ref().count() != 1 {
-                return None;
-            }
-            let zslice = zslices.next().unwrap();
             // SAFETY: ShmBufInner cannot change the size of the slice
-            unsafe { zslice.downcast_mut::<ShmBufInner>() }.map(Into::into)
+            let buf = unsafe { zslices.next()?.downcast_mut::<ShmBufInner>() };
+            buf.map(Into::into).filter(|_| zslices.next().is_none())
         }
     }
 };
