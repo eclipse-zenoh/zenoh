@@ -45,8 +45,8 @@ zenoh-ext = { workspace = true }
 rand = { workspace = true, features = ["default"] }
 
 [build-dependencies]
-rustc_version = { workspace = true }
-prost-build = "0.13.3"
+prost-build = "0.13"
+which = "6"
 
 [[example]]
 name = "z_scout"
