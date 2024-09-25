@@ -43,8 +43,8 @@ async fn main() {
             Ok(sample) => {
                 let payload = sample
                     .payload()
-                    .deserialize::<String>()
-                    .unwrap_or_else(|e| format!("{}", e));
+                    .try_to_string()
+                    .unwrap_or_else(|e| e.to_string().into());
                 println!(
                     ">> [Subscriber] Pulled {} ('{}': '{}')... performing a computation of {:#?}",
                     sample.kind(),
@@ -67,8 +67,8 @@ async fn main() {
     //         Ok(Some(sample)) => {
     //             let payload = sample
     //                 .payload()
-    //                 .deserialize::<String>()
-    //                 .unwrap_or_else(|e| format!("{}", e));
+    //                 .try_to_string()
+    //                 .unwrap_or_else(|e| e.to_string().into());
     //             println!(
     //                 ">> [Subscriber] Pulled {} ('{}': '{}')",
     //                 sample.kind(),

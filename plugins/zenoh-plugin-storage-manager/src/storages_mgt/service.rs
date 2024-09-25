@@ -264,23 +264,24 @@ impl StorageService {
             // there might be the case that the actual update was outdated due to a wild card
             // update, but not stored yet in the storage. get the relevant wild
             // card entry and use that value and timestamp to update the storage
-            let sample_to_store: Sample = if let Some(update) =
-                self.overriding_wild_update(&k, sample_timestamp).await
-            {
-                match update.kind {
-                    SampleKind::Put => SampleBuilder::put(k.clone(), update.data.value.payload())
-                        .encoding(update.data.value.encoding().clone())
-                        .timestamp(update.data.timestamp)
-                        .into(),
-                    SampleKind::Delete => SampleBuilder::delete(k.clone())
-                        .timestamp(update.data.timestamp)
-                        .into(),
-                }
-            } else {
-                SampleBuilder::from(sample.clone())
-                    .keyexpr(k.clone())
-                    .into()
-            };
+            let sample_to_store: Sample =
+                if let Some(update) = self.overriding_wild_update(&k, sample_timestamp).await {
+                    match update.kind {
+                        SampleKind::Put => {
+                            SampleBuilder::put(k.clone(), update.data.value.payload().clone())
+                                .encoding(update.data.value.encoding().clone())
+                                .timestamp(update.data.timestamp)
+                                .into()
+                        }
+                        SampleKind::Delete => SampleBuilder::delete(k.clone())
+                            .timestamp(update.data.timestamp)
+                            .into(),
+                    }
+                } else {
+                    SampleBuilder::from(sample.clone())
+                        .keyexpr(k.clone())
+                        .into()
+                };
 
             // A Sample that is to be stored **must** have a Timestamp. In theory, the Sample
             // generated should have a Timestamp and, in theory, this check is
@@ -330,7 +331,7 @@ impl StorageService {
                         .put(
                             stripped_key.clone(),
                             Value::new(
-                                sample_to_store.payload(),
+                                sample_to_store.payload().clone(),
                                 sample_to_store.encoding().clone(),
                             ),
                             sample_to_store_timestamp,
@@ -634,7 +635,7 @@ fn serialize_update(update: &Update) -> String {
         kind,
         data: StoredData { value, timestamp },
     } = update;
-    let zbuf: ZBuf = value.payload().into();
+    let zbuf: ZBuf = value.payload().clone().into();
 
     let result = (
         kind.to_string(),

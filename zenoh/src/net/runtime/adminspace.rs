@@ -616,8 +616,8 @@ fn local_data(context: &AdminContext, query: Query) {
     }
 
     tracing::trace!("AdminSpace router_data: {:?}", json);
-    let payload = match ZBytes::try_from(json) {
-        Ok(p) => p,
+    let payload = match serde_json::to_vec(&json) {
+        Ok(bytes) => ZBytes::from(bytes),
         Err(e) => {
             tracing::error!("Error serializing AdminSpace reply: {:?}", e);
             return;
@@ -767,11 +767,10 @@ fn plugins_data(context: &AdminContext, query: Query) {
         for status in statuses {
             tracing::debug!("plugin status: {:?}", status);
             let key = root_key.join(status.id()).unwrap();
-            let status = serde_json::to_value(status).unwrap();
-            match ZBytes::try_from(status) {
-                Ok(zbuf) => {
+            match serde_json::to_vec(&status) {
+                Ok(bytes) => {
                     if let Err(e) = query
-                        .reply(key, zbuf)
+                        .reply(key, bytes)
                         .encoding(Encoding::APPLICATION_JSON)
                         .wait()
                     {
@@ -825,13 +824,14 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 Ok(Ok(responses)) => {
                     for response in responses {
                         if let Ok(key_expr) = KeyExpr::try_from(response.key) {
-                            match ZBytes::try_from(response.value) {
-                                Ok(zbuf) => {
-                                    if let Err(e) = query.reply(key_expr, zbuf).encoding(Encoding::APPLICATION_JSON).wait() {
+                            match serde_json::to_vec(&response.value) {
+                                Ok(bytes) => {
+                                    if let Err(e) = query.reply(key_expr, bytes).encoding(Encoding::APPLICATION_JSON).wait() {
                                         tracing::error!("Error sending AdminSpace reply: {:?}", e);
                                     }
-                                },
+                                }
                                 Err(e) => tracing::debug!("Admin query error: {}", e),
+
                             }
                         } else {
                             tracing::error!("Error: plugin {} replied with an invalid key", plugin_key);

@@ -228,7 +228,7 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDel
     fn wait(self) -> <Self as Resolvable>::To {
         self.publisher.session.0.resolve_put(
             &self.publisher.key_expr?,
-            ZBytes::empty(),
+            ZBytes::new(),
             SampleKind::Delete,
             Encoding::ZENOH_BYTES,
             self.publisher.congestion_control,
@@ -459,7 +459,7 @@ impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
     fn wait(self) -> <Self as Resolvable>::To {
         self.publisher.session.resolve_put(
             &self.publisher.key_expr,
-            ZBytes::empty(),
+            ZBytes::new(),
             SampleKind::Delete,
             Encoding::ZENOH_BYTES,
             self.publisher.congestion_control,

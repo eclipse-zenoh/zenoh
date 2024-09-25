@@ -12,10 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{
-    borrow::Cow,
-    collections::{HashMap, HashSet},
-};
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 use zenoh::{
@@ -88,17 +85,16 @@ impl Replication {
             }
         };
 
-        let alignment_query =
-            match bincode::deserialize::<AlignmentQuery>(&attachment.into::<Cow<[u8]>>()) {
-                Ok(alignment) => alignment,
-                Err(e) => {
-                    tracing::error!(
-                        "Failed to deserialize `attachment` of received Query into \
+        let alignment_query = match bincode::deserialize::<AlignmentQuery>(&attachment.to_bytes()) {
+            Ok(alignment) => alignment,
+            Err(e) => {
+                tracing::error!(
+                    "Failed to deserialize `attachment` of received Query into \
                          AlignmentQuery: {e:?}"
-                    );
-                    return;
-                }
-            };
+                );
+                return;
+            }
+        };
 
         match alignment_query {
             AlignmentQuery::Diff(digest_diff) => {
@@ -367,17 +363,18 @@ impl Replication {
                                 tracing::debug!("Skipping reply without attachment");
                                 continue;
                             }
-                            Some(attachment) => match bincode::deserialize::<AlignmentReply>(
-                                &attachment.into::<Cow<[u8]>>(),
-                            ) {
-                                Err(e) => {
-                                    tracing::error!(
+                            Some(attachment) => {
+                                match bincode::deserialize::<AlignmentReply>(&attachment.to_bytes())
+                                {
+                                    Err(e) => {
+                                        tracing::error!(
                                         "Failed to deserialize attachment as AlignmentReply: {e:?}"
                                     );
-                                    continue;
+                                        continue;
+                                    }
+                                    Ok(alignment_reply) => alignment_reply,
                                 }
-                                Ok(alignment_reply) => alignment_reply,
-                            },
+                            }
                         };
 
                         replication
@@ -655,7 +652,7 @@ async fn reply_to_query(query: &Query, reply: AlignmentReply, value: Option<Valu
             .attachment(attachment)
     } else {
         query
-            .reply(query.key_expr(), ZBytes::empty())
+            .reply(query.key_expr(), ZBytes::new())
             .attachment(attachment)
     };
 

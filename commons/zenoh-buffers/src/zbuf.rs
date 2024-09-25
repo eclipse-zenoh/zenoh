@@ -404,7 +404,7 @@ impl<'a> io::Seek for ZBufReader<'a> {
             .fold(0, |acc, s| acc + s.len())
             + self.cursor.byte;
         let current_pos = i64::try_from(current_pos)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("{}", e)))?;
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
 
         let offset = match pos {
             std::io::SeekFrom::Start(s) => i64::try_from(s).unwrap_or(i64::MAX) - current_pos,

@@ -32,25 +32,25 @@ maintenance = { status = "actively-developed" }
 auth_pubkey = ["zenoh-transport/auth_pubkey"]
 auth_usrpwd = ["zenoh-transport/auth_usrpwd"]
 default = [
-    "auth_pubkey",
-    "auth_usrpwd",
-    "transport_multilink",
-    "transport_compression",
-    "transport_quic",
-    "transport_tcp",
-    "transport_tls",
-    "transport_udp",
-    "transport_unixsock-stream",
-    "transport_ws",
+  "auth_pubkey",
+  "auth_usrpwd",
+  "transport_multilink",
+  "transport_compression",
+  "transport_quic",
+  "transport_tcp",
+  "transport_tls",
+  "transport_udp",
+  "transport_unixsock-stream",
+  "transport_ws",
 ]
 internal = ["zenoh-keyexpr/internal", "zenoh-config/internal"]
 plugins = []
 runtime_plugins = ["plugins"]
 shared-memory = [
-    "zenoh-shm",
-    "zenoh-protocol/shared-memory",
-    "zenoh-transport/shared-memory",
-    "zenoh-buffers/shared-memory",
+  "zenoh-shm",
+  "zenoh-protocol/shared-memory",
+  "zenoh-transport/shared-memory",
+  "zenoh-buffers/shared-memory",
 ]
 stats = ["zenoh-transport/stats", "zenoh-protocol/stats"]
 transport_multilink = ["zenoh-transport/transport_multilink"]
@@ -91,7 +91,6 @@ serde-pickle = { workspace = true }
 serde_yaml = { workspace = true }
 socket2 = { workspace = true }
 uhlc = { workspace = true, features = ["default"] }
-unwrap-infallible = { workspace = true }
 vec_map = { workspace = true }
 zenoh-buffers = { workspace = true, features = ["std"] }
 zenoh-codec = { workspace = true }

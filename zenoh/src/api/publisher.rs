@@ -909,7 +909,7 @@ mod tests {
 
             assert_eq!(sample.kind, kind);
             if let SampleKind::Put = kind {
-                assert_eq!(sample.payload.deserialize::<String>().unwrap(), VALUE);
+                assert_eq!(sample.payload.try_to_string().unwrap(), VALUE);
             }
         }
 
@@ -936,7 +936,7 @@ mod tests {
 
             assert_eq!(sample.kind, kind);
             if let SampleKind::Put = kind {
-                assert_eq!(sample.payload.deserialize::<String>().unwrap(), VALUE);
+                assert_eq!(sample.payload.try_to_string().unwrap(), VALUE);
             }
         }
 
