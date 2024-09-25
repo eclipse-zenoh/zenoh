@@ -53,6 +53,63 @@ pub(crate) struct Replication {
 }
 
 impl Replication {
+    /// Performs an initial alignment, skipping the comparison of Digest, asking directly the first
+    /// discovered Replica for all its entries.
+    ///
+    /// # ⚠️ Assumption: empty Storage
+    ///
+    /// We assume that this method will only be called if the underlying Storage is empty. This has
+    /// at least one consequence: if the Aligner receives a `delete` event from the Replica, it will
+    /// not attempt to delete anything from the Storage.
+    ///
+    /// # Replica discovery
+    ///
+    /// To discover a Replica, this method will create a Digest subscriber, wait to receive a
+    /// *valid* Digest and, upon reception, ask that Replica for all its entries.
+    ///
+    /// To avoid waiting indefinitely (in case there are no other Replica on the network), the
+    /// subscriber will wait for, at most, the duration of two Intervals.
+    pub(crate) async fn initial_alignment(&self) {
+        let ke_all_replicas = match keformat!(
+            aligner_key_expr_formatter::formatter(),
+            hash_configuration = *self
+                .replication_log
+                .read()
+                .await
+                .configuration
+                .fingerprint(),
+            zid = "*",
+        ) {
+            Ok(ke) => ke,
+            Err(e) => {
+                tracing::error!(
+                    "Failed to generate key expression to query all Replicas: {e:?}. Skipping \
+                     initial alignment."
+                );
+                return;
+            }
+        };
+
+        // NOTE: As discussed with @OlivierHecart, the plugins do not wait for the duration of the
+        // "scouting delay" before performing any Zenoh operation. Hence, we manually enforce this
+        // delay when performing the initial alignment.
+        let delay = self
+            .zenoh_session
+            .config()
+            .lock()
+            .scouting
+            .delay()
+            .unwrap_or(500);
+        tokio::time::sleep(Duration::from_millis(delay)).await;
+
+        if let Err(e) = self
+            .spawn_query_replica_aligner(ke_all_replicas, AlignmentQuery::Discovery)
+            .await
+        {
+            tracing::error!("Initial alignment failed with: {e:?}");
+        }
+    }
+
     /// Spawns a task that periodically publishes the [Digest] of the Replication [Log].
     ///
     /// This task will perform the following steps:
