@@ -6,7 +6,7 @@ fn main() -> std::io::Result<()> {
     // If protoc is not installed, we cheat because building protoc from source
     // with protobuf-src is way too long
     if which("protoc").is_err() {
-        const PROTO: &'static str = r#"#[derive(Clone, PartialEq, ::prost::Message)] pub struct Entity { #[prost(uint32, tag = "1")] pub id: u32, #[prost(string, tag = "2")] pub name: ::prost::alloc::string::String,}"#;
+        const PROTO: &str = r#"#[derive(Clone, PartialEq, ::prost::Message)] pub struct Entity { #[prost(uint32, tag = "1")] pub id: u32, #[prost(string, tag = "2")] pub name: ::prost::alloc::string::String,}"#;
         let out_path = Path::new(&env::var("OUT_DIR").unwrap()).join("example.rs");
         File::create(out_path)?.write(PROTO.as_bytes())?;
         return Ok(());
