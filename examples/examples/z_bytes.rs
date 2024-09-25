@@ -111,13 +111,13 @@ fn main() {
     let input2 = ZBytes::from([2, 3]);
     let mut zbytes = ZBytes::new();
     let mut writer = zbytes.writer();
-    writer.write(&[0u8, 1]).unwrap();
+    writer.write_all(&[0u8, 1]).unwrap();
     writer.append(input2.clone());
     assert_eq!(*zbytes.to_bytes(), [0u8, 1, 2, 3]);
     let mut reader = zbytes.reader();
     let mut buf = [0; 2];
-    reader.read(&mut buf).unwrap();
+    reader.read_exact(&mut buf).unwrap();
     assert_eq!(buf, *input1);
-    reader.read(&mut buf).unwrap();
+    reader.read_exact(&mut buf).unwrap();
     assert_eq!(buf, *input2.to_bytes());
 }

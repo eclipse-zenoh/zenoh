@@ -120,7 +120,7 @@ fn payload_to_json(payload: &ZBytes, encoding: &Encoding) -> serde_json::Value {
                 tracing::warn!(
                     "Encoding is String but data is not String, converting to base64, Error: {e:?}"
                 );
-                base64_encode(&e.as_bytes())
+                base64_encode(e.as_bytes())
             }),
         ),
         // otherwise convert to JSON string
