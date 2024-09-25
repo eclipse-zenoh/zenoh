@@ -200,9 +200,7 @@ impl Primitives for Mux {
         }
     }
 
-    fn send_close(&self) {
-        // self.handler.closing().await;
-    }
+    fn send_close(&self) {}
 }
 
 impl EPrimitives for Mux {
@@ -530,9 +528,7 @@ impl Primitives for McastMux {
         }
     }
 
-    fn send_close(&self) {
-        // self.handler.closing().await;
-    }
+    fn send_close(&self) {}
 }
 
 impl EPrimitives for McastMux {
