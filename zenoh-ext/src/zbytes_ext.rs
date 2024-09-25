@@ -142,13 +142,13 @@ macro_rules! impl_num {
     ($($ty:ty),* $(,)?) => {$(
         impl Serialize for $ty {
             fn serialize(&self, writer: &mut ZBytesWriter) {
-                writer.write(&(*self).to_le_bytes()).unwrap();
+                writer.write_all(&(*self).to_le_bytes()).unwrap();
             }
             fn serialize_slice(slice: &[Self], writer: &mut ZBytesWriter) where Self: Sized {
                 if cfg!(target_endian = "little") || std::mem::size_of::<Self>() == 1 {
                     writer.write_vle(slice.len() as u64);
                     // SAFETY: transmuting numeric types to their little endian bytes is safe
-                    writer.write(unsafe { slice.align_to().1 }).unwrap();
+                    writer.write_all(unsafe { slice.align_to().1 }).unwrap();
                 } else {
                     writer.serialize_iter(slice);
                 }
@@ -157,7 +157,7 @@ macro_rules! impl_num {
         impl Deserialize for $ty {
             fn deserialize(reader: &mut ZBytesReader) -> Result<Self, ZDeserializeError> {
                 let mut buf = [0; { std::mem::size_of::<Self>() }];
-                reader.read(&mut buf).or(Err(ZDeserializeError))?;
+                reader.read_exact(&mut buf).or(Err(ZDeserializeError))?;
                 Ok(<$ty>::from_le_bytes(buf))
             }
             fn deserialize_slice(reader: &mut ZBytesReader) -> Result<Box<[Self]>, ZDeserializeError> {
@@ -166,7 +166,7 @@ macro_rules! impl_num {
                     let len = reader.read_vle().ok_or(ZDeserializeError)? as usize;
                     let total_size = len * size;
                     let mut buf = std::mem::ManuallyDrop::new(vec![0; total_size].into_boxed_slice());
-                    reader.read(&mut buf).or(Err(ZDeserializeError))?;
+                    reader.read_exact(&mut buf).or(Err(ZDeserializeError))?;
                     // SAFETY: transmuting numeric types from their little endian bytes is safe
                     Ok(unsafe { Box::from_raw(ptr::slice_from_raw_parts_mut(buf.as_mut_ptr().cast(), len)) })
                 } else {
