@@ -35,11 +35,7 @@ use zenoh::{
 };
 use zenoh_backend_traits::Storage;
 
-use super::{
-    digest::Digest,
-    log::LogLatest,
-    service::{MAX_RETRY, WAIT_PERIOD_SECS},
-};
+use super::{digest::Digest, log::LogLatest};
 use crate::{replication::aligner::AlignmentQuery, storages_mgt::LatestUpdates};
 
 kedefine!(
@@ -253,9 +249,7 @@ impl Replication {
                 }
             };
 
-            let mut retry = 0;
-            let subscriber = loop {
-                match replication
+            let subscriber = match replication
                     .zenoh_session
                     .declare_subscriber(&digest_key_sub)
                     // NOTE: We need to explicitly set the locality to `Remote` as otherwise the
@@ -263,24 +257,14 @@ impl Replication {
                     //       Digest publisher.
                     .allowed_origin(Locality::Remote)
                     .await
-                {
-                    Ok(subscriber) => break subscriber,
-                    Err(e) => {
-                        if retry < MAX_RETRY {
-                            retry += 1;
-                            tracing::warn!(
-                                "Failed to declare Digest subscriber: {e:?}. Attempt \
-                                 {retry}/{MAX_RETRY}."
-                            );
-                            tokio::time::sleep(Duration::from_secs(WAIT_PERIOD_SECS)).await;
-                        } else {
-                            tracing::error!(
-                                "Could not declare Digest subscriber. The storage will not \
-                                 receive the Replication Digest of other replicas."
-                            );
-                            return;
-                        }
-                    }
+            {
+                Ok(subscriber) => subscriber,
+                Err(e) => {
+                    tracing::error!(
+                        "Could not declare Digest subscriber: {e:?}. The storage will not receive \
+                         the Replication Digest of other replicas."
+                    );
+                    return;
                 }
             };
 
@@ -397,31 +381,19 @@ impl Replication {
                 }
             };
 
-            let mut retry = 0;
-            let queryable = loop {
-                match replication
-                    .zenoh_session
-                    .declare_queryable(&aligner_ke)
-                    .allowed_origin(Locality::Remote)
-                    .await
-                {
-                    Ok(queryable) => break queryable,
-                    Err(e) => {
-                        if retry < MAX_RETRY {
-                            retry += 1;
-                            tracing::warn!(
-                                "Failed to declare the Aligner queryable: {e:?}. Attempt \
-                                 {retry}/{MAX_RETRY}."
-                            );
-                            tokio::time::sleep(Duration::from_secs(WAIT_PERIOD_SECS)).await;
-                        } else {
-                            tracing::error!(
-                                "Could not declare the Aligner queryable. This storage will NOT \
-                                 align with other replicas."
-                            );
-                            return;
-                        }
-                    }
+            let queryable = match replication
+                .zenoh_session
+                .declare_queryable(&aligner_ke)
+                .allowed_origin(Locality::Remote)
+                .await
+            {
+                Ok(queryable) => queryable,
+                Err(e) => {
+                    tracing::error!(
+                        "Could not declare the Aligner queryable: {e:?}. This storage will NOT \
+                         align with other replicas."
+                    );
+                    return;
                 }
             };
 
