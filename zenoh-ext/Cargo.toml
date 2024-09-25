@@ -33,11 +33,11 @@ shared-memory = ["zenoh/shared-memory"]
 
 [dependencies]
 tokio = { workspace = true, features = [
-    "rt",
-    "sync",
-    "time",
-    "macros",
-    "io-std",
+  "rt",
+  "sync",
+  "time",
+  "macros",
+  "io-std",
 ] }
 bincode = { workspace = true }
 zenoh-util = { workspace = true }

@@ -14,20 +14,20 @@
 pub mod group;
 mod publication_cache;
 mod querying_subscriber;
+mod serialization;
 mod session_ext;
 mod subscriber_ext;
-mod zbytes_ext;
 
 pub use publication_cache::{PublicationCache, PublicationCacheBuilder};
 pub use querying_subscriber::{
     FetchingSubscriber, FetchingSubscriberBuilder, QueryingSubscriberBuilder,
 };
+pub use serialization::{
+    z_deserialize, z_serialize, Deserialize, Serialize, ZDeserializeError, ZDeserializer,
+    ZReadIter, ZSerializer,
+};
 pub use session_ext::SessionExt;
 pub use subscriber_ext::{SubscriberBuilderExt, SubscriberForward};
-pub use zbytes_ext::{
-    Deserialize, Serialize, ZBytesExt, ZBytesReaderExt, ZBytesWriterExt, ZDeserializeError,
-    ZReadIter,
-};
 use zenoh::{internal::zerror, query::Reply, sample::Sample, Result as ZResult};
 
 /// The space of keys to use in a [`FetchingSubscriber`].

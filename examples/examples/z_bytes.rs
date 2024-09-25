@@ -72,33 +72,32 @@ fn main() {
 
     // zenoh-ext serialization
     {
-        // Requires to import zenoh-ext trait
-        use zenoh_ext::ZBytesExt;
+        use zenoh_ext::{z_deserialize, z_serialize};
 
         // Numeric types: u8, u16, u32, u128, i8, i16, i32, i128, f32, f64
         let input = 1234_u32;
-        let payload = ZBytes::serialize(&input);
-        let output: u32 = payload.deserialize().unwrap();
+        let payload = z_serialize(&input);
+        let output: u32 = z_deserialize(&payload).unwrap();
         assert_eq!(input, output);
 
         // Vec
         let input = vec![0.0f32, 1.5, 42.0];
-        let payload = ZBytes::serialize(&input);
-        let output: Vec<f32> = payload.deserialize().unwrap();
+        let payload = z_serialize(&input);
+        let output: Vec<f32> = z_deserialize(&payload).unwrap();
         assert_eq!(input, output);
 
         // HashMap
         let mut input: HashMap<u32, String> = HashMap::new();
         input.insert(0, String::from("abc"));
         input.insert(1, String::from("def"));
-        let payload = ZBytes::serialize(&input);
-        let output: HashMap<u32, String> = payload.deserialize().unwrap();
+        let payload = z_serialize(&input);
+        let output: HashMap<u32, String> = z_deserialize(&payload).unwrap();
         assert_eq!(input, output);
 
         // Tuple
         let input = (0.42f64, "string".to_string());
-        let payload = ZBytes::serialize(&input);
-        let output: (f64, String) = payload.deserialize().unwrap();
+        let payload = z_serialize(&input);
+        let output: (f64, String) = z_deserialize(&payload).unwrap();
         assert_eq!(input, output);
 
         // Look at Serialize/Deserialize documentation for the exhaustive
