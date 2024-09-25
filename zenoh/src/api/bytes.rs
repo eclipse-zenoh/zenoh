@@ -21,7 +21,6 @@ use zenoh_buffers::{
     writer::HasWriter,
     ZBuf, ZBufReader, ZBufWriter, ZSlice, ZSliceBuffer,
 };
-use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_protocol::zenoh::ext::AttachmentType;
 
 /// Wrapper type for API ergonomicity to allow any type `T` to be converted into `Option<ZBytes>` where `T` implements `Into<ZBytes>`.
@@ -245,6 +244,7 @@ impl ZBytesReader<'_> {
 
     #[zenoh_macros::internal]
     pub fn read_vle(&mut self) -> Option<u64> {
+        use zenoh_codec::{RCodec, Zenoh080};
         let codec = Zenoh080::new();
         codec.read(&mut self.0).ok()
     }
@@ -302,6 +302,7 @@ impl ZBytesWriter<'_> {
 
     #[zenoh_macros::internal]
     pub fn write_vle(&mut self, vle: u64) {
+        use zenoh_codec::{WCodec, Zenoh080};
         let codec = Zenoh080::new();
         codec.write(&mut self.0, vle).unwrap();
     }
