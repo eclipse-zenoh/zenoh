@@ -82,7 +82,7 @@ async fn open_router_session() -> Session {
     config
         .listen
         .endpoints
-        .set(vec!["tcp/127.0.0.1:37447".parse().unwrap()])
+        .set(vec!["tcp/127.0.0.1:30447".parse().unwrap()])
         .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][00a] Opening router session");
@@ -100,7 +100,7 @@ async fn open_client_sessions() -> (Session, Session, Session) {
     config.set_mode(Some(WhatAmI::Client)).unwrap();
     config
         .connect
-        .set_endpoints(ModeDependentValue::Unique(vec!["tcp/127.0.0.1:37447"
+        .set_endpoints(ModeDependentValue::Unique(vec!["tcp/127.0.0.1:30447"
             .parse::<EndPoint>()
             .unwrap()]))
         .unwrap();
@@ -111,7 +111,7 @@ async fn open_client_sessions() -> (Session, Session, Session) {
     config.set_mode(Some(WhatAmI::Client)).unwrap();
     config
         .connect
-        .set_endpoints(ModeDependentValue::Unique(vec!["tcp/127.0.0.1:37447"
+        .set_endpoints(ModeDependentValue::Unique(vec!["tcp/127.0.0.1:30447"
             .parse::<EndPoint>()
             .unwrap()]))
         .unwrap();
@@ -122,7 +122,7 @@ async fn open_client_sessions() -> (Session, Session, Session) {
     config.set_mode(Some(WhatAmI::Client)).unwrap();
     config
         .connect
-        .set_endpoints(ModeDependentValue::Unique(vec!["tcp/127.0.0.1:37447"
+        .set_endpoints(ModeDependentValue::Unique(vec!["tcp/127.0.0.1:30447"
             .parse::<EndPoint>()
             .unwrap()]))
         .unwrap();

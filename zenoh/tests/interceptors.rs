@@ -145,7 +145,7 @@ fn downsampling_test<F>(
 
 fn downsampling_by_keyexpr_impl(flow: InterceptorFlow) {
     let ke_prefix = "test/downsamples_by_keyexp";
-    let locator = "tcp/127.0.0.1:38446";
+    let locator = "tcp/127.0.0.1:31446";
 
     let ke_10hz: KeyExpr = format!("{ke_prefix}/10hz").try_into().unwrap();
     let ke_20hz: KeyExpr = format!("{ke_prefix}/20hz").try_into().unwrap();
@@ -198,7 +198,7 @@ fn downsampling_by_keyexpr() {
 #[cfg(unix)]
 fn downsampling_by_interface_impl(flow: InterceptorFlow) {
     let ke_prefix = "test/downsamples_by_interface";
-    let locator = "tcp/127.0.0.1:38447";
+    let locator = "tcp/127.0.0.1:31447";
 
     let ke_10hz: KeyExpr = format!("{ke_prefix}/10hz").try_into().unwrap();
     let ke_no_effect: KeyExpr = format!("{ke_prefix}/no_effect").try_into().unwrap();
