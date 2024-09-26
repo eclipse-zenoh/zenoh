@@ -29,7 +29,7 @@ pub trait Serialize {
         serializer.serialize_iter(slice);
     }
 }
-impl<T: Serialize> Serialize for &T {
+impl<T: Serialize + ?Sized> Serialize for &T {
     fn serialize(&self, serializer: &mut ZSerializer) {
         T::serialize(*self, serializer)
     }
@@ -45,7 +45,7 @@ pub trait Deserialize: Sized {
     }
 }
 
-pub fn z_serialize<T: Serialize>(t: &T) -> ZBytes {
+pub fn z_serialize<T: Serialize + ?Sized>(t: &T) -> ZBytes {
     let mut zbytes = ZBytes::new();
     ZSerializer::new(&mut zbytes).serialize(t);
     zbytes
