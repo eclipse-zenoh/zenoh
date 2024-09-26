@@ -357,3 +357,55 @@ impl_tuple!(
     T14 / 14,
     T15 / 15,
 );
+
+#[repr(transparent)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct VarInt<T>(T);
+
+impl<T> VarInt<T> {
+    pub fn new(int: T) -> Self {
+        Self(int)
+    }
+
+    pub fn from_ref(int: &T) -> &Self {
+        // SAFETY: VInt is repr(transparent)
+        unsafe { &*(int as *const T as *const Self) }
+    }
+
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+
+    pub fn as_inner(&self) -> &T {
+        &self.0
+    }
+}
+
+macro_rules! impl_varint {
+    ($($u:ty: $i:ty),* $(,)?) => {$(
+        impl Serialize for VarInt<$u> {
+            fn serialize(&self, serializer: &mut ZSerializer) {
+                serializer.0.write_vle(self.0 as u64);
+            }
+        }
+        impl Serialize for VarInt<$i> {
+            fn serialize(&self, serializer: &mut ZSerializer) {
+                let zigzag = (self.0 >> (std::mem::size_of::<$i>() * 8 - 1)) as $u ^ (self.0 << 1) as $u;
+                VarInt(zigzag).serialize(serializer);
+            }
+        }
+        impl Deserialize for VarInt<$u> {
+            fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
+                let n = deserializer.0.read_vle().ok_or(ZDeserializeError)?;
+                Ok(VarInt(<$u>::try_from(n).or(Err(ZDeserializeError))?))
+            }
+        }
+        impl Deserialize for VarInt<$i> {
+            fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
+                let zigzag = <VarInt<$u>>::deserialize(deserializer)?.0;
+                Ok(VarInt((zigzag >> 1) as $i ^ -((zigzag & 1) as $i)))
+            }
+        }
+    )*};
+}
+impl_varint!(u8: i8, u16: i16, u32: i32, u64: i64, usize: isize);
