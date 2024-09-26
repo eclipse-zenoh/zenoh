@@ -41,10 +41,10 @@ mod test {
         create_new_files(TESTFILES_PATH.to_path_buf())
             .await
             .unwrap();
-        test_pub_sub_deny_then_allow_usrpswd(37447).await;
-        test_pub_sub_allow_then_deny_usrpswd(37447).await;
-        test_get_qbl_allow_then_deny_usrpswd(37447).await;
-        test_get_qbl_deny_then_allow_usrpswd(37447).await;
+        test_pub_sub_deny_then_allow_usrpswd(29447).await;
+        test_pub_sub_allow_then_deny_usrpswd(29447).await;
+        test_get_qbl_allow_then_deny_usrpswd(29447).await;
+        test_get_qbl_deny_then_allow_usrpswd(29447).await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -53,10 +53,10 @@ mod test {
         create_new_files(TESTFILES_PATH.to_path_buf())
             .await
             .unwrap();
-        test_pub_sub_deny_then_allow_tls(37448, false).await;
-        test_pub_sub_allow_then_deny_tls(37449).await;
-        test_get_qbl_allow_then_deny_tls(37450).await;
-        test_get_qbl_deny_then_allow_tls(37451).await;
+        test_pub_sub_deny_then_allow_tls(29448, false).await;
+        test_pub_sub_allow_then_deny_tls(29449).await;
+        test_get_qbl_allow_then_deny_tls(29450).await;
+        test_get_qbl_deny_then_allow_tls(29451).await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -65,10 +65,10 @@ mod test {
         create_new_files(TESTFILES_PATH.to_path_buf())
             .await
             .unwrap();
-        test_pub_sub_deny_then_allow_quic(37452).await;
-        test_pub_sub_allow_then_deny_quic(37453).await;
-        test_get_qbl_deny_then_allow_quic(37454).await;
-        test_get_qbl_allow_then_deny_quic(37455).await;
+        test_pub_sub_deny_then_allow_quic(29452).await;
+        test_pub_sub_allow_then_deny_quic(29453).await;
+        test_get_qbl_deny_then_allow_quic(29454).await;
+        test_get_qbl_allow_then_deny_quic(29455).await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -78,7 +78,7 @@ mod test {
         create_new_files(TESTFILES_PATH.to_path_buf())
             .await
             .unwrap();
-        test_pub_sub_deny_then_allow_tls(37456, true).await;
+        test_pub_sub_deny_then_allow_tls(29456, true).await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -87,8 +87,8 @@ mod test {
         create_new_files(TESTFILES_PATH.to_path_buf())
             .await
             .unwrap();
-        test_deny_allow_combination(37457).await;
-        test_allow_deny_combination(37458).await;
+        test_deny_allow_combination(29457).await;
+        test_allow_deny_combination(29458).await;
     }
 
     #[allow(clippy::all)]
