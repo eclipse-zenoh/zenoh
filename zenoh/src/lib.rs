@@ -86,6 +86,7 @@ lazy_static::lazy_static!(
 );
 
 const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
+#[doc(hidden)]
 pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
     prefix = "zenoh",
     features = [
@@ -108,8 +109,6 @@ pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
     ]
 );
 
-#[allow(deprecated)]
-pub use zenoh_core::{AsyncResolve, SyncResolve};
 pub use zenoh_core::{Resolvable, Resolve, Wait};
 /// A zenoh error.
 pub use zenoh_result::Error;
@@ -124,9 +123,6 @@ pub use crate::{
     scouting::scout,
     session::{open, Session},
 };
-
-#[deprecated(since = "1.0.0")]
-pub mod prelude;
 
 /// [Key expression](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md) are Zenoh's address space.
 ///
@@ -264,8 +260,10 @@ pub mod query {
 
 /// Callback handler trait
 pub mod handlers {
+    #[zenoh_macros::internal]
+    pub use crate::api::handlers::locked;
     pub use crate::api::handlers::{
-        locked, Callback, CallbackDrop, DefaultHandler, FifoChannel, IntoHandler, RingChannel,
+        Callback, CallbackDrop, DefaultHandler, FifoChannel, IntoHandler, RingChannel,
         RingChannelHandler,
     };
 }

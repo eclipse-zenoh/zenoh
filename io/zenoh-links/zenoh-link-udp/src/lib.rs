@@ -20,7 +20,7 @@
 mod multicast;
 mod unicast;
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, str::FromStr};
 
 use async_trait::async_trait;
 pub use multicast::*;
@@ -28,7 +28,7 @@ pub use unicast::*;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
 use zenoh_protocol::{
-    core::{endpoint::Address, Locator},
+    core::{endpoint::Address, Locator, Metadata, Reliability},
     transport::BatchSize,
 };
 use zenoh_result::{zerror, ZResult};
@@ -65,6 +65,8 @@ const UDP_MTU_LIMIT: BatchSize = 9_216;
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 const UDP_MTU_LIMIT: BatchSize = 8_192;
 
+const IS_RELIABLE: bool = false;
+
 zconfigurable! {
     // Default MTU (UDP PDU) in bytes.
     static ref UDP_DEFAULT_MTU: BatchSize = UDP_MTU_LIMIT;
@@ -86,6 +88,19 @@ impl LocatorInspector for UdpLocatorInspector {
             .await?
             .any(|x| x.ip().is_multicast());
         Ok(is_multicast)
+    }
+
+    fn is_reliable(&self, locator: &Locator) -> ZResult<bool> {
+        if let Some(reliability) = locator
+            .metadata()
+            .get(Metadata::RELIABILITY)
+            .map(Reliability::from_str)
+            .transpose()?
+        {
+            Ok(reliability == Reliability::Reliable)
+        } else {
+            Ok(IS_RELIABLE)
+        }
     }
 }
 

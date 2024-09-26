@@ -98,15 +98,6 @@ pub struct ZSlice {
 }
 
 impl ZSlice {
-    #[deprecated(since = "1.0.0", note = "use `new` instead")]
-    pub fn make(
-        buf: Arc<dyn ZSliceBuffer>,
-        start: usize,
-        end: usize,
-    ) -> Result<ZSlice, Arc<dyn ZSliceBuffer>> {
-        Self::new(buf, start, end)
-    }
-
     #[inline]
     pub fn new(
         buf: Arc<dyn ZSliceBuffer>,

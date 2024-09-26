@@ -17,16 +17,15 @@ use std::{fmt::Display, num::NonZeroUsize};
 use super::chunk::AllocatedChunk;
 use crate::api::buffer::zshmmut::ZShmMut;
 
-/// Allocation errors
-///
-/// NeedDefragment: defragmentation needed
-/// OutOfMemory: the provider is out of memory
-/// Other: other error
+/// Allocation error.
 #[zenoh_macros::unstable_doc]
 #[derive(Debug)]
 pub enum ZAllocError {
+    /// Defragmentation is needed.
     NeedDefragment,
+    /// The provider is out of memory.
     OutOfMemory,
+    /// Uncategorized allocation error.
     Other(zenoh_result::Error),
 }
 
@@ -212,14 +211,13 @@ impl MemoryLayout {
     }
 }
 
-/// Layouting errors
-///
-/// IncorrectLayoutArgs: layout arguments are incorrect
-/// ProviderIncompatibleLayout: layout incompatible with provider
+/// Layout error.
 #[zenoh_macros::unstable_doc]
 #[derive(Debug)]
 pub enum ZLayoutError {
+    /// Incorrect layout arguments.
     IncorrectLayoutArgs,
+    /// The layout is incompatible with the provider.
     ProviderIncompatibleLayout,
 }
 
@@ -231,14 +229,13 @@ pub type ChunkAllocResult = Result<AllocatedChunk, ZAllocError>;
 #[zenoh_macros::unstable_doc]
 pub type BufAllocResult = Result<ZShmMut, ZAllocError>;
 
-/// Layouting and allocation errors
-///
-/// Alloc: allocation error
-/// Layout: layouting error
+/// Layout or allocation error.
 #[zenoh_macros::unstable_doc]
 #[derive(Debug)]
 pub enum ZLayoutAllocError {
+    /// Allocation error.
     Alloc(ZAllocError),
+    /// Layout error.
     Layout(ZLayoutError),
 }
 

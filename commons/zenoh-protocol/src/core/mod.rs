@@ -19,11 +19,13 @@ use alloc::{
 };
 use core::{
     convert::{From, TryFrom, TryInto},
-    fmt,
+    fmt::{self, Display},
     hash::Hash,
+    ops::{Deref, RangeInclusive},
     str::FromStr,
 };
 
+use serde::Serialize;
 pub use uhlc::{Timestamp, NTP64};
 use zenoh_keyexpr::OwnedKeyExpr;
 use zenoh_result::{bail, zerror};
@@ -295,7 +297,7 @@ impl EntityGlobalIdProto {
 }
 
 #[repr(u8)]
-#[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq, PartialOrd, Ord, Serialize)]
 pub enum Priority {
     Control = 0,
     RealTime = 1,
@@ -306,6 +308,116 @@ pub enum Priority {
     Data = 5,
     DataLow = 6,
     Background = 7,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize)]
+/// A [`Priority`] range bounded inclusively below and above.
+pub struct PriorityRange(RangeInclusive<Priority>);
+
+impl Deref for PriorityRange {
+    type Target = RangeInclusive<Priority>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl PriorityRange {
+    pub fn new(range: RangeInclusive<Priority>) -> Self {
+        Self(range)
+    }
+
+    /// Returns `true` if `self` is a superset of `other`.
+    pub fn includes(&self, other: &PriorityRange) -> bool {
+        self.start() <= other.start() && other.end() <= self.end()
+    }
+
+    pub fn len(&self) -> usize {
+        *self.end() as usize - *self.start() as usize + 1
+    }
+
+    pub fn is_empty(&self) -> bool {
+        false
+    }
+
+    #[cfg(feature = "test")]
+    pub fn rand() -> Self {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let start = rng.gen_range(Priority::MAX as u8..Priority::MIN as u8);
+        let end = rng.gen_range((start + 1)..=Priority::MIN as u8);
+
+        Self(Priority::try_from(start).unwrap()..=Priority::try_from(end).unwrap())
+    }
+}
+
+impl Display for PriorityRange {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}-{}", *self.start() as u8, *self.end() as u8)
+    }
+}
+
+#[derive(Debug)]
+pub enum InvalidPriorityRange {
+    InvalidSyntax { found: String },
+    InvalidBound { message: String },
+}
+
+impl Display for InvalidPriorityRange {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            InvalidPriorityRange::InvalidSyntax { found } => write!(f, "invalid PriorityRange string, expected an range of the form `start-end` but found {found}"),
+            InvalidPriorityRange::InvalidBound { message } => write!(f, "invalid PriorityRange bound: {message}"),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for InvalidPriorityRange {}
+
+impl FromStr for PriorityRange {
+    type Err = InvalidPriorityRange;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        const SEPARATOR: &str = "-";
+        let mut metadata = s.split(SEPARATOR);
+
+        let start = metadata
+            .next()
+            .ok_or_else(|| InvalidPriorityRange::InvalidSyntax {
+                found: s.to_string(),
+            })?
+            .parse::<u8>()
+            .map(Priority::try_from)
+            .map_err(|err| InvalidPriorityRange::InvalidBound {
+                message: err.to_string(),
+            })?
+            .map_err(|err| InvalidPriorityRange::InvalidBound {
+                message: err.to_string(),
+            })?;
+
+        let end = metadata
+            .next()
+            .ok_or_else(|| InvalidPriorityRange::InvalidSyntax {
+                found: s.to_string(),
+            })?
+            .parse::<u8>()
+            .map(Priority::try_from)
+            .map_err(|err| InvalidPriorityRange::InvalidBound {
+                message: err.to_string(),
+            })?
+            .map_err(|err| InvalidPriorityRange::InvalidBound {
+                message: err.to_string(),
+            })?;
+
+        if metadata.next().is_some() {
+            return Err(InvalidPriorityRange::InvalidSyntax {
+                found: s.to_string(),
+            });
+        };
+
+        Ok(PriorityRange::new(start..=end))
+    }
 }
 
 impl Priority {
@@ -342,7 +454,7 @@ impl TryFrom<u8> for Priority {
     }
 }
 
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Serialize)]
 #[repr(u8)]
 pub enum Reliability {
     #[default]
@@ -352,6 +464,16 @@ pub enum Reliability {
 
 impl Reliability {
     pub const DEFAULT: Self = Self::Reliable;
+
+    const BEST_EFFORT_STR: &'static str = "best_effort";
+    const RELIABLE_STR: &'static str = "reliable";
+
+    pub fn as_str(&self) -> &str {
+        match self {
+            Reliability::BestEffort => Reliability::BEST_EFFORT_STR,
+            Reliability::Reliable => Reliability::RELIABLE_STR,
+        }
+    }
 
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
@@ -363,6 +485,59 @@ impl Reliability {
             Reliability::Reliable
         } else {
             Reliability::BestEffort
+        }
+    }
+}
+
+impl From<bool> for Reliability {
+    fn from(value: bool) -> Self {
+        if value {
+            Reliability::Reliable
+        } else {
+            Reliability::BestEffort
+        }
+    }
+}
+
+impl From<Reliability> for bool {
+    fn from(value: Reliability) -> Self {
+        match value {
+            Reliability::BestEffort => false,
+            Reliability::Reliable => true,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct InvalidReliability {
+    found: String,
+}
+
+impl Display for InvalidReliability {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "invalid Reliability string, expected `{}` or `{}` but found {}",
+            Reliability::BEST_EFFORT_STR,
+            Reliability::RELIABLE_STR,
+            self.found
+        )
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for InvalidReliability {}
+
+impl FromStr for Reliability {
+    type Err = InvalidReliability;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            Reliability::RELIABLE_STR => Ok(Reliability::Reliable),
+            Reliability::BEST_EFFORT_STR => Ok(Reliability::BestEffort),
+            other => Err(InvalidReliability {
+                found: other.to_string(),
+            }),
         }
     }
 }
@@ -380,12 +555,15 @@ impl Channel {
     };
 }
 
-/// The kind of congestion control.
+/// Congestion control strategy.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CongestionControl {
     #[default]
+    /// When transmitting a message in a node with a full queue, the node may drop the message.
     Drop = 0,
+    /// When transmitting a message in a node with a full queue, the node will wait for queue to
+    /// progress.
     Block = 1,
 }
 

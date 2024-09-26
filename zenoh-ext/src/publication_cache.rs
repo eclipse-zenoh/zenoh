@@ -21,15 +21,14 @@ use std::{
 use zenoh::{
     internal::{bail, runtime::ZRuntime, ResolveFuture, TerminatableTask},
     key_expr::{keyexpr, KeyExpr, OwnedKeyExpr},
-    prelude::Wait,
     pubsub::FlumeSubscriber,
     query::{Query, Queryable, ZenohParameters},
     sample::{Locality, Sample},
-    Error, Resolvable, Resolve, Result as ZResult, Session,
+    Error, Resolvable, Resolve, Result as ZResult, Session, Wait,
 };
 
 /// The builder of PublicationCache, allowing to configure it.
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct PublicationCacheBuilder<'a, 'b, 'c> {
     session: &'a Session,
     pub_key_expr: ZResult<KeyExpr<'b>>,

@@ -218,7 +218,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
 
     #[inline(always)]
     fn is_reliable(&self) -> bool {
-        true
+        super::IS_RELIABLE
     }
 
     #[inline(always)]
@@ -362,12 +362,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let local_port = local_addr.port();
 
         // Initialize the TlsAcceptor
-        let acceptor = TlsAcceptor::from(Arc::new(tls_server_config.server_config));
         let token = self.listeners.token.child_token();
-        let c_token = token.clone();
-        let c_manager = self.manager.clone();
 
-        let task = async move { accept_task(socket, acceptor, c_token, c_manager).await };
+        let task = {
+            let acceptor = TlsAcceptor::from(Arc::new(tls_server_config.server_config));
+            let token = token.clone();
+            let manager = self.manager.clone();
+
+            async move { accept_task(socket, acceptor, token, manager).await }
+        };
 
         // Update the endpoint locator address
         let locator = Locator::new(

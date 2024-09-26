@@ -24,21 +24,4 @@
 //! use zenoh::prelude::*;
 //! ```
 
-#[allow(deprecated)]
-pub use crate::AsyncResolve;
-#[allow(deprecated)]
-pub use crate::SyncResolve;
 pub use crate::Wait;
-
-/// Prelude to import when using Zenoh's sync API.
-#[deprecated(since = "1.0.0", note = "use `zenoh::Wait` instead")]
-pub mod sync {
-    #[allow(deprecated)]
-    pub use crate::SyncResolve;
-}
-/// Prelude to import when using Zenoh's async API.
-#[deprecated(since = "1.0.0")]
-pub mod r#async {
-    #[allow(deprecated)]
-    pub use crate::AsyncResolve;
-}

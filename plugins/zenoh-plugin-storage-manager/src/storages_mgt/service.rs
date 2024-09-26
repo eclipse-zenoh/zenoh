@@ -20,11 +20,10 @@ use std::{
 };
 
 use async_trait::async_trait;
-use flume::Receiver;
-use futures::select;
-use tokio::sync::{Mutex, MutexGuard, RwLock};
+use tokio::sync::{broadcast::Receiver, Mutex, RwLock, RwLockWriteGuard};
 use zenoh::{
     internal::{
+        bail,
         buffers::{SplitBuffer, ZBuf},
         zenoh_home, Timed, TimedEvent, Timer, Value,
     },
@@ -37,13 +36,18 @@ use zenoh::{
     sample::{Sample, SampleBuilder, SampleKind},
     session::Session,
     time::{Timestamp, NTP64},
+    Result as ZResult,
 };
 use zenoh_backend_traits::{
     config::{GarbageCollectionConfig, StorageConfig},
     Capability, History, Persistence, StorageInsertionResult, StoredData,
 };
 
-use crate::storages_mgt::StorageMessage;
+use super::LatestUpdates;
+use crate::{
+    replication::Event,
+    storages_mgt::{CacheLatest, StorageMessage},
+};
 
 pub const WILDCARD_UPDATES_FILENAME: &str = "wildcard_updates";
 pub const TOMBSTONE_FILENAME: &str = "tombstones";
@@ -54,17 +58,18 @@ struct Update {
     data: StoredData,
 }
 
+#[derive(Clone)]
 pub struct StorageService {
     session: Arc<Session>,
     key_expr: OwnedKeyExpr,
     complete: bool,
     name: String,
     strip_prefix: Option<OwnedKeyExpr>,
-    storage: Arc<Mutex<Box<dyn zenoh_backend_traits::Storage>>>,
+    pub(crate) storage: Arc<Mutex<Box<dyn zenoh_backend_traits::Storage>>>,
     capability: Capability,
     tombstones: Arc<RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>>,
     wildcard_updates: Arc<RwLock<KeBoxTree<Update, UnknownWildness, KeyedSetProvider>>>,
-    latest_updates: Arc<Mutex<HashMap<Option<OwnedKeyExpr>, Timestamp>>>,
+    cache_latest: CacheLatest,
 }
 
 impl StorageService {
@@ -75,9 +80,9 @@ impl StorageService {
         storage: Arc<Mutex<Box<dyn zenoh_backend_traits::Storage>>>,
         capability: Capability,
         rx: Receiver<StorageMessage>,
-        latest_updates: Arc<Mutex<HashMap<Option<OwnedKeyExpr>, Timestamp>>>,
-    ) {
-        let mut storage_service = StorageService {
+        cache_latest: CacheLatest,
+    ) -> Self {
+        let storage_service = StorageService {
             session,
             key_expr: config.key_expr,
             complete: config.complete,
@@ -87,7 +92,7 @@ impl StorageService {
             capability,
             tombstones: Arc::new(RwLock::new(KeBoxTree::default())),
             wildcard_updates: Arc::new(RwLock::new(KeBoxTree::default())),
-            latest_updates,
+            cache_latest,
         };
         if storage_service
             .capability
@@ -117,24 +122,34 @@ impl StorageService {
             }
         }
         storage_service
+            .clone()
             .start_storage_queryable_subscriber(rx, config.garbage_collection_config)
-            .await
+            .await;
+
+        storage_service
     }
 
     async fn start_storage_queryable_subscriber(
-        &mut self,
-        rx: Receiver<StorageMessage>,
+        self,
+        mut rx: Receiver<StorageMessage>,
         gc_config: GarbageCollectionConfig,
     ) {
         // start periodic GC event
         let t = Timer::default();
+
+        let latest_updates = if self.cache_latest.replication_log.is_none() {
+            Some(self.cache_latest.latest_updates.clone())
+        } else {
+            None
+        };
+
         let gc = TimedEvent::periodic(
             gc_config.period,
             GarbageCollectionEvent {
                 config: gc_config,
                 tombstones: self.tombstones.clone(),
                 wildcard_updates: self.wildcard_updates.clone(),
-                latest_updates: self.latest_updates.clone(),
+                latest_updates,
             },
         );
         t.add_async(gc).await;
@@ -162,49 +177,50 @@ impl StorageService {
             }
         };
 
-        loop {
-            select!(
-                // on sample for key_expr
-                sample = storage_sub.recv_async() => {
-                    let sample = match sample {
-                        Ok(sample) => sample,
-                        Err(e) => {
-                            tracing::error!("Error in sample: {}", e);
-                            continue;
+        tokio::task::spawn(async move {
+            loop {
+                tokio::select!(
+                    // on sample for key_expr
+                    sample = storage_sub.recv_async() => {
+                        let sample = match sample {
+                            Ok(sample) => sample,
+                            Err(e) => {
+                                tracing::error!("Error in sample: {}", e);
+                                continue;
+                            }
+                        };
+                        let timestamp = sample.timestamp().cloned().unwrap_or(self.session.new_timestamp());
+                        let sample = SampleBuilder::from(sample).timestamp(timestamp).into();
+                        if let Err(e) = self.process_sample(sample).await {
+                            tracing::error!("{e:?}");
                         }
-                    };
-                    let timestamp = sample.timestamp().cloned().unwrap_or(self.session.new_timestamp());
-                    let sample = SampleBuilder::from(sample).timestamp(timestamp).into();
-                    self.process_sample(sample).await;
-                },
-                // on query on key_expr
-                query = storage_queryable.recv_async() => {
-                    self.reply_query(query).await;
-                },
-                // on storage handle drop
-                message = rx.recv_async() => {
-                    match message {
-                        Ok(StorageMessage::Stop) => {
-                            tracing::trace!("Dropping storage '{}'", self.name);
-                            return
-                        },
-                        Ok(StorageMessage::GetStatus(tx)) => {
-                            let storage = self.storage.lock().await;
-                            std::mem::drop(tx.send(storage.get_admin_status()).await);
-                            drop(storage);
-                        }
-                        Err(e) => {
-                            tracing::error!("Storage Message Channel Error: {}", e);
-                        },
-                    };
-                },
-            );
-        }
+                    },
+                    // on query on key_expr
+                    query = storage_queryable.recv_async() => {
+                        self.reply_query(query).await;
+                    },
+                    // on storage handle drop
+                    Ok(message) = rx.recv() => {
+                        match message {
+                            StorageMessage::Stop => {
+                                tracing::trace!("Dropping storage '{}'", self.name);
+                                return
+                            },
+                            StorageMessage::GetStatus(tx) => {
+                                let storage = self.storage.lock().await;
+                                std::mem::drop(tx.send(storage.get_admin_status()).await);
+                                drop(storage);
+                            }
+                        };
+                    },
+                );
+            }
+        });
     }
 
     // The storage should only simply save the key, sample pair while put and retrieve the same
     // during get the trimming during PUT and GET should be handled by the plugin
-    pub(crate) async fn process_sample(&self, sample: Sample) {
+    pub(crate) async fn process_sample(&self, sample: Sample) -> ZResult<()> {
         tracing::trace!("[STORAGE] Processing sample: {:?}", sample);
 
         // A Sample, in theory, will not arrive to a Storage without a Timestamp. This check (which,
@@ -213,8 +229,7 @@ impl StorageService {
         let sample_timestamp = match sample.timestamp() {
             Some(timestamp) => timestamp,
             None => {
-                tracing::error!("Discarding Sample that has no Timestamp: {:?}", sample);
-                return;
+                bail!("Discarding Sample without a Timestamp: {:?}", sample);
             }
         };
 
@@ -286,8 +301,7 @@ impl StorageService {
                 match crate::strip_prefix(self.strip_prefix.as_ref(), sample_to_store.key_expr()) {
                     Ok(stripped) => stripped,
                     Err(e) => {
-                        tracing::error!("{}", e);
-                        return;
+                        bail!("{e:?}");
                     }
                 };
 
@@ -340,14 +354,21 @@ impl StorageService {
                 }
                 Ok(_) => {
                     if let Some(mut cache_guard) = cache_guard {
-                        cache_guard.insert(stripped_key, sample_to_store_timestamp);
+                        cache_guard.insert(
+                            stripped_key.clone(),
+                            Event::new(stripped_key, sample_to_store_timestamp, sample.kind()),
+                        );
                     }
                 }
                 Err(e) => {
+                    // TODO In case of a wildcard update, multiple keys can be updated. What should
+                    //      be the behaviour if one or more of these updates fail?
                     tracing::error!("`{}` on < {} > failed with: {e:?}", sample.kind(), k);
                 }
             }
         }
+
+        Ok(())
     }
 
     async fn mark_tombstone(&self, key_expr: &OwnedKeyExpr, timestamp: Timestamp) {
@@ -470,23 +491,30 @@ impl StorageService {
     async fn guard_cache_if_latest(
         &self,
         stripped_key: &Option<OwnedKeyExpr>,
-        timestamp: &Timestamp,
-    ) -> Option<MutexGuard<'_, HashMap<Option<OwnedKeyExpr>, Timestamp>>> {
-        let cache_guard = self.latest_updates.lock().await;
-        if let Some(latest_timestamp) = cache_guard.get(stripped_key) {
-            if timestamp > latest_timestamp {
+        received_ts: &Timestamp,
+    ) -> Option<RwLockWriteGuard<'_, LatestUpdates>> {
+        let cache_guard = self.cache_latest.latest_updates.write().await;
+        if let Some(event) = cache_guard.get(stripped_key) {
+            if received_ts > event.timestamp() {
                 return Some(cache_guard);
-            } else {
-                return None;
             }
         }
 
-        let mut storage = self.storage.lock().await;
-
-        if let Ok(stored_data) = storage.get(stripped_key.clone(), "").await {
-            for data in stored_data {
-                if data.timestamp > *timestamp {
+        if let Some(replication_log) = &self.cache_latest.replication_log {
+            if let Some(event) = replication_log.read().await.lookup(stripped_key) {
+                if received_ts <= event.timestamp() {
                     return None;
+                }
+            }
+        } else {
+            let mut storage = self.storage.lock().await;
+            // FIXME: An actual error from the underlying Storage cannot be distinguished from a
+            //        missing entry.
+            if let Ok(stored_data) = storage.get(stripped_key.clone(), "").await {
+                for data in stored_data {
+                    if data.timestamp > *received_ts {
+                        return None;
+                    }
                 }
             }
         }
@@ -641,7 +669,7 @@ struct GarbageCollectionEvent {
     config: GarbageCollectionConfig,
     tombstones: Arc<RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>>,
     wildcard_updates: Arc<RwLock<KeBoxTree<Update, UnknownWildness, KeyedSetProvider>>>,
-    latest_updates: Arc<Mutex<HashMap<Option<OwnedKeyExpr>, Timestamp>>>,
+    latest_updates: Option<Arc<RwLock<LatestUpdates>>>,
 }
 
 #[async_trait]
@@ -678,10 +706,12 @@ impl Timed for GarbageCollectionEvent {
             wildcard_updates.remove(&k);
         }
 
-        self.latest_updates
-            .lock()
-            .await
-            .retain(|_, timestamp| timestamp.get_time() < &time_limit);
+        if let Some(latest_updates) = &self.latest_updates {
+            latest_updates
+                .write()
+                .await
+                .retain(|_, event| event.timestamp().get_time() < &time_limit);
+        }
 
         tracing::trace!("End garbage collection of obsolete data-infos");
     }

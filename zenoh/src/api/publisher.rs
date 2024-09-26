@@ -327,7 +327,7 @@ impl<'a> UndeclarableSealed<()> for Publisher<'a> {
 /// publisher.undeclare().await.unwrap();
 /// # }
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct PublisherUndeclaration<'a>(Publisher<'a>);
 
 impl Resolvable for PublisherUndeclaration<'_> {
@@ -405,7 +405,11 @@ impl<'a> Sink<Sample> for Publisher<'a> {
     }
 }
 
-/// The Priority of zenoh messages.
+/// Message priority.
+///
+/// If QoS is enabled, Zenoh keeps one transmission queue per [`Priority`] P, where all messages in
+/// the queue have [`Priority`] P. These queues are serviced in the order of their assigned
+/// [`Priority`] (i.e. from [`Priority::RealTime`] to [`Priority::Background`]).
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Priority {

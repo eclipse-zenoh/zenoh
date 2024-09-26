@@ -90,7 +90,9 @@ impl From<OptionZBytes> for Option<ZBytes> {
 pub trait Serialize<T> {
     type Output;
 
-    /// The implementer should take care of serializing the type `T` and set the proper [`Encoding`].
+    /// The implementer should take care of serializing the type `T` into a [`ZBytes`].
+    /// If [`Encoding`] metadata is important in a given system, the caller should take care
+    /// of setting the proprer [`Encoding`] value when calling functions like [`crate::Session::put`].
     fn serialize(self, t: T) -> Self::Output;
 }
 
@@ -98,7 +100,9 @@ pub trait Deserialize<T> {
     type Input<'a>;
     type Error;
 
-    /// The implementer should take care of deserializing the type `T` based on the [`Encoding`] information.
+    /// The implementer should take care of deserializing a [`ZBytes`] into the type `T`.
+    /// If [`Encoding`] metadata is required in a given system, the caller should take care of checking the proprer
+    /// [`Encoding`] value (e.g. [`crate::sample::Sample::encoding`]) to select the right type `T` to deserialize into.
     fn deserialize(self, t: Self::Input<'_>) -> Result<T, Self::Error>;
 }
 
@@ -235,6 +239,7 @@ impl ZBytes {
     }
 
     /// Create a [`ZBytes`] from any type `T` that implements [`Into<ZBuf>`].
+    #[doc(hidden)]
     pub fn new<T>(t: T) -> Self
     where
         T: Into<ZBuf>,
@@ -862,6 +867,7 @@ impl Deserialize<ZBytes> for ZSerde {
 }
 
 // ZBuf
+#[doc(hidden)]
 impl Serialize<ZBuf> for ZSerde {
     type Output = ZBytes;
 
@@ -870,12 +876,14 @@ impl Serialize<ZBuf> for ZSerde {
     }
 }
 
+#[doc(hidden)]
 impl From<ZBuf> for ZBytes {
     fn from(t: ZBuf) -> Self {
         ZSerde.serialize(t)
     }
 }
 
+#[doc(hidden)]
 impl Serialize<&ZBuf> for ZSerde {
     type Output = ZBytes;
 
@@ -884,12 +892,14 @@ impl Serialize<&ZBuf> for ZSerde {
     }
 }
 
+#[doc(hidden)]
 impl From<&ZBuf> for ZBytes {
     fn from(t: &ZBuf) -> Self {
         ZSerde.serialize(t)
     }
 }
 
+#[doc(hidden)]
 impl Serialize<&mut ZBuf> for ZSerde {
     type Output = ZBytes;
 
@@ -898,12 +908,14 @@ impl Serialize<&mut ZBuf> for ZSerde {
     }
 }
 
+#[doc(hidden)]
 impl From<&mut ZBuf> for ZBytes {
     fn from(t: &mut ZBuf) -> Self {
         ZSerde.serialize(t)
     }
 }
 
+#[doc(hidden)]
 impl Deserialize<ZBuf> for ZSerde {
     type Input<'a> = &'a ZBytes;
     type Error = Infallible;
@@ -913,18 +925,21 @@ impl Deserialize<ZBuf> for ZSerde {
     }
 }
 
+#[doc(hidden)]
 impl From<ZBytes> for ZBuf {
     fn from(value: ZBytes) -> Self {
         value.0
     }
 }
 
+#[doc(hidden)]
 impl From<&ZBytes> for ZBuf {
     fn from(value: &ZBytes) -> Self {
         ZSerde.deserialize(value).unwrap_infallible()
     }
 }
 
+#[doc(hidden)]
 impl From<&mut ZBytes> for ZBuf {
     fn from(value: &mut ZBytes) -> Self {
         ZSerde.deserialize(&*value).unwrap_infallible()
@@ -932,6 +947,7 @@ impl From<&mut ZBytes> for ZBuf {
 }
 
 // ZSlice
+#[doc(hidden)]
 impl Serialize<ZSlice> for ZSerde {
     type Output = ZBytes;
 
@@ -940,12 +956,14 @@ impl Serialize<ZSlice> for ZSerde {
     }
 }
 
+#[doc(hidden)]
 impl From<ZSlice> for ZBytes {
     fn from(t: ZSlice) -> Self {
         ZSerde.serialize(t)
     }
 }
 
+#[doc(hidden)]
 impl Serialize<&ZSlice> for ZSerde {
     type Output = ZBytes;
 
@@ -954,12 +972,14 @@ impl Serialize<&ZSlice> for ZSerde {
     }
 }
 
+#[doc(hidden)]
 impl From<&ZSlice> for ZBytes {
     fn from(t: &ZSlice) -> Self {
         ZSerde.serialize(t)
     }
 }
 
+#[doc(hidden)]
 impl Serialize<&mut ZSlice> for ZSerde {
     type Output = ZBytes;
 
@@ -968,12 +988,14 @@ impl Serialize<&mut ZSlice> for ZSerde {
     }
 }
 
+#[doc(hidden)]
 impl From<&mut ZSlice> for ZBytes {
     fn from(t: &mut ZSlice) -> Self {
         ZSerde.serialize(t)
     }
 }
 
+#[doc(hidden)]
 impl Deserialize<ZSlice> for ZSerde {
     type Input<'a> = &'a ZBytes;
     type Error = Infallible;
@@ -983,18 +1005,21 @@ impl Deserialize<ZSlice> for ZSerde {
     }
 }
 
+#[doc(hidden)]
 impl From<ZBytes> for ZSlice {
     fn from(value: ZBytes) -> Self {
         ZBuf::from(value).to_zslice()
     }
 }
 
+#[doc(hidden)]
 impl From<&ZBytes> for ZSlice {
     fn from(value: &ZBytes) -> Self {
         ZSerde.deserialize(value).unwrap_infallible()
     }
 }
 
+#[doc(hidden)]
 impl From<&mut ZBytes> for ZSlice {
     fn from(value: &mut ZBytes) -> Self {
         ZSerde.deserialize(&*value).unwrap_infallible()

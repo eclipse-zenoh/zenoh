@@ -14,6 +14,7 @@ allow = [
     "CC0-1.0",
     "MPL-2.0",
     "OpenSSL",
+    "BSL-1.0"
 ]
 
 # This was copied from https://github.com/EmbarkStudios/cargo-deny/blob/main/deny.toml#L64

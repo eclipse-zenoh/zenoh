@@ -42,13 +42,6 @@ use crate::{
     TransportManager, TransportPeerEventHandler,
 };
 
-macro_rules! zlinkindex {
-    ($guard:expr, $link:expr) => {
-        // Compare LinkUnicast link to not compare TransportLinkUnicast direction
-        $guard.iter().position(|tl| tl.link == $link)
-    };
-}
-
 /*************************************/
 /*        UNIVERSAL TRANSPORT        */
 /*************************************/
@@ -175,7 +168,15 @@ impl TransportUnicastUniversal {
         let target = {
             let mut guard = zwrite!(self.links);
 
-            if let Some(index) = zlinkindex!(guard, link) {
+            if let Some(index) = guard.iter().position(|tl| {
+                // Compare LinkUnicast link to not compare TransportLinkUnicast direction
+                Link::new_unicast(
+                    &tl.link.link,
+                    tl.link.config.priorities.clone(),
+                    tl.link.config.reliability,
+                )
+                .eq(&link)
+            }) {
                 let is_last = guard.len() == 1;
                 if is_last {
                     // Close the whole transport

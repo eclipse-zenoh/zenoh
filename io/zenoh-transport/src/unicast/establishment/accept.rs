@@ -224,7 +224,10 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
 
         // Extension QoS
         self.ext_qos
-            .recv_init_syn((&mut state.transport.ext_qos, init_syn.ext_qos))
+            .recv_init_syn((
+                &mut state.transport.ext_qos,
+                (init_syn.ext_qos, init_syn.ext_qos_optimized),
+            ))
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -284,7 +287,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         let (mut state, input) = input;
 
         // Extension QoS
-        let ext_qos = self
+        let (ext_qos, ext_qos_optimized) = self
             .ext_qos
             .send_init_ack(&state.transport.ext_qos)
             .await
@@ -381,6 +384,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             batch_size: state.transport.batch_size,
             cookie,
             ext_qos,
+            ext_qos_optimized,
             #[cfg(feature = "shared-memory")]
             ext_shm,
             ext_auth,
@@ -642,16 +646,20 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
 }
 
 pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -> ZResult<()> {
+    let endpoint = link.get_src().to_endpoint();
+    let direction = TransportLinkUnicastDirection::Inbound;
     let mtu = link.get_mtu();
     let is_streamed = link.is_streamed();
     let config = TransportLinkUnicastConfig {
-        direction: TransportLinkUnicastDirection::Inbound,
+        direction,
         batch: BatchConfig {
             mtu,
             is_streamed,
             #[cfg(feature = "transport_compression")]
             is_compression: false,
         },
+        priorities: None,
+        reliability: None,
     };
     let mut link = TransportLinkUnicast::new(link, config);
     let mut fsm = AcceptLink {
@@ -699,7 +707,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
             transport: StateTransport {
                 batch_size,
                 resolution: manager.config.resolution,
-                ext_qos: ext::qos::StateAccept::new(manager.config.unicast.is_qos),
+                ext_qos: ext::qos::StateAccept::new(manager.config.unicast.is_qos, &endpoint)?,
                 #[cfg(feature = "transport_multilink")]
                 ext_mlink: manager
                     .state
@@ -781,13 +789,15 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
     };
 
     let a_config = TransportLinkUnicastConfig {
-        direction: TransportLinkUnicastDirection::Inbound,
+        direction,
         batch: BatchConfig {
             mtu: state.transport.batch_size,
             is_streamed,
             #[cfg(feature = "transport_compression")]
             is_compression: state.link.ext_compression.is_compression(),
         },
+        priorities: state.transport.ext_qos.priorities(),
+        reliability: state.transport.ext_qos.reliability(),
     };
     let a_link = link.reconfigure(a_config);
     let s_link = format!("{:?}", a_link);

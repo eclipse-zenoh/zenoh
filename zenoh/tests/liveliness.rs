@@ -362,6 +362,62 @@ async fn test_liveliness_query_local() {
     peer.close().await.unwrap();
 }
 
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_liveliness_after_close() {
+    use std::time::Duration;
+
+    use zenoh::{config::WhatAmI, sample::SampleKind};
+    use zenoh_config::EndPoint;
+    const TIMEOUT: Duration = Duration::from_secs(60);
+    const SLEEP: Duration = Duration::from_secs(1);
+    const PEER1_ENDPOINT: &str = "tcp/localhost:47447";
+    const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/clique";
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let peer1 = {
+        let mut c = zenoh::Config::default();
+        c.listen
+            .endpoints
+            .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (1) ZID: {}", s.zid());
+        s
+    };
+
+    let peer2 = {
+        let mut c = zenoh::Config::default();
+        c.connect
+            .endpoints
+            .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (2) ZID: {}", s.zid());
+        s
+    };
+
+    let sub = ztimeout!(peer1.liveliness().declare_subscriber(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let _token = ztimeout!(peer2.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+
+    peer1.close().await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    assert!(sub.try_recv().is_err())
+}
+
 /// -------------------------------------------------------
 /// DOUBLE CLIENT
 /// -------------------------------------------------------

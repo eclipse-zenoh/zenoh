@@ -33,7 +33,7 @@ use crate::net::runtime::Runtime;
 /// let zid = session.info().zid().await;
 /// # }
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct ZenohIdBuilder<'a> {
     runtime: &'a Runtime,
 }
@@ -71,7 +71,7 @@ impl<'a> IntoFuture for ZenohIdBuilder<'a> {
 /// while let Some(router_zid) = routers_zid.next() {}
 /// # }
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct RoutersZenohIdBuilder<'a> {
     runtime: &'a Runtime,
 }
@@ -119,7 +119,7 @@ impl<'a> IntoFuture for RoutersZenohIdBuilder<'a> {
 /// while let Some(peer_zid) = peers_zid.next() {}
 /// # }
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct PeersZenohIdBuilder<'a> {
     runtime: &'a Runtime,
 }

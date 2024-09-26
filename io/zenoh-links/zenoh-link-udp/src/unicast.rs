@@ -217,7 +217,7 @@ impl LinkUnicastTrait for LinkUnicastUdp {
 
     #[inline(always)]
     fn is_reliable(&self) -> bool {
-        false
+        super::IS_RELIABLE
     }
 
     #[inline(always)]
@@ -402,10 +402,13 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
                     )?;
 
                     let token = self.listeners.token.child_token();
-                    let c_token = token.clone();
-                    let c_manager = self.manager.clone();
 
-                    let task = async move { accept_read_task(socket, c_token, c_manager).await };
+                    let task = {
+                        let token = token.clone();
+                        let manager = self.manager.clone();
+
+                        async move { accept_read_task(socket, token, manager).await }
+                    };
 
                     let locator = endpoint.to_locator();
                     self.listeners

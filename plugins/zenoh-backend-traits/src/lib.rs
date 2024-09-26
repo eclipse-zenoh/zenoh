@@ -141,6 +141,7 @@ const FEATURES: &str =
 
 /// Capability of a storage indicates the guarantees of the storage
 /// It is used by the storage manager to take decisions on the trade-offs to ensure correct performance
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Capability {
     pub persistence: Persistence,
     pub history: History,

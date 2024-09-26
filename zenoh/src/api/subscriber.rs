@@ -21,10 +21,7 @@ use tracing::error;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
 #[cfg(feature = "unstable")]
-use {
-    crate::qos::Reliability, zenoh_config::wrappers::EntityGlobalId,
-    zenoh_protocol::core::EntityGlobalIdProto,
-};
+use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
 
 use crate::{
     api::{
@@ -78,7 +75,7 @@ pub(crate) struct SubscriberInner {
 /// subscriber.undeclare().await.unwrap();
 /// # }
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct SubscriberUndeclaration<Handler>(Subscriber<Handler>);
 
 impl<Handler> Resolvable for SubscriberUndeclaration<Handler> {
@@ -100,7 +97,7 @@ impl<Handler> IntoFuture for SubscriberUndeclaration<Handler> {
     }
 }
 
-/// A builder for initializing a [`FlumeSubscriber`].
+/// A builder for initializing a [`crate::pubsub::Subscriber<Handler>`].
 ///
 /// # Examples
 /// ```
@@ -114,32 +111,32 @@ impl<Handler> IntoFuture for SubscriberUndeclaration<Handler> {
 ///     .unwrap();
 /// # }
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[derive(Debug)]
 pub struct SubscriberBuilder<'a, 'b, Handler> {
-    #[cfg(feature = "unstable")]
+    #[cfg(feature = "internal")]
     pub session: &'a Session,
-    #[cfg(not(feature = "unstable"))]
+    #[cfg(not(feature = "internal"))]
     pub(crate) session: &'a Session,
 
-    #[cfg(feature = "unstable")]
+    #[cfg(feature = "internal")]
     pub key_expr: ZResult<KeyExpr<'b>>,
-    #[cfg(not(feature = "unstable"))]
+    #[cfg(not(feature = "internal"))]
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
 
-    #[cfg(feature = "unstable")]
+    #[cfg(feature = "internal")]
     pub origin: Locality,
-    #[cfg(not(feature = "unstable"))]
+    #[cfg(not(feature = "internal"))]
     pub(crate) origin: Locality,
 
-    #[cfg(feature = "unstable")]
+    #[cfg(feature = "internal")]
     pub handler: Handler,
-    #[cfg(not(feature = "unstable"))]
+    #[cfg(not(feature = "internal"))]
     pub(crate) handler: Handler,
 
-    #[cfg(feature = "unstable")]
+    #[cfg(feature = "internal")]
     pub undeclare_on_drop: bool,
-    #[cfg(not(feature = "unstable"))]
+    #[cfg(not(feature = "internal"))]
     pub(crate) undeclare_on_drop: bool,
 }
 
@@ -247,41 +244,10 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
 }
 
 impl<Handler> SubscriberBuilder<'_, '_, Handler> {
-    /// Change the subscription reliability.
-    #[cfg(feature = "unstable")]
-    #[deprecated(
-        since = "1.0.0",
-        note = "please use `reliability` on `declare_publisher` or `put`"
-    )]
-    #[allow(unused_mut, unused_variables)]
-    pub fn reliability(mut self, reliability: Reliability) -> Self {
-        self
-    }
-
-    /// Change the subscription reliability to `Reliable`.
-    #[cfg(feature = "unstable")]
-    #[deprecated(
-        since = "1.0.0",
-        note = "please use `reliability` on `declare_publisher` or `put`"
-    )]
-    #[allow(unused_mut)]
-    pub fn reliable(mut self) -> Self {
-        self
-    }
-
-    /// Change the subscription reliability to `BestEffort`.
-    #[cfg(feature = "unstable")]
-    #[deprecated(
-        since = "1.0.0",
-        note = "please use `reliability` on `declare_publisher` or `put`"
-    )]
-    #[allow(unused_mut)]
-    pub fn best_effort(mut self) -> Self {
-        self
-    }
-
-    /// Restrict the matching publications that will be receive by this [`Subscriber`]
-    /// to the ones that have the given [`Locality`](Locality).
+    /// Changes the [`crate::sample::Locality`] of received publications.
+    ///
+    /// Restricts the matching publications that will be receive by this [`Subscriber`] to the ones
+    /// that have the given [`crate::sample::Locality`].
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {

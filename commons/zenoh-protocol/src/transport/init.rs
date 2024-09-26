@@ -115,6 +115,7 @@ pub struct InitSyn {
     pub resolution: Resolution,
     pub batch_size: BatchSize,
     pub ext_qos: Option<ext::QoS>,
+    pub ext_qos_optimized: Option<ext::QoSOptimized>,
     #[cfg(feature = "shared-memory")]
     pub ext_shm: Option<ext::Shm>,
     pub ext_auth: Option<ext::Auth>,
@@ -126,13 +127,14 @@ pub struct InitSyn {
 // Extensions
 pub mod ext {
     use crate::{
-        common::{ZExtUnit, ZExtZBuf},
-        zextunit, zextzbuf,
+        common::{ZExtUnit, ZExtZ64, ZExtZBuf},
+        zextunit, zextz64, zextzbuf,
     };
 
     /// # QoS extension
     /// Used to negotiate the use of QoS
-    pub type QoS = zextunit!(0x1, false);
+    pub type QoS = zextz64!(0x1, false);
+    pub type QoSOptimized = zextunit!(0x1, false);
 
     /// # Shm extension
     /// Used as challenge for probing shared memory capabilities
@@ -161,7 +163,7 @@ impl InitSyn {
     pub fn rand() -> Self {
         use rand::Rng;
 
-        use crate::common::{ZExtUnit, ZExtZBuf};
+        use crate::common::{ZExtUnit, ZExtZ64, ZExtZBuf};
 
         let mut rng = rand::thread_rng();
 
@@ -170,7 +172,8 @@ impl InitSyn {
         let zid = ZenohIdProto::default();
         let resolution = Resolution::rand();
         let batch_size: BatchSize = rng.gen();
-        let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        let ext_qos = rng.gen_bool(0.5).then_some(ZExtZ64::rand());
+        let ext_qos_optimized = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         #[cfg(feature = "shared-memory")]
         let ext_shm = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
@@ -185,6 +188,7 @@ impl InitSyn {
             resolution,
             batch_size,
             ext_qos,
+            ext_qos_optimized,
             #[cfg(feature = "shared-memory")]
             ext_shm,
             ext_auth,
@@ -204,6 +208,7 @@ pub struct InitAck {
     pub batch_size: BatchSize,
     pub cookie: ZSlice,
     pub ext_qos: Option<ext::QoS>,
+    pub ext_qos_optimized: Option<ext::QoSOptimized>,
     #[cfg(feature = "shared-memory")]
     pub ext_shm: Option<ext::Shm>,
     pub ext_auth: Option<ext::Auth>,
@@ -217,7 +222,7 @@ impl InitAck {
     pub fn rand() -> Self {
         use rand::Rng;
 
-        use crate::common::{ZExtUnit, ZExtZBuf};
+        use crate::common::{ZExtUnit, ZExtZ64, ZExtZBuf};
 
         let mut rng = rand::thread_rng();
 
@@ -231,7 +236,8 @@ impl InitAck {
         };
         let batch_size: BatchSize = rng.gen();
         let cookie = ZSlice::rand(64);
-        let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        let ext_qos = rng.gen_bool(0.5).then_some(ZExtZ64::rand());
+        let ext_qos_optimized = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         #[cfg(feature = "shared-memory")]
         let ext_shm = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
@@ -247,6 +253,7 @@ impl InitAck {
             batch_size,
             cookie,
             ext_qos,
+            ext_qos_optimized,
             #[cfg(feature = "shared-memory")]
             ext_shm,
             ext_auth,

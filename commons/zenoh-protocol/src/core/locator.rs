@@ -64,6 +64,10 @@ impl Locator {
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
+
+    pub fn to_endpoint(&self) -> EndPoint {
+        self.0.clone()
+    }
 }
 
 impl From<EndPoint> for Locator {
