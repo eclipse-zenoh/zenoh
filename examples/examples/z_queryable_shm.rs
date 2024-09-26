@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -16,8 +18,7 @@ use zenoh::{
     bytes::ZBytes,
     key_expr::KeyExpr,
     shm::{
-        zshm, BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder,
-        POSIX_PROTOCOL_ID,
+        BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID,
     },
     Config, Wait,
 };
@@ -126,7 +127,7 @@ fn parse_args() -> (Config, KeyExpr<'static>, String, bool) {
     (args.common.into(), args.key, args.payload, args.complete)
 }
 
-fn handle_bytes(bytes: &ZBytes) -> (&str, String) {
+fn handle_bytes(bytes: &ZBytes) -> (&str, Cow<str>) {
     // Determine buffer type for indication purpose
     let bytes_type = {
         // if Zenoh is built without SHM support, the only buffer type it can receive is RAW

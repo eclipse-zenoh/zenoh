@@ -12,9 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::{bytes::ZBytes, key_expr::KeyExpr, Config};
+use zenoh::{key_expr::KeyExpr, Config};
 use zenoh_examples::CommonArgs;
-use zenoh_ext::ZBytesExt;
+use zenoh_ext::z_serialize;
 
 #[tokio::main]
 async fn main() {
@@ -28,10 +28,7 @@ async fn main() {
 
     println!("Putting Float ('{key_expr}': '{payload}')...");
     // you must have imported `zenoh_ext::ZBytesExt` to use `ZBytes::serialize`
-    session
-        .put(&key_expr, ZBytes::serialize(&payload))
-        .await
-        .unwrap();
+    session.put(&key_expr, z_serialize(&payload)).await.unwrap();
 
     session.close().await.unwrap();
 }
