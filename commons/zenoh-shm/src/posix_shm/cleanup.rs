@@ -14,12 +14,12 @@
 
 pub(crate) use platform::cleanup_orphaned_segments;
 
-#[cfg(not(unix))]
+#[cfg(not(linux))]
 mod platform {
     pub(crate) fn cleanup_orphaned_segments() {}
 }
 
-#[cfg(unix)]
+#[cfg(linux)]
 mod platform {
     use std::{borrow::Borrow, collections::HashSet, fs, path::PathBuf};
 
