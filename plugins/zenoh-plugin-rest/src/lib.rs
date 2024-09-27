@@ -26,7 +26,6 @@ use std::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     },
-    time::Duration,
 };
 
 use base64::Engine;
@@ -34,11 +33,10 @@ use futures::StreamExt;
 use http_types::Method;
 use serde::{Deserialize, Serialize};
 use tide::{http::Mime, sse::Sender, Request, Response, Server, StatusCode};
-use tokio::time::timeout;
+use tokio::{task::JoinHandle, time::timeout};
 use zenoh::{
     bytes::{Encoding, ZBytes},
     internal::{
-        bail,
         plugins::{RunningPluginTrait, ZenohPlugin},
         runtime::Runtime,
         zerror,
@@ -72,17 +70,22 @@ lazy_static::lazy_static! {
                .build()
                .expect("Unable to create runtime");
 }
-#[inline(always)]
-pub(crate) fn blockon_runtime<F: Future>(task: F) -> F::Output {
+
+pub(crate) fn spawn_runtime<F>(task: F) -> JoinHandle<F::Output>
+where
+    F: Future + Send + 'static,
+    F::Output: Send + 'static,
+{
+    println!("########### I'M HERE #############");
     // Check whether able to get the current runtime
     match tokio::runtime::Handle::try_current() {
         Ok(rt) => {
-            // Able to get the current runtime (standalone binary), use the current runtime
-            tokio::task::block_in_place(|| rt.block_on(task))
+            // Able to get the current runtime (standalone binary), spawn on the current runtime
+            rt.spawn(task)
         }
         Err(_) => {
-            // Unable to get the current runtime (dynamic plugins), reuse the global runtime
-            tokio::task::block_in_place(|| TOKIO_RUNTIME.block_on(task))
+            // Unable to get the current runtime (dynamic plugins), spawn on the global runtime
+            TOKIO_RUNTIME.spawn(task)
         }
     }
 }
@@ -285,16 +288,8 @@ impl Plugin for RestPlugin {
         WORKER_THREAD_NUM.store(conf.work_thread_num, Ordering::SeqCst);
         MAX_BLOCK_THREAD_NUM.store(conf.max_block_thread_num, Ordering::SeqCst);
 
-        let task = run(runtime.clone(), conf.clone());
-        let task = blockon_runtime(async {
-            timeout(Duration::from_millis(1), TOKIO_RUNTIME.spawn(task)).await
-        });
+        spawn_runtime(run(runtime.clone(), conf.clone()));
 
-        // The spawn task (TOKIO_RUNTIME.spawn(task)) should not return immediately. The server should block inside.
-        // If it returns immediately (for example, address already in use), we can get the error inside Ok
-        if let Ok(Ok(Err(e))) = task {
-            bail!("REST server failed within 1ms: {e}")
-        }
         Ok(Box::new(RunningPlugin(conf)))
     }
 }
