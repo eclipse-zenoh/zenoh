@@ -141,7 +141,7 @@ impl StageIn {
         &mut self,
         msg: &mut NetworkMessage,
         priority: Priority,
-        deadline_before_drop: Option<Instant>,
+        deadline_before_drop: Option<Option<Instant>>,
     ) -> bool {
         // Lock the current serialization batch.
         let mut c_guard = self.mutex.current();
@@ -163,7 +163,7 @@ impl StageIn {
                                     Some(deadline) if !$fragment => {
                                         // We are in the congestion scenario and message is droppable
                                         // Wait for an available batch until deadline
-                                        if !self.s_ref.wait_deadline(deadline) {
+                                        if !deadline.map_or(false, |deadline| self.s_ref.wait_deadline(deadline)) {
                                             // Still no available batch.
                                             // Restore the sequence number and drop the message
                                             $restore_sn;
@@ -628,7 +628,11 @@ impl TransmissionPipelineProducer {
         };
         // If message is droppable, compute a deadline after which the sample could be dropped
         let deadline_before_drop = if msg.is_droppable() {
-            Some(Instant::now() + self.wait_before_drop)
+            if self.wait_before_drop.is_zero() {
+                Some(None)
+            } else {
+                Some(Some(Instant::now() + self.wait_before_drop))
+            }
         } else {
             None
         };
