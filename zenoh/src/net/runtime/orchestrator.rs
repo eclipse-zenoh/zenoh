@@ -911,7 +911,7 @@ impl Runtime {
         }
     }
 
-    /// Returns `true` if a new Transport instance has been opened with `zid`.
+    /// Returns `true` if a new Transport instance exists between us and `zid`.
     #[must_use]
     async fn connect(&self, zid: &ZenohIdProto, scouted_locators: &[Locator]) -> bool {
         if !self.insert_pending_connection(*zid).await {
@@ -1024,6 +1024,7 @@ impl Runtime {
         }
     }
 
+    /// Returns `true` if a new Transport instance exists between us and `zid`.
     pub async fn connect_peer(&self, zid: &ZenohIdProto, locators: &[Locator]) -> bool {
         let manager = self.manager();
         if zid != &manager.zid() {
