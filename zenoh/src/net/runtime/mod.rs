@@ -457,16 +457,9 @@ impl TransportPeerEventHandler for RuntimeSession {
         }
     }
 
-    fn closing(&self) {
-        self.main_handler.closing();
-        Runtime::closing_session(self);
-        for handler in &self.slave_handlers {
-            handler.closing();
-        }
-    }
-
     fn closed(&self) {
         self.main_handler.closed();
+        Runtime::closed_session(self);
         for handler in &self.slave_handlers {
             handler.closed();
         }
@@ -498,12 +491,6 @@ impl TransportMulticastEventHandler for RuntimeMulticastGroup {
                 .new_peer_multicast(self.transport.clone(), peer)?,
             slave_handlers,
         }))
-    }
-
-    fn closing(&self) {
-        for handler in &self.slave_handlers {
-            handler.closed();
-        }
     }
 
     fn closed(&self) {
@@ -538,13 +525,6 @@ impl TransportPeerEventHandler for RuntimeMulticastSession {
         self.main_handler.del_link(link.clone());
         for handler in &self.slave_handlers {
             handler.del_link(link.clone());
-        }
-    }
-
-    fn closing(&self) {
-        self.main_handler.closing();
-        for handler in &self.slave_handlers {
-            handler.closing();
         }
     }
 

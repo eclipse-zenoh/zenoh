@@ -178,11 +178,7 @@ impl TransportMulticastInner {
     pub(super) async fn delete(&self) -> ZResult<()> {
         tracing::debug!("Closing multicast transport on {:?}", self.locator);
 
-        // Notify the callback that we are going to close the transport
         let callback = zwrite!(self.callback).take();
-        if let Some(cb) = callback.as_ref() {
-            cb.closing();
-        }
 
         // Delete the transport on the manager
         let _ = self.manager.del_transport_multicast(&self.locator).await;
@@ -441,7 +437,6 @@ impl TransportMulticastInner {
 
             // TODO(yuyuan): Unify the termination
             peer.token.cancel();
-            peer.handler.closing();
             drop(guard);
             peer.handler.closed();
         }
