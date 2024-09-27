@@ -5,6 +5,7 @@ use std::{
     hash::Hash,
     io::{Read, Write},
     marker::PhantomData,
+    ops::{Deref, DerefMut},
     ptr,
 };
 
@@ -366,39 +367,39 @@ impl_tuple!(
 
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct VarInt<T>(T);
+pub struct VarInt<T>(pub T);
 
-impl<T> VarInt<T> {
-    pub fn new(int: T) -> Self {
-        Self(int)
-    }
+unsafe impl<T> bytemuck::TransparentWrapper<T> for VarInt<T> {}
+impl<T> Deref for VarInt<T> {
+    type Target = T;
 
-    pub fn from_ref(int: &T) -> &Self {
-        // SAFETY: VInt is repr(transparent)
-        unsafe { &*(int as *const T as *const Self) }
-    }
-
-    pub fn into_inner(self) -> T {
-        self.0
-    }
-
-    pub fn as_inner(&self) -> &T {
+    fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+impl<T> DerefMut for VarInt<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+impl<T> From<T> for VarInt<T> {
+    fn from(value: T) -> Self {
+        Self(value)
+    }
+}
+impl<T> AsRef<T> for VarInt<T> {
+    fn as_ref(&self) -> &T {
+        self
+    }
+}
+impl<T> AsMut<T> for VarInt<T> {
+    fn as_mut(&mut self) -> &mut T {
+        self
     }
 }
 
 macro_rules! impl_varint {
     ($($u:ty: $i:ty),* $(,)?) => {$(
-        impl From<$u> for VarInt<$u> {
-            fn from(value: $u) -> Self {
-                Self(value)
-            }
-        }
-        impl From<$i> for VarInt<$i> {
-            fn from(value: $i) -> Self {
-                Self(value)
-            }
-        }
         impl From<VarInt<$u>> for $u {
             fn from(value: VarInt<$u>) -> Self {
                 value.0
@@ -407,16 +408,6 @@ macro_rules! impl_varint {
         impl From<VarInt<$i>> for $i {
             fn from(value: VarInt<$i>) -> Self {
                 value.0
-            }
-        }
-        impl AsRef<$u> for VarInt<$u> {
-            fn as_ref(&self) -> &$u {
-                &self.0
-            }
-        }
-        impl AsRef<$i> for VarInt<$i> {
-            fn as_ref(&self) -> &$i {
-                &self.0
             }
         }
         impl Serialize for VarInt<$u> {
