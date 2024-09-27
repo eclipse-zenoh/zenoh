@@ -368,8 +368,32 @@ impl_tuple!(
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VarInt<T>(pub T);
-
-unsafe impl<T> bytemuck::TransparentWrapper<T> for VarInt<T> {}
+impl<T> VarInt<T> {
+    pub fn from_ref(int: &T) -> &Self {
+        // SAFETY: `VarInt` is `repr(transparent)`
+        unsafe { &*(int as *const T as *const Self) }
+    }
+    pub fn from_mut(int: &mut T) -> &mut Self {
+        // SAFETY: `VarInt` is `repr(transparent)`
+        unsafe { &mut *(int as *mut T as *mut Self) }
+    }
+    pub fn slice_from_ref(slice: &[T]) -> &[Self] {
+        // SAFETY: `VarInt` is `repr(transparent)`
+        unsafe { &*(slice as *const [T] as *const [Self]) }
+    }
+    pub fn slice_from_mut(slice: &mut [T]) -> &mut [Self] {
+        // SAFETY: `VarInt` is `repr(transparent)`
+        unsafe { &mut *(slice as *mut [T] as *mut [Self]) }
+    }
+    pub fn slice_into_ref(slice: &[Self]) -> &[T] {
+        // SAFETY: `VarInt` is `repr(transparent)`
+        unsafe { &*(slice as *const [Self] as *const [T]) }
+    }
+    pub fn slice_into_mut(slice: &mut [Self]) -> &mut [T] {
+        // SAFETY: `VarInt` is `repr(transparent)`
+        unsafe { &mut *(slice as *mut [Self] as *mut [T]) }
+    }
+}
 impl<T> Deref for VarInt<T> {
     type Target = T;
 
