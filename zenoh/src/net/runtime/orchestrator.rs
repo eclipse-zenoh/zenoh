@@ -911,7 +911,7 @@ impl Runtime {
         }
     }
 
-    /// Returns `true` if a new Transport instance has been opened with `zid`.
+    /// Returns `true` if a new Transport instance is established with `zid` or had already been established.
     #[must_use]
     async fn connect(&self, zid: &ZenohIdProto, scouted_locators: &[Locator]) -> bool {
         if !self.insert_pending_connection(*zid).await {
@@ -1024,7 +1024,8 @@ impl Runtime {
         }
     }
 
-    pub async fn connect_peer(&self, zid: &ZenohIdProto, locators: &[Locator]) {
+    /// Returns `true` if a new Transport instance is established with `zid` or had already been established.
+    pub async fn connect_peer(&self, zid: &ZenohIdProto, locators: &[Locator]) -> bool {
         let manager = self.manager();
         if zid != &manager.zid() {
             let has_unicast = manager.get_transport_unicast(zid).await.is_some();
@@ -1042,10 +1043,13 @@ impl Runtime {
 
             if !has_unicast && !has_multicast {
                 tracing::debug!("Try to connect to peer {} via any of {:?}", zid, locators);
-                let _ = self.connect(zid, locators).await;
+                self.connect(zid, locators).await
             } else {
                 tracing::trace!("Already connected scouted peer: {}", zid);
+                true
             }
+        } else {
+            true
         }
     }
 
@@ -1089,7 +1093,7 @@ impl Runtime {
     ) {
         Runtime::scout(ucast_sockets, what, addr, move |hello| async move {
             if !hello.locators.is_empty() {
-                self.connect_peer(&hello.zid, &hello.locators).await
+                self.connect_peer(&hello.zid, &hello.locators).await;
             } else {
                 tracing::warn!("Received Hello with no locators: {:?}", hello);
             }
