@@ -13,13 +13,12 @@
 //
 
 //! ZBytes primitives.
-use std::{borrow::Cow, fmt::Debug, str::Utf8Error};
+use std::{borrow::Cow, fmt::Debug, mem, str::Utf8Error};
 
 use zenoh_buffers::{
     buffer::{Buffer, SplitBuffer},
     reader::{HasReader, Reader},
-    writer::HasWriter,
-    ZBuf, ZBufReader, ZBufWriter, ZSlice, ZSliceBuffer,
+    ZBuf, ZBufReader, ZSlice, ZSliceBuffer,
 };
 use zenoh_protocol::zenoh::ext::AttachmentType;
 
@@ -141,8 +140,8 @@ impl ZBytes {
     /// Get a [`ZBytesWriter`] implementing [`std::io::Write`] trait.
     ///
     /// See [`ZBytesWriter`] on how to chain the serialization of different types into a single [`ZBytes`].
-    pub fn writer(&mut self) -> ZBytesWriter<'_> {
-        ZBytesWriter(self.0.writer())
+    pub fn writer() -> ZBytesWriter {
+        Self::new().into()
     }
 
     /// Return an iterator on raw bytes slices contained in the [`ZBytes`].
@@ -235,13 +234,6 @@ impl ZBytesReader<'_> {
     pub fn is_empty(&self) -> bool {
         self.remaining() == 0
     }
-
-    #[zenoh_macros::internal]
-    pub fn read_vle(&mut self) -> Option<u64> {
-        use zenoh_codec::{RCodec, Zenoh080};
-        let codec = Zenoh080::new();
-        codec.read(&mut self.0).ok()
-    }
 }
 
 impl std::io::Read for ZBytesReader<'_> {
@@ -257,11 +249,13 @@ impl std::io::Seek for ZBytesReader<'_> {
 }
 
 /// A writer that implements [`std::io::Write`] trait to serialize into a [`ZBytes`].
-#[repr(transparent)]
 #[derive(Debug)]
-pub struct ZBytesWriter<'a>(ZBufWriter<'a>);
+pub struct ZBytesWriter {
+    zbuf: ZBuf,
+    vec: Vec<u8>,
+}
 
-impl ZBytesWriter<'_> {
+impl ZBytesWriter {
     /// Append a [`ZBytes`] to this [`ZBytes`] by taking ownership.
     /// This allows to compose a [`ZBytes`] out of multiple [`ZBytes`] that may point to different memory regions.
     /// Said in other terms, it allows to create a linear view on different memory regions without copy.
@@ -285,26 +279,41 @@ impl ZBytesWriter<'_> {
     /// let mut out: Vec<u8> = bytes.into();
     /// assert_eq!(out, vec![0u8, 1, 2, 3, 4, 5, 6, 7]);
     /// ```
-    pub fn append(&mut self, b: ZBytes) {
-        use zenoh_buffers::writer::Writer;
-        for s in b.0.zslices() {
-            // SAFETY: we are writing a ZSlice on a ZBuf, this is infallible because we are just pushing a ZSlice to
-            //         the list of available ZSlices.
-            unsafe { self.0.write_zslice(s).unwrap_unchecked() }
+    pub fn append(&mut self, zbytes: ZBytes) {
+        if !self.vec.is_empty() {
+            self.zbuf.push_zslice(mem::take(&mut self.vec).into());
+        }
+        for zslice in zbytes.0.into_zslices() {
+            self.zbuf.push_zslice(zslice);
         }
     }
 
-    #[zenoh_macros::internal]
-    pub fn write_vle(&mut self, vle: u64) {
-        use zenoh_codec::{WCodec, Zenoh080};
-        let codec = Zenoh080::new();
-        codec.write(&mut self.0, vle).unwrap();
+    pub fn finish(mut self) -> ZBytes {
+        if !self.vec.is_empty() {
+            self.zbuf.push_zslice(self.vec.into());
+        }
+        ZBytes(self.zbuf)
     }
 }
 
-impl std::io::Write for ZBytesWriter<'_> {
+impl From<ZBytesWriter> for ZBytes {
+    fn from(value: ZBytesWriter) -> Self {
+        value.finish()
+    }
+}
+
+impl From<ZBytes> for ZBytesWriter {
+    fn from(value: ZBytes) -> Self {
+        Self {
+            zbuf: value.0,
+            vec: vec![],
+        }
+    }
+}
+
+impl std::io::Write for ZBytesWriter {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        std::io::Write::write(&mut self.0, buf)
+        std::io::Write::write(&mut self.vec, buf)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
@@ -339,7 +348,6 @@ impl std::io::Write for ZBytesWriter<'_> {
 /// // let out: Vec<u8> = zbs.into();
 /// assert_eq!(buf, out);    
 /// ```
-#[repr(transparent)]
 #[derive(Debug)]
 pub struct ZBytesSliceIterator<'a>(ZBytesSliceIteratorInner<'a>);
 

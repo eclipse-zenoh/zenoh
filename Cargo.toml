@@ -113,6 +113,7 @@ json5 = "0.4.1"
 jsonschema = { version = "0.20", default-features = false }
 keyed-set = "1.0.0"
 lazy_static = "1.5.0"
+leb128 = "0.2"
 libc = "0.2.158"
 libloading = "0.8"
 tracing = "0.1"

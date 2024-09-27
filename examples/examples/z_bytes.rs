@@ -108,10 +108,10 @@ fn main() {
     use std::io::{Read, Write};
     let input1 = &[0u8, 1];
     let input2 = ZBytes::from([2, 3]);
-    let mut zbytes = ZBytes::new();
-    let mut writer = zbytes.writer();
+    let mut writer = ZBytes::writer();
     writer.write_all(&[0u8, 1]).unwrap();
     writer.append(input2.clone());
+    let zbytes = writer.finish();
     assert_eq!(*zbytes.to_bytes(), [0u8, 1, 2, 3]);
     let mut reader = zbytes.reader();
     let mut buf = [0; 2];

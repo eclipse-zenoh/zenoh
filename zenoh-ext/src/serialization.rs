@@ -46,9 +46,9 @@ pub trait Deserialize: Sized {
 }
 
 pub fn z_serialize<T: Serialize + ?Sized>(t: &T) -> ZBytes {
-    let mut zbytes = ZBytes::new();
-    ZSerializer::new(&mut zbytes).serialize(t);
-    zbytes
+    let mut serializer = ZSerializer::new();
+    serializer.serialize(t);
+    serializer.finish()
 }
 
 pub fn z_deserialize<T: Deserialize>(zbytes: &ZBytes) -> Result<T, ZDeserializeError> {
@@ -61,11 +61,11 @@ pub fn z_deserialize<T: Deserialize>(zbytes: &ZBytes) -> Result<T, ZDeserializeE
 }
 
 #[derive(Debug)]
-pub struct ZSerializer<'a>(ZBytesWriter<'a>);
+pub struct ZSerializer(ZBytesWriter);
 
-impl<'a> ZSerializer<'a> {
-    pub fn new(zbytes: &'a mut ZBytes) -> Self {
-        Self(zbytes.writer())
+impl ZSerializer {
+    pub fn new() -> Self {
+        Self(ZBytes::writer())
     }
 
     pub fn serialize<T: Serialize>(&mut self, t: T) {
@@ -77,15 +77,25 @@ impl<'a> ZSerializer<'a> {
         I::IntoIter: ExactSizeIterator,
     {
         let iter = iter.into_iter();
-        self.0.write_vle(iter.len() as u64);
+        self.serialize(VarInt(iter.len()));
         for t in iter {
             t.serialize(self);
         }
     }
+
+    pub fn finish(self) -> ZBytes {
+        self.0.finish()
+    }
 }
 
-impl<'a> From<ZBytesWriter<'a>> for ZSerializer<'a> {
-    fn from(value: ZBytesWriter<'a>) -> Self {
+impl From<ZSerializer> for ZBytes {
+    fn from(value: ZSerializer) -> Self {
+        value.finish()
+    }
+}
+
+impl From<ZBytesWriter> for ZSerializer {
+    fn from(value: ZBytesWriter) -> Self {
         Self(value)
     }
 }
@@ -106,14 +116,10 @@ impl<'a> ZDeserializer<'a> {
         T::deserialize(self)
     }
 
-    fn read_vle(&mut self) -> Result<usize, ZDeserializeError> {
-        Ok(self.0.read_vle().ok_or(ZDeserializeError)? as usize)
-    }
-
     pub fn deserialize_iter<'b, T: Deserialize>(
         &'b mut self,
     ) -> Result<ZReadIter<'a, 'b, T>, ZDeserializeError> {
-        let len = self.read_vle()?;
+        let len = <VarInt<usize>>::deserialize(self)?.0;
         Ok(ZReadIter {
             deserializer: self,
             len,
@@ -159,7 +165,7 @@ impl<T: Deserialize> Drop for ZReadIter<'_, '_, T> {
 
 impl Serialize for ZBytes {
     fn serialize(&self, serializer: &mut ZSerializer) {
-        serializer.0.write_vle(self.len() as u64);
+        serializer.serialize(VarInt(self.len()));
         serializer.0.append(self.clone());
     }
 }
@@ -172,7 +178,7 @@ macro_rules! impl_num {
             }
             fn serialize_slice(slice: &[Self], serializer: &mut ZSerializer) where Self: Sized {
                 if cfg!(target_endian = "little") || std::mem::size_of::<Self>() == 1 {
-                    serializer.0.write_vle(slice.len() as u64);
+                    serializer.serialize(VarInt(slice.len()));
                     // SAFETY: transmuting numeric types to their little endian bytes is safe
                     serializer.0.write_all(unsafe { slice.align_to().1 }).unwrap();
                 } else {
@@ -189,7 +195,7 @@ macro_rules! impl_num {
             fn deserialize_slice(deserializer: &mut ZDeserializer) -> Result<Box<[Self]>, ZDeserializeError> {
                 let size = std::mem::size_of::<Self>();
                 if cfg!(target_endian = "little") || size == 1 {
-                    let len = deserializer.read_vle()? as usize;
+                    let len = <VarInt<usize>>::deserialize(deserializer)?.0;
                     let total_size = len * size;
                     let mut buf = std::mem::ManuallyDrop::new(vec![0; total_size].into_boxed_slice());
                     deserializer.0.read_exact(&mut buf).or(Err(ZDeserializeError))?;
@@ -383,9 +389,39 @@ impl<T> VarInt<T> {
 
 macro_rules! impl_varint {
     ($($u:ty: $i:ty),* $(,)?) => {$(
+        impl From<$u> for VarInt<$u> {
+            fn from(value: $u) -> Self {
+                Self(value)
+            }
+        }
+        impl From<$i> for VarInt<$i> {
+            fn from(value: $i) -> Self {
+                Self(value)
+            }
+        }
+        impl From<VarInt<$u>> for $u {
+            fn from(value: VarInt<$u>) -> Self {
+                value.0
+            }
+        }
+        impl From<VarInt<$i>> for $i {
+            fn from(value: VarInt<$i>) -> Self {
+                value.0
+            }
+        }
+        impl AsRef<$u> for VarInt<$u> {
+            fn as_ref(&self) -> &$u {
+                &self.0
+            }
+        }
+        impl AsRef<$i> for VarInt<$i> {
+            fn as_ref(&self) -> &$i {
+                &self.0
+            }
+        }
         impl Serialize for VarInt<$u> {
             fn serialize(&self, serializer: &mut ZSerializer) {
-                serializer.0.write_vle(self.0 as u64);
+                leb128::write::unsigned(&mut serializer.0, self.0 as u64).unwrap();
             }
         }
         impl Serialize for VarInt<$i> {
@@ -396,7 +432,7 @@ macro_rules! impl_varint {
         }
         impl Deserialize for VarInt<$u> {
             fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
-                let n = deserializer.0.read_vle().ok_or(ZDeserializeError)?;
+                let n = leb128::read::unsigned(&mut deserializer.0).or(Err(ZDeserializeError))?;
                 Ok(VarInt(<$u>::try_from(n).or(Err(ZDeserializeError))?))
             }
         }

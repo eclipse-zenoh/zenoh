@@ -53,6 +53,10 @@ impl ZBuf {
         self.slices.as_mut().iter_mut()
     }
 
+    pub fn into_zslices(self) -> impl Iterator<Item = ZSlice> {
+        self.slices.into_iter()
+    }
+
     pub fn push_zslice(&mut self, zslice: ZSlice) {
         if !zslice.is_empty() {
             self.slices.push(zslice);
