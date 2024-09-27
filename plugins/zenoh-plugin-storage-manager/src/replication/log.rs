@@ -25,16 +25,33 @@ use super::{
     digest::{Digest, Fingerprint},
 };
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Hash)]
+pub(crate) enum Action {
+    Delete,
+    Put,
+    WildcardDelete(OwnedKeyExpr),
+    WildcardPut(OwnedKeyExpr),
+}
+
+impl From<SampleKind> for Action {
+    fn from(sample_kind: SampleKind) -> Self {
+        match sample_kind {
+            SampleKind::Put => Self::Put,
+            SampleKind::Delete => Self::Delete,
+        }
+    }
+}
+
 /// The `EventMetadata` structure contains all the information needed by a replica to assess if it
 /// is missing an [Event] in its log.
 ///
 /// Associating the `action` allows only sending the metadata when the associate action is
 /// [SampleKind::Delete].
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Hash)]
 pub struct EventMetadata {
     pub(crate) stripped_key: Option<OwnedKeyExpr>,
     pub(crate) timestamp: Timestamp,
-    pub(crate) action: SampleKind,
+    pub(crate) action: Action,
 }
 
 impl EventMetadata {
@@ -52,7 +69,7 @@ impl From<&Event> for EventMetadata {
         Self {
             stripped_key: event.maybe_stripped_key.clone(),
             timestamp: event.timestamp,
-            action: event.action,
+            action: event.action.clone(),
         }
     }
 }
@@ -66,7 +83,7 @@ impl From<&Event> for EventMetadata {
 pub struct Event {
     pub(crate) maybe_stripped_key: Option<OwnedKeyExpr>,
     pub(crate) timestamp: Timestamp,
-    pub(crate) action: SampleKind,
+    pub(crate) action: Action,
     pub(crate) fingerprint: Fingerprint,
 }
 
@@ -80,7 +97,11 @@ impl Event {
     /// Creates a new [Event] with the provided key expression and timestamp.
     ///
     /// This function computes the [Fingerprint] of both using the `xxhash_rust` crate.
-    pub fn new(key_expr: Option<OwnedKeyExpr>, timestamp: Timestamp, action: SampleKind) -> Self {
+    pub fn new(
+        key_expr: Option<OwnedKeyExpr>,
+        timestamp: Timestamp,
+        action: impl Into<Action>,
+    ) -> Self {
         let mut hasher = xxhash_rust::xxh3::Xxh3::default();
         if let Some(key_expr) = &key_expr {
             hasher.update(key_expr.as_bytes());
@@ -91,7 +112,7 @@ impl Event {
         Self {
             maybe_stripped_key: key_expr,
             timestamp,
-            action,
+            action: action.into(),
             fingerprint: hasher.digest().into(),
         }
     }
@@ -268,6 +289,8 @@ impl LogLatest {
         };
 
         self.bloom_filter_event.set(event.key_expr());
+
+        tracing::trace!("Inserting < {:?} > in Replication Log", event.key_expr());
 
         self.intervals
             .entry(interval_idx)

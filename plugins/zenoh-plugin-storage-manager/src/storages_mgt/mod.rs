@@ -122,15 +122,17 @@ pub(crate) async fn create_and_start_storage(
     //      target any Storage that matches the same key expression, regardless of if they have
     //      been configured to be replicated.
     tokio::task::spawn(async move {
-        let storage_service = StorageService::new(
-            zenoh_session.clone(),
-            config.clone(),
-            &name,
-            storage,
-            capability,
-            CacheLatest::new(latest_updates.clone(), replication_log.clone()),
-        )
-        .await;
+        let storage_service = Arc::new(
+            StorageService::new(
+                zenoh_session.clone(),
+                config.clone(),
+                &name,
+                storage,
+                capability,
+                CacheLatest::new(latest_updates.clone(), replication_log.clone()),
+            )
+            .await,
+        );
 
         // Testing if the `replication_log` is set is equivalent to testing if the `replication` is
         // set: the `replication_log` is only set when the latter is.
@@ -143,7 +145,7 @@ pub(crate) async fn create_and_start_storage(
 
             ReplicationService::spawn_start(
                 zenoh_session,
-                &storage_service,
+                storage_service.clone(),
                 config.key_expr,
                 replication_log,
                 latest_updates,

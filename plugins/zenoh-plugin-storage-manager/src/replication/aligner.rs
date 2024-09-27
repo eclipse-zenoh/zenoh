@@ -19,7 +19,7 @@ use tokio::task::JoinHandle;
 use zenoh::{
     bytes::ZBytes,
     internal::Value,
-    key_expr::{format::keformat, OwnedKeyExpr},
+    key_expr::{format::keformat, keyexpr_tree::IKeyExprTree, OwnedKeyExpr},
     query::{ConsolidationMode, Query, Selector},
     sample::{Sample, SampleKind},
     session::ZenohId,
@@ -30,7 +30,7 @@ use super::{
     classification::{IntervalIdx, SubIntervalIdx},
     core::{aligner_key_expr_formatter, Replication},
     digest::{DigestDiff, Fingerprint},
-    log::EventMetadata,
+    log::{Action, EventMetadata},
 };
 
 /// The `AlignmentQuery` enumeration represents the information requested by a Replica to align
@@ -133,7 +133,21 @@ impl Replication {
                         .get(&interval_idx)
                     {
                         interval.sub_intervals.values().for_each(|sub_interval| {
-                            events_to_send.extend(sub_interval.events.values().map(Into::into));
+                            events_to_send.extend(
+                                sub_interval
+                                    .events
+                                    .values()
+                                    .filter(|event| {
+                                        // NOTE: We process the wildcard actions separately: the
+                                        // payload of a WildcardPut is not stored in the Storage but
+                                        // separately.
+                                        !matches!(
+                                            event.action,
+                                            Action::WildcardDelete(_) | Action::WildcardPut(_)
+                                        )
+                                    })
+                                    .map(Into::into),
+                            );
                         });
                     }
 
@@ -141,6 +155,39 @@ impl Replication {
                     // diminishing contention.
 
                     self.reply_events(&query, events_to_send).await;
+                }
+
+                let wildcard_updates = self
+                    .storage_service
+                    .wildcard_updates
+                    .read()
+                    .await
+                    .key_value_pairs()
+                    .map(|(wildcard_update_ke, update)| {
+                        let action = match update.kind {
+                            SampleKind::Put => Action::WildcardPut(wildcard_update_ke.clone()),
+                            SampleKind::Delete => {
+                                Action::WildcardDelete(wildcard_update_ke.clone())
+                            }
+                        };
+
+                        let event_metadata = EventMetadata {
+                            stripped_key: Some(wildcard_update_ke.clone()),
+                            timestamp: update.data.timestamp,
+                            action,
+                        };
+
+                        (event_metadata, update.data.value.clone())
+                    })
+                    .collect::<HashMap<EventMetadata, Value>>();
+
+                for (wildcard_update_metadata, update_value) in wildcard_updates {
+                    reply_to_query(
+                        &query,
+                        AlignmentReply::Retrieval(wildcard_update_metadata),
+                        Some(update_value),
+                    )
+                    .await;
                 }
             }
             AlignmentQuery::Diff(digest_diff) => {
@@ -304,13 +351,16 @@ impl Replication {
     /// is the reason why we need the consolidation to set to be `None` (⚠️).
     pub(crate) async fn reply_events(&self, query: &Query, events_to_retrieve: Vec<EventMetadata>) {
         for event_metadata in events_to_retrieve {
-            if event_metadata.action == SampleKind::Delete {
+            if matches!(
+                event_metadata.action,
+                Action::Delete | Action::WildcardDelete(_) | Action::WildcardPut(_)
+            ) {
                 reply_to_query(query, AlignmentReply::Retrieval(event_metadata), None).await;
                 continue;
             }
 
             let stored_data = {
-                let mut storage = self.storage.lock().await;
+                let mut storage = self.storage_service.storage.lock().await;
                 match storage.get(event_metadata.stripped_key.clone(), "").await {
                     Ok(stored_data) => stored_data,
                     Err(e) => {
@@ -629,51 +679,62 @@ impl Replication {
                         continue;
                     }
 
-                    match replica_event.action {
-                        SampleKind::Put => {
-                            let replication_log_guard = self.replication_log.read().await;
-                            if let Some(latest_event) =
-                                replication_log_guard.lookup(&replica_event.stripped_key)
-                            {
-                                if latest_event.timestamp >= replica_event.timestamp {
-                                    continue;
-                                }
-                            }
-                            diff_events.push(replica_event);
-                        }
-                        SampleKind::Delete => {
-                            let mut replication_log_guard = self.replication_log.write().await;
-                            if let Some(latest_event) =
-                                replication_log_guard.lookup(&replica_event.stripped_key)
-                            {
-                                if latest_event.timestamp >= replica_event.timestamp {
-                                    continue;
-                                }
-                            }
-                            if matches!(
-                                self.storage
-                                    .lock()
-                                    .await
-                                    .delete(
-                                        replica_event.stripped_key.clone(),
-                                        replica_event.timestamp
-                                    )
-                                    .await,
-                                // NOTE: In some of our backend implementation, a deletion on a
-                                //       non-existing key will return an error. Given that we cannot
-                                //       distinguish an error from a missing key, we will assume
-                                //       the latter and move forward.
-                                //
-                                // FIXME: Once the behaviour described above is fixed, check for
-                                //        errors.
-                                Ok(StorageInsertionResult::Outdated)
-                            ) {
+                    // We process a Put or WildPut: we only need a read access on the Replication
+                    // Log as we need the payload in order to apply it the update -- and we don't
+                    // have the payload at this stage.
+                    if matches!(replica_event.action, Action::Put | Action::WildcardPut(_)) {
+                        let replication_log_guard = self.replication_log.read().await;
+                        if let Some(latest_event) =
+                            replication_log_guard.lookup(&replica_event.stripped_key)
+                        {
+                            if latest_event.timestamp >= replica_event.timestamp {
                                 continue;
                             }
+                        }
+                        diff_events.push(replica_event);
+                        continue;
+                    }
 
-                            replication_log_guard.insert_event(replica_event.into());
+                    // We process a Delete or WildDelete: we need a write access on the Replication
+                    // Log as we have all the required information in order to apply them.
+                    let mut replication_log_guard = self.replication_log.write().await;
+                    if let Some(latest_event) =
+                        replication_log_guard.lookup(&replica_event.stripped_key)
+                    {
+                        if latest_event.timestamp >= replica_event.timestamp {
+                            continue;
                         }
                     }
+
+                    if matches!(replica_event.action, Action::Delete)
+                        && matches!(
+                            self.storage_service
+                                .storage
+                                .lock()
+                                .await
+                                .delete(replica_event.stripped_key.clone(), replica_event.timestamp)
+                                .await,
+                            // NOTE: In some of our backend implementation, a deletion on a
+                            //       non-existing key will return an error. Given that we cannot
+                            //       distinguish an error from a missing key, we will assume
+                            //       the latter and move forward.
+                            //
+                            // FIXME: Once the behaviour described above is fixed, check for
+                            //        errors.
+                            Ok(StorageInsertionResult::Outdated)
+                        )
+                    {
+                        continue;
+                    }
+
+                    if let Action::WildcardDelete(ref _wild_key_expr) = replica_event.action {
+                        // self.storage_service
+                        //     .register_wildcard_update(wild_key_expr, replica_event.timestamp)
+                        //     .await;
+                        // TODO Apply wild deletes backward.
+                    }
+
+                    replication_log_guard.insert_event(replica_event.into());
                 }
 
                 if !diff_events.is_empty() {
@@ -716,27 +777,49 @@ impl Replication {
                     }
                 }
 
-                // NOTE: This code can only be called with `action` set to `delete` on an initial
-                // alignment, in which case the Storage of the receiving Replica is empty => there
-                // is no need to actually call `storage.delete`.
-                //
-                // Outside of an initial alignment, the `delete` action will be performed at the
-                // step above, in `AlignmentReply::Events`.
-                if replica_event.action == SampleKind::Put
-                    && matches!(
-                        self.storage
-                            .lock()
-                            .await
-                            .put(
-                                replica_event.stripped_key.clone(),
-                                sample.into(),
-                                replica_event.timestamp,
+                match replica_event.action {
+                    // NOTE: This code can only be called with `action` set to `delete` on an
+                    // initial alignment, in which case the Storage of the receiving Replica is
+                    // empty => there is no need to actually call `storage.delete`.
+                    //
+                    // Outside of an initial alignment, the `delete` action will be performed at the
+                    // step above, in `AlignmentReply::Events`.
+                    Action::Delete => {}
+                    Action::Put => {
+                        if matches!(
+                            self.storage_service
+                                .storage
+                                .lock()
+                                .await
+                                .put(
+                                    replica_event.stripped_key.clone(),
+                                    sample.into(),
+                                    replica_event.timestamp,
+                                )
+                                .await,
+                            Ok(StorageInsertionResult::Outdated) | Err(_)
+                        ) {
+                            return;
+                        }
+                    }
+                    Action::WildcardDelete(ref wildcard_delete_ke) => {
+                        self.storage_service
+                            .register_wildcard_update(
+                                wildcard_delete_ke.clone(),
+                                SampleKind::Delete,
+                                sample,
                             )
-                            .await,
-                        Ok(StorageInsertionResult::Outdated) | Err(_)
-                    )
-                {
-                    return;
+                            .await;
+                    }
+                    Action::WildcardPut(ref wildcard_update_ke) => {
+                        self.storage_service
+                            .register_wildcard_update(
+                                wildcard_update_ke.clone(),
+                                SampleKind::Put,
+                                sample,
+                            )
+                            .await;
+                    }
                 }
 
                 replication_log_guard.insert_event(replica_event.into());
@@ -748,6 +831,16 @@ impl Replication {
 /// Replies to a Query, adding the [AlignmentReply] as an attachment and, if provided, the [Value]
 /// as the payload (not forgetting to set the Encoding!).
 async fn reply_to_query(query: &Query, reply: AlignmentReply, value: Option<Value>) {
+    let mut timestamp = None;
+    if let AlignmentReply::Retrieval(ref event_metadata) = reply {
+        if matches!(
+            event_metadata.action,
+            Action::WildcardDelete(_) | Action::WildcardPut(_)
+        ) {
+            timestamp = Some(event_metadata.timestamp);
+        }
+    }
+
     let attachment = match bincode::serialize(&reply) {
         Ok(attachment) => attachment,
         Err(e) => {
@@ -756,7 +849,7 @@ async fn reply_to_query(query: &Query, reply: AlignmentReply, value: Option<Valu
         }
     };
 
-    let reply_fut = if let Some(value) = value {
+    let mut reply_builder = if let Some(value) = value {
         query
             .reply(query.key_expr(), value.payload)
             .encoding(value.encoding)
@@ -767,7 +860,11 @@ async fn reply_to_query(query: &Query, reply: AlignmentReply, value: Option<Valu
             .attachment(attachment)
     };
 
-    if let Err(e) = reply_fut.await {
+    if let Some(timestamp) = timestamp {
+        reply_builder = reply_builder.timestamp(timestamp);
+    }
+
+    if let Err(e) = reply_builder.await {
         tracing::error!("Failed to reply to Query: {e:?}");
     }
 }

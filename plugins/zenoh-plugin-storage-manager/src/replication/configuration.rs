@@ -37,10 +37,10 @@ use super::{
 /// events.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub(crate) struct Configuration {
-    storage_key_expr: OwnedKeyExpr,
-    prefix: Option<OwnedKeyExpr>,
-    replica_config: ReplicaConfig,
-    fingerprint: Fingerprint,
+    pub(crate) storage_key_expr: OwnedKeyExpr,
+    pub(crate) prefix: Option<OwnedKeyExpr>,
+    pub(crate) replica_config: ReplicaConfig,
+    pub(crate) fingerprint: Fingerprint,
 }
 
 impl Deref for Configuration {

@@ -45,7 +45,7 @@ use zenoh_backend_traits::{
 
 use super::LatestUpdates;
 use crate::{
-    replication::Event,
+    replication::{Action, Event},
     storages_mgt::{CacheLatest, StorageMessage},
 };
 
@@ -53,20 +53,20 @@ pub const WILDCARD_UPDATES_FILENAME: &str = "wildcard_updates";
 pub const TOMBSTONE_FILENAME: &str = "tombstones";
 
 #[derive(Clone)]
-struct Update {
-    kind: SampleKind,
-    data: StoredData,
+pub(crate) struct Update {
+    pub(crate) kind: SampleKind,
+    pub(crate) data: StoredData,
 }
 
 #[derive(Clone)]
 pub struct StorageService {
     session: Arc<Session>,
-    configuration: StorageConfig,
+    pub(crate) configuration: StorageConfig,
     name: String,
     pub(crate) storage: Arc<Mutex<Box<dyn zenoh_backend_traits::Storage>>>,
     capability: Capability,
-    tombstones: Arc<RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>>,
-    wildcard_updates: Arc<RwLock<KeBoxTree<Update, UnknownWildness, KeyedSetProvider>>>,
+    pub(crate) tombstones: Arc<RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>>,
+    pub(crate) wildcard_updates: Arc<RwLock<KeBoxTree<Update, UnknownWildness, KeyedSetProvider>>>,
     cache_latest: CacheLatest,
 }
 
@@ -120,7 +120,10 @@ impl StorageService {
         storage_service
     }
 
-    pub(crate) async fn start_storage_queryable_subscriber(self, mut rx: Receiver<StorageMessage>) {
+    pub(crate) async fn start_storage_queryable_subscriber(
+        self: Arc<Self>,
+        mut rx: Receiver<StorageMessage>,
+    ) {
         // start periodic GC event
         let t = Timer::default();
 
@@ -232,7 +235,12 @@ impl StorageService {
 
         // if wildcard, update wildcard_updates
         if sample.key_expr().is_wild() {
-            self.register_wildcard_update(sample.clone()).await;
+            self.register_wildcard_update(
+                sample.key_expr().clone().into(),
+                sample.kind(),
+                sample.clone(),
+            )
+            .await;
         }
 
         let matching_keys = if sample.key_expr().is_wild() {
@@ -249,7 +257,7 @@ impl StorageService {
         let prefix = self.configuration.strip_prefix.as_ref();
 
         for k in matching_keys {
-            if self.is_deleted(&k, sample_timestamp).await {
+            if self.is_deleted(&k, sample_timestamp).await.is_some() {
                 tracing::trace!("Skipping Sample < {} > deleted later on", k);
                 continue;
             }
@@ -389,15 +397,19 @@ impl StorageService {
         }
     }
 
-    async fn register_wildcard_update(&self, sample: Sample) {
+    pub(crate) async fn register_wildcard_update(
+        &self,
+        key_expr: OwnedKeyExpr,
+        kind: SampleKind,
+        sample: Sample,
+    ) {
         // @TODO: change into a better store that does incremental writes
-        let key = sample.key_expr().clone();
         let mut wildcards = self.wildcard_updates.write().await;
         let timestamp = *sample.timestamp().unwrap();
         wildcards.insert(
-            &key,
+            &key_expr,
             Update {
-                kind: sample.kind(),
+                kind,
                 data: StoredData {
                     value: Value::from(sample),
                     timestamp,
@@ -417,13 +429,33 @@ impl StorageService {
                 tracing::error!("Saving wildcard updates failed: {}", e);
             }
         }
+
+        self.cache_latest.latest_updates.write().await.insert(
+            Some(key_expr.clone()),
+            Event::new(
+                Some(key_expr.clone()),
+                timestamp,
+                Action::WildcardPut(key_expr),
+            ),
+        );
     }
 
-    async fn is_deleted(&self, key_expr: &OwnedKeyExpr, timestamp: &Timestamp) -> bool {
+    pub(crate) async fn is_deleted(
+        &self,
+        key_expr: &OwnedKeyExpr,
+        timestamp: &Timestamp,
+    ) -> Option<Timestamp> {
         // check tombstones to see if it is deleted in the future
         let tombstones = self.tombstones.read().await;
         let weight = tombstones.weight_at(key_expr);
-        weight.is_some() && weight.unwrap() > timestamp
+
+        if let Some(wild_delete_timestamp) = weight {
+            if wild_delete_timestamp > timestamp {
+                return Some(*wild_delete_timestamp);
+            }
+        }
+
+        None
     }
 
     async fn overriding_wild_update(
@@ -616,20 +648,13 @@ impl StorageService {
             Ok(entries) => {
                 for (k, _ts) in entries {
                     // @TODO: optimize adding back the prefix (possible inspiration from https://github.com/eclipse-zenoh/zenoh/blob/0.5.0-beta.9/backends/traits/src/utils.rs#L79)
-                    let full_key = match k {
-                        Some(key) => crate::prefix(prefix, &key),
-                        None => {
-                            let Some(prefix) = prefix else {
-                                // TODO Check if we have anything in place that would prevent such
-                                //      an error from happening.
-                                tracing::error!(
-                                    "Internal bug: empty key with no `strip_prefix` configured"
-                                );
-                                continue;
-                            };
-                            prefix.clone()
-                        }
+                    let Ok(full_key) = crate::prefix(prefix, k.as_ref()) else {
+                        tracing::error!(
+                            "Internal error: empty key with no `strip_prefix` configured"
+                        );
+                        continue;
                     };
+
                     if key_expr.intersects(&full_key.clone()) {
                         result.push(full_key);
                     }

@@ -463,10 +463,12 @@ pub fn strip_prefix(
 /// If a prefix is provided, this function returns the concatenation of both.
 pub fn prefix(
     maybe_prefix: Option<&OwnedKeyExpr>,
-    maybe_stripped_key: &OwnedKeyExpr,
-) -> OwnedKeyExpr {
-    match maybe_prefix {
-        Some(prefix) => prefix / maybe_stripped_key,
-        None => maybe_stripped_key.clone(),
+    maybe_stripped_key: Option<&OwnedKeyExpr>,
+) -> ZResult<OwnedKeyExpr> {
+    match (maybe_prefix, maybe_stripped_key) {
+        (Some(prefix), Some(stripped_key)) => Ok(prefix / stripped_key),
+        (Some(prefix), None) => Ok(prefix.clone()),
+        (None, Some(key)) => Ok(key.clone()),
+        (None, None) => bail!("Fatal internal error: empty prefix with empty key"),
     }
 }

@@ -34,5 +34,5 @@ mod digest;
 mod log;
 mod service;
 
-pub(crate) use log::{Event, LogLatest};
+pub(crate) use log::{Action, Event, LogLatest};
 pub(crate) use service::ReplicationService;

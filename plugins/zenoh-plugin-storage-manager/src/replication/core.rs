@@ -19,10 +19,7 @@ use std::{
 };
 
 use rand::Rng;
-use tokio::{
-    sync::{Mutex, RwLock},
-    task::JoinHandle,
-};
+use tokio::{sync::RwLock, task::JoinHandle};
 use tracing::{debug_span, Instrument};
 use zenoh::{
     key_expr::{
@@ -32,10 +29,12 @@ use zenoh::{
     sample::Locality,
     Session,
 };
-use zenoh_backend_traits::Storage;
 
 use super::{digest::Digest, log::LogLatest};
-use crate::{replication::aligner::AlignmentQuery, storages_mgt::LatestUpdates};
+use crate::{
+    replication::aligner::AlignmentQuery,
+    storages_mgt::{LatestUpdates, StorageService},
+};
 
 kedefine!(
     pub digest_key_expr_formatter: "@-digest/${zid:*}/${hash_configuration:*}",
@@ -48,7 +47,7 @@ pub(crate) struct Replication {
     pub(crate) replication_log: Arc<RwLock<LogLatest>>,
     pub(crate) storage_key_expr: OwnedKeyExpr,
     pub(crate) latest_updates: Arc<RwLock<LatestUpdates>>,
-    pub(crate) storage: Arc<Mutex<Box<dyn Storage>>>,
+    pub(crate) storage_service: Arc<StorageService>,
 }
 
 impl Replication {
@@ -374,7 +373,7 @@ impl Replication {
                         };
 
                         if let Some(digest_diff) = digest.diff(other_digest) {
-                            tracing::debug!("Potential misalignment detected");
+                            tracing::debug!("Potential misalignment detected: {digest_diff:?}");
 
                             let replica_aligner_ke = match keformat!(
                                 aligner_key_expr_formatter::formatter(),
