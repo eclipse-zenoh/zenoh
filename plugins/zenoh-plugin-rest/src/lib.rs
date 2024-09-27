@@ -304,8 +304,6 @@ impl Plugin for RestPlugin {
         WORKER_THREAD_NUM.store(conf.work_thread_num, Ordering::SeqCst);
         MAX_BLOCK_THREAD_NUM.store(conf.max_block_thread_num, Ordering::SeqCst);
 
-        // spawn_runtime(run(runtime.clone(), conf.clone()));
-
         let task = run(runtime.clone(), conf.clone());
         let task =
             blockon_runtime(async { timeout(Duration::from_millis(1), spawn_runtime(task)).await });
