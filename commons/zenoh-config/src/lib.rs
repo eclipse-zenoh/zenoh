@@ -422,8 +422,11 @@ validated_struct::validator! {
                         /// Using CongestionControl::Block the caller is blocked until a batch is available and re-inserted into the queue.
                         /// Using CongestionControl::Drop the message might be dropped, depending on conditions configured here.
                         pub congestion_control: CongestionControlConf {
-                            /// The maximum time in microseconds to wait for an available batch before dropping the message if still no batch is available.
-                            pub wait_before_drop: u64,
+                            /// The maximum time in microseconds to wait for an available batch before dropping a droppable message if still no batch is available.
+                            wait_before_drop: u64,
+                            /// The maximum time in microseconds to wait for an available batch before closing the transport session when sending a blocking message
+                            /// if still no batch is available.
+                            wait_before_close: u64,
                         },
                         pub batching: BatchingConf {
                             /// Perform adaptive batching of messages if they are smaller of the batch_size.

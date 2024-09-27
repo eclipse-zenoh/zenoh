@@ -244,6 +244,7 @@ impl Default for CongestionControlConf {
     fn default() -> Self {
         Self {
             wait_before_drop: 1000,
+            wait_before_close: 5000000,
         }
     }
 }

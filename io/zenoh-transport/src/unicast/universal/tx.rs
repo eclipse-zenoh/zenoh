@@ -14,6 +14,7 @@
 use zenoh_protocol::{
     core::{Priority, PriorityRange, Reliability},
     network::NetworkMessage,
+    transport::close,
 };
 
 use super::transport::TransportUnicastUniversal;
@@ -110,7 +111,27 @@ impl TransportUnicastUniversal {
         // the link could be congested and this operation could
         // block for fairly long time
         drop(transport_links);
-        pipeline.push_network_message(msg)
+        let droppable = msg.is_droppable();
+        let push = pipeline.push_network_message(msg);
+        if !push && !droppable {
+            tracing::error!(
+                "Unable to push non droppable network message to {}. Closing transport!",
+                self.config.zid
+            );
+            zenoh_runtime::ZRuntime::RX.spawn({
+                let transport = self.clone();
+                async move {
+                    if let Err(e) = transport.close(close::reason::GENERIC).await {
+                        tracing::error!(
+                            "Error closing transport with {}: {}",
+                            transport.config.zid,
+                            e
+                        );
+                    }
+                }
+            });
+        }
+        push
     }
 
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled
