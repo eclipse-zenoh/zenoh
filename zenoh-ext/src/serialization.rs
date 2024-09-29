@@ -9,7 +9,7 @@ use std::{
     ptr,
 };
 
-use zenoh::bytes::{ZBytes, ZBytesReader, ZBytesWriter};
+use zenoh::{bytes::{ZBytes, ZBytesReader, ZBytesWriter}, time::{Timestamp, TimestampId, NTP64}};
 
 #[derive(Debug)]
 pub struct ZDeserializeError;
@@ -86,6 +86,12 @@ impl ZSerializer {
 
     pub fn finish(self) -> ZBytes {
         self.0.finish()
+    }
+}
+
+impl Default for ZSerializer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -460,3 +466,26 @@ macro_rules! impl_varint {
     )*};
 }
 impl_varint!(u8: i8, u16: i16, u32: i32, u64: i64, usize: isize);
+
+//
+// Serialization/deseialization for zenoh types
+//
+
+impl Serialize for zenoh::time::Timestamp {
+    fn serialize(&self, serializer: &mut ZSerializer) {
+        let time = self.get_time().as_u64();
+        let id = self.get_id().to_le_bytes();
+        time.serialize(serializer);
+        id.serialize(serializer);
+    }
+}
+
+impl Deserialize for zenoh::time::Timestamp {
+    fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
+        let time = u64::deserialize(deserializer)?;
+        let time = NTP64(time);
+        let id = Vec::<u8>::deserialize(deserializer)?;
+        let id = id.as_slice().try_into().map_err(|_| ZDeserializeError)?;
+        Ok(Timestamp::new(time, id))
+    }
+}
