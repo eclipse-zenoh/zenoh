@@ -89,6 +89,12 @@ impl ZSerializer {
     }
 }
 
+impl Default for ZSerializer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl From<ZSerializer> for ZBytes {
     fn from(value: ZSerializer) -> Self {
         value.finish()
@@ -448,3 +454,81 @@ macro_rules! impl_varint {
     )*};
 }
 impl_varint!(u8: i8, u16: i16, u32: i32, u64: i64, usize: isize);
+
+#[cfg(tests)]
+mod tests {
+    use std::collections::HashMap;
+
+    use crate::{z_deserialize, z_serialize, VarInt};
+
+    macro_rules! serialize_deserialize {
+        ($ty:ty, $expr:expr) => {
+            let payload = z_serialize(&$expr);
+            let output = z_deserialize::<$ty>(&payload).unwrap();
+            assert_eq!($expr, output);
+        };
+    }
+
+    const RANDOM_TESTS: usize = 1_000;
+
+    #[test]
+    fn numeric_serialization() {
+        macro_rules! test_int {
+            ($($ty:ty),* $(,)?) => {
+                serialize_deserialize($ty, <$ty>::MIN);
+                serialize_deserialize($ty, <$ty>::MAX);
+                let mut rng = rand::thread_rng();
+                for _ in RANDOM_TESTS {
+                    serialize_deserialize($ty, rng.gen::<$ty>());
+                }
+            };
+        }
+        test_int!(i8, i16, i32, i64, i128, u8, u16, u32, u64, u128, f32, f64);
+    }
+
+    #[test]
+    fn varint_serialization() {
+        macro_rules! test_varint {
+            ($($ty:ty),* $(,)?) => {
+                serialize_deserialize(VarInt<$ty>, VarInt(<$ty>::MIN));
+                serialize_deserialize(VarInt<$ty>, VarInt(<$ty>::MAX));
+                let mut rng = rand::thread_rng();
+                for _ in RANDOM_TESTS {
+                    serialize_deserialize(VarInt<$ty>, VarInt(rng.gen::<$ty>()));
+                }
+            };
+        }
+        test_varint!(i8, i16, i32, i64, isize, u8, u16, u32, u64, usize);
+    }
+
+    #[test]
+    fn slice_serialization() {
+        let vec = vec![42.0f64, 0.15];
+        serialize_deserialize!(Vec<f64>, vec);
+        let payload = crate::z_serialize(vec.as_slice());
+        assert_eq!(vec, z_deserialize::<Vec<f64>>(&payload).unwrap())
+    }
+
+    #[test]
+    fn string_serialization() {
+        let s = "serialization".to_string();
+        serialize_deserialize!(String, s);
+        let payload = z_serialize(s.as_str());
+        assert_eq!(s, z_deserialize::<String>(&payload).unwrap())
+    }
+
+    #[test]
+    fn tuple_serialization() {
+        serialize_deserialize!(
+            (VarInt<usize>, f32, String),
+            (VarInt(42), 42.0, "42".to_string())
+        );
+    }
+
+    #[test]
+    fn hashmap_serialization() {
+        let mut map = HashMap::new();
+        map.insert("hello".to_string(), "world".to_string());
+        serialize_deserialize!(HashMap<String, String>, map);
+    }
+}

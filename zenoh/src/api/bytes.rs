@@ -162,20 +162,20 @@ impl ZBytes {
     ///
     /// let buf1: Vec<u8> = vec![1, 2, 3];
     /// let buf2: Vec<u8> = vec![4, 5, 6, 7, 8];
-    /// let mut zbs = ZBytes::new();
-    /// let mut writer = zbs.writer();
+    /// let mut writer = ZBytes::writer();
     /// writer.write(&buf1);
     /// writer.write(&buf2);
+    /// let zbytes = writer.finish();
     ///
     /// // Access the raw content
-    /// for slice in zbs.slices() {
+    /// for slice in zbytes.slices() {
     ///     println!("{:02x?}", slice);
     /// }
     ///
     /// // Concatenate input in a single vector
     /// let buf: Vec<u8> = buf1.into_iter().chain(buf2.into_iter()).collect();
     /// // Concatenate raw bytes in a single vector
-    /// let out: Vec<u8> = zbs.slices().fold(Vec::new(), |mut b, x| { b.extend_from_slice(x); b });
+    /// let out: Vec<u8> = zbytes.slices().fold(Vec::new(), |mut b, x| { b.extend_from_slice(x); b });
     /// // The previous line is the equivalent of
     /// // let out: Vec<u8> = zbs.into();
     /// assert_eq!(buf, out);    
@@ -190,12 +190,12 @@ impl ZBytes {
     /// let buf1: Vec<u8> = vec![1, 2, 3];
     /// let buf2: Vec<u8> = vec![4, 5, 6, 7, 8];
     ///
-    /// let mut zbs = ZBytes::new();
-    /// let mut writer = zbs.writer();
+    /// let mut writer = ZBytes::writer();
     /// writer.append(ZBytes::from(buf1.clone()));
     /// writer.append(ZBytes::from(buf2.clone()));
+    /// let zbytes = writer.finish();
     ///
-    /// let mut iter = zbs.slices();
+    /// let mut iter = zbytes.slices();
     /// assert_eq!(buf1.as_slice(), iter.next().unwrap());
     /// assert_eq!(buf2.as_slice(), iter.next().unwrap());
     /// ```
@@ -271,16 +271,14 @@ impl ZBytesWriter {
     /// let two = ZBytes::from(vec![2, 3, 4, 5]);
     /// let three = ZBytes::from(vec![6, 7]);
     ///
-    /// let mut bytes = ZBytes::new();
-    /// let mut writer = bytes.writer();
+    /// let mut writer = ZBytes::writer();
     /// // Append data without copying by passing ownership
     /// writer.append(one);
     /// writer.append(two);
     /// writer.append(three);
+    /// let zbytes = writer.finish();
     ///
-    /// // deserialization
-    /// let mut out: Vec<u8> = bytes.into();
-    /// assert_eq!(out, vec![0u8, 1, 2, 3, 4, 5, 6, 7]);
+    /// assert_eq!(zbytes.to_bytes(), vec![0u8, 1, 2, 3, 4, 5, 6, 7]);
     /// ```
     pub fn append(&mut self, zbytes: ZBytes) {
         if !self.vec.is_empty() {
@@ -324,20 +322,20 @@ impl std::io::Write for ZBytesWriter {
 ///
 /// let buf1: Vec<u8> = vec![1, 2, 3];
 /// let buf2: Vec<u8> = vec![4, 5, 6, 7, 8];
-/// let mut zbs = ZBytes::new();
-/// let mut writer = zbs.writer();
+/// let mut writer = ZBytes::writer();
 /// writer.write(&buf1);
 /// writer.write(&buf2);
+/// let mut zbytes = writer.finish();
 ///
 /// // Access the raw content
-/// for slice in zbs.slices() {
+/// for slice in zbytes.slices() {
 ///     println!("{:02x?}", slice);
 /// }
 ///
 /// // Concatenate input in a single vector
 /// let buf: Vec<u8> = buf1.into_iter().chain(buf2.into_iter()).collect();
 /// // Concatenate raw bytes in a single vector
-/// let out: Vec<u8> = zbs.slices().fold(Vec::new(), |mut b, x| { b.extend_from_slice(x); b });
+/// let out: Vec<u8> = zbytes.slices().fold(Vec::new(), |mut b, x| { b.extend_from_slice(x); b });
 /// // The previous line is the equivalent of
 /// // let out: Vec<u8> = zbs.into();
 /// assert_eq!(buf, out);    
@@ -482,231 +480,3 @@ impl<const ID: u8> From<AttachmentType<ID>> for ZBytes {
         this.buffer.into()
     }
 }
-
-// mod tests {
-//
-//     #[test]
-//     fn serializer() {
-//         use std::borrow::Cow;
-//
-//         use rand::Rng;
-//         use zenoh_buffers::{ZBuf, ZSlice};
-//         use zenoh_protocol::core::Parameters;
-//         #[cfg(feature = "shared-memory")]
-//         use zenoh_shm::api::{
-//             buffer::zshm::{zshm, ZShm},
-//             protocol_implementations::posix::{
-//                 posix_shm_provider_backend::PosixShmProviderBackend, protocol_id::POSIX_PROTOCOL_ID,
-//             },
-//             provider::shm_provider::ShmProviderBuilder,
-//         };
-//
-//         use super::ZBytes;
-//         #[cfg(feature = "shared-memory")]
-//         use crate::zenoh_core::Wait;
-//
-//         const NUM: usize = 1_000;
-//
-//         macro_rules! serialize_deserialize {
-//             ($t:ty, $in:expr) => {
-//                 let i = $in;
-//                 let t = i.clone();
-//                 println!("Serialize:\t{:?}", t);
-//                 let v = ZBytes::serialize(t);
-//                 println!("Deserialize:\t{:?}", v);
-//                 let o: $t = v.deserialize().unwrap();
-//                 assert_eq!(i, o);
-//                 println!("");
-//             };
-//         }
-//
-//         // WARN: test function body produces stack overflow, so I split it into subroutines
-//         #[inline(never)]
-//         fn numeric() {
-//             let mut rng = rand::thread_rng();
-//
-//             // unsigned integer
-//             serialize_deserialize!(u8, u8::MIN);
-//             serialize_deserialize!(u16, u16::MIN);
-//             serialize_deserialize!(u32, u32::MIN);
-//             serialize_deserialize!(u64, u64::MIN);
-//             serialize_deserialize!(usize, usize::MIN);
-//
-//             serialize_deserialize!(u8, u8::MAX);
-//             serialize_deserialize!(u16, u16::MAX);
-//             serialize_deserialize!(u32, u32::MAX);
-//             serialize_deserialize!(u64, u64::MAX);
-//             serialize_deserialize!(usize, usize::MAX);
-//
-//             for _ in 0..NUM {
-//                 serialize_deserialize!(u8, rng.gen::<u8>());
-//                 serialize_deserialize!(u16, rng.gen::<u16>());
-//                 serialize_deserialize!(u32, rng.gen::<u32>());
-//                 serialize_deserialize!(u64, rng.gen::<u64>());
-//                 serialize_deserialize!(usize, rng.gen::<usize>());
-//             }
-//
-//             // signed integer
-//             serialize_deserialize!(i8, i8::MIN);
-//             serialize_deserialize!(i16, i16::MIN);
-//             serialize_deserialize!(i32, i32::MIN);
-//             serialize_deserialize!(i64, i64::MIN);
-//             serialize_deserialize!(isize, isize::MIN);
-//
-//             serialize_deserialize!(i8, i8::MAX);
-//             serialize_deserialize!(i16, i16::MAX);
-//             serialize_deserialize!(i32, i32::MAX);
-//             serialize_deserialize!(i64, i64::MAX);
-//             serialize_deserialize!(isize, isize::MAX);
-//
-//             for _ in 0..NUM {
-//                 serialize_deserialize!(i8, rng.gen::<i8>());
-//                 serialize_deserialize!(i16, rng.gen::<i16>());
-//                 serialize_deserialize!(i32, rng.gen::<i32>());
-//                 serialize_deserialize!(i64, rng.gen::<i64>());
-//                 serialize_deserialize!(isize, rng.gen::<isize>());
-//             }
-//
-//             // float
-//             serialize_deserialize!(f32, f32::MIN);
-//             serialize_deserialize!(f64, f64::MIN);
-//
-//             serialize_deserialize!(f32, f32::MAX);
-//             serialize_deserialize!(f64, f64::MAX);
-//
-//             for _ in 0..NUM {
-//                 serialize_deserialize!(f32, rng.gen::<f32>());
-//                 serialize_deserialize!(f64, rng.gen::<f64>());
-//             }
-//         }
-//         numeric();
-//
-//         // WARN: test function body produces stack overflow, so I split it into subroutines
-//         #[inline(never)]
-//         fn basic() {
-//             let mut rng = rand::thread_rng();
-//
-//             // bool
-//             serialize_deserialize!(bool, true);
-//             serialize_deserialize!(bool, false);
-//
-//             // char
-//             serialize_deserialize!(char, char::MAX);
-//             serialize_deserialize!(char, rng.gen::<char>());
-//
-//             let a = 'a';
-//             let bytes = ZSerde.serialize(a);
-//             let s: String = ZSerde.deserialize(&bytes).unwrap();
-//             assert_eq!(a.to_string(), s);
-//
-//             let a = String::from("a");
-//             let bytes = ZSerde.serialize(&a);
-//             let s: char = ZSerde.deserialize(&bytes).unwrap();
-//             assert_eq!(a, s.to_string());
-//
-//             // String
-//             serialize_deserialize!(String, "");
-//             serialize_deserialize!(String, String::from("abcdef"));
-//
-//             // Cow<str>
-//             serialize_deserialize!(Cow<str>, Cow::from(""));
-//             serialize_deserialize!(Cow<str>, Cow::from(String::from("abcdef")));
-//
-//             // Vec
-//             serialize_deserialize!(Vec<u8>, vec![0u8; 0]);
-//             serialize_deserialize!(Vec<u8>, vec![0u8; 64]);
-//
-//             // Cow<[u8]>
-//             serialize_deserialize!(Cow<[u8]>, Cow::from(vec![0u8; 0]));
-//             serialize_deserialize!(Cow<[u8]>, Cow::from(vec![0u8; 64]));
-//
-//             // ZBuf
-//             serialize_deserialize!(ZBuf, ZBuf::from(vec![0u8; 0]));
-//             serialize_deserialize!(ZBuf, ZBuf::from(vec![0u8; 64]));
-//         }
-//         basic();
-//
-//         // WARN: test function body produces stack overflow, so I split it into subroutines
-//         #[inline(never)]
-//         fn reader_writer() {
-//             let mut bytes = ZBytes::new();
-//             let mut writer = bytes.writer();
-//
-//             let i1 = 1_u8;
-//             let i2 = String::from("abcdef");
-//             let i3 = vec![2u8; 64];
-//
-//             println!("Write: {:?}", i1);
-//             writer.serialize(i1);
-//             println!("Write: {:?}", i2);
-//             writer.serialize(&i2);
-//             println!("Write: {:?}", i3);
-//             writer.serialize(&i3);
-//
-//             let mut reader = bytes.reader();
-//             let o1: u8 = reader.deserialize().unwrap();
-//             println!("Read: {:?}", o1);
-//             let o2: String = reader.deserialize().unwrap();
-//             println!("Read: {:?}", o2);
-//             let o3: Vec<u8> = reader.deserialize().unwrap();
-//             println!("Read: {:?}", o3);
-//
-//             println!();
-//
-//             assert_eq!(i1, o1);
-//             assert_eq!(i2, o2);
-//             assert_eq!(i3, o3);
-//         }
-//         reader_writer();
-//
-//         // SHM
-//         #[cfg(feature = "shared-memory")]
-//         fn shm() {
-//             // create an SHM backend...
-//             let backend = PosixShmProviderBackend::builder()
-//                 .with_size(4096)
-//                 .unwrap()
-//                 .wait()
-//                 .unwrap();
-//             // ...and an SHM provider
-//             let provider = ShmProviderBuilder::builder()
-//                 .protocol_id::<POSIX_PROTOCOL_ID>()
-//                 .backend(backend)
-//                 .wait();
-//
-//             // Prepare a layout for allocations
-//             let layout = provider.alloc(1024).into_layout().unwrap();
-//
-//             // allocate an SHM buffer
-//             let mutable_shm_buf = layout.alloc().wait().unwrap();
-//
-//             // convert to immutable SHM buffer
-//             let immutable_shm_buf: ZShm = mutable_shm_buf.into();
-//
-//             serialize_deserialize!(&zshm, immutable_shm_buf);
-//         }
-//         #[cfg(feature = "shared-memory")]
-//         shm();
-//
-//         // Parameters
-//         serialize_deserialize!(Parameters, Parameters::from(""));
-//         serialize_deserialize!(Parameters, Parameters::from("a=1;b=2;c3"));
-//
-//         // Bytes
-//         serialize_deserialize!(bytes::Bytes, bytes::Bytes::from(vec![1, 2, 3, 4]));
-//         serialize_deserialize!(bytes::Bytes, bytes::Bytes::from("Hello World"));
-//
-//         // Tuple
-//         serialize_deserialize!((usize, usize), (0, 1));
-//         serialize_deserialize!((usize, String), (0, String::from("a")));
-//         serialize_deserialize!((String, String), (String::from("a"), String::from("b")));
-//         serialize_deserialize!(
-//             (Cow<'static, [u8]>, Cow<'static, [u8]>),
-//             (Cow::from(vec![0u8; 8]), Cow::from(vec![0u8; 8]))
-//         );
-//         serialize_deserialize!(
-//             (Cow<'static, str>, Cow<'static, str>),
-//             (Cow::from("a"), Cow::from("b"))
-//         );
-//     }
-// }
