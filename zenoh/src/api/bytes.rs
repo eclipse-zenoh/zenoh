@@ -141,7 +141,10 @@ impl ZBytes {
     ///
     /// See [`ZBytesWriter`] on how to chain the serialization of different types into a single [`ZBytes`].
     pub fn writer() -> ZBytesWriter {
-        Self::new().into()
+        ZBytesWriter {
+            zbuf: ZBuf::empty(),
+            vec: Vec::new(),
+        }
     }
 
     /// Return an iterator on raw bytes slices contained in the [`ZBytes`].
