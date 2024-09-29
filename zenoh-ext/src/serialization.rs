@@ -471,21 +471,45 @@ impl_varint!(u8: i8, u16: i16, u32: i32, u64: i64, usize: isize);
 // Serialization/deseialization for zenoh types
 //
 
+impl Serialize for zenoh::time::NTP64 {
+    fn serialize(&self, serializer: &mut ZSerializer) {
+        let time = self.as_u64();
+        time.serialize(serializer);
+    }
+}
+
+impl Deserialize for zenoh::time::NTP64 {
+    fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
+        let time = u64::deserialize(deserializer)?;
+        Ok(NTP64(time))
+    }
+}
+
+impl Serialize for zenoh::time::TimestampId {
+    fn serialize(&self, serializer: &mut ZSerializer) {
+        self.to_le_bytes().serialize(serializer);
+    }
+}
+
+impl Deserialize for zenoh::time::TimestampId {
+    fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
+        let id = Vec::<u8>::deserialize(deserializer)?;
+        let id = id.as_slice().try_into().map_err(|_| ZDeserializeError)?;
+        Ok(id)
+    }
+}
+
 impl Serialize for zenoh::time::Timestamp {
     fn serialize(&self, serializer: &mut ZSerializer) {
-        let time = self.get_time().as_u64();
-        let id = self.get_id().to_le_bytes();
-        time.serialize(serializer);
-        id.serialize(serializer);
+        self.get_time().serialize(serializer);
+        self.get_id().serialize(serializer); 
     }
 }
 
 impl Deserialize for zenoh::time::Timestamp {
     fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
-        let time = u64::deserialize(deserializer)?;
-        let time = NTP64(time);
-        let id = Vec::<u8>::deserialize(deserializer)?;
-        let id = id.as_slice().try_into().map_err(|_| ZDeserializeError)?;
+        let time = NTP64::deserialize(deserializer)?;
+        let id = TimestampId::deserialize(deserializer)?;
         Ok(Timestamp::new(time, id))
     }
 }
