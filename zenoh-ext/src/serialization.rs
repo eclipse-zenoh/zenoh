@@ -95,12 +95,6 @@ impl From<ZSerializer> for ZBytes {
     }
 }
 
-impl From<ZBytesWriter> for ZSerializer {
-    fn from(value: ZBytesWriter) -> Self {
-        Self(value)
-    }
-}
-
 #[derive(Debug)]
 pub struct ZDeserializer<'a>(ZBytesReader<'a>);
 
@@ -126,12 +120,6 @@ impl<'a> ZDeserializer<'a> {
             len,
             _phantom: PhantomData,
         })
-    }
-}
-
-impl<'a> From<ZBytesReader<'a>> for ZDeserializer<'a> {
-    fn from(value: ZBytesReader<'a>) -> Self {
-        Self(value)
     }
 }
 

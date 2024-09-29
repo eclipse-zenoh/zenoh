@@ -302,15 +302,6 @@ impl From<ZBytesWriter> for ZBytes {
     }
 }
 
-impl From<ZBytes> for ZBytesWriter {
-    fn from(value: ZBytes) -> Self {
-        Self {
-            zbuf: value.0,
-            vec: vec![],
-        }
-    }
-}
-
 impl std::io::Write for ZBytesWriter {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         std::io::Write::write(&mut self.vec, buf)
