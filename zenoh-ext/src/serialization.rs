@@ -6,10 +6,10 @@ use std::{
     io::{Read, Write},
     marker::PhantomData,
     ops::{Deref, DerefMut},
-    ptr,
+    ptr, str::FromStr,
 };
 
-use zenoh::{bytes::{ZBytes, ZBytesReader, ZBytesWriter}, time::{Timestamp, TimestampId, NTP64}};
+use zenoh::{bytes::{Encoding, ZBytes, ZBytesReader, ZBytesWriter}, time::{Timestamp, TimestampId, NTP64}};
 
 #[derive(Debug)]
 pub struct ZDeserializeError;
@@ -471,27 +471,27 @@ impl_varint!(u8: i8, u16: i16, u32: i32, u64: i64, usize: isize);
 // Serialization/deseialization for zenoh types
 //
 
-impl Serialize for zenoh::time::NTP64 {
+impl Serialize for NTP64 {
     fn serialize(&self, serializer: &mut ZSerializer) {
         let time = self.as_u64();
         time.serialize(serializer);
     }
 }
 
-impl Deserialize for zenoh::time::NTP64 {
+impl Deserialize for NTP64 {
     fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
         let time = u64::deserialize(deserializer)?;
         Ok(NTP64(time))
     }
 }
 
-impl Serialize for zenoh::time::TimestampId {
+impl Serialize for TimestampId {
     fn serialize(&self, serializer: &mut ZSerializer) {
         self.to_le_bytes().serialize(serializer);
     }
 }
 
-impl Deserialize for zenoh::time::TimestampId {
+impl Deserialize for TimestampId {
     fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
         let id = Vec::<u8>::deserialize(deserializer)?;
         let id = id.as_slice().try_into().map_err(|_| ZDeserializeError)?;
@@ -499,17 +499,30 @@ impl Deserialize for zenoh::time::TimestampId {
     }
 }
 
-impl Serialize for zenoh::time::Timestamp {
+impl Serialize for Timestamp {
     fn serialize(&self, serializer: &mut ZSerializer) {
         self.get_time().serialize(serializer);
         self.get_id().serialize(serializer); 
     }
 }
 
-impl Deserialize for zenoh::time::Timestamp {
+impl Deserialize for Timestamp {
     fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
         let time = NTP64::deserialize(deserializer)?;
         let id = TimestampId::deserialize(deserializer)?;
         Ok(Timestamp::new(time, id))
+    }
+}
+
+impl Serialize for Encoding {
+    fn serialize(&self, serializer: &mut ZSerializer) {
+        self.to_string().serialize(serializer);
+    }
+}
+
+impl Deserialize for zenoh::bytes::Encoding {
+    fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
+        let encoding = String::deserialize(deserializer)?;
+        Encoding::from_str(&encoding).map_err(|_| ZDeserializeError)
     }
 }

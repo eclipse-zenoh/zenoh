@@ -1,4 +1,3 @@
-use std::{collections::HashMap, time::{SystemTime, UNIX_EPOCH}};
 
 //
 // Copyright (c) 2024 ZettaScale Technology
@@ -13,7 +12,8 @@ use std::{collections::HashMap, time::{SystemTime, UNIX_EPOCH}};
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh::{bytes::ZBytes, time::{Timestamp, TimestampId}};
+use zenoh::{bytes::{Encoding, ZBytes}, time::{Timestamp, TimestampId}};
+use std::{collections::HashMap, str::FromStr, time::{SystemTime, UNIX_EPOCH}};
 
 fn main() {
     // Raw bytes
@@ -105,6 +105,16 @@ fn main() {
         let input = Timestamp::new(now, TimestampId::rand());
         let payload = z_serialize(&input);
         let output: Timestamp = z_deserialize(&payload).unwrap();
+        assert_eq!(input, output);
+
+        let input = Encoding::TEXT_JSON;
+        let payload = z_serialize(&input);
+        let output: Encoding = z_deserialize(&payload).unwrap();
+        assert_eq!(input, output);
+
+        let input = Encoding::from_str("text/plain;foobar").unwrap();
+        let payload = z_serialize(&input);
+        let output: Encoding = z_deserialize(&payload).unwrap();
         assert_eq!(input, output);
 
         // Look at Serialize/Deserialize documentation for the exhaustive
