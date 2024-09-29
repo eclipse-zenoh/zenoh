@@ -6,10 +6,14 @@ use std::{
     io::{Read, Write},
     marker::PhantomData,
     ops::{Deref, DerefMut},
-    ptr, str::FromStr,
+    ptr,
+    str::FromStr,
 };
 
-use zenoh::{bytes::{Encoding, ZBytes, ZBytesReader, ZBytesWriter}, time::{Timestamp, TimestampId, NTP64}};
+use zenoh::{
+    bytes::{Encoding, ZBytes, ZBytesReader, ZBytesWriter},
+    time::{Timestamp, TimestampId, NTP64},
+};
 
 #[derive(Debug)]
 pub struct ZDeserializeError;
@@ -502,7 +506,7 @@ impl Deserialize for TimestampId {
 impl Serialize for Timestamp {
     fn serialize(&self, serializer: &mut ZSerializer) {
         self.get_time().serialize(serializer);
-        self.get_id().serialize(serializer); 
+        self.get_id().serialize(serializer);
     }
 }
 

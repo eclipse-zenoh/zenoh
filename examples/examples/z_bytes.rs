@@ -1,4 +1,3 @@
-
 //
 // Copyright (c) 2024 ZettaScale Technology
 //
@@ -12,8 +11,16 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh::{bytes::{Encoding, ZBytes}, time::{Timestamp, TimestampId}};
-use std::{collections::HashMap, str::FromStr, time::{SystemTime, UNIX_EPOCH}};
+use std::{
+    collections::HashMap,
+    str::FromStr,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+use zenoh::{
+    bytes::{Encoding, ZBytes},
+    time::{Timestamp, TimestampId},
+};
 
 fn main() {
     // Raw bytes
