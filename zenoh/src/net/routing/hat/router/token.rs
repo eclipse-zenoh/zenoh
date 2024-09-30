@@ -20,7 +20,7 @@ use zenoh_protocol::{
     network::{
         declare::{common::ext::WireExprType, TokenId},
         ext,
-        interest::{InterestId, InterestMode, InterestOptions},
+        interest::{InterestId, InterestMode},
         Declare, DeclareBody, DeclareToken, UndeclareToken,
     },
 };
@@ -32,7 +32,7 @@ use super::{
     HatContext, HatFace, HatTables,
 };
 use crate::net::routing::{
-    dispatcher::{face::FaceState, tables::Tables},
+    dispatcher::{face::FaceState, interests::RemoteInterest, tables::Tables},
     hat::{CurrentFutureTrait, HatTokenTrait, SendDeclare},
     router::{NodeId, Resource, SessionContext},
     RoutingContext,
@@ -104,11 +104,16 @@ fn propagate_simple_token_to(
         let matching_interests = face_hat!(dst_face)
             .remote_interests
             .values()
-            .filter(|(r, o)| o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true))
+            .filter(|i| i.options.tokens() && i.matches(res))
             .cloned()
-            .collect::<Vec<(Option<Arc<Resource>>, InterestOptions)>>();
+            .collect::<Vec<_>>();
 
-        for (int_res, options) in matching_interests {
+        for RemoteInterest {
+            res: int_res,
+            options,
+            ..
+        } in matching_interests
+        {
             let res = if options.aggregate() {
                 int_res.as_ref().unwrap_or(res)
             } else {
@@ -420,9 +425,11 @@ fn propagate_forget_simple_token(
                 && (src_face.whatami != WhatAmI::Peer
                     || face.whatami != WhatAmI::Peer
                     || hat!(tables).failover_brokering(src_face.zid, face.zid))
-        }) && face_hat!(face).remote_interests.values().any(|(r, o)| {
-            o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true) && !o.aggregate()
-        }) {
+        }) && face_hat!(face)
+            .remote_interests
+            .values()
+            .any(|i| i.options.tokens() && i.matches(res) && !i.options.aggregate())
+        {
             // Token has never been declared on this face.
             // Send an Undeclare with a one shot generated id and a WireExpr ext.
             send_declare(
@@ -475,15 +482,16 @@ fn propagate_forget_simple_token(
                             res.expr(),
                         ),
                     );
-                } else if face_hat!(face).remote_interests.values().any(|(r, o)| {
-                    o.tokens()
-                        && r.as_ref().map(|r| r.matches(&res)).unwrap_or(true)
-                        && !o.aggregate()
-                }) && src_face.map_or(true, |src_face| {
-                    src_face.whatami != WhatAmI::Peer
-                        || face.whatami != WhatAmI::Peer
-                        || hat!(tables).failover_brokering(src_face.zid, face.zid)
-                }) {
+                } else if face_hat!(face)
+                    .remote_interests
+                    .values()
+                    .any(|i| i.options.tokens() && i.matches(&res) && !i.options.aggregate())
+                    && src_face.map_or(true, |src_face| {
+                        src_face.whatami != WhatAmI::Peer
+                            || face.whatami != WhatAmI::Peer
+                            || hat!(tables).failover_brokering(src_face.zid, face.zid)
+                    })
+                {
                     // Token has never been declared on this face.
                     // Send an Undeclare with a one shot generated id and a WireExpr ext.
                     send_declare(

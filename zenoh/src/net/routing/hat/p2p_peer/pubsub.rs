@@ -24,7 +24,7 @@ use zenoh_protocol::{
             common::ext::WireExprType, ext, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
             UndeclareSubscriber,
         },
-        interest::{InterestId, InterestMode, InterestOptions},
+        interest::{InterestId, InterestMode},
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -35,6 +35,7 @@ use crate::{
     net::routing::{
         dispatcher::{
             face::FaceState,
+            interests::RemoteInterest,
             pubsub::SubscriberInfo,
             resource::{NodeId, Resource, SessionContext},
             tables::{Route, RoutingExpr, Tables},
@@ -84,13 +85,16 @@ fn propagate_simple_subscription_to(
             let matching_interests = face_hat!(dst_face)
                 .remote_interests
                 .values()
-                .filter(|(r, _, o)| {
-                    o.subscribers() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true)
-                })
+                .filter(|i| i.options.subscribers() && i.matches(res))
                 .cloned()
-                .collect::<Vec<(Option<Arc<Resource>>, InterestMode, InterestOptions)>>();
+                .collect::<Vec<_>>();
 
-            for (int_res, _, options) in matching_interests {
+            for RemoteInterest {
+                res: int_res,
+                options,
+                ..
+            } in matching_interests
+            {
                 let res = if options.aggregate() {
                     int_res.as_ref().unwrap_or(res)
                 } else {

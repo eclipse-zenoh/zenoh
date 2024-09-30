@@ -191,7 +191,7 @@ fn propagate_forget_simple_token(
         } else if face_hat!(face)
             .remote_interests
             .values()
-            .any(|(r, o)| o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true))
+            .any(|i| i.options.tokens() && i.matches(res))
         {
             // Token has never been declared on this face.
             // Send an Undeclare with a one shot generated id and a WireExpr ext.

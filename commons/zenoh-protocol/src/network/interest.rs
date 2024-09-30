@@ -31,7 +31,7 @@ pub mod flag {
 ///
 /// The behaviour of a INTEREST depends on the INTEREST MODE.
 ///
-/// E.g., the message flow is the following for an [`Interest`] with mode `Current`:
+/// E.g., the message flow is the following for an [`Interest`] with mode [`InterestMode::Current`]:
 ///
 /// ```text
 ///     A                   B
@@ -51,7 +51,7 @@ pub mod flag {
 ///     |                   |
 /// ```
 ///
-/// And the message flow is the following for an [`Interest`] with mode `CurrentFuture`:
+/// And the message flow is the following for an [`Interest`] with mode [`InterestMode::CurrentFuture`]:
 ///
 /// ```text
 ///     A                   B
@@ -78,8 +78,30 @@ pub mod flag {
 ///     | INTEREST FINAL    |
 ///     |------------------>| -- Mode: Final
 ///     |                   |    This stops the transmission of subscriber declarations/undeclarations.
-///     |                   |              
+///     |                   |
+/// ```
 ///
+/// And the message flow is the following for an [`Interest`] with mode [`InterestMode::Future`]:
+///
+/// ```text
+///     A                   B
+///     |     INTEREST      |
+///     |------------------>| -- This is a DeclareInterest e.g. for subscriber declarations/undeclarations.
+///     |                   |
+///     |  DECL SUBSCRIBER  |
+///     |<------------------| -- With interest_id field not set
+///     | UNDECL SUBSCRIBER |
+///     |<------------------| -- With interest_id field not set
+///     |                   |
+///     |        ...        |
+///     |                   |
+///     | INTEREST FINAL    |
+///     |------------------>| -- Mode: Final
+///     |                   |    This stops the transmission of subscriber declarations/undeclarations.
+///     |                   |
+/// ```
+///
+/// ```text
 /// Flags:
 /// - |: Mode           The mode of the interest*
 /// -/
@@ -100,7 +122,7 @@ pub mod flag {
 /// ~  [int_exts]   ~  if Z==1
 /// +---------------+
 ///
-/// *Mode of declaration:
+/// Mode of declaration:
 /// - Mode 0b00: Final
 /// - Mode 0b01: Current
 /// - Mode 0b10: Future
@@ -116,6 +138,16 @@ pub mod flag {
 ///               If R==0 then M should be set to 0.
 ///     - if A==1 then the replies SHOULD be aggregated
 /// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Interest {
+    pub id: InterestId,
+    pub mode: InterestMode,
+    pub options: InterestOptions,
+    pub wire_expr: Option<WireExpr<'static>>,
+    pub ext_qos: ext::QoSType,
+    pub ext_tstamp: Option<ext::TimestampType>,
+    pub ext_nodeid: ext::NodeIdType,
+}
 
 /// The resolution of a RequestId
 pub type DeclareRequestId = u32;
@@ -144,17 +176,6 @@ impl InterestMode {
             _ => unreachable!(),
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Interest {
-    pub id: InterestId,
-    pub mode: InterestMode,
-    pub options: InterestOptions,
-    pub wire_expr: Option<WireExpr<'static>>,
-    pub ext_qos: ext::QoSType,
-    pub ext_tstamp: Option<ext::TimestampType>,
-    pub ext_nodeid: ext::NodeIdType,
 }
 
 pub mod ext {
