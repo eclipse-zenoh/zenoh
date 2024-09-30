@@ -7,9 +7,13 @@ use std::{
     marker::PhantomData,
     mem::MaybeUninit,
     ops::{Deref, DerefMut},
+    str::FromStr,
 };
 
-use zenoh::bytes::{ZBytes, ZBytesReader, ZBytesWriter};
+use zenoh::{
+    bytes::{Encoding, ZBytes, ZBytesReader, ZBytesWriter},
+    time::{Timestamp, TimestampId, NTP64},
+};
 
 #[derive(Debug)]
 pub struct ZDeserializeError;
@@ -531,11 +535,75 @@ macro_rules! impl_varint {
 }
 impl_varint!(u8: i8, u16: i16, u32: i32, u64: i64, usize: isize);
 
+//
+// Serialization/deseialization for zenoh types
+//
+
+impl Serialize for NTP64 {
+    fn serialize(&self, serializer: &mut ZSerializer) {
+        let time = self.as_u64();
+        time.serialize(serializer);
+    }
+}
+
+impl Deserialize for NTP64 {
+    fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
+        let time = u64::deserialize(deserializer)?;
+        Ok(NTP64(time))
+    }
+}
+
+impl Serialize for TimestampId {
+    fn serialize(&self, serializer: &mut ZSerializer) {
+        self.to_le_bytes().serialize(serializer);
+    }
+}
+
+impl Deserialize for TimestampId {
+    fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
+        let id = Vec::<u8>::deserialize(deserializer)?;
+        let id = id.as_slice().try_into().map_err(|_| ZDeserializeError)?;
+        Ok(id)
+    }
+}
+
+impl Serialize for Timestamp {
+    fn serialize(&self, serializer: &mut ZSerializer) {
+        self.get_time().serialize(serializer);
+        self.get_id().serialize(serializer);
+    }
+}
+
+impl Deserialize for Timestamp {
+    fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
+        let time = NTP64::deserialize(deserializer)?;
+        let id = TimestampId::deserialize(deserializer)?;
+        Ok(Timestamp::new(time, id))
+    }
+}
+
+impl Serialize for Encoding {
+    fn serialize(&self, serializer: &mut ZSerializer) {
+        self.to_string().serialize(serializer);
+    }
+}
+
+impl Deserialize for zenoh::bytes::Encoding {
+    fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
+        let encoding = String::deserialize(deserializer)?;
+        Encoding::from_str(&encoding).map_err(|_| ZDeserializeError)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, ops::Range};
+    use std::{collections::HashMap, ops::Range, str::FromStr};
 
     use rand::{thread_rng, Rng};
+    use zenoh::{
+        bytes::Encoding,
+        time::{Timestamp, TimestampId},
+    };
 
     use crate::{z_deserialize, z_serialize, VarInt};
 
@@ -617,5 +685,18 @@ mod tests {
         let mut map = HashMap::new();
         map.insert("hello".to_string(), "world".to_string());
         serialize_deserialize!(HashMap<String, String>, map);
+    }
+
+    #[test]
+    fn timestamp_serialization() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into();
+        serialize_deserialize!(Timestamp, Timestamp::new(now, TimestampId::rand()));
+    }
+
+    #[test]
+    fn encoding_serialization() {
+        serialize_deserialize!(Encoding, Encoding::TEXT_JSON);
+        serialize_deserialize!(Encoding, Encoding::from_str("text/plain;foobar").unwrap());
     }
 }
