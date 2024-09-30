@@ -519,7 +519,7 @@ impl Drop for WeakSession {
 /// Error indicating the operation cannot proceed because the session is closed.
 ///
 /// It may be returned by operations like [`Session::get`] or [`Publisher::put`] when
-/// [`Session::closed`] has been called before.
+/// [`Session::close`] has been called before.
 #[derive(Debug)]
 pub struct SessionClosedError;
 
