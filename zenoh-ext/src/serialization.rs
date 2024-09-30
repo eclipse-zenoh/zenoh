@@ -305,6 +305,11 @@ impl<T: Serialize> Serialize for [T] {
         serialize_slice(self, serializer);
     }
 }
+impl<T: Serialize, const N: usize> Serialize for [T; N] {
+    fn serialize(&self, serializer: &mut ZSerializer) {
+        serialize_slice(self.as_slice(), serializer);
+    }
+}
 impl<'a, T: Serialize + 'a> Serialize for Cow<'a, [T]>
 where
     [T]: ToOwned,
@@ -326,6 +331,19 @@ impl<T: Deserialize> Deserialize for Box<[T]> {
 impl<T: Serialize> Serialize for Vec<T> {
     fn serialize(&self, serializer: &mut ZSerializer) {
         serialize_slice(self, serializer)
+    }
+}
+impl<T: Deserialize, const N: usize> Deserialize for [T; N] {
+    fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
+        if <VarInt<usize>>::deserialize(deserializer)?.0 != N {
+            return Err(ZDeserializeError);
+        }
+        let mut array = std::array::from_fn(|_| MaybeUninit::uninit());
+        let slice = T::deserialize_n_uninit(&mut array, deserializer)?;
+        let (slice_ptr, slice_len) = (slice.as_ptr(), slice.len());
+        assert_eq!((slice_ptr, slice_len), (array.as_ptr().cast::<T>(), N));
+        // SAFETY: assertion checks the returned slice is array's one, and it's returned initialized
+        Ok(array.map(|t| unsafe { t.assume_init() }))
     }
 }
 impl<T: Deserialize> Deserialize for Vec<T> {
