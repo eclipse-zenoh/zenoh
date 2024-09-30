@@ -457,31 +457,34 @@ impl_varint!(u8: i8, u16: i16, u32: i32, u64: i64, usize: isize);
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::{collections::HashMap, ops::Range};
+
+    use rand::{thread_rng, Rng};
 
     use crate::{z_deserialize, z_serialize, VarInt};
 
     macro_rules! serialize_deserialize {
         ($ty:ty, $expr:expr) => {
-            let payload = z_serialize(&$expr);
+            let expr: &$ty = &$expr;
+            let payload = z_serialize(expr);
             let output = z_deserialize::<$ty>(&payload).unwrap();
-            assert_eq!($expr, output);
+            assert_eq!(*expr, output);
         };
     }
 
-    const RANDOM_TESTS: usize = 1_000;
+    const RANDOM_TESTS: Range<usize> = 0..1_000;
 
     #[test]
     fn numeric_serialization() {
         macro_rules! test_int {
-            ($($ty:ty),* $(,)?) => {
-                serialize_deserialize($ty, <$ty>::MIN);
-                serialize_deserialize($ty, <$ty>::MAX);
-                let mut rng = rand::thread_rng();
+            ($($ty:ty),* $(,)?) => {$(
+                serialize_deserialize!($ty, <$ty>::MIN);
+                serialize_deserialize!($ty, <$ty>::MAX);
+                let mut rng = thread_rng();
                 for _ in RANDOM_TESTS {
-                    serialize_deserialize($ty, rng.gen::<$ty>());
+                    serialize_deserialize!($ty, rng.gen::<$ty>());
                 }
-            };
+            )*};
         }
         test_int!(i8, i16, i32, i64, i128, u8, u16, u32, u64, u128, f32, f64);
     }
@@ -489,14 +492,14 @@ mod tests {
     #[test]
     fn varint_serialization() {
         macro_rules! test_varint {
-            ($($ty:ty),* $(,)?) => {
-                serialize_deserialize(VarInt<$ty>, VarInt(<$ty>::MIN));
-                serialize_deserialize(VarInt<$ty>, VarInt(<$ty>::MAX));
-                let mut rng = rand::thread_rng();
+            ($($ty:ty),* $(,)?) => {$(
+                serialize_deserialize!(VarInt<$ty>, VarInt(<$ty>::MIN));
+                serialize_deserialize!(VarInt<$ty>, VarInt(<$ty>::MAX));
+                let mut rng = thread_rng();
                 for _ in RANDOM_TESTS {
-                    serialize_deserialize(VarInt<$ty>, VarInt(rng.gen::<$ty>()));
+                    serialize_deserialize!(VarInt<$ty>, VarInt(rng.gen::<$ty>()));
                 }
-            };
+            )*};
         }
         test_varint!(i8, i16, i32, i64, isize, u8, u16, u32, u64, usize);
     }
@@ -505,7 +508,7 @@ mod tests {
     fn slice_serialization() {
         let vec = vec![42.0f64, 0.15];
         serialize_deserialize!(Vec<f64>, vec);
-        let payload = crate::z_serialize(vec.as_slice());
+        let payload = z_serialize(vec.as_slice());
         assert_eq!(vec, z_deserialize::<Vec<f64>>(&payload).unwrap())
     }
 
@@ -521,7 +524,7 @@ mod tests {
     fn tuple_serialization() {
         serialize_deserialize!(
             (VarInt<usize>, f32, String),
-            (VarInt(42), 42.0, "42".to_string())
+            (VarInt(42), 42.0f32, "42".to_string())
         );
     }
 
