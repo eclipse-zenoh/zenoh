@@ -395,7 +395,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                         ))
                     }
                 };
-                tokio::spawn(async move {
+                spawn_runtime(async move {
                     tracing::debug!("Subscribe to {} for SSE stream", key_expr);
                     let sender = &sender;
                     let sub = req.state().0.declare_subscriber(&key_expr).await.unwrap();
