@@ -88,7 +88,6 @@ impl From<OptionZBytes> for Option<ZBytes> {
 /// It is also possible to iterate over the raw data that may be scattered on different memory regions using [`slices`](Self::slices).
 /// Please note that no guarantee is provided on the internal memory layout of [`ZBytes`] nor on how many slices a given [`ZBytes`] will be composed of.
 /// The only provided guarantee is on the bytes order that is preserved.
-/// ```
 #[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ZBytes(ZBuf);
