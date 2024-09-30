@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -13,6 +11,8 @@ use std::borrow::Cow;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::borrow::Cow;
+
 use clap::Parser;
 use zenoh::{bytes::ZBytes, config::Config, key_expr::KeyExpr};
 use zenoh_examples::CommonArgs;

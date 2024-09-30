@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 //
 // Copyright (c) 2024 ZettaScale Technology
 //
@@ -13,6 +11,8 @@ use std::collections::HashMap;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::collections::HashMap;
+
 use zenoh::bytes::ZBytes;
 
 fn main() {
