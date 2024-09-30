@@ -421,12 +421,20 @@ validated_struct::validator! {
                         /// Congestion occurs when the queue is empty (no available batch).
                         /// Using CongestionControl::Block the caller is blocked until a batch is available and re-inserted into the queue.
                         /// Using CongestionControl::Drop the message might be dropped, depending on conditions configured here.
-                        pub congestion_control: CongestionControlConf {
-                            /// The maximum time in microseconds to wait for an available batch before dropping a droppable message if still no batch is available.
-                            wait_before_drop: i64,
-                            /// The maximum time in microseconds to wait for an available batch before closing the transport session when sending a blocking message
-                            /// if still no batch is available.
-                            wait_before_close: i64,
+                        pub congestion_control: #[derive(Default)]
+                        CongestionControlConf {
+                            /// Behavior pushing CongestionControl::Drop messages to the queue.
+                            pub drop: CongestionControlDropConf {
+                                /// The maximum time in microseconds to wait for an available batch before dropping a droppable message
+                                /// if still no batch is available.
+                                wait_before_drop: i64,
+                            },
+                            /// Behavior pushing CongestionControl::Block messages to the queue.
+                            pub block: CongestionControlBlockConf {
+                                /// The maximum time in microseconds to wait for an available batch before closing the transport session
+                                /// when sending a blocking message if still no batch is available.
+                                wait_before_close: i64,
+                            },
                         },
                         pub batching: BatchingConf {
                             /// Perform adaptive batching of messages if they are smaller of the batch_size.

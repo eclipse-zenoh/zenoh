@@ -260,10 +260,20 @@ impl TransportManagerBuilder {
         self = self.defrag_buff_size(*link.rx().max_message_size());
         self = self.link_rx_buffer_size(*link.rx().buffer_size());
         self = self.wait_before_drop(duration_from_i64us(
-            *link.tx().queue().congestion_control().wait_before_drop(),
+            *link
+                .tx()
+                .queue()
+                .congestion_control()
+                .drop()
+                .wait_before_drop(),
         ));
         self = self.wait_before_close(duration_from_i64us(
-            *link.tx().queue().congestion_control().wait_before_close(),
+            *link
+                .tx()
+                .queue()
+                .congestion_control()
+                .block()
+                .wait_before_close(),
         ));
         self = self.queue_size(link.tx().queue().size().clone());
         self = self.tx_threads(*link.tx().threads());
@@ -362,8 +372,8 @@ impl Default for TransportManagerBuilder {
         let link_rx = LinkRxConf::default();
         let queue = QueueConf::default();
         let backoff = *queue.batching().time_limit();
-        let wait_before_drop = *queue.congestion_control().wait_before_drop();
-        let wait_before_close = *queue.congestion_control().wait_before_close();
+        let wait_before_drop = *queue.congestion_control().drop().wait_before_drop();
+        let wait_before_close = *queue.congestion_control().block().wait_before_close();
         Self {
             version: VERSION,
             zid: ZenohIdProto::rand(),
