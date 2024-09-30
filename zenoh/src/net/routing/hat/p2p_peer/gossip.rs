@@ -427,8 +427,8 @@ impl Network {
                                     .get_transport_unicast(&zid)
                                     .await
                                     .is_none()
+                                    && runtime.connect_peer(&zid, &locators).await
                                 {
-                                    runtime.connect_peer(&zid, &locators).await;
                                     runtime
                                         .start_conditions()
                                         .terminate_peer_connector_zid(zid)

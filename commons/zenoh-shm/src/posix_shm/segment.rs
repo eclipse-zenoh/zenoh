@@ -106,7 +106,7 @@ where
     fn os_id(id: ID, id_prefix: &str) -> String {
         let os_id_str = format!("{id_prefix}_{id}");
         let crc_os_id_str = ECMA.checksum(os_id_str.as_bytes());
-        format!("{:x}", crc_os_id_str)
+        format!("{:x}.zenoh", crc_os_id_str)
     }
 
     pub fn as_ptr(&self) -> *mut u8 {

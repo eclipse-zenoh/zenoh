@@ -32,10 +32,7 @@ use zenoh_protocol::{
 use crate::net::{
     primitives::{DummyPrimitives, EPrimitives, Primitives},
     routing::{
-        dispatcher::{
-            pubsub::SubscriberInfo,
-            tables::{self, Tables},
-        },
+        dispatcher::{pubsub::SubscriberInfo, tables::Tables},
         router::*,
         RoutingContext,
     },
@@ -189,15 +186,14 @@ fn multisub_test() {
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
-    let face0 = Arc::downgrade(&router.new_primitives(primitives).state);
-    assert!(face0.upgrade().is_some());
+    let face0 = &router.new_primitives(primitives);
 
     // --------------
     let sub_info = SubscriberInfo;
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face0.upgrade().unwrap(),
+        &mut face0.state.clone(),
         0,
         &"sub".into(),
         &sub_info,
@@ -213,7 +209,7 @@ fn multisub_test() {
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face0.upgrade().unwrap(),
+        &mut face0.state.clone(),
         1,
         &"sub".into(),
         &sub_info,
@@ -225,7 +221,7 @@ fn multisub_test() {
     undeclare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face0.upgrade().unwrap(),
+        &mut face0.state.clone(),
         0,
         &WireExpr::empty(),
         NodeId::default(),
@@ -236,7 +232,7 @@ fn multisub_test() {
     undeclare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face0.upgrade().unwrap(),
+        &mut face0.state.clone(),
         1,
         &WireExpr::empty(),
         NodeId::default(),
@@ -244,7 +240,7 @@ fn multisub_test() {
     );
     assert!(res.upgrade().is_none());
 
-    tables::close_face(&tables, &face0);
+    face0.send_close();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
@@ -260,11 +256,10 @@ async fn clean_test() {
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
-    let face0 = Arc::downgrade(&router.new_primitives(primitives).state);
-    assert!(face0.upgrade().is_some());
+    let face0 = &router.new_primitives(primitives);
 
     // --------------
-    register_expr(&tables, &mut face0.upgrade().unwrap(), 1, &"todrop1".into());
+    register_expr(&tables, &mut face0.state.clone(), 1, &"todrop1".into());
     let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1")
         .map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
@@ -273,7 +268,7 @@ async fn clean_test() {
 
     register_expr(
         &tables,
-        &mut face0.upgrade().unwrap(),
+        &mut face0.state.clone(),
         2,
         &"todrop1/todrop11".into(),
     );
@@ -283,30 +278,30 @@ async fn clean_test() {
     let res2 = optres2.unwrap();
     assert!(res2.upgrade().is_some());
 
-    register_expr(&tables, &mut face0.upgrade().unwrap(), 3, &"**".into());
+    register_expr(&tables, &mut face0.state.clone(), 3, &"**".into());
     let optres3 = Resource::get_resource(zread!(tables.tables)._get_root(), "**")
         .map(|res| Arc::downgrade(&res));
     assert!(optres3.is_some());
     let res3 = optres3.unwrap();
     assert!(res3.upgrade().is_some());
 
-    unregister_expr(&tables, &mut face0.upgrade().unwrap(), 1);
+    unregister_expr(&tables, &mut face0.state.clone(), 1);
     assert!(res1.upgrade().is_some());
     assert!(res2.upgrade().is_some());
     assert!(res3.upgrade().is_some());
 
-    unregister_expr(&tables, &mut face0.upgrade().unwrap(), 2);
+    unregister_expr(&tables, &mut face0.state.clone(), 2);
     assert!(res1.upgrade().is_none());
     assert!(res2.upgrade().is_none());
     assert!(res3.upgrade().is_some());
 
-    unregister_expr(&tables, &mut face0.upgrade().unwrap(), 3);
+    unregister_expr(&tables, &mut face0.state.clone(), 3);
     assert!(res1.upgrade().is_none());
     assert!(res2.upgrade().is_none());
     assert!(res3.upgrade().is_none());
 
     // --------------
-    register_expr(&tables, &mut face0.upgrade().unwrap(), 1, &"todrop1".into());
+    register_expr(&tables, &mut face0.state.clone(), 1, &"todrop1".into());
     let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1")
         .map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
@@ -318,7 +313,7 @@ async fn clean_test() {
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face0.upgrade().unwrap(),
+        &mut face0.state.clone(),
         0,
         &"todrop1/todrop11".into(),
         &sub_info,
@@ -334,7 +329,7 @@ async fn clean_test() {
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face0.upgrade().unwrap(),
+        &mut face0.state.clone(),
         1,
         &WireExpr::from(1).with_suffix("/todrop12"),
         &sub_info,
@@ -351,7 +346,7 @@ async fn clean_test() {
     undeclare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face0.upgrade().unwrap(),
+        &mut face0.state.clone(),
         1,
         &WireExpr::empty(),
         NodeId::default(),
@@ -367,7 +362,7 @@ async fn clean_test() {
     undeclare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face0.upgrade().unwrap(),
+        &mut face0.state.clone(),
         0,
         &WireExpr::empty(),
         NodeId::default(),
@@ -377,17 +372,17 @@ async fn clean_test() {
     assert!(res2.upgrade().is_none());
     assert!(res3.upgrade().is_none());
 
-    unregister_expr(&tables, &mut face0.upgrade().unwrap(), 1);
+    unregister_expr(&tables, &mut face0.state.clone(), 1);
     assert!(res1.upgrade().is_none());
     assert!(res2.upgrade().is_none());
     assert!(res3.upgrade().is_none());
 
     // --------------
-    register_expr(&tables, &mut face0.upgrade().unwrap(), 2, &"todrop3".into());
+    register_expr(&tables, &mut face0.state.clone(), 2, &"todrop3".into());
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face0.upgrade().unwrap(),
+        &mut face0.state.clone(),
         2,
         &"todrop3".into(),
         &sub_info,
@@ -403,7 +398,7 @@ async fn clean_test() {
     undeclare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face0.upgrade().unwrap(),
+        &mut face0.state.clone(),
         2,
         &WireExpr::empty(),
         NodeId::default(),
@@ -411,16 +406,16 @@ async fn clean_test() {
     );
     assert!(res1.upgrade().is_some());
 
-    unregister_expr(&tables, &mut face0.upgrade().unwrap(), 2);
+    unregister_expr(&tables, &mut face0.state.clone(), 2);
     assert!(res1.upgrade().is_none());
 
     // --------------
-    register_expr(&tables, &mut face0.upgrade().unwrap(), 3, &"todrop4".into());
-    register_expr(&tables, &mut face0.upgrade().unwrap(), 4, &"todrop5".into());
+    register_expr(&tables, &mut face0.state.clone(), 3, &"todrop4".into());
+    register_expr(&tables, &mut face0.state.clone(), 4, &"todrop5".into());
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face0.upgrade().unwrap(),
+        &mut face0.state.clone(),
         3,
         &"todrop5".into(),
         &sub_info,
@@ -430,7 +425,7 @@ async fn clean_test() {
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face0.upgrade().unwrap(),
+        &mut face0.state.clone(),
         4,
         &"todrop6".into(),
         &sub_info,
@@ -455,8 +450,7 @@ async fn clean_test() {
     assert!(res2.upgrade().is_some());
     assert!(res3.upgrade().is_some());
 
-    tables::close_face(&tables, &face0);
-    assert!(face0.upgrade().is_none());
+    face0.send_close();
     assert!(res1.upgrade().is_none());
     assert!(res2.upgrade().is_none());
     assert!(res3.upgrade().is_none());

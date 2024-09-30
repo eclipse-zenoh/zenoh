@@ -12,13 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use tokio::{
     sync::{broadcast::Receiver, RwLock},
     task::JoinHandle,
 };
-use zenoh::{key_expr::OwnedKeyExpr, query::QueryTarget, sample::Locality, session::Session};
+use zenoh::{key_expr::OwnedKeyExpr, session::Session};
 
 use super::{core::Replication, LogLatest};
 use crate::storages_mgt::{LatestUpdates, StorageMessage, StorageService};
@@ -29,84 +29,53 @@ pub(crate) struct ReplicationService {
     aligner_queryable_handle: JoinHandle<()>,
 }
 
-pub(crate) const MAX_RETRY: usize = 2;
-pub(crate) const WAIT_PERIOD_SECS: u64 = 4;
-
 impl ReplicationService {
     /// Starts the `ReplicationService`, spawning multiple tasks.
     ///
+    /// # Initial alignment
+    ///
+    /// To optimise network resources, if the Storage is empty an "initial alignment" will be
+    /// performed: if a Replica is detected, a query will be made to retrieve the entire content of
+    /// its Storage.
+    ///
     /// # Tasks spawned
     ///
-    /// This function will spawn two tasks:
+    /// This function will spawn four long-lived tasks:
     /// 1. One to publish the [Digest].
-    /// 2. One to wait on the provided [Receiver] in order to stop the Replication Service,
+    /// 2. One to receive the [Digest] of other Replica.
+    /// 3. One to receive alignment queries of other Replica.
+    /// 4. One to wait on the provided [Receiver] in order to stop the Replication Service,
     ///    attempting to abort all the tasks that were spawned, once a Stop message has been
     ///    received.
     pub async fn spawn_start(
         zenoh_session: Arc<Session>,
-        storage_service: StorageService,
+        storage_service: &StorageService,
         storage_key_expr: OwnedKeyExpr,
         replication_log: Arc<RwLock<LogLatest>>,
         latest_updates: Arc<RwLock<LatestUpdates>>,
         mut rx: Receiver<StorageMessage>,
     ) {
-        // We perform a "wait-try" policy because Zenoh needs some time to propagate the routing
-        // information and, here, we need to have the queryables propagated.
-        //
-        // 4 seconds is an arbitrary value.
-        let mut attempt = 0;
-        let mut received_reply = false;
+        let storage = storage_service.storage.clone();
 
-        while attempt < MAX_RETRY {
-            attempt += 1;
-            tokio::time::sleep(Duration::from_secs(WAIT_PERIOD_SECS)).await;
+        let replication = Replication {
+            zenoh_session,
+            replication_log,
+            storage_key_expr,
+            latest_updates,
+            storage,
+        };
 
-            match zenoh_session
-                .get(&storage_key_expr)
-                // `BestMatching`, the default option for `target`, will try to minimise the storage
-                // that are queried and their distance while trying to maximise the key space
-                // covered.
-                //
-                // In other words, if there is a close and complete storage, it will only query this
-                // one.
-                .target(QueryTarget::BestMatching)
-                // The value `Remote` is self-explanatory but why it is needed deserves an
-                // explanation: we do not want to query the local database as the purpose is to get
-                // the data from other replicas (if there is one).
-                .allowed_destination(Locality::Remote)
-                .await
-            {
-                Ok(replies) => {
-                    while let Ok(reply) = replies.recv_async().await {
-                        received_reply = true;
-                        if let Ok(sample) = reply.into_result() {
-                            if let Err(e) = storage_service.process_sample(sample).await {
-                                tracing::error!("{e:?}");
-                            }
-                        }
-                    }
-                }
-                Err(e) => tracing::error!("Initial alignment Query failed with: {e:?}"),
-            }
-
-            if received_reply {
-                break;
-            }
-
-            tracing::debug!(
-                "Found no Queryable matching '{storage_key_expr}'. Attempt {attempt}/{MAX_RETRY}."
-            );
+        if replication
+            .replication_log
+            .read()
+            .await
+            .intervals
+            .is_empty()
+        {
+            replication.initial_alignment().await;
         }
 
         tokio::task::spawn(async move {
-            let replication = Replication {
-                zenoh_session,
-                replication_log,
-                storage_key_expr,
-                latest_updates,
-                storage: storage_service.storage.clone(),
-            };
-
             let replication_service = Self {
                 digest_publisher_handle: replication.spawn_digest_publisher(),
                 digest_subscriber_handle: replication.spawn_digest_subscriber(),
@@ -122,7 +91,7 @@ impl ReplicationService {
         });
     }
 
-    /// Stops all the tasks spawned by the `ReplicationService`.
+    /// Stops all the long-lived tasks spawned by the `ReplicationService`.
     pub fn stop(self) {
         self.digest_publisher_handle.abort();
         self.digest_subscriber_handle.abort();

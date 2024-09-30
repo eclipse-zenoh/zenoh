@@ -14,7 +14,7 @@
 use std::{
     any::Any,
     collections::HashMap,
-    sync::{Arc, Mutex, RwLock, Weak},
+    sync::{Arc, Mutex, RwLock},
     time::Duration,
 };
 
@@ -30,7 +30,6 @@ use zenoh_sync::get_mut_unchecked;
 use super::face::FaceState;
 pub use super::{pubsub::*, queries::*, resource::*};
 use crate::net::routing::{
-    dispatcher::interests::finalize_pending_interests,
     hat::{self, HatTrait},
     interceptor::{interceptor_factories, InterceptorFactory},
 };
@@ -166,27 +165,6 @@ impl Tables {
                 }
             }
         }
-    }
-}
-
-pub fn close_face(tables: &TablesLock, face: &Weak<FaceState>) {
-    match face.upgrade() {
-        Some(mut face) => {
-            tracing::debug!("Close {}", face);
-            face.task_controller.terminate_all(Duration::from_secs(10));
-            finalize_pending_queries(tables, &mut face);
-            let mut declares = vec![];
-            let ctrl_lock = zlock!(tables.ctrl_lock);
-            finalize_pending_interests(tables, &mut face, &mut |p, m| {
-                declares.push((p.clone(), m))
-            });
-            ctrl_lock.close_face(tables, &mut face, &mut |p, m| declares.push((p.clone(), m)));
-            drop(ctrl_lock);
-            for (p, m) in declares {
-                p.send_declare(m);
-            }
-        }
-        None => tracing::error!("Face already closed!"),
     }
 }
 

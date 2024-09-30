@@ -182,8 +182,6 @@ impl TransportMulticastEventHandler for Handler {
         }
     }
 
-    fn closing(&self) {}
-
     fn closed(&self) {}
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -244,8 +242,6 @@ impl TransportPeerEventHandler for PeerHandler {
             None,
         );
     }
-
-    fn closing(&self) {}
 
     fn closed(&self) {
         let info = DataInfo {

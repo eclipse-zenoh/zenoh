@@ -34,16 +34,12 @@ use zenoh::{
 };
 use zenoh_backend_traits::Storage;
 
-use super::{
-    digest::Digest,
-    log::LogLatest,
-    service::{MAX_RETRY, WAIT_PERIOD_SECS},
-};
+use super::{digest::Digest, log::LogLatest};
 use crate::{replication::aligner::AlignmentQuery, storages_mgt::LatestUpdates};
 
 kedefine!(
-    pub digest_key_expr_formatter: "@-digest/${zid:*}/${storage_ke:**}",
-    pub aligner_key_expr_formatter: "@zid/${zid:*}/${storage_ke:**}/aligner",
+    pub digest_key_expr_formatter: "@-digest/${zid:*}/${hash_configuration:*}",
+    pub aligner_key_expr_formatter: "@zid/${zid:*}/${hash_configuration:*}/aligner",
 );
 
 #[derive(Clone)]
@@ -56,6 +52,63 @@ pub(crate) struct Replication {
 }
 
 impl Replication {
+    /// Performs an initial alignment, skipping the comparison of Digest, asking directly the first
+    /// discovered Replica for all its entries.
+    ///
+    /// # ⚠️ Assumption: empty Storage
+    ///
+    /// We assume that this method will only be called if the underlying Storage is empty. This has
+    /// at least one consequence: if the Aligner receives a `delete` event from the Replica, it will
+    /// not attempt to delete anything from the Storage.
+    ///
+    /// # Replica discovery
+    ///
+    /// To discover a Replica, this method will create a Digest subscriber, wait to receive a
+    /// *valid* Digest and, upon reception, ask that Replica for all its entries.
+    ///
+    /// To avoid waiting indefinitely (in case there are no other Replica on the network), the
+    /// subscriber will wait for, at most, the duration of two Intervals.
+    pub(crate) async fn initial_alignment(&self) {
+        let ke_all_replicas = match keformat!(
+            aligner_key_expr_formatter::formatter(),
+            hash_configuration = *self
+                .replication_log
+                .read()
+                .await
+                .configuration
+                .fingerprint(),
+            zid = "*",
+        ) {
+            Ok(ke) => ke,
+            Err(e) => {
+                tracing::error!(
+                    "Failed to generate key expression to query all Replicas: {e:?}. Skipping \
+                     initial alignment."
+                );
+                return;
+            }
+        };
+
+        // NOTE: As discussed with @OlivierHecart, the plugins do not wait for the duration of the
+        // "scouting delay" before performing any Zenoh operation. Hence, we manually enforce this
+        // delay when performing the initial alignment.
+        let delay = self
+            .zenoh_session
+            .config()
+            .lock()
+            .scouting
+            .delay()
+            .unwrap_or(500);
+        tokio::time::sleep(Duration::from_millis(delay)).await;
+
+        if let Err(e) = self
+            .spawn_query_replica_aligner(ke_all_replicas, AlignmentQuery::Discovery)
+            .await
+        {
+            tracing::error!("Initial alignment failed with: {e:?}");
+        }
+    }
+
     /// Spawns a task that periodically publishes the [Digest] of the Replication [Log].
     ///
     /// This task will perform the following steps:
@@ -68,16 +121,20 @@ impl Replication {
     ///
     /// [Log]: crate::replication::log::LogLatest
     pub(crate) fn spawn_digest_publisher(&self) -> JoinHandle<()> {
-        let zenoh_session = self.zenoh_session.clone();
-        let storage_key_expr = self.storage_key_expr.clone();
-        let replication_log = self.replication_log.clone();
-        let latest_updates = self.latest_updates.clone();
+        let replication = self.clone();
 
         tokio::task::spawn(async move {
+            let configuration = replication
+                .replication_log
+                .read()
+                .await
+                .configuration
+                .clone();
+
             let digest_key_put = match keformat!(
                 digest_key_expr_formatter::formatter(),
-                zid = zenoh_session.zid(),
-                storage_ke = storage_key_expr
+                zid = replication.zenoh_session.zid(),
+                hash_configuration = *configuration.fingerprint(),
             ) {
                 Ok(key) => key,
                 Err(e) => {
@@ -88,25 +145,14 @@ impl Replication {
                 }
             };
 
-            // Scope to not forget to release the lock.
-            let (publication_interval, propagation_delay, last_elapsed_interval) = {
-                let replication_log_guard = replication_log.read().await;
-                let configuration = replication_log_guard.configuration();
-                let last_elapsed_interval = match configuration.last_elapsed_interval() {
-                    Ok(idx) => idx,
-                    Err(e) => {
-                        tracing::error!(
-                            "Fatal error, call to `last_elapsed_interval` failed with: {e:?}"
-                        );
-                        return;
-                    }
-                };
-
-                (
-                    configuration.interval,
-                    configuration.propagation_delay,
-                    last_elapsed_interval,
-                )
+            let last_elapsed_interval = match configuration.last_elapsed_interval() {
+                Ok(idx) => idx,
+                Err(e) => {
+                    tracing::error!(
+                        "Fatal error, call to `last_elapsed_interval` failed with: {e:?}"
+                    );
+                    return;
+                }
             };
 
             // We have no control over when a replica is going to be started. The purpose is here
@@ -114,7 +160,7 @@ impl Replication {
             // at every interval (+ δ).
             let duration_until_next_interval = {
                 let millis_last_elapsed =
-                    *last_elapsed_interval as u128 * publication_interval.as_millis();
+                    *last_elapsed_interval as u128 * configuration.interval.as_millis();
 
                 if millis_last_elapsed > u64::MAX as u128 {
                     tracing::error!(
@@ -137,7 +183,7 @@ impl Replication {
                     };
 
                 Duration::from_millis(
-                    (publication_interval.as_millis() - (millis_since_now - millis_last_elapsed))
+                    (configuration.interval.as_millis() - (millis_since_now - millis_last_elapsed))
                         as u64,
                 )
             };
@@ -147,7 +193,7 @@ impl Replication {
             let mut events = HashMap::default();
 
             // Internal delay to avoid an "update storm".
-            let max_publication_delay = (publication_interval.as_millis() / 3) as u64;
+            let max_publication_delay = (configuration.interval.as_millis() / 3) as u64;
 
             let mut digest_update_start: Instant;
             let mut digest: Digest;
@@ -159,15 +205,15 @@ impl Replication {
                 // Except that we want to take into account the time it takes for a publication to
                 // reach this Zenoh node. Hence, we sleep for `propagation_delay` to, hopefully,
                 // catch the publications that are in transit.
-                tokio::time::sleep(propagation_delay).await;
+                tokio::time::sleep(configuration.propagation_delay).await;
 
                 {
-                    let mut latest_updates_guard = latest_updates.write().await;
+                    let mut latest_updates_guard = replication.latest_updates.write().await;
                     std::mem::swap(&mut events, &mut latest_updates_guard);
                 }
 
                 {
-                    let mut replication_guard = replication_log.write().await;
+                    let mut replication_guard = replication.replication_log.write().await;
                     replication_guard.update(events.drain().map(|(_, event)| event));
                     digest = match replication_guard.digest() {
                         Ok(digest) => digest,
@@ -193,7 +239,8 @@ impl Replication {
                 // buffer that, hopefully, has enough memory.
                 let buffer_capacity = serialization_buffer.capacity();
 
-                match zenoh_session
+                match replication
+                    .zenoh_session
                     .put(
                         &digest_key_put,
                         std::mem::replace(
@@ -208,17 +255,17 @@ impl Replication {
                 }
 
                 let digest_update_duration = digest_update_start.elapsed();
-                if digest_update_duration > publication_interval {
+                if digest_update_duration > configuration.interval {
                     tracing::warn!(
                         "The duration it took to update and publish the Digest is superior to the \
                          duration of an Interval ({} ms), we recommend increasing the duration of \
                          the latter. Digest update: {} ms (incl. delay: {} ms)",
-                        publication_interval.as_millis(),
+                        configuration.interval.as_millis(),
                         digest_update_duration.as_millis(),
-                        publication_delay + propagation_delay.as_millis() as u64
+                        publication_delay + configuration.propagation_delay.as_millis() as u64
                     );
                 } else {
-                    tokio::time::sleep(publication_interval - digest_update_duration).await;
+                    tokio::time::sleep(configuration.interval - digest_update_duration).await;
                 }
             }
         })
@@ -232,16 +279,20 @@ impl Replication {
     ///
     /// [DigestDiff]: super::digest::DigestDiff
     pub(crate) fn spawn_digest_subscriber(&self) -> JoinHandle<()> {
-        let zenoh_session = self.zenoh_session.clone();
-        let storage_key_expr = self.storage_key_expr.clone();
-        let replication_log = self.replication_log.clone();
         let replication = self.clone();
 
         tokio::task::spawn(async move {
+            let configuration = replication
+                .replication_log
+                .read()
+                .await
+                .configuration
+                .clone();
+
             let digest_key_sub = match keformat!(
                 digest_key_expr_formatter::formatter(),
                 zid = "*",
-                storage_ke = &storage_key_expr
+                hash_configuration = *configuration.fingerprint()
             ) {
                 Ok(key) => key,
                 Err(e) => {
@@ -254,33 +305,22 @@ impl Replication {
                 }
             };
 
-            let mut retry = 0;
-            let subscriber = loop {
-                match zenoh_session
+            let subscriber = match replication
+                    .zenoh_session
                     .declare_subscriber(&digest_key_sub)
                     // NOTE: We need to explicitly set the locality to `Remote` as otherwise the
                     //       Digest subscriber will also receive the Digest published by its own
                     //       Digest publisher.
                     .allowed_origin(Locality::Remote)
                     .await
-                {
-                    Ok(subscriber) => break subscriber,
-                    Err(e) => {
-                        if retry < MAX_RETRY {
-                            retry += 1;
-                            tracing::warn!(
-                                "Failed to declare Digest subscriber: {e:?}. Attempt \
-                                 {retry}/{MAX_RETRY}."
-                            );
-                            tokio::time::sleep(Duration::from_secs(WAIT_PERIOD_SECS)).await;
-                        } else {
-                            tracing::error!(
-                                "Could not declare Digest subscriber. The storage will not \
-                                 receive the Replication Digest of other replicas."
-                            );
-                            return;
-                        }
-                    }
+            {
+                Ok(subscriber) => subscriber,
+                Err(e) => {
+                    tracing::error!(
+                        "Could not declare Digest subscriber: {e:?}. The storage will not receive \
+                         the Replication Digest of other replicas."
+                    );
+                    return;
                 }
             };
 
@@ -323,7 +363,7 @@ impl Replication {
 
                         tracing::debug!("Replication digest received");
 
-                        let digest = match replication_log.read().await.digest() {
+                        let digest = match replication.replication_log.read().await.digest() {
                             Ok(digest) => digest,
                             Err(e) => {
                                 tracing::error!(
@@ -338,7 +378,7 @@ impl Replication {
 
                             let replica_aligner_ke = match keformat!(
                                 aligner_key_expr_formatter::formatter(),
-                                storage_ke = &storage_key_expr,
+                                hash_configuration = *configuration.fingerprint(),
                                 zid = source_zid,
                             ) {
                                 Ok(key) => key,
@@ -371,15 +411,20 @@ impl Replication {
     /// responsible for fetching in the Replication Log or in the Storage the relevant information
     /// to send to the Replica such that it can align its own Storage.
     pub(crate) fn spawn_aligner_queryable(&self) -> JoinHandle<()> {
-        let zenoh_session = self.zenoh_session.clone();
-        let storage_key_expr = self.storage_key_expr.clone();
         let replication = self.clone();
 
         tokio::task::spawn(async move {
+            let configuration = replication
+                .replication_log
+                .read()
+                .await
+                .configuration
+                .clone();
+
             let aligner_ke = match keformat!(
                 aligner_key_expr_formatter::formatter(),
-                zid = zenoh_session.zid(),
-                storage_ke = storage_key_expr,
+                zid = replication.zenoh_session.zid(),
+                hash_configuration = *configuration.fingerprint(),
             ) {
                 Ok(ke) => ke,
                 Err(e) => {
@@ -391,30 +436,19 @@ impl Replication {
                 }
             };
 
-            let mut retry = 0;
-            let queryable = loop {
-                match zenoh_session
-                    .declare_queryable(&aligner_ke)
-                    .allowed_origin(Locality::Remote)
-                    .await
-                {
-                    Ok(queryable) => break queryable,
-                    Err(e) => {
-                        if retry < MAX_RETRY {
-                            retry += 1;
-                            tracing::warn!(
-                                "Failed to declare the Aligner queryable: {e:?}. Attempt \
-                                 {retry}/{MAX_RETRY}."
-                            );
-                            tokio::time::sleep(Duration::from_secs(WAIT_PERIOD_SECS)).await;
-                        } else {
-                            tracing::error!(
-                                "Could not declare the Aligner queryable. This storage will NOT \
-                                 align with other replicas."
-                            );
-                            return;
-                        }
-                    }
+            let queryable = match replication
+                .zenoh_session
+                .declare_queryable(&aligner_ke)
+                .allowed_origin(Locality::Remote)
+                .await
+            {
+                Ok(queryable) => queryable,
+                Err(e) => {
+                    tracing::error!(
+                        "Could not declare the Aligner queryable: {e:?}. This storage will NOT \
+                         align with other replicas."
+                    );
+                    return;
                 }
             };
 

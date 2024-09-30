@@ -16,6 +16,7 @@ use std::{
     collections::HashMap,
     fmt,
     sync::{Arc, Weak},
+    time::Duration,
 };
 
 use tokio_util::sync::CancellationToken;
@@ -37,13 +38,16 @@ use super::{
     super::router::*,
     interests::{declare_final, declare_interest, undeclare_interest, CurrentInterest},
     resource::*,
-    tables::{self, TablesLock},
+    tables::TablesLock,
 };
 use crate::{
     api::key_expr::KeyExpr,
     net::{
         primitives::{McastMux, Mux, Primitives},
-        routing::interceptor::{InterceptorTrait, InterceptorsChain},
+        routing::{
+            dispatcher::interests::finalize_pending_interests,
+            interceptor::{InterceptorTrait, InterceptorsChain},
+        },
     },
 };
 
@@ -421,7 +425,25 @@ impl Primitives for Face {
     }
 
     fn send_close(&self) {
-        tables::close_face(&self.tables, &Arc::downgrade(&self.state));
+        tracing::debug!("Close {}", self.state);
+        let mut state = self.state.clone();
+        state.task_controller.terminate_all(Duration::from_secs(10));
+        finalize_pending_queries(&self.tables, &mut state);
+        let mut declares = vec![];
+        let ctrl_lock = zlock!(self.tables.ctrl_lock);
+        finalize_pending_interests(&self.tables, &mut state, &mut |p, m| {
+            declares.push((p.clone(), m))
+        });
+        ctrl_lock.close_face(
+            &self.tables,
+            &self.tables.clone(),
+            &mut state,
+            &mut |p, m| declares.push((p.clone(), m)),
+        );
+        drop(ctrl_lock);
+        for (p, m) in declares {
+            p.send_declare(m);
+        }
     }
 }
 

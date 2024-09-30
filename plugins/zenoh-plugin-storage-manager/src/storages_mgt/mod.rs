@@ -68,9 +68,8 @@ pub(crate) async fn create_and_start_storage(
     let storage_name = parts[7];
     let name = format!("{uuid}/{storage_name}");
 
-    tracing::trace!("Start storage '{}' on keyexpr '{}'", name, config.key_expr);
-
     let (tx, rx_storage) = tokio::sync::broadcast::channel(1);
+    let rx_replication = tx.subscribe();
 
     let mut entries = match storage.get_all_entries().await {
         Ok(entries) => entries
@@ -111,50 +110,52 @@ pub(crate) async fn create_and_start_storage(
     let latest_updates = Arc::new(RwLock::new(latest_updates));
 
     let storage = Arc::new(Mutex::new(storage));
-    let storage_service = StorageService::start(
-        zenoh_session.clone(),
-        config.clone(),
-        &name,
-        storage,
-        capability,
-        rx_storage,
-        CacheLatest::new(latest_updates.clone(), replication_log.clone()),
-    )
-    .await;
 
-    // Testing if the `replication_log` is set is equivalent to testing if the `replication` is
-    // set: the `replication_log` is only set when the latter is.
-    if let Some(replication_log) = replication_log {
-        let rx_replication = tx.subscribe();
+    // NOTE The StorageService method `start_storage_queryable_subscriber` does not spawn its own
+    //      task to loop/wait on the Subscriber and Queryable it creates. Thus we spawn the task
+    //      here.
+    //
+    //      Doing so also allows us to return early from the creation of the Storage, creation which
+    //      blocks populating the routing tables.
+    //
+    // TODO Do we really want to perform such an initial alignment? Because this query will
+    //      target any Storage that matches the same key expression, regardless of if they have
+    //      been configured to be replicated.
+    tokio::task::spawn(async move {
+        let storage_service = StorageService::new(
+            zenoh_session.clone(),
+            config.clone(),
+            &name,
+            storage,
+            capability,
+            CacheLatest::new(latest_updates.clone(), replication_log.clone()),
+        )
+        .await;
 
-        // NOTE Although the function `ReplicationService::spawn_start` spawns its own tasks, we
-        //      still need to call it within a dedicated task because the Zenoh routing tables are
-        //      populated only after the plugins have been loaded.
-        //
-        //      If we don't wait for the routing tables to be populated the initial alignment
-        //      (i.e. querying any Storage on the network handling the same key expression), will
-        //      never work.
-        //
-        // TODO Do we really want to perform such an initial alignment? Because this query will
-        //      target any Storage that matches the same key expression, regardless of if they have
-        //      been configured to be replicated.
-        tokio::task::spawn(async move {
+        // Testing if the `replication_log` is set is equivalent to testing if the `replication` is
+        // set: the `replication_log` is only set when the latter is.
+        if let Some(replication_log) = replication_log {
             tracing::debug!(
                 "Starting replication of storage '{}' on keyexpr '{}'",
                 name,
                 config.key_expr,
             );
+
             ReplicationService::spawn_start(
                 zenoh_session,
-                storage_service,
+                &storage_service,
                 config.key_expr,
                 replication_log,
                 latest_updates,
                 rx_replication,
             )
             .await;
-        });
-    }
+        }
+
+        storage_service
+            .start_storage_queryable_subscriber(rx_storage)
+            .await;
+    });
 
     Ok(tx)
 }
