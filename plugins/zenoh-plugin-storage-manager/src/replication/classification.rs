@@ -13,7 +13,7 @@
 //
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     ops::{Deref, Sub},
 };
 
@@ -74,7 +74,7 @@ impl Sub<u64> for IntervalIdx {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct Interval {
     pub(crate) fingerprint: Fingerprint,
-    pub(crate) sub_intervals: HashMap<SubIntervalIdx, SubInterval>,
+    pub(crate) sub_intervals: BTreeMap<SubIntervalIdx, SubInterval>,
 }
 
 impl<const N: usize> From<[(SubIntervalIdx, SubInterval); N]> for Interval {
