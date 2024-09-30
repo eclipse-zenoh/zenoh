@@ -53,7 +53,7 @@ async fn main() {
         println!("Sending Query '{get_selector}'...");
         let replies = get_session
             .get(&get_selector)
-            .payload(idx)
+            .payload(idx.to_le_bytes())
             .target(QueryTarget::All)
             .await
             .unwrap();
