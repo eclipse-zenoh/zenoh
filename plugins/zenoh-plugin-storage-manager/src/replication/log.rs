@@ -16,7 +16,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use bloomfilter::Bloom;
 use serde::{Deserialize, Serialize};
-use zenoh::{key_expr::OwnedKeyExpr, sample::SampleKind, time::Timestamp, Result};
+use zenoh::{key_expr::OwnedKeyExpr, sample::SampleKind, time::Timestamp, Result as ZResult};
 use zenoh_backend_traits::config::ReplicaConfig;
 
 use super::{
@@ -352,7 +352,7 @@ impl LogLatest {
     /// This method will return an error if the index of the last elapsed interval is superior to
     /// [u64::MAX]. In theory, this should not happen but if it does, **it is an error that cannot
     /// be recovered from (⚠️)**.
-    pub fn digest(&self) -> Result<Digest> {
+    pub fn digest(&self) -> ZResult<Digest> {
         let last_elapsed_interval = self.configuration.last_elapsed_interval()?;
 
         Ok(self.digest_from(last_elapsed_interval))
