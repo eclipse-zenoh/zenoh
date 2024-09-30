@@ -41,6 +41,14 @@ use crate::multicast::manager::{
     TransportManagerStateMulticast,
 };
 
+fn duration_from_i64us(us: i64) -> Duration {
+    if us >= 0 {
+        Duration::from_micros(us as u64)
+    } else {
+        Duration::MAX
+    }
+}
+
 /// # Examples
 /// ```
 /// use std::sync::Arc;
@@ -251,10 +259,10 @@ impl TransportManagerBuilder {
         ));
         self = self.defrag_buff_size(*link.rx().max_message_size());
         self = self.link_rx_buffer_size(*link.rx().buffer_size());
-        self = self.wait_before_drop(Duration::from_micros(
+        self = self.wait_before_drop(duration_from_i64us(
             *link.tx().queue().congestion_control().wait_before_drop(),
         ));
-        self = self.wait_before_close(Duration::from_micros(
+        self = self.wait_before_close(duration_from_i64us(
             *link.tx().queue().congestion_control().wait_before_close(),
         ));
         self = self.queue_size(link.tx().queue().size().clone());
@@ -363,8 +371,8 @@ impl Default for TransportManagerBuilder {
             resolution: Resolution::default(),
             batch_size: BatchSize::MAX,
             batching_enabled: true,
-            wait_before_drop: Duration::from_micros(wait_before_drop),
-            wait_before_close: Duration::from_micros(wait_before_close),
+            wait_before_drop: duration_from_i64us(wait_before_drop),
+            wait_before_close: duration_from_i64us(wait_before_close),
             queue_size: queue.size,
             batching_time_limit: Duration::from_millis(backoff),
             defrag_buff_size: *link_rx.max_message_size(),

@@ -141,7 +141,7 @@ impl StageIn {
         &mut self,
         msg: &mut NetworkMessage,
         priority: Priority,
-        deadline: Option<Instant>,
+        deadline: Option<Option<Instant>>,
     ) -> bool {
         // Lock the current serialization batch.
         let mut c_guard = self.mutex.current();
@@ -163,9 +163,11 @@ impl StageIn {
                             None => {
                                 drop(c_guard);
                                 // Wait for an available batch until deadline
-                                if !deadline
-                                    .map_or(false, |deadline| self.s_ref.wait_deadline(deadline))
-                                {
+                                if !match deadline {
+                                    None => false,
+                                    Some(None) => self.s_ref.wait(),
+                                    Some(Some(deadline)) => self.s_ref.wait_deadline(deadline),
+                                } {
                                     // Still no available batch.
                                     // Restore the sequence number and drop the message
                                     $restore_sn;
@@ -626,7 +628,7 @@ impl TransmissionPipelineProducer {
         } else {
             self.wait_before_close
         };
-        let deadline = (!wait_time.is_zero()).then_some(Instant::now() + wait_time);
+        let deadline = (!wait_time.is_zero()).then_some(Instant::now().checked_add(wait_time));
         // Lock the channel. We are the only one that will be writing on it.
         let mut queue = zlock!(self.stage_in[idx]);
         queue.push_network_message(&mut msg, priority, deadline)
