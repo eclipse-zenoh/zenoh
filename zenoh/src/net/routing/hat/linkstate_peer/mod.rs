@@ -30,7 +30,7 @@ use zenoh_protocol::{
     core::ZenohIdProto,
     network::{
         declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId},
-        interest::{InterestId, InterestOptions},
+        interest::InterestId,
         oam::id::OAM_LINKSTATE,
         Oam,
     },
@@ -56,7 +56,7 @@ use crate::net::{
     codec::Zenoh080Routing,
     protocol::linkstate::LinkStateList,
     routing::{
-        dispatcher::face::Face,
+        dispatcher::{face::Face, interests::RemoteInterest},
         hat::TREES_COMPUTATION_DELAY_MS,
         router::{compute_data_routes, compute_query_routes, RoutesIndexes},
     },
@@ -489,7 +489,7 @@ impl HatContext {
 struct HatFace {
     link_id: usize,
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
-    remote_interests: HashMap<InterestId, (Option<Arc<Resource>>, InterestOptions)>,
+    remote_interests: HashMap<InterestId, RemoteInterest>,
     local_subs: HashMap<Arc<Resource>, SubscriberId>,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
     local_tokens: HashMap<Arc<Resource>, SubscriberId>,
