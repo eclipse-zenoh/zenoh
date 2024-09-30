@@ -185,7 +185,7 @@ impl SessionState {
         self.primitives
             .as_ref()
             .cloned()
-            .ok_or_else(|| zerror!("session closed").into())
+            .ok_or_else(|| SessionClosed.into())
     }
 
     #[inline]
@@ -515,6 +515,21 @@ impl Drop for WeakSession {
         *weak -= 1;
     }
 }
+
+/// Error indicating the operation cannot proceed because the session is closed.
+///
+/// It may be returned by operations like [`Session::get`] or [`Publisher::put`] when
+/// [`Session::closed`] has been called before.
+#[derive(Debug)]
+pub struct SessionClosed;
+
+impl fmt::Display for SessionClosed {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "session closed")
+    }
+}
+
+impl std::error::Error for SessionClosed {}
 
 static SESSION_ID_COUNTER: AtomicU16 = AtomicU16::new(0);
 impl Session {
