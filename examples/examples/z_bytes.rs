@@ -106,6 +106,15 @@ fn main() {
         let output: (f64, String) = z_deserialize(&payload).unwrap();
         assert_eq!(input, output);
 
+        // Array (handled as variable-length sequence, not as tuple)
+        let input = [0.0f32, 1.5, 42.0];
+        let payload = z_serialize(&input);
+        let output: [f32; 3] = z_deserialize(&payload).unwrap();
+        assert_eq!(input, output);
+        // can also be deserialized as a vec
+        let output: Vec<f32> = z_deserialize(&payload).unwrap();
+        assert_eq!(input.as_slice(), output);
+
         // Look at Serialize/Deserialize documentation for the exhaustive
         // list of provided implementations
     }
