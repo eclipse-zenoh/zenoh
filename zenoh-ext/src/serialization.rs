@@ -5,8 +5,8 @@ use std::{
     hash::Hash,
     io::{Read, Write},
     marker::PhantomData,
+    mem::MaybeUninit,
     ops::{Deref, DerefMut},
-    ptr,
 };
 
 use zenoh::bytes::{ZBytes, ZBytesReader, ZBytesWriter};
@@ -20,14 +20,20 @@ impl fmt::Display for ZDeserializeError {
 }
 impl std::error::Error for ZDeserializeError {}
 
+fn default_serialize_n<T: Serialize>(slice: &[T], serializer: &mut ZSerializer) {
+    for t in slice {
+        t.serialize(serializer)
+    }
+}
+
 pub trait Serialize {
     fn serialize(&self, serializer: &mut ZSerializer);
     #[doc(hidden)]
-    fn serialize_slice(slice: &[Self], serializer: &mut ZSerializer)
+    fn serialize_n(slice: &[Self], serializer: &mut ZSerializer)
     where
         Self: Sized,
     {
-        serializer.serialize_iter(slice);
+        default_serialize_n(slice, serializer);
     }
 }
 impl<T: Serialize + ?Sized> Serialize for &T {
@@ -36,13 +42,42 @@ impl<T: Serialize + ?Sized> Serialize for &T {
     }
 }
 
+fn default_deserialize_n<T: Deserialize>(
+    in_place: &mut [T],
+    deserializer: &mut ZDeserializer,
+) -> Result<(), ZDeserializeError> {
+    for t in in_place {
+        *t = T::deserialize(deserializer)?;
+    }
+    Ok(())
+}
+
+fn default_deserialize_n_uninit<'a, T: Deserialize>(
+    in_place: &'a mut [MaybeUninit<T>],
+    deserializer: &mut ZDeserializer,
+) -> Result<&'a mut [T], ZDeserializeError> {
+    for t in in_place.iter_mut() {
+        t.write(T::deserialize(deserializer)?);
+    }
+    // SAFETY: all members of the slices have been initialized
+    Ok(unsafe { &mut *(in_place as *mut [MaybeUninit<T>] as *mut [T]) })
+}
+
 pub trait Deserialize: Sized {
     fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError>;
     #[doc(hidden)]
-    fn deserialize_slice(
+    fn deserialize_n(
+        in_place: &mut [Self],
         deserializer: &mut ZDeserializer,
-    ) -> Result<Box<[Self]>, ZDeserializeError> {
-        deserializer.deserialize_iter()?.collect()
+    ) -> Result<(), ZDeserializeError> {
+        default_deserialize_n(in_place, deserializer)
+    }
+    #[doc(hidden)]
+    fn deserialize_n_uninit<'a>(
+        in_place: &'a mut [MaybeUninit<Self>],
+        deserializer: &mut ZDeserializer,
+    ) -> Result<&'a mut [Self], ZDeserializeError> {
+        default_deserialize_n_uninit(in_place, deserializer)
     }
 }
 
@@ -127,6 +162,20 @@ impl<'a> ZDeserializer<'a> {
             _phantom: PhantomData,
         })
     }
+
+    pub fn deserialize_n<T: Deserialize>(
+        &mut self,
+        in_place: &mut [T],
+    ) -> Result<(), ZDeserializeError> {
+        T::deserialize_n(in_place, self)
+    }
+
+    pub fn deserialize_n_uninit<'b, T: Deserialize>(
+        &mut self,
+        in_place: &'b mut [MaybeUninit<T>],
+    ) -> Result<&'b mut [T], ZDeserializeError> {
+        T::deserialize_n_uninit(in_place, self)
+    }
 }
 
 pub struct ZReadIter<'a, 'b, T: Deserialize> {
@@ -171,13 +220,12 @@ macro_rules! impl_num {
             fn serialize(&self, serializer: &mut ZSerializer) {
                 serializer.0.write_all(&(*self).to_le_bytes()).unwrap();
             }
-            fn serialize_slice(slice: &[Self], serializer: &mut ZSerializer) where Self: Sized {
+            fn serialize_n(slice: &[Self], serializer: &mut ZSerializer) where Self: Sized {
                 if cfg!(target_endian = "little") || std::mem::size_of::<Self>() == 1 {
-                    serializer.serialize(VarInt(slice.len()));
                     // SAFETY: transmuting numeric types to their little endian bytes is safe
                     serializer.0.write_all(unsafe { slice.align_to().1 }).unwrap();
                 } else {
-                    serializer.serialize_iter(slice);
+                    default_serialize_n(slice, serializer)
                 }
             }
         }
@@ -187,17 +235,27 @@ macro_rules! impl_num {
                 deserializer.0.read_exact(&mut buf).or(Err(ZDeserializeError))?;
                 Ok(<$ty>::from_le_bytes(buf))
             }
-            fn deserialize_slice(deserializer: &mut ZDeserializer) -> Result<Box<[Self]>, ZDeserializeError> {
+            fn deserialize_n(in_place: &mut [Self], deserializer: &mut ZDeserializer) -> Result<(), ZDeserializeError> {
                 let size = std::mem::size_of::<Self>();
                 if cfg!(target_endian = "little") || size == 1 {
-                    let len = <VarInt<usize>>::deserialize(deserializer)?.0;
-                    let total_size = len * size;
-                    let mut buf = std::mem::ManuallyDrop::new(vec![0; total_size].into_boxed_slice());
-                    deserializer.0.read_exact(&mut buf).or(Err(ZDeserializeError))?;
-                    // SAFETY: transmuting numeric types from their little endian bytes is safe
-                    Ok(unsafe { Box::from_raw(ptr::slice_from_raw_parts_mut(buf.as_mut_ptr().cast(), len)) })
+                    // SAFETY: transmuting numeric types to their little endian bytes is safe
+                    let buf = unsafe {in_place.align_to_mut().1};
+                    deserializer.0.read_exact(buf).or(Err(ZDeserializeError))?;
+                    Ok(())
                 } else {
-                    deserializer.deserialize_iter()?.collect()
+                    default_deserialize_n(in_place, deserializer)
+                }
+            }
+            fn deserialize_n_uninit<'a>(in_place: &'a mut [MaybeUninit<Self>], deserializer: &mut ZDeserializer) -> Result<&'a mut [Self], ZDeserializeError> {
+                if cfg!(target_endian = "little") ||  std::mem::size_of::<Self>() == 1 {
+                    // need to initialize the slice because of std::io::Read interface
+                    in_place.fill(MaybeUninit::new(Self::default()));
+                    // SAFETY: all members of the slices have been initialized
+                    let initialized = unsafe { &mut *(in_place as *mut [MaybeUninit<Self>] as *mut [Self]) };
+                    Self::deserialize_n(initialized, deserializer)?;
+                    Ok(initialized)
+                } else {
+                    default_deserialize_n_uninit(in_place, deserializer)
                 }
             }
         }
@@ -220,9 +278,27 @@ impl Deserialize for bool {
     }
 }
 
+fn serialize_slice<T: Serialize>(slice: &[T], serializer: &mut ZSerializer) {
+    serializer.serialize(VarInt(slice.len()));
+    T::serialize_n(slice, serializer);
+}
+
+fn deserialize_slice<T: Deserialize>(
+    deserializer: &mut ZDeserializer,
+) -> Result<Box<[T]>, ZDeserializeError> {
+    let len = <VarInt<usize>>::deserialize(deserializer)?.0;
+    let mut vec = Vec::with_capacity(len);
+    let slice = T::deserialize_n_uninit(&mut vec.spare_capacity_mut()[..len], deserializer)?;
+    let (slice_ptr, slice_len) = (slice.as_ptr(), slice.len());
+    assert_eq!((slice_ptr, slice_len), (vec.as_ptr(), len));
+    // SAFETY: assertion checks the returned slice is vector's one, and it's returned initialized
+    unsafe { vec.set_len(len) };
+    Ok(vec.into_boxed_slice())
+}
+
 impl<T: Serialize> Serialize for [T] {
     fn serialize(&self, serializer: &mut ZSerializer) {
-        T::serialize_slice(self, serializer)
+        serialize_slice(self, serializer);
     }
 }
 impl<'a, T: Serialize + 'a> Serialize for Cow<'a, [T]>
@@ -230,27 +306,27 @@ where
     [T]: ToOwned,
 {
     fn serialize(&self, serializer: &mut ZSerializer) {
-        T::serialize_slice(self, serializer)
+        serialize_slice(self, serializer);
     }
 }
 impl<T: Serialize> Serialize for Box<[T]> {
     fn serialize(&self, serializer: &mut ZSerializer) {
-        T::serialize_slice(self, serializer)
+        serialize_slice(self, serializer);
     }
 }
 impl<T: Deserialize> Deserialize for Box<[T]> {
     fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
-        T::deserialize_slice(deserializer)
+        deserialize_slice(deserializer)
     }
 }
 impl<T: Serialize> Serialize for Vec<T> {
     fn serialize(&self, serializer: &mut ZSerializer) {
-        T::serialize_slice(self, serializer)
+        serialize_slice(self, serializer)
     }
 }
 impl<T: Deserialize> Deserialize for Vec<T> {
     fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
-        T::deserialize_slice(deserializer).map(Into::into)
+        Ok(deserialize_slice(deserializer)?.into_vec())
     }
 }
 impl<T: Serialize + Eq + Hash> Serialize for HashSet<T> {
@@ -505,11 +581,19 @@ mod tests {
     }
 
     #[test]
-    fn slice_serialization() {
+    fn primitive_slice_serialization() {
         let vec = vec![42.0f64, 0.15];
         serialize_deserialize!(Vec<f64>, vec);
         let payload = z_serialize(vec.as_slice());
         assert_eq!(vec, z_deserialize::<Vec<f64>>(&payload).unwrap())
+    }
+
+    #[test]
+    fn slice_serialization() {
+        let vec = vec!["abc".to_string(), "def".to_string()];
+        serialize_deserialize!(Vec<String>, vec);
+        let payload = z_serialize(vec.as_slice());
+        assert_eq!(vec, z_deserialize::<Vec<String>>(&payload).unwrap())
     }
 
     #[test]
