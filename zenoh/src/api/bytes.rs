@@ -154,8 +154,6 @@ impl ZBytes {
     /// Please note that no guarantee is provided on the internal memory layout of [`ZBytes`].
     /// The only provided guarantee is on the bytes order that is preserved.
     ///
-    /// Please note that [`ZBytes::iter`] will perform deserialization while iterating while [`ZBytes::slices`] will not.
-    ///
     /// ```rust
     /// use std::io::Write;
     /// use zenoh::bytes::ZBytes;
