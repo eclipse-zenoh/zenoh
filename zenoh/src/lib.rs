@@ -193,7 +193,7 @@ pub mod session {
         builders::publisher::{SessionDeleteBuilder, SessionPutBuilder},
         info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, SessionInfo, ZenohIdBuilder},
         query::SessionGetBuilder,
-        session::{open, OpenBuilder, Session, SessionClosed, Undeclarable},
+        session::{open, OpenBuilder, Session, SessionClosedError, Undeclarable},
     };
 }
 
