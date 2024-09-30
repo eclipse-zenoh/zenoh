@@ -5608,7 +5608,6 @@ dependencies = [
  "prost-build",
  "rand 0.8.5",
  "serde_json",
- "serde_yaml",
  "tokio",
  "which",
  "zenoh",

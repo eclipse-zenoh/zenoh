@@ -36,7 +36,6 @@ clap = { workspace = true, features = ["derive"] }
 futures = { workspace = true }
 prost = { workspace = true }
 serde_json = { workspace = true }
-serde_yaml = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "time", "io-std"] }
 zenoh = { workspace = true, default-features = true }
 zenoh-ext = { workspace = true }
