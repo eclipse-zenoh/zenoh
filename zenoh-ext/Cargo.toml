@@ -48,6 +48,7 @@ zenoh = { workspace = true, default-features = false }
 zenoh-macros = { workspace = true }
 
 [dev-dependencies]
+zenoh-config = { workspace = true }
 rand = { workspace = true }
 
 [package.metadata.docs.rs]
