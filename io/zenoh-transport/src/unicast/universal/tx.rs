@@ -121,7 +121,7 @@ impl TransportUnicastUniversal {
             zenoh_runtime::ZRuntime::RX.spawn({
                 let transport = self.clone();
                 async move {
-                    if let Err(e) = transport.close(close::reason::GENERIC).await {
+                    if let Err(e) = transport.close(close::reason::UNRESPONSIVE).await {
                         tracing::error!(
                             "Error closing transport with {}: {}",
                             transport.config.zid,

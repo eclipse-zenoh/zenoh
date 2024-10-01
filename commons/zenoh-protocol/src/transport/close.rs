@@ -65,6 +65,7 @@ pub mod reason {
     pub const MAX_SESSIONS: u8 = 0x03;
     pub const MAX_LINKS: u8 = 0x04;
     pub const EXPIRED: u8 = 0x05;
+    pub const UNRESPONSIVE: u8 = 0x06;
 }
 
 pub fn reason_to_str(reason: u8) -> &'static str {
@@ -75,6 +76,7 @@ pub fn reason_to_str(reason: u8) -> &'static str {
         reason::MAX_SESSIONS => "MAX_SESSIONS",
         reason::MAX_LINKS => "MAX_LINKS",
         reason::EXPIRED => "EXPIRED",
+        reason::UNRESPONSIVE => "UNRESPONSIVE",
         _ => "UNKNOWN",
     }
 }
