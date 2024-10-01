@@ -13,7 +13,7 @@
 //
 // use crate::key_expr::SINGLE_WILD;
 
-// use super::{restiction::NoBigWilds, Intersector};
+// use super::{restriction::NoBigWilds, Intersector};
 
 // pub struct LTRChunkIntersector;
 // impl Intersector<NoBigWilds<&[u8]>, NoBigWilds<&[u8]>> for LTRChunkIntersector {
