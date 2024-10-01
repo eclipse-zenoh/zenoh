@@ -383,11 +383,18 @@
             background: 4,
           },
           /// Congestion occurs when the queue is empty (no available batch).
-          /// Using CongestionControl::Block the caller is blocked until a batch is available and re-inserted into the queue.
-          /// Using CongestionControl::Drop the message might be dropped, depending on conditions configured here.
           congestion_control: {
-            /// The maximum time in microseconds to wait for an available batch before dropping the message if still no batch is available.
-            wait_before_drop: 1000,
+            /// Behavior pushing CongestionControl::Drop messages to the queue. 
+            drop: {
+              /// The maximum time in microseconds to wait for an available batch before dropping a droppable message if still no batch is available.
+              wait_before_drop: 1000,
+            },
+            /// Behavior pushing CongestionControl::Block messages to the queue. 
+            block: {
+              /// The maximum time in microseconds to wait for an available batch before closing the transport session when sending a blocking message
+              /// if still no batch is available.
+              wait_before_close: 5000000,
+            }
           },
           /// Perform batching of messages if they are smaller of the batch_size
           batching: {

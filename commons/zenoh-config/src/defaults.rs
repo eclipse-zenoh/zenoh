@@ -240,10 +240,18 @@ impl Default for QueueSizeConf {
     }
 }
 
-impl Default for CongestionControlConf {
+impl Default for CongestionControlDropConf {
     fn default() -> Self {
         Self {
             wait_before_drop: 1000,
+        }
+    }
+}
+
+impl Default for CongestionControlBlockConf {
+    fn default() -> Self {
+        Self {
+            wait_before_close: 5000000,
         }
     }
 }

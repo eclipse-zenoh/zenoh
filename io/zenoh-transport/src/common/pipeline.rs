@@ -141,7 +141,7 @@ impl StageIn {
         &mut self,
         msg: &mut NetworkMessage,
         priority: Priority,
-        deadline_before_drop: Option<Option<Instant>>,
+        deadline: Option<Option<Instant>>,
     ) -> bool {
         // Lock the current serialization batch.
         let mut c_guard = self.mutex.current();
@@ -154,31 +154,24 @@ impl StageIn {
                         None => match self.s_ref.pull() {
                             Some(mut batch) => {
                                 batch.clear();
-                                self.s_out.atomic_backoff.first_write.store(LOCAL_EPOCH.elapsed().as_micros() as MicroSeconds, Ordering::Relaxed);
+                                self.s_out.atomic_backoff.first_write.store(
+                                    LOCAL_EPOCH.elapsed().as_micros() as MicroSeconds,
+                                    Ordering::Relaxed,
+                                );
                                 break batch;
                             }
                             None => {
                                 drop(c_guard);
-                                match deadline_before_drop {
-                                    Some(deadline) if !$fragment => {
-                                        // We are in the congestion scenario and message is droppable
-                                        // Wait for an available batch until deadline
-                                        if !deadline.map_or(false, |deadline| self.s_ref.wait_deadline(deadline)) {
-                                            // Still no available batch.
-                                            // Restore the sequence number and drop the message
-                                            $restore_sn;
-                                            return false
-                                        }
-                                    }
-                                    _ => {
-                                        // Block waiting for an available batch
-                                        if !self.s_ref.wait() {
-                                            // Some error prevented the queue to wait and give back an available batch
-                                            // Restore the sequence number and drop the message
-                                            $restore_sn;
-                                            return false;
-                                        }
-                                    }
+                                // Wait for an available batch until deadline
+                                if !match deadline {
+                                    None => false,
+                                    Some(None) => self.s_ref.wait(),
+                                    Some(Some(deadline)) => self.s_ref.wait_deadline(deadline),
+                                } {
+                                    // Still no available batch.
+                                    // Restore the sequence number and drop the message
+                                    $restore_sn;
+                                    return false;
                                 }
                                 c_guard = self.mutex.current();
                             }
@@ -513,6 +506,7 @@ pub(crate) struct TransmissionPipelineConf {
     pub(crate) batch: BatchConfig,
     pub(crate) queue_size: [usize; Priority::NUM],
     pub(crate) wait_before_drop: Duration,
+    pub(crate) wait_before_close: Duration,
     pub(crate) batching_enabled: bool,
     pub(crate) batching_time_limit: Duration,
 }
@@ -597,6 +591,7 @@ impl TransmissionPipeline {
             stage_in: stage_in.into_boxed_slice().into(),
             active: active.clone(),
             wait_before_drop: config.wait_before_drop,
+            wait_before_close: config.wait_before_close,
         };
         let consumer = TransmissionPipelineConsumer {
             stage_out: stage_out.into_boxed_slice(),
@@ -614,6 +609,7 @@ pub(crate) struct TransmissionPipelineProducer {
     stage_in: Arc<[Mutex<StageIn>]>,
     active: Arc<AtomicBool>,
     wait_before_drop: Duration,
+    wait_before_close: Duration,
 }
 
 impl TransmissionPipelineProducer {
@@ -627,18 +623,15 @@ impl TransmissionPipelineProducer {
             (0, Priority::DEFAULT)
         };
         // If message is droppable, compute a deadline after which the sample could be dropped
-        let deadline_before_drop = if msg.is_droppable() {
-            if self.wait_before_drop.is_zero() {
-                Some(None)
-            } else {
-                Some(Some(Instant::now() + self.wait_before_drop))
-            }
+        let wait_time = if msg.is_droppable() {
+            self.wait_before_drop
         } else {
-            None
+            self.wait_before_close
         };
+        let deadline = (!wait_time.is_zero()).then_some(Instant::now().checked_add(wait_time));
         // Lock the channel. We are the only one that will be writing on it.
         let mut queue = zlock!(self.stage_in[idx]);
-        queue.push_network_message(&mut msg, priority, deadline_before_drop)
+        queue.push_network_message(&mut msg, priority, deadline)
     }
 
     #[inline]
@@ -793,6 +786,7 @@ mod tests {
         queue_size: [1; Priority::NUM],
         batching_enabled: true,
         wait_before_drop: Duration::from_millis(1),
+        wait_before_close: Duration::from_secs(5),
         batching_time_limit: Duration::from_micros(1),
     };
 
@@ -806,6 +800,7 @@ mod tests {
         queue_size: [1; Priority::NUM],
         batching_enabled: true,
         wait_before_drop: Duration::from_millis(1),
+        wait_before_close: Duration::from_secs(5),
         batching_time_limit: Duration::from_micros(1),
     };
 

@@ -41,6 +41,14 @@ use crate::multicast::manager::{
     TransportManagerStateMulticast,
 };
 
+fn duration_from_i64us(us: i64) -> Duration {
+    if us >= 0 {
+        Duration::from_micros(us as u64)
+    } else {
+        Duration::MAX
+    }
+}
+
 /// # Examples
 /// ```
 /// use std::sync::Arc;
@@ -102,6 +110,7 @@ pub struct TransportManagerConfig {
     pub batch_size: BatchSize,
     pub batching: bool,
     pub wait_before_drop: Duration,
+    pub wait_before_close: Duration,
     pub queue_size: [usize; Priority::NUM],
     pub queue_backoff: Duration,
     pub defrag_buff_size: usize,
@@ -133,6 +142,7 @@ pub struct TransportManagerBuilder {
     batching_enabled: bool,
     batching_time_limit: Duration,
     wait_before_drop: Duration,
+    wait_before_close: Duration,
     queue_size: QueueSizeConf,
     defrag_buff_size: usize,
     link_rx_buffer_size: usize,
@@ -184,6 +194,11 @@ impl TransportManagerBuilder {
 
     pub fn wait_before_drop(mut self, wait_before_drop: Duration) -> Self {
         self.wait_before_drop = wait_before_drop;
+        self
+    }
+
+    pub fn wait_before_close(mut self, wait_before_close: Duration) -> Self {
+        self.wait_before_close = wait_before_close;
         self
     }
 
@@ -244,8 +259,21 @@ impl TransportManagerBuilder {
         ));
         self = self.defrag_buff_size(*link.rx().max_message_size());
         self = self.link_rx_buffer_size(*link.rx().buffer_size());
-        self = self.wait_before_drop(Duration::from_micros(
-            *link.tx().queue().congestion_control().wait_before_drop(),
+        self = self.wait_before_drop(duration_from_i64us(
+            *link
+                .tx()
+                .queue()
+                .congestion_control()
+                .drop()
+                .wait_before_drop(),
+        ));
+        self = self.wait_before_close(duration_from_i64us(
+            *link
+                .tx()
+                .queue()
+                .congestion_control()
+                .block()
+                .wait_before_close(),
         ));
         self = self.queue_size(link.tx().queue().size().clone());
         self = self.tx_threads(*link.tx().threads());
@@ -305,6 +333,7 @@ impl TransportManagerBuilder {
             batch_size: self.batch_size,
             batching: self.batching_enabled,
             wait_before_drop: self.wait_before_drop,
+            wait_before_close: self.wait_before_close,
             queue_size,
             queue_backoff: self.batching_time_limit,
             defrag_buff_size: self.defrag_buff_size,
@@ -343,7 +372,8 @@ impl Default for TransportManagerBuilder {
         let link_rx = LinkRxConf::default();
         let queue = QueueConf::default();
         let backoff = *queue.batching().time_limit();
-        let wait_before_drop = *queue.congestion_control().wait_before_drop();
+        let wait_before_drop = *queue.congestion_control().drop().wait_before_drop();
+        let wait_before_close = *queue.congestion_control().block().wait_before_close();
         Self {
             version: VERSION,
             zid: ZenohIdProto::rand(),
@@ -351,7 +381,8 @@ impl Default for TransportManagerBuilder {
             resolution: Resolution::default(),
             batch_size: BatchSize::MAX,
             batching_enabled: true,
-            wait_before_drop: Duration::from_micros(wait_before_drop),
+            wait_before_drop: duration_from_i64us(wait_before_drop),
+            wait_before_close: duration_from_i64us(wait_before_close),
             queue_size: queue.size,
             batching_time_limit: Duration::from_millis(backoff),
             defrag_buff_size: *link_rx.max_message_size(),
