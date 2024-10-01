@@ -120,33 +120,30 @@ pub fn base64_encode(data: &[u8]) -> String {
 }
 
 fn payload_to_json(payload: &ZBytes, encoding: &Encoding) -> serde_json::Value {
-    match payload.is_empty() {
-        // If the value is empty return a JSON null
-        true => serde_json::Value::Null,
-        // if it is not check the encoding
-        false => {
-            match encoding {
-                // If it is a JSON try to deserialize as json, if it fails fallback to base64
-                &Encoding::APPLICATION_JSON | &Encoding::TEXT_JSON | &Encoding::TEXT_JSON5 => {
-                    payload
-                        .deserialize::<serde_json::Value>()
-                        .unwrap_or_else(|e| {
-                            tracing::warn!("Encoding is JSON but data is not JSON, converting to base64, Error: {e:?}");
-                            serde_json::Value::String(base64_encode(&Cow::from(payload)))
-                        })
-                }
-                &Encoding::TEXT_PLAIN | &Encoding::ZENOH_STRING  => serde_json::Value::String(
-                    payload
-                        .deserialize::<String>()
-                        .unwrap_or_else(|e| {
-                            tracing::warn!("Encoding is String but data is not String, converting to base64, Error: {e:?}");
-                            base64_encode(&Cow::from(payload))
-                        }),
-                ),
-                // otherwise convert to JSON string
-                _ => serde_json::Value::String(base64_encode(&Cow::from(payload))),
-            }
+    if payload.is_empty() {
+        return serde_json::Value::Null;
+    }
+    match encoding {
+        // If it is a JSON try to deserialize as json, if it fails fallback to base64
+        &Encoding::APPLICATION_JSON | &Encoding::TEXT_JSON | &Encoding::TEXT_JSON5 => {
+            let bytes = payload.to_bytes();
+            serde_json::from_slice(&bytes).unwrap_or_else(|e| {
+                tracing::warn!(
+                    "Encoding is JSON but data is not JSON, converting to base64, Error: {e:?}"
+                );
+                serde_json::Value::String(base64_encode(&bytes))
+            })
         }
+        &Encoding::TEXT_PLAIN | &Encoding::ZENOH_STRING => serde_json::Value::String(
+            String::from_utf8(payload.to_bytes().into_owned()).unwrap_or_else(|e| {
+                tracing::warn!(
+                    "Encoding is String but data is not String, converting to base64, Error: {e:?}"
+                );
+                base64_encode(e.as_bytes())
+            }),
+        ),
+        // otherwise convert to JSON string
+        _ => serde_json::Value::String(base64_encode(&payload.to_bytes())),
     }
 }
 
@@ -189,10 +186,7 @@ fn sample_to_html(sample: &Sample) -> String {
     format!(
         "<dt>{}</dt>\n<dd>{}</dd>\n",
         sample.key_expr().as_str(),
-        sample
-            .payload()
-            .deserialize::<Cow<str>>()
-            .unwrap_or_default()
+        sample.payload().try_to_string().unwrap_or_default()
     )
 }
 
@@ -202,7 +196,7 @@ fn result_to_html(sample: Result<&Sample, &ReplyError>) -> String {
         Err(err) => {
             format!(
                 "<dt>ERROR</dt>\n<dd>{}</dd>\n",
-                err.payload().deserialize::<Cow<str>>().unwrap_or_default()
+                err.payload().try_to_string().unwrap_or_default()
             )
         }
     }
@@ -228,18 +222,12 @@ async fn to_raw_response(results: flume::Receiver<Reply>) -> Response {
             Ok(sample) => response(
                 StatusCode::Ok,
                 Cow::from(sample.encoding()).as_ref(),
-                &sample
-                    .payload()
-                    .deserialize::<Cow<str>>()
-                    .unwrap_or_default(),
+                &sample.payload().try_to_string().unwrap_or_default(),
             ),
             Err(value) => response(
                 StatusCode::Ok,
                 Cow::from(value.encoding()).as_ref(),
-                &value
-                    .payload()
-                    .deserialize::<Cow<str>>()
-                    .unwrap_or_default(),
+                &value.payload().try_to_string().unwrap_or_default(),
             ),
         },
         Err(_) => response(StatusCode::Ok, "", ""),
@@ -395,7 +383,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                         ))
                     }
                 };
-                tokio::spawn(async move {
+                spawn_runtime(async move {
                     tracing::debug!("Subscribe to {} for SSE stream", key_expr);
                     let sender = &sender;
                     let sub = req.state().0.declare_subscriber(&key_expr).await.unwrap();

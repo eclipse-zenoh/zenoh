@@ -38,7 +38,7 @@ impl Value {
     /// Creates an empty [`Value`].
     pub const fn empty() -> Self {
         Value {
-            payload: ZBytes::empty(),
+            payload: ZBytes::new(),
             encoding: Encoding::default(),
         }
     }

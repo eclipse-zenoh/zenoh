@@ -214,10 +214,7 @@ pub mod sample {
 /// Payload primitives
 pub mod bytes {
     pub use crate::api::{
-        bytes::{
-            Deserialize, OptionZBytes, Serialize, ZBytes, ZBytesIterator, ZBytesReader,
-            ZBytesSliceIterator, ZBytesWriter, ZDeserializeError, ZSerde,
-        },
+        bytes::{OptionZBytes, ZBytes, ZBytesReader, ZBytesSliceIterator, ZBytesWriter},
         encoding::Encoding,
     };
 }

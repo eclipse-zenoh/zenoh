@@ -30,6 +30,7 @@ use super::{
 use crate::net::routing::{
     dispatcher::{
         face::FaceState,
+        interests::RemoteInterest,
         resource::Resource,
         tables::{Tables, TablesLock},
     },
@@ -90,9 +91,14 @@ impl HatInterestTrait for HatCode {
             )
         }
         if mode.future() {
-            face_hat_mut!(face)
-                .remote_interests
-                .insert(id, (res.cloned(), options));
+            face_hat_mut!(face).remote_interests.insert(
+                id,
+                RemoteInterest {
+                    res: res.cloned(),
+                    options,
+                    mode,
+                },
+            );
         }
         if mode.current() {
             send_declare(

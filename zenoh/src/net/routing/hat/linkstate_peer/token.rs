@@ -20,7 +20,7 @@ use zenoh_protocol::{
     network::{
         declare::{common::ext::WireExprType, TokenId},
         ext,
-        interest::{InterestId, InterestMode, InterestOptions},
+        interest::{InterestId, InterestMode},
         Declare, DeclareBody, DeclareToken, UndeclareToken,
     },
 };
@@ -31,7 +31,7 @@ use super::{
     HatCode, HatContext, HatFace, HatTables,
 };
 use crate::net::routing::{
-    dispatcher::{face::FaceState, tables::Tables},
+    dispatcher::{face::FaceState, interests::RemoteInterest, tables::Tables},
     hat::{CurrentFutureTrait, HatTokenTrait, SendDeclare},
     router::{NodeId, Resource, SessionContext},
     RoutingContext,
@@ -116,11 +116,16 @@ fn propagate_simple_token_to(
             let matching_interests = face_hat!(dst_face)
                 .remote_interests
                 .values()
-                .filter(|(r, o)| o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true))
+                .filter(|i| i.options.tokens() && i.matches(res))
                 .cloned()
-                .collect::<Vec<(Option<Arc<Resource>>, InterestOptions)>>();
+                .collect::<Vec<_>>();
 
-            for (int_res, options) in matching_interests {
+            for RemoteInterest {
+                res: int_res,
+                options,
+                ..
+            } in matching_interests
+            {
                 let res = if options.aggregate() {
                     int_res.as_ref().unwrap_or(res)
                 } else {

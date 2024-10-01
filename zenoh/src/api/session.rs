@@ -1613,7 +1613,7 @@ impl SessionInner {
                     for token in known_tokens {
                         callback.call(Sample {
                             key_expr: token,
-                            payload: ZBytes::empty(),
+                            payload: ZBytes::new(),
                             kind: SampleKind::Put,
                             encoding: Encoding::default(),
                             timestamp: None,
@@ -2378,7 +2378,7 @@ impl Primitives for WeakSession {
                                 let reply = Reply {
                                     result: Ok(Sample {
                                         key_expr,
-                                        payload: ZBytes::empty(),
+                                        payload: ZBytes::new(),
                                         kind: SampleKind::Put,
                                         encoding: Encoding::default(),
                                         timestamp: None,

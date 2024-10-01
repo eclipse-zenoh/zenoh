@@ -17,8 +17,7 @@ use clap::Parser;
 use zenoh::{
     query::{QueryTarget, Selector},
     shm::{
-        zshm, BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder,
-        POSIX_PROTOCOL_ID,
+        BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID,
     },
     Config, Wait,
 };
@@ -78,16 +77,16 @@ async fn main() {
         match reply.result() {
             Ok(sample) => {
                 print!(">> Received ('{}': ", sample.key_expr().as_str());
-                match sample.payload().deserialize::<&zshm>() {
-                    Ok(payload) => println!("'{}')", String::from_utf8_lossy(payload),),
-                    Err(e) => println!("'Not a ShmBufInner: {:?}')", e),
+                match sample.payload().as_shm() {
+                    Some(payload) => println!("'{}')", String::from_utf8_lossy(payload)),
+                    None => println!("'Not a ShmBufInner')"),
                 }
             }
             Err(err) => {
                 let payload = err
                     .payload()
-                    .deserialize::<String>()
-                    .unwrap_or_else(|e| format!("{}", e));
+                    .try_to_string()
+                    .unwrap_or_else(|e| e.to_string().into());
                 println!(">> Received (ERROR: '{}')", payload);
             }
         }

@@ -30,7 +30,7 @@ use super::{
 use crate::net::routing::{
     dispatcher::{
         face::{FaceState, InterestState},
-        interests::{CurrentInterest, CurrentInterestCleanup},
+        interests::{CurrentInterest, CurrentInterestCleanup, RemoteInterest},
         resource::Resource,
         tables::{Tables, TablesLock},
     },
@@ -47,7 +47,9 @@ pub(super) fn interests_new_face(tables: &mut Tables, face: &mut Arc<FaceState>)
             .collect::<Vec<Arc<FaceState>>>()
         {
             if face.whatami == WhatAmI::Router {
-                for (res, _, options) in face_hat_mut!(&mut src_face).remote_interests.values() {
+                for RemoteInterest { res, options, .. } in
+                    face_hat_mut!(&mut src_face).remote_interests.values()
+                {
                     let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
                     get_mut_unchecked(face).local_interests.insert(
                         id,
@@ -123,9 +125,14 @@ impl HatInterestTrait for HatCode {
                 send_declare,
             )
         }
-        face_hat_mut!(face)
-            .remote_interests
-            .insert(id, (res.as_ref().map(|res| (*res).clone()), mode, options));
+        face_hat_mut!(face).remote_interests.insert(
+            id,
+            RemoteInterest {
+                res: res.as_ref().map(|res| (*res).clone()),
+                options,
+                mode,
+            },
+        );
 
         let interest = Arc::new(CurrentInterest {
             src_face: face.clone(),
@@ -221,7 +228,8 @@ impl HatInterestTrait for HatCode {
                         .collect::<Vec<InterestId>>()
                     {
                         let local_interest = dst_face.local_interests.get(&id).unwrap();
-                        if local_interest.res == interest.0 && local_interest.options == interest.2
+                        if local_interest.res == interest.res
+                            && local_interest.options == interest.options
                         {
                             dst_face.primitives.send_interest(RoutingContext::with_expr(
                                 Interest {

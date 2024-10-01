@@ -13,10 +13,7 @@
 //
 use zenoh::{
     bytes::ZBytes,
-    shm::{
-        zshm, zshmmut, PosixShmProviderBackend, ShmProviderBuilder, ZShm, ZShmMut,
-        POSIX_PROTOCOL_ID,
-    },
+    shm::{zshmmut, PosixShmProviderBackend, ShmProviderBuilder, ZShm, ZShmMut, POSIX_PROTOCOL_ID},
     Wait,
 };
 
@@ -62,7 +59,7 @@ fn main() {
     // branch to illustrate immutable access to SHM data
     {
         // deserialize ZBytes as an immutably borrowed zshm (ZBytes -> &zshm)
-        let borrowed_shm_buf: &zshm = payload.deserialize().unwrap();
+        let borrowed_shm_buf = payload.as_shm().unwrap();
 
         // immutable API
         let _data: &[u8] = borrowed_shm_buf;
@@ -82,7 +79,7 @@ fn main() {
     // branch to illustrate mutable access to SHM data
     {
         // deserialize ZBytes as mutably borrowed zshm (ZBytes -> &mut zshm)
-        let borrowed_shm_buf: &mut zshm = payload.deserialize_mut().unwrap();
+        let borrowed_shm_buf = payload.as_shm_mut().unwrap();
 
         // immutable API
         let _data: &[u8] = borrowed_shm_buf;

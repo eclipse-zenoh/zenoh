@@ -97,9 +97,7 @@ fn propagate_simple_queryable_to(
             || face_hat!(dst_face)
                 .remote_interests
                 .values()
-                .any(|(r, _, o)| {
-                    o.queryables() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true)
-                }))
+                .any(|i| i.options.queryables() && i.matches(res)))
         && src_face
             .as_ref()
             .map(|src_face| {
