@@ -38,7 +38,7 @@ pub use unicast::*;
 //       adopted in Zenoh and the usage of 16 bits in Zenoh to encode the
 //       payload length in byte-streamed, the UNIXSOCKSTREAM MTU is constrained to
 //       2^16 - 1 bytes (i.e., 65535).
-const UNIXSOCKSTREAM_MAX_MTU: BatchSize = BatchSize::MAX;
+const UNIXSOCKSTREAM_MAX_MTU: BatchSize = 1024;
 
 pub const UNIXSOCKSTREAM_LOCATOR_PREFIX: &str = "unixsock-stream";
 
