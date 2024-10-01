@@ -102,12 +102,16 @@ where
             // If creation fails because segment already exists for this id,
             // the creation attempt will be repeated with another id
             match ShmemConf::new().size(alloc_size).os_id(os_id).create() {
-                Ok(mut shmem) => {
+                Ok(shmem) => {
                     tracing::debug!(
                         "Created SHM segment, size: {alloc_size}, prefix: {id_prefix}, id: {id}"
                     );
                     #[cfg(unix)]
-                    shmem.set_owner(false);
+                    let shmem = {
+                        let mut shmem = shmem;
+                        shmem.set_owner(false);
+                        shmem
+                    };
                     return Ok(Segment {
                         shmem,
                         id,
