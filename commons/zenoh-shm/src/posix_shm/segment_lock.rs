@@ -90,6 +90,7 @@ pub(crate) mod unix {
             // create or open tempfile just to lock it
             let tempfile = OpenOptions::new()
                 .write(true)
+                .truncate(false)
                 .create(true)
                 .open(path.clone())?;
 
