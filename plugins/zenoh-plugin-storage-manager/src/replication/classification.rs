@@ -13,7 +13,7 @@
 //
 
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     ops::{Deref, Sub},
 };
 
@@ -74,7 +74,7 @@ impl Sub<u64> for IntervalIdx {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct Interval {
     pub(crate) fingerprint: Fingerprint,
-    pub(crate) sub_intervals: BTreeMap<SubIntervalIdx, SubInterval>,
+    sub_intervals: BTreeMap<SubIntervalIdx, SubInterval>,
 }
 
 impl<const N: usize> From<[(SubIntervalIdx, SubInterval); N]> for Interval {
@@ -99,6 +99,18 @@ impl Interval {
         self.fingerprint
     }
 
+    /// Returns an iterator yielding the [SubIntervalIdx] and [SubInterval] contained in this
+    /// `Interval`.
+    pub(crate) fn sub_intervals(&self) -> impl Iterator<Item = (&SubIntervalIdx, &SubInterval)> {
+        self.sub_intervals.iter()
+    }
+
+    /// Returns, if one exists, a reference over the [SubInterval] matching the provided
+    /// [SubIntervalIdx].
+    pub(crate) fn get(&self, sub_interval_idx: &SubIntervalIdx) -> Option<&SubInterval> {
+        self.sub_intervals.get(sub_interval_idx)
+    }
+
     /// Lookup the provided key expression and return, if found, its associated [Event].
     pub(crate) fn lookup(&self, stripped_key: &Option<OwnedKeyExpr>) -> Option<&Event> {
         for sub_interval in self.sub_intervals.values() {
@@ -108,6 +120,40 @@ impl Interval {
         }
 
         None
+    }
+
+    pub(crate) fn apply_wildcard(
+        &mut self,
+        prefix: Option<&OwnedKeyExpr>,
+        wildcard_key_expr: &OwnedKeyExpr,
+        wildcard_timestamp: &Timestamp,
+        wildcard_sub_idx: Option<SubIntervalIdx>,
+    ) -> HashSet<Event> {
+        let mut entries_to_update = HashSet::new();
+        for (sub_interval_idx, sub_interval) in self.sub_intervals.iter_mut() {
+            let mut timestamp = None;
+            if let Some(wildcard_sub_idx) = wildcard_sub_idx {
+                if *sub_interval_idx > wildcard_sub_idx {
+                    break;
+                }
+
+                if *sub_interval_idx == wildcard_sub_idx {
+                    timestamp = Some(wildcard_timestamp);
+                }
+            }
+
+            self.fingerprint ^= sub_interval.fingerprint;
+
+            entries_to_update.extend(sub_interval.apply_wildcard(
+                prefix,
+                wildcard_key_expr,
+                timestamp,
+            ));
+
+            self.fingerprint ^= sub_interval.fingerprint;
+        }
+
+        entries_to_update
     }
 
     /// Returns an [HashMap] of the index and [Fingerprint] of all the [SubInterval]s contained in
@@ -207,7 +253,7 @@ impl From<u64> for SubIntervalIdx {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct SubInterval {
     pub(crate) fingerprint: Fingerprint,
-    pub(crate) events: HashMap<Option<OwnedKeyExpr>, Event>,
+    events: HashMap<Option<OwnedKeyExpr>, Event>,
 }
 
 impl<const N: usize> From<[Event; N]> for SubInterval {
@@ -227,6 +273,10 @@ impl<const N: usize> From<[Event; N]> for SubInterval {
 }
 
 impl SubInterval {
+    pub(crate) fn events(&self) -> impl Iterator<Item = (&Option<OwnedKeyExpr>, &Event)> {
+        self.events.iter()
+    }
+
     /// Inserts the [Event], regardless of its [Timestamp].
     ///
     /// This method also updates the fingerprint of the [SubInterval].
@@ -274,6 +324,46 @@ impl SubInterval {
         }
 
         EventRemoval::NotFound
+    }
+
+    fn apply_wildcard(
+        &mut self,
+        prefix: Option<&OwnedKeyExpr>,
+        wildcard_key_expr: &OwnedKeyExpr,
+        wildcard_timestamp: Option<&Timestamp>,
+    ) -> HashSet<Event> {
+        let mut removed_entries = HashSet::default();
+
+        self.events.retain(|event_key_expr, event| {
+            if let Some(wildcard_timestamp) = wildcard_timestamp {
+                if *wildcard_timestamp < event.timestamp {
+                    return true;
+                }
+            }
+
+            let Ok(complete_key) = crate::prefix(prefix, event_key_expr.as_ref()) else {
+                tracing::error!(
+                    "Internal error while attempting to prefix < {:?} > with < {:?} >",
+                    event_key_expr,
+                    prefix
+                );
+                return true;
+            };
+
+            if wildcard_key_expr.includes(&complete_key) {
+                self.fingerprint ^= event.fingerprint;
+                removed_entries.insert(event.clone());
+                tracing::trace!(
+                    "Event < {:?} > is overridden by Wildcard Update: < {wildcard_key_expr} >",
+                    event.maybe_stripped_key
+                );
+                return false;
+            }
+
+            true
+        });
+
+        removed_entries
     }
 }
 

@@ -221,7 +221,7 @@ impl StorageService {
     // The storage should only simply save the key, sample pair while put and retrieve the same
     // during get the trimming during PUT and GET should be handled by the plugin
     pub(crate) async fn process_sample(&self, sample: Sample) -> ZResult<()> {
-        tracing::trace!("[STORAGE] Processing sample: {:?}", sample);
+        tracing::trace!("[STORAGE] Processing sample: {:?}", sample.key_expr());
 
         // A Sample, in theory, will not arrive to a Storage without a Timestamp. This check (which,
         // again, should never enter the `None` branch) ensures that the Storage Manager
@@ -238,6 +238,7 @@ impl StorageService {
             self.register_wildcard_update(
                 sample.key_expr().clone().into(),
                 sample.kind(),
+                *sample_timestamp,
                 sample.clone(),
             )
             .await;
@@ -261,12 +262,6 @@ impl StorageService {
                 tracing::trace!("Skipping Sample < {} > deleted later on", k);
                 continue;
             }
-
-            tracing::trace!(
-                "Sample `{:?}` identified as needed processing for key {}",
-                sample,
-                k
-            );
 
             // there might be the case that the actual update was outdated due to a wild card
             // update, but not stored yet in the storage. get the relevant wild
@@ -401,17 +396,18 @@ impl StorageService {
         &self,
         key_expr: OwnedKeyExpr,
         kind: SampleKind,
-        sample: Sample,
+        timestamp: Timestamp,
+        value: impl Into<Value>,
     ) {
+        tracing::trace!("Registering Wildcard Update on < {key_expr} >");
         // @TODO: change into a better store that does incremental writes
         let mut wildcards = self.wildcard_updates.write().await;
-        let timestamp = *sample.timestamp().unwrap();
         wildcards.insert(
             &key_expr,
             Update {
                 kind,
                 data: StoredData {
-                    value: Value::from(sample),
+                    value: value.into(),
                     timestamp,
                 },
             },
@@ -430,13 +426,14 @@ impl StorageService {
             }
         }
 
+        let action = match kind {
+            SampleKind::Put => Action::WildcardPut(key_expr.clone()),
+            SampleKind::Delete => Action::WildcardDelete(key_expr.clone()),
+        };
+
         self.cache_latest.latest_updates.write().await.insert(
             Some(key_expr.clone()),
-            Event::new(
-                Some(key_expr.clone()),
-                timestamp,
-                Action::WildcardPut(key_expr),
-            ),
+            Event::new(Some(key_expr), timestamp, action),
         );
     }
 
@@ -458,7 +455,7 @@ impl StorageService {
         None
     }
 
-    async fn overriding_wild_update(
+    pub(crate) async fn overriding_wild_update(
         &self,
         key_expr: &OwnedKeyExpr,
         timestamp: &Timestamp,
@@ -502,6 +499,10 @@ impl StorageService {
                         update = Some(weight.unwrap().clone());
                     }
                 }
+
+                tracing::trace!(
+                    "Found more recent Wildcard Update < {node} > for key expression: {key_expr}"
+                );
             }
         }
         update

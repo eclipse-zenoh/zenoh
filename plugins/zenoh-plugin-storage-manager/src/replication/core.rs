@@ -459,8 +459,6 @@ impl Replication {
                     continue;
                 }
 
-                tracing::trace!("Received Alignment Query");
-
                 let replication = replication.clone();
                 tokio::task::spawn(async move { replication.aligner(query).await });
             }

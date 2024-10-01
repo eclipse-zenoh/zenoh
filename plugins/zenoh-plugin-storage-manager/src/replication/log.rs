@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use bloomfilter::Bloom;
 use serde::{Deserialize, Serialize};
@@ -20,7 +20,7 @@ use zenoh::{key_expr::OwnedKeyExpr, sample::SampleKind, time::Timestamp, Result 
 use zenoh_backend_traits::config::ReplicaConfig;
 
 use super::{
-    classification::{EventRemoval, Interval, IntervalIdx},
+    classification::{EventRemoval, Interval, IntervalIdx, SubIntervalIdx},
     configuration::Configuration,
     digest::{Digest, Fingerprint},
 };
@@ -79,7 +79,7 @@ impl From<&Event> for EventMetadata {
 ///
 /// When an `Event` is created, its [Fingerprint] is computed, using the `xxhash-rust` crate. This
 /// [Fingerprint] is used to construct the [Digest] associated with the replication log.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Event {
     pub(crate) maybe_stripped_key: Option<OwnedKeyExpr>,
     pub(crate) timestamp: Timestamp,
@@ -233,6 +233,51 @@ impl LogLatest {
         None
     }
 
+    /// Applies the wildcard delete.
+    pub(crate) fn apply_wildcard_update(
+        &mut self,
+        wildcard_ke: &OwnedKeyExpr,
+        wildcard_ts: &Timestamp,
+        wildcard_action: SampleKind,
+    ) -> ZResult<HashSet<Event>> {
+        let (interval_idx_delete, sub_interval_idx_delete) =
+            self.configuration.get_time_classification(wildcard_ts)?;
+
+        let mut deleted_entries = HashSet::new();
+
+        for (interval_idx, interval) in self.intervals.iter_mut() {
+            if *interval_idx > interval_idx_delete {
+                break;
+            }
+
+            let mut wildcard_sub_idx = None;
+            if *interval_idx == interval_idx_delete {
+                wildcard_sub_idx = Some(sub_interval_idx_delete);
+            }
+
+            deleted_entries.extend(interval.apply_wildcard(
+                self.configuration.prefix.as_ref(),
+                wildcard_ke,
+                wildcard_ts,
+                wildcard_sub_idx,
+            ));
+        }
+
+        deleted_entries.iter().for_each(|deleted_event| {
+            self.insert_event_unchecked(
+                interval_idx_delete,
+                sub_interval_idx_delete,
+                Event::new(
+                    deleted_event.maybe_stripped_key.clone(),
+                    *wildcard_ts,
+                    wildcard_action,
+                ),
+            );
+        });
+
+        Ok(deleted_entries)
+    }
+
     /// Attempts to insert the provided [Event] in the replication log and return the [Insertion]
     /// outcome.
     ///
@@ -298,6 +343,20 @@ impl LogLatest {
             .insert_unchecked(sub_interval_idx, event);
 
         result
+    }
+
+    pub(crate) fn insert_event_unchecked(
+        &mut self,
+        interval_idx: IntervalIdx,
+        sub_interval_idx: SubIntervalIdx,
+        event: Event,
+    ) {
+        self.bloom_filter_event.set(event.key_expr());
+
+        self.intervals
+            .entry(interval_idx)
+            .or_default()
+            .insert_unchecked(sub_interval_idx, event);
     }
 
     /// Updates the replication log with the provided set of [Event]s and return the updated

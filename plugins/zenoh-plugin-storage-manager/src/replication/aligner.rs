@@ -15,7 +15,7 @@
 use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
-use tokio::task::JoinHandle;
+use tokio::{sync::RwLockWriteGuard, task::JoinHandle};
 use zenoh::{
     bytes::ZBytes,
     internal::Value,
@@ -31,7 +31,9 @@ use super::{
     core::{aligner_key_expr_formatter, Replication},
     digest::{DigestDiff, Fingerprint},
     log::{Action, EventMetadata},
+    LogLatest,
 };
+use crate::storages_mgt::service::Update;
 
 /// The `AlignmentQuery` enumeration represents the information requested by a Replica to align
 /// its storage.
@@ -94,8 +96,8 @@ impl Replication {
             Ok(alignment) => alignment,
             Err(e) => {
                 tracing::error!(
-                    "Failed to deserialize `attachment` of received Query into \
-                         AlignmentQuery: {e:?}"
+                    "Failed to deserialize `attachment` of received Query into AlignmentQuery: \
+                     {e:?}"
                 );
                 return;
             }
@@ -132,12 +134,11 @@ impl Replication {
                         .intervals
                         .get(&interval_idx)
                     {
-                        interval.sub_intervals.values().for_each(|sub_interval| {
+                        interval.sub_intervals().for_each(|(_, sub_interval)| {
                             events_to_send.extend(
                                 sub_interval
-                                    .events
-                                    .values()
-                                    .filter(|event| {
+                                    .events()
+                                    .filter(|(_, event)| {
                                         // NOTE: We process the wildcard actions separately: the
                                         // payload of a WildcardPut is not stored in the Storage but
                                         // separately.
@@ -146,14 +147,13 @@ impl Replication {
                                             Action::WildcardDelete(_) | Action::WildcardPut(_)
                                         )
                                     })
-                                    .map(Into::into),
+                                    .map(|(_, event)| event.into()),
                             );
                         });
                     }
 
                     // NOTE: As we took the lock in the `if let` block, it is released here,
                     // diminishing contention.
-
                     self.reply_events(&query, events_to_send).await;
                 }
 
@@ -328,12 +328,10 @@ impl Replication {
                 .for_each(|(interval_idx, sub_intervals)| {
                     if let Some(interval) = log.intervals.get(interval_idx) {
                         sub_intervals.iter().for_each(|sub_interval_idx| {
-                            if let Some(sub_interval) = interval.sub_intervals.get(sub_interval_idx)
-                            {
+                            if let Some(sub_interval) = interval.get(sub_interval_idx) {
                                 sub_interval
-                                    .events
-                                    .values()
-                                    .for_each(|event| events.push(event.into()))
+                                    .events()
+                                    .for_each(|(_, event)| events.push(event.into()))
                             }
                         });
                     }
@@ -353,10 +351,24 @@ impl Replication {
         for event_metadata in events_to_retrieve {
             if matches!(
                 event_metadata.action,
-                Action::Delete | Action::WildcardDelete(_) | Action::WildcardPut(_)
+                Action::Delete | Action::WildcardDelete(_)
             ) {
                 reply_to_query(query, AlignmentReply::Retrieval(event_metadata), None).await;
                 continue;
+            }
+
+            if let Action::WildcardPut(ref wildcard_ke) = event_metadata.action {
+                let wildcard_updates_guard = self.storage_service.wildcard_updates.read().await;
+
+                if let Some(update_payload) = wildcard_updates_guard.weight_at(wildcard_ke) {
+                    reply_to_query(
+                        query,
+                        AlignmentReply::Retrieval(event_metadata),
+                        Some(update_payload.data.value.clone()),
+                    )
+                    .await;
+                    continue;
+                }
             }
 
             let stored_data = {
@@ -481,8 +493,9 @@ impl Replication {
                                 {
                                     Err(e) => {
                                         tracing::error!(
-                                        "Failed to deserialize attachment as AlignmentReply: {e:?}"
-                                    );
+                                            "Failed to deserialize attachment as AlignmentReply: \
+                                             {e:?}"
+                                        );
                                         continue;
                                     }
                                     Ok(alignment_reply) => alignment_reply,
@@ -625,13 +638,9 @@ impl Replication {
                             Some(interval) => {
                                 let diff = replica_sub_ivl
                                     .into_iter()
-                                    .filter(|(sub_idx, sub_fp)| {
-                                        match interval.sub_intervals.get(sub_idx) {
-                                            None => true,
-                                            Some(sub_interval) => {
-                                                sub_interval.fingerprint != *sub_fp
-                                            }
-                                        }
+                                    .filter(|(sub_idx, sub_fp)| match interval.get(sub_idx) {
+                                        None => true,
+                                        Some(sub_interval) => sub_interval.fingerprint != *sub_fp,
                                     })
                                     .map(|(sub_idx, _)| sub_idx)
                                     .collect();
@@ -651,21 +660,13 @@ impl Replication {
                 }
             }
             AlignmentReply::Events(replica_events) => {
-                tracing::trace!("Processing `AlignmentReply::Events`");
                 let mut diff_events = Vec::default();
 
                 for replica_event in replica_events {
-                    {
-                        let span = tracing::Span::current();
-                        span.record(
-                            "sample",
-                            replica_event
-                                .stripped_key
-                                .as_ref()
-                                .map_or("", |key| key.as_str()),
-                        );
-                        span.record("t", replica_event.timestamp.to_string());
-                    }
+                    tracing::trace!(
+                        "Processing `AlignmentReply::Events` on: < {:?} >",
+                        replica_event.stripped_key
+                    );
 
                     if self
                         .latest_updates
@@ -679,59 +680,157 @@ impl Replication {
                         continue;
                     }
 
-                    // We process a Put or WildPut: we only need a read access on the Replication
-                    // Log as we need the payload in order to apply it the update -- and we don't
-                    // have the payload at this stage.
-                    if matches!(replica_event.action, Action::Put | Action::WildcardPut(_)) {
-                        let replication_log_guard = self.replication_log.read().await;
-                        if let Some(latest_event) =
-                            replication_log_guard.lookup(&replica_event.stripped_key)
-                        {
+                    let mut maybe_wildcard_update = None;
+                    if matches!(replica_event.action, Action::Put | Action::Delete) {
+                        let Ok(non_stripped_ke) = crate::prefix(
+                            self.storage_service.configuration.strip_prefix.as_ref(),
+                            replica_event.stripped_key.as_ref(),
+                        ) else {
+                            tracing::error!(
+                                "Internal error while attempting to prefix < {:?} > with < {:?} >",
+                                self.storage_service.configuration.strip_prefix,
+                                replica_event.stripped_key
+                            );
+                            continue;
+                        };
+
+                        maybe_wildcard_update = self
+                            .storage_service
+                            .overriding_wild_update(&non_stripped_ke, &replica_event.timestamp)
+                            .await;
+                    }
+
+                    // NOTE: We do not need to hold a write lock in all situations. However, we
+                    // cannot know ahead of time if that's going to be the case. The scenario that
+                    // is particularly problematic is in case a PUT event is received for which
+                    // there is a more recent wildcard update.
+                    //
+                    // In that scenario we need to check if there isn't yet another more recent
+                    // event in the Replication Log.  If we take a read lock and there is no event
+                    // more recent then we need to change the read lock to a write lock to add the
+                    // wildcard update. To switch from a read lock to a write lock we need to
+                    // drop the read lock, and take a write lock.
+                    //
+                    // By directly taking a write lock we skip that extra complexity.
+                    let mut replication_log_guard = self.replication_log.write().await;
+                    match (
+                        maybe_wildcard_update,
+                        replication_log_guard.lookup(&replica_event.stripped_key),
+                    ) {
+                        (Some(wildcard_update), Some(latest_event)) => {
+                            if latest_event.timestamp >= wildcard_update.data.timestamp {
+                                if latest_event.timestamp >= replica_event.timestamp {
+                                    continue;
+                                }
+                            } else {
+                                tracing::trace!(
+                                    "Event on < {:?} > is overridden by Wildcard Update",
+                                    replica_event.stripped_key
+                                );
+                                self.store_event_overridden_wildcard_update(
+                                    replication_log_guard,
+                                    replica_event,
+                                    wildcard_update,
+                                )
+                                .await;
+                                continue;
+                            }
+                        }
+                        (None, Some(latest_event)) => {
                             if latest_event.timestamp >= replica_event.timestamp {
                                 continue;
                             }
                         }
-                        diff_events.push(replica_event);
-                        continue;
-                    }
-
-                    // We process a Delete or WildDelete: we need a write access on the Replication
-                    // Log as we have all the required information in order to apply them.
-                    let mut replication_log_guard = self.replication_log.write().await;
-                    if let Some(latest_event) =
-                        replication_log_guard.lookup(&replica_event.stripped_key)
-                    {
-                        if latest_event.timestamp >= replica_event.timestamp {
+                        (Some(wildcard_update), None) => {
+                            tracing::trace!(
+                                "Event on < {:?} > is overridden by Wildcard Update",
+                                replica_event.stripped_key
+                            );
+                            self.store_event_overridden_wildcard_update(
+                                replication_log_guard,
+                                replica_event,
+                                wildcard_update,
+                            )
+                            .await;
                             continue;
                         }
+                        (None, None) => {}
                     }
 
-                    if matches!(replica_event.action, Action::Delete)
-                        && matches!(
+                    match replica_event.action {
+                        Action::Put | Action::WildcardPut(_) => {
+                            diff_events.push(replica_event);
+                            continue;
+                        }
+                        Action::Delete => {
+                            if matches!(
+                                self.storage_service
+                                    .storage
+                                    .lock()
+                                    .await
+                                    .delete(
+                                        replica_event.stripped_key.clone(),
+                                        replica_event.timestamp
+                                    )
+                                    .await,
+                                // NOTE: In some of our backend implementation, a deletion on a
+                                //       non-existing key will return an error. Given that we cannot
+                                //       distinguish an error from a missing key, we will assume the
+                                //       latter and move forward.
+                                //
+                                // FIXME: Once the behaviour described above is fixed, check for
+                                //        errors.
+                                Ok(StorageInsertionResult::Outdated)
+                            ) {
+                                continue;
+                            }
+                        }
+                        Action::WildcardDelete(ref wildcard_delete_ke) => {
                             self.storage_service
-                                .storage
-                                .lock()
-                                .await
-                                .delete(replica_event.stripped_key.clone(), replica_event.timestamp)
-                                .await,
-                            // NOTE: In some of our backend implementation, a deletion on a
-                            //       non-existing key will return an error. Given that we cannot
-                            //       distinguish an error from a missing key, we will assume
-                            //       the latter and move forward.
-                            //
-                            // FIXME: Once the behaviour described above is fixed, check for
-                            //        errors.
-                            Ok(StorageInsertionResult::Outdated)
-                        )
-                    {
-                        continue;
-                    }
+                                .register_wildcard_update(
+                                    wildcard_delete_ke.clone(),
+                                    SampleKind::Delete,
+                                    replica_event.timestamp,
+                                    Value::empty(),
+                                )
+                                .await;
 
-                    if let Action::WildcardDelete(ref _wild_key_expr) = replica_event.action {
-                        // self.storage_service
-                        //     .register_wildcard_update(wild_key_expr, replica_event.timestamp)
-                        //     .await;
-                        // TODO Apply wild deletes backward.
+                            match replication_log_guard.apply_wildcard_update(
+                                wildcard_delete_ke,
+                                &replica_event.timestamp,
+                                SampleKind::Delete,
+                            ) {
+                                Err(e) => {
+                                    tracing::error!(
+                                        "Fatal error trying to apply wildcard delete < \
+                                         {wildcard_delete_ke} >: {e:?}"
+                                    );
+                                    return;
+                                }
+                                Ok(deleted_entries) => {
+                                    let mut storage_guard =
+                                        self.storage_service.storage.lock().await;
+                                    for deleted_event in deleted_entries {
+                                        if matches!(
+                                            storage_guard
+                                                .delete(
+                                                    deleted_event.maybe_stripped_key.clone(),
+                                                    deleted_event.timestamp,
+                                                )
+                                                .await,
+                                            Ok(StorageInsertionResult::Outdated)
+                                        ) {
+                                            tracing::error!(
+                                                "Internal error detected: Wildcard Delete < {} > \
+                                                 applied on < {:?} > was flagged as Outdated",
+                                                wildcard_delete_ke,
+                                                deleted_event.maybe_stripped_key
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     replication_log_guard.insert_event(replica_event.into());
@@ -807,6 +906,7 @@ impl Replication {
                             .register_wildcard_update(
                                 wildcard_delete_ke.clone(),
                                 SampleKind::Delete,
+                                replica_event.timestamp,
                                 sample,
                             )
                             .await;
@@ -816,15 +916,88 @@ impl Replication {
                             .register_wildcard_update(
                                 wildcard_update_ke.clone(),
                                 SampleKind::Put,
-                                sample,
+                                replica_event.timestamp,
+                                sample.clone(),
                             )
                             .await;
+
+                        match replication_log_guard.apply_wildcard_update(
+                            wildcard_update_ke,
+                            &replica_event.timestamp,
+                            SampleKind::Put,
+                        ) {
+                            Err(e) => {
+                                tracing::error!(
+                                    "Internal error attempting to apply Wildcard Put < \
+                                     {wildcard_update_ke} >: {e:?}"
+                                );
+                                return;
+                            }
+                            Ok(entries_to_reinsert) => {
+                                for entry in entries_to_reinsert {
+                                    let mut storage_guard =
+                                        self.storage_service.storage.lock().await;
+
+                                    let _ = storage_guard
+                                        .delete(entry.maybe_stripped_key.clone(), entry.timestamp)
+                                        .await;
+
+                                    let _ = storage_guard
+                                        .put(
+                                            entry.maybe_stripped_key,
+                                            sample.clone().into(),
+                                            replica_event.timestamp,
+                                        )
+                                        .await;
+                                }
+                            }
+                        }
                     }
                 }
 
                 replication_log_guard.insert_event(replica_event.into());
             }
         }
+    }
+
+    /// Stores in the Storage and/or the Replication Log an [Event] on the key expression associated
+    /// to provided `replica_event`.
+    ///
+    /// A payload will be pushed to the Storage if the `wildcard_update` is a put.
+    //
+    // NOTE: There is no need to attempt to delete an event in the Storage if the `wildcard_update`
+    //       is a delete. Indeed, if the wildcard update is a delete then it is impossible to have
+    //       a previous event associated to the same key expression as, by definition of a wildcard
+    //       update, it would have been deleted.
+    async fn store_event_overridden_wildcard_update(
+        &self,
+        mut replication_log_guard: RwLockWriteGuard<'_, LogLatest>,
+        replica_event: EventMetadata,
+        wildcard_update: Update,
+    ) {
+        if wildcard_update.kind == SampleKind::Put
+            && matches!(
+                self.storage_service
+                    .storage
+                    .lock()
+                    .await
+                    .put(
+                        replica_event.stripped_key.clone(),
+                        wildcard_update.data.value,
+                        wildcard_update.data.timestamp
+                    )
+                    .await,
+                Ok(StorageInsertionResult::Outdated) | Err(_)
+            )
+        {
+            tracing::error!(
+                "Failed to insert Wildcard Put Update applied to < {:?} >",
+                replica_event.stripped_key
+            );
+            return;
+        }
+
+        replication_log_guard.insert_event(replica_event.into());
     }
 }
 
