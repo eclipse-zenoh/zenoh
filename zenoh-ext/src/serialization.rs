@@ -123,6 +123,10 @@ impl ZSerializer {
         }
     }
 
+    pub fn serialize_n<T: Serialize>(&mut self, ts: &[T]) {
+        T::serialize_n(ts, self);
+    }
+
     pub fn finish(self) -> ZBytes {
         self.0.finish()
     }

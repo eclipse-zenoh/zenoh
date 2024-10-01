@@ -27,9 +27,7 @@ description = "Zenoh: extensions to the client API."
 maintenance = { status = "actively-developed" }
 
 [features]
-unstable = []
-default = []
-shared-memory = ["zenoh/shared-memory"]
+unstable = ["zenoh/unstable", "zenoh/internal"]
 
 [dependencies]
 tokio = { workspace = true, features = [

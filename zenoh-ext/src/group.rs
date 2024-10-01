@@ -40,31 +40,37 @@ const VIEW_REFRESH_LEASE_RATIO: f32 = 0.75f32;
 const DEFAULT_LEASE: Duration = Duration::from_secs(18);
 const DEFAULT_PRIORITY: Priority = Priority::DataHigh;
 
+#[zenoh_macros::unstable]
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct JoinEvent {
     pub member: Member,
 }
 
+#[zenoh_macros::unstable]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct LeaseExpiredEvent {
     pub mid: OwnedKeyExpr,
 }
 
+#[zenoh_macros::unstable]
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct LeaveEvent {
     pub mid: OwnedKeyExpr,
 }
 
+#[zenoh_macros::unstable]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NewLeaderEvent {
     pub mid: OwnedKeyExpr,
 }
 
+#[zenoh_macros::unstable]
 #[derive(Serialize, Deserialize, Debug)]
 struct KeepAliveEvent {
     pub mid: OwnedKeyExpr,
 }
 
+#[zenoh_macros::unstable]
 #[derive(Serialize, Deserialize, Debug)]
 enum GroupNetEvent {
     Join(JoinEvent),
@@ -74,6 +80,7 @@ enum GroupNetEvent {
 
 /// Events exposed to the user to be informed for relevant
 /// changes in the group.
+#[zenoh_macros::unstable]
 #[derive(Serialize, Deserialize, Debug)]
 pub enum GroupEvent {
     Join(JoinEvent),
@@ -83,12 +90,14 @@ pub enum GroupEvent {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[zenoh_macros::unstable]
 pub enum MemberLiveliness {
     Auto,
     Manual,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[zenoh_macros::unstable]
 pub struct Member {
     mid: OwnedKeyExpr,
     info: Option<String>,
@@ -161,6 +170,7 @@ struct GroupState {
     cond: Condition,
 }
 
+#[zenoh_macros::unstable]
 pub struct Group {
     state: Arc<GroupState>,
     task_controller: TaskController,

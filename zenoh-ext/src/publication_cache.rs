@@ -28,6 +28,7 @@ use zenoh::{
 };
 
 /// The builder of PublicationCache, allowing to configure it.
+#[zenoh_macros::unstable]
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct PublicationCacheBuilder<'a, 'b, 'c> {
     session: &'a Session,
@@ -112,6 +113,7 @@ impl IntoFuture for PublicationCacheBuilder<'_, '_, '_> {
     }
 }
 
+#[zenoh_macros::unstable]
 pub struct PublicationCache {
     local_sub: FlumeSubscriber,
     _queryable: Queryable<flume::Receiver<Query>>,

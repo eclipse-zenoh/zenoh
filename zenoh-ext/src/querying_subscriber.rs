@@ -22,18 +22,48 @@ use std::{
 
 use zenoh::{
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
-    internal::zlock,
+    internal::{zerror, zlock},
     key_expr::KeyExpr,
     pubsub::Subscriber,
-    query::{QueryConsolidation, QueryTarget, ReplyKeyExpr, Selector},
+    query::{QueryConsolidation, QueryTarget, Reply, ReplyKeyExpr, Selector},
     sample::{Locality, Sample, SampleBuilder},
     time::Timestamp,
     Error, Resolvable, Resolve, Result as ZResult, Session, Wait,
 };
 
-use crate::ExtractSample;
+/// The space of keys to use in a [`FetchingSubscriber`].
+#[zenoh_macros::unstable]
+pub enum KeySpace {
+    User,
+    Liveliness,
+}
+
+/// The key space for user data.
+#[zenoh_macros::unstable]
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy)]
+pub struct UserSpace;
+
+impl From<UserSpace> for KeySpace {
+    fn from(_: UserSpace) -> Self {
+        KeySpace::User
+    }
+}
+
+/// The key space for liveliness tokens.
+#[zenoh_macros::unstable]
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy)]
+pub struct LivelinessSpace;
+
+impl From<LivelinessSpace> for KeySpace {
+    fn from(_: LivelinessSpace) -> Self {
+        KeySpace::Liveliness
+    }
+}
 
 /// The builder of [`FetchingSubscriber`], allowing to configure it.
+#[zenoh_macros::unstable]
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct QueryingSubscriberBuilder<'a, 'b, KeySpace, Handler> {
     pub(crate) session: &'a Session,
@@ -125,7 +155,7 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
     }
 }
 
-impl<'b, Handler> QueryingSubscriberBuilder<'_, 'b, crate::UserSpace, Handler> {
+impl<'b, Handler> QueryingSubscriberBuilder<'_, 'b, UserSpace, Handler> {
     ///
     ///
     /// Restrict the matching publications that will be receive by this [`Subscriber`]
@@ -204,7 +234,7 @@ where
 
 impl<KeySpace, Handler> Wait for QueryingSubscriberBuilder<'_, '_, KeySpace, Handler>
 where
-    KeySpace: Into<crate::KeySpace> + Clone,
+    KeySpace: Into<self::KeySpace> + Clone,
     Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
 {
@@ -226,7 +256,7 @@ where
             key_space: self.key_space,
             origin: self.origin,
             fetch: |cb| match key_space {
-                crate::KeySpace::User => match query_selector {
+                self::KeySpace::User => match query_selector {
                     Some(s) => session.get(s),
                     None => session.get(key_expr),
                 }
@@ -236,7 +266,7 @@ where
                 .accept_replies(query_accept_replies)
                 .timeout(query_timeout)
                 .wait(),
-                crate::KeySpace::Liveliness => session
+                self::KeySpace::Liveliness => session
                     .liveliness()
                     .get(key_expr)
                     .callback(cb)
@@ -253,7 +283,7 @@ where
 
 impl<KeySpace, Handler> IntoFuture for QueryingSubscriberBuilder<'_, '_, KeySpace, Handler>
 where
-    KeySpace: Into<crate::KeySpace> + Clone,
+    KeySpace: Into<self::KeySpace> + Clone,
     Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
 {
@@ -326,6 +356,7 @@ struct InnerState {
 }
 
 /// The builder of [`FetchingSubscriber`], allowing to configure it.
+#[zenoh_macros::unstable]
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct FetchingSubscriberBuilder<
     'a,
@@ -464,7 +495,7 @@ impl<
         Handler,
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
         TryIntoSample,
-    > FetchingSubscriberBuilder<'_, '_, crate::UserSpace, Handler, Fetch, TryIntoSample>
+    > FetchingSubscriberBuilder<'_, '_, UserSpace, Handler, Fetch, TryIntoSample>
 where
     TryIntoSample: ExtractSample,
 {
@@ -521,7 +552,7 @@ impl<
         TryIntoSample,
     > Wait for FetchingSubscriberBuilder<'_, '_, KeySpace, Handler, Fetch, TryIntoSample>
 where
-    KeySpace: Into<crate::KeySpace>,
+    KeySpace: Into<self::KeySpace>,
     Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
     TryIntoSample: ExtractSample + Send + Sync,
@@ -538,7 +569,7 @@ impl<
         TryIntoSample,
     > IntoFuture for FetchingSubscriberBuilder<'_, '_, KeySpace, Handler, Fetch, TryIntoSample>
 where
-    KeySpace: Into<crate::KeySpace>,
+    KeySpace: Into<self::KeySpace>,
     Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
     TryIntoSample: ExtractSample + Send + Sync,
@@ -582,6 +613,7 @@ where
 /// }
 /// # }
 /// ```
+#[zenoh_macros::unstable]
 pub struct FetchingSubscriber<Handler> {
     subscriber: Subscriber<()>,
     callback: Callback<Sample>,
@@ -613,7 +645,7 @@ impl<Handler> FetchingSubscriber<Handler> {
         conf: FetchingSubscriberBuilder<'a, 'a, KeySpace, InputHandler, Fetch, TryIntoSample>,
     ) -> ZResult<Self>
     where
-        KeySpace: Into<crate::KeySpace>,
+        KeySpace: Into<self::KeySpace>,
         InputHandler: IntoHandler<Sample, Handler = Handler> + Send,
         TryIntoSample: ExtractSample + Send + Sync,
     {
@@ -657,14 +689,14 @@ impl<Handler> FetchingSubscriber<Handler> {
         let handler = register_handler(state.clone(), callback.clone());
         // declare subscriber
         let subscriber = match conf.key_space.into() {
-            crate::KeySpace::User => conf
+            self::KeySpace::User => conf
                 .session
                 .declare_subscriber(&key_expr)
                 .with(sub_callback)
                 .undeclare_on_drop(conf.undeclare_on_drop)
                 .allowed_origin(conf.origin)
                 .wait()?,
-            crate::KeySpace::Liveliness => conf
+            self::KeySpace::Liveliness => conf
                 .session
                 .liveliness()
                 .declare_subscriber(&key_expr)
@@ -811,6 +843,7 @@ impl Drop for RepliesHandler {
 ///     .unwrap();
 /// # }
 /// ```
+#[zenoh_macros::unstable]
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct FetchBuilder<
     Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
@@ -881,4 +914,15 @@ where
         }
         Err(e) => tracing::debug!("Received error fetching data: {}", e),
     }))
+}
+
+#[zenoh_macros::unstable]
+pub trait ExtractSample {
+    fn extract(self) -> ZResult<Sample>;
+}
+
+impl ExtractSample for Reply {
+    fn extract(self) -> ZResult<Sample> {
+        self.into_result().map_err(|e| zerror!("{:?}", e).into())
+    }
 }
