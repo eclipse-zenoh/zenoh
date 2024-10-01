@@ -17,6 +17,7 @@ use zenoh::{key_expr::KeyExpr, session::Session, Error};
 use super::PublicationCacheBuilder;
 
 /// Some extensions to the [`zenoh::Session`](zenoh::Session)
+#[zenoh_macros::unstable]
 pub trait SessionExt {
     // REVIEW(fuzzypixelz): this doc test is the only one to use the programmatic configuration API..
     /// Examples:

@@ -28,6 +28,7 @@ use crate::{
 };
 
 /// Allows writing `subscriber.forward(receiver)` instead of `subscriber.stream().map(Ok).forward(publisher)`
+#[zenoh_macros::unstable]
 pub trait SubscriberForward<'a, S> {
     type Output;
     fn forward(&'a mut self, sink: S) -> Self::Output;
@@ -43,6 +44,7 @@ where
 }
 
 /// Some extensions to the [`zenoh::subscriber::SubscriberBuilder`](zenoh::pubsub::SubscriberBuilder)
+#[zenoh_macros::unstable]
 pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     type KeySpace;
 

@@ -11,59 +11,29 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "unstable")]
 pub mod group;
+#[cfg(feature = "unstable")]
 mod publication_cache;
+#[cfg(feature = "unstable")]
 mod querying_subscriber;
 mod serialization;
+#[cfg(feature = "unstable")]
 mod session_ext;
+#[cfg(feature = "unstable")]
 mod subscriber_ext;
 
-pub use publication_cache::{PublicationCache, PublicationCacheBuilder};
-pub use querying_subscriber::{
-    FetchingSubscriber, FetchingSubscriberBuilder, QueryingSubscriberBuilder,
-};
-pub use serialization::{
+pub use crate::serialization::{
     z_deserialize, z_serialize, Deserialize, Serialize, VarInt, ZDeserializeError, ZDeserializer,
     ZReadIter, ZSerializer,
 };
-pub use session_ext::SessionExt;
-pub use subscriber_ext::{SubscriberBuilderExt, SubscriberForward};
-use zenoh::{internal::zerror, query::Reply, sample::Sample, Result as ZResult};
-
-/// The space of keys to use in a [`FetchingSubscriber`].
-pub enum KeySpace {
-    User,
-    Liveliness,
-}
-
-/// The key space for user data.
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy)]
-pub struct UserSpace;
-
-impl From<UserSpace> for KeySpace {
-    fn from(_: UserSpace) -> Self {
-        KeySpace::User
-    }
-}
-
-/// The key space for liveliness tokens.
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy)]
-pub struct LivelinessSpace;
-
-impl From<LivelinessSpace> for KeySpace {
-    fn from(_: LivelinessSpace) -> Self {
-        KeySpace::Liveliness
-    }
-}
-
-pub trait ExtractSample {
-    fn extract(self) -> ZResult<Sample>;
-}
-
-impl ExtractSample for Reply {
-    fn extract(self) -> ZResult<Sample> {
-        self.into_result().map_err(|e| zerror!("{:?}", e).into())
-    }
-}
+#[cfg(feature = "unstable")]
+pub use crate::{
+    publication_cache::{PublicationCache, PublicationCacheBuilder},
+    querying_subscriber::{
+        ExtractSample, FetchingSubscriber, FetchingSubscriberBuilder, KeySpace, LivelinessSpace,
+        QueryingSubscriberBuilder, UserSpace,
+    },
+    session_ext::SessionExt,
+    subscriber_ext::{SubscriberBuilderExt, SubscriberForward},
+};
