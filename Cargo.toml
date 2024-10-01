@@ -75,6 +75,7 @@ description = "Zenoh: The Zero Overhead Pub/Sub/Query Protocol."
 # DEFAULT-FEATURES NOTE: Be careful with default-features and additivity!
 #                        (https://github.com/rust-lang/cargo/issues/11329)
 [workspace.dependencies]
+advisory-lock = "0.3.0"
 aes = "0.8.4"
 ahash = "0.8.11"
 anyhow = { version = "1.0.89", default-features = false } # Default features are disabled due to usage in no_std crates

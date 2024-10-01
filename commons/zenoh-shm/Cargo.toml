@@ -49,5 +49,8 @@ thread-priority = { workspace = true }
 lockfree = { workspace = true }
 stabby = { workspace = true }
 
+[target.'cfg(unix)'.dependencies]
+advisory-lock = { workspace = true }
+
 [dev-dependencies]
 libc = { workspace = true }

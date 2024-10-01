@@ -6006,6 +6006,7 @@ dependencies = [
 name = "zenoh-shm"
 version = "1.0.0-dev"
 dependencies = [
+ "advisory-lock",
  "async-trait",
  "crc",
  "libc",
