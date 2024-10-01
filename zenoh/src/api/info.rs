@@ -21,7 +21,7 @@ use zenoh_protocol::core::WhatAmI;
 
 use crate::net::runtime::Runtime;
 
-/// A builder retuned by [`SessionInfo::zid()`](SessionInfo::zid) that allows
+/// A builder returned by [`SessionInfo::zid()`](SessionInfo::zid) that allows
 /// to access the [`ZenohId`] of the current zenoh [`Session`](crate::Session).
 ///
 /// # Examples
@@ -105,7 +105,7 @@ impl<'a> IntoFuture for RoutersZenohIdBuilder<'a> {
     }
 }
 
-/// A builder retuned by [`SessionInfo::peers_zid()`](SessionInfo::peers_zid) that allows
+/// A builder returned by [`SessionInfo::peers_zid()`](SessionInfo::peers_zid) that allows
 /// to access the [`ZenohId`] of the zenoh peers this process is currently connected to.
 ///
 /// # Examples

@@ -34,7 +34,7 @@ use {std::sync::Arc, zenoh_protocol::common::imsg};
 const L_LEN: usize = (BatchSize::BITS / 8) as usize;
 const H_LEN: usize = BatchHeader::SIZE;
 
-// Split the inner buffer into (length, header, payload) inmutable slices
+// Split the inner buffer into (length, header, payload) immutable slices
 macro_rules! zsplit {
     ($slice:expr, $config:expr) => {{
         match ($config.is_streamed, $config.has_header()) {

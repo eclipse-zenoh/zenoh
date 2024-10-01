@@ -87,7 +87,7 @@ pub enum ZSliceKind {
     ShmPtr = 1,
 }
 
-/// A clonable wrapper to a contiguous slice of bytes.
+/// A cloneable wrapper to a contiguous slice of bytes.
 #[derive(Clone)]
 pub struct ZSlice {
     buf: Arc<dyn ZSliceBuffer>,
