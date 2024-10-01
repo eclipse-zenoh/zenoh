@@ -20,9 +20,8 @@ use zenoh_result::{bail, zerror, ZResult};
 
 use crate::cleanup::CLEANUP;
 
-use super::segment_lock::unix::ExclusiveShmLock;
 #[cfg(unix)]
-use super::segment_lock::unix::ShmLock;
+use super::segment_lock::unix::{ExclusiveShmLock, ShmLock};
 
 const SEGMENT_DEDICATE_TRIES: usize = 100;
 const ECMA: crc::Crc<u64> = crc::Crc::<u64>::new(&crc::CRC_64_ECMA_182);
