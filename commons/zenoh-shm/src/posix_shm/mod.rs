@@ -13,5 +13,7 @@
 //
 
 pub mod array;
+#[cfg(unix)]
+pub(crate) mod segment_lock;
 tested_crate_module!(segment);
 pub(crate) mod cleanup;
