@@ -14,11 +14,17 @@
 pub mod group;
 mod publication_cache;
 mod querying_subscriber;
+mod serialization;
 mod session_ext;
 mod subscriber_ext;
+
 pub use publication_cache::{PublicationCache, PublicationCacheBuilder};
 pub use querying_subscriber::{
     FetchingSubscriber, FetchingSubscriberBuilder, QueryingSubscriberBuilder,
+};
+pub use serialization::{
+    z_deserialize, z_serialize, Deserialize, Serialize, VarInt, ZDeserializeError, ZDeserializer,
+    ZReadIter, ZSerializer,
 };
 pub use session_ext::SessionExt;
 pub use subscriber_ext::{SubscriberBuilderExt, SubscriberForward};

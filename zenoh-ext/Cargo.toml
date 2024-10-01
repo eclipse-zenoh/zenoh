@@ -33,11 +33,11 @@ shared-memory = ["zenoh/shared-memory"]
 
 [dependencies]
 tokio = { workspace = true, features = [
-    "rt",
-    "sync",
-    "time",
-    "macros",
-    "io-std",
+  "rt",
+  "sync",
+  "time",
+  "macros",
+  "io-std",
 ] }
 bincode = { workspace = true }
 zenoh-util = { workspace = true }
@@ -45,12 +45,14 @@ flume = { workspace = true }
 futures = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true, features = ["default"] }
+leb128 = { workspace = true }
 zenoh = { workspace = true, features = ["unstable", "internal"], default-features = false }
 zenoh-macros = { workspace = true }
 
 [dev-dependencies]
 zenoh = { workspace = true, features = ["unstable"], default-features = true }
 zenoh-config = { workspace = true }
+rand = { workspace = true }
 
 [package.metadata.docs.rs]
 features = ["unstable"]

@@ -14,6 +14,7 @@
 use clap::Parser;
 use zenoh::{key_expr::KeyExpr, Config};
 use zenoh_examples::CommonArgs;
+use zenoh_ext::z_serialize;
 
 #[tokio::main]
 async fn main() {
@@ -26,7 +27,8 @@ async fn main() {
     let session = zenoh::open(config).await.unwrap();
 
     println!("Putting Float ('{key_expr}': '{payload}')...");
-    session.put(&key_expr, payload).await.unwrap();
+    // you must have imported `zenoh_ext::ZBytesExt` to use `ZBytes::serialize`
+    session.put(&key_expr, z_serialize(&payload)).await.unwrap();
 
     session.close().await.unwrap();
 }

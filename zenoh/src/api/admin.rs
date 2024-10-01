@@ -27,7 +27,6 @@ use zenoh_transport::{
 };
 
 use super::{
-    bytes::ZBytes,
     encoding::Encoding,
     key_expr::KeyExpr,
     queryable::Query,
@@ -68,13 +67,11 @@ pub(crate) fn on_admin_query(session: &WeakSession, query: Query) {
         if let Ok(zid) = keyexpr::new(&zid) {
             let key_expr = *KE_PREFIX / own_zid / *KE_SESSION / *KE_TRANSPORT_UNICAST / zid;
             if query.key_expr().intersects(&key_expr) {
-                if let Ok(value) = serde_json::value::to_value(peer.clone()) {
-                    match ZBytes::try_from(value) {
-                        Ok(zbuf) => {
-                            let _ = query.reply(key_expr, zbuf).wait();
-                        }
-                        Err(e) => tracing::debug!("Admin query error: {}", e),
+                match serde_json::to_vec(&peer) {
+                    Ok(bytes) => {
+                        let _ = query.reply(key_expr, bytes).wait();
                     }
+                    Err(e) => tracing::debug!("Admin query error: {}", e),
                 }
             }
 
@@ -90,13 +87,11 @@ pub(crate) fn on_admin_query(session: &WeakSession, query: Query) {
                         / *KE_LINK
                         / lid;
                     if query.key_expr().intersects(&key_expr) {
-                        if let Ok(value) = serde_json::value::to_value(link) {
-                            match ZBytes::try_from(value) {
-                                Ok(zbuf) => {
-                                    let _ = query.reply(key_expr, zbuf).wait();
-                                }
-                                Err(e) => tracing::debug!("Admin query error: {}", e),
+                        match serde_json::to_vec(&link) {
+                            Ok(bytes) => {
+                                let _ = query.reply(key_expr, bytes).wait();
                             }
+                            Err(e) => tracing::debug!("Admin query error: {}", e),
                         }
                     }
                 }

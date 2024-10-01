@@ -13,7 +13,6 @@
 //
 
 use std::{
-    borrow::Cow,
     collections::HashMap,
     sync::Arc,
     time::{Duration, Instant, SystemTime},
@@ -351,17 +350,16 @@ impl Replication {
                     // Async block such that we can `instrument` it in an asynchronous compatible
                     // manner using the `span` we created just above.
                     async {
-                        let other_digest = match bincode::deserialize::<Digest>(
-                            &sample.payload().into::<Cow<[u8]>>(),
-                        ) {
-                            Ok(other_digest) => other_digest,
-                            Err(e) => {
-                                tracing::warn!(
-                                    "Failed to deserialize Payload as Digest: {e:?}. Skipping."
-                                );
-                                return;
-                            }
-                        };
+                        let other_digest =
+                            match bincode::deserialize::<Digest>(&sample.payload().to_bytes()) {
+                                Ok(other_digest) => other_digest,
+                                Err(e) => {
+                                    tracing::warn!(
+                                        "Failed to deserialize Payload as Digest: {e:?}. Skipping."
+                                    );
+                                    return;
+                                }
+                            };
 
                         tracing::debug!("Replication digest received");
 

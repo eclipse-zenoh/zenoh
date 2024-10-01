@@ -115,7 +115,7 @@ impl SampleBuilder<SampleBuilderDelete> {
         Self {
             sample: Sample {
                 key_expr: key_expr.into(),
-                payload: ZBytes::empty(),
+                payload: ZBytes::new(),
                 kind: SampleKind::Delete,
                 encoding: Encoding::default(),
                 timestamp: None,

@@ -39,7 +39,7 @@ async fn main() {
         publisher
             .put(buf)
             .encoding(Encoding::TEXT_PLAIN) // Optionally set the encoding metadata 
-            .attachment(&attachment) // Optionally add an attachment
+            .attachment(attachment.clone()) // Optionally add an attachment
             .await
             .unwrap();
     }

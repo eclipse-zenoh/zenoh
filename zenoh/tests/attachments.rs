@@ -11,49 +11,30 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#![cfg(feature = "unstable")]
-use zenoh::{bytes::ZBytes, config::Config, Wait};
+use zenoh::{config::Config, Wait};
 
 #[test]
 fn attachment_pubsub() {
     let zenoh = zenoh::open(Config::default()).wait().unwrap();
-    let _sub = zenoh
+    const ATTACHMENT: &[u8] = b"pubsub attachment";
+    zenoh
         .declare_subscriber("test/attachment")
         .callback(|sample| {
-            println!("{}", sample.payload().deserialize::<String>().unwrap());
-            for (k, v) in sample
-                .attachment()
-                .unwrap()
-                .iter::<(
-                    [u8; std::mem::size_of::<usize>()],
-                    [u8; std::mem::size_of::<usize>()],
-                )>()
-                .map(Result::unwrap)
-            {
-                assert!(k.iter().rev().zip(v.as_slice()).all(|(k, v)| k == v))
-            }
+            println!("{}", sample.payload().try_to_string().unwrap());
+            assert_eq!(sample.attachment().unwrap().to_bytes(), ATTACHMENT);
         })
         .wait()
         .unwrap();
-
     let publisher = zenoh.declare_publisher("test/attachment").wait().unwrap();
-    for i in 0..10 {
-        let mut backer = [(
-            [0; std::mem::size_of::<usize>()],
-            [0; std::mem::size_of::<usize>()],
-        ); 10];
-        for (j, backer) in backer.iter_mut().enumerate() {
-            *backer = ((i * 10 + j).to_le_bytes(), (i * 10 + j).to_be_bytes())
-        }
-
+    for _ in 0..10 {
         zenoh
             .put("test/attachment", "put")
-            .attachment(ZBytes::from_iter(backer.iter()))
+            .attachment(ATTACHMENT)
             .wait()
             .unwrap();
         publisher
             .put("publisher")
-            .attachment(ZBytes::from_iter(backer.iter()))
+            .attachment(ATTACHMENT)
             .wait()
             .unwrap();
     }
@@ -62,71 +43,31 @@ fn attachment_pubsub() {
 #[test]
 fn attachment_queries() {
     let zenoh = zenoh::open(Config::default()).wait().unwrap();
-    let _sub = zenoh
+    const QUERY_ATTACHMENT: &[u8] = b"query attachment";
+    const REPLY_ATTACHMENT: &[u8] = b"reply attachment";
+    zenoh
         .declare_queryable("test/attachment")
         .callback(|query| {
-            let s = query
-                .payload()
-                .map(|p| p.deserialize::<String>().unwrap())
-                .unwrap_or_default();
-            println!("Query value: {}", s);
-
-            let attachment = query.attachment().unwrap();
-            println!("Query attachment: {:?}", attachment);
-            for (k, v) in attachment
-                .iter::<(
-                    [u8; std::mem::size_of::<usize>()],
-                    [u8; std::mem::size_of::<usize>()],
-                )>()
-                .map(Result::unwrap)
-            {
-                assert!(k.iter().rev().zip(v.as_slice()).all(|(k, v)| k == v));
-            }
-
+            println!("{}", query.payload().unwrap().try_to_string().unwrap());
+            assert_eq!(query.attachment().unwrap().to_bytes(), QUERY_ATTACHMENT);
             query
                 .reply(query.key_expr().clone(), query.payload().unwrap().clone())
-                .attachment(ZBytes::from_iter(
-                    attachment
-                        .iter::<(
-                            [u8; std::mem::size_of::<usize>()],
-                            [u8; std::mem::size_of::<usize>()],
-                        )>()
-                        .map(Result::unwrap)
-                        .map(|(k, _)| (k, k)),
-                ))
+                .attachment(REPLY_ATTACHMENT)
                 .wait()
                 .unwrap();
         })
         .wait()
         .unwrap();
-    for i in 0..10 {
-        let mut backer = [(
-            [0; std::mem::size_of::<usize>()],
-            [0; std::mem::size_of::<usize>()],
-        ); 10];
-        for (j, backer) in backer.iter_mut().enumerate() {
-            *backer = ((i * 10 + j).to_le_bytes(), (i * 10 + j).to_be_bytes())
-        }
-
+    for _ in 0..10 {
         let get = zenoh
             .get("test/attachment")
             .payload("query")
-            .attachment(ZBytes::from_iter(backer.iter()))
+            .attachment(QUERY_ATTACHMENT)
             .wait()
             .unwrap();
         while let Ok(reply) = get.recv() {
             let response = reply.result().unwrap();
-            for (k, v) in response
-                .attachment()
-                .unwrap()
-                .iter::<(
-                    [u8; std::mem::size_of::<usize>()],
-                    [u8; std::mem::size_of::<usize>()],
-                )>()
-                .map(Result::unwrap)
-            {
-                assert_eq!(k, v)
-            }
+            assert_eq!(response.attachment().unwrap().to_bytes(), REPLY_ATTACHMENT);
         }
     }
 }

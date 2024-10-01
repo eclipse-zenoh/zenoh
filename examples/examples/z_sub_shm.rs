@@ -11,9 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::borrow::Cow;
+
 use clap::Parser;
-#[cfg(all(feature = "shared-memory", feature = "unstable"))]
-use zenoh::shm::zshm;
 use zenoh::{bytes::ZBytes, config::Config, key_expr::KeyExpr};
 use zenoh_examples::CommonArgs;
 
@@ -54,13 +54,11 @@ async fn main() {
     // // Try to get a mutable reference to the SHM buffer. If this subscriber is the only subscriber
     // // holding a reference to the SHM buffer, then it will be able to get a mutable reference to it.
     // // With the mutable reference at hand, it's possible to mutate in place the SHM buffer content.
-    //
-    // use zenoh::shm::zshmmut;
 
     // while let Ok(mut sample) = subscriber.recv_async().await {
     //     let kind = sample.kind();
     //     let key_expr = sample.key_expr().to_string();
-    //     match sample.payload_mut().deserialize_mut::<&mut zshmmut>() {
+    //     match sample.payload_mut().as_shm_mut() {
     //         Ok(payload) => println!(
     //             ">> [Subscriber] Received {} ('{}': '{:02x?}')",
     //             kind, key_expr, payload
@@ -86,7 +84,7 @@ fn parse_args() -> (Config, KeyExpr<'static>) {
     (args.common.into(), args.key)
 }
 
-fn handle_bytes(bytes: &ZBytes) -> (&str, String) {
+fn handle_bytes(bytes: &ZBytes) -> (&str, Cow<str>) {
     // Determine buffer type for indication purpose
     let bytes_type = {
         // if Zenoh is built without SHM support, the only buffer type it can receive is RAW
@@ -104,9 +102,9 @@ fn handle_bytes(bytes: &ZBytes) -> (&str, String) {
 
         // if Zenoh is built with SHM support and with SHM API  we can detect the exact buffer type
         #[cfg(all(feature = "shared-memory", feature = "unstable"))]
-        match bytes.deserialize::<&zshm>() {
-            Ok(_) => "SHM",
-            Err(_) => "RAW",
+        match bytes.as_shm() {
+            Some(_) => "SHM",
+            None => "RAW",
         }
     };
 
@@ -117,8 +115,8 @@ fn handle_bytes(bytes: &ZBytes) -> (&str, String) {
     //
     // Refer to z_bytes.rs to see how to deserialize different types of message
     let bytes_string = bytes
-        .deserialize::<String>()
-        .unwrap_or_else(|e| format!("{}", e));
+        .try_to_string()
+        .unwrap_or_else(|e| e.to_string().into());
 
     (bytes_type, bytes_string)
 }
