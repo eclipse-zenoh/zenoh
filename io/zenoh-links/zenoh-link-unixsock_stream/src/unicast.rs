@@ -141,7 +141,7 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
 
     #[inline(always)]
     fn is_streamed(&self) -> bool {
-        false
+        true
     }
 
     #[inline(always)]
