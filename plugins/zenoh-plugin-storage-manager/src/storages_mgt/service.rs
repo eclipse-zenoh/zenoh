@@ -616,20 +616,13 @@ impl StorageService {
             Ok(entries) => {
                 for (k, _ts) in entries {
                     // @TODO: optimize adding back the prefix (possible inspiration from https://github.com/eclipse-zenoh/zenoh/blob/0.5.0-beta.9/backends/traits/src/utils.rs#L79)
-                    let full_key = match k {
-                        Some(key) => crate::prefix(prefix, &key),
-                        None => {
-                            let Some(prefix) = prefix else {
-                                // TODO Check if we have anything in place that would prevent such
-                                //      an error from happening.
-                                tracing::error!(
-                                    "Internal bug: empty key with no `strip_prefix` configured"
-                                );
-                                continue;
-                            };
-                            prefix.clone()
-                        }
+                    let Ok(full_key) = crate::prefix(prefix, k.as_ref()) else {
+                        tracing::error!(
+                            "Internal error: empty key with no `strip_prefix` configured"
+                        );
+                        continue;
                     };
+
                     if key_expr.intersects(&full_key.clone()) {
                         result.push(full_key);
                     }
