@@ -12,6 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+mod aligner_query;
+mod aligner_reply;
+
 use std::{
     collections::HashMap,
     sync::Arc,
@@ -29,13 +32,15 @@ use zenoh::{
         format::{kedefine, keformat},
         OwnedKeyExpr,
     },
+    query::{ConsolidationMode, Selector},
     sample::Locality,
     Session,
 };
 use zenoh_backend_traits::Storage;
 
+use self::aligner_reply::AlignmentReply;
 use super::{digest::Digest, log::LogLatest};
-use crate::{replication::aligner::AlignmentQuery, storages_mgt::LatestUpdates};
+use crate::{replication::core::aligner_query::AlignmentQuery, storages_mgt::LatestUpdates};
 
 kedefine!(
     pub digest_key_expr_formatter: "@-digest/${zid:*}/${hash_configuration:*}",
@@ -464,6 +469,114 @@ impl Replication {
 
                 let replication = replication.clone();
                 tokio::task::spawn(async move { replication.aligner(query).await });
+            }
+        })
+    }
+
+    /// Spawns a new task to query the Aligner of the Replica which potentially has data this
+    /// Storage is missing.
+    ///
+    /// This method will:
+    /// 1. Serialise the AlignmentQuery.
+    /// 2. Send a Query to the Aligner of the Replica, adding the serialised AlignmentQuery as an
+    ///    attachment.
+    /// 3. Process all replies.
+    ///
+    /// Note that the processing of a reply can trigger a new query (requesting additional
+    /// information), spawning a new task.
+    ///
+    /// This process is stateless and all the required information are carried in the query / reply.
+    pub(crate) fn spawn_query_replica_aligner(
+        &self,
+        replica_aligner_ke: OwnedKeyExpr,
+        alignment_query: AlignmentQuery,
+    ) -> JoinHandle<()> {
+        let replication = self.clone();
+        tokio::task::spawn(async move {
+            let attachment = match bincode::serialize(&alignment_query) {
+                Ok(attachment) => attachment,
+                Err(e) => {
+                    tracing::error!("Failed to serialize AlignmentQuery: {e:?}");
+                    return;
+                }
+            };
+
+            // NOTE: We need to put the Consolidation to `None` as otherwise if multiple replies are
+            //       sent, they will be "consolidated" and only one of them will make it through.
+            //
+            //       When we retrieve Samples from a Replica, each Sample is sent in a separate
+            //       reply. Hence the need to have no consolidation.
+            let mut consolidation = ConsolidationMode::None;
+
+            if matches!(alignment_query, AlignmentQuery::Discovery) {
+                // NOTE: `Monotonic` means that Zenoh will forward the first answer it receives (and
+                //       ensure that later answers are with a higher timestamp — we do not care
+                //       about that last aspect).
+                //
+                //       By setting the consolidation to this value when performing the initial
+                //       alignment, we select the most reactive Replica (hopefully the closest as
+                //       well).
+                consolidation = ConsolidationMode::Monotonic;
+            }
+
+            match replication
+                .zenoh_session
+                .get(Into::<Selector>::into(replica_aligner_ke.clone()))
+                .attachment(attachment)
+                .consolidation(consolidation)
+                .await
+            {
+                Err(e) => {
+                    tracing::error!("Failed to query Aligner < {replica_aligner_ke} >: {e:?}");
+                }
+                Ok(reply_receiver) => {
+                    while let Ok(reply) = reply_receiver.recv_async().await {
+                        let sample = match reply.into_result() {
+                            Ok(sample) => sample,
+                            Err(e) => {
+                                tracing::warn!(
+                                    "Skipping reply to query to < {replica_aligner_ke} >: {e:?}"
+                                );
+                                continue;
+                            }
+                        };
+
+                        let alignment_reply = match sample.attachment() {
+                            None => {
+                                tracing::debug!("Skipping reply without attachment");
+                                continue;
+                            }
+                            Some(attachment) => {
+                                match bincode::deserialize::<AlignmentReply>(&attachment.to_bytes())
+                                {
+                                    Err(e) => {
+                                        tracing::error!(
+                                            "Failed to deserialize attachment as AlignmentReply: \
+                                             {e:?}"
+                                        );
+                                        continue;
+                                    }
+                                    Ok(alignment_reply) => alignment_reply,
+                                }
+                            }
+                        };
+
+                        replication
+                            .process_alignment_reply(
+                                replica_aligner_ke.clone(),
+                                alignment_reply,
+                                sample,
+                            )
+                            .await;
+
+                        // The consolidation mode `Monotonic`, used for sending out an
+                        // `AlignmentQuery::Discovery`, will keep on sending replies. We only want
+                        // to discover / align with a single Replica so we break here.
+                        if matches!(alignment_query, AlignmentQuery::Discovery) {
+                            return;
+                        }
+                    }
+                }
             }
         })
     }
