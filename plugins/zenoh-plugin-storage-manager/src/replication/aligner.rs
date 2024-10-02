@@ -715,7 +715,8 @@ impl Replication {
                     let mut replication_log_guard = self.replication_log.write().await;
                     match (
                         maybe_wildcard_update,
-                        replication_log_guard.lookup(&replica_event.stripped_key),
+                        replication_log_guard
+                            .lookup(&replica_event.stripped_key, &replica_event.timestamp),
                     ) {
                         (Some(wildcard_update), Some(latest_event)) => {
                             if latest_event.timestamp >= wildcard_update.data.timestamp {
@@ -868,8 +869,8 @@ impl Replication {
                 }
 
                 let mut replication_log_guard = self.replication_log.write().await;
-                if let Some(latest_event) =
-                    replication_log_guard.lookup(&replica_event.stripped_key)
+                if let Some(latest_event) = replication_log_guard
+                    .lookup(&replica_event.stripped_key, &replica_event.timestamp)
                 {
                     if latest_event.timestamp >= replica_event.timestamp {
                         return;

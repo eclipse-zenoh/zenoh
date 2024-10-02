@@ -219,11 +219,28 @@ impl LogLatest {
     }
 
     /// Lookup the provided key expression and, if found, return its associated [Event].
-    pub fn lookup(&self, stripped_key: &Option<OwnedKeyExpr>) -> Option<&Event> {
+    pub fn lookup(
+        &self,
+        stripped_key: &Option<OwnedKeyExpr>,
+        timestamp: &Timestamp,
+    ) -> Option<&Event> {
         if !self.bloom_filter_event.check(stripped_key) {
             return None;
         }
 
+        // Look up event directly from configuration time classification
+        if let Ok((interval, sub_idx)) = self.configuration.get_time_classification(timestamp) {
+            if let Some(event) = self
+                .intervals
+                .get(&interval)
+                .and_then(|interval| interval.get(&sub_idx))
+                .and_then(|sub_interval| sub_interval.events.get(stripped_key))
+            {
+                return Some(event);
+            };
+        };
+
+        // Else fallback to full tree reverse search
         for interval in self.intervals.values().rev() {
             if let Some(event) = interval.lookup(stripped_key) {
                 return Some(event);

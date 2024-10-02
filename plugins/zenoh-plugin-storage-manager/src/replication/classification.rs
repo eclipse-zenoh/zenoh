@@ -253,7 +253,7 @@ impl From<u64> for SubIntervalIdx {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct SubInterval {
     pub(crate) fingerprint: Fingerprint,
-    events: HashMap<Option<OwnedKeyExpr>, Event>,
+    pub(crate) events: HashMap<Option<OwnedKeyExpr>, Event>,
 }
 
 impl<const N: usize> From<[Event; N]> for SubInterval {
