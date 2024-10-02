@@ -20,7 +20,7 @@ use zenoh_result::{bail, zerror, ZResult};
 
 use crate::cleanup::CLEANUP;
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 use super::segment_lock::unix::{ExclusiveShmLock, ShmLock};
 
 const SEGMENT_DEDICATE_TRIES: usize = 100;
@@ -34,11 +34,11 @@ where
 {
     shmem: Shmem, // <-------------|
     id: ID,       //               |
-    #[cfg(unix)] //                | location of these two fields matters!
+    #[cfg(target_os = "linux")] // | location of these two fields matters!
     _lock: Option<ShmLock>, // <---|
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 impl<ID> Drop for Segment<ID>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
@@ -80,7 +80,7 @@ where
             let id: ID = rand::thread_rng().gen();
             let os_id = Self::os_id(id.clone(), id_prefix);
 
-            #[cfg(unix)]
+            #[cfg(target_os = "linux")]
             // Create lock to indicate that segment is managed
             let lock = {
                 match ShmLock::create(&os_id) {
@@ -106,7 +106,7 @@ where
                     tracing::debug!(
                         "Created SHM segment, size: {alloc_size}, prefix: {id_prefix}, id: {id}"
                     );
-                    #[cfg(unix)]
+                    #[cfg(target_os = "linux")]
                     let shmem = {
                         let mut shmem = shmem;
                         shmem.set_owner(false);
@@ -115,7 +115,7 @@ where
                     return Ok(Segment {
                         shmem,
                         id,
-                        #[cfg(unix)]
+                        #[cfg(target_os = "linux")]
                         _lock: Some(lock),
                     });
                 }
@@ -131,7 +131,7 @@ where
     pub fn open(id: ID, id_prefix: &str) -> ZResult<Self> {
         let os_id = Self::os_id(id.clone(), id_prefix);
 
-        #[cfg(unix)]
+        #[cfg(target_os = "linux")]
         // Open lock to indicate that segment is managed
         let lock = ShmLock::open(&os_id)?;
 
@@ -148,7 +148,7 @@ where
         Ok(Self {
             shmem,
             id,
-            #[cfg(unix)]
+            #[cfg(target_os = "linux")]
             _lock: Some(lock),
         })
     }

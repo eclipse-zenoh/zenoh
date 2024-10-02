@@ -14,12 +14,12 @@
 
 pub(crate) use platform::cleanup_orphaned_segments;
 
-#[cfg(not(unix))]
+#[cfg(not(target_os = "linux"))]
 mod platform {
     pub(crate) fn cleanup_orphaned_segments() {}
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 mod platform {
     use std::fs;
 

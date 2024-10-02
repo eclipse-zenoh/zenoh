@@ -13,7 +13,7 @@
 //
 
 pub mod array;
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 pub(crate) mod segment_lock;
 tested_crate_module!(segment);
 pub(crate) mod cleanup;
