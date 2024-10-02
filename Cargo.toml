@@ -192,37 +192,37 @@ x509-parser = "0.16.0"
 z-serial = "0.2.3"
 either = "1.13.0"
 prost = "0.13.2"
-zenoh-ext = { version = "1.0.0-dev", path = "zenoh-ext" }
-zenoh-shm = { version = "1.0.0-dev", path = "commons/zenoh-shm" }
-zenoh-result = { version = "1.0.0-dev", path = "commons/zenoh-result", default-features = false }
-zenoh-config = { version = "1.0.0-dev", path = "commons/zenoh-config" }
-zenoh-protocol = { version = "1.0.0-dev", path = "commons/zenoh-protocol", default-features = false }
-zenoh-keyexpr = { version = "1.0.0-dev", path = "commons/zenoh-keyexpr", default-features = false }
-zenoh-core = { version = "1.0.0-dev", path = "commons/zenoh-core" }
-zenoh-buffers = { version = "1.0.0-dev", path = "commons/zenoh-buffers", default-features = false }
-zenoh-util = { version = "1.0.0-dev", path = "commons/zenoh-util" }
-zenoh-crypto = { version = "1.0.0-dev", path = "commons/zenoh-crypto" }
-zenoh-codec = { version = "1.0.0-dev", path = "commons/zenoh-codec" }
-zenoh-sync = { version = "1.0.0-dev", path = "commons/zenoh-sync" }
-zenoh-collections = { version = "1.0.0-dev", path = "commons/zenoh-collections", default-features = false }
-zenoh-macros = { version = "1.0.0-dev", path = "commons/zenoh-macros" }
-zenoh-plugin-trait = { version = "1.0.0-dev", path = "plugins/zenoh-plugin-trait", default-features = false }
-zenoh_backend_traits = { version = "1.0.0-dev", path = "plugins/zenoh-backend-traits" }
-zenoh-transport = { version = "1.0.0-dev", path = "io/zenoh-transport", default-features = false }
-zenoh-link-tls = { version = "1.0.0-dev", path = "io/zenoh-links/zenoh-link-tls" }
-zenoh-link-tcp = { version = "1.0.0-dev", path = "io/zenoh-links/zenoh-link-tcp" }
-zenoh-link-unixsock_stream = { version = "1.0.0-dev", path = "io/zenoh-links/zenoh-link-unixsock_stream" }
-zenoh-link-quic = { version = "1.0.0-dev", path = "io/zenoh-links/zenoh-link-quic" }
-zenoh-link-udp = { version = "1.0.0-dev", path = "io/zenoh-links/zenoh-link-udp" }
-zenoh-link-ws = { version = "1.0.0-dev", path = "io/zenoh-links/zenoh-link-ws" }
-zenoh-link-unixpipe = { version = "1.0.0-dev", path = "io/zenoh-links/zenoh-link-unixpipe" }
-zenoh-link-serial = { version = "1.0.0-dev", path = "io/zenoh-links/zenoh-link-serial" }
-zenoh-link-vsock = { version = "1.0.0-dev", path = "io/zenoh-links/zenoh-link-vsock" }
-zenoh-link = { version = "1.0.0-dev", path = "io/zenoh-link" }
-zenoh-link-commons = { version = "1.0.0-dev", path = "io/zenoh-link-commons" }
-zenoh = { version = "1.0.0-dev", path = "zenoh", default-features = false }
-zenoh-runtime = { version = "1.0.0-dev", path = "commons/zenoh-runtime" }
-zenoh-task = { version = "1.0.0-dev", path = "commons/zenoh-task" }
+zenoh-ext = { version = "1.0.0-beta.4", path = "zenoh-ext" }
+zenoh-shm = { version = "1.0.0-beta.4", path = "commons/zenoh-shm" }
+zenoh-result = { version = "1.0.0-beta.4", path = "commons/zenoh-result", default-features = false }
+zenoh-config = { version = "1.0.0-beta.4", path = "commons/zenoh-config" }
+zenoh-protocol = { version = "1.0.0-beta.4", path = "commons/zenoh-protocol", default-features = false }
+zenoh-keyexpr = { version = "1.0.0-beta.4", path = "commons/zenoh-keyexpr", default-features = false }
+zenoh-core = { version = "1.0.0-beta.4", path = "commons/zenoh-core" }
+zenoh-buffers = { version = "1.0.0-beta.4", path = "commons/zenoh-buffers", default-features = false }
+zenoh-util = { version = "1.0.0-beta.4", path = "commons/zenoh-util" }
+zenoh-crypto = { version = "1.0.0-beta.4", path = "commons/zenoh-crypto" }
+zenoh-codec = { version = "1.0.0-beta.4", path = "commons/zenoh-codec" }
+zenoh-sync = { version = "1.0.0-beta.4", path = "commons/zenoh-sync" }
+zenoh-collections = { version = "1.0.0-beta.4", path = "commons/zenoh-collections", default-features = false }
+zenoh-macros = { version = "1.0.0-beta.4", path = "commons/zenoh-macros" }
+zenoh-plugin-trait = { version = "1.0.0-beta.4", path = "plugins/zenoh-plugin-trait", default-features = false }
+zenoh_backend_traits = { version = "1.0.0-beta.4", path = "plugins/zenoh-backend-traits" }
+zenoh-transport = { version = "1.0.0-beta.4", path = "io/zenoh-transport", default-features = false }
+zenoh-link-tls = { version = "1.0.0-beta.4", path = "io/zenoh-links/zenoh-link-tls" }
+zenoh-link-tcp = { version = "1.0.0-beta.4", path = "io/zenoh-links/zenoh-link-tcp" }
+zenoh-link-unixsock_stream = { version = "1.0.0-beta.4", path = "io/zenoh-links/zenoh-link-unixsock_stream" }
+zenoh-link-quic = { version = "1.0.0-beta.4", path = "io/zenoh-links/zenoh-link-quic" }
+zenoh-link-udp = { version = "1.0.0-beta.4", path = "io/zenoh-links/zenoh-link-udp" }
+zenoh-link-ws = { version = "1.0.0-beta.4", path = "io/zenoh-links/zenoh-link-ws" }
+zenoh-link-unixpipe = { version = "1.0.0-beta.4", path = "io/zenoh-links/zenoh-link-unixpipe" }
+zenoh-link-serial = { version = "1.0.0-beta.4", path = "io/zenoh-links/zenoh-link-serial" }
+zenoh-link-vsock = { version = "1.0.0-beta.4", path = "io/zenoh-links/zenoh-link-vsock" }
+zenoh-link = { version = "1.0.0-beta.4", path = "io/zenoh-link" }
+zenoh-link-commons = { version = "1.0.0-beta.4", path = "io/zenoh-link-commons" }
+zenoh = { version = "1.0.0-beta.4", path = "zenoh", default-features = false }
+zenoh-runtime = { version = "1.0.0-beta.4", path = "commons/zenoh-runtime" }
+zenoh-task = { version = "1.0.0-beta.4", path = "commons/zenoh-task" }
 
 [profile.dev]
 debug = true
