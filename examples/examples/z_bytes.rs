@@ -72,18 +72,12 @@ fn main() {
 
     // zenoh-ext serialization
     {
-        use zenoh_ext::{z_deserialize, z_serialize, VarInt};
+        use zenoh_ext::{z_deserialize, z_serialize};
 
         // Numeric types: u8, u16, u32, u128, i8, i16, i32, i128, f32, f64
         let input = 1234_u32;
         let payload = z_serialize(&input);
         let output: u32 = z_deserialize(&payload).unwrap();
-        assert_eq!(input, output);
-
-        // Varint LEB128
-        let input = VarInt(42usize);
-        let payload = z_serialize(&input);
-        let output: VarInt<usize> = z_deserialize(&payload).unwrap();
         assert_eq!(input, output);
 
         // Vec

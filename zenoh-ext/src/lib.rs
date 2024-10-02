@@ -23,8 +23,10 @@ mod session_ext;
 #[cfg(feature = "unstable")]
 mod subscriber_ext;
 
+#[cfg(feature = "internal")]
+pub use crate::serialization::VarInt;
 pub use crate::serialization::{
-    z_deserialize, z_serialize, Deserialize, Serialize, VarInt, ZDeserializeError, ZDeserializer,
+    z_deserialize, z_serialize, Deserialize, Serialize, ZDeserializeError, ZDeserializer,
     ZReadIter, ZSerializer,
 };
 #[cfg(feature = "unstable")]

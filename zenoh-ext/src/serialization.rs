@@ -6,7 +6,6 @@ use std::{
     io::{Read, Write},
     marker::PhantomData,
     mem::MaybeUninit,
-    ops::{Deref, DerefMut},
     str::FromStr,
 };
 
@@ -169,20 +168,6 @@ impl<'a> ZDeserializer<'a> {
             len,
             _phantom: PhantomData,
         })
-    }
-
-    pub fn deserialize_n<T: Deserialize>(
-        &mut self,
-        in_place: &mut [T],
-    ) -> Result<(), ZDeserializeError> {
-        T::deserialize_n(in_place, self)
-    }
-
-    pub fn deserialize_n_uninit<'b, T: Deserialize>(
-        &mut self,
-        in_place: &'b mut [MaybeUninit<T>],
-    ) -> Result<&'b mut [T], ZDeserializeError> {
-        T::deserialize_n_uninit(in_place, self)
     }
 }
 
@@ -464,101 +449,20 @@ impl_tuple!(
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VarInt<T>(pub T);
-impl<T> VarInt<T> {
-    pub fn from_ref(int: &T) -> &Self {
-        // SAFETY: `VarInt` is `repr(transparent)`
-        unsafe { &*(int as *const T as *const Self) }
-    }
-    pub fn from_mut(int: &mut T) -> &mut Self {
-        // SAFETY: `VarInt` is `repr(transparent)`
-        unsafe { &mut *(int as *mut T as *mut Self) }
-    }
-    pub fn slice_from_ref(slice: &[T]) -> &[Self] {
-        // SAFETY: `VarInt` is `repr(transparent)`
-        unsafe { &*(slice as *const [T] as *const [Self]) }
-    }
-    pub fn slice_from_mut(slice: &mut [T]) -> &mut [Self] {
-        // SAFETY: `VarInt` is `repr(transparent)`
-        unsafe { &mut *(slice as *mut [T] as *mut [Self]) }
-    }
-    pub fn slice_into_ref(slice: &[Self]) -> &[T] {
-        // SAFETY: `VarInt` is `repr(transparent)`
-        unsafe { &*(slice as *const [Self] as *const [T]) }
-    }
-    pub fn slice_into_mut(slice: &mut [Self]) -> &mut [T] {
-        // SAFETY: `VarInt` is `repr(transparent)`
-        unsafe { &mut *(slice as *mut [Self] as *mut [T]) }
+impl Serialize for VarInt<usize> {
+    fn serialize(&self, serializer: &mut ZSerializer) {
+        leb128::write::unsigned(&mut serializer.0, self.0 as u64).unwrap();
     }
 }
-impl<T> Deref for VarInt<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
+impl Deserialize for VarInt<usize> {
+    fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
+        let n = leb128::read::unsigned(&mut deserializer.0).or(Err(ZDeserializeError))?;
+        Ok(VarInt(<usize>::try_from(n).or(Err(ZDeserializeError))?))
     }
 }
-impl<T> DerefMut for VarInt<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-impl<T> From<T> for VarInt<T> {
-    fn from(value: T) -> Self {
-        Self(value)
-    }
-}
-impl<T> AsRef<T> for VarInt<T> {
-    fn as_ref(&self) -> &T {
-        self
-    }
-}
-impl<T> AsMut<T> for VarInt<T> {
-    fn as_mut(&mut self) -> &mut T {
-        self
-    }
-}
-
-macro_rules! impl_varint {
-    ($($u:ty: $i:ty),* $(,)?) => {$(
-        impl From<VarInt<$u>> for $u {
-            fn from(value: VarInt<$u>) -> Self {
-                value.0
-            }
-        }
-        impl From<VarInt<$i>> for $i {
-            fn from(value: VarInt<$i>) -> Self {
-                value.0
-            }
-        }
-        impl Serialize for VarInt<$u> {
-            fn serialize(&self, serializer: &mut ZSerializer) {
-                leb128::write::unsigned(&mut serializer.0, self.0 as u64).unwrap();
-            }
-        }
-        impl Serialize for VarInt<$i> {
-            fn serialize(&self, serializer: &mut ZSerializer) {
-                let zigzag = (self.0 >> (std::mem::size_of::<$i>() * 8 - 1)) as $u ^ (self.0 << 1) as $u;
-                VarInt(zigzag).serialize(serializer);
-            }
-        }
-        impl Deserialize for VarInt<$u> {
-            fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
-                let n = leb128::read::unsigned(&mut deserializer.0).or(Err(ZDeserializeError))?;
-                Ok(VarInt(<$u>::try_from(n).or(Err(ZDeserializeError))?))
-            }
-        }
-        impl Deserialize for VarInt<$i> {
-            fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
-                let zigzag = <VarInt<$u>>::deserialize(deserializer)?.0;
-                Ok(VarInt((zigzag >> 1) as $i ^ -((zigzag & 1) as $i)))
-            }
-        }
-    )*};
-}
-impl_varint!(u8: i8, u16: i16, u32: i32, u64: i64, usize: isize);
 
 //
-// Serialization/deseialization for zenoh types
+// Serialization/deserialization for zenoh types
 //
 
 impl Serialize for NTP64 {
@@ -610,7 +514,7 @@ impl Serialize for Encoding {
     }
 }
 
-impl Deserialize for zenoh::bytes::Encoding {
+impl Deserialize for Encoding {
     fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
         let encoding = String::deserialize(deserializer)?;
         Encoding::from_str(&encoding).map_err(|_| ZDeserializeError)
@@ -619,15 +523,11 @@ impl Deserialize for zenoh::bytes::Encoding {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, ops::Range, str::FromStr};
+    use std::ops::Range;
 
     use rand::{thread_rng, Rng};
-    use zenoh::{
-        bytes::Encoding,
-        time::{Timestamp, TimestampId},
-    };
 
-    use crate::{z_deserialize, z_serialize, VarInt};
+    use super::*;
 
     macro_rules! serialize_deserialize {
         ($ty:ty, $expr:expr) => {
@@ -657,17 +557,12 @@ mod tests {
 
     #[test]
     fn varint_serialization() {
-        macro_rules! test_varint {
-            ($($ty:ty),* $(,)?) => {$(
-                serialize_deserialize!(VarInt<$ty>, VarInt(<$ty>::MIN));
-                serialize_deserialize!(VarInt<$ty>, VarInt(<$ty>::MAX));
-                let mut rng = thread_rng();
-                for _ in RANDOM_TESTS {
-                    serialize_deserialize!(VarInt<$ty>, VarInt(rng.gen::<$ty>()));
-                }
-            )*};
+        serialize_deserialize!(VarInt<usize>, VarInt(<usize>::MIN));
+        serialize_deserialize!(VarInt<usize>, VarInt(<usize>::MAX));
+        let mut rng = thread_rng();
+        for _ in RANDOM_TESTS {
+            serialize_deserialize!(VarInt<usize>, VarInt(rng.gen::<usize>()));
         }
-        test_varint!(i8, i16, i32, i64, isize, u8, u16, u32, u64, usize);
     }
 
     #[test]
