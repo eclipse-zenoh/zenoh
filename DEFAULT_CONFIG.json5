@@ -317,14 +317,17 @@
         enabled: false,
       },
     },
+    /// WARNING: multicast communication does not perform any negotiation upon group joining.
+    ///   Because of that, it is important that all transport parameters are the same to make
+    ///   sure all your nodes in the system can communicate. One common parameter to configure
+    ///   is "transport/link/tx/batch_size" since its default value depends on the actual platform
+    ///   when operating on multicast.
+    ///   E.g., the batch size on Linux and Windows is 65535 bytes, on Mac OS X is 9216, and anything else is 8192.
     multicast: {
-      /// WARNING: multicast communication does not perform any negotiation upon group joining.
-      ///   Because of that, it is important that all transport parameters are the same to make
-      ///   sure all your nodes in the system can communicate. One common parameter to configure
-      ///   is "transport/link/tx/batch_size" since its default value depends on the actual platform
-      ///   when operating on multicast. 
-      ///   E.g., the batch size on Linux and Windows is 65535 bytes, on Mac OS X is 9216, and anything else is 8192.
-
+      /// JOIN message transmission interval in milliseconds.
+      join_interval: 2500,
+      /// Maximum number of multicast sessions.
+      max_sessions: 1000,
       /// Enables QoS on multicast communication.
       /// Default to false for Zenoh-to-Zenoh-Pico out-of-the-box compatibility.
       qos: {
@@ -384,17 +387,17 @@
           },
           /// Congestion occurs when the queue is empty (no available batch).
           congestion_control: {
-            /// Behavior pushing CongestionControl::Drop messages to the queue. 
+            /// Behavior pushing CongestionControl::Drop messages to the queue.
             drop: {
               /// The maximum time in microseconds to wait for an available batch before dropping a droppable message if still no batch is available.
               wait_before_drop: 1000,
             },
-            /// Behavior pushing CongestionControl::Block messages to the queue. 
+            /// Behavior pushing CongestionControl::Block messages to the queue.
             block: {
               /// The maximum time in microseconds to wait for an available batch before closing the transport session when sending a blocking message
               /// if still no batch is available.
               wait_before_close: 5000000,
-            }
+            },
           },
           /// Perform batching of messages if they are smaller of the batch_size
           batching: {
