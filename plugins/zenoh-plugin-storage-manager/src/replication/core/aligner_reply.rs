@@ -42,7 +42,7 @@ pub(crate) enum AlignmentReply {
     Discovery(ZenohId),
     Intervals(HashMap<IntervalIdx, Fingerprint>),
     SubIntervals(HashMap<IntervalIdx, HashMap<SubIntervalIdx, Fingerprint>>),
-    Events(Vec<EventMetadata>),
+    EventsMetadata(Vec<EventMetadata>),
     Retrieval(EventMetadata),
 }
 
@@ -187,8 +187,8 @@ impl Replication {
                     );
                 }
             }
-            AlignmentReply::Events(replica_events) => {
-                tracing::trace!("Processing `AlignmentReply::Events`");
+            AlignmentReply::EventsMetadata(replica_events) => {
+                tracing::trace!("Processing `AlignmentReply::EventsMetadata`");
                 let mut diff_events = Vec::default();
 
                 for replica_event in replica_events {
