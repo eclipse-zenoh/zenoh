@@ -234,7 +234,7 @@ impl LogLatest {
                 .intervals
                 .get(&interval)
                 .and_then(|interval| interval.get(&sub_idx))
-                .and_then(|sub_interval| sub_interval.events.get(stripped_key))
+                .and_then(|sub_interval| sub_interval.get(stripped_key))
             {
                 return Some(event);
             };

@@ -253,7 +253,7 @@ impl From<u64> for SubIntervalIdx {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct SubInterval {
     pub(crate) fingerprint: Fingerprint,
-    pub(crate) events: HashMap<Option<OwnedKeyExpr>, Event>,
+    events: HashMap<Option<OwnedKeyExpr>, Event>,
 }
 
 impl<const N: usize> From<[Event; N]> for SubInterval {
@@ -273,6 +273,10 @@ impl<const N: usize> From<[Event; N]> for SubInterval {
 }
 
 impl SubInterval {
+    pub(crate) fn get(&self, key: &Option<OwnedKeyExpr>) -> Option<&Event> {
+        self.events.get(key)
+    }
+
     pub(crate) fn events(&self) -> impl Iterator<Item = (&Option<OwnedKeyExpr>, &Event)> {
         self.events.iter()
     }
