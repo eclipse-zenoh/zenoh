@@ -19,9 +19,10 @@ use std::{
 };
 
 use zenoh::{
+    handlers::FifoChannelHandler,
     internal::{bail, runtime::ZRuntime, ResolveFuture, TerminatableTask},
     key_expr::{keyexpr, KeyExpr, OwnedKeyExpr},
-    pubsub::FlumeSubscriber,
+    pubsub::Subscriber,
     query::{Query, Queryable, ZenohParameters},
     sample::{Locality, Sample},
     Error, Resolvable, Resolve, Result as ZResult, Session, Wait,
@@ -115,8 +116,8 @@ impl IntoFuture for PublicationCacheBuilder<'_, '_, '_> {
 
 #[zenoh_macros::unstable]
 pub struct PublicationCache {
-    local_sub: FlumeSubscriber,
-    _queryable: Queryable<flume::Receiver<Query>>,
+    local_sub: Subscriber<FifoChannelHandler<Sample>>,
+    _queryable: Queryable<FifoChannelHandler<Query>>,
     task: TerminatableTask,
 }
 

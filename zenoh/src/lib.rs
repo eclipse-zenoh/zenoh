@@ -231,7 +231,7 @@ pub mod pubsub {
             PublisherDeleteBuilder, PublisherPutBuilder,
         },
         publisher::{Publisher, PublisherUndeclaration},
-        subscriber::{FlumeSubscriber, Subscriber, SubscriberBuilder},
+        subscriber::{Subscriber, SubscriberBuilder},
     };
 }
 
@@ -260,9 +260,14 @@ pub mod handlers {
     #[zenoh_macros::internal]
     pub use crate::api::handlers::locked;
     pub use crate::api::handlers::{
-        Callback, CallbackDrop, DefaultHandler, FifoChannel, IntoHandler, RingChannel,
-        RingChannelHandler,
+        Callback, CallbackDrop, DefaultHandler, FifoChannel, FifoChannelHandler, IntoHandler,
+        RingChannel, RingChannelHandler,
     };
+    pub mod fifo {
+        pub use crate::api::handlers::{
+            Drain, FifoChannel, FifoChannelHandler, IntoIter, Iter, RecvFut, RecvStream, TryIter,
+        };
+    }
 }
 
 /// Quality of service primitives
