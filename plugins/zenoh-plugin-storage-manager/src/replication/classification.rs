@@ -73,8 +73,11 @@ impl Sub<u64> for IntervalIdx {
 /// [Fingerprint] of all the [SubInterval]s it contains.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct Interval {
-    pub(crate) fingerprint: Fingerprint,
-    pub(crate) sub_intervals: BTreeMap<SubIntervalIdx, SubInterval>,
+    // ⚠️ This field should remain private: the Fingerprint must always remain valid.
+    fingerprint: Fingerprint,
+    // ⚠️ This field should remain private: we cannot manipulate the SubIntervals without updating
+    //     (i) their Fingerprint and (ii) the Fingerprint of this Interval.
+    sub_intervals: BTreeMap<SubIntervalIdx, SubInterval>,
 }
 
 impl<const N: usize> From<[(SubIntervalIdx, SubInterval); N]> for Interval {
@@ -117,6 +120,20 @@ impl Interval {
     /// of the all the [SubInterval]s it contains.
     pub(crate) fn fingerprint(&self) -> Fingerprint {
         self.fingerprint
+    }
+
+    /// Returns an iterator over the [SubInterval]s contained in this `Interval`.
+    pub(crate) fn sub_intervals(&self) -> impl Iterator<Item = &SubInterval> {
+        self.sub_intervals.values()
+    }
+
+    /// Returns, if one exists, a reference over the [SubInterval] matching the provided
+    /// [SubIntervalIdx].
+    pub(crate) fn sub_interval_at(
+        &self,
+        sub_interval_idx: &SubIntervalIdx,
+    ) -> Option<&SubInterval> {
+        self.sub_intervals.get(sub_interval_idx)
     }
 
     /// Lookup the provided key expression and return, if found, its associated [Event].
@@ -228,8 +245,11 @@ impl From<u64> for SubIntervalIdx {
 /// [Event]s it contains.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct SubInterval {
-    pub(crate) fingerprint: Fingerprint,
-    pub(crate) events: HashMap<Option<OwnedKeyExpr>, Event>,
+    // ⚠️ This field should remain private: the Fingerprint must always remain valid.
+    fingerprint: Fingerprint,
+    // ⚠️ This field should remain private: we cannot manipulate the `Events` without updating the
+    //     Fingerprint.
+    events: HashMap<Option<OwnedKeyExpr>, Event>,
 }
 
 impl<const N: usize> From<[Event; N]> for SubInterval {
@@ -271,6 +291,19 @@ impl SubInterval {
         }
 
         true
+    }
+
+    /// Returns the [Fingerprint] of this `SubInterval`.
+    ///
+    /// The [Fingerprint] of an `SubInterval` is equal to the XOR (exclusive or) of the fingerprints
+    /// of the all the [Event]s it contains.
+    pub(crate) fn fingerprint(&self) -> Fingerprint {
+        self.fingerprint
+    }
+
+    /// Returns an iterator over the [Event]s contained in this `SubInterval`.
+    pub(crate) fn events(&self) -> impl Iterator<Item = &Event> {
+        self.events.values()
     }
 
     /// Inserts the [Event], regardless of its [Timestamp].
