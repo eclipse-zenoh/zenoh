@@ -192,74 +192,10 @@ impl Replication {
                 let mut diff_events = Vec::default();
 
                 for replica_event in replica_events {
+                    if let Some(missing_event_metadata) =
+                        self.process_event_metadata(replica_event).await
                     {
-                        let span = tracing::Span::current();
-                        span.record(
-                            "sample",
-                            replica_event
-                                .stripped_key
-                                .as_ref()
-                                .map_or("", |key| key.as_str()),
-                        );
-                        span.record("t", replica_event.timestamp.to_string());
-                    }
-
-                    if self
-                        .latest_updates
-                        .read()
-                        .await
-                        .get(&replica_event.stripped_key)
-                        .is_some_and(|latest_event| {
-                            latest_event.timestamp >= replica_event.timestamp
-                        })
-                    {
-                        continue;
-                    }
-
-                    match replica_event.action {
-                        SampleKind::Put => {
-                            let replication_log_guard = self.replication_log.read().await;
-                            if let Some(latest_event) =
-                                replication_log_guard.lookup(&replica_event.stripped_key)
-                            {
-                                if latest_event.timestamp >= replica_event.timestamp {
-                                    continue;
-                                }
-                            }
-                            diff_events.push(replica_event);
-                        }
-                        SampleKind::Delete => {
-                            let mut replication_log_guard = self.replication_log.write().await;
-                            if let Some(latest_event) =
-                                replication_log_guard.lookup(&replica_event.stripped_key)
-                            {
-                                if latest_event.timestamp >= replica_event.timestamp {
-                                    continue;
-                                }
-                            }
-                            if matches!(
-                                self.storage
-                                    .lock()
-                                    .await
-                                    .delete(
-                                        replica_event.stripped_key.clone(),
-                                        replica_event.timestamp
-                                    )
-                                    .await,
-                                // NOTE: In some of our backend implementation, a deletion on a
-                                //       non-existing key will return an error. Given that we cannot
-                                //       distinguish an error from a missing key, we will assume
-                                //       the latter and move forward.
-                                //
-                                // FIXME: Once the behaviour described above is fixed, check for
-                                //        errors.
-                                Ok(StorageInsertionResult::Outdated)
-                            ) {
-                                continue;
-                            }
-
-                            replication_log_guard.insert_event(replica_event.into());
-                        }
+                        diff_events.push(missing_event_metadata);
                     }
                 }
 
@@ -329,5 +265,79 @@ impl Replication {
                 replication_log_guard.insert_event(replica_event.into());
             }
         }
+    }
+
+    /// Processes the [EventMetadata] sent by the Replica we are aligning with, determining if we
+    /// need to retrieve the associated payload or not.
+    ///
+    /// If we need to retrieve the payload then this [EventMetadata] is returned. If we don't,
+    /// `None` is returned.
+    ///
+    /// Furthermore, depending on the `action` of the event, different operations are performed:
+    ///
+    /// - If it is a [Put] then we only need to check if in the Cache or the Replication Log we
+    ///   have an event with the same or a more recent timestamp.
+    ///   If we do then we are either already up to date with that event or the Replica is
+    ///   "lagging". In both cases, we don't need to retrieve the associated payload and return
+    ///   `None`.
+    ///   If we don't, then we need to retrieve the payload and return the [EventMetadata].
+    ///
+    /// - If it is a [Delete] then if we don't have a more recent event in our Cache or Replication
+    ///   Log then we have all the information needed to perform the delete and, thus, perform it.
+    async fn process_event_metadata(&self, replica_event: EventMetadata) -> Option<EventMetadata> {
+        if self
+            .latest_updates
+            .read()
+            .await
+            .get(&replica_event.stripped_key)
+            .is_some_and(|latest_event| latest_event.timestamp >= replica_event.timestamp)
+        {
+            return None;
+        }
+
+        match &replica_event.action {
+            SampleKind::Put => {
+                let replication_log_guard = self.replication_log.read().await;
+                if let Some(latest_event) =
+                    replication_log_guard.lookup(&replica_event.stripped_key)
+                {
+                    if latest_event.timestamp >= replica_event.timestamp {
+                        return None;
+                    }
+                }
+                return Some(replica_event);
+            }
+            SampleKind::Delete => {
+                let mut replication_log_guard = self.replication_log.write().await;
+                if let Some(latest_event) =
+                    replication_log_guard.lookup(&replica_event.stripped_key)
+                {
+                    if latest_event.timestamp >= replica_event.timestamp {
+                        return None;
+                    }
+                }
+                if matches!(
+                    self.storage
+                        .lock()
+                        .await
+                        .delete(replica_event.stripped_key.clone(), replica_event.timestamp)
+                        .await,
+                    // NOTE: In some of our backend implementation, a deletion on a
+                    //       non-existing key will return an error. Given that we cannot
+                    //       distinguish an error from a missing key, we will assume
+                    //       the latter and move forward.
+                    //
+                    // FIXME: Once the behaviour described above is fixed, check for
+                    //        errors.
+                    Ok(StorageInsertionResult::Outdated)
+                ) {
+                    return None;
+                }
+
+                replication_log_guard.insert_event(replica_event.clone().into());
+            }
+        }
+
+        Some(replica_event)
     }
 }
