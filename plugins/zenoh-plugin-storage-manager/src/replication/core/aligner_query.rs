@@ -107,8 +107,8 @@ impl Replication {
                         .intervals
                         .get(&interval_idx)
                     {
-                        interval.sub_intervals.values().for_each(|sub_interval| {
-                            events_to_send.extend(sub_interval.events.values().map(Into::into));
+                        interval.sub_intervals().for_each(|sub_interval| {
+                            events_to_send.extend(sub_interval.events().map(Into::into));
                         });
                     }
 
@@ -256,12 +256,8 @@ impl Replication {
                 .for_each(|(interval_idx, sub_intervals)| {
                     if let Some(interval) = log.intervals.get(interval_idx) {
                         sub_intervals.iter().for_each(|sub_interval_idx| {
-                            if let Some(sub_interval) = interval.sub_intervals.get(sub_interval_idx)
-                            {
-                                sub_interval
-                                    .events
-                                    .values()
-                                    .for_each(|event| events.push(event.into()))
+                            if let Some(sub_interval) = interval.sub_interval_at(sub_interval_idx) {
+                                events.extend(sub_interval.events().map(Into::into));
                             }
                         });
                     }
