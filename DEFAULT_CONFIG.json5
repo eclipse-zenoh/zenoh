@@ -439,7 +439,7 @@
         enable_mtls: false,
         /// Path to the TLS connecting side private key
         connect_private_key: null,
-        /// Path to the TLS client connecting side certificate
+        /// Path to the TLS connecting side certificate
         connect_certificate: null,
         // Whether or not to verify the matching between hostname/dns and certificate when connecting,
         // if set to false zenoh will disregard the common names of the certificates when verifying servers.
