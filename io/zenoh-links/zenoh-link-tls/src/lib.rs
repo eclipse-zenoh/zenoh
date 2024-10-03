@@ -88,23 +88,23 @@ pub mod config {
     pub const TLS_ROOT_CA_CERTIFICATE_RAW: &str = "root_ca_certificate_raw";
     pub const TLS_ROOT_CA_CERTIFICATE_BASE64: &str = "root_ca_certificate_base64";
 
-    pub const TLS_SERVER_PRIVATE_KEY_FILE: &str = "server_private_key_file";
-    pub const TLS_SERVER_PRIVATE_KEY_RAW: &str = "server_private_key_raw";
-    pub const TLS_SERVER_PRIVATE_KEY_BASE_64: &str = "server_private_key_base64";
+    pub const TLS_LISTEN_PRIVATE_KEY_FILE: &str = "listen_private_key_file";
+    pub const TLS_LISTEN_PRIVATE_KEY_RAW: &str = "listen_private_key_raw";
+    pub const TLS_LISTEN_PRIVATE_KEY_BASE_64: &str = "listen_private_key_base64";
 
-    pub const TLS_SERVER_CERTIFICATE_FILE: &str = "server_certificate_file";
-    pub const TLS_SERVER_CERTIFICATE_RAW: &str = "server_certificate_raw";
-    pub const TLS_SERVER_CERTIFICATE_BASE64: &str = "server_certificate_base64";
+    pub const TLS_LISTEN_CERTIFICATE_FILE: &str = "listen_certificate_file";
+    pub const TLS_LISTEN_CERTIFICATE_RAW: &str = "listen_certificate_raw";
+    pub const TLS_LISTEN_CERTIFICATE_BASE64: &str = "listen_certificate_base64";
 
-    pub const TLS_CLIENT_PRIVATE_KEY_FILE: &str = "client_private_key_file";
-    pub const TLS_CLIENT_PRIVATE_KEY_RAW: &str = "client_private_key_raw";
-    pub const TLS_CLIENT_PRIVATE_KEY_BASE64: &str = "client_private_key_base64";
+    pub const TLS_CONNECT_PRIVATE_KEY_FILE: &str = "connect_private_key_file";
+    pub const TLS_CONNECT_PRIVATE_KEY_RAW: &str = "connect_private_key_raw";
+    pub const TLS_CONNECT_PRIVATE_KEY_BASE64: &str = "connect_private_key_base64";
 
-    pub const TLS_CLIENT_CERTIFICATE_FILE: &str = "client_certificate_file";
-    pub const TLS_CLIENT_CERTIFICATE_RAW: &str = "client_certificate_raw";
-    pub const TLS_CLIENT_CERTIFICATE_BASE64: &str = "client_certificate_base64";
+    pub const TLS_CONNECT_CERTIFICATE_FILE: &str = "connect_certificate_file";
+    pub const TLS_CONNECT_CERTIFICATE_RAW: &str = "connect_certificate_raw";
+    pub const TLS_CONNECT_CERTIFICATE_BASE64: &str = "connect_certificate_base64";
 
-    pub const TLS_CLIENT_AUTH: &str = "client_auth";
+    pub const TLS_ENABLE_MTLS: &str = "enable_mtls";
 
-    pub const TLS_SERVER_NAME_VERIFICATION: &str = "server_name_verification";
+    pub const TLS_VERIFY_NAME_ON_CONNECT: &str = "verify_name_on_connect";
 }
