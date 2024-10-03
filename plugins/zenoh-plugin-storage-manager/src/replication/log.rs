@@ -282,6 +282,8 @@ impl LogLatest {
             return;
         };
 
+        tracing::trace!("Inserting < {:?} > in Replication Log", event.key_expr());
+
         self.bloom_filter_event.set(event.key_expr());
 
         self.intervals

@@ -379,7 +379,7 @@ impl Replication {
                         };
 
                         if let Some(digest_diff) = digest.diff(other_digest) {
-                            tracing::debug!("Potential misalignment detected");
+                            tracing::debug!("Potential misalignment detected: {digest_diff:?}");
 
                             let replica_aligner_ke = match keformat!(
                                 aligner_key_expr_formatter::formatter(),
@@ -464,8 +464,6 @@ impl Replication {
                     tracing::debug!("Skipping query with empty Attachment");
                     continue;
                 }
-
-                tracing::trace!("Received Alignment Query");
 
                 let replication = replication.clone();
                 tokio::task::spawn(async move { replication.aligner(query).await });
