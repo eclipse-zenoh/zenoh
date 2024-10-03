@@ -445,7 +445,7 @@
         // if set to false zenoh will disregard the common names of the certificates when verifying servers.
         // This could be dangerous because your CA can have signed a server cert for foo.com, that's later being used to host a server at baz.com. If you wan't your
         // ca to verify that the server at baz.com is actually baz.com, let this be true (default).
-        verify_name_on_connect: null,
+        verify_name_on_connect: true,
       },
     },
     /// Shared memory configuration.
