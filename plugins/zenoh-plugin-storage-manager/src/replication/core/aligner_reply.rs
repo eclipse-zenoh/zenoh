@@ -163,10 +163,10 @@ impl Replication {
                                 let diff = replica_sub_ivl
                                     .into_iter()
                                     .filter(|(sub_idx, sub_fp)| {
-                                        match interval.sub_intervals.get(sub_idx) {
+                                        match interval.sub_interval_at(sub_idx) {
                                             None => true,
                                             Some(sub_interval) => {
-                                                sub_interval.fingerprint != *sub_fp
+                                                sub_interval.fingerprint() != *sub_fp
                                             }
                                         }
                                     })
