@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use bloomfilter::Bloom;
 use serde::{Deserialize, Serialize};
@@ -170,6 +170,24 @@ pub struct LogLatest {
 }
 
 impl LogLatest {
+    /// Returns true if the Replication Log only contains a single Event for each key expression.
+    ///
+    /// To perform that check a HashSet is constructed by visiting each Interval and each
+    /// SubInterval, filling the HashSet with the key expression of all the Events contained.
+    ///
+    /// ⚠️ This method will only be called if Zenoh is compiled in Debug mode.
+    #[cfg(debug_assertions)]
+    pub(crate) fn assert_only_one_event_per_key_expr(&self) -> bool {
+        let mut hash_set = HashSet::new();
+        for interval in self.intervals.values() {
+            if !interval.assert_only_one_event_per_key_expr(&mut hash_set) {
+                return false;
+            }
+        }
+
+        true
+    }
+
     /// Creates a new [LogLatest] configured with the provided [ReplicaConfig].
     pub fn new(
         storage_key_expr: OwnedKeyExpr,
@@ -270,6 +288,9 @@ impl LogLatest {
             .entry(interval_idx)
             .or_default()
             .insert_unchecked(sub_interval_idx, event);
+
+        #[cfg(debug_assertions)]
+        assert!(self.assert_only_one_event_per_key_expr());
     }
 
     /// Removes, if there is one, the previous event from the Replication Log for the provided key

@@ -13,7 +13,7 @@
 //
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ops::{Deref, Sub},
 };
 
@@ -91,6 +91,26 @@ impl<const N: usize> From<[(SubIntervalIdx, SubInterval); N]> for Interval {
 }
 
 impl Interval {
+    /// Returns true if the Replication Log only contains a single Event for each key expression.
+    ///
+    /// To perform that check a HashSet is constructed by visiting each Interval and each
+    /// SubInterval, filling the HashSet with the key expression of all the Events contained.
+    ///
+    /// ⚠️ This method will only be called if Zenoh is compiled in Debug mode.
+    #[cfg(debug_assertions)]
+    pub(crate) fn assert_only_one_event_per_key_expr(
+        &self,
+        events: &mut HashSet<Option<OwnedKeyExpr>>,
+    ) -> bool {
+        for sub_interval in self.sub_intervals.values() {
+            if !sub_interval.assert_only_one_event_per_key_expr(events) {
+                return false;
+            }
+        }
+
+        true
+    }
+
     /// Returns the [Fingerprint] of this [Interval].
     ///
     /// The [Fingerprint] of an [Interval] is equal to the XOR (exclusive or) of the fingerprints
@@ -229,6 +249,30 @@ impl<const N: usize> From<[Event; N]> for SubInterval {
 }
 
 impl SubInterval {
+    /// Returns true if the Replication Log only contains a single Event for each key expression.
+    ///
+    /// To perform that check a HashSet is constructed by visiting each Interval and each
+    /// SubInterval, filling the HashSet with the key expression of all the Events contained.
+    ///
+    /// ⚠️ This method will only be called if Zenoh is compiled in Debug mode.
+    #[cfg(debug_assertions)]
+    fn assert_only_one_event_per_key_expr(
+        &self,
+        events: &mut HashSet<Option<OwnedKeyExpr>>,
+    ) -> bool {
+        for event_ke in self.events.keys() {
+            if !events.insert(event_ke.clone()) {
+                tracing::error!(
+                    "FATAL ERROR, REPLICATION LOG INVARIANT VIOLATED, KEY APPEARS MULTIPLE TIMES: \
+                     < {event_ke:?} >"
+                );
+                return false;
+            }
+        }
+
+        true
+    }
+
     /// Inserts the [Event], regardless of its [Timestamp].
     ///
     /// This method also updates the fingerprint of the [SubInterval].
