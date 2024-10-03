@@ -23,7 +23,7 @@ use zenoh::{
 use zenoh_backend_traits::StorageInsertionResult;
 
 use crate::replication::{
-    classification::{IntervalIdx, SubIntervalIdx},
+    classification::{EventRemoval, IntervalIdx, SubIntervalIdx},
     core::{aligner_key_expr_formatter, aligner_query::AlignmentQuery, Replication},
     digest::Fingerprint,
     log::EventMetadata,
@@ -254,32 +254,31 @@ impl Replication {
             }
             SampleKind::Delete => {
                 let mut replication_log_guard = self.replication_log.write().await;
-                if let Some(latest_event) =
-                    replication_log_guard.lookup(&replica_event.stripped_key)
+                match replication_log_guard
+                    .remove_older(&replica_event.stripped_key, &replica_event.timestamp)
                 {
-                    if latest_event.timestamp >= replica_event.timestamp {
-                        return None;
+                    EventRemoval::NotFound => {}
+                    EventRemoval::KeptNewer => return None,
+                    EventRemoval::RemovedOlder(older_event) => {
+                        if older_event.action == SampleKind::Put {
+                            // NOTE: In some of our backend implementation, a deletion on a
+                            //       non-existing key will return an error. Given that we cannot
+                            //       distinguish an error from a missing key, we will assume
+                            //       the latter and move forward.
+                            //
+                            // FIXME: Once the behaviour described above is fixed, check for
+                            //        errors.
+                            let _ = self
+                                .storage
+                                .lock()
+                                .await
+                                .delete(replica_event.stripped_key.clone(), replica_event.timestamp)
+                                .await;
+                        }
                     }
                 }
-                if matches!(
-                    self.storage
-                        .lock()
-                        .await
-                        .delete(replica_event.stripped_key.clone(), replica_event.timestamp)
-                        .await,
-                    // NOTE: In some of our backend implementation, a deletion on a
-                    //       non-existing key will return an error. Given that we cannot
-                    //       distinguish an error from a missing key, we will assume
-                    //       the latter and move forward.
-                    //
-                    // FIXME: Once the behaviour described above is fixed, check for
-                    //        errors.
-                    Ok(StorageInsertionResult::Outdated)
-                ) {
-                    return None;
-                }
 
-                replication_log_guard.insert_event(replica_event.clone().into());
+                replication_log_guard.insert_event_unchecked(replica_event.clone().into());
             }
         }
 
@@ -313,10 +312,11 @@ impl Replication {
         }
 
         let mut replication_log_guard = self.replication_log.write().await;
-        if let Some(latest_event) = replication_log_guard.lookup(&replica_event.stripped_key) {
-            if latest_event.timestamp >= replica_event.timestamp {
-                return;
-            }
+        match replication_log_guard
+            .remove_older(&replica_event.stripped_key, &replica_event.timestamp)
+        {
+            EventRemoval::KeptNewer => return,
+            EventRemoval::RemovedOlder(_) | EventRemoval::NotFound => {}
         }
 
         // NOTE: This code can only be called with `action` set to `delete` on an initial
@@ -342,6 +342,6 @@ impl Replication {
             return;
         }
 
-        replication_log_guard.insert_event(replica_event.into());
+        replication_log_guard.insert_event_unchecked(replica_event.into());
     }
 }

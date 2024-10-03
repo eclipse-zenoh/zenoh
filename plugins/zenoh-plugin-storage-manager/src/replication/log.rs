@@ -142,7 +142,6 @@ pub enum EventInsertion {
     New(Event),
     ReplacedOlder(Event),
     NotInsertedAsOlder,
-    NotInsertedAsOutOfBound,
 }
 
 /// The `LogLatest` keeps track of the last publication that happened on a key expression.
@@ -215,6 +214,9 @@ impl LogLatest {
     /// Attempts to insert the provided [Event] in the replication log and return the [Insertion]
     /// outcome.
     ///
+    /// This method will first go through the Replication Log to determine if the provided [Event]
+    /// is indeed newer. If not then this method will do nothing.
+    ///
     /// # Caveat: out of bound
     ///
     /// This method will record an error in the Zenoh log if the timestamp associated with the
@@ -228,15 +230,38 @@ impl LogLatest {
             EventRemoval::NotFound => EventInsertion::New(event.clone()),
         };
 
-        let (interval_idx, sub_interval_idx) = match self
+        self.insert_event_unchecked(event);
+
+        event_insertion
+    }
+
+    /// Inserts the provided [Event] in the replication log *without checking if there is another
+    /// [Event] with the same key expression*.
+    ///
+    /// ⚠️ This method is meant to be used *after having called [remove_older] and processed its
+    ///    result*, ensuring that the provided event is indeed more recent and the only one for
+    ///    that key expression.
+    ///
+    /// This method will first go through the Replication Log to determine if the provided [Event]
+    /// is indeed newer. If not then this method will do nothing.
+    ///
+    /// # Caveat: out of bound
+    ///
+    /// This method will record an error in the Zenoh log if the timestamp associated with the
+    /// [Event] is so far in the future that the index of its interval is higher than
+    /// [u64::MAX]. This should not happen unless a specially crafted [Event] is sent to this node
+    /// or if the internal clock of the host that produced it is (very) far in the future.
+    pub(crate) fn insert_event_unchecked(&mut self, event: Event) {
+        let Ok((interval_idx, sub_interval_idx)) = self
             .configuration
             .get_time_classification(event.timestamp())
-        {
-            Ok((interval_idx, sub_interval_idx)) => (interval_idx, sub_interval_idx),
-            Err(e) => {
-                tracing::error!("{e:?}");
-                return EventInsertion::NotInsertedAsOutOfBound;
-            }
+        else {
+            tracing::error!(
+                "Fatal error: timestamp of Event < {:?} > is out of bounds: {}",
+                event.maybe_stripped_key,
+                event.timestamp
+            );
+            return;
         };
 
         self.bloom_filter_event.set(event.key_expr());
@@ -245,8 +270,6 @@ impl LogLatest {
             .entry(interval_idx)
             .or_default()
             .insert_unchecked(sub_interval_idx, event);
-
-        event_insertion
     }
 
     /// Removes, if there is one, the previous event from the Replication Log for the provided key
