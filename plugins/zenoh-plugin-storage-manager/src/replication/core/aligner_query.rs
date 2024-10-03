@@ -268,7 +268,7 @@ impl Replication {
                 });
         }
 
-        let reply = AlignmentReply::Events(events);
+        let reply = AlignmentReply::EventsMetadata(events);
         reply_to_query(query, reply, None).await;
     }
 
