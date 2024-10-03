@@ -5934,7 +5934,6 @@ dependencies = [
  "async-trait",
  "bincode",
  "bloomfilter",
- "flume",
  "futures",
  "git-version",
  "jsonschema",
