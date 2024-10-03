@@ -218,7 +218,7 @@ impl StorageService {
     // The storage should only simply save the key, sample pair while put and retrieve the same
     // during get the trimming during PUT and GET should be handled by the plugin
     pub(crate) async fn process_sample(&self, sample: Sample) -> ZResult<()> {
-        tracing::trace!("[STORAGE] Processing sample: {:?}", sample);
+        tracing::trace!("[STORAGE] Processing sample: {:?}", sample.key_expr());
 
         // A Sample, in theory, will not arrive to a Storage without a Timestamp. This check (which,
         // again, should never enter the `None` branch) ensures that the Storage Manager
@@ -253,12 +253,6 @@ impl StorageService {
                 tracing::trace!("Skipping Sample < {} > deleted later on", k);
                 continue;
             }
-
-            tracing::trace!(
-                "Sample `{:?}` identified as needed processing for key {}",
-                sample,
-                k
-            );
 
             // there might be the case that the actual update was outdated due to a wild card
             // update, but not stored yet in the storage. get the relevant wild
