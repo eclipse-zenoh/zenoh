@@ -222,38 +222,10 @@ impl LogLatest {
     /// [u64::MAX]. This should not happen unless a specially crafted [Event] is sent to this node
     /// or if the internal clock of the host that produced it is (very) far in the future.
     pub(crate) fn insert_event(&mut self, event: Event) -> EventInsertion {
-        let mut result = None;
-
-        // A Bloom filter never returns false negative. Hence if the call to `check_and_set` we
-        // can be sure (provided that we update correctly the Bloom filter) that there is no
-        // Event with that key expression.
-        if self.bloom_filter_event.check(event.key_expr()) {
-            // The Bloom filter indicates that there is an Event with the same key expression,
-            // we need to check if it is older or not than the one we are processing.
-            //
-            // By construction of the LogLatest, there can only be a single [Event] with the
-            // same key expression, hence the moment we find it we can skip the search.
-            //
-            // NOTE: `rev()`
-            //       We are making here the following assumption: it is more likely that a recent
-            //       key will be updated. Iterating over a `BTreeMap` will yield its elements in
-            //       increasing order --- in our particular case that means from oldest to
-            //       newest. Using `rev()` yields them from newest to oldest.
-            for interval in self.intervals.values_mut().rev() {
-                match interval.if_newer_remove_older(event.key_expr(), event.timestamp()) {
-                    EventRemoval::RemovedOlder(old_event) => {
-                        result = Some(old_event);
-                        break;
-                    }
-                    EventRemoval::KeptNewer => return EventInsertion::NotInsertedAsOlder,
-                    EventRemoval::NotFound => continue,
-                }
-            }
-        }
-
-        let result = match result {
-            Some(old_event) => EventInsertion::ReplacedOlder(old_event),
-            None => EventInsertion::New(event.clone()),
+        let event_insertion = match self.remove_older(event.key_expr(), event.timestamp()) {
+            EventRemoval::RemovedOlder(old_event) => EventInsertion::ReplacedOlder(old_event),
+            EventRemoval::KeptNewer => return EventInsertion::NotInsertedAsOlder,
+            EventRemoval::NotFound => EventInsertion::New(event.clone()),
         };
 
         let (interval_idx, sub_interval_idx) = match self
@@ -274,7 +246,43 @@ impl LogLatest {
             .or_default()
             .insert_unchecked(sub_interval_idx, event);
 
-        result
+        event_insertion
+    }
+
+    /// Removes, if there is one, the previous event from the Replication Log for the provided key
+    /// expression *if its associated [Timestamp] is older* than the provided `timestamp`.
+    ///
+    /// In addition, if an event is indeed found, the index of the Interval and SubInterval in which
+    /// it was found are returned. This allows for quick reinsertion if needed.
+    pub fn remove_older(
+        &mut self,
+        stripped_key: &Option<OwnedKeyExpr>,
+        timestamp: &Timestamp,
+    ) -> EventRemoval {
+        // A Bloom filter never returns false negative. Hence if the call to `check_and_set` we
+        // can be sure (provided that we update correctly the Bloom filter) that there is no
+        // Event with that key expression.
+        if self.bloom_filter_event.check(stripped_key) {
+            // The Bloom filter indicates that there is an Event with the same key expression,
+            // we need to check if it is older or not than the one we are processing.
+            //
+            // By construction of the LogLatest, there can only be a single [Event] with the
+            // same key expression, hence the moment we find it we can skip the search.
+            //
+            // NOTE: `rev()`
+            //       We are making here the following assumption: it is more likely that a recent
+            //       key will be updated. Iterating over a `BTreeMap` will yield its elements in
+            //       increasing order --- in our particular case that means from oldest to
+            //       newest. Using `rev()` yields them from newest to oldest.
+            for interval in self.intervals.values_mut().rev() {
+                let removal = interval.remove_older(stripped_key, timestamp);
+                if !matches!(removal, EventRemoval::NotFound) {
+                    return removal;
+                }
+            }
+        }
+
+        EventRemoval::NotFound
     }
 
     /// Updates the replication log with the provided set of [Event]s and return the updated
