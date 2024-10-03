@@ -55,14 +55,14 @@ fn test_sub_interval() {
     );
     assert_eq!(
         EventRemoval::NotFound,
-        sub_interval.if_newer_remove_older(event_d.key_expr(), event_d.timestamp())
+        sub_interval.remove_older(event_d.key_expr(), event_d.timestamp())
     );
     sub_interval.insert_unchecked(event_d.clone());
 
     let event_d_new = new_event(event_d.key_expr().clone(), hlc.new_timestamp());
     assert_eq!(
         EventRemoval::RemovedOlder(event_d),
-        sub_interval.if_newer_remove_older(event_d_new.key_expr(), event_d_new.timestamp())
+        sub_interval.remove_older(event_d_new.key_expr(), event_d_new.timestamp())
     );
     // NOTE: We added and removed `event_d` the fingerprint should be identical.
     assert_eq!(expected_fingerprint, sub_interval.fingerprint);
@@ -105,19 +105,19 @@ fn test_interval() {
     // No Event with the same key expression.
     assert_eq!(
         EventRemoval::NotFound,
-        interval.if_newer_remove_older(event_1_1.key_expr(), event_1_1.timestamp())
+        interval.remove_older(event_1_1.key_expr(), event_1_1.timestamp())
     );
     // Event already present in the Interval: the event is not the newest.
     interval.insert_unchecked(SubIntervalIdx(1), event_1_1.clone());
     assert_eq!(
         EventRemoval::KeptNewer,
-        interval.if_newer_remove_older(event_1_1.key_expr(), event_1_1.timestamp())
+        interval.remove_older(event_1_1.key_expr(), event_1_1.timestamp())
     );
 
     let event_1_1_new = new_event(event_1_1.key_expr().clone(), hlc.new_timestamp());
     assert_eq!(
         EventRemoval::RemovedOlder(event_1_1),
-        interval.if_newer_remove_older(event_1_1_new.key_expr(), event_1_1_new.timestamp())
+        interval.remove_older(event_1_1_new.key_expr(), event_1_1_new.timestamp())
     );
     // We removed `event_1_1`, we should be back to having only `event_0_0`, `event_0_1` and
     // `event_1_0`.
@@ -127,7 +127,7 @@ fn test_interval() {
     // the Interval.
     assert_eq!(
         EventRemoval::RemovedOlder(event_1_0.clone()),
-        interval.if_newer_remove_older(event_1_0.key_expr(), &hlc.new_timestamp())
+        interval.remove_older(event_1_0.key_expr(), &hlc.new_timestamp())
     );
     assert!(!interval.sub_intervals.contains_key(&SubIntervalIdx(1)));
 }

@@ -147,8 +147,10 @@ impl Interval {
     /// This method will go through all of the [SubInterval]s included in this [Interval] and stop
     /// at the first that indicates having an [Event] for the provided key expression.
     ///
+    /// The [Fingerprint] of this Interval will be updated accordingly.
+    ///
     /// This method returns, through the [EventRemoval] enumeration, the action that was performed.
-    pub(crate) fn if_newer_remove_older(
+    pub(crate) fn remove_older(
         &mut self,
         key_expr: &Option<OwnedKeyExpr>,
         timestamp: &Timestamp,
@@ -157,7 +159,7 @@ impl Interval {
         let mut result = EventRemoval::NotFound;
 
         for (sub_interval_idx, sub_interval) in self.sub_intervals.iter_mut() {
-            result = sub_interval.if_newer_remove_older(key_expr, timestamp);
+            result = sub_interval.remove_older(key_expr, timestamp);
             if let EventRemoval::RemovedOlder(ref old_event) = result {
                 self.fingerprint ^= old_event.fingerprint();
                 if sub_interval.events.is_empty() {
@@ -258,7 +260,9 @@ impl SubInterval {
     ///
     /// This method returns, through the [EventRemoval] enumeration, returns the action that was
     /// performed.
-    fn if_newer_remove_older(
+    ///
+    /// The [Fingerprint] of this SubInterval will be updated accordingly.
+    fn remove_older(
         &mut self,
         key_expr: &Option<OwnedKeyExpr>,
         timestamp: &Timestamp,
