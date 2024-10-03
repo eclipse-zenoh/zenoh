@@ -133,12 +133,13 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
             _ => {}
         }
 
-        if let Some(server_name_verification) = c.verify_name_on_connect() {
-            match server_name_verification {
-                true => ps.push((TLS_VERIFY_NAME_ON_CONNECT, "true")),
-                false => ps.push((TLS_VERIFY_NAME_ON_CONNECT, "false")),
-            };
-        }
+        match c
+            .verify_name_on_connect()
+            .unwrap_or(TLS_VERIFY_NAME_ON_CONNECT_DEFAULT)
+        {
+            true => ps.push((TLS_VERIFY_NAME_ON_CONNECT, "true")),
+            false => ps.push((TLS_VERIFY_NAME_ON_CONNECT, "false")),
+        };
 
         Ok(parameters::from_iter(ps.drain(..)))
     }

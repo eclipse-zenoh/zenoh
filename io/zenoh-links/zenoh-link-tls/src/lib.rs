@@ -107,4 +107,5 @@ pub mod config {
     pub const TLS_ENABLE_MTLS: &str = "enable_mtls";
 
     pub const TLS_VERIFY_NAME_ON_CONNECT: &str = "verify_name_on_connect";
+    pub const TLS_VERIFY_NAME_ON_CONNECT_DEFAULT: bool = true;
 }
