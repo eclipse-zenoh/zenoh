@@ -461,66 +461,6 @@ impl Deserialize for VarInt<usize> {
     }
 }
 
-//
-// Serialization/deserialization for zenoh types
-//
-
-impl Serialize for NTP64 {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        let time = self.as_u64();
-        time.serialize(serializer);
-    }
-}
-
-impl Deserialize for NTP64 {
-    fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
-        let time = u64::deserialize(deserializer)?;
-        Ok(NTP64(time))
-    }
-}
-
-impl Serialize for TimestampId {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        self.to_le_bytes().serialize(serializer);
-    }
-}
-
-impl Deserialize for TimestampId {
-    fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
-        let id = Vec::<u8>::deserialize(deserializer)?;
-        let id = id.as_slice().try_into().map_err(|_| ZDeserializeError)?;
-        Ok(id)
-    }
-}
-
-impl Serialize for Timestamp {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        self.get_time().serialize(serializer);
-        self.get_id().serialize(serializer);
-    }
-}
-
-impl Deserialize for Timestamp {
-    fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
-        let time = NTP64::deserialize(deserializer)?;
-        let id = TimestampId::deserialize(deserializer)?;
-        Ok(Timestamp::new(time, id))
-    }
-}
-
-impl Serialize for Encoding {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        self.to_string().serialize(serializer);
-    }
-}
-
-impl Deserialize for Encoding {
-    fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
-        let encoding = String::deserialize(deserializer)?;
-        Encoding::from_str(&encoding).map_err(|_| ZDeserializeError)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::ops::Range;
@@ -608,12 +548,11 @@ mod tests {
     fn timestamp_serialization() {
         use std::time::{SystemTime, UNIX_EPOCH};
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into();
-        serialize_deserialize!(Timestamp, Timestamp::new(now, TimestampId::rand()));
-    }
-
-    #[test]
-    fn encoding_serialization() {
-        serialize_deserialize!(Encoding, Encoding::TEXT_JSON);
-        serialize_deserialize!(Encoding, Encoding::from_str("text/plain;foobar").unwrap());
+        let timestamp= Timestamp::new(now, TimestampId::rand());
+        let (NTP64(ts), id) = (timestamp.get_time(), timestamp.get_id().to_le_bytes());
+        let payload = z_serialize(&(ts, id));
+        let (ts, id) = z_deserialize::<(_, [u8; 16])>(&payload).unwrap();
+        let timestamp_out = Timestamp::new(NTP64(ts), TimestampId::try_from(&id).unwrap());
+        assert_eq!(timestamp, timestamp_out);
     }
 }
