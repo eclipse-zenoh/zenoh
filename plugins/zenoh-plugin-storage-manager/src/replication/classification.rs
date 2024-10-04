@@ -18,9 +18,12 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use zenoh::{key_expr::OwnedKeyExpr, time::Timestamp};
+use zenoh::{key_expr::OwnedKeyExpr, sample::SampleKind, time::Timestamp};
 
-use super::{digest::Fingerprint, log::Event};
+use super::{
+    digest::Fingerprint,
+    log::{Event, EventMetadata, LogLatestKey},
+};
 
 /// The `EventRemoval` enumeration lists the possible outcomes when searching for an older [Event]
 /// and removing it if one was found.
@@ -103,7 +106,7 @@ impl Interval {
     #[cfg(debug_assertions)]
     pub(crate) fn assert_only_one_event_per_key_expr(
         &self,
-        events: &mut HashSet<Option<OwnedKeyExpr>>,
+        events: &mut HashSet<LogLatestKey>,
     ) -> bool {
         for sub_interval in self.sub_intervals.values() {
             if !sub_interval.assert_only_one_event_per_key_expr(events) {
@@ -137,9 +140,9 @@ impl Interval {
     }
 
     /// Lookup the provided key expression and return, if found, its associated [Event].
-    pub(crate) fn lookup(&self, stripped_key: &Option<OwnedKeyExpr>) -> Option<&Event> {
+    pub(crate) fn lookup(&self, event_to_lookup: &EventMetadata) -> Option<&Event> {
         for sub_interval in self.sub_intervals.values() {
-            if let Some(event) = sub_interval.events.get(stripped_key) {
+            if let Some(event) = sub_interval.lookup(event_to_lookup) {
                 return Some(event);
             }
         }
@@ -187,16 +190,12 @@ impl Interval {
     /// The [Fingerprint] of this Interval will be updated accordingly.
     ///
     /// This method returns, through the [EventRemoval] enumeration, the action that was performed.
-    pub(crate) fn remove_older(
-        &mut self,
-        key_expr: &Option<OwnedKeyExpr>,
-        timestamp: &Timestamp,
-    ) -> EventRemoval {
+    pub(crate) fn remove_older(&mut self, event_to_remove: &EventMetadata) -> EventRemoval {
         let mut sub_interval_idx_to_remove = None;
         let mut result = EventRemoval::NotFound;
 
         for (sub_interval_idx, sub_interval) in self.sub_intervals.iter_mut() {
-            result = sub_interval.remove_older(key_expr, timestamp);
+            result = sub_interval.remove_older(event_to_remove);
             if let EventRemoval::RemovedOlder(ref old_event) = result {
                 self.fingerprint ^= old_event.fingerprint();
                 if sub_interval.events.is_empty() {
@@ -215,6 +214,54 @@ impl Interval {
         }
 
         result
+    }
+
+    pub(crate) fn remove_event(
+        &mut self,
+        sub_interval_idx: &SubIntervalIdx,
+        event_to_remove: &EventMetadata,
+    ) -> Option<Event> {
+        let removed_event = self
+            .sub_intervals
+            .get_mut(sub_interval_idx)
+            .and_then(|sub_interval| sub_interval.remove_event(event_to_remove));
+
+        if let Some(event) = &removed_event {
+            self.fingerprint ^= event.fingerprint();
+        }
+
+        removed_event
+    }
+
+    /// Removes and returns the [Event] present in this `Interval` that are overridden by the
+    /// provided Wildcard Update.
+    ///
+    /// If the Wildcard Update should be recorded in this `Interval` then the index of the
+    /// `SubInterval` should also be provided as the removal can be stopped right after: all the
+    /// [Event]s contained in greater `SubInterval` will, by construction of the Replication Log,
+    /// only have greater timestamps and thus cannot be overridden by this Wildcard Update.
+    pub(crate) fn remove_events_overridden_by_wildcard_update(
+        &mut self,
+        prefix: Option<&OwnedKeyExpr>,
+        wildcard_key_expr: &OwnedKeyExpr,
+        wildcard_timestamp: &Timestamp,
+        wildcard_kind: SampleKind,
+    ) -> HashSet<Event> {
+        let mut overridden_events = HashSet::new();
+        for sub_interval in self.sub_intervals.values_mut() {
+            self.fingerprint ^= sub_interval.fingerprint;
+
+            overridden_events.extend(sub_interval.remove_events_overridden_by_wildcard_update(
+                prefix,
+                wildcard_key_expr,
+                wildcard_timestamp,
+                wildcard_kind,
+            ));
+
+            self.fingerprint ^= sub_interval.fingerprint;
+        }
+
+        overridden_events
     }
 }
 
@@ -249,7 +296,7 @@ pub(crate) struct SubInterval {
     fingerprint: Fingerprint,
     // ⚠️ This field should remain private: we cannot manipulate the `Events` without updating the
     //     Fingerprint.
-    events: HashMap<Option<OwnedKeyExpr>, Event>,
+    events: HashMap<LogLatestKey, Event>,
 }
 
 impl<const N: usize> From<[Event; N]> for SubInterval {
@@ -262,7 +309,7 @@ impl<const N: usize> From<[Event; N]> for SubInterval {
             fingerprint,
             events: events
                 .into_iter()
-                .map(|event| (event.key_expr().clone(), event))
+                .map(|event| (event.log_key(), event))
                 .collect(),
         }
     }
@@ -276,15 +323,12 @@ impl SubInterval {
     ///
     /// ⚠️ This method will only be called if Zenoh is compiled in Debug mode.
     #[cfg(debug_assertions)]
-    fn assert_only_one_event_per_key_expr(
-        &self,
-        events: &mut HashSet<Option<OwnedKeyExpr>>,
-    ) -> bool {
-        for event_ke in self.events.keys() {
-            if !events.insert(event_ke.clone()) {
+    fn assert_only_one_event_per_key_expr(&self, events: &mut HashSet<LogLatestKey>) -> bool {
+        for event_log_key in self.events.keys() {
+            if !events.insert(event_log_key.clone()) {
                 tracing::error!(
                     "FATAL ERROR, REPLICATION LOG INVARIANT VIOLATED, KEY APPEARS MULTIPLE TIMES: \
-                     < {event_ke:?} >"
+                     < {event_log_key:?} >"
                 );
                 return false;
             }
@@ -323,7 +367,7 @@ impl SubInterval {
     /// be updated to keep it correct and a warning message will be emitted.
     fn insert_unchecked(&mut self, event: Event) {
         self.fingerprint ^= event.fingerprint();
-        if let Some(replaced_event) = self.events.insert(event.key_expr().clone(), event) {
+        if let Some(replaced_event) = self.events.insert(event.log_key(), event) {
             tracing::warn!(
                 "Call to `insert_unchecked` replaced an Event in the replication Log, this should \
                  NOT have happened: {replaced_event:?}"
@@ -339,13 +383,9 @@ impl SubInterval {
     /// performed.
     ///
     /// The [Fingerprint] of this SubInterval will be updated accordingly.
-    fn remove_older(
-        &mut self,
-        key_expr: &Option<OwnedKeyExpr>,
-        timestamp: &Timestamp,
-    ) -> EventRemoval {
-        if let Some((key_expr, event)) = self.events.remove_entry(key_expr) {
-            if event.timestamp() < timestamp {
+    fn remove_older(&mut self, event_to_remove: &EventMetadata) -> EventRemoval {
+        if let Some((key_expr, event)) = self.events.remove_entry(&event_to_remove.log_key()) {
+            if event.timestamp() < &event_to_remove.timestamp {
                 self.fingerprint ^= event.fingerprint();
                 return EventRemoval::RemovedOlder(event);
             } else {
@@ -355,6 +395,49 @@ impl SubInterval {
         }
 
         EventRemoval::NotFound
+    }
+
+    fn lookup(&self, event_to_lookup: &EventMetadata) -> Option<&Event> {
+        self.events.get(&event_to_lookup.log_key())
+    }
+
+    fn remove_event(&mut self, event_to_remove: &EventMetadata) -> Option<Event> {
+        let removed_event = self.events.remove(&event_to_remove.log_key());
+        if let Some(event) = &removed_event {
+            self.fingerprint ^= event.fingerprint();
+        }
+
+        removed_event
+    }
+
+    /// Removes and returns the [Event] present in this `SubInterval` that are overridden by the
+    /// provided Wildcard Update.
+    ///
+    /// The timestamp of the Wildcard Update should only be provided if the considered `SubInterval`
+    /// is where the Wildcard Update should be recorded.
+    /// It is only in that specific scenario that we are not sure that all [Event]s have a lower
+    /// timestamp.
+    fn remove_events_overridden_by_wildcard_update(
+        &mut self,
+        prefix: Option<&OwnedKeyExpr>,
+        wildcard_key_expr: &OwnedKeyExpr,
+        wildcard_timestamp: &Timestamp,
+        wildcard_kind: SampleKind,
+    ) -> HashSet<Event> {
+        let overridden_events =
+            crate::replication::core::remove_events_overridden_by_wildcard_update(
+                &mut self.events,
+                prefix,
+                wildcard_key_expr,
+                wildcard_timestamp,
+                wildcard_kind,
+            );
+
+        overridden_events
+            .iter()
+            .for_each(|overridden_event| self.fingerprint ^= overridden_event.fingerprint());
+
+        overridden_events
     }
 }
 
