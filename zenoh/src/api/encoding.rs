@@ -86,147 +86,32 @@ impl Encoding {
     ///
     /// Constant alias for string: `"zenoh/bytes"`.
     ///
-    /// Usually used for types: `Vec<u8>`, `&[u8]`, `[u8; N]`, `Cow<[u8]>`.
+    /// This encoding supposes that the payload was created with [`ZBytes::from::<Vec<u8>>`](crate::bytes::ZBytes::from) or similar and
+    /// its data should be accessed with `ZBytes::to_bytes()`, no additional assumptions are made
     pub const ZENOH_BYTES: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 0,
-        schema: None,
-    });
-    /// A VLE-encoded signed little-endian 8bit integer. Binary representation uses two's complement.
-    ///
-    /// Constant alias for string: `"zenoh/int8"`.
-    ///
-    /// Usually used for types: `i8`.
-    pub const ZENOH_INT8: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 1,
-        schema: None,
-    });
-    /// A VLE-encoded signed little-endian 16bit integer. Binary representation uses two's complement.
-    ///
-    /// Constant alias for string: `"zenoh/int16"`.
-    ///
-    /// Usually used for types: `i16`.
-    pub const ZENOH_INT16: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 2,
-        schema: None,
-    });
-    /// A VLE-encoded signed little-endian 32bit integer. Binary representation uses two's complement.
-    ///
-    /// Constant alias for string: `"zenoh/int32"`.
-    ///
-    /// Usually used for types: `i32`.
-    pub const ZENOH_INT32: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 3,
-        schema: None,
-    });
-    /// A VLE-encoded signed little-endian 64bit integer. Binary representation uses two's complement.
-    ///
-    /// Constant alias for string: `"zenoh/int64"`.
-    ///
-    /// Usually used for types: `i64`.
-    pub const ZENOH_INT64: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 4,
-        schema: None,
-    });
-    /// A VLE-encoded signed little-endian 128bit integer. Binary representation uses two's complement.
-    ///
-    /// Constant alias for string: `"zenoh/int128"`.
-    ///
-    /// Usually used for types: `i128`.
-    pub const ZENOH_INT128: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 5,
-        schema: None,
-    });
-    /// A VLE-encoded unsigned little-endian 8bit integer.
-    ///
-    /// Constant alias for string: `"zenoh/uint8"`.
-    ///
-    /// Usually used for types: `u8`.
-    pub const ZENOH_UINT8: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 6,
-        schema: None,
-    });
-    /// A VLE-encoded unsigned little-endian 16bit integer.
-    ///
-    /// Constant alias for string: `"zenoh/uint16"`.
-    ///
-    /// Usually used for types: `u16`.
-    pub const ZENOH_UINT16: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 7,
-        schema: None,
-    });
-    /// A VLE-encoded unsigned little-endian 32bit integer.
-    ///
-    /// Constant alias for string: `"zenoh/uint32"`.
-    ///
-    /// Usually used for types: `u32`.
-    pub const ZENOH_UINT32: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 8,
-        schema: None,
-    });
-    /// A VLE-encoded unsigned little-endian 64bit integer.
-    ///
-    /// Constant alias for string: `"zenoh/uint64"`.
-    ///
-    /// Usually used for types: `u64`.
-    pub const ZENOH_UINT64: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 9,
-        schema: None,
-    });
-    /// A VLE-encoded unsigned little-endian 128bit integer.
-    ///
-    /// Constant alias for string: `"zenoh/uint128"`.
-    ///
-    /// Usually used for types: `u128`.
-    pub const ZENOH_UINT128: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 10,
-        schema: None,
-    });
-    /// A VLE-encoded 32bit float. Binary representation uses *IEEE 754-2008* *binary32* .
-    ///
-    /// Constant alias for string: `"zenoh/float32"`.
-    ///
-    /// Usually used for types: `f32`.
-    pub const ZENOH_FLOAT32: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 11,
-        schema: None,
-    });
-    /// A VLE-encoded 64bit float. Binary representation uses *IEEE 754-2008* *binary64*.
-    ///
-    /// Constant alias for string: `"zenoh/float64"`.
-    ///
-    /// Usually used for types: `f64`.
-    pub const ZENOH_FLOAT64: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 12,
-        schema: None,
-    });
-    /// A boolean. `0` is `false`, `1` is `true`. Other values are invalid.
-    ///
-    /// Constant alias for string: `"zenoh/bool"`.
-    ///
-    /// Usually used for types: `bool`.
-    pub const ZENOH_BOOL: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 13,
         schema: None,
     });
     /// A UTF-8 string.
     ///
     /// Constant alias for string: `"zenoh/string"`.
     ///
-    /// Usually used for types: `String`, `&str`, `Cow<str>`, `char`.
+    /// This encoding supposes that the payload was created with [`ZBytes::from::<String>`](crate::bytes::ZBytes::from) or similar
+    /// (`&str`, `Cow<str>`, `char`) and it's data can be acquired with [`ZBytes::try_to_string()`](crate::bytes::ZBytes::try_to_string) without an error.
     pub const ZENOH_STRING: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 14,
+        id: 1,
         schema: None,
     });
-    /// A zenoh error.
+    /// Zenoh serialized data.
     ///
-    /// Constant alias for string: `"zenoh/error"`.
+    /// Constant alias for string: `"zenoh/serialized"`.
     ///
-    /// Usually used for types: `ReplyError`.
-    pub const ZENOH_ERROR: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 15,
+    /// This encoding supposes that the payload created with serialization functions provided by `zenoh-ext` crate.
+    /// The `schema` field may contain the details of the serialization format.
+    pub const ZENOH_SERIALIZED: Encoding = Self(zenoh_protocol::core::Encoding {
+        id: 2,
         schema: None,
     });
-
     // - Advanced types may be supported in some of the Zenoh bindings.
     /// An application-specific stream of bytes.
     ///
@@ -582,21 +467,8 @@ impl Encoding {
 
     const ID_TO_STR: phf::Map<EncodingId, &'static str> = phf_map! {
         0u16 => "zenoh/bytes",
-        1u16 => "zenoh/int8",
-        2u16 => "zenoh/int16",
-        3u16 => "zenoh/int32",
-        4u16 => "zenoh/int64",
-        5u16 => "zenoh/int128",
-        6u16 => "zenoh/uint8",
-        7u16 => "zenoh/uint16",
-        8u16 => "zenoh/uint32",
-        9u16 => "zenoh/uint64",
-        10u16 => "zenoh/uint128",
-        11u16 => "zenoh/float32",
-        12u16 => "zenoh/float64",
-        13u16 => "zenoh/bool",
-        14u16 => "zenoh/string",
-        15u16 => "zenoh/error",
+        1u16 => "zenoh/string",
+        2u16 => "zenoh/serialized",
         16u16 => "application/octet-stream",
         17u16 => "text/plain",
         18u16 => "application/json",
@@ -651,21 +523,8 @@ impl Encoding {
 
     const STR_TO_ID: phf::Map<&'static str, EncodingId> = phf_map! {
         "zenoh/bytes" => 0u16,
-        "zenoh/int8" => 1u16,
-        "zenoh/int16" => 2u16,
-        "zenoh/int32" => 3u16,
-        "zenoh/int64" => 4u16,
-        "zenoh/int128" => 5u16,
-        "zenoh/uint8" => 6u16,
-        "zenoh/uint16" => 7u16,
-        "zenoh/uint32" => 8u16,
-        "zenoh/uint64" => 9u16,
-        "zenoh/uint128" => 10u16,
-        "zenoh/float32" => 11u16,
-        "zenoh/float64" => 12u16,
-        "zenoh/bool" => 13u16,
-        "zenoh/string" => 14u16,
-        "zenoh/error" => 15u16,
+        "zenoh/string" => 1u16,
+        "zenoh/serialized" => 2u16,
         "application/octet-stream" => 16u16,
         "text/plain" => 17u16,
         "application/json" => 18u16,
@@ -877,84 +736,6 @@ impl EncodingMapping for &str {
 
 impl EncodingMapping for Cow<'_, str> {
     const ENCODING: Encoding = Encoding::ZENOH_STRING;
-}
-
-// Zenoh unsigned integers
-impl EncodingMapping for u8 {
-    const ENCODING: Encoding = Encoding::ZENOH_UINT8;
-}
-
-impl EncodingMapping for u16 {
-    const ENCODING: Encoding = Encoding::ZENOH_UINT16;
-}
-
-impl EncodingMapping for u32 {
-    const ENCODING: Encoding = Encoding::ZENOH_UINT32;
-}
-
-impl EncodingMapping for u64 {
-    const ENCODING: Encoding = Encoding::ZENOH_UINT64;
-}
-
-impl EncodingMapping for u128 {
-    const ENCODING: Encoding = Encoding::ZENOH_UINT128;
-}
-
-impl EncodingMapping for usize {
-    #[cfg(target_pointer_width = "16")]
-    const ENCODING: Encoding = Encoding::ZENOH_UINT16;
-    #[cfg(target_pointer_width = "32")]
-    const ENCODING: Encoding = Encoding::ZENOH_UINT32;
-    #[cfg(target_pointer_width = "64")]
-    const ENCODING: Encoding = Encoding::ZENOH_UINT64;
-}
-
-// Zenoh signed integers
-impl EncodingMapping for i8 {
-    const ENCODING: Encoding = Encoding::ZENOH_INT8;
-}
-
-impl EncodingMapping for i16 {
-    const ENCODING: Encoding = Encoding::ZENOH_INT16;
-}
-
-impl EncodingMapping for i32 {
-    const ENCODING: Encoding = Encoding::ZENOH_INT32;
-}
-
-impl EncodingMapping for i64 {
-    const ENCODING: Encoding = Encoding::ZENOH_INT64;
-}
-
-impl EncodingMapping for i128 {
-    const ENCODING: Encoding = Encoding::ZENOH_INT128;
-}
-
-impl EncodingMapping for isize {
-    #[cfg(target_pointer_width = "8")]
-    const ENCODING: Encoding = Encoding::ZENOH_INT8;
-    #[cfg(target_pointer_width = "16")]
-    const ENCODING: Encoding = Encoding::ZENOH_INT16;
-    #[cfg(target_pointer_width = "32")]
-    const ENCODING: Encoding = Encoding::ZENOH_INT32;
-    #[cfg(target_pointer_width = "64")]
-    const ENCODING: Encoding = Encoding::ZENOH_INT64;
-    #[cfg(target_pointer_width = "128")]
-    const ENCODING: Encoding = Encoding::ZENOH_INT128;
-}
-
-// Zenoh floats
-impl EncodingMapping for f32 {
-    const ENCODING: Encoding = Encoding::ZENOH_FLOAT32;
-}
-
-impl EncodingMapping for f64 {
-    const ENCODING: Encoding = Encoding::ZENOH_FLOAT64;
-}
-
-// Zenoh bool
-impl EncodingMapping for bool {
-    const ENCODING: Encoding = Encoding::ZENOH_BOOL;
 }
 
 // - Zenoh advanced types encoders/decoders
