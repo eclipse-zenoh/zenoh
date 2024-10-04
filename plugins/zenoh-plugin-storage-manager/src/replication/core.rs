@@ -16,16 +16,13 @@ mod aligner_query;
 mod aligner_reply;
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::Arc,
     time::{Duration, Instant, SystemTime},
 };
 
 use rand::Rng;
-use tokio::{
-    sync::{Mutex, RwLock},
-    task::JoinHandle,
-};
+use tokio::{sync::RwLock, task::JoinHandle};
 use tracing::{debug_span, Instrument};
 use zenoh::{
     key_expr::{
@@ -33,14 +30,17 @@ use zenoh::{
         OwnedKeyExpr,
     },
     query::{ConsolidationMode, Selector},
-    sample::Locality,
+    sample::{Locality, SampleKind},
+    time::Timestamp,
     Session,
 };
-use zenoh_backend_traits::Storage;
 
 use self::aligner_reply::AlignmentReply;
-use super::{digest::Digest, log::LogLatest};
-use crate::{replication::core::aligner_query::AlignmentQuery, storages_mgt::LatestUpdates};
+use super::{digest::Digest, log::LogLatest, Action, Event, LogLatestKey};
+use crate::{
+    replication::core::aligner_query::AlignmentQuery,
+    storages_mgt::{LatestUpdates, StorageService},
+};
 
 kedefine!(
     pub digest_key_expr_formatter: "@-digest/${zid:*}/${hash_configuration:*}",
@@ -53,7 +53,7 @@ pub(crate) struct Replication {
     pub(crate) replication_log: Arc<RwLock<LogLatest>>,
     pub(crate) storage_key_expr: OwnedKeyExpr,
     pub(crate) latest_updates: Arc<RwLock<LatestUpdates>>,
-    pub(crate) storage: Arc<Mutex<Box<dyn Storage>>>,
+    pub(crate) storage_service: Arc<StorageService>,
 }
 
 impl Replication {
@@ -578,4 +578,93 @@ impl Replication {
             }
         })
     }
+}
+
+pub(crate) fn remove_events_overridden_by_wildcard_update(
+    events: &mut HashMap<LogLatestKey, Event>,
+    prefix: Option<&OwnedKeyExpr>,
+    wildcard_ke: &OwnedKeyExpr,
+    wildcard_ts: &Timestamp,
+    wildcard_kind: SampleKind,
+) -> HashSet<Event> {
+    let mut overridden_events = HashSet::default();
+
+    events.retain(|_, event| {
+        // We only provide the timestamp of the Wildcard Update if the Wildcard Update belongs
+        // in this SubInterval.
+        //
+        // Only then do we need to compare its timestamp with the timestamp of the Events
+        // contained in the SubInterval.
+        if event.timestamp() >= wildcard_ts {
+            // Very specific scenario: we are processing a Wildcard Delete that should have been
+            // applied before another Wildcard Update.
+            //
+            // With an example, we had the events:
+            // - put "a = 1"   @t0
+            // - put "** = 42" @t2
+            //
+            // That leads the Event in the Replication Log associated to "a" to be:
+            // - timestamp = @t2
+            // - timestamp_last_non_wildcard_update = @t0
+            //
+            // And now we receive:
+            // - delete "**" @t1 (@t0 < @t1 < @t2)
+            //
+            // As the Wildcard Delete should have arrived before the Wildcard Update (put "** =
+            // 42"), "a" should have been deleted and the Wildcard Update Put not applied.
+            //
+            // These `if` check that very specific scenario. Basically we should only retain the
+            // Event if its `timestamp_last_non_wildcard_update` exists and is greater than the
+            // timestamp of the Wildcard Delete.
+            if wildcard_kind == SampleKind::Delete && event.action() == &Action::Put {
+                if let Some(timestamp_last_non_wildcard_update) =
+                    event.timestamp_last_non_wildcard_update
+                {
+                    if timestamp_last_non_wildcard_update > *wildcard_ts {
+                        return true;
+                    }
+                }
+            } else {
+                return true;
+            }
+        }
+
+        let full_event_key_expr = match event.action() {
+            // We do not want to override deleted Events, either with another Wildcard Update or
+            // with a Wildcard Delete.
+            Action::Delete => return true,
+            Action::Put => match crate::prefix(prefix, event.stripped_key.as_ref()) {
+                Ok(full_ke) => full_ke,
+                Err(e) => {
+                    tracing::error!(
+                        "Internal error while attempting to prefix < {:?} > with < {:?} >: {e:?}",
+                        event.stripped_key,
+                        prefix
+                    );
+                    return true;
+                }
+            },
+            Action::WildcardPut(wildcard_ke) | Action::WildcardDelete(wildcard_ke) => {
+                wildcard_ke.clone()
+            }
+        };
+
+        if wildcard_ke.includes(&full_event_key_expr) {
+            // A Wildcard Update cannot override a Wildcard Delete. A Wildcard Delete can only be
+            // overridden by another Wildcard Delete.
+            //
+            // The opposite is not true: a Wildcard Delete can override a Wildcard Update.
+            if wildcard_kind == SampleKind::Put && matches!(event.action, Action::WildcardDelete(_))
+            {
+                return true;
+            }
+
+            overridden_events.insert(event.clone());
+            return false;
+        }
+
+        true
+    });
+
+    overridden_events
 }

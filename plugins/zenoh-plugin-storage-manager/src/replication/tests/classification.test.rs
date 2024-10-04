@@ -14,12 +14,13 @@
 
 use std::str::FromStr;
 
-use zenoh::{key_expr::OwnedKeyExpr, sample::SampleKind};
+use zenoh::key_expr::OwnedKeyExpr;
 
 use super::*;
+use crate::replication::Action;
 
 fn new_event(key_expr: Option<OwnedKeyExpr>, timestamp: Timestamp) -> Event {
-    Event::new(key_expr, timestamp, SampleKind::Put)
+    Event::new(key_expr, timestamp, &Action::Put)
 }
 
 #[test]
@@ -53,16 +54,13 @@ fn test_sub_interval() {
         Some(OwnedKeyExpr::from_str("test/d").unwrap()),
         hlc.new_timestamp(),
     );
-    assert_eq!(
-        EventRemoval::NotFound,
-        sub_interval.remove_older(event_d.key_expr(), event_d.timestamp())
-    );
+    assert_eq!(EventRemoval::NotFound, sub_interval.remove_older(&event_d));
     sub_interval.insert_unchecked(event_d.clone());
 
     let event_d_new = new_event(event_d.key_expr().clone(), hlc.new_timestamp());
     assert_eq!(
-        EventRemoval::RemovedOlder(event_d),
-        sub_interval.remove_older(event_d_new.key_expr(), event_d_new.timestamp())
+        EventRemoval::RemovedOlder(event_d.clone()),
+        sub_interval.remove_older(&event_d_new)
     );
     // NOTE: We added and removed `event_d` the fingerprint should be identical.
     assert_eq!(expected_fingerprint, sub_interval.fingerprint);
@@ -103,21 +101,15 @@ fn test_interval() {
         hlc.new_timestamp(),
     );
     // No Event with the same key expression.
-    assert_eq!(
-        EventRemoval::NotFound,
-        interval.remove_older(event_1_1.key_expr(), event_1_1.timestamp())
-    );
+    assert_eq!(EventRemoval::NotFound, interval.remove_older(&event_1_1));
     // Event already present in the Interval: the event is not the newest.
     interval.insert_unchecked(SubIntervalIdx(1), event_1_1.clone());
-    assert_eq!(
-        EventRemoval::KeptNewer,
-        interval.remove_older(event_1_1.key_expr(), event_1_1.timestamp())
-    );
+    assert_eq!(EventRemoval::KeptNewer, interval.remove_older(&event_1_1));
 
     let event_1_1_new = new_event(event_1_1.key_expr().clone(), hlc.new_timestamp());
     assert_eq!(
-        EventRemoval::RemovedOlder(event_1_1),
-        interval.remove_older(event_1_1_new.key_expr(), event_1_1_new.timestamp())
+        EventRemoval::RemovedOlder(event_1_1.clone()),
+        interval.remove_older(&event_1_1_new)
     );
     // We removed `event_1_1`, we should be back to having only `event_0_0`, `event_0_1` and
     // `event_1_0`.
@@ -125,9 +117,10 @@ fn test_interval() {
 
     // We remove `event_1_0`, there is no event left in SubInterval(1) so it should be removed from
     // the Interval.
+    let event_1_0_new = new_event(event_1_0.key_expr().clone(), hlc.new_timestamp());
     assert_eq!(
         EventRemoval::RemovedOlder(event_1_0.clone()),
-        interval.remove_older(event_1_0.key_expr(), &hlc.new_timestamp())
+        interval.remove_older(&event_1_0_new)
     );
     assert!(!interval.sub_intervals.contains_key(&SubIntervalIdx(1)));
 }

@@ -49,20 +49,18 @@ impl ReplicationService {
     ///    received.
     pub async fn spawn_start(
         zenoh_session: Arc<Session>,
-        storage_service: &StorageService,
+        storage_service: Arc<StorageService>,
         storage_key_expr: OwnedKeyExpr,
         replication_log: Arc<RwLock<LogLatest>>,
         latest_updates: Arc<RwLock<LatestUpdates>>,
         mut rx: Receiver<StorageMessage>,
     ) {
-        let storage = storage_service.storage.clone();
-
         let replication = Replication {
             zenoh_session,
             replication_log,
             storage_key_expr,
             latest_updates,
-            storage,
+            storage_service,
         };
 
         if replication

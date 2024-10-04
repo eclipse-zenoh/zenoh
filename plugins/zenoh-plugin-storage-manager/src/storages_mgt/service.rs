@@ -13,8 +13,8 @@
 //
 
 use std::{
-    collections::{HashMap, HashSet},
-    str::{self, FromStr},
+    collections::HashSet,
+    str::{self},
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -22,14 +22,10 @@ use std::{
 use async_trait::async_trait;
 use tokio::sync::{broadcast::Receiver, Mutex, RwLock, RwLockWriteGuard};
 use zenoh::{
-    internal::{
-        bail,
-        buffers::{SplitBuffer, ZBuf},
-        zenoh_home, Timed, TimedEvent, Timer, Value,
-    },
+    internal::{bail, Timed, TimedEvent, Timer, Value},
     key_expr::{
         keyexpr_tree::{
-            IKeyExprTree, IKeyExprTreeMut, KeBoxTree, KeyedSetProvider, NonWild, UnknownWildness,
+            IKeyExprTree, IKeyExprTreeMut, KeBoxTree, KeyedSetProvider, UnknownWildness,
         },
         KeyExpr, OwnedKeyExpr,
     },
@@ -40,33 +36,48 @@ use zenoh::{
 };
 use zenoh_backend_traits::{
     config::{GarbageCollectionConfig, StorageConfig},
-    Capability, History, Persistence, StorageInsertionResult, StoredData,
+    Capability, History, StorageInsertionResult, StoredData,
 };
 
 use super::LatestUpdates;
 use crate::{
-    replication::Event,
+    replication::{Action, Event},
     storages_mgt::{CacheLatest, StorageMessage},
 };
 
-pub const WILDCARD_UPDATES_FILENAME: &str = "wildcard_updates";
-pub const TOMBSTONE_FILENAME: &str = "tombstones";
-
 #[derive(Clone)]
-struct Update {
+pub(crate) struct Update {
     kind: SampleKind,
     data: StoredData,
+}
+
+impl Update {
+    pub(crate) fn timestamp(&self) -> &Timestamp {
+        &self.data.timestamp
+    }
+
+    pub(crate) fn kind(&self) -> SampleKind {
+        self.kind
+    }
+
+    pub(crate) fn value(&self) -> &Value {
+        &self.data.value
+    }
+
+    pub(crate) fn into_value(self) -> Value {
+        self.data.value
+    }
 }
 
 #[derive(Clone)]
 pub struct StorageService {
     session: Arc<Session>,
-    configuration: StorageConfig,
+    pub(crate) configuration: StorageConfig,
     name: String,
     pub(crate) storage: Arc<Mutex<Box<dyn zenoh_backend_traits::Storage>>>,
     capability: Capability,
-    tombstones: Arc<RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>>,
-    wildcard_updates: Arc<RwLock<KeBoxTree<Update, UnknownWildness, KeyedSetProvider>>>,
+    pub(crate) wildcard_deletes: Arc<RwLock<KeBoxTree<Update, UnknownWildness, KeyedSetProvider>>>,
+    pub(crate) wildcard_puts: Arc<RwLock<KeBoxTree<Update, UnknownWildness, KeyedSetProvider>>>,
     cache_latest: CacheLatest,
 }
 
@@ -79,48 +90,22 @@ impl StorageService {
         capability: Capability,
         cache_latest: CacheLatest,
     ) -> Self {
-        let storage_service = StorageService {
+        StorageService {
             session,
             configuration: config,
             name: name.to_string(),
             storage,
             capability,
-            tombstones: Arc::new(RwLock::new(KeBoxTree::default())),
-            wildcard_updates: Arc::new(RwLock::new(KeBoxTree::default())),
+            wildcard_deletes: Arc::new(RwLock::new(KeBoxTree::default())),
+            wildcard_puts: Arc::new(RwLock::new(KeBoxTree::default())),
             cache_latest,
-        };
-        if storage_service
-            .capability
-            .persistence
-            .eq(&Persistence::Durable)
-        {
-            // update tombstones and wild card updates from persisted file if it exists
-            if zenoh_home().join(TOMBSTONE_FILENAME).exists() {
-                let saved_ts =
-                    std::fs::read_to_string(zenoh_home().join(TOMBSTONE_FILENAME)).unwrap();
-                let saved_ts: HashMap<OwnedKeyExpr, Timestamp> =
-                    serde_json::from_str(&saved_ts).unwrap();
-                let mut tombstones = storage_service.tombstones.write().await;
-                for (k, ts) in saved_ts {
-                    tombstones.insert(&k, ts);
-                }
-            }
-            if zenoh_home().join(WILDCARD_UPDATES_FILENAME).exists() {
-                let saved_wc =
-                    std::fs::read_to_string(zenoh_home().join(WILDCARD_UPDATES_FILENAME)).unwrap();
-                let saved_wc: HashMap<OwnedKeyExpr, String> =
-                    serde_json::from_str(&saved_wc).unwrap();
-                let mut wildcard_updates = storage_service.wildcard_updates.write().await;
-                for (k, data) in saved_wc {
-                    wildcard_updates.insert(&k, construct_update(data));
-                }
-            }
         }
-
-        storage_service
     }
 
-    pub(crate) async fn start_storage_queryable_subscriber(self, mut rx: Receiver<StorageMessage>) {
+    pub(crate) async fn start_storage_queryable_subscriber(
+        self: Arc<Self>,
+        mut rx: Receiver<StorageMessage>,
+    ) {
         // start periodic GC event
         let t = Timer::default();
 
@@ -136,8 +121,8 @@ impl StorageService {
             gc_config.period,
             GarbageCollectionEvent {
                 config: gc_config,
-                tombstones: self.tombstones.clone(),
-                wildcard_updates: self.wildcard_updates.clone(),
+                wildcard_deletes: self.wildcard_deletes.clone(),
+                wildcard_puts: self.wildcard_puts.clone(),
                 latest_updates,
             },
         );
@@ -230,9 +215,30 @@ impl StorageService {
             }
         };
 
+        let mut action: Action = sample.kind().into();
         // if wildcard, update wildcard_updates
         if sample.key_expr().is_wild() {
-            self.register_wildcard_update(sample.clone()).await;
+            let sample_key_expr: OwnedKeyExpr = sample.key_expr().clone().into();
+            self.register_wildcard_update(
+                sample_key_expr.clone(),
+                sample.kind(),
+                *sample_timestamp,
+                sample.clone(),
+            )
+            .await;
+
+            action = match sample.kind() {
+                SampleKind::Put => Action::WildcardPut(sample_key_expr.clone()),
+                SampleKind::Delete => Action::WildcardDelete(sample_key_expr.clone()),
+            };
+
+            let event = Event::new(Some(sample_key_expr.clone()), *sample_timestamp, &action);
+
+            self.cache_latest
+                .latest_updates
+                .write()
+                .await
+                .insert(event.log_key(), event);
         }
 
         let matching_keys = if sample.key_expr().is_wild() {
@@ -249,32 +255,29 @@ impl StorageService {
         let prefix = self.configuration.strip_prefix.as_ref();
 
         for k in matching_keys {
-            if self.is_deleted(&k, sample_timestamp).await {
-                tracing::trace!("Skipping Sample < {} > deleted later on", k);
-                continue;
-            }
-
             // there might be the case that the actual update was outdated due to a wild card
             // update, but not stored yet in the storage. get the relevant wild
             // card entry and use that value and timestamp to update the storage
-            let sample_to_store: Sample =
-                if let Some(update) = self.overriding_wild_update(&k, sample_timestamp).await {
-                    match update.kind {
-                        SampleKind::Put => {
-                            SampleBuilder::put(k.clone(), update.data.value.payload().clone())
-                                .encoding(update.data.value.encoding().clone())
-                                .timestamp(update.data.timestamp)
-                                .into()
-                        }
-                        SampleKind::Delete => SampleBuilder::delete(k.clone())
+            let sample_to_store: Sample = if let Some((_, update)) = self
+                .overriding_wild_update(&k, sample_timestamp, &None, &sample.kind().into())
+                .await
+            {
+                match update.kind {
+                    SampleKind::Put => {
+                        SampleBuilder::put(k.clone(), update.data.value.payload().clone())
+                            .encoding(update.data.value.encoding().clone())
                             .timestamp(update.data.timestamp)
-                            .into(),
+                            .into()
                     }
-                } else {
-                    SampleBuilder::from(sample.clone())
-                        .keyexpr(k.clone())
-                        .into()
-                };
+                    SampleKind::Delete => SampleBuilder::delete(k.clone())
+                        .timestamp(update.data.timestamp)
+                        .into(),
+                }
+            } else {
+                SampleBuilder::from(sample.clone())
+                    .keyexpr(k.clone())
+                    .into()
+            };
 
             // A Sample that is to be stored **must** have a Timestamp. In theory, the Sample
             // generated should have a Timestamp and, in theory, this check is
@@ -300,12 +303,10 @@ impl StorageService {
 
             // If the Storage was declared as only keeping the Latest value, we ensure that, for
             // each received Sample, it is indeed the Latest value that is processed.
+            let new_event = Event::new(stripped_key.clone(), sample_to_store_timestamp, &action);
             let mut cache_guard = None;
             if self.capability.history == History::Latest {
-                match self
-                    .guard_cache_if_latest(&stripped_key, &sample_to_store_timestamp)
-                    .await
-                {
+                match self.guard_cache_if_latest(&new_event).await {
                     Some(guard) => {
                         cache_guard = Some(guard);
                     }
@@ -331,8 +332,6 @@ impl StorageService {
                         .await
                 }
                 SampleKind::Delete => {
-                    // register a tombstone
-                    self.mark_tombstone(&k, sample_to_store_timestamp).await;
                     storage
                         .delete(stripped_key.clone(), sample_to_store_timestamp)
                         .await
@@ -347,10 +346,7 @@ impl StorageService {
                 }
                 Ok(_) => {
                     if let Some(mut cache_guard) = cache_guard {
-                        cache_guard.insert(
-                            stripped_key.clone(),
-                            Event::new(stripped_key, sample_to_store_timestamp, sample.kind()),
-                        );
+                        cache_guard.insert(new_event.log_key(), new_event);
                     }
                 }
                 Err(e) => {
@@ -364,109 +360,126 @@ impl StorageService {
         Ok(())
     }
 
-    async fn mark_tombstone(&self, key_expr: &OwnedKeyExpr, timestamp: Timestamp) {
-        // @TODO: change into a better store that does incremental writes
-        let mut tombstones = self.tombstones.write().await;
-        tombstones.insert(key_expr, timestamp);
-        if self.capability.persistence.eq(&Persistence::Durable) {
-            // flush to disk to make it durable
-            let mut serialized_data = HashMap::new();
-            for (k, ts) in tombstones.key_value_pairs() {
-                serialized_data.insert(k, *ts);
-            }
-            if let Err(e) = std::fs::write(
-                zenoh_home().join(TOMBSTONE_FILENAME),
-                serde_json::to_string_pretty(&serialized_data).unwrap(),
-            ) {
-                tracing::error!("Saving tombstones failed: {}", e);
-            }
-        }
-    }
-
-    async fn register_wildcard_update(&self, sample: Sample) {
-        // @TODO: change into a better store that does incremental writes
-        let key = sample.key_expr().clone();
-        let mut wildcards = self.wildcard_updates.write().await;
-        let timestamp = *sample.timestamp().unwrap();
-        wildcards.insert(
-            &key,
-            Update {
-                kind: sample.kind(),
-                data: StoredData {
-                    value: Value::from(sample),
-                    timestamp,
-                },
+    /// Registers a Wildcard Update, storing it in a dedicated in-memory structure and on disk if
+    /// the Storage persistence capability is set to `Durable`.
+    ///
+    /// The `key_expr` and `timestamp` cannot be extracted from the received Sample when aligning
+    /// and hence must be manually passed.
+    ///
+    /// # ⚠️ Cache with Replication
+    ///
+    /// It is the *responsibility of the caller* to insert a Wildcard Update event in the Cache. If
+    /// the Replication is enabled, depending on where this method is called, the event should
+    /// either be inserted in the Cache (to be later added in the Replication Log) or in the
+    /// Replication Log.
+    pub(crate) async fn register_wildcard_update(
+        &self,
+        key_expr: OwnedKeyExpr,
+        kind: SampleKind,
+        timestamp: Timestamp,
+        value: impl Into<Value>,
+    ) {
+        let update = Update {
+            kind,
+            data: StoredData {
+                value: value.into(),
+                timestamp,
             },
-        );
-        if self.capability.persistence.eq(&Persistence::Durable) {
-            // flush to disk to make it durable
-            let mut serialized_data = HashMap::new();
-            for (k, update) in wildcards.key_value_pairs() {
-                serialized_data.insert(k, serialize_update(update));
+        };
+
+        match kind {
+            SampleKind::Put => {
+                self.wildcard_puts.write().await.insert(&key_expr, update);
             }
-            if let Err(e) = std::fs::write(
-                zenoh_home().join(WILDCARD_UPDATES_FILENAME),
-                serde_json::to_string_pretty(&serialized_data).unwrap(),
-            ) {
-                tracing::error!("Saving wildcard updates failed: {}", e);
+            SampleKind::Delete => {
+                self.wildcard_deletes
+                    .write()
+                    .await
+                    .insert(&key_expr, update);
             }
         }
     }
 
-    async fn is_deleted(&self, key_expr: &OwnedKeyExpr, timestamp: &Timestamp) -> bool {
-        // check tombstones to see if it is deleted in the future
-        let tombstones = self.tombstones.read().await;
-        let weight = tombstones.weight_at(key_expr);
-        weight.is_some() && weight.unwrap() > timestamp
-    }
-
-    async fn overriding_wild_update(
+    /// Returns an [Update] if the provided key expression is overridden by a Wildcard Update.
+    pub(crate) async fn overriding_wild_update(
         &self,
         key_expr: &OwnedKeyExpr,
         timestamp: &Timestamp,
-    ) -> Option<Update> {
-        // check wild card store for any futuristic update
-        let wildcards = self.wildcard_updates.read().await;
-        let mut ts = timestamp;
-        let mut update = None;
+        timestamp_last_non_wildcard_update: &Option<Timestamp>,
+        action: &Action,
+    ) -> Option<(OwnedKeyExpr, Update)> {
+        // First, check for a delete *if and only if the action is not a Wildcard Put*: if there are
+        // Wildcard Delete that match this key expression, we want to keep the lowest delete
+        // (i.e. the first that applies) as a Delete does not override another Delete -- except if
+        // it's a Wildcard Delete that overrides another Wildcard Delete but that's another story.
+        if matches!(
+            action,
+            Action::Put | Action::Delete | Action::WildcardDelete(_)
+        ) {
+            let mut wildcard_ke = None;
+            let wildcard_deletes_guard = self.wildcard_deletes.read().await;
+            let lowest_event_ts = timestamp_last_non_wildcard_update.unwrap_or(*timestamp);
+            let mut lowest_wildcard_delete_ts = None;
 
-        let prefix = self.configuration.strip_prefix.as_ref();
-
-        for node in wildcards.intersecting_keys(key_expr) {
-            let weight = wildcards.weight_at(&node);
-            if weight.is_some() && weight.unwrap().data.timestamp > *ts {
-                // if the key matches a wild card update, check whether it was saved in storage
-                // remember that wild card updates change only existing keys
-                let stripped_key = match crate::strip_prefix(prefix, &key_expr.into()) {
-                    Ok(stripped) => stripped,
-                    Err(e) => {
-                        tracing::error!("{}", e);
-                        break;
-                    }
-                };
-                let mut storage = self.storage.lock().await;
-                match storage.get(stripped_key, "").await {
-                    Ok(stored_data) => {
-                        for entry in stored_data {
-                            if entry.timestamp > *ts {
-                                return None;
+            for wildcard_delete_ke in wildcard_deletes_guard.intersecting_keys(key_expr) {
+                if let Some(wildcard_delete_update) =
+                    wildcard_deletes_guard.weight_at(&wildcard_delete_ke)
+                {
+                    // Wildcard Delete with a greater timestamp than the lowest timestamp of the
+                    // Event are the only one that should apply.
+                    if wildcard_delete_update.data.timestamp >= lowest_event_ts {
+                        match lowest_wildcard_delete_ts {
+                            None => {
+                                lowest_wildcard_delete_ts =
+                                    Some(*wildcard_delete_update.timestamp());
+                                wildcard_ke = Some(wildcard_delete_ke);
+                            }
+                            Some(current_lowest_ts) => {
+                                if current_lowest_ts > wildcard_delete_update.data.timestamp {
+                                    lowest_wildcard_delete_ts =
+                                        Some(*wildcard_delete_update.timestamp());
+                                    wildcard_ke = Some(wildcard_delete_ke);
+                                }
                             }
                         }
                     }
-                    Err(e) => {
-                        tracing::warn!(
-                            "Storage '{}' raised an error fetching a query on key {} : {}",
-                            self.name,
-                            key_expr,
-                            e
-                        );
-                        ts = &weight.unwrap().data.timestamp;
-                        update = Some(weight.unwrap().clone());
-                    }
+                }
+            }
+
+            if let Some(wildcard_delete_ke) = wildcard_ke {
+                if let Some(wildcard_delete_update) =
+                    wildcard_deletes_guard.weight_at(&wildcard_delete_ke)
+                {
+                    return Some((wildcard_delete_ke, wildcard_delete_update.clone()));
                 }
             }
         }
-        update
+
+        // A Wildcard Put can only override a Put or another Wildcard Put. If several match, this
+        // time we want to keep the Update with the latest timestamp.
+        if matches!(action, Action::Put | Action::WildcardPut(_)) {
+            let mut wildcard_ke = None;
+
+            let wildcards = self.wildcard_puts.read().await;
+            let mut latest_wildcard_ts = *timestamp;
+
+            for node in wildcards.intersecting_keys(key_expr) {
+                if let Some(wildcard_update) = wildcards.weight_at(&node) {
+                    if wildcard_update.data.timestamp >= latest_wildcard_ts {
+                        latest_wildcard_ts = wildcard_update.data.timestamp;
+                        wildcard_ke = Some(node);
+                    }
+                }
+            }
+
+            if let Some(wildcard_ke) = wildcard_ke {
+                if let Some(wildcard_update) = wildcards.weight_at(&wildcard_ke) {
+                    return Some((wildcard_ke, wildcard_update.clone()));
+                }
+            }
+        }
+
+        None
     }
 
     /// Returns a guard over the cache if the provided [Timestamp] is more recent than what is kept
@@ -485,19 +498,18 @@ impl StorageService {
     /// end up in an inconsistent state (think two updates being processed at the same time).
     async fn guard_cache_if_latest(
         &self,
-        stripped_key: &Option<OwnedKeyExpr>,
-        received_ts: &Timestamp,
+        new_event: &Event,
     ) -> Option<RwLockWriteGuard<'_, LatestUpdates>> {
         let cache_guard = self.cache_latest.latest_updates.write().await;
-        if let Some(event) = cache_guard.get(stripped_key) {
-            if received_ts > event.timestamp() {
+        if let Some(event) = cache_guard.get(&new_event.log_key()) {
+            if new_event.timestamp > event.timestamp {
                 return Some(cache_guard);
             }
         }
 
         if let Some(replication_log) = &self.cache_latest.replication_log {
-            if let Some(event) = replication_log.read().await.lookup(stripped_key) {
-                if received_ts <= event.timestamp() {
+            if let Some(event) = replication_log.read().await.lookup(new_event) {
+                if new_event.timestamp <= event.timestamp {
                     return None;
                 }
             }
@@ -505,9 +517,9 @@ impl StorageService {
             let mut storage = self.storage.lock().await;
             // FIXME: An actual error from the underlying Storage cannot be distinguished from a
             //        missing entry.
-            if let Ok(stored_data) = storage.get(stripped_key.clone(), "").await {
+            if let Ok(stored_data) = storage.get(new_event.stripped_key.clone(), "").await {
                 for data in stored_data {
-                    if data.timestamp > *received_ts {
+                    if data.timestamp > new_event.timestamp {
                         return None;
                     }
                 }
@@ -632,46 +644,11 @@ impl StorageService {
     }
 }
 
-fn serialize_update(update: &Update) -> String {
-    let Update {
-        kind,
-        data: StoredData { value, timestamp },
-    } = update;
-    let zbuf: ZBuf = value.payload().clone().into();
-
-    let result = (
-        kind.to_string(),
-        timestamp.to_string(),
-        value.encoding().to_string(),
-        zbuf.slices().collect::<Vec<&[u8]>>(),
-    );
-    serde_json::to_string_pretty(&result).unwrap()
-}
-
-fn construct_update(data: String) -> Update {
-    let result: (String, String, String, Vec<&[u8]>) = serde_json::from_str(&data).unwrap(); // @TODO: remove the unwrap()
-    let mut payload = ZBuf::default();
-    for slice in result.3 {
-        payload.push_zslice(slice.to_vec().into());
-    }
-    let value = Value::new(payload, result.2);
-    let data = StoredData {
-        value,
-        timestamp: Timestamp::from_str(&result.1).unwrap(), // @TODO: remove the unwrap()
-    };
-    let kind = if result.0.eq(&(SampleKind::Put).to_string()) {
-        SampleKind::Put
-    } else {
-        SampleKind::Delete
-    };
-    Update { kind, data }
-}
-
 // Periodic event cleaning-up data info for old metadata
 struct GarbageCollectionEvent {
     config: GarbageCollectionConfig,
-    tombstones: Arc<RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>>,
-    wildcard_updates: Arc<RwLock<KeBoxTree<Update, UnknownWildness, KeyedSetProvider>>>,
+    wildcard_deletes: Arc<RwLock<KeBoxTree<Update, UnknownWildness, KeyedSetProvider>>>,
+    wildcard_puts: Arc<RwLock<KeBoxTree<Update, UnknownWildness, KeyedSetProvider>>>,
     latest_updates: Option<Arc<RwLock<LatestUpdates>>>,
 }
 
@@ -683,22 +660,11 @@ impl Timed for GarbageCollectionEvent {
             - NTP64::from(self.config.lifespan);
 
         // Get lock on fields
-        let mut tombstones = self.tombstones.write().await;
-        let mut wildcard_updates = self.wildcard_updates.write().await;
+        let mut wildcard_deletes_guard = self.wildcard_deletes.write().await;
+        let mut wildcard_updates_guard = self.wildcard_puts.write().await;
 
         let mut to_be_removed = HashSet::new();
-        for (k, ts) in tombstones.key_value_pairs() {
-            if ts.get_time() < &time_limit {
-                // mark key to be removed
-                to_be_removed.insert(k);
-            }
-        }
-        for k in to_be_removed {
-            tombstones.remove(&k);
-        }
-
-        let mut to_be_removed = HashSet::new();
-        for (k, update) in wildcard_updates.key_value_pairs() {
+        for (k, update) in wildcard_deletes_guard.key_value_pairs() {
             let ts = update.data.timestamp;
             if ts.get_time() < &time_limit {
                 // mark key to be removed
@@ -706,7 +672,19 @@ impl Timed for GarbageCollectionEvent {
             }
         }
         for k in to_be_removed {
-            wildcard_updates.remove(&k);
+            wildcard_deletes_guard.remove(&k);
+        }
+
+        let mut to_be_removed = HashSet::new();
+        for (k, update) in wildcard_updates_guard.key_value_pairs() {
+            let ts = update.data.timestamp;
+            if ts.get_time() < &time_limit {
+                // mark key to be removed
+                to_be_removed.insert(k);
+            }
+        }
+        for k in to_be_removed {
+            wildcard_updates_guard.remove(&k);
         }
 
         if let Some(latest_updates) = &self.latest_updates {

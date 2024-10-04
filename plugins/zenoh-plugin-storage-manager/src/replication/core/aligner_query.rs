@@ -15,14 +15,14 @@
 use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
-use zenoh::{bytes::ZBytes, internal::Value, query::Query, sample::SampleKind};
+use zenoh::{bytes::ZBytes, internal::Value, key_expr::keyexpr_tree::IKeyExprTree, query::Query};
 
 use super::aligner_reply::AlignmentReply;
 use crate::replication::{
     classification::{IntervalIdx, SubIntervalIdx},
     core::Replication,
     digest::DigestDiff,
-    log::EventMetadata,
+    log::{Action, EventMetadata},
 };
 
 /// The `AlignmentQuery` enumeration represents the information requested by a Replica to align
@@ -271,54 +271,70 @@ impl Replication {
 
     /// Replies to the [Query] with the [EventMetadata] and [Value] identified as missing.
     ///
-    /// This method will fetch the [StoredData] from the Storage.
+    /// Depending on the associated action, this method will fetch the [Value] either from the
+    /// Storage or from the wildcard updates.
     pub(crate) async fn reply_event_retrieval(
         &self,
         query: &Query,
         event_to_retrieve: EventMetadata,
     ) {
-        let mut value = None;
+        let value = match &event_to_retrieve.action {
+            // For a Delete or WildcardDelete there is no associated `Value`.
+            Action::Delete | Action::WildcardDelete(_) => None,
+            // For a Put we need to retrieve the `Value` in the Storage.
+            Action::Put => {
+                let stored_data = {
+                    let mut storage = self.storage_service.storage.lock().await;
+                    match storage
+                        .get(event_to_retrieve.stripped_key.clone(), "")
+                        .await
+                    {
+                        Ok(stored_data) => stored_data,
+                        Err(e) => {
+                            tracing::error!(
+                                "Failed to retrieve data associated to key < {:?} >: {e:?}",
+                                event_to_retrieve.key_expr()
+                            );
+                            return;
+                        }
+                    }
+                };
 
-        if event_to_retrieve.action == SampleKind::Put {
-            let stored_data = {
-                let mut storage = self.storage.lock().await;
-                match storage
-                    .get(event_to_retrieve.stripped_key.clone(), "")
-                    .await
-                {
-                    Ok(stored_data) => stored_data,
-                    Err(e) => {
-                        tracing::error!(
-                            "Failed to retrieve data associated to key < {:?} >: {e:?}",
-                            event_to_retrieve.key_expr()
+                let requested_data = stored_data
+                    .into_iter()
+                    .find(|data| data.timestamp == *event_to_retrieve.timestamp());
+                match requested_data {
+                    Some(data) => Some(data.value),
+                    None => {
+                        // NOTE: This is not necessarily an error. There is a possibility that the
+                        //       data associated with this specific key was updated between the time
+                        //       the [AlignmentQuery] was sent and when it is processed.
+                        //
+                        //       Hence, at the time it was "valid" but it no longer is.
+                        tracing::debug!(
+                            "Found no data in the Storage associated to key < {:?} > with a \
+                             Timestamp equal to: {}",
+                            event_to_retrieve.key_expr(),
+                            event_to_retrieve.timestamp()
                         );
                         return;
                     }
                 }
-            };
+            }
+            // For a WildcardPut we need to retrieve the `Value` in the `StorageService`.
+            Action::WildcardPut(wildcard_ke) => {
+                let wildcard_puts_guard = self.storage_service.wildcard_puts.read().await;
 
-            let requested_data = stored_data
-                .into_iter()
-                .find(|data| data.timestamp == *event_to_retrieve.timestamp());
-            match requested_data {
-                Some(data) => {
-                    value = Some(data.value);
-                }
-                None => {
-                    // NOTE: This is not necessarily an error. There is a possibility that the data
-                    //       associated with this specific key was updated between the time the
-                    //       [AlignmentQuery] was sent and when it is processed.
-                    //
-                    //       Hence, at the time it was "valid" but it no longer is.
-                    tracing::debug!(
-                        "Found no data in the Storage associated to key < {:?} > with a Timestamp \
-                         equal to: {}",
-                        event_to_retrieve.key_expr(),
-                        event_to_retrieve.timestamp()
+                if let Some(update) = wildcard_puts_guard.weight_at(wildcard_ke) {
+                    Some(update.value().clone())
+                } else {
+                    tracing::error!(
+                        "Ignoring Wildcard Update < {wildcard_ke} >: found no associated `Update`."
                     );
+                    return;
                 }
             }
-        }
+        };
 
         reply_to_query(query, AlignmentReply::Retrieval(event_to_retrieve), value).await;
     }
