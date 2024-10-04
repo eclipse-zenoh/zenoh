@@ -121,7 +121,7 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
 
         match (c.connect_certificate(), c.connect_certificate_base64()) {
             (Some(_), Some(_)) => {
-                bail!("Only one between 'client_certificate' and 'client_certificate_base64' can be present!")
+                bail!("Only one between 'connect_certificate' and 'connect_certificate_base64' can be present!")
             }
             (Some(client_certificate), None) => {
                 ps.push((TLS_CONNECT_CERTIFICATE_FILE, client_certificate));
