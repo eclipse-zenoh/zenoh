@@ -215,14 +215,41 @@ impl LogLatest {
     }
 
     /// Lookup the provided key expression and, if found, return its associated [Event].
-    pub fn lookup(&self, stripped_key: &Option<OwnedKeyExpr>) -> Option<&Event> {
+    pub fn search_more_recent_event(
+        &self,
+        stripped_key: &Option<OwnedKeyExpr>,
+        timestamp: &Timestamp,
+    ) -> Option<&Event> {
         if !self.bloom_filter_event.check(stripped_key) {
             return None;
         }
 
-        for interval in self.intervals.values().rev() {
-            if let Some(event) = interval.lookup(stripped_key) {
-                return Some(event);
+        // NOTE: If the call to `get_time_classification` returns an error it either means that the
+        // Timestamp is far in the future or the clock of the Host is in a weird state. In both
+        // cases, there is nothing we can do.
+        let Ok((start_interval_idx, start_sub_interval_idx)) =
+            self.configuration.get_time_classification(timestamp)
+        else {
+            return None;
+        };
+
+        for (interval_idx, interval) in self
+            .intervals
+            .iter()
+            .filter(|(&idx, _)| idx >= start_interval_idx)
+        {
+            let search_result = if interval_idx == &start_interval_idx {
+                interval.search_more_recent_event(
+                    stripped_key,
+                    timestamp,
+                    Some(start_sub_interval_idx),
+                )
+            } else {
+                interval.search_more_recent_event(stripped_key, timestamp, None)
+            };
+
+            if search_result.is_some() {
+                return search_result;
             }
         }
 

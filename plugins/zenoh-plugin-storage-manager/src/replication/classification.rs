@@ -137,10 +137,26 @@ impl Interval {
     }
 
     /// Lookup the provided key expression and return, if found, its associated [Event].
-    pub(crate) fn lookup(&self, stripped_key: &Option<OwnedKeyExpr>) -> Option<&Event> {
-        for sub_interval in self.sub_intervals.values() {
-            if let Some(event) = sub_interval.events.get(stripped_key) {
-                return Some(event);
+    pub(crate) fn search_more_recent_event(
+        &self,
+        stripped_key: &Option<OwnedKeyExpr>,
+        timestamp: &Timestamp,
+        start_sub_interval_idx: Option<SubIntervalIdx>,
+    ) -> Option<&Event> {
+        let sub_intervals = if let Some(start_sub_interval_idx) = start_sub_interval_idx {
+            self.sub_intervals
+                .iter()
+                .filter(|(&sub_idx, _)| sub_idx >= start_sub_interval_idx)
+                .map(|(_, sub_interval)| sub_interval)
+                .collect::<Vec<_>>()
+        } else {
+            self.sub_intervals.values().collect::<Vec<_>>()
+        };
+
+        for sub_interval in sub_intervals {
+            let search_result = sub_interval.events.get(stripped_key);
+            if search_result.is_some() {
+                return search_result;
             }
         }
 
@@ -291,6 +307,11 @@ impl SubInterval {
         }
 
         true
+    }
+
+    /// Returns a reference to an [Event] of a [SubInterval] for the given stripped key expression.
+    pub(crate) fn get(&self, key: &Option<OwnedKeyExpr>) -> Option<&Event> {
+        self.events.get(key)
     }
 
     /// Returns the [Fingerprint] of this `SubInterval`.

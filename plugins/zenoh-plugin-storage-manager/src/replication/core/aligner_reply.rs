@@ -243,8 +243,8 @@ impl Replication {
         match &replica_event.action {
             SampleKind::Put => {
                 let replication_log_guard = self.replication_log.read().await;
-                if let Some(latest_event) =
-                    replication_log_guard.lookup(&replica_event.stripped_key)
+                if let Some(latest_event) = replication_log_guard
+                    .search_more_recent_event(&replica_event.stripped_key, &replica_event.timestamp)
                 {
                     if latest_event.timestamp >= replica_event.timestamp {
                         return None;
