@@ -201,11 +201,7 @@ impl TlsServerConfig {
 
         let sc = if tls_server_client_auth {
             let root_cert_store = load_trust_anchors(config)?.map_or_else(
-                || {
-                    Err(zerror!(
-                        "Missing root certificates while mTLS is enabled."
-                    ))
-                },
+                || Err(zerror!("Missing root certificates while mTLS is enabled.")),
                 Ok,
             )?;
             let client_auth = WebPkiClientVerifier::builder(root_cert_store.into()).build()?;
