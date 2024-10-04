@@ -81,6 +81,8 @@ zconfigurable! {
     // Amount of time in microseconds to throttle the accept loop upon an error.
     // Default set to 100 ms.
     static ref TLS_ACCEPT_THROTTLE_TIME: u64 = 100_000;
+    /// The time duration in milliseconds to wait for the TLS handshake to complete.
+    static ref TLS_HANDSHAKE_TIMEOUT_MS: u64 = 10_000;
 }
 
 pub mod config {

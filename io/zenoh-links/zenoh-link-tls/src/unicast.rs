@@ -35,7 +35,8 @@ use zenoh_result::{zerror, ZResult};
 
 use crate::{
     utils::{get_tls_addr, get_tls_host, get_tls_server_name, TlsClientConfig, TlsServerConfig},
-    TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
+    TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU, TLS_HANDSHAKE_TIMEOUT_MS, TLS_LINGER_TIMEOUT,
+    TLS_LOCATOR_PREFIX,
 };
 
 #[derive(Default, Debug, PartialEq, Eq, Hash)]
@@ -436,9 +437,18 @@ async fn accept_task(
                         };
 
                         // Accept the TLS connection
-                        let tls_stream = match acceptor.accept(tcp_stream).await {
-                            Ok(stream) => TlsStream::Server(stream),
+                        let tls_stream = match tokio::time::timeout(
+                            dbg!(Duration::from_millis(*TLS_HANDSHAKE_TIMEOUT_MS)),
+                            acceptor.accept(tcp_stream),
+                        )
+                        .await
+                        {
+                            Ok(Ok(stream)) => TlsStream::Server(stream),
                             Err(e) => {
+                                tracing::warn!("TLS handshake timed out: {e}");
+                                continue;
+                            }
+                            Ok(Err(e)) => {
                                 let e = format!("Can not accept TLS connection: {e}");
                                 tracing::warn!("{}", e);
                                 continue;
