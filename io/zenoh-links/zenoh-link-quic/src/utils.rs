@@ -64,7 +64,7 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
 
         match (c.listen_private_key(), c.listen_private_key_base64()) {
             (Some(_), Some(_)) => {
-                bail!("Only one between 'server_private_key' and 'server_private_key_base64' can be present!")
+                bail!("Only one between 'listen_private_key' and 'listen_private_key_base64' can be present!")
             }
             (Some(server_private_key), None) => {
                 ps.push((TLS_LISTEN_PRIVATE_KEY_FILE, server_private_key));
@@ -80,7 +80,7 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
 
         match (c.listen_certificate(), c.listen_certificate_base64()) {
             (Some(_), Some(_)) => {
-                bail!("Only one between 'server_certificate' and 'server_certificate_base64' can be present!")
+                bail!("Only one between 'listen_certificate' and 'listen_certificate_base64' can be present!")
             }
             (Some(server_certificate), None) => {
                 ps.push((TLS_LISTEN_CERTIFICATE_FILE, server_certificate));
@@ -103,7 +103,7 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
 
         match (c.connect_private_key(), c.connect_private_key_base64()) {
             (Some(_), Some(_)) => {
-                bail!("Only one between 'client_private_key' and 'client_private_key_base64' can be present!")
+                bail!("Only one between 'connect_private_key' and 'connect_private_key_base64' can be present!")
             }
             (Some(client_private_key), None) => {
                 ps.push((TLS_CONNECT_PRIVATE_KEY_FILE, client_private_key));
@@ -154,7 +154,7 @@ impl TlsServerConfig {
         let tls_server_client_auth: bool = match config.get(TLS_ENABLE_MTLS) {
             Some(s) => s
                 .parse()
-                .map_err(|_| zerror!("Unknown client auth argument: {}", s))?,
+                .map_err(|_| zerror!("Unknown enable mTLS argument: {}", s))?,
             None => false,
         };
         let tls_server_private_key = TlsServerConfig::load_tls_private_key(config).await?;
@@ -203,7 +203,7 @@ impl TlsServerConfig {
             let root_cert_store = load_trust_anchors(config)?.map_or_else(
                 || {
                     Err(zerror!(
-                        "Missing root certificates while client authentication is enabled."
+                        "Missing root certificates while mTLS is enabled."
                     ))
                 },
                 Ok,
@@ -252,7 +252,7 @@ impl TlsClientConfig {
         let tls_client_server_auth: bool = match config.get(TLS_ENABLE_MTLS) {
             Some(s) => s
                 .parse()
-                .map_err(|_| zerror!("Unknown client auth argument: {}", s))?,
+                .map_err(|_| zerror!("Unknown enable mTLS argument: {}", s))?,
             None => false,
         };
 
