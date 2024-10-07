@@ -90,10 +90,8 @@ impl<T> FifoChannelHandler<T> {
 
     /// Wait for an incoming value from the channel associated with this receiver, returning an
     /// error if all senders have been dropped or the timeout has expired.
-    pub fn recv_timeout(&self, dur: Duration) -> ZResult<T> {
-        self.0
-            .recv_deadline(Instant::now().checked_add(dur).unwrap())
-            .map_err(Into::into)
+    pub fn recv_timeout(&self, duration: Duration) -> ZResult<T> {
+        self.0.recv_timeout(duration).map_err(Into::into)
     }
 
     /// Create a blocking iterator over the values received on the channel that finishes iteration
