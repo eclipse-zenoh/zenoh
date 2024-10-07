@@ -15,8 +15,8 @@ use std::time::Duration;
 
 use clap::Parser;
 use zenoh::{
+    config::Config,
     query::{QueryTarget, Selector},
-    Config,
 };
 use zenoh_examples::CommonArgs;
 

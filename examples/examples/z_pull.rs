@@ -14,7 +14,7 @@
 use std::time::Duration;
 
 use clap::Parser;
-use zenoh::{handlers::RingChannel, key_expr::KeyExpr, Config};
+use zenoh::{config::Config, handlers::RingChannel, key_expr::KeyExpr};
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]

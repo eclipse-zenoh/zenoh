@@ -20,7 +20,8 @@ use std::{str::FromStr, thread::sleep};
 
 use tokio::runtime::Runtime;
 use zenoh::{
-    internal::zasync_executor_init, query::Reply, sample::Sample, time::Timestamp, Config, Session,
+    config::Config, internal::zasync_executor_init, query::Reply, sample::Sample, time::Timestamp,
+    Session,
 };
 use zenoh_plugin_trait::Plugin;
 

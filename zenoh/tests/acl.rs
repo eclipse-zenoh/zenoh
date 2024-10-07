@@ -21,7 +21,11 @@ mod test {
     };
 
     use tokio::runtime::Handle;
-    use zenoh::{config::WhatAmI, sample::SampleKind, Config, Session};
+    use zenoh::{
+        config::{Config, WhatAmI},
+        sample::SampleKind,
+        Session,
+    };
     use zenoh_config::{EndPoint, ModeDependentValue};
     use zenoh_core::{zlock, ztimeout};
 
@@ -75,7 +79,7 @@ mod test {
 
     async fn get_client_sessions(port: u16) -> (Session, Session) {
         println!("Opening client sessions");
-        let mut config = zenoh::Config::default();
+        let mut config = zenoh::config::default();
         config.set_mode(Some(WhatAmI::Client)).unwrap();
         config
             .connect
@@ -88,7 +92,7 @@ mod test {
 
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
 
-        let mut config = zenoh::Config::default();
+        let mut config = zenoh::config::default();
         config.set_mode(Some(WhatAmI::Client)).unwrap();
         config
             .connect

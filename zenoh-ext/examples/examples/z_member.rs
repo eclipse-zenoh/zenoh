@@ -14,7 +14,7 @@
 use std::{sync::Arc, time::Duration};
 
 use futures::StreamExt;
-use zenoh::Config;
+use zenoh::config::Config;
 use zenoh_ext::group::*;
 
 #[tokio::main]

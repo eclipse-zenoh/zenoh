@@ -39,7 +39,7 @@ async fn time_open(
     lowlatency: bool,
 ) {
     /* [ROUTER] */
-    let mut router_config = zenoh::Config::default();
+    let mut router_config = zenoh::config::default();
     router_config.set_mode(Some(WhatAmI::Router)).unwrap();
     router_config
         .listen
@@ -69,7 +69,7 @@ async fn time_open(
     );
 
     /* [APP] */
-    let mut app_config = zenoh::Config::default();
+    let mut app_config = zenoh::config::default();
     app_config.set_mode(Some(connect_mode)).unwrap();
     app_config
         .connect

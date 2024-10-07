@@ -14,7 +14,7 @@
 
 #![cfg(feature = "internal_config")]
 
-use zenoh::{Config, Wait};
+use zenoh::{config::Config, Wait};
 use zenoh_config::{ConnectionRetryConf, EndPoint, ModeDependent};
 
 #[test]

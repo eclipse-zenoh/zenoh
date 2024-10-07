@@ -14,7 +14,7 @@
 use std::time::Duration;
 
 use clap::Parser;
-use zenoh::{bytes::Encoding, key_expr::KeyExpr, Config};
+use zenoh::{bytes::Encoding, config::Config, key_expr::KeyExpr};
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]

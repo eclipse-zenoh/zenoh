@@ -2,7 +2,7 @@
 //! See the code in ../examples/
 //! Check ../README.md for usage.
 //!
-use zenoh::{config::WhatAmI, Config};
+use zenoh::config::{Config, WhatAmI};
 
 #[derive(clap::ValueEnum, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Wai {

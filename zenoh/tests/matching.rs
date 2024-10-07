@@ -25,7 +25,7 @@ const RECV_TIMEOUT: Duration = Duration::from_secs(1);
 
 async fn create_session_pair(locator: &str) -> (Session, Session) {
     let config1 = {
-        let mut config = zenoh::Config::default();
+        let mut config = zenoh::config::default();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
             .listen
@@ -34,7 +34,7 @@ async fn create_session_pair(locator: &str) -> (Session, Session) {
             .unwrap();
         config
     };
-    let mut config2 = zenoh::Config::default();
+    let mut config2 = zenoh::config::default();
     config2.set_mode(Some(WhatAmI::Client)).unwrap();
     config2
         .connect
@@ -102,8 +102,8 @@ async fn zenoh_matching_status_any() -> ZResult<()> {
 async fn zenoh_matching_status_remote() -> ZResult<()> {
     zenoh_util::init_log_from_env_or("error");
 
-    let session1 = ztimeout!(zenoh::open(zenoh::Config::default())).unwrap();
-    let session2 = ztimeout!(zenoh::open(zenoh::Config::default())).unwrap();
+    let session1 = ztimeout!(zenoh::open(zenoh::config::default())).unwrap();
+    let session2 = ztimeout!(zenoh::open(zenoh::config::default())).unwrap();
 
     let publisher1 = ztimeout!(session1
         .declare_publisher("zenoh_matching_status_remote_test")
@@ -157,8 +157,8 @@ async fn zenoh_matching_status_remote() -> ZResult<()> {
 async fn zenoh_matching_status_local() -> ZResult<()> {
     zenoh_util::init_log_from_env_or("error");
 
-    let session1 = ztimeout!(zenoh::open(zenoh::Config::default())).unwrap();
-    let session2 = ztimeout!(zenoh::open(zenoh::Config::default())).unwrap();
+    let session1 = ztimeout!(zenoh::open(zenoh::config::default())).unwrap();
+    let session2 = ztimeout!(zenoh::open(zenoh::config::default())).unwrap();
 
     let publisher1 = ztimeout!(session1
         .declare_publisher("zenoh_matching_status_local_test")

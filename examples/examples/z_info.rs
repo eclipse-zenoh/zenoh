@@ -43,7 +43,7 @@ struct Args {
     common: CommonArgs,
 }
 
-fn parse_args() -> zenoh::Config {
+fn parse_args() -> zenoh::config::Config {
     let args = Args::parse();
     args.common.into()
 }

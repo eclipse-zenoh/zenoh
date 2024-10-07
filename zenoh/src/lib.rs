@@ -119,7 +119,6 @@ pub use zenoh_util::{init_log_from_env_or, try_init_log_from_env};
 
 #[doc(inline)]
 pub use crate::{
-    config::Config,
     scouting::scout,
     session::{open, Session},
 };

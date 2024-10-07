@@ -28,8 +28,8 @@ use zenoh_task::TerminatableTask;
 
 use crate::{
     api::handlers::{locked, Callback, DefaultHandler, IntoHandler},
+    config::Config,
     net::runtime::{orchestrator::Loop, Runtime},
-    Config,
 };
 
 /// A builder for initializing a [`Scout`].

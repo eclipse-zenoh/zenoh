@@ -17,7 +17,10 @@ use git_version::git_version;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 #[cfg(feature = "loki")]
 use url::Url;
-use zenoh::{config::WhatAmI, Config, Result};
+use zenoh::{
+    config::{Config, WhatAmI},
+    Result,
+};
 use zenoh_config::{EndPoint, ModeDependentValue, PermissionsConf};
 use zenoh_util::LibSearchDirs;
 

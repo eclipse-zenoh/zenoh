@@ -18,9 +18,9 @@ use std::collections::HashMap;
 use clap::Parser;
 use futures::select;
 use zenoh::{
+    config::Config,
     key_expr::{keyexpr, KeyExpr},
     sample::{Sample, SampleKind},
-    Config,
 };
 use zenoh_examples::CommonArgs;
 

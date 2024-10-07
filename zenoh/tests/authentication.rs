@@ -24,7 +24,10 @@ mod test {
 
     use once_cell::sync::Lazy;
     use tokio::runtime::Handle;
-    use zenoh::{config::WhatAmI, Config, Session};
+    use zenoh::{
+        config::{Config, WhatAmI},
+        Session,
+    };
     use zenoh_config::{EndPoint, ModeDependentValue};
     use zenoh_core::{zlock, ztimeout};
 
@@ -270,7 +273,7 @@ client2name:client2passwd";
 
     async fn get_basic_router_config_tls(port: u16, lowlatency: bool) -> Config {
         let cert_path = TESTFILES_PATH.to_string_lossy();
-        let mut config = zenoh::Config::default();
+        let mut config = zenoh::config::default();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
         config
             .listen
@@ -323,7 +326,7 @@ client2name:client2passwd";
     }
     async fn get_basic_router_config_quic(port: u16) -> Config {
         let cert_path = TESTFILES_PATH.to_string_lossy();
-        let mut config = zenoh::Config::default();
+        let mut config = zenoh::config::default();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
         config
             .listen
@@ -369,7 +372,7 @@ client2name:client2passwd";
     }
 
     async fn get_basic_router_config_usrpswd(port: u16) -> Config {
-        let mut config = zenoh::Config::default();
+        let mut config = zenoh::config::default();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
         config
             .listen
@@ -408,7 +411,7 @@ client2name:client2passwd";
 
     async fn get_basic_router_config_quic_usrpswd(port: u16) -> Config {
         let cert_path = TESTFILES_PATH.to_string_lossy();
-        let mut config = zenoh::Config::default();
+        let mut config = zenoh::config::default();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
         config
             .listen
@@ -474,7 +477,7 @@ client2name:client2passwd";
     async fn get_client_sessions_tls(port: u16, lowlatency: bool) -> (Session, Session) {
         let cert_path = TESTFILES_PATH.to_string_lossy();
         println!("Opening client sessions");
-        let mut config = zenoh::Config::default();
+        let mut config = zenoh::config::default();
         config.set_mode(Some(WhatAmI::Client)).unwrap();
         config
             .connect
@@ -527,7 +530,7 @@ client2name:client2passwd";
             .unwrap();
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
 
-        let mut config = zenoh::Config::default();
+        let mut config = zenoh::config::default();
         config.set_mode(Some(WhatAmI::Client)).unwrap();
         config
             .connect
@@ -585,7 +588,7 @@ client2name:client2passwd";
     async fn get_client_sessions_quic(port: u16) -> (Session, Session) {
         let cert_path = TESTFILES_PATH.to_string_lossy();
         println!("Opening client sessions");
-        let mut config = zenoh::Config::default();
+        let mut config = zenoh::config::default();
         config.set_mode(Some(WhatAmI::Client)).unwrap();
         config
             .connect
@@ -630,7 +633,7 @@ client2name:client2passwd";
             .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
             .unwrap();
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
-        let mut config = zenoh::Config::default();
+        let mut config = zenoh::config::default();
         config.set_mode(Some(WhatAmI::Client)).unwrap();
         config
             .connect
@@ -680,7 +683,7 @@ client2name:client2passwd";
 
     async fn get_client_sessions_usrpswd(port: u16) -> (Session, Session) {
         println!("Opening client sessions");
-        let mut config = zenoh::Config::default();
+        let mut config = zenoh::config::default();
         config.set_mode(Some(WhatAmI::Client)).unwrap();
         config
             .connect
@@ -704,7 +707,7 @@ client2name:client2passwd";
             )
             .unwrap();
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
-        let mut config = zenoh::Config::default();
+        let mut config = zenoh::config::default();
         config.set_mode(Some(WhatAmI::Client)).unwrap();
         config
             .connect
@@ -734,7 +737,7 @@ client2name:client2passwd";
     async fn get_client_sessions_quic_usrpswd(port: u16) -> (Session, Session) {
         let cert_path = TESTFILES_PATH.to_string_lossy();
         println!("Opening client sessions");
-        let mut config = zenoh::Config::default();
+        let mut config = zenoh::config::default();
         config.set_mode(Some(WhatAmI::Client)).unwrap();
         config
             .connect
@@ -786,7 +789,7 @@ client2name:client2passwd";
             .unwrap();
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
 
-        let mut config = zenoh::Config::default();
+        let mut config = zenoh::config::default();
         config.set_mode(Some(WhatAmI::Client)).unwrap();
         config
             .connect

@@ -860,7 +860,7 @@ impl<Handler> IntoFuture for MatchingListenerUndeclaration<Handler> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{sample::SampleKind, Config, Wait};
+    use crate::{config::Config, sample::SampleKind, Wait};
 
     #[cfg(feature = "internal")]
     #[test]

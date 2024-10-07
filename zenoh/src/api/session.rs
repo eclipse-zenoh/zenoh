@@ -101,12 +101,12 @@ use super::{
 #[cfg(feature = "unstable")]
 use crate::api::selector::ZenohParameters;
 use crate::{
+    config::Config,
     net::{
         primitives::Primitives,
         routing::dispatcher::face::Face,
         runtime::{Runtime, RuntimeBuilder},
     },
-    Config,
 };
 
 zconfigurable! {

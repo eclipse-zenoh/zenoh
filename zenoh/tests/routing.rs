@@ -23,7 +23,11 @@ use std::{
 };
 
 use tokio_util::sync::CancellationToken;
-use zenoh::{config::WhatAmI, qos::CongestionControl, Config, Result, Session};
+use zenoh::{
+    config::{Config, WhatAmI},
+    qos::CongestionControl,
+    Result, Session,
+};
 use zenoh_config::{ModeDependentValue, WhatAmIMatcher};
 use zenoh_core::ztimeout;
 use zenoh_result::bail;
