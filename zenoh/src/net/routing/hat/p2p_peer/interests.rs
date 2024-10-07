@@ -147,7 +147,8 @@ impl HatInterestTrait for HatCode {
         };
         for dst_face in tables.faces.values_mut().filter(|f| {
             f.whatami == WhatAmI::Router
-                || (options.tokens()
+                || (face.whatami == WhatAmI::Client
+                    && options.tokens()
                     && mode == InterestMode::Current
                     && f.whatami == WhatAmI::Peer
                     && !initial_interest(f).map(|i| i.finalized).unwrap_or(true))
