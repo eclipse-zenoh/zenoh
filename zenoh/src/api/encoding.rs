@@ -14,12 +14,10 @@
 use std::{borrow::Cow, convert::Infallible, fmt, str::FromStr};
 
 use phf::phf_map;
-use zenoh_buffers::{ZBuf, ZSlice};
+use zenoh_buffers::ZSlice;
 use zenoh_protocol::core::EncodingId;
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::api::buffer::{zshm::ZShm, zshmmut::ZShmMut};
-
-use super::bytes::ZBytes;
 
 /// Default encoding values used by Zenoh.
 ///
@@ -61,7 +59,7 @@ use super::bytes::ZBytes;
 /// ### Schema
 ///
 /// Additionally, a schema can be associated to the encoding.
-/// The conventions is to use the `;` separator if an encoding is created from a string.
+/// The convention is to use the `;` separator if an encoding is created from a string.
 /// Alternatively, [`with_schema()`](Encoding::with_schema) can be used to add a scheme to one of the associated constants.
 /// ```
 /// use zenoh::bytes::Encoding;
@@ -102,14 +100,17 @@ impl Encoding {
         id: 1,
         schema: None,
     });
+
+    // ids 2..15 are reserved for possible future zenoh encoding types
+
     /// Zenoh serialized data.
     ///
-    /// Constant alias for string: `"zenoh/serialized"`.
+    /// Constant alias for string: `"zenoh/serialization"`.
     ///
     /// This encoding supposes that the payload created with serialization functions provided by `zenoh-ext` crate.
     /// The `schema` field may contain the details of the serialization format.
     pub const ZENOH_SERIALIZED: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 2,
+        id: 15,
         schema: None,
     });
     // - Advanced types may be supported in some of the Zenoh bindings.
@@ -468,7 +469,7 @@ impl Encoding {
     const ID_TO_STR: phf::Map<EncodingId, &'static str> = phf_map! {
         0u16 => "zenoh/bytes",
         1u16 => "zenoh/string",
-        2u16 => "zenoh/serialized",
+        15u16 => "zenoh/serialized",
         16u16 => "application/octet-stream",
         17u16 => "text/plain",
         18u16 => "application/json",
@@ -524,7 +525,7 @@ impl Encoding {
     const STR_TO_ID: phf::Map<&'static str, EncodingId> = phf_map! {
         "zenoh/bytes" => 0u16,
         "zenoh/string" => 1u16,
-        "zenoh/serialized" => 2u16,
+        "zenoh/serialized" => 15u16,
         "application/octet-stream" => 16u16,
         "text/plain" => 17u16,
         "application/json" => 18u16,
@@ -698,63 +699,6 @@ impl fmt::Display for Encoding {
     }
 }
 
-#[allow(dead_code)]
-// - Encoding trait
-pub trait EncodingMapping {
-    const ENCODING: Encoding;
-}
-
-// Bytes
-impl EncodingMapping for ZBytes {
-    const ENCODING: Encoding = Encoding::ZENOH_BYTES;
-}
-
-impl EncodingMapping for ZBuf {
-    const ENCODING: Encoding = Encoding::ZENOH_BYTES;
-}
-
-impl EncodingMapping for Vec<u8> {
-    const ENCODING: Encoding = Encoding::ZENOH_BYTES;
-}
-
-impl EncodingMapping for &[u8] {
-    const ENCODING: Encoding = Encoding::ZENOH_BYTES;
-}
-
-impl EncodingMapping for Cow<'_, [u8]> {
-    const ENCODING: Encoding = Encoding::ZENOH_BYTES;
-}
-
-// String
-impl EncodingMapping for String {
-    const ENCODING: Encoding = Encoding::ZENOH_STRING;
-}
-
-impl EncodingMapping for &str {
-    const ENCODING: Encoding = Encoding::ZENOH_STRING;
-}
-
-impl EncodingMapping for Cow<'_, str> {
-    const ENCODING: Encoding = Encoding::ZENOH_STRING;
-}
-
-// - Zenoh advanced types encoders/decoders
-impl EncodingMapping for serde_json::Value {
-    const ENCODING: Encoding = Encoding::APPLICATION_JSON;
-}
-
-impl EncodingMapping for serde_yaml::Value {
-    const ENCODING: Encoding = Encoding::APPLICATION_YAML;
-}
-
-impl EncodingMapping for serde_cbor::Value {
-    const ENCODING: Encoding = Encoding::APPLICATION_CBOR;
-}
-
-impl EncodingMapping for serde_pickle::Value {
-    const ENCODING: Encoding = Encoding::APPLICATION_PYTHON_SERIALIZED_OBJECT;
-}
-
 impl Encoding {
     #[zenoh_macros::internal]
     pub fn id(&self) -> EncodingId {
@@ -768,14 +712,4 @@ impl Encoding {
     pub fn new(id: EncodingId, schema: Option<ZSlice>) -> Self {
         Encoding(zenoh_protocol::core::Encoding { id, schema })
     }
-}
-
-// - Zenoh SHM
-#[cfg(feature = "shared-memory")]
-impl EncodingMapping for ZShm {
-    const ENCODING: Encoding = Encoding::ZENOH_BYTES;
-}
-#[cfg(feature = "shared-memory")]
-impl EncodingMapping for ZShmMut {
-    const ENCODING: Encoding = Encoding::ZENOH_BYTES;
 }
