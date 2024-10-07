@@ -438,7 +438,7 @@ async fn accept_task(
 
                         // Accept the TLS connection
                         let tls_stream = match tokio::time::timeout(
-                            dbg!(Duration::from_millis(*TLS_HANDSHAKE_TIMEOUT_MS)),
+                            Duration::from_millis(*TLS_HANDSHAKE_TIMEOUT_MS),
                             acceptor.accept(tcp_stream),
                         )
                         .await
