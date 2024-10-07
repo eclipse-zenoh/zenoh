@@ -16,8 +16,6 @@ use std::{borrow::Cow, convert::Infallible, fmt, str::FromStr};
 use phf::phf_map;
 use zenoh_buffers::ZSlice;
 use zenoh_protocol::core::EncodingId;
-#[cfg(feature = "shared-memory")]
-use zenoh_shm::api::buffer::{zshm::ZShm, zshmmut::ZShmMut};
 
 /// Default encoding values used by Zenoh.
 ///
