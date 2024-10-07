@@ -35,8 +35,7 @@ use zenoh_result::{zerror, ZResult};
 
 use crate::{
     utils::{get_tls_addr, get_tls_host, get_tls_server_name, TlsClientConfig, TlsServerConfig},
-    TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU, TLS_HANDSHAKE_TIMEOUT_MS, TLS_LINGER_TIMEOUT,
-    TLS_LOCATOR_PREFIX,
+    TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
 };
 
 #[derive(Default, Debug, PartialEq, Eq, Hash)]
@@ -370,7 +369,16 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             let token = token.clone();
             let manager = self.manager.clone();
 
-            async move { accept_task(socket, acceptor, token, manager).await }
+            async move {
+                accept_task(
+                    socket,
+                    acceptor,
+                    token,
+                    manager,
+                    tls_server_config.tls_handshake_timeout,
+                )
+                .await
+            }
         };
 
         // Update the endpoint locator address
@@ -407,6 +415,7 @@ async fn accept_task(
     acceptor: TlsAcceptor,
     token: CancellationToken,
     manager: NewLinkChannelSender,
+    tls_handshake_timeout: Duration,
 ) -> ZResult<()> {
     async fn accept(socket: &TcpListener) -> ZResult<(TcpStream, SocketAddr)> {
         let res = socket.accept().await.map_err(|e| zerror!(e))?;
@@ -438,7 +447,7 @@ async fn accept_task(
 
                         // Accept the TLS connection
                         let tls_stream = match tokio::time::timeout(
-                            Duration::from_millis(*TLS_HANDSHAKE_TIMEOUT_MS),
+                            tls_handshake_timeout,
                             acceptor.accept(tcp_stream),
                         )
                         .await

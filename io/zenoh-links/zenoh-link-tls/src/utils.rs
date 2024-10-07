@@ -14,10 +14,11 @@
 use std::{
     convert::TryFrom,
     fs::File,
-    io,
-    io::{BufReader, Cursor},
+    io::{self, BufReader, Cursor},
     net::SocketAddr,
+    str::FromStr,
     sync::Arc,
+    time::Duration,
 };
 
 use rustls::{
@@ -37,7 +38,7 @@ use zenoh_protocol::core::{
 };
 use zenoh_result::{bail, zerror, ZError, ZResult};
 
-use crate::config::*;
+use crate::config::{self, *};
 
 #[derive(Default, Clone, Copy, Debug)]
 pub struct TlsConfigurator;
@@ -149,6 +150,7 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
 
 pub(crate) struct TlsServerConfig {
     pub(crate) server_config: ServerConfig,
+    pub(crate) tls_handshake_timeout: Duration,
 }
 
 impl TlsServerConfig {
@@ -217,7 +219,19 @@ impl TlsServerConfig {
                 .with_single_cert(certs, keys.remove(0))
                 .map_err(|e| zerror!(e))?
         };
-        Ok(TlsServerConfig { server_config: sc })
+
+        let tls_handshake_timeout = Duration::from_millis(
+            config
+                .get(config::TLS_HANDSHAKE_TIMEOUT_MS)
+                .map(u64::from_str)
+                .transpose()?
+                .unwrap_or(config::TLS_HANDSHAKE_TIMEOUT_MS_DEFAULT),
+        );
+
+        Ok(TlsServerConfig {
+            server_config: sc,
+            tls_handshake_timeout,
+        })
     }
 
     async fn load_tls_private_key(config: &Config<'_>) -> ZResult<Vec<u8>> {
