@@ -319,8 +319,8 @@ AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
         .config_mut()
         .extend_from_iter(
             [
-                (TLS_SERVER_CERTIFICATE_RAW, cert),
-                (TLS_SERVER_PRIVATE_KEY_RAW, key),
+                (TLS_LISTEN_CERTIFICATE_RAW, cert),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, key),
             ]
             .iter()
             .copied(),
@@ -398,8 +398,8 @@ AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
         .config_mut()
         .extend_from_iter(
             [
-                (TLS_SERVER_CERTIFICATE_RAW, cert),
-                (TLS_SERVER_PRIVATE_KEY_RAW, key),
+                (TLS_LISTEN_CERTIFICATE_RAW, cert),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, key),
             ]
             .iter()
             .copied(),

@@ -369,7 +369,16 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             let token = token.clone();
             let manager = self.manager.clone();
 
-            async move { accept_task(socket, acceptor, token, manager).await }
+            async move {
+                accept_task(
+                    socket,
+                    acceptor,
+                    token,
+                    manager,
+                    tls_server_config.tls_handshake_timeout,
+                )
+                .await
+            }
         };
 
         // Update the endpoint locator address
@@ -406,6 +415,7 @@ async fn accept_task(
     acceptor: TlsAcceptor,
     token: CancellationToken,
     manager: NewLinkChannelSender,
+    tls_handshake_timeout: Duration,
 ) -> ZResult<()> {
     async fn accept(socket: &TcpListener) -> ZResult<(TcpStream, SocketAddr)> {
         let res = socket.accept().await.map_err(|e| zerror!(e))?;
@@ -436,9 +446,18 @@ async fn accept_task(
                         };
 
                         // Accept the TLS connection
-                        let tls_stream = match acceptor.accept(tcp_stream).await {
-                            Ok(stream) => TlsStream::Server(stream),
+                        let tls_stream = match tokio::time::timeout(
+                            tls_handshake_timeout,
+                            acceptor.accept(tcp_stream),
+                        )
+                        .await
+                        {
+                            Ok(Ok(stream)) => TlsStream::Server(stream),
                             Err(e) => {
+                                tracing::warn!("TLS handshake timed out: {e}");
+                                continue;
+                            }
+                            Ok(Err(e)) => {
                                 let e = format!("Can not accept TLS connection: {e}");
                                 tracing::warn!("{}", e);
                                 continue;

@@ -287,8 +287,8 @@ client2name:client2passwd";
                             "tls"
                         ],
                         "tls": {
-                            "client_auth": true,
-                            "server_name_verification": false
+                            "enable_mtls": true,
+                            "verify_name_on_connect": false
                         },
                     },
                 }"#,
@@ -298,13 +298,13 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_server_private_key(Some(format!("{}/serversidekey.pem", cert_path)))
+            .set_listen_private_key(Some(format!("{}/serversidekey.pem", cert_path)))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_server_certificate(Some(format!("{}/serverside.pem", cert_path)))
+            .set_listen_certificate(Some(format!("{}/serverside.pem", cert_path)))
             .unwrap();
         config
             .transport
@@ -340,8 +340,8 @@ client2name:client2passwd";
                         "quic"
                     ],
                     "tls": {
-                        "client_auth": true,
-                        "server_name_verification": false
+                        "enable_mtls": true,
+                        "verify_name_on_connect": false
                     },
                     },  
                 }"#,
@@ -351,13 +351,13 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_server_private_key(Some(format!("{}/serversidekey.pem", cert_path)))
+            .set_listen_private_key(Some(format!("{}/serversidekey.pem", cert_path)))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_server_certificate(Some(format!("{}/serverside.pem", cert_path)))
+            .set_listen_certificate(Some(format!("{}/serverside.pem", cert_path)))
             .unwrap();
         config
             .transport
@@ -428,8 +428,8 @@ client2name:client2passwd";
                             "quic", "tcp"
                         ],
                         "tls": {
-                            "client_auth": true,
-                            "server_name_verification": false
+                            "enable_mtls": true,
+                            "verify_name_on_connect": false
                         },
                     },
                     "auth": {
@@ -454,13 +454,13 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_server_private_key(Some(format!("{}/serversidekey.pem", cert_path)))
+            .set_listen_private_key(Some(format!("{}/serversidekey.pem", cert_path)))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_server_certificate(Some(format!("{}/serverside.pem", cert_path)))
+            .set_listen_certificate(Some(format!("{}/serverside.pem", cert_path)))
             .unwrap();
         config
             .transport
@@ -493,8 +493,8 @@ client2name:client2passwd";
                             "tls"
                         ],
                         "tls": {
-                            "client_auth": true,
-                            "server_name_verification": false
+                            "enable_mtls": true,
+                            "verify_name_on_connect": false
                         }
                     }
                 }"#,
@@ -504,13 +504,13 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_client_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
+            .set_connect_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_client_certificate(Some(format!("{}/clientside.pem", cert_path)))
+            .set_connect_certificate(Some(format!("{}/clientside.pem", cert_path)))
             .unwrap();
         config
             .transport
@@ -546,8 +546,8 @@ client2name:client2passwd";
                             "tls"
                         ],
                         "tls": {
-                            "client_auth": true,
-                            "server_name_verification": false
+                            "enable_mtls": true,
+                            "verify_name_on_connect": false
                         }
                     }
                 }"#,
@@ -557,13 +557,13 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_client_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
+            .set_connect_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_client_certificate(Some(format!("{}/clientside.pem", cert_path)))
+            .set_connect_certificate(Some(format!("{}/clientside.pem", cert_path)))
             .unwrap();
         config
             .transport
@@ -604,8 +604,8 @@ client2name:client2passwd";
                             "quic"
                         ],
                         "tls": {
-                            "client_auth": true,
-                            "server_name_verification": false
+                            "enable_mtls": true,
+                            "verify_name_on_connect": false
                         }
                     }
                 }"#,
@@ -615,13 +615,13 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_client_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
+            .set_connect_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_client_certificate(Some(format!("{}/clientside.pem", cert_path)))
+            .set_connect_certificate(Some(format!("{}/clientside.pem", cert_path)))
             .unwrap();
         config
             .transport
@@ -649,8 +649,8 @@ client2name:client2passwd";
                             "quic"
                         ],
                         "tls": {
-                            "client_auth": true,
-                            "server_name_verification": false
+                            "enable_mtls": true,
+                            "verify_name_on_connect": false
                         }
                     }
                 }"#,
@@ -660,13 +660,13 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_client_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
+            .set_connect_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_client_certificate(Some(format!("{}/clientside.pem", cert_path)))
+            .set_connect_certificate(Some(format!("{}/clientside.pem", cert_path)))
             .unwrap();
         config
             .transport
@@ -753,8 +753,8 @@ client2name:client2passwd";
                             "quic"
                         ],
                         "tls": {
-                            "client_auth": true,
-                            "server_name_verification": false
+                            "enable_mtls": true,
+                            "verify_name_on_connect": false
                         }
                     },
                     "auth": {
@@ -770,13 +770,13 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_client_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
+            .set_connect_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_client_certificate(Some(format!("{}/clientside.pem", cert_path)))
+            .set_connect_certificate(Some(format!("{}/clientside.pem", cert_path)))
             .unwrap();
         config
             .transport
@@ -805,8 +805,8 @@ client2name:client2passwd";
                             "quic"
                         ],
                         "tls": {
-                            "client_auth": true,
-                            "server_name_verification": false
+                            "enable_mtls": true,
+                            "verify_name_on_connect": false
                         }
                     },
                     "auth": {
@@ -822,13 +822,13 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_client_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
+            .set_connect_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_client_certificate(Some(format!("{}/clientside.pem", cert_path)))
+            .set_connect_certificate(Some(format!("{}/clientside.pem", cert_path)))
             .unwrap();
         config
             .transport

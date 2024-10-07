@@ -431,20 +431,21 @@
         /// or the client's keys and certificates, depending on the node's mode. If not specified
         /// on router mode then the default WebPKI certificates are used instead.
         root_ca_certificate: null,
-        /// Path to the TLS server private key
-        server_private_key: null,
-        /// Path to the TLS server public certificate
-        server_certificate: null,
-        /// Client authentication, if true enables mTLS (mutual authentication)
-        client_auth: false,
-        /// Path to the TLS client private key
-        client_private_key: null,
-        /// Path to the TLS client public certificate
-        client_certificate: null,
-        // Whether or not to use server name verification, if set to false zenoh will disregard the common names of the certificates when verifying servers.
+        /// Path to the TLS listening side private key
+        listen_private_key: null,
+        /// Path to the TLS listening side public certificate
+        listen_certificate: null,
+        ///  Enables mTLS (mutual authentication), client authentication
+        enable_mtls: false,
+        /// Path to the TLS connecting side private key
+        connect_private_key: null,
+        /// Path to the TLS connecting side certificate
+        connect_certificate: null,
+        // Whether or not to verify the matching between hostname/dns and certificate when connecting,
+        // if set to false zenoh will disregard the common names of the certificates when verifying servers.
         // This could be dangerous because your CA can have signed a server cert for foo.com, that's later being used to host a server at baz.com. If you wan't your
         // ca to verify that the server at baz.com is actually baz.com, let this be true (default).
-        server_name_verification: null,
+        verify_name_on_connect: true,
       },
     },
     /// Shared memory configuration.
