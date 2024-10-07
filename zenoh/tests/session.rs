@@ -39,7 +39,7 @@ const MSG_SIZE: [usize; 2] = [1_024, 100_000];
 
 async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
     // Open the sessions
-    let mut config = zenoh::Config::default();
+    let mut config = zenoh::config::default();
     config
         .listen
         .endpoints

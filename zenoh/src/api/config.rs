@@ -91,6 +91,11 @@ impl Config {
     }
 }
 
+/// Default configuration. Same as [`Config::default`]
+pub fn default() -> Config {
+    Config::default()
+}
+
 #[zenoh_macros::internal_config]
 impl std::ops::Deref for Config {
     type Target = zenoh_config::Config;

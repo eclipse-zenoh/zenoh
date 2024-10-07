@@ -349,9 +349,9 @@ pub mod time {
 pub mod config {
     pub use zenoh_config::{EndPoint, Locator, WhatAmI, WhatAmIMatcher, ZenohId};
 
-    pub use crate::api::config::Config;
     #[zenoh_macros::unstable]
     pub use crate::api::config::Notifier;
+    pub use crate::api::config::{default, Config};
 }
 
 #[cfg(all(
