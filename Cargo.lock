@@ -5454,7 +5454,6 @@ dependencies = [
  "rustc_version 0.4.1",
  "serde",
  "serde_json",
- "serde_yaml",
  "socket2 0.5.7",
  "tokio",
  "tokio-util",
