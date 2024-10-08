@@ -33,7 +33,7 @@ pub enum StorageMessage {
 
 pub(crate) type LatestUpdates = HashMap<Option<OwnedKeyExpr>, Event>;
 
-#[derive(Clone)]
+#[derive(Default, Clone)]
 pub(crate) struct CacheLatest {
     pub(crate) latest_updates: Arc<RwLock<LatestUpdates>>,
     pub(crate) replication_log: Option<Arc<RwLock<LogLatest>>>,

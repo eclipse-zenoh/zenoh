@@ -431,48 +431,28 @@ impl StorageService {
         key_expr: &OwnedKeyExpr,
         timestamp: &Timestamp,
     ) -> Option<Update> {
-        // check wild card store for any futuristic update
         let wildcards = self.wildcard_updates.read().await;
-        let mut ts = timestamp;
-        let mut update = None;
+        let mut ts = *timestamp;
 
-        let prefix = self.configuration.strip_prefix.as_ref();
-
-        for node in wildcards.intersecting_keys(key_expr) {
-            let weight = wildcards.weight_at(&node);
-            if weight.is_some() && weight.unwrap().data.timestamp > *ts {
-                // if the key matches a wild card update, check whether it was saved in storage
-                // remember that wild card updates change only existing keys
-                let stripped_key = match crate::strip_prefix(prefix, &key_expr.into()) {
-                    Ok(stripped) => stripped,
-                    Err(e) => {
-                        tracing::error!("{}", e);
-                        break;
-                    }
-                };
-                let mut storage = self.storage.lock().await;
-                match storage.get(stripped_key, "").await {
-                    Ok(stored_data) => {
-                        for entry in stored_data {
-                            if entry.timestamp > *ts {
-                                return None;
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            "Storage '{}' raised an error fetching a query on key {} : {}",
-                            self.name,
-                            key_expr,
-                            e
-                        );
-                        ts = &weight.unwrap().data.timestamp;
-                        update = Some(weight.unwrap().clone());
+        let update = wildcards
+            .intersecting_keys(key_expr)
+            .fold(None, |acc, node| {
+                if let Some(update) = wildcards.weight_at(&node) {
+                    // NOTE: As an optimisation for the Replication, we also want to retrieve
+                    // Wildcard Update that have exactly the same timestamp.
+                    //
+                    // If the Aligner detects that an Event is missing and that Event is overridden
+                    // by a Wildcard Update, we can avoid retrieving its associated payload if we
+                    // have already retrieved the Wildcard Update.
+                    if update.data.timestamp >= ts {
+                        ts = update.data.timestamp;
+                        return Some(node);
                     }
                 }
-            }
-        }
-        update
+                acc
+            });
+
+        update.and_then(|node| wildcards.weight_at(&node)).cloned()
     }
 
     /// Returns a guard over the cache if the provided [Timestamp] is more recent than what is kept
@@ -732,3 +712,7 @@ impl Timed for GarbageCollectionEvent {
         tracing::trace!("End garbage collection of obsolete data-infos");
     }
 }
+
+#[cfg(test)]
+#[path = "./tests/service.tests.rs"]
+mod tests;
