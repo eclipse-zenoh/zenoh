@@ -873,6 +873,11 @@ impl<Handler> Queryable<Handler> {
         self.inner.undeclare_on_drop = false;
         self.inner.session.close_queryable(self.inner.id)
     }
+
+    #[zenoh_macros::internal]
+    pub fn background(mut self) {
+        self.inner.undeclare_on_drop = false;
+    }
 }
 
 impl<Handler> Drop for Queryable<Handler> {

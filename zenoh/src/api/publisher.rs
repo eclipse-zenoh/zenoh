@@ -852,6 +852,11 @@ impl<Handler> MatchingListener<Handler> {
             .session
             .undeclare_matches_listener_inner(self.inner.id)
     }
+
+    #[zenoh_macros::internal]
+    pub fn background(mut self) {
+        self.inner.undeclare_on_drop = false;
+    }
 }
 
 #[zenoh_macros::unstable]

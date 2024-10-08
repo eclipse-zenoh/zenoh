@@ -524,6 +524,35 @@ where
 }
 
 impl<
+        'a,
+        'b,
+        KeySpace,
+        Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
+        TryIntoSample,
+    > FetchingSubscriberBuilder<'a, 'b, KeySpace, Callback<Sample>, Fetch, TryIntoSample>
+where
+    TryIntoSample: ExtractSample,
+{
+    /// Register the subscriber callback to be run in background until the session is closed.
+    ///
+    /// Background builder doesn't return a `FetchingSubscriber` object anymore.
+    fn background(
+        self,
+    ) -> FetchingSubscriberBuilder<'a, 'b, KeySpace, Callback<Sample>, Fetch, TryIntoSample, true>
+    {
+        FetchingSubscriberBuilder {
+            session: self.session,
+            key_expr: self.key_expr,
+            key_space: self.key_space,
+            origin: self.origin,
+            fetch: self.fetch,
+            handler: self.handler,
+            phantom: self.phantom,
+        }
+    }
+}
+
+impl<
         Handler,
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
         TryIntoSample,
