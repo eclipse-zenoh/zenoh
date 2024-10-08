@@ -856,7 +856,7 @@ impl<Handler> MatchingListener<Handler> {
 
     #[zenoh_macros::internal]
     pub fn set_background(&mut self, background: bool) {
-        self.inner.undeclare_on_drop = background;
+        self.inner.undeclare_on_drop = !background;
     }
 }
 
