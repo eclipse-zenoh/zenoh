@@ -103,7 +103,7 @@ impl Encoding {
 
     /// Zenoh serialized data.
     ///
-    /// Constant alias for string: `"zenoh/serialization"`.
+    /// Constant alias for string: `"zenoh/serialized"`.
     ///
     /// This encoding supposes that the payload created with serialization functions provided by `zenoh-ext` crate.
     /// The `schema` field may contain the details of the serialization format.
