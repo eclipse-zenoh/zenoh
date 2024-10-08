@@ -647,7 +647,7 @@ where
     fn wait(self) -> <Self as Resolvable>::To {
         FetchingSubscriber::new(self.with_static_keys())?
             .subscriber
-            .background();
+            .set_background(true);
         Ok(())
     }
 }
@@ -811,8 +811,8 @@ impl<Handler> FetchingSubscriber<Handler> {
     }
 
     #[zenoh_macros::internal]
-    pub fn background(&mut self) {
-        self.subscriber.background()
+    pub fn set_background(&mut self, background: bool) {
+        self.subscriber.set_background(background)
     }
 
     /// Return the key expression of this FetchingSubscriber

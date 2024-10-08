@@ -875,8 +875,8 @@ impl<Handler> Queryable<Handler> {
     }
 
     #[zenoh_macros::internal]
-    pub fn background(&mut self) {
-        self.inner.undeclare_on_drop = false;
+    pub fn set_background(&mut self, background: bool) {
+        self.inner.undeclare_on_drop = background;
     }
 }
 
