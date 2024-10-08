@@ -463,23 +463,23 @@ validated_struct::validator! {
                 pub tls: #[derive(Default)]
                 TLSConf {
                     root_ca_certificate: Option<String>,
-                    server_private_key: Option<String>,
-                    server_certificate: Option<String>,
-                    client_auth: Option<bool>,
-                    client_private_key: Option<String>,
-                    client_certificate: Option<String>,
-                    server_name_verification: Option<bool>,
+                    listen_private_key: Option<String>,
+                    listen_certificate: Option<String>,
+                    enable_mtls: Option<bool>,
+                    connect_private_key: Option<String>,
+                    connect_certificate: Option<String>,
+                    verify_name_on_connect: Option<bool>,
                     // Skip serializing field because they contain secrets
                     #[serde(skip_serializing)]
                     root_ca_certificate_base64: Option<SecretValue>,
                     #[serde(skip_serializing)]
-                    server_private_key_base64:  Option<SecretValue>,
+                    listen_private_key_base64:  Option<SecretValue>,
                     #[serde(skip_serializing)]
-                    server_certificate_base64: Option<SecretValue>,
+                    listen_certificate_base64: Option<SecretValue>,
                     #[serde(skip_serializing)]
-                    client_private_key_base64 :  Option<SecretValue>,
+                    connect_private_key_base64 :  Option<SecretValue>,
                     #[serde(skip_serializing)]
-                    client_certificate_base64 :  Option<SecretValue>,
+                    connect_certificate_base64 :  Option<SecretValue>,
                 },
                 pub unixpipe: #[derive(Default)]
                 UnixPipeConf {

@@ -470,9 +470,6 @@ impl<Handler> DerefMut for Subscriber<Handler> {
     }
 }
 
-/// A [`Subscriber`] that provides data through a `flume` channel.
-pub type FlumeSubscriber = Subscriber<flume::Receiver<Sample>>;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SubscriberKind {
     Subscriber,

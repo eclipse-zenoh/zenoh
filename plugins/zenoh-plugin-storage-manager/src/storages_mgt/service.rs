@@ -523,7 +523,7 @@ impl StorageService {
         Some(cache_guard)
     }
 
-    async fn reply_query(&self, query: Result<zenoh::query::Query, flume::RecvError>) {
+    async fn reply_query(&self, query: ZResult<zenoh::query::Query>) {
         let q = match query {
             Ok(q) => q,
             Err(e) => {
