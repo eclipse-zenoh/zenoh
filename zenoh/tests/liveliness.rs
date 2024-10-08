@@ -486,7 +486,7 @@ async fn test_liveliness_subscriber_double_client_before() {
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sub2 = ztimeout!(client_sub
         .liveliness()
@@ -494,7 +494,7 @@ async fn test_liveliness_subscriber_double_client_before() {
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -502,12 +502,12 @@ async fn test_liveliness_subscriber_double_client_before() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     sub1.undeclare().await.unwrap();
     sub2.undeclare().await.unwrap();
@@ -584,7 +584,7 @@ async fn test_liveliness_subscriber_double_client_middle() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sub2 = ztimeout!(client_sub
         .liveliness()
@@ -592,7 +592,7 @@ async fn test_liveliness_subscriber_double_client_middle() {
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -600,12 +600,12 @@ async fn test_liveliness_subscriber_double_client_middle() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     sub1.undeclare().await.unwrap();
     sub2.undeclare().await.unwrap();
@@ -687,12 +687,12 @@ async fn test_liveliness_subscriber_double_client_after() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -700,12 +700,12 @@ async fn test_liveliness_subscriber_double_client_after() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     sub1.undeclare().await.unwrap();
     sub2.undeclare().await.unwrap();
@@ -783,7 +783,7 @@ async fn test_liveliness_subscriber_double_client_history_before() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sub2 = ztimeout!(client_sub
         .liveliness()
@@ -795,7 +795,7 @@ async fn test_liveliness_subscriber_double_client_history_before() {
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -803,12 +803,12 @@ async fn test_liveliness_subscriber_double_client_history_before() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     sub1.undeclare().await.unwrap();
     sub2.undeclare().await.unwrap();
@@ -886,7 +886,7 @@ async fn test_liveliness_subscriber_double_client_history_middle() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sub2 = ztimeout!(client_sub
         .liveliness()
@@ -898,7 +898,7 @@ async fn test_liveliness_subscriber_double_client_history_middle() {
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -906,12 +906,12 @@ async fn test_liveliness_subscriber_double_client_history_middle() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     sub1.undeclare().await.unwrap();
     sub2.undeclare().await.unwrap();
@@ -995,12 +995,12 @@ async fn test_liveliness_subscriber_double_client_history_after() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -1008,12 +1008,12 @@ async fn test_liveliness_subscriber_double_client_history_after() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     sub1.undeclare().await.unwrap();
     sub2.undeclare().await.unwrap();
@@ -1088,12 +1088,12 @@ async fn test_liveliness_subscriber_double_peer_before() {
     let sub1 = ztimeout!(peer_sub.liveliness().declare_subscriber(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sub2 = ztimeout!(peer_sub.liveliness().declare_subscriber(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -1101,12 +1101,12 @@ async fn test_liveliness_subscriber_double_peer_before() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     sub1.undeclare().await.unwrap();
     sub2.undeclare().await.unwrap();
@@ -1180,12 +1180,12 @@ async fn test_liveliness_subscriber_double_peer_middle() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sub2 = ztimeout!(peer_sub.liveliness().declare_subscriber(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -1193,12 +1193,12 @@ async fn test_liveliness_subscriber_double_peer_middle() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     sub1.undeclare().await.unwrap();
     sub2.undeclare().await.unwrap();
@@ -1274,12 +1274,12 @@ async fn test_liveliness_subscriber_double_peer_after() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -1287,12 +1287,12 @@ async fn test_liveliness_subscriber_double_peer_after() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     sub1.undeclare().await.unwrap();
     sub2.undeclare().await.unwrap();
@@ -1370,7 +1370,7 @@ async fn test_liveliness_subscriber_double_peer_history_before() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sub2 = ztimeout!(peer_sub
         .liveliness()
@@ -1382,7 +1382,7 @@ async fn test_liveliness_subscriber_double_peer_history_before() {
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -1390,12 +1390,12 @@ async fn test_liveliness_subscriber_double_peer_history_before() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     sub1.undeclare().await.unwrap();
     sub2.undeclare().await.unwrap();
@@ -1473,7 +1473,7 @@ async fn test_liveliness_subscriber_double_peer_history_middle() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sub2 = ztimeout!(peer_sub
         .liveliness()
@@ -1485,7 +1485,7 @@ async fn test_liveliness_subscriber_double_peer_history_middle() {
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -1493,12 +1493,12 @@ async fn test_liveliness_subscriber_double_peer_history_middle() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     sub1.undeclare().await.unwrap();
     sub2.undeclare().await.unwrap();
@@ -1582,12 +1582,12 @@ async fn test_liveliness_subscriber_double_peer_history_after() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -1595,12 +1595,12 @@ async fn test_liveliness_subscriber_double_peer_history_after() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     sub1.undeclare().await.unwrap();
     sub2.undeclare().await.unwrap();
@@ -1683,7 +1683,7 @@ async fn test_liveliness_subscriber_double_router_before() {
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sub2 = ztimeout!(router_sub
         .liveliness()
@@ -1691,7 +1691,7 @@ async fn test_liveliness_subscriber_double_router_before() {
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -1699,12 +1699,12 @@ async fn test_liveliness_subscriber_double_router_before() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     sub1.undeclare().await.unwrap();
     sub2.undeclare().await.unwrap();
@@ -1786,7 +1786,7 @@ async fn test_liveliness_subscriber_double_router_middle() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sub2 = ztimeout!(router_sub
         .liveliness()
@@ -1794,7 +1794,7 @@ async fn test_liveliness_subscriber_double_router_middle() {
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -1802,12 +1802,12 @@ async fn test_liveliness_subscriber_double_router_middle() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     sub1.undeclare().await.unwrap();
     sub2.undeclare().await.unwrap();
@@ -1894,12 +1894,12 @@ async fn test_liveliness_subscriber_double_router_after() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -1907,12 +1907,12 @@ async fn test_liveliness_subscriber_double_router_after() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     sub1.undeclare().await.unwrap();
     sub2.undeclare().await.unwrap();
@@ -1995,7 +1995,7 @@ async fn test_liveliness_subscriber_double_router_history_before() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sub2 = ztimeout!(router_sub
         .liveliness()
@@ -2007,7 +2007,7 @@ async fn test_liveliness_subscriber_double_router_history_before() {
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -2015,12 +2015,12 @@ async fn test_liveliness_subscriber_double_router_history_before() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     sub1.undeclare().await.unwrap();
     sub2.undeclare().await.unwrap();
@@ -2103,7 +2103,7 @@ async fn test_liveliness_subscriber_double_router_history_middle() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sub2 = ztimeout!(router_sub
         .liveliness()
@@ -2115,7 +2115,7 @@ async fn test_liveliness_subscriber_double_router_history_middle() {
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -2123,12 +2123,12 @@ async fn test_liveliness_subscriber_double_router_history_middle() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     sub1.undeclare().await.unwrap();
     sub2.undeclare().await.unwrap();
@@ -2217,12 +2217,12 @@ async fn test_liveliness_subscriber_double_router_history_after() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -2230,12 +2230,12 @@ async fn test_liveliness_subscriber_double_router_history_after() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     sub1.undeclare().await.unwrap();
     sub2.undeclare().await.unwrap();
@@ -2331,7 +2331,7 @@ async fn test_liveliness_subscriber_double_clientviapeer_before() {
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sub2 = ztimeout!(client_sub
         .liveliness()
@@ -2339,7 +2339,7 @@ async fn test_liveliness_subscriber_double_clientviapeer_before() {
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -2347,12 +2347,12 @@ async fn test_liveliness_subscriber_double_clientviapeer_before() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     sub1.undeclare().await.unwrap();
     sub2.undeclare().await.unwrap();
@@ -2448,7 +2448,7 @@ async fn test_liveliness_subscriber_double_clientviapeer_middle() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sub2 = ztimeout!(client_sub
         .liveliness()
@@ -2456,7 +2456,7 @@ async fn test_liveliness_subscriber_double_clientviapeer_middle() {
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -2464,12 +2464,12 @@ async fn test_liveliness_subscriber_double_clientviapeer_middle() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     sub1.undeclare().await.unwrap();
     sub2.undeclare().await.unwrap();
@@ -2570,12 +2570,12 @@ async fn test_liveliness_subscriber_double_clientviapeer_after() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -2583,12 +2583,12 @@ async fn test_liveliness_subscriber_double_clientviapeer_after() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     sub1.undeclare().await.unwrap();
     sub2.undeclare().await.unwrap();
@@ -2686,7 +2686,7 @@ async fn test_liveliness_subscriber_double_clientviapeer_history_before() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sub2 = ztimeout!(client_sub
         .liveliness()
@@ -2698,7 +2698,7 @@ async fn test_liveliness_subscriber_double_clientviapeer_history_before() {
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -2706,12 +2706,12 @@ async fn test_liveliness_subscriber_double_clientviapeer_history_before() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     sub1.undeclare().await.unwrap();
     sub2.undeclare().await.unwrap();
@@ -2809,7 +2809,7 @@ async fn test_liveliness_subscriber_double_clientviapeer_history_middle() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sub2 = ztimeout!(client_sub
         .liveliness()
@@ -2821,7 +2821,7 @@ async fn test_liveliness_subscriber_double_clientviapeer_history_middle() {
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -2829,12 +2829,12 @@ async fn test_liveliness_subscriber_double_clientviapeer_history_middle() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     sub1.undeclare().await.unwrap();
     sub2.undeclare().await.unwrap();
@@ -2938,12 +2938,12 @@ async fn test_liveliness_subscriber_double_clientviapeer_history_after() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -2951,12 +2951,12 @@ async fn test_liveliness_subscriber_double_clientviapeer_history_after() {
     let sample = ztimeout!(sub1.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub2.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub2.try_recv().is_err());
+    assert!(sub2.try_recv().unwrap().is_none());
 
     sub1.undeclare().await.unwrap();
     sub2.undeclare().await.unwrap();
@@ -3035,7 +3035,7 @@ async fn test_liveliness_subget_client_before() {
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let get = ztimeout!(client_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -3051,7 +3051,7 @@ async fn test_liveliness_subget_client_before() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let get = ztimeout!(client_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -3112,7 +3112,7 @@ async fn test_liveliness_subget_client_middle() {
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let client_tok = {
         let mut c = zenoh::Config::default();
@@ -3133,7 +3133,7 @@ async fn test_liveliness_subget_client_middle() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let get = ztimeout!(client_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -3149,7 +3149,7 @@ async fn test_liveliness_subget_client_middle() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let get = ztimeout!(client_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -3230,7 +3230,7 @@ async fn test_liveliness_subget_client_history_before() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let get = ztimeout!(client_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -3246,7 +3246,7 @@ async fn test_liveliness_subget_client_history_before() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let get = ztimeout!(client_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -3308,7 +3308,7 @@ async fn test_liveliness_subget_client_history_middle() {
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let client_tok = {
         let mut c = zenoh::Config::default();
@@ -3329,7 +3329,7 @@ async fn test_liveliness_subget_client_history_middle() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let get = ztimeout!(client_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -3345,7 +3345,7 @@ async fn test_liveliness_subget_client_history_middle() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let get = ztimeout!(client_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -3426,7 +3426,7 @@ async fn test_liveliness_subget_peer_before() {
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let get = ztimeout!(peer_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -3442,7 +3442,7 @@ async fn test_liveliness_subget_peer_before() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let get = ztimeout!(peer_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -3503,7 +3503,7 @@ async fn test_liveliness_subget_peer_middle() {
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let client_tok = {
         let mut c = zenoh::Config::default();
@@ -3524,7 +3524,7 @@ async fn test_liveliness_subget_peer_middle() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let get = ztimeout!(peer_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -3540,7 +3540,7 @@ async fn test_liveliness_subget_peer_middle() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let get = ztimeout!(peer_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -3621,7 +3621,7 @@ async fn test_liveliness_subget_peer_history_before() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let get = ztimeout!(peer_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -3637,7 +3637,7 @@ async fn test_liveliness_subget_peer_history_before() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let get = ztimeout!(peer_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -3699,7 +3699,7 @@ async fn test_liveliness_subget_peer_history_middle() {
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let client_tok = {
         let mut c = zenoh::Config::default();
@@ -3720,7 +3720,7 @@ async fn test_liveliness_subget_peer_history_middle() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let get = ztimeout!(peer_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -3736,7 +3736,7 @@ async fn test_liveliness_subget_peer_history_middle() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let get = ztimeout!(peer_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -3822,7 +3822,7 @@ async fn test_liveliness_subget_router_before() {
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let get = ztimeout!(router_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -3838,7 +3838,7 @@ async fn test_liveliness_subget_router_before() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let get = ztimeout!(router_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -3904,7 +3904,7 @@ async fn test_liveliness_subget_router_middle() {
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let client_tok = {
         let mut c = zenoh::Config::default();
@@ -3925,7 +3925,7 @@ async fn test_liveliness_subget_router_middle() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let get = ztimeout!(router_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -3941,7 +3941,7 @@ async fn test_liveliness_subget_router_middle() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let get = ztimeout!(router_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -4027,7 +4027,7 @@ async fn test_liveliness_subget_router_history_before() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let get = ztimeout!(router_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -4043,7 +4043,7 @@ async fn test_liveliness_subget_router_history_before() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let get = ztimeout!(router_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -4110,7 +4110,7 @@ async fn test_liveliness_subget_router_history_middle() {
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let client_tok = {
         let mut c = zenoh::Config::default();
@@ -4131,7 +4131,7 @@ async fn test_liveliness_subget_router_history_middle() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let get = ztimeout!(router_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -4147,7 +4147,7 @@ async fn test_liveliness_subget_router_history_middle() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let get = ztimeout!(router_subget.liveliness().get(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -4229,7 +4229,7 @@ async fn test_liveliness_regression_1() {
     let sub = ztimeout!(peer_sub.liveliness().declare_subscriber(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -4237,7 +4237,7 @@ async fn test_liveliness_regression_1() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     peer_tok.close().await.unwrap();
     peer_sub.close().await.unwrap();
@@ -4297,7 +4297,7 @@ async fn test_liveliness_regression_2() {
     let sub = ztimeout!(peer_sub.liveliness().declare_subscriber(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let peer_tok2 = {
         let mut c = zenoh::Config::default();
@@ -4318,12 +4318,12 @@ async fn test_liveliness_regression_2() {
     let token2 = ztimeout!(peer_tok2.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     token1.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     token2.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -4331,7 +4331,7 @@ async fn test_liveliness_regression_2() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     peer_tok1.close().await.unwrap();
     peer_tok2.close().await.unwrap();
@@ -4398,7 +4398,7 @@ async fn test_liveliness_regression_2_history() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     let peer_tok2 = {
         let mut c = zenoh::Config::default();
@@ -4419,12 +4419,12 @@ async fn test_liveliness_regression_2_history() {
     let token2 = ztimeout!(peer_tok2.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     token1.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     token2.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -4432,7 +4432,7 @@ async fn test_liveliness_regression_2_history() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     peer_tok1.close().await.unwrap();
     peer_tok2.close().await.unwrap();
@@ -4524,12 +4524,12 @@ async fn test_liveliness_regression_3() {
     let sub = ztimeout!(peer_sub.liveliness().declare_subscriber(LIVELINESS_KEYEXPR)).unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     token1.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     token2.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -4537,7 +4537,7 @@ async fn test_liveliness_regression_3() {
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert!(sample.kind() == SampleKind::Delete);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(sub.try_recv().is_err());
+    assert!(sub.try_recv().unwrap().is_none());
 
     peer_tok1.close().await.unwrap();
     client_tok2.close().await.unwrap();
@@ -4662,7 +4662,7 @@ async fn test_liveliness_issue_1470() {
     assert!(sample.kind() == SampleKind::Put);
     puts0.insert(sample.key_expr().to_string());
 
-    assert!(sub0.try_recv().is_err());
+    assert!(sub0.try_recv().unwrap().is_none());
 
     assert_eq!(
         puts0,
@@ -4708,7 +4708,7 @@ async fn test_liveliness_issue_1470() {
     assert!(sample.kind() == SampleKind::Put);
     puts1.insert(sample.key_expr().to_string());
 
-    assert!(sub1.try_recv().is_err());
+    assert!(sub1.try_recv().unwrap().is_none());
 
     assert_eq!(
         puts1,

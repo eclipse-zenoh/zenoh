@@ -72,8 +72,14 @@ impl<T: Send + 'static> IntoHandler<T> for FifoChannel {
 impl<T> FifoChannelHandler<T> {
     /// Attempt to fetch an incoming value from the channel associated with this receiver, returning
     /// an error if the channel is empty or if all senders have been dropped.
-    pub fn try_recv(&self) -> ZResult<T> {
-        self.0.try_recv().map_err(Into::into)
+    ///
+    /// If the channel is empty, this will return [`None`].
+    pub fn try_recv(&self) -> ZResult<Option<T>> {
+        match self.0.try_recv() {
+            Ok(value) => Ok(Some(value)),
+            Err(flume::TryRecvError::Empty) => Ok(None),
+            Err(err) => Err(err.into()),
+        }
     }
 
     /// Wait for an incoming value from the channel associated with this receiver, returning an
@@ -84,14 +90,26 @@ impl<T> FifoChannelHandler<T> {
 
     /// Wait for an incoming value from the channel associated with this receiver, returning an
     /// error if all senders have been dropped or the deadline has passed.
-    pub fn recv_deadline(&self, deadline: Instant) -> ZResult<T> {
-        self.0.recv_deadline(deadline).map_err(Into::into)
+    ///
+    /// If the deadline has expired, this will return [`None`].
+    pub fn recv_deadline(&self, deadline: Instant) -> ZResult<Option<T>> {
+        match self.0.recv_deadline(deadline) {
+            Ok(value) => Ok(Some(value)),
+            Err(flume::RecvTimeoutError::Timeout) => Ok(None),
+            Err(err) => Err(err.into()),
+        }
     }
 
     /// Wait for an incoming value from the channel associated with this receiver, returning an
     /// error if all senders have been dropped or the timeout has expired.
-    pub fn recv_timeout(&self, duration: Duration) -> ZResult<T> {
-        self.0.recv_timeout(duration).map_err(Into::into)
+    ///
+    /// If the timeout has expired, this will return [`None`].
+    pub fn recv_timeout(&self, duration: Duration) -> ZResult<Option<T>> {
+        match self.0.recv_timeout(duration) {
+            Ok(value) => Ok(Some(value)),
+            Err(flume::RecvTimeoutError::Timeout) => Ok(None),
+            Err(err) => Err(err.into()),
+        }
     }
 
     /// Create a blocking iterator over the values received on the channel that finishes iteration

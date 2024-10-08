@@ -58,9 +58,7 @@ async fn zenoh_matching_status_any() -> ZResult<()> {
     let matching_listener = ztimeout!(publisher1.matching_listener()).unwrap();
 
     let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
-    assert!(
-        received_status.err().unwrap().downcast_ref() == Some(&flume::RecvTimeoutError::Timeout)
-    );
+    assert!(received_status.unwrap().is_none());
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
     assert!(!matching_status.matching_subscribers());
@@ -68,7 +66,11 @@ async fn zenoh_matching_status_any() -> ZResult<()> {
     let sub = ztimeout!(session1.declare_subscriber("zenoh_matching_status_any_test")).unwrap();
 
     let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
-    assert!(received_status.ok().map(|s| s.matching_subscribers()) == Some(true));
+    assert!(received_status
+        .ok()
+        .flatten()
+        .map(|s| s.matching_subscribers())
+        .eq(&Some(true)));
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
     assert!(matching_status.matching_subscribers());
@@ -76,7 +78,11 @@ async fn zenoh_matching_status_any() -> ZResult<()> {
     ztimeout!(sub.undeclare()).unwrap();
 
     let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
-    assert!(received_status.ok().map(|s| s.matching_subscribers()) == Some(false));
+    assert!(received_status
+        .ok()
+        .flatten()
+        .map(|s| s.matching_subscribers())
+        .eq(&Some(false)));
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
     assert!(!matching_status.matching_subscribers());
@@ -84,7 +90,11 @@ async fn zenoh_matching_status_any() -> ZResult<()> {
     let sub = ztimeout!(session2.declare_subscriber("zenoh_matching_status_any_test")).unwrap();
 
     let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
-    assert!(received_status.ok().map(|s| s.matching_subscribers()) == Some(true));
+    assert!(received_status
+        .ok()
+        .flatten()
+        .map(|s| s.matching_subscribers())
+        .eq(&Some(true)));
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
     assert!(matching_status.matching_subscribers());
@@ -92,7 +102,11 @@ async fn zenoh_matching_status_any() -> ZResult<()> {
     ztimeout!(sub.undeclare()).unwrap();
 
     let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
-    assert!(received_status.ok().map(|s| s.matching_subscribers()) == Some(false));
+    assert!(received_status
+        .ok()
+        .flatten()
+        .map(|s| s.matching_subscribers())
+        .eq(&Some(false)));
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
     assert!(!matching_status.matching_subscribers());
@@ -114,9 +128,7 @@ async fn zenoh_matching_status_remote() -> ZResult<()> {
     let matching_listener = ztimeout!(publisher1.matching_listener()).unwrap();
 
     let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
-    assert!(
-        received_status.err().unwrap().downcast_ref() == Some(&flume::RecvTimeoutError::Timeout)
-    );
+    assert!(received_status.unwrap().is_none());
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
     assert!(!matching_status.matching_subscribers());
@@ -124,9 +136,7 @@ async fn zenoh_matching_status_remote() -> ZResult<()> {
     let sub = ztimeout!(session1.declare_subscriber("zenoh_matching_status_remote_test")).unwrap();
 
     let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
-    assert!(
-        received_status.err().unwrap().downcast_ref() == Some(&flume::RecvTimeoutError::Timeout)
-    );
+    assert!(received_status.unwrap().is_none());
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
     assert!(!matching_status.matching_subscribers());
@@ -134,9 +144,7 @@ async fn zenoh_matching_status_remote() -> ZResult<()> {
     ztimeout!(sub.undeclare()).unwrap();
 
     let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
-    assert!(
-        received_status.err().unwrap().downcast_ref() == Some(&flume::RecvTimeoutError::Timeout)
-    );
+    assert!(received_status.unwrap().is_none());
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
     assert!(!matching_status.matching_subscribers());
@@ -144,7 +152,11 @@ async fn zenoh_matching_status_remote() -> ZResult<()> {
     let sub = ztimeout!(session2.declare_subscriber("zenoh_matching_status_remote_test")).unwrap();
 
     let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
-    assert!(received_status.ok().map(|s| s.matching_subscribers()) == Some(true));
+    assert!(received_status
+        .ok()
+        .flatten()
+        .map(|s| s.matching_subscribers())
+        .eq(&Some(true)));
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
     assert!(matching_status.matching_subscribers());
@@ -152,7 +164,11 @@ async fn zenoh_matching_status_remote() -> ZResult<()> {
     ztimeout!(sub.undeclare()).unwrap();
 
     let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
-    assert!(received_status.ok().map(|s| s.matching_subscribers()) == Some(false));
+    assert!(received_status
+        .ok()
+        .flatten()
+        .map(|s| s.matching_subscribers())
+        .eq(&Some(false)));
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
     assert!(!matching_status.matching_subscribers());
@@ -175,9 +191,7 @@ async fn zenoh_matching_status_local() -> ZResult<()> {
     let matching_listener = ztimeout!(publisher1.matching_listener()).unwrap();
 
     let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
-    assert!(
-        received_status.err().unwrap().downcast_ref() == Some(&flume::RecvTimeoutError::Timeout)
-    );
+    assert!(received_status.unwrap().is_none());
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
     assert!(!matching_status.matching_subscribers());
@@ -185,7 +199,11 @@ async fn zenoh_matching_status_local() -> ZResult<()> {
     let sub = ztimeout!(session1.declare_subscriber("zenoh_matching_status_local_test")).unwrap();
 
     let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
-    assert!(received_status.ok().map(|s| s.matching_subscribers()) == Some(true));
+    assert!(received_status
+        .ok()
+        .flatten()
+        .map(|s| s.matching_subscribers())
+        .eq(&Some(true)));
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
     assert!(matching_status.matching_subscribers());
@@ -193,7 +211,11 @@ async fn zenoh_matching_status_local() -> ZResult<()> {
     ztimeout!(sub.undeclare()).unwrap();
 
     let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
-    assert!(received_status.ok().map(|s| s.matching_subscribers()) == Some(false));
+    assert!(received_status
+        .ok()
+        .flatten()
+        .map(|s| s.matching_subscribers())
+        .eq(&Some(false)));
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
     assert!(!matching_status.matching_subscribers());
@@ -201,9 +223,7 @@ async fn zenoh_matching_status_local() -> ZResult<()> {
     let sub = ztimeout!(session2.declare_subscriber("zenoh_matching_status_local_test")).unwrap();
 
     let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
-    assert!(
-        received_status.err().unwrap().downcast_ref() == Some(&flume::RecvTimeoutError::Timeout)
-    );
+    assert!(received_status.unwrap().is_none());
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
     assert!(!matching_status.matching_subscribers());
@@ -211,9 +231,7 @@ async fn zenoh_matching_status_local() -> ZResult<()> {
     ztimeout!(sub.undeclare()).unwrap();
 
     let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
-    assert!(
-        received_status.err().unwrap().downcast_ref() == Some(&flume::RecvTimeoutError::Timeout)
-    );
+    assert!(received_status.unwrap().is_none());
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
     assert!(!matching_status.matching_subscribers());
