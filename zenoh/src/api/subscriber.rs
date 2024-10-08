@@ -460,7 +460,7 @@ impl<Handler> Subscriber<Handler> {
     }
 
     #[zenoh_macros::internal]
-    pub fn background(mut self) {
+    pub fn background(&mut self) {
         self.inner.undeclare_on_drop = false;
     }
 }

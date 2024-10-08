@@ -536,7 +536,7 @@ where
     /// Register the subscriber callback to be run in background until the session is closed.
     ///
     /// Background builder doesn't return a `FetchingSubscriber` object anymore.
-    fn background(
+    pub fn background(
         self,
     ) -> FetchingSubscriberBuilder<'a, 'b, KeySpace, Callback<Sample>, Fetch, TryIntoSample, true>
     {
@@ -808,6 +808,11 @@ impl<Handler> FetchingSubscriber<Handler> {
     #[inline]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> {
         self.subscriber.undeclare()
+    }
+
+    #[zenoh_macros::internal]
+    pub fn background(&mut self) {
+        self.subscriber.background()
     }
 
     /// Return the key expression of this FetchingSubscriber
