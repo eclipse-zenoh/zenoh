@@ -6,13 +6,9 @@ use std::{
     io::{Read, Write},
     marker::PhantomData,
     mem::MaybeUninit,
-    str::FromStr,
 };
 
-use zenoh::{
-    bytes::{Encoding, ZBytes, ZBytesReader, ZBytesWriter},
-    time::{Timestamp, TimestampId, NTP64},
-};
+use zenoh::bytes::{ZBytes, ZBytesReader, ZBytesWriter};
 
 #[derive(Debug)]
 pub struct ZDeserializeError;
@@ -466,6 +462,7 @@ mod tests {
     use std::ops::Range;
 
     use rand::{thread_rng, Rng};
+    use zenoh::time::{Timestamp, TimestampId, NTP64};
 
     use super::*;
 
@@ -548,7 +545,7 @@ mod tests {
     fn timestamp_serialization() {
         use std::time::{SystemTime, UNIX_EPOCH};
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into();
-        let timestamp= Timestamp::new(now, TimestampId::rand());
+        let timestamp = Timestamp::new(now, TimestampId::rand());
         let (NTP64(ts), id) = (timestamp.get_time(), timestamp.get_id().to_le_bytes());
         let payload = z_serialize(&(ts, id));
         let (ts, id) = z_deserialize::<(_, [u8; 16])>(&payload).unwrap();
