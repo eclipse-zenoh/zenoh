@@ -48,10 +48,7 @@ use super::{
     sample::{Locality, Sample, SampleFields},
     session::UndeclarableSealed,
 };
-use crate::{
-    api::{session::WeakSession, Id},
-    handlers::locked,
-};
+use crate::api::{session::WeakSession, Id};
 
 pub(crate) struct PublisherState {
     pub(crate) id: Id,
@@ -613,7 +610,7 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
     where
         F: FnMut(MatchingStatus) + Send + Sync + 'static,
     {
-        self.callback(locked(callback))
+        self.callback(crate::handlers::locked(callback))
     }
 
     /// Receive the MatchingStatuses for this listener with a [`Handler`](IntoHandler).
