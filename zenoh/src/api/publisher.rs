@@ -610,7 +610,7 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
     where
         F: FnMut(MatchingStatus) + Send + Sync + 'static,
     {
-        self.callback(crate::handlers::locked(callback))
+        self.callback(crate::api::handlers::locked(callback))
     }
 
     /// Receive the MatchingStatuses for this listener with a [`Handler`](IntoHandler).
