@@ -16,6 +16,7 @@ use std::{
     future::{IntoFuture, Ready},
     net::SocketAddr,
     ops::Deref,
+    sync::Arc,
     time::Duration,
 };
 
@@ -72,11 +73,11 @@ impl ScoutBuilder<DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    pub fn callback<Callback>(self, callback: Callback) -> ScoutBuilder<Callback>
+    pub fn callback<F>(self, callback: F) -> ScoutBuilder<Callback<Hello>>
     where
-        Callback: Fn(Hello) + Send + Sync + 'static,
+        F: Fn(Hello) + Send + Sync + 'static,
     {
-        self.with(callback)
+        self.with(Callback::new(Arc::new(callback)))
     }
 
     /// Receive the [`Hello`] messages from this scout with a mutable callback.
@@ -98,12 +99,9 @@ impl ScoutBuilder<DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    pub fn callback_mut<CallbackMut>(
-        self,
-        callback: CallbackMut,
-    ) -> ScoutBuilder<impl Fn(Hello) + Send + Sync + 'static>
+    pub fn callback_mut<F>(self, callback: F) -> ScoutBuilder<Callback<Hello>>
     where
-        CallbackMut: FnMut(Hello) + Send + Sync + 'static,
+        F: FnMut(Hello) + Send + Sync + 'static,
     {
         self.callback(locked(callback))
     }

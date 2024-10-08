@@ -15,6 +15,7 @@ use std::{
     fmt,
     future::{IntoFuture, Ready},
     ops::{Deref, DerefMut},
+    sync::Arc,
 };
 
 use tracing::error;
@@ -113,7 +114,7 @@ impl<Handler> IntoFuture for SubscriberUndeclaration<Handler> {
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[derive(Debug)]
-pub struct SubscriberBuilder<'a, 'b, Handler> {
+pub struct SubscriberBuilder<'a, 'b, Handler, const BACKGROUND: bool = false> {
     #[cfg(feature = "internal")]
     pub session: &'a Session,
     #[cfg(not(feature = "internal"))]
@@ -133,21 +134,10 @@ pub struct SubscriberBuilder<'a, 'b, Handler> {
     pub handler: Handler,
     #[cfg(not(feature = "internal"))]
     pub(crate) handler: Handler,
-
-    #[cfg(feature = "internal")]
-    pub undeclare_on_drop: bool,
-    #[cfg(not(feature = "internal"))]
-    pub(crate) undeclare_on_drop: bool,
 }
 
 impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     /// Receive the samples for this subscription with a callback.
-    ///
-    /// Subscriber will not be undeclared when dropped, with the callback running
-    /// in background until the session is closed.
-    ///
-    /// It is in fact just a convenient shortcut for
-    /// `.with(my_callback).undeclare_on_drop(false)`.
     ///
     /// # Examples
     /// ```
@@ -163,20 +153,17 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    pub fn callback<Callback>(self, callback: Callback) -> SubscriberBuilder<'a, 'b, Callback>
+    pub fn callback<F>(self, callback: F) -> SubscriberBuilder<'a, 'b, Callback<Sample>>
     where
-        Callback: Fn(Sample) + Send + Sync + 'static,
+        F: Fn(Sample) + Send + Sync + 'static,
     {
-        self.with(callback).undeclare_on_drop(false)
+        self.with(Callback::new(Arc::new(callback)))
     }
 
     /// Receive the samples for this subscription with a mutable callback.
     ///
     /// Using this guarantees that your callback will never be called concurrently.
     /// If your callback is also accepted by the [`callback`](SubscriberBuilder::callback) method, we suggest you use it instead of `callback_mut`.
-    ///
-    /// Subscriber will not be undeclared when dropped, with the callback running
-    /// in background until the session is closed.
     ///
     /// # Examples
     /// ```
@@ -193,12 +180,9 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    pub fn callback_mut<CallbackMut>(
-        self,
-        callback: CallbackMut,
-    ) -> SubscriberBuilder<'a, 'b, impl Fn(Sample) + Send + Sync + 'static>
+    pub fn callback_mut<F>(self, callback: F) -> SubscriberBuilder<'a, 'b, Callback<Sample>>
     where
-        CallbackMut: FnMut(Sample) + Send + Sync + 'static,
+        F: FnMut(Sample) + Send + Sync + 'static,
     {
         self.callback(locked(callback))
     }
@@ -231,19 +215,47 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
             key_expr,
             origin,
             handler: _,
-            undeclare_on_drop,
         } = self;
         SubscriberBuilder {
             session,
             key_expr,
             origin,
             handler,
-            undeclare_on_drop,
         }
     }
 }
 
-impl<Handler> SubscriberBuilder<'_, '_, Handler> {
+impl<'a, 'b> SubscriberBuilder<'a, 'b, Callback<Sample>> {
+    /// Register the subscriber callback to be run in background until the session is closed.
+    ///
+    /// Background builder doesn't return a `Subscriber` object anymore.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// // no need to assign and keep a variable with a background subscriber
+    /// session
+    ///     .declare_subscriber("key/expression")
+    ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr(), sample.payload()); })
+    ///     .background()
+    ///     .await
+    ///     .unwrap();
+    /// # }
+    /// ```
+    pub fn background(self) -> SubscriberBuilder<'a, 'b, Callback<Sample>, true> {
+        SubscriberBuilder {
+            session: self.session,
+            key_expr: self.key_expr,
+            origin: self.origin,
+            handler: self.handler,
+        }
+    }
+}
+
+impl<Handler, const BACKGROUND: bool> SubscriberBuilder<'_, '_, Handler, BACKGROUND> {
     /// Changes the [`crate::sample::Locality`] of received publications.
     ///
     /// Restricts the matching publications that will be receive by this [`Subscriber`] to the ones
@@ -254,21 +266,8 @@ impl<Handler> SubscriberBuilder<'_, '_, Handler> {
         self.origin = origin;
         self
     }
-
-    /// Set whether the subscriber will be undeclared when dropped.
-    ///
-    /// The method is usually used in combination with a callback like in
-    /// [`callback`](Self::callback) method, or a channel sender.
-    /// Be careful when using it, as subscribers not undeclared will consume
-    /// resources until the session is closed.
-    #[inline]
-    pub fn undeclare_on_drop(mut self, undeclare_on_drop: bool) -> Self {
-        self.undeclare_on_drop = undeclare_on_drop;
-        self
-    }
 }
 
-// Push mode
 impl<Handler> Resolvable for SubscriberBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<Sample> + Send,
@@ -295,7 +294,7 @@ where
                     id: sub_state.id,
                     key_expr: sub_state.key_expr.clone(),
                     kind: SubscriberKind::Subscriber,
-                    undeclare_on_drop: self.undeclare_on_drop,
+                    undeclare_on_drop: true,
                 },
                 handler: receiver,
             })
@@ -307,6 +306,28 @@ where
     Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
 {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
+    }
+}
+
+impl Resolvable for SubscriberBuilder<'_, '_, Callback<Sample>, true> {
+    type To = ZResult<()>;
+}
+
+impl Wait for SubscriberBuilder<'_, '_, Callback<Sample>, true> {
+    fn wait(self) -> <Self as Resolvable>::To {
+        self.session
+            .0
+            .declare_subscriber_inner(&self.key_expr?, self.origin, self.handler)?;
+        Ok(())
+    }
+}
+
+impl IntoFuture for SubscriberBuilder<'_, '_, Callback<Sample>, true> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
@@ -436,6 +457,11 @@ impl<Handler> Subscriber<Handler> {
         self.inner
             .session
             .undeclare_subscriber_inner(self.inner.id, self.inner.kind)
+    }
+
+    #[zenoh_macros::internal]
+    pub fn background(mut self) {
+        self.inner.undeclare_on_drop = false;
     }
 }
 
