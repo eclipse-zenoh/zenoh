@@ -673,6 +673,7 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, Callback<MatchingStatus>> {
     ///             println!("Publisher has NO MORE matching subscribers.");
     ///         }
     ///     })
+    ///     .background()
     ///     .await
     ///     .unwrap();
     /// # }
