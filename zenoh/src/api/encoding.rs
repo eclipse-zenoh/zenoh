@@ -100,8 +100,6 @@ impl Encoding {
         schema: None,
     });
 
-    // ids 2..15 are reserved for possible future zenoh encoding types
-
     /// Zenoh serialized data.
     ///
     /// Constant alias for string: `"zenoh/serialization"`.
@@ -109,7 +107,7 @@ impl Encoding {
     /// This encoding supposes that the payload created with serialization functions provided by `zenoh-ext` crate.
     /// The `schema` field may contain the details of the serialization format.
     pub const ZENOH_SERIALIZED: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 15,
+        id: 2,
         schema: None,
     });
     // - Advanced types may be supported in some of the Zenoh bindings.
@@ -117,63 +115,63 @@ impl Encoding {
     ///
     /// Constant alias for string: `"application/octet-stream"`.
     pub const APPLICATION_OCTET_STREAM: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 16,
+        id: 3,
         schema: None,
     });
     /// A textual file.
     ///
     /// Constant alias for string: `"text/plain"`.
     pub const TEXT_PLAIN: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 17,
+        id: 4,
         schema: None,
     });
     /// JSON data intended to be consumed by an application.
     ///
     /// Constant alias for string: `"application/json"`.
     pub const APPLICATION_JSON: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 18,
+        id: 5,
         schema: None,
     });
     /// JSON data intended to be human readable.
     ///
     /// Constant alias for string: `"text/json"`.
     pub const TEXT_JSON: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 19,
+        id: 6,
         schema: None,
     });
     /// A Common Data Representation (CDR)-encoded data.
     ///
     /// Constant alias for string: `"application/cdr"`.
     pub const APPLICATION_CDR: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 20,
+        id: 7,
         schema: None,
     });
     /// A Concise Binary Object Representation (CBOR)-encoded data.
     ///
     /// Constant alias for string: `"application/cbor"`.
     pub const APPLICATION_CBOR: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 21,
+        id: 8,
         schema: None,
     });
     /// YAML data intended to be consumed by an application.
     ///
     /// Constant alias for string: `"application/yaml"`.
     pub const APPLICATION_YAML: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 22,
+        id: 9,
         schema: None,
     });
     /// YAML data intended to be human readable.
     ///
     /// Constant alias for string: `"text/yaml"`.
     pub const TEXT_YAML: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 23,
+        id: 10,
         schema: None,
     });
     /// JSON5 encoded data that are human readable.
     ///
     /// Constant alias for string: `"text/json5"`.
     pub const TEXT_JSON5: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 24,
+        id: 11,
         schema: None,
     });
     /// A Python object serialized using [pickle](https://docs.python.org/3/library/pickle.html).
@@ -181,400 +179,400 @@ impl Encoding {
     /// Constant alias for string: `"application/python-serialized-object"`.
     pub const APPLICATION_PYTHON_SERIALIZED_OBJECT: Encoding =
         Self(zenoh_protocol::core::Encoding {
-            id: 25,
+            id: 12,
             schema: None,
         });
     /// An application-specific protobuf-encoded data.
     ///
     /// Constant alias for string: `"application/protobuf"`.
     pub const APPLICATION_PROTOBUF: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 26,
+        id: 13,
         schema: None,
     });
     /// A Java serialized object.
     ///
     /// Constant alias for string: `"application/java-serialized-object"`.
     pub const APPLICATION_JAVA_SERIALIZED_OBJECT: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 27,
+        id: 14,
         schema: None,
     });
     /// An [openmetrics](https://github.com/OpenObservability/OpenMetrics) data, common used by [Prometheus](https://prometheus.io/).
     ///
     /// Constant alias for string: `"application/openmetrics-text"`.
     pub const APPLICATION_OPENMETRICS_TEXT: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 28,
+        id: 15,
         schema: None,
     });
     /// A Portable Network Graphics (PNG) image.
     ///
     /// Constant alias for string: `"image/png"`.
     pub const IMAGE_PNG: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 29,
+        id: 16,
         schema: None,
     });
     /// A Joint Photographic Experts Group (JPEG) image.
     ///
     /// Constant alias for string: `"image/jpeg"`.
     pub const IMAGE_JPEG: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 30,
+        id: 17,
         schema: None,
     });
     /// A Graphics Interchange Format (GIF) image.
     ///
     /// Constant alias for string: `"image/gif"`.
     pub const IMAGE_GIF: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 31,
+        id: 18,
         schema: None,
     });
     /// A BitMap (BMP) image.
     ///
     /// Constant alias for string: `"image/bmp"`.
     pub const IMAGE_BMP: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 32,
+        id: 19,
         schema: None,
     });
     /// A Web Portable (WebP) image.
     ///
     ///  Constant alias for string: `"image/webp"`.
     pub const IMAGE_WEBP: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 33,
+        id: 20,
         schema: None,
     });
     /// An XML file intended to be consumed by an application..
     ///
     /// Constant alias for string: `"application/xml"`.
     pub const APPLICATION_XML: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 34,
+        id: 21,
         schema: None,
     });
     /// An encoded a list of tuples, each consisting of a name and a value.
     ///
     /// Constant alias for string: `"application/x-www-form-urlencoded"`.
     pub const APPLICATION_X_WWW_FORM_URLENCODED: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 35,
+        id: 22,
         schema: None,
     });
     /// An HTML file.
     ///
     /// Constant alias for string: `"text/html"`.
     pub const TEXT_HTML: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 36,
+        id: 23,
         schema: None,
     });
     /// An XML file that is human readable.
     ///
     /// Constant alias for string: `"text/xml"`.
     pub const TEXT_XML: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 37,
+        id: 24,
         schema: None,
     });
     /// A CSS file.
     ///
     /// Constant alias for string: `"text/css"`.
     pub const TEXT_CSS: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 38,
+        id: 25,
         schema: None,
     });
     /// A JavaScript file.
     ///
     /// Constant alias for string: `"text/javascript"`.
     pub const TEXT_JAVASCRIPT: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 39,
+        id: 26,
         schema: None,
     });
     /// A MarkDown file.
     ///
     /// Constant alias for string: `"text/markdown"`.
     pub const TEXT_MARKDOWN: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 40,
+        id: 27,
         schema: None,
     });
     /// A CSV file.
     ///
     /// Constant alias for string: `"text/csv"`.
     pub const TEXT_CSV: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 41,
+        id: 28,
         schema: None,
     });
     /// An application-specific SQL query.
     ///
     /// Constant alias for string: `"application/sql"`.
     pub const APPLICATION_SQL: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 42,
+        id: 29,
         schema: None,
     });
     /// Constrained Application Protocol (CoAP) data intended for CoAP-to-HTTP and HTTP-to-CoAP proxies.
     ///
     /// Constant alias for string: `"application/coap-payload"`.
     pub const APPLICATION_COAP_PAYLOAD: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 43,
+        id: 30,
         schema: None,
     });
     /// Defines a JSON document structure for expressing a sequence of operations to apply to a JSON document.
     ///
     /// Constant alias for string: `"application/json-patch+json"`.
     pub const APPLICATION_JSON_PATCH_JSON: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 44,
+        id: 31,
         schema: None,
     });
     /// A JSON text sequence consists of any number of JSON texts, all encoded in UTF-8.
     ///
     /// Constant alias for string: `"application/json-seq"`.
     pub const APPLICATION_JSON_SEQ: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 45,
+        id: 32,
         schema: None,
     });
     /// A JSONPath defines a string syntax for selecting and extracting JSON values from within a given JSON value.
     ///
     /// Constant alias for string: `"application/jsonpath"`.
     pub const APPLICATION_JSONPATH: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 46,
+        id: 33,
         schema: None,
     });
     /// A JSON Web Token (JWT).
     ///
     /// Constant alias for string: `"application/jwt"`.
     pub const APPLICATION_JWT: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 47,
+        id: 34,
         schema: None,
     });
     /// An application-specific MPEG-4 encoded data, either audio or video.
     ///
     /// Constant alias for string: `"application/mp4"`.
     pub const APPLICATION_MP4: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 48,
+        id: 35,
         schema: None,
     });
     /// A SOAP 1.2 message serialized as XML 1.0.
     ///
     /// Constant alias for string: `"application/soap+xml"`.
     pub const APPLICATION_SOAP_XML: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 49,
+        id: 36,
         schema: None,
     });
     /// A YANG-encoded data commonly used by the Network Configuration Protocol (NETCONF).
     ///
     /// Constant alias for string: `"application/yang"`.
     pub const APPLICATION_YANG: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 50,
+        id: 37,
         schema: None,
     });
     /// A MPEG-4 Advanced Audio Coding (AAC) media.
     ///
     /// Constant alias for string: `"audio/aac"`.
     pub const AUDIO_AAC: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 51,
+        id: 38,
         schema: None,
     });
     /// A Free Lossless Audio Codec (FLAC) media.
     ///
     /// Constant alias for string: `"audio/flac"`.
     pub const AUDIO_FLAC: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 52,
+        id: 39,
         schema: None,
     });
     /// An audio codec defined in MPEG-1, MPEG-2, MPEG-4, or registered at the MP4 registration authority.
     ///
     /// Constant alias for string: `"audio/mp4"`.
     pub const AUDIO_MP4: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 53,
+        id: 40,
         schema: None,
     });
     /// An Ogg-encapsulated audio stream.
     ///
     /// Constant alias for string: `"audio/ogg"`.
     pub const AUDIO_OGG: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 54,
+        id: 41,
         schema: None,
     });
     /// A Vorbis-encoded audio stream.
     ///
     /// Constant alias for string: `"audio/vorbis"`.
     pub const AUDIO_VORBIS: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 55,
+        id: 42,
         schema: None,
     });
     /// A h261-encoded video stream.
     ///
     /// Constant alias for string: `"video/h261"`.
     pub const VIDEO_H261: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 56,
+        id: 43,
         schema: None,
     });
     /// A h263-encoded video stream.
     ///
     /// Constant alias for string: `"video/h263"`.
     pub const VIDEO_H263: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 57,
+        id: 44,
         schema: None,
     });
     /// A h264-encoded video stream.
     ///
     /// Constant alias for string: `"video/h264"`.
     pub const VIDEO_H264: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 58,
+        id: 45,
         schema: None,
     });
     /// A h265-encoded video stream.
     ///
     /// Constant alias for string: `"video/h265"`.
     pub const VIDEO_H265: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 59,
+        id: 46,
         schema: None,
     });
     /// A h266-encoded video stream.
     ///
     /// Constant alias for string: `"video/h266"`.
     pub const VIDEO_H266: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 60,
+        id: 47,
         schema: None,
     });
     /// A video codec defined in MPEG-1, MPEG-2, MPEG-4, or registered at the MP4 registration authority.
     ///
     /// Constant alias for string: `"video/mp4"`.
     pub const VIDEO_MP4: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 61,
+        id: 48,
         schema: None,
     });
     /// An Ogg-encapsulated video stream.
     ///
     /// Constant alias for string: `"video/ogg"`.
     pub const VIDEO_OGG: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 62,
+        id: 49,
         schema: None,
     });
     /// An uncompressed, studio-quality video stream.
     ///
     /// Constant alias for string: `"video/raw"`.
     pub const VIDEO_RAW: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 63,
+        id: 50,
         schema: None,
     });
     /// A VP8-encoded video stream.
     ///
     /// Constant alias for string: `"video/vp8"`.
     pub const VIDEO_VP8: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 64,
+        id: 51,
         schema: None,
     });
     /// A VP9-encoded video stream.
     ///
     /// Constant alias for string: `"video/vp9"`.
     pub const VIDEO_VP9: Encoding = Self(zenoh_protocol::core::Encoding {
-        id: 65,
+        id: 52,
         schema: None,
     });
 
     const ID_TO_STR: phf::Map<EncodingId, &'static str> = phf_map! {
         0u16 => "zenoh/bytes",
         1u16 => "zenoh/string",
-        15u16 => "zenoh/serialized",
-        16u16 => "application/octet-stream",
-        17u16 => "text/plain",
-        18u16 => "application/json",
-        19u16 => "text/json",
-        20u16 => "application/cdr",
-        21u16 => "application/cbor",
-        22u16 => "application/yaml",
-        23u16 => "text/yaml",
-        24u16 => "text/json5",
-        25u16 => "application/python-serialized-object",
-        26u16 => "application/protobuf",
-        27u16 => "application/java-serialized-object",
-        28u16 => "application/openmetrics-text",
-        29u16 => "image/png",
-        30u16 => "image/jpeg",
-        31u16 => "image/gif",
-        32u16 => "image/bmp",
-        33u16 => "image/webp",
-        34u16 => "application/xml",
-        35u16 => "application/x-www-form-urlencoded",
-        36u16 => "text/html",
-        37u16 => "text/xml",
-        38u16 => "text/css",
-        39u16 => "text/javascript",
-        40u16 => "text/markdown",
-        41u16 => "text/csv",
-        42u16 => "application/sql",
-        43u16 => "application/coap-payload",
-        44u16 => "application/json-patch+json",
-        45u16 => "application/json-seq",
-        46u16 => "application/jsonpath",
-        47u16 => "application/jwt",
-        48u16 => "application/mp4",
-        49u16 => "application/soap+xml",
-        50u16 => "application/yang",
-        51u16 => "audio/aac",
-        52u16 => "audio/flac",
-        53u16 => "audio/mp4",
-        54u16 => "audio/ogg",
-        55u16 => "audio/vorbis",
-        56u16 => "video/h261",
-        57u16 => "video/h263",
-        58u16 => "video/h264",
-        59u16 => "video/h265",
-        60u16 => "video/h266",
-        61u16 => "video/mp4",
-        62u16 => "video/ogg",
-        63u16 => "video/raw",
-        64u16 => "video/vp8",
-        65u16 => "video/vp9",
+        2u16 => "zenoh/serialized",
+        3u16 => "application/octet-stream",
+        4u16 => "text/plain",
+        5u16 => "application/json",
+        6u16 => "text/json",
+        7u16 => "application/cdr",
+        8u16 => "application/cbor",
+        9u16 => "application/yaml",
+        10u16 => "text/yaml",
+        11u16 => "text/json5",
+        12u16 => "application/python-serialized-object",
+        13u16 => "application/protobuf",
+        14u16 => "application/java-serialized-object",
+        15u16 => "application/openmetrics-text",
+        16u16 => "image/png",
+        17u16 => "image/jpeg",
+        18u16 => "image/gif",
+        19u16 => "image/bmp",
+        20u16 => "image/webp",
+        21u16 => "application/xml",
+        22u16 => "application/x-www-form-urlencoded",
+        23u16 => "text/html",
+        24u16 => "text/xml",
+        25u16 => "text/css",
+        26u16 => "text/javascript",
+        27u16 => "text/markdown",
+        28u16 => "text/csv",
+        29u16 => "application/sql",
+        30u16 => "application/coap-payload",
+        31u16 => "application/json-patch+json",
+        32u16 => "application/json-seq",
+        33u16 => "application/jsonpath",
+        34u16 => "application/jwt",
+        35u16 => "application/mp4",
+        36u16 => "application/soap+xml",
+        37u16 => "application/yang",
+        38u16 => "audio/aac",
+        39u16 => "audio/flac",
+        40u16 => "audio/mp4",
+        41u16 => "audio/ogg",
+        42u16 => "audio/vorbis",
+        43u16 => "video/h261",
+        44u16 => "video/h263",
+        45u16 => "video/h264",
+        46u16 => "video/h265",
+        47u16 => "video/h266",
+        48u16 => "video/mp4",
+        49u16 => "video/ogg",
+        50u16 => "video/raw",
+        51u16 => "video/vp8",
+        52u16 => "video/vp9",
     };
 
     const STR_TO_ID: phf::Map<&'static str, EncodingId> = phf_map! {
         "zenoh/bytes" => 0u16,
         "zenoh/string" => 1u16,
-        "zenoh/serialized" => 15u16,
-        "application/octet-stream" => 16u16,
-        "text/plain" => 17u16,
-        "application/json" => 18u16,
-        "text/json" => 19u16,
-        "application/cdr" => 20u16,
-        "application/cbor" => 21u16,
-        "application/yaml" => 22u16,
-        "text/yaml" => 23u16,
-        "text/json5" => 24u16,
-        "application/python-serialized-object" => 25u16,
-        "application/protobuf" => 26u16,
-        "application/java-serialized-object" => 27u16,
-        "application/openmetrics-text" => 28u16,
-        "image/png" => 29u16,
-        "image/jpeg" => 30u16,
-        "image/gif" => 31u16,
-        "image/bmp" => 32u16,
-        "image/webp" => 33u16,
-        "application/xml" => 34u16,
-        "application/x-www-form-urlencoded" => 35u16,
-        "text/html" => 36u16,
-        "text/xml" => 37u16,
-        "text/css" => 38u16,
-        "text/javascript" => 39u16,
-        "text/markdown" => 40u16,
-        "text/csv" => 41u16,
-        "application/sql" => 42u16,
-        "application/coap-payload" => 43u16,
-        "application/json-patch+json" => 44u16,
-        "application/json-seq" => 45u16,
-        "application/jsonpath" => 46u16,
-        "application/jwt" => 47u16,
-        "application/mp4" => 48u16,
-        "application/soap+xml" => 49u16,
-        "application/yang" => 50u16,
-        "audio/aac" => 51u16,
-        "audio/flac" => 52u16,
-        "audio/mp4" => 53u16,
-        "audio/ogg" => 54u16,
-        "audio/vorbis" => 55u16,
-        "video/h261" => 56u16,
-        "video/h263" => 57u16,
-        "video/h264" => 58u16,
-        "video/h265" => 59u16,
-        "video/h266" => 60u16,
-        "video/mp4" => 61u16,
-        "video/ogg" => 62u16,
-        "video/raw" => 63u16,
-        "video/vp8" => 64u16,
-        "video/vp9" => 65u16,
+        "zenoh/serialized" => 2u16,
+        "application/octet-stream" => 3u16,
+        "text/plain" => 4u16,
+        "application/json" => 5u16,
+        "text/json" => 6u16,
+        "application/cdr" => 7u16,
+        "application/cbor" => 8u16,
+        "application/yaml" => 9u16,
+        "text/yaml" => 10u16,
+        "text/json5" => 11u16,
+        "application/python-serialized-object" => 12u16,
+        "application/protobuf" => 13u16,
+        "application/java-serialized-object" => 14u16,
+        "application/openmetrics-text" => 15u16,
+        "image/png" => 16u16,
+        "image/jpeg" => 17u16,
+        "image/gif" => 18u16,
+        "image/bmp" => 19u16,
+        "image/webp" => 20u16,
+        "application/xml" => 21u16,
+        "application/x-www-form-urlencoded" => 22u16,
+        "text/html" => 23u16,
+        "text/xml" => 24u16,
+        "text/css" => 25u16,
+        "text/javascript" => 26u16,
+        "text/markdown" => 27u16,
+        "text/csv" => 28u16,
+        "application/sql" => 29u16,
+        "application/coap-payload" => 30u16,
+        "application/json-patch+json" => 31u16,
+        "application/json-seq" => 32u16,
+        "application/jsonpath" => 33u16,
+        "application/jwt" => 34u16,
+        "application/mp4" => 35u16,
+        "application/soap+xml" => 36u16,
+        "application/yang" => 37u16,
+        "audio/aac" => 38u16,
+        "audio/flac" => 39u16,
+        "audio/mp4" => 40u16,
+        "audio/ogg" => 41u16,
+        "audio/vorbis" => 42u16,
+        "video/h261" => 43u16,
+        "video/h263" => 44u16,
+        "video/h264" => 45u16,
+        "video/h265" => 46u16,
+        "video/h266" => 47u16,
+        "video/mp4" => 48u16,
+        "video/ogg" => 49u16,
+        "video/raw" => 50u16,
+        "video/vp8" => 51u16,
+        "video/vp9" => 52u16,
     };
 
     /// The default [`Encoding`] is [`ZENOH_BYTES`](Encoding::ZENOH_BYTES).
