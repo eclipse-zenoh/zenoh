@@ -597,23 +597,16 @@ impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[derive(Debug)]
-pub struct QueryableBuilder<'a, 'b, Handler> {
+pub struct QueryableBuilder<'a, 'b, Handler, const BACKGROUND: bool = false> {
     pub(crate) session: &'a Session,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) complete: bool,
     pub(crate) origin: Locality,
     pub(crate) handler: Handler,
-    pub(crate) undeclare_on_drop: bool,
 }
 
 impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// Receive the queries for this queryable with a callback.
-    ///
-    /// Queryable will not be undeclared when dropped, with the callback running
-    /// in background until the session is closed.
-    ///
-    /// It is in fact just a convenient shortcut for
-    /// `.with(my_callback).undeclare_on_drop(false)`.
     ///
     /// # Examples
     /// ```
@@ -629,20 +622,17 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    pub fn callback<Callback>(self, callback: Callback) -> QueryableBuilder<'a, 'b, Callback>
+    pub fn callback<F>(self, callback: F) -> QueryableBuilder<'a, 'b, Callback<Query>>
     where
-        Callback: Fn(Query) + Send + Sync + 'static,
+        F: Fn(Query) + Send + Sync + 'static,
     {
-        self.with(callback).undeclare_on_drop(false)
+        self.with(Callback::new(Arc::new(callback)))
     }
 
     /// Receive the queries for this Queryable with a mutable callback.
     ///
     /// Using this guarantees that your callback will never be called concurrently.
     /// If your callback is also accepted by the [`callback`](QueryableBuilder::callback) method, we suggest you use it instead of `callback_mut`.
-    ///
-    /// Queryable will not be undeclared when dropped, with the callback running
-    /// in background until the session is closed.
     ///
     /// # Examples
     /// ```
@@ -659,12 +649,9 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    pub fn callback_mut<CallbackMut>(
-        self,
-        callback: CallbackMut,
-    ) -> QueryableBuilder<'a, 'b, impl Fn(Query) + Send + Sync + 'static>
+    pub fn callback_mut<F>(self, callback: F) -> QueryableBuilder<'a, 'b, Callback<Query>>
     where
-        CallbackMut: FnMut(Query) + Send + Sync + 'static,
+        F: FnMut(Query) + Send + Sync + 'static,
     {
         self.callback(locked(callback))
     }
@@ -698,7 +685,6 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
             complete,
             origin,
             handler: _,
-            undeclare_on_drop,
         } = self;
         QueryableBuilder {
             session,
@@ -706,12 +692,42 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
             complete,
             origin,
             handler,
-            undeclare_on_drop,
         }
     }
 }
 
-impl<Handler> QueryableBuilder<'_, '_, Handler> {
+impl<'a, 'b> QueryableBuilder<'a, 'b, Callback<Query>> {
+    /// Register the queryable callback to be run in background until the session is closed.
+    ///
+    /// Background builder doesn't return a `Queryable` object anymore.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// // no need to assign and keep a variable with a background queryable
+    /// session
+    ///     .declare_queryable("key/expression")
+    ///     .callback(|query| {println!(">> Handling query '{}'", query.selector());})
+    ///     .background()
+    ///     .await
+    ///     .unwrap();
+    /// # }
+    /// ```
+    pub fn background(self) -> QueryableBuilder<'a, 'b, Callback<Query>, true> {
+        QueryableBuilder {
+            session: self.session,
+            key_expr: self.key_expr,
+            complete: self.complete,
+            origin: self.origin,
+            handler: self.handler,
+        }
+    }
+}
+
+impl<Handler, const BACKGROUND: bool> QueryableBuilder<'_, '_, Handler, BACKGROUND> {
     /// Change queryable completeness.
     #[inline]
     pub fn complete(mut self, complete: bool) -> Self {
@@ -727,18 +743,6 @@ impl<Handler> QueryableBuilder<'_, '_, Handler> {
     #[zenoh_macros::unstable]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
         self.origin = origin;
-        self
-    }
-
-    /// Set whether the queryable will be undeclared when dropped.
-    ///
-    /// The method is usually used in combination with a callback like in
-    /// [`callback`](Self::callback) method, or a channel sender.
-    /// Be careful when using it, as queryables not undeclared will consume
-    /// resources until the session is closed.
-    #[inline]
-    pub fn undeclare_on_drop(mut self, undeclare_on_drop: bool) -> Self {
-        self.undeclare_on_drop = undeclare_on_drop;
         self
     }
 }
@@ -869,6 +873,11 @@ impl<Handler> Queryable<Handler> {
         self.inner.undeclare_on_drop = false;
         self.inner.session.close_queryable(self.inner.id)
     }
+
+    #[zenoh_macros::internal]
+    pub fn set_background(&mut self, background: bool) {
+        self.inner.undeclare_on_drop = !background;
+    }
 }
 
 impl<Handler> Drop for Queryable<Handler> {
@@ -931,7 +940,7 @@ where
                 inner: QueryableInner {
                     session: self.session.downgrade(),
                     id: qable_state.id,
-                    undeclare_on_drop: self.undeclare_on_drop,
+                    undeclare_on_drop: true,
                 },
                 handler: receiver,
             })
@@ -943,6 +952,31 @@ where
     Handler: IntoHandler<Query> + Send,
     Handler::Handler: Send,
 {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
+    }
+}
+
+impl Resolvable for QueryableBuilder<'_, '_, Callback<Query>, true> {
+    type To = ZResult<()>;
+}
+
+impl Wait for QueryableBuilder<'_, '_, Callback<Query>, true> {
+    fn wait(self) -> <Self as Resolvable>::To {
+        self.session.0.declare_queryable_inner(
+            &self.key_expr?.to_wire(&self.session.0),
+            self.complete,
+            self.origin,
+            self.handler,
+        )?;
+        Ok(())
+    }
+}
+
+impl IntoFuture for QueryableBuilder<'_, '_, Callback<Query>, true> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 

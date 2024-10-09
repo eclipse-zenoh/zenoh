@@ -273,7 +273,6 @@ impl<'a> Publisher<'a> {
         MatchingListenerBuilder {
             publisher: self,
             handler: DefaultHandler::default(),
-            undeclare_on_drop: true,
         }
     }
 
@@ -544,10 +543,9 @@ impl MatchingStatus {
 /// A builder for initializing a [`MatchingListener`].
 #[zenoh_macros::unstable]
 #[derive(Debug)]
-pub struct MatchingListenerBuilder<'a, 'b, Handler> {
+pub struct MatchingListenerBuilder<'a, 'b, Handler, const BACKGROUND: bool = false> {
     pub(crate) publisher: &'a Publisher<'b>,
     pub handler: Handler,
-    pub(crate) undeclare_on_drop: bool,
 }
 
 #[zenoh_macros::unstable]
@@ -576,11 +574,14 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
-    pub fn callback<Callback>(self, callback: Callback) -> MatchingListenerBuilder<'a, 'b, Callback>
+    pub fn callback<F>(
+        self,
+        callback: F,
+    ) -> MatchingListenerBuilder<'a, 'b, Callback<MatchingStatus>>
     where
-        Callback: Fn(MatchingStatus) + Send + Sync + 'static,
+        F: Fn(MatchingStatus) + Send + Sync + 'static,
     {
-        self.with(callback).undeclare_on_drop(false)
+        self.with(Callback::new(Arc::new(callback)))
     }
 
     /// Receive the MatchingStatuses for this listener with a mutable callback.
@@ -602,12 +603,12 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
-    pub fn callback_mut<CallbackMut>(
+    pub fn callback_mut<F>(
         self,
-        callback: CallbackMut,
-    ) -> MatchingListenerBuilder<'a, 'b, impl Fn(MatchingStatus) + Send + Sync + 'static>
+        callback: F,
+    ) -> MatchingListenerBuilder<'a, 'b, Callback<MatchingStatus>>
     where
-        CallbackMut: FnMut(MatchingStatus) + Send + Sync + 'static,
+        F: FnMut(MatchingStatus) + Send + Sync + 'static,
     {
         self.callback(crate::api::handlers::locked(callback))
     }
@@ -644,28 +645,44 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
         let MatchingListenerBuilder {
             publisher,
             handler: _,
-            undeclare_on_drop,
         } = self;
-        MatchingListenerBuilder {
-            publisher,
-            handler,
-            undeclare_on_drop,
-        }
+        MatchingListenerBuilder { publisher, handler }
     }
 }
 
 #[zenoh_macros::unstable]
-impl<Handler> MatchingListenerBuilder<'_, '_, Handler> {
-    /// Set whether the matching listener will be undeclared when dropped.
+impl<'a, 'b> MatchingListenerBuilder<'a, 'b, Callback<MatchingStatus>> {
+    /// Register the listener callback to be run in background until the publisher is undeclared.
     ///
-    /// The method is usually used in combination with a callback like in
-    /// [`callback`](Self::callback) method, or a channel sender.
-    /// Be careful when using it, as matching listeners not undeclared will consume
-    /// resources until the publisher is undeclared.
-    #[inline]
-    pub fn undeclare_on_drop(mut self, undeclare_on_drop: bool) -> Self {
-        self.undeclare_on_drop = undeclare_on_drop;
-        self
+    /// Background builder doesn't return a `MatchingListener` object anymore.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression").await.unwrap();
+    /// // no need to assign and keep a variable with a background listener
+    /// publisher
+    ///     .matching_listener()
+    ///     .callback(|matching_status| {
+    ///         if matching_status.matching_subscribers() {
+    ///             println!("Publisher has matching subscribers.");
+    ///         } else {
+    ///             println!("Publisher has NO MORE matching subscribers.");
+    ///         }
+    ///     })
+    ///     .background()
+    ///     .await
+    ///     .unwrap();
+    /// # }
+    /// ```
+    pub fn background(self) -> MatchingListenerBuilder<'a, 'b, Callback<MatchingStatus>, true> {
+        MatchingListenerBuilder {
+            publisher: self.publisher,
+            handler: self.handler,
+        }
     }
 }
 
@@ -697,7 +714,7 @@ where
                 session: self.publisher.session.clone(),
                 matching_listeners: self.publisher.matching_listeners.clone(),
                 id: state.id,
-                undeclare_on_drop: self.undeclare_on_drop,
+                undeclare_on_drop: true,
             },
             handler,
         })
@@ -710,6 +727,35 @@ where
     Handler: IntoHandler<MatchingStatus> + Send,
     Handler::Handler: Send,
 {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
+
+    #[zenoh_macros::unstable]
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
+    }
+}
+
+#[zenoh_macros::unstable]
+impl Resolvable for MatchingListenerBuilder<'_, '_, Callback<MatchingStatus>, true> {
+    type To = ZResult<()>;
+}
+
+#[zenoh_macros::unstable]
+impl Wait for MatchingListenerBuilder<'_, '_, Callback<MatchingStatus>, true> {
+    #[zenoh_macros::unstable]
+    fn wait(self) -> <Self as Resolvable>::To {
+        let state = self
+            .publisher
+            .session
+            .declare_matches_listener_inner(self.publisher, self.handler)?;
+        zlock!(self.publisher.matching_listeners).insert(state.id);
+        Ok(())
+    }
+}
+
+#[zenoh_macros::unstable]
+impl IntoFuture for MatchingListenerBuilder<'_, '_, Callback<MatchingStatus>, true> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
@@ -806,6 +852,11 @@ impl<Handler> MatchingListener<Handler> {
         self.inner
             .session
             .undeclare_matches_listener_inner(self.inner.id)
+    }
+
+    #[zenoh_macros::internal]
+    pub fn set_background(&mut self, background: bool) {
+        self.inner.undeclare_on_drop = !background;
     }
 }
 

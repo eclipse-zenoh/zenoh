@@ -36,9 +36,10 @@ fn main() {
         .wait()
         .unwrap();
 
-    let _sub = session
+    session
         .declare_subscriber(key_expr_ping)
         .callback(move |sample| publisher.put(sample.payload().clone()).wait().unwrap())
+        .background()
         .wait()
         .unwrap();
     std::thread::park();
