@@ -82,8 +82,9 @@ impl Encoding {
     ///
     /// Constant alias for string: `"zenoh/bytes"`.
     ///
-    /// This encoding supposes that the payload was created with [`ZBytes::from::<Vec<u8>>`](crate::bytes::ZBytes::from) or similar and
-    /// its data should be accessed with `ZBytes::to_bytes()`, no additional assumptions are made
+    /// This encoding supposes that the payload was created with [`ZBytes::from::<Vec<u8>>`](crate::bytes::ZBytes::from) or similar
+    /// (`[u8]`, `[u8;N]`, `Cow<_,[u8]>`) and its data can be accessed with [`ZBytes::to_bytes()`](crate::bytes::ZBytes::to_bytes),
+    /// no additional assumptions about data format are made
     pub const ZENOH_BYTES: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 0,
         schema: None,
@@ -93,7 +94,7 @@ impl Encoding {
     /// Constant alias for string: `"zenoh/string"`.
     ///
     /// This encoding supposes that the payload was created with [`ZBytes::from::<String>`](crate::bytes::ZBytes::from) or similar
-    /// (`&str`, `Cow<str>`, `char`) and it's data can be acquired with [`ZBytes::try_to_string()`](crate::bytes::ZBytes::try_to_string) without an error.
+    /// (`&str`, `Cow<str>`) and its data can be accessed with [`ZBytes::try_to_string()`](crate::bytes::ZBytes::try_to_string) without an error.
     pub const ZENOH_STRING: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 1,
         schema: None,

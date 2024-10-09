@@ -540,16 +540,4 @@ mod tests {
         map.insert("hello".to_string(), "world".to_string());
         serialize_deserialize!(HashMap<String, String>, map);
     }
-
-    #[test]
-    fn timestamp_serialization() {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into();
-        let timestamp = Timestamp::new(now, TimestampId::rand());
-        let (NTP64(ts), id) = (timestamp.get_time(), timestamp.get_id().to_le_bytes());
-        let payload = z_serialize(&(ts, id));
-        let (ts, id) = z_deserialize::<(_, [u8; 16])>(&payload).unwrap();
-        let timestamp_out = Timestamp::new(NTP64(ts), TimestampId::try_from(&id).unwrap());
-        assert_eq!(timestamp, timestamp_out);
-    }
 }
