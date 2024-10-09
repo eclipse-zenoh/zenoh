@@ -462,7 +462,6 @@ mod tests {
     use std::ops::Range;
 
     use rand::{thread_rng, Rng};
-    use zenoh::time::{Timestamp, TimestampId, NTP64};
 
     use super::*;
 
