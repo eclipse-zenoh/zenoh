@@ -31,7 +31,7 @@ use zenoh::{
 /// The builder of PublicationCache, allowing to configure it.
 #[zenoh_macros::unstable]
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
-pub struct PublicationCacheBuilder<'a, 'b, 'c> {
+pub struct PublicationCacheBuilder<'a, 'b, 'c, const BACKGROUND: bool = false> {
     session: &'a Session,
     pub_key_expr: ZResult<KeyExpr<'b>>,
     queryable_prefix: Option<ZResult<KeyExpr<'c>>>,
@@ -93,6 +93,18 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
         self.resources_limit = Some(limit);
         self
     }
+
+    pub fn background(self) -> PublicationCacheBuilder<'a, 'b, 'c, true> {
+        PublicationCacheBuilder {
+            session: self.session,
+            pub_key_expr: self.pub_key_expr,
+            queryable_prefix: self.queryable_prefix,
+            queryable_origin: self.queryable_origin,
+            complete: self.complete,
+            history: self.history,
+            resources_limit: self.resources_limit,
+        }
+    }
 }
 
 impl Resolvable for PublicationCacheBuilder<'_, '_, '_> {
@@ -114,6 +126,25 @@ impl IntoFuture for PublicationCacheBuilder<'_, '_, '_> {
     }
 }
 
+impl Resolvable for PublicationCacheBuilder<'_, '_, '_, true> {
+    type To = ZResult<()>;
+}
+
+impl Wait for PublicationCacheBuilder<'_, '_, '_, true> {
+    fn wait(self) -> <Self as Resolvable>::To {
+        PublicationCache::new(self).map(|_| ())
+    }
+}
+
+impl IntoFuture for PublicationCacheBuilder<'_, '_, '_, true> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
+    }
+}
+
 #[zenoh_macros::unstable]
 pub struct PublicationCache {
     local_sub: Subscriber<FifoChannelHandler<Sample>>,
@@ -122,7 +153,9 @@ pub struct PublicationCache {
 }
 
 impl PublicationCache {
-    fn new(conf: PublicationCacheBuilder<'_, '_, '_>) -> ZResult<PublicationCache> {
+    fn new<const BACKGROUND: bool>(
+        conf: PublicationCacheBuilder<'_, '_, '_, BACKGROUND>,
+    ) -> ZResult<PublicationCache> {
         let key_expr = conf.pub_key_expr?;
         // the queryable_prefix (optional), and the key_expr for PublicationCache's queryable ("[<queryable_prefix>]/<pub_key_expr>")
         let (queryable_prefix, queryable_key_expr): (Option<OwnedKeyExpr>, KeyExpr) =
@@ -150,11 +183,14 @@ impl PublicationCache {
         }
 
         // declare the local subscriber that will store the local publications
-        let local_sub = conf
+        let mut local_sub = conf
             .session
             .declare_subscriber(&key_expr)
             .allowed_origin(Locality::SessionLocal)
             .wait()?;
+        if BACKGROUND {
+            local_sub.set_background(true);
+        }
 
         // declare the queryable which returns the cached publications
         let mut queryable = conf.session.declare_queryable(&queryable_key_expr);
@@ -164,7 +200,10 @@ impl PublicationCache {
         if let Some(complete) = conf.complete {
             queryable = queryable.complete(complete);
         }
-        let queryable = queryable.wait()?;
+        let mut queryable = queryable.wait()?;
+        if BACKGROUND {
+            queryable.set_background(true);
+        }
 
         // take local ownership of stuff to be moved into task
         let sub_recv = local_sub.handler().clone();
@@ -271,6 +310,12 @@ impl PublicationCache {
             task.terminate(Duration::from_secs(10));
             Ok(())
         })
+    }
+
+    #[zenoh_macros::internal]
+    pub fn set_background(&mut self, background: bool) {
+        self.local_sub.set_background(background);
+        self._queryable.set_background(background);
     }
 
     pub fn key_expr(&self) -> &KeyExpr<'static> {
