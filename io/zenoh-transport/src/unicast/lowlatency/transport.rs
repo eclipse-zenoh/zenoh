@@ -269,7 +269,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
             self.internal_start_rx(other_lease);
         });
 
-        Ok((start_tx, start_rx, ack))
+        Ok((start_tx, start_rx, ack, None))
     }
 
     /*************************************/
