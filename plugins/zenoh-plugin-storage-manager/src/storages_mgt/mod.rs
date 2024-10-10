@@ -15,12 +15,10 @@
 use std::{collections::HashMap, sync::Arc};
 
 use tokio::sync::{broadcast::Sender, Mutex, RwLock};
-use zenoh::{
-    internal::bail, key_expr::OwnedKeyExpr, sample::SampleKind, session::Session, Result as ZResult,
-};
+use zenoh::{internal::bail, session::Session, Result as ZResult};
 use zenoh_backend_traits::{config::StorageConfig, History, VolumeInstance};
 
-use crate::replication::{Event, LogLatest, ReplicationService};
+use crate::replication::{Action, Event, LogLatest, LogLatestKey, ReplicationService};
 
 pub(crate) mod service;
 pub(crate) use service::StorageService;
@@ -31,7 +29,7 @@ pub enum StorageMessage {
     GetStatus(tokio::sync::mpsc::Sender<serde_json::Value>),
 }
 
-pub(crate) type LatestUpdates = HashMap<Option<OwnedKeyExpr>, Event>;
+pub(crate) type LatestUpdates = HashMap<LogLatestKey, Event>;
 
 #[derive(Clone)]
 pub(crate) struct CacheLatest {
@@ -75,10 +73,8 @@ pub(crate) async fn create_and_start_storage(
         Ok(entries) => entries
             .into_iter()
             .map(|(stripped_key, ts)| {
-                (
-                    stripped_key.clone(),
-                    Event::new(stripped_key, ts, SampleKind::Put),
-                )
+                let event = Event::new(stripped_key, ts, &Action::Put);
+                (event.log_key(), event)
             })
             .collect::<HashMap<_, _>>(),
         Err(e) => bail!("`get_all_entries` failed with: {e:?}"),
@@ -122,15 +118,17 @@ pub(crate) async fn create_and_start_storage(
     //      target any Storage that matches the same key expression, regardless of if they have
     //      been configured to be replicated.
     tokio::task::spawn(async move {
-        let storage_service = StorageService::new(
-            zenoh_session.clone(),
-            config.clone(),
-            &name,
-            storage,
-            capability,
-            CacheLatest::new(latest_updates.clone(), replication_log.clone()),
-        )
-        .await;
+        let storage_service = Arc::new(
+            StorageService::new(
+                zenoh_session.clone(),
+                config.clone(),
+                &name,
+                storage,
+                capability,
+                CacheLatest::new(latest_updates.clone(), replication_log.clone()),
+            )
+            .await,
+        );
 
         // Testing if the `replication_log` is set is equivalent to testing if the `replication` is
         // set: the `replication_log` is only set when the latter is.
@@ -143,7 +141,7 @@ pub(crate) async fn create_and_start_storage(
 
             ReplicationService::spawn_start(
                 zenoh_session,
-                &storage_service,
+                storage_service.clone(),
                 config.key_expr,
                 replication_log,
                 latest_updates,

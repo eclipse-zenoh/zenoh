@@ -79,6 +79,10 @@ impl Configuration {
         }
     }
 
+    pub fn prefix(&self) -> Option<&OwnedKeyExpr> {
+        self.prefix.as_ref()
+    }
+
     /// Returns the [Fingerprint] of the `Configuration`.
     ///
     /// The fingerprint is the hash of all its fields, using the `xxhash_rust` crate.

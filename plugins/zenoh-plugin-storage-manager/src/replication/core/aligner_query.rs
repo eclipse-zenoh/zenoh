@@ -15,14 +15,14 @@
 use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
-use zenoh::{bytes::ZBytes, internal::Value, query::Query, sample::SampleKind};
+use zenoh::{bytes::ZBytes, internal::Value, key_expr::keyexpr_tree::IKeyExprTree, query::Query};
 
 use super::aligner_reply::AlignmentReply;
 use crate::replication::{
     classification::{IntervalIdx, SubIntervalIdx},
     core::Replication,
     digest::DigestDiff,
-    log::EventMetadata,
+    log::{Action, EventMetadata},
 };
 
 /// The `AlignmentQuery` enumeration represents the information requested by a Replica to align
@@ -99,7 +99,7 @@ impl Replication {
                     .collect::<Vec<_>>();
 
                 for interval_idx in idx_intervals {
-                    let mut events_to_send = Vec::default();
+                    let mut events_to_retrieve = Vec::default();
                     if let Some(interval) = self
                         .replication_log
                         .read()
@@ -107,15 +107,16 @@ impl Replication {
                         .intervals
                         .get(&interval_idx)
                     {
-                        interval.sub_intervals.values().for_each(|sub_interval| {
-                            events_to_send.extend(sub_interval.events.values().map(Into::into));
+                        interval.sub_intervals().for_each(|sub_interval| {
+                            events_to_retrieve.extend(sub_interval.events().map(Into::into));
                         });
                     }
 
                     // NOTE: As we took the lock in the `if let` block, it is released here,
                     // diminishing contention.
-
-                    self.reply_events(&query, events_to_send).await;
+                    for event_to_retrieve in events_to_retrieve {
+                        self.reply_event_retrieval(&query, event_to_retrieve).await;
+                    }
                 }
             }
             AlignmentQuery::Diff(digest_diff) => {
@@ -149,8 +150,8 @@ impl Replication {
             }
             AlignmentQuery::Events(events_to_retrieve) => {
                 tracing::trace!("Processing `AlignmentQuery::Events`");
-                if !events_to_retrieve.is_empty() {
-                    self.reply_events(&query, events_to_retrieve).await;
+                for event_to_retrieve in events_to_retrieve {
+                    self.reply_event_retrieval(&query, event_to_retrieve).await;
                 }
             }
         }
@@ -256,12 +257,8 @@ impl Replication {
                 .for_each(|(interval_idx, sub_intervals)| {
                     if let Some(interval) = log.intervals.get(interval_idx) {
                         sub_intervals.iter().for_each(|sub_interval_idx| {
-                            if let Some(sub_interval) = interval.sub_intervals.get(sub_interval_idx)
-                            {
-                                sub_interval
-                                    .events
-                                    .values()
-                                    .for_each(|event| events.push(event.into()))
+                            if let Some(sub_interval) = interval.sub_interval_at(sub_interval_idx) {
+                                events.extend(sub_interval.events().map(Into::into));
                             }
                         });
                     }
@@ -272,60 +269,74 @@ impl Replication {
         reply_to_query(query, reply, None).await;
     }
 
-    /// Replies to the [Query] with the [EventMetadata] and [Value] that were identified as missing.
+    /// Replies to the [Query] with the [EventMetadata] and [Value] identified as missing.
     ///
-    /// This method will fetch the [StoredData] from the Storage for each provided [EventMetadata],
-    /// making a distinct reply for each. The fact that multiple replies are sent to the same Query
-    /// is the reason why we need the consolidation to set to be `None` (⚠️).
-    pub(crate) async fn reply_events(&self, query: &Query, events_to_retrieve: Vec<EventMetadata>) {
-        for event_metadata in events_to_retrieve {
-            if event_metadata.action == SampleKind::Delete {
-                reply_to_query(query, AlignmentReply::Retrieval(event_metadata), None).await;
-                continue;
-            }
+    /// Depending on the associated action, this method will fetch the [Value] either from the
+    /// Storage or from the wildcard updates.
+    pub(crate) async fn reply_event_retrieval(
+        &self,
+        query: &Query,
+        event_to_retrieve: EventMetadata,
+    ) {
+        let value = match &event_to_retrieve.action {
+            // For a Delete or WildcardDelete there is no associated `Value`.
+            Action::Delete | Action::WildcardDelete(_) => None,
+            // For a Put we need to retrieve the `Value` in the Storage.
+            Action::Put => {
+                let stored_data = {
+                    let mut storage = self.storage_service.storage.lock().await;
+                    match storage
+                        .get(event_to_retrieve.stripped_key.clone(), "")
+                        .await
+                    {
+                        Ok(stored_data) => stored_data,
+                        Err(e) => {
+                            tracing::error!(
+                                "Failed to retrieve data associated to key < {:?} >: {e:?}",
+                                event_to_retrieve.key_expr()
+                            );
+                            return;
+                        }
+                    }
+                };
 
-            let stored_data = {
-                let mut storage = self.storage.lock().await;
-                match storage.get(event_metadata.stripped_key.clone(), "").await {
-                    Ok(stored_data) => stored_data,
-                    Err(e) => {
-                        tracing::error!(
-                            "Failed to retrieve data associated to key < {:?} >: {e:?}",
-                            event_metadata.key_expr()
+                let requested_data = stored_data
+                    .into_iter()
+                    .find(|data| data.timestamp == *event_to_retrieve.timestamp());
+                match requested_data {
+                    Some(data) => Some(data.value),
+                    None => {
+                        // NOTE: This is not necessarily an error. There is a possibility that the
+                        //       data associated with this specific key was updated between the time
+                        //       the [AlignmentQuery] was sent and when it is processed.
+                        //
+                        //       Hence, at the time it was "valid" but it no longer is.
+                        tracing::debug!(
+                            "Found no data in the Storage associated to key < {:?} > with a \
+                             Timestamp equal to: {}",
+                            event_to_retrieve.key_expr(),
+                            event_to_retrieve.timestamp()
                         );
-                        continue;
+                        return;
                     }
                 }
-            };
+            }
+            // For a WildcardPut we need to retrieve the `Value` in the `StorageService`.
+            Action::WildcardPut(wildcard_ke) => {
+                let wildcard_puts_guard = self.storage_service.wildcard_puts.read().await;
 
-            let requested_data = stored_data
-                .into_iter()
-                .find(|data| data.timestamp == *event_metadata.timestamp());
-            match requested_data {
-                Some(data) => {
-                    tracing::trace!("Sending Sample: {:?}", event_metadata.stripped_key);
-                    reply_to_query(
-                        query,
-                        AlignmentReply::Retrieval(event_metadata),
-                        Some(data.value),
-                    )
-                    .await;
-                }
-                None => {
-                    // NOTE: This is not necessarily an error. There is a possibility that the data
-                    //       associated with this specific key was updated between the time the
-                    //       [AlignmentQuery] was sent and when it is processed.
-                    //
-                    //       Hence, at the time it was "valid" but it no longer is.
-                    tracing::debug!(
-                        "Found no data in the Storage associated to key < {:?} > with a Timestamp \
-                         equal to: {}",
-                        event_metadata.key_expr(),
-                        event_metadata.timestamp()
+                if let Some(update) = wildcard_puts_guard.weight_at(wildcard_ke) {
+                    Some(update.value().clone())
+                } else {
+                    tracing::error!(
+                        "Ignoring Wildcard Update < {wildcard_ke} >: found no associated `Update`."
                     );
+                    return;
                 }
             }
-        }
+        };
+
+        reply_to_query(query, AlignmentReply::Retrieval(event_to_retrieve), value).await;
     }
 }
 

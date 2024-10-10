@@ -456,17 +456,29 @@ pub fn strip_prefix(
     }
 }
 
-/// Returns the key with an additional prefix, if one was provided.
+/// Returns the key with an additional prefix, if both were provided.
 ///
 /// If no prefix is provided, this function returns `maybe_stripped_key`.
 ///
+/// If no key is provided, this function returns the `maybe_prefix`.
+///
 /// If a prefix is provided, this function returns the concatenation of both.
+///
+/// # Error
+///
+/// This function will return an error if both `maybe_prefix` and `maybe_stripped_key` are equal to
+/// `None`. This situation can happen if (i) the "backend" associated to a Storage is first started
+/// with a `strip_prefix` set to some value, (ii) a key equal to the `strip_prefix` is published
+/// (hence storing `None`) then (iii) the Storage is stopped and the "backend" is associated to
+/// another Storage without a `strip_prefix` configured.
 pub fn prefix(
     maybe_prefix: Option<&OwnedKeyExpr>,
-    maybe_stripped_key: &OwnedKeyExpr,
-) -> OwnedKeyExpr {
-    match maybe_prefix {
-        Some(prefix) => prefix / maybe_stripped_key,
-        None => maybe_stripped_key.clone(),
+    maybe_stripped_key: Option<&OwnedKeyExpr>,
+) -> ZResult<OwnedKeyExpr> {
+    match (maybe_prefix, maybe_stripped_key) {
+        (Some(prefix), Some(stripped_key)) => Ok(prefix / stripped_key),
+        (Some(prefix), None) => Ok(prefix.clone()),
+        (None, Some(key)) => Ok(key.clone()),
+        (None, None) => bail!("Fatal internal error: empty prefix with empty key"),
     }
 }
