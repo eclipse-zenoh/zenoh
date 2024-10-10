@@ -163,10 +163,10 @@ impl Replication {
                                 let diff = replica_sub_ivl
                                     .into_iter()
                                     .filter(|(sub_idx, sub_fp)| {
-                                        match interval.sub_intervals.get(sub_idx) {
+                                        match interval.sub_interval_at(sub_idx) {
                                             None => true,
                                             Some(sub_interval) => {
-                                                sub_interval.fingerprint != *sub_fp
+                                                sub_interval.fingerprint() != *sub_fp
                                             }
                                         }
                                     })
@@ -243,8 +243,8 @@ impl Replication {
         match &replica_event.action {
             SampleKind::Put => {
                 let replication_log_guard = self.replication_log.read().await;
-                if let Some(latest_event) =
-                    replication_log_guard.lookup(&replica_event.stripped_key)
+                if let Some(latest_event) = replication_log_guard
+                    .search_more_recent_event(&replica_event.stripped_key, &replica_event.timestamp)
                 {
                     if latest_event.timestamp >= replica_event.timestamp {
                         return None;

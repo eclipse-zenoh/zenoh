@@ -502,7 +502,11 @@ impl StorageService {
         }
 
         if let Some(replication_log) = &self.cache_latest.replication_log {
-            if let Some(event) = replication_log.read().await.lookup(stripped_key) {
+            if let Some(event) = replication_log
+                .read()
+                .await
+                .search_more_recent_event(stripped_key, received_ts)
+            {
                 if received_ts <= event.timestamp() {
                     return None;
                 }
