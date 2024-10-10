@@ -463,12 +463,10 @@ async fn test_transport(
         "Sending {} messages... {:?} {}",
         MSG_COUNT, channel, msg_size
     );
-    // TODO: workaround for https://github.com/eclipse-zenoh/zenoh/issues/1494
-    //let cctrl = match channel.reliability {
-    //    Reliability::Reliable => CongestionControl::Block,
-    //    Reliability::BestEffort => CongestionControl::Drop,
-    //};
-    let cctrl = CongestionControl::Block;
+    let cctrl = match channel.reliability {
+        Reliability::Reliable => CongestionControl::Block,
+        Reliability::BestEffort => CongestionControl::Drop,
+    };
 
     // Create the message to send
     let message: NetworkMessage = Push {
