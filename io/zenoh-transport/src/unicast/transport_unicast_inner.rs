@@ -42,6 +42,7 @@ pub(crate) type AddLinkResult<'a> = Result<
         Box<dyn FnOnce() + Send + Sync + 'a>,
         Box<dyn FnOnce() + Send + Sync + 'a>,
         MaybeOpenAck,
+        Option<AsyncMutexGuard<'a, ()>>,
     ),
     LinkError,
 >;
