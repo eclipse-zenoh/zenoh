@@ -288,7 +288,6 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         *guard = links.into_boxed_slice();
 
         drop(guard);
-        drop(add_link_guard);
 
         // create a callback to start the link
         let transport = self.clone();
@@ -302,7 +301,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
             link.start_rx(transport, other_lease);
         });
 
-        Ok((start_link, ack))
+        Ok((start_link, ack, Some(add_link_guard)))
     }
 
     /*************************************/

@@ -444,7 +444,7 @@ impl TransportManager {
         }
 
         // Add the link to the transport
-        let (start_tx_rx, ack) = transport
+        let (start_tx_rx, ack, add_link_guard) = transport
             .add_link(link, other_initial_sn, other_lease)
             .await
             .map_err(InitTransportError::Link)?;
@@ -460,6 +460,8 @@ impl TransportManager {
         Self::notify_new_link_unicast(&transport, c_link);
 
         start_tx_rx();
+
+        drop(add_link_guard);
 
         Ok(transport)
     }
@@ -548,13 +550,14 @@ impl TransportManager {
         };
 
         // Add the link to the transport
-        let (start_tx_rx, ack) = match t.add_link(link, other_initial_sn, other_lease).await {
-            Ok(val) => val,
-            Err(e) => {
-                let _ = t.close(e.2).await;
-                return Err(InitTransportError::Link(e));
-            }
-        };
+        let (start_tx_rx, ack, add_link_guard) =
+            match t.add_link(link, other_initial_sn, other_lease).await {
+                Ok(val) => val,
+                Err(e) => {
+                    let _ = t.close(e.2).await;
+                    return Err(InitTransportError::Link(e));
+                }
+            };
 
         macro_rules! transport_error {
             ($s:expr, $reason:expr) => {
@@ -585,6 +588,8 @@ impl TransportManager {
         Self::notify_new_link_unicast(&t, c_link);
 
         start_tx_rx();
+
+        drop(add_link_guard);
 
         zcondfeat!(
             "shared-memory",

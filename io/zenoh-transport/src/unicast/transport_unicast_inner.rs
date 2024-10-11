@@ -36,8 +36,14 @@ pub(crate) enum InitTransportError {
     Transport(TransportError),
 }
 
-pub(crate) type AddLinkResult<'a> =
-    Result<(Box<dyn FnOnce() + Send + Sync + 'a>, MaybeOpenAck), LinkError>;
+pub(crate) type AddLinkResult<'a> = Result<
+    (
+        Box<dyn FnOnce() + Send + Sync + 'a>,
+        MaybeOpenAck,
+        Option<AsyncMutexGuard<'a, ()>>,
+    ),
+    LinkError,
+>;
 pub(crate) type InitTransportResult = Result<Arc<dyn TransportUnicastTrait>, InitTransportError>;
 
 /*************************************/
