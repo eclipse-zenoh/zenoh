@@ -245,11 +245,9 @@ pub mod query {
     pub use crate::api::queryable::ReplySample;
     pub use crate::api::{
         builders::queryable::QueryableBuilder,
+        builders::reply::{ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
         query::{ConsolidationMode, QueryConsolidation, QueryTarget, Reply, ReplyError},
-        queryable::{
-            Query, Queryable, QueryableUndeclaration, ReplyBuilder, ReplyBuilderDelete,
-            ReplyBuilderPut, ReplyErrBuilder,
-        },
+        queryable::{Query, Queryable, QueryableUndeclaration},
         selector::Selector,
     };
     #[zenoh_macros::unstable]
