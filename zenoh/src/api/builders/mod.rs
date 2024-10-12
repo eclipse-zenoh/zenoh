@@ -13,4 +13,5 @@
 //
 
 pub(crate) mod publisher;
+pub(crate) mod queryable;
 pub(crate) mod sample;

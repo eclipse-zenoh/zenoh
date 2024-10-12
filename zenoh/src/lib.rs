@@ -243,16 +243,17 @@ pub mod query {
 
     #[zenoh_macros::internal]
     pub use crate::api::queryable::ReplySample;
-    #[zenoh_macros::unstable]
-    pub use crate::api::{query::ReplyKeyExpr, selector::ZenohParameters};
     pub use crate::api::{
+        builders::queryable::QueryableBuilder,
         query::{ConsolidationMode, QueryConsolidation, QueryTarget, Reply, ReplyError},
         queryable::{
-            Query, Queryable, QueryableBuilder, QueryableUndeclaration, ReplyBuilder,
-            ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder,
+            Query, Queryable, QueryableUndeclaration, ReplyBuilder, ReplyBuilderDelete,
+            ReplyBuilderPut, ReplyErrBuilder,
         },
         selector::Selector,
     };
+    #[zenoh_macros::unstable]
+    pub use crate::api::{query::ReplyKeyExpr, selector::ZenohParameters};
 }
 
 /// Callback handler trait
