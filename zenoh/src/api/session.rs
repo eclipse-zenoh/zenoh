@@ -70,9 +70,12 @@ use zenoh_task::TaskController;
 
 use super::{
     admin,
-    builders::publisher::{
-        PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder, SessionDeleteBuilder,
-        SessionPutBuilder,
+    builders::{
+        publisher::{
+            PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
+            SessionDeleteBuilder, SessionPutBuilder,
+        },
+        queryable::QueryableBuilder,
     },
     bytes::ZBytes,
     encoding::Encoding,
@@ -83,7 +86,7 @@ use super::{
     query::{
         ConsolidationMode, QueryConsolidation, QueryState, QueryTarget, Reply, SessionGetBuilder,
     },
-    queryable::{Query, QueryInner, QueryableBuilder, QueryableState},
+    queryable::{Query, QueryInner, QueryableState},
     sample::{DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind},
     selector::Selector,
     subscriber::{SubscriberBuilder, SubscriberKind, SubscriberState},
