@@ -26,14 +26,17 @@ use zenoh_transport::{
     TransportEventHandler, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
 
-use crate::api::{
-    encoding::Encoding,
-    key_expr::KeyExpr,
-    queryable::Query,
-    sample::{DataInfo, Locality, SampleKind},
-    subscriber::SubscriberKind,
+use crate::{
+    api::{
+        encoding::Encoding,
+        key_expr::KeyExpr,
+        queryable::Query,
+        sample::{DataInfo, Locality, SampleKind},
+        session::WeakSession,
+        subscriber::SubscriberKind,
+    },
+    handlers::Callback,
 };
-use crate::{api::session::WeakSession, handlers::Callback};
 
 lazy_static::lazy_static!(
     static ref KE_STARSTAR: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("**") };

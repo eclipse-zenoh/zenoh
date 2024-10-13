@@ -23,16 +23,18 @@ use tracing::error;
 use zenoh_config::unwrap_or_default;
 use zenoh_core::{Resolvable, Resolve, Result as ZResult, Wait};
 
-use crate::api::{
-    handlers::{locked, DefaultHandler, IntoHandler},
-    key_expr::KeyExpr,
-    query::Reply,
-    sample::{Locality, Sample},
-    session::{Session, UndeclarableSealed},
-    subscriber::{Subscriber, SubscriberInner},
-    Id,
+use crate::{
+    api::{
+        handlers::{locked, DefaultHandler, IntoHandler},
+        key_expr::KeyExpr,
+        query::Reply,
+        sample::{Locality, Sample},
+        session::{Session, UndeclarableSealed, WeakSession},
+        subscriber::{Subscriber, SubscriberInner},
+        Id,
+    },
+    handlers::Callback,
 };
-use crate::{api::session::WeakSession, handlers::Callback};
 
 /// A structure with functions to declare a [`LivelinessToken`](LivelinessToken),
 /// query existing [`LivelinessTokens`](LivelinessToken)
