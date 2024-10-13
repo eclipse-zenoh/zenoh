@@ -14,6 +14,7 @@
 
 pub(crate) mod info;
 pub(crate) mod publisher;
+pub(crate) mod query;
 pub(crate) mod queryable;
 pub(crate) mod reply;
 pub(crate) mod sample;
