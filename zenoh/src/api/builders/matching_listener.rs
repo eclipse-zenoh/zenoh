@@ -11,9 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "unstable")]
 use std::future::{IntoFuture, Ready};
 
+#[cfg(feature = "unstable")]
 use zenoh_core::{Resolvable, Wait};
+#[cfg(feature = "unstable")]
 use zenoh_result::ZResult;
 #[cfg(feature = "unstable")]
 use {

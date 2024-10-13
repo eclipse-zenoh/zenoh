@@ -15,6 +15,7 @@
 use std::future::{IntoFuture, Ready};
 
 use zenoh_core::{Resolvable, Wait};
+#[cfg(feature = "internal")]
 use zenoh_keyexpr::OwnedKeyExpr;
 use zenoh_result::ZResult;
 

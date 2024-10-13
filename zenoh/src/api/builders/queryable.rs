@@ -18,16 +18,12 @@ use std::{
 
 use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
-#[zenoh_macros::unstable]
-use {
-    crate::api::queryable::Query, crate::api::queryable::Queryable,
-    crate::api::queryable::QueryableInner,
-};
 
 use crate::{
     api::{
         handlers::{locked, DefaultHandler, IntoHandler},
         key_expr::KeyExpr,
+        queryable::{Query, Queryable, QueryableInner},
         sample::Locality,
     },
     handlers::Callback,
