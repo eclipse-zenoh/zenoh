@@ -27,7 +27,7 @@ use crate::api::session::Session;
 #[cfg(feature = "internal")]
 use crate::net::runtime::Runtime;
 
-/// A builder returned by [`open`] used to open a zenoh [`Session`].
+/// A builder returned by [`crate::open`] used to open a zenoh [`Session`].
 ///
 /// # Examples
 /// ```

@@ -20,7 +20,7 @@ use zenoh_keyexpr::OwnedKeyExpr;
 use zenoh_protocol::core::Parameters;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::ZenohIdProto;
-/// The [`Queryable`](crate::query::Queryable)s that should be target of a [`get`](Session::get).
+/// The [`Queryable`](crate::query::Queryable)s that should be target of a [`get`](crate::Session::get).
 pub use zenoh_protocol::network::request::ext::QueryTarget;
 #[doc(inline)]
 pub use zenoh_protocol::zenoh::query::ConsolidationMode;
@@ -30,7 +30,7 @@ use crate::api::{
     selector::Selector, value::Value,
 };
 
-/// The replies consolidation strategy to apply on replies to a [`get`](Session::get).
+/// The replies consolidation strategy to apply on replies to a [`get`](crate::Session::get).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct QueryConsolidation {
     pub(crate) mode: ConsolidationMode,
@@ -65,7 +65,7 @@ impl Default for QueryConsolidation {
     }
 }
 
-/// Error returned by a [`get`](Session::get).
+/// Error returned by a [`get`](crate::Session::get).
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct ReplyError {
     pub(crate) payload: ZBytes,
@@ -108,7 +108,7 @@ impl From<Value> for ReplyError {
     }
 }
 
-/// Struct returned by a [`get`](Session::get).
+/// Struct returned by a [`get`](crate::Session::get).
 #[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct Reply {

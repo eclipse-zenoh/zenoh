@@ -174,15 +174,15 @@ impl<Handler> Subscriber<Handler> {
     }
 
     /// Returns a reference to this subscriber's handler.
-    /// An handler is anything that implements [`IntoHandler`].
-    /// The default handler is [`DefaultHandler`].
+    /// An handler is anything that implements [`crate::handlers::IntoHandler`].
+    /// The default handler is [`crate::handlers::DefaultHandler`].
     pub fn handler(&self) -> &Handler {
         &self.handler
     }
 
     /// Returns a mutable reference to this subscriber's handler.
-    /// An handler is anything that implements [`IntoHandler`].
-    /// The default handler is [`DefaultHandler`].
+    /// An handler is anything that implements [`crate::handlers::IntoHandler`].
+    /// The default handler is [`crate::handlers::DefaultHandler`].
     pub fn handler_mut(&mut self) -> &mut Handler {
         &mut self.handler
     }
