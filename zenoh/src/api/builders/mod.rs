@@ -16,4 +16,5 @@ pub(crate) mod publisher;
 pub(crate) mod queryable;
 pub(crate) mod reply;
 pub(crate) mod sample;
+pub(crate) mod session;
 pub(crate) mod subscriber;

@@ -188,12 +188,15 @@ pub mod session {
     pub use zenoh_protocol::core::EntityId;
 
     #[zenoh_macros::internal]
-    pub use crate::api::session::{init, InitBuilder};
+    pub use crate::api::builders::session::{init, InitBuilder};
     pub use crate::api::{
-        builders::publisher::{SessionDeleteBuilder, SessionPutBuilder},
+        builders::{
+            publisher::{SessionDeleteBuilder, SessionPutBuilder},
+            session::OpenBuilder,
+        },
         info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, SessionInfo, ZenohIdBuilder},
         query::SessionGetBuilder,
-        session::{open, OpenBuilder, Session, SessionClosedError, Undeclarable},
+        session::{open, Session, SessionClosedError, Undeclarable},
     };
 }
 
