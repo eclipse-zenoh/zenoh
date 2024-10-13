@@ -24,7 +24,7 @@ use zenoh_protocol::{
     network::declare::ext::QoSType,
 };
 
-use super::{
+use crate::api::{
     builders::sample::QoSBuilderTrait, bytes::ZBytes, encoding::Encoding, key_expr::KeyExpr,
     publisher::Priority, value::Value,
 };

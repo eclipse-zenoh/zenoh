@@ -21,7 +21,7 @@ use zenoh_plugin_trait::{
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_result::ZResult;
 
-use super::key_expr::KeyExpr;
+use crate::api::key_expr::KeyExpr;
 use crate::net::runtime::Runtime;
 
 zconfigurable! {

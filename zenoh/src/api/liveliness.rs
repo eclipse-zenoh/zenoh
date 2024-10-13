@@ -23,7 +23,7 @@ use tracing::error;
 use zenoh_config::unwrap_or_default;
 use zenoh_core::{Resolvable, Resolve, Result as ZResult, Wait};
 
-use super::{
+use crate::api::{
     handlers::{locked, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
     query::Reply,

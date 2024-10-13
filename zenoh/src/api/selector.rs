@@ -22,7 +22,7 @@ use zenoh_protocol::core::{
 #[cfg(feature = "unstable")]
 use ::{zenoh_result::ZResult, zenoh_util::time_range::TimeRange};
 
-use super::{key_expr::KeyExpr, queryable::Query};
+use crate::api::{key_expr::KeyExpr, queryable::Query};
 
 /// A selector is the combination of a [Key Expression](crate::key_expr::KeyExpr), which defines the
 /// set of keys that are relevant to an operation, and a set of parameters

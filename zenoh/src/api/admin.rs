@@ -26,7 +26,7 @@ use zenoh_transport::{
     TransportEventHandler, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
 
-use super::{
+use crate::api::{
     encoding::Encoding,
     key_expr::KeyExpr,
     queryable::Query,

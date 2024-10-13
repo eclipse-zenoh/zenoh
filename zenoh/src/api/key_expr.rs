@@ -25,7 +25,7 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 
-use super::session::{Session, SessionInner, UndeclarableSealed};
+use crate::api::session::{Session, SessionInner, UndeclarableSealed};
 use crate::net::primitives::Primitives;
 
 #[derive(Clone, Debug)]
