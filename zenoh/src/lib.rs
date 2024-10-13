@@ -292,7 +292,10 @@ pub mod qos {
 pub mod scouting {
     pub use zenoh_config::wrappers::Hello;
 
-    pub use crate::api::scouting::{scout, Scout, ScoutBuilder};
+    pub use crate::api::{
+        builders::scouting::ScoutBuilder,
+        scouting::{scout, Scout},
+    };
 }
 
 /// Liveliness primitives

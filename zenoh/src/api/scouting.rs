@@ -11,168 +11,22 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{
-    fmt,
-    future::{IntoFuture, Ready},
-    net::SocketAddr,
-    ops::Deref,
-    sync::Arc,
-    time::Duration,
-};
+use std::{fmt, net::SocketAddr, ops::Deref, time::Duration};
 
 use tokio::net::UdpSocket;
 use zenoh_config::wrappers::Hello;
-use zenoh_core::{Resolvable, Wait};
 use zenoh_protocol::core::WhatAmIMatcher;
 use zenoh_result::ZResult;
 use zenoh_task::TerminatableTask;
 
 use crate::{
-    api::handlers::{locked, Callback, DefaultHandler, IntoHandler},
+    api::{
+        builders::scouting::ScoutBuilder,
+        handlers::{Callback, DefaultHandler},
+    },
     net::runtime::{orchestrator::Loop, Runtime},
     Config,
 };
-
-/// A builder for initializing a [`Scout`].
-///
-/// # Examples
-/// ```no_run
-/// # #[tokio::main]
-/// # async fn main() {
-/// use zenoh::config::WhatAmI;
-///
-/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::Config::default())
-///     .await
-///     .unwrap();
-/// while let Ok(hello) = receiver.recv_async().await {
-///     println!("{}", hello);
-/// }
-/// # }
-/// ```
-#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
-#[derive(Debug)]
-pub struct ScoutBuilder<Handler> {
-    pub(crate) what: WhatAmIMatcher,
-    pub(crate) config: ZResult<crate::config::Config>,
-    pub(crate) handler: Handler,
-}
-
-impl ScoutBuilder<DefaultHandler> {
-    /// Receive the [`Hello`] messages from this scout with a callback.
-    ///
-    /// # Examples
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::config::WhatAmI;
-    ///
-    /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::Config::default())
-    ///     .callback(|hello| { println!("{}", hello); })
-    ///     .await
-    ///     .unwrap();
-    /// # }
-    /// ```
-    #[inline]
-    pub fn callback<F>(self, callback: F) -> ScoutBuilder<Callback<Hello>>
-    where
-        F: Fn(Hello) + Send + Sync + 'static,
-    {
-        self.with(Callback::new(Arc::new(callback)))
-    }
-
-    /// Receive the [`Hello`] messages from this scout with a mutable callback.
-    ///
-    /// Using this guarantees that your callback will never be called concurrently.
-    /// If your callback is also accepted by the [`callback`](ScoutBuilder::callback) method, we suggest you use it instead of `callback_mut`.
-    ///
-    /// # Examples
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::config::WhatAmI;
-    ///
-    /// let mut n = 0;
-    /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::Config::default())
-    ///     .callback_mut(move |_hello| { n += 1; })
-    ///     .await
-    ///     .unwrap();
-    /// # }
-    /// ```
-    #[inline]
-    pub fn callback_mut<F>(self, callback: F) -> ScoutBuilder<Callback<Hello>>
-    where
-        F: FnMut(Hello) + Send + Sync + 'static,
-    {
-        self.callback(locked(callback))
-    }
-
-    /// Receive the [`Hello`] messages from this scout with a [`Handler`](crate::handlers::IntoHandler).
-    ///
-    /// # Examples
-    /// ```no_run
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::config::WhatAmI;
-    ///
-    /// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::Config::default())
-    ///     .with(flume::bounded(32))
-    ///     .await
-    ///     .unwrap();
-    /// while let Ok(hello) = receiver.recv_async().await {
-    ///     println!("{}", hello);
-    /// }
-    /// # }
-    /// ```
-    #[inline]
-    pub fn with<Handler>(self, handler: Handler) -> ScoutBuilder<Handler>
-    where
-        Handler: IntoHandler<Hello>,
-    {
-        let ScoutBuilder {
-            what,
-            config,
-            handler: _,
-        } = self;
-        ScoutBuilder {
-            what,
-            config,
-            handler,
-        }
-    }
-}
-
-impl<Handler> Resolvable for ScoutBuilder<Handler>
-where
-    Handler: IntoHandler<Hello> + Send,
-    Handler::Handler: Send,
-{
-    type To = ZResult<Scout<Handler::Handler>>;
-}
-
-impl<Handler> Wait for ScoutBuilder<Handler>
-where
-    Handler: IntoHandler<Hello> + Send,
-    Handler::Handler: Send,
-{
-    fn wait(self) -> <Self as Resolvable>::To {
-        let (callback, receiver) = self.handler.into_handler();
-        _scout(self.what, self.config?, callback).map(|scout| Scout { scout, receiver })
-    }
-}
-
-impl<Handler> IntoFuture for ScoutBuilder<Handler>
-where
-    Handler: IntoHandler<Hello> + Send,
-    Handler::Handler: Send,
-{
-    type Output = <Self as Resolvable>::To;
-    type IntoFuture = Ready<<Self as Resolvable>::To>;
-
-    fn into_future(self) -> Self::IntoFuture {
-        std::future::ready(self.wait())
-    }
-}
-
 /// A scout that returns [`Hello`] messages through a callback.
 ///
 /// # Examples
@@ -282,7 +136,11 @@ impl<Receiver> Scout<Receiver> {
     }
 }
 
-fn _scout(what: WhatAmIMatcher, config: Config, callback: Callback<Hello>) -> ZResult<ScoutInner> {
+pub(crate) fn _scout(
+    what: WhatAmIMatcher,
+    config: Config,
+    callback: Callback<Hello>,
+) -> ZResult<ScoutInner> {
     tracing::trace!("scout({}, {})", what, &config);
     let default_addr = SocketAddr::from(zenoh_config::defaults::scouting::multicast::address);
     let addr = config
