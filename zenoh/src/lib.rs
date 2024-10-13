@@ -226,8 +226,9 @@ pub mod bytes {
 /// Pub/sub primitives
 pub mod pubsub {
     #[zenoh_macros::unstable]
-    pub use crate::api::publisher::{
-        MatchingListener, MatchingListenerBuilder, MatchingListenerUndeclaration, MatchingStatus,
+    pub use crate::api::{
+        builders::matching_listener::MatchingListenerBuilder,
+        publisher::{MatchingListener, MatchingListenerUndeclaration, MatchingStatus},
     };
     pub use crate::api::{
         builders::{
