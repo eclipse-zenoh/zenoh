@@ -13,11 +13,15 @@
 //
 
 use std::future::{IntoFuture, Ready};
+#[cfg(feature = "shared-memory")]
+use std::sync::Arc;
 
 use zenoh_core::{Resolvable, Wait};
 #[cfg(feature = "internal")]
 use zenoh_keyexpr::OwnedKeyExpr;
 use zenoh_result::ZResult;
+#[cfg(feature = "shared-memory")]
+use zenoh_shm::api::client_storage::ShmClientStorage;
 
 use crate::api::session::Session;
 #[cfg(feature = "internal")]
