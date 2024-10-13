@@ -226,12 +226,15 @@ pub mod pubsub {
         MatchingListener, MatchingListenerBuilder, MatchingListenerUndeclaration, MatchingStatus,
     };
     pub use crate::api::{
-        builders::publisher::{
-            PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
-            PublisherDeleteBuilder, PublisherPutBuilder,
+        builders::{
+            publisher::{
+                PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut,
+                PublisherBuilder, PublisherDeleteBuilder, PublisherPutBuilder,
+            },
+            subscriber::SubscriberBuilder,
         },
         publisher::{Publisher, PublisherUndeclaration},
-        subscriber::{Subscriber, SubscriberBuilder},
+        subscriber::Subscriber,
     };
 }
 

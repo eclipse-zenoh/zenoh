@@ -76,6 +76,7 @@ use super::{
             SessionDeleteBuilder, SessionPutBuilder,
         },
         queryable::QueryableBuilder,
+        subscriber::SubscriberBuilder,
     },
     bytes::ZBytes,
     encoding::Encoding,
@@ -89,7 +90,7 @@ use super::{
     queryable::{Query, QueryInner, QueryableState},
     sample::{DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind},
     selector::Selector,
-    subscriber::{SubscriberBuilder, SubscriberKind, SubscriberState},
+    subscriber::{SubscriberKind, SubscriberState},
     value::Value,
     Id,
 };
