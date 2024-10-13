@@ -191,10 +191,11 @@ pub mod session {
     pub use crate::api::builders::session::{init, InitBuilder};
     pub use crate::api::{
         builders::{
+            info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, ZenohIdBuilder},
             publisher::{SessionDeleteBuilder, SessionPutBuilder},
             session::OpenBuilder,
         },
-        info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, SessionInfo, ZenohIdBuilder},
+        info::SessionInfo,
         query::SessionGetBuilder,
         session::{open, Session, SessionClosedError, Undeclarable},
     };
