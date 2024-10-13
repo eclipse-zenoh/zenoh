@@ -20,7 +20,7 @@ use zenoh_keyexpr::OwnedKeyExpr;
 use zenoh_result::ZResult;
 
 use crate::api::session::Session;
-#[cfg(feature = "unstable")]
+#[cfg(feature = "internal")]
 use crate::net::runtime::Runtime;
 
 /// A builder returned by [`open`] used to open a zenoh [`Session`].
