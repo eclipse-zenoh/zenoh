@@ -107,34 +107,82 @@ Zenoh's router is built as `target/release/zenohd`. All the examples are built i
 > [!NOTE]
 > **Windows users**: to properly execute the commands below in PowerShell you need to escape `"` characters as `\"`.
 
-* **put/store/get**
+* **put / store / get**
   * run the Zenoh router with a memory storage:
-    `./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'`
-  * in another shell run: `./target/release/examples/z_put`
-  * then run `./target/release/examples/z_get`
+
+    ```sh
+    ./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'
+    ```
+
+  * in another shell run:
+  
+    ```sh
+    ./target/release/examples/z_put`
+    ```
+
+  * then run
+
+    ```sh
+    ./target/release/examples/z_get
+    ```
+
   * the get should receive the stored publication.
 
 * **REST API using `curl` tool**
   * run the Zenoh router with a memory storage:
-    `./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'`
+
+    ```sh
+    ./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'
+    ```
+
   * in another shell, do a publication via the REST API:
-    `curl -X PUT -d '"Hello World!"' http://localhost:8000/demo/example/test`
+
+    ```sh
+    curl -X PUT -d '"Hello World!"' http://localhost:8000/demo/example/test
+    ```
+
   * get it back via the REST API:
-    `curl http://localhost:8000/demo/example/test`
+
+    ```sh
+    curl http://localhost:8000/demo/example/test
+    ```
 
 * **router admin space via the REST API**
   * run the Zenoh router with permission to perform config changes via the admin space, and with a memory storage:
-    `./target/release/zenohd --adminspace-permissions=rw --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'`
-  * in another shell, get info of the zenoh router via the zenoh admin space:
-    `curl http://localhost:8000/@/local/router`
+
+    ```sh
+    ./target/release/zenohd --adminspace-permissions=rw --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'
+    ```
+
+  * in another shell, get info of the zenoh router via the zenoh admin space (you may use `jq` for pretty json formatting):
+
+    ```sh
+    curl -s http://localhost:8000/@/local/router | jq
+    ```
+
   * get the volumes of the router (only memory by default):
-    `curl 'http://localhost:8000/@/local/router/**/volumes/*'`
+
+    ```sh
+    curl -s 'http://localhost:8000/@/local/router/**/volumes/*' | jq
+    ```
+
   * get the storages of the local router (the memory storage configured at startup on '/demo/example/**' should be present):
-    `curl 'http://localhost:8000/@/local/router/**/storages/*'`
+
+    ```sh
+    curl -s 'http://localhost:8000/@/local/router/**/storages/*' | jq
+    ```
+
   * add another memory storage on `/demo/mystore/**`:
-    `curl -X PUT -H 'content-type:application/json' -d '{"key_expr":"demo/mystore/**","volume":"memory"}' http://localhost:8000/@/local/router/config/plugins/storage_manager/storages/mystore`
+
+    ```sh
+    curl -X PUT -H 'content-type:application/json' -d '{"key_expr":"demo/mystore/**","volume":"memory"}' http://localhost:8000/@/local/router/config/plugins/storage_manager/storages/mystore
+    ```
+
   * check it has been created:
-    `curl 'http://localhost:8000/@/local/router/**/storages/*'`
+  
+    ```sh
+    curl -s 'http://localhost:8000/@/local/router/**/storages/*' | jq
+    ```
 
 ### Configuration options
 
@@ -190,8 +238,8 @@ See other examples of Zenoh usage in [examples/](examples)
 
 > [!WARNING]
 > As Rust doesn't have a stable ABI, the plugins should be
-built with the exact same Rust version than `zenohd`, and using for `zenoh` dependency the same version (or commit number) than 'zenohd'.
-Otherwise, incompatibilities in memory mapping of shared types between `zenohd` and the library can lead to a `"SIGSEV"` crash.
+built with the exact same Rust version as `zenohd`, and using for `zenoh` dependency the same version (or commit number) as `zenohd` with the same
+set of features. A plugin compiled with different Rust version or with different set of `zenoh` crate features will be rejected when `zenohd` attempts to load it. Otherwise, incompatibilities in memory mapping of structures shared between `zenohd` and the library could lead to a `"SIGSEGV"` crash.
 
 By default the Zenoh router is delivered or built with 2 plugins. These may be configured through a configuration file, or through individual changes to the configuration via the `--cfg` CLI option or via zenoh puts on individual parts of the configuration.
 
