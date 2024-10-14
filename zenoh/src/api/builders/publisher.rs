@@ -18,12 +18,13 @@ use zenoh_core::{Resolvable, Result as ZResult, Wait};
 use zenoh_protocol::core::Reliability;
 use zenoh_protocol::{core::CongestionControl, network::Mapping};
 
-use super::sample::TimestampBuilderTrait;
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
 use crate::{
     api::{
-        builders::sample::{EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait},
+        builders::sample::{
+            EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
+        },
         bytes::{OptionZBytes, ZBytes},
         encoding::Encoding,
         key_expr::KeyExpr,

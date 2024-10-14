@@ -188,12 +188,16 @@ pub mod session {
     pub use zenoh_protocol::core::EntityId;
 
     #[zenoh_macros::internal]
-    pub use crate::api::session::{init, InitBuilder};
+    pub use crate::api::builders::session::{init, InitBuilder};
     pub use crate::api::{
-        builders::publisher::{SessionDeleteBuilder, SessionPutBuilder},
-        info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, SessionInfo, ZenohIdBuilder},
-        query::SessionGetBuilder,
-        session::{open, OpenBuilder, Session, SessionClosedError, Undeclarable},
+        builders::{
+            info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, ZenohIdBuilder},
+            publisher::{SessionDeleteBuilder, SessionPutBuilder},
+            query::SessionGetBuilder,
+            session::OpenBuilder,
+        },
+        info::SessionInfo,
+        session::{open, Session, SessionClosedError, Undeclarable},
     };
 }
 
@@ -222,16 +226,20 @@ pub mod bytes {
 /// Pub/sub primitives
 pub mod pubsub {
     #[zenoh_macros::unstable]
-    pub use crate::api::publisher::{
-        MatchingListener, MatchingListenerBuilder, MatchingListenerUndeclaration, MatchingStatus,
+    pub use crate::api::{
+        builders::matching_listener::MatchingListenerBuilder,
+        publisher::{MatchingListener, MatchingListenerUndeclaration, MatchingStatus},
     };
     pub use crate::api::{
-        builders::publisher::{
-            PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
-            PublisherDeleteBuilder, PublisherPutBuilder,
+        builders::{
+            publisher::{
+                PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut,
+                PublisherBuilder, PublisherDeleteBuilder, PublisherPutBuilder,
+            },
+            subscriber::SubscriberBuilder,
         },
         publisher::{Publisher, PublisherUndeclaration},
-        subscriber::{Subscriber, SubscriberBuilder},
+        subscriber::Subscriber,
     };
 }
 
@@ -243,16 +251,17 @@ pub mod query {
 
     #[zenoh_macros::internal]
     pub use crate::api::queryable::ReplySample;
-    #[zenoh_macros::unstable]
-    pub use crate::api::{query::ReplyKeyExpr, selector::ZenohParameters};
     pub use crate::api::{
-        query::{ConsolidationMode, QueryConsolidation, QueryTarget, Reply, ReplyError},
-        queryable::{
-            Query, Queryable, QueryableBuilder, QueryableUndeclaration, ReplyBuilder,
-            ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder,
+        builders::{
+            queryable::QueryableBuilder,
+            reply::{ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
         },
+        query::{ConsolidationMode, QueryConsolidation, QueryTarget, Reply, ReplyError},
+        queryable::{Query, Queryable, QueryableUndeclaration},
         selector::Selector,
     };
+    #[zenoh_macros::unstable]
+    pub use crate::api::{query::ReplyKeyExpr, selector::ZenohParameters};
 }
 
 /// Callback handler trait
@@ -283,7 +292,10 @@ pub mod qos {
 pub mod scouting {
     pub use zenoh_config::wrappers::Hello;
 
-    pub use crate::api::scouting::{scout, Scout, ScoutBuilder};
+    pub use crate::api::{
+        builders::scouting::ScoutBuilder,
+        scouting::{scout, Scout},
+    };
 }
 
 /// Liveliness primitives
