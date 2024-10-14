@@ -269,6 +269,13 @@ validated_struct::validator! {
             timeout: Option<u64>,
             /// In peer mode, the period dedicated to scouting remote peers before attempting other operations. In milliseconds.
             delay: Option<u64>,
+
+            pub open_wait: #[derive(Default)]
+            OpenWaitConf {
+                connect_multicast_scouted: Option<bool>,
+                connect_gossip_scouted: Option<bool>,
+                initial_interest: Option<bool>,
+            },
             /// The multicast scouting configuration.
             pub multicast: #[derive(Default)]
             ScoutingMulticastConf {

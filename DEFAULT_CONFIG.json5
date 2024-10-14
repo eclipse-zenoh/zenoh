@@ -97,6 +97,11 @@
     timeout: 3000,
     /// In peer mode, the maximum period in milliseconds dedicated to scouting remote peers before attempting other operations.
     delay: 500,
+    open_wait: {
+        connect_multicast_scouted: true,
+        connect_gossip_scouted: true,
+        initial_interest: false,
+    }
     /// The multicast scouting configuration.
     multicast: {
       /// Whether multicast scouting is enabled or not

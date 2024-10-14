@@ -62,6 +62,11 @@ pub mod listen {
 pub mod scouting {
     pub const timeout: u64 = 3000;
     pub const delay: u64 = 500;
+    pub mod open_wait {
+        pub const connect_multicast_scouted: bool = true;
+        pub const connect_gossip_scouted: bool = true;
+        pub const initial_interest: bool = false;
+    }
     pub mod multicast {
         pub const enabled: bool = true;
         pub const address: ([u8; 4], u16) = ([224, 0, 0, 224], 7446);
