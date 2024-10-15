@@ -97,6 +97,7 @@ pub(super) struct Network {
     pub(super) gossip: bool,
     pub(super) gossip_multihop: bool,
     pub(super) autoconnect: WhatAmIMatcher,
+    pub(super) wait_declares: bool,
     pub(super) idx: NodeIndex,
     pub(super) links: VecMap<Link>,
     pub(super) graph: petgraph::stable_graph::StableUnGraph<Node, f64>,
@@ -104,6 +105,7 @@ pub(super) struct Network {
 }
 
 impl Network {
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
         name: String,
         zid: ZenohIdProto,
@@ -112,6 +114,7 @@ impl Network {
         gossip: bool,
         gossip_multihop: bool,
         autoconnect: WhatAmIMatcher,
+        wait_declares: bool,
     ) -> Self {
         let mut graph = petgraph::stable_graph::StableGraph::default();
         tracing::debug!("{} Add node (self) {}", name, zid);
@@ -128,6 +131,7 @@ impl Network {
             gossip,
             gossip_multihop,
             autoconnect,
+            wait_declares,
             idx,
             links: VecMap::new(),
             graph,
@@ -271,7 +275,12 @@ impl Network {
                 }))
     }
 
-    pub(super) fn link_states(&mut self, link_states: Vec<LinkState>, src: ZenohIdProto) {
+    pub(super) fn link_states(
+        &mut self,
+        link_states: Vec<LinkState>,
+        src: ZenohIdProto,
+        src_whatami: WhatAmI,
+    ) {
         tracing::trace!("{} Received from {} raw: {:?}", self.name, src, link_states);
         let strong_runtime = self.runtime.upgrade().unwrap();
 
@@ -421,6 +430,7 @@ impl Network {
                         // Connect discovered peers
                         if let Some(locators) = locators {
                             let runtime = strong_runtime.clone();
+                            let wait_declares = self.wait_declares;
                             strong_runtime.spawn(async move {
                                 if runtime
                                     .manager()
@@ -428,6 +438,7 @@ impl Network {
                                     .await
                                     .is_none()
                                     && runtime.connect_peer(&zid, &locators).await
+                                    && ((!wait_declares) || whatami != WhatAmI::Peer)
                                 {
                                     runtime
                                         .start_conditions()
@@ -440,11 +451,13 @@ impl Network {
                 }
             }
         }
-        zenoh_runtime::ZRuntime::Net.block_in_place(
-            strong_runtime
-                .start_conditions()
-                .terminate_peer_connector_zid(src),
-        );
+        if self.wait_declares && src_whatami != WhatAmI::Peer {
+            zenoh_runtime::ZRuntime::Net.block_in_place(
+                strong_runtime
+                    .start_conditions()
+                    .terminate_peer_connector_zid(src),
+            );
+        }
     }
 
     pub(super) fn add_link(&mut self, transport: TransportUnicast) -> usize {

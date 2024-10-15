@@ -748,6 +748,7 @@ impl Runtime {
             let config_guard = this.config().lock();
             let config = &config_guard.0;
             let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
+            let wait_declares = unwrap_or_default!(config.open().return_conditions().declares());
             drop(config_guard);
             self.spawn(async move {
                 if let Ok(zid) = this.peer_connector_retry(peer).await {
@@ -756,7 +757,7 @@ impl Runtime {
                         .set_peer_connector_zid(idx, zid)
                         .await;
                 }
-                if !gossip {
+                if !gossip && (!wait_declares || this.whatami() != WhatAmI::Peer) {
                     this.state
                         .start_conditions
                         .terminate_peer_connector(idx)
