@@ -263,19 +263,24 @@ validated_struct::validator! {
             pub exit_on_failure: Option<ModeDependentValue<bool>>,
             pub retry: Option<connection_retry::ConnectionRetryModeDependentConf>,
         },
+        /// Configure the session open behavior.
+        pub open: #[derive(Default)]
+        OpenConf {
+            /// Configure the conditions to be met before session open returns.
+            pub return_conditions: #[derive(Default)]
+            ReturnConditionsConf {
+                /// Session open waits to connect to scouted peers and routers before returning.
+                connect_scouted: Option<bool>,
+                /// Session open waits to receive initial declares from connected peers before returning.
+                declares: Option<bool>,
+            },
+        },
         pub scouting: #[derive(Default)]
         ScoutingConf {
             /// In client mode, the period dedicated to scouting for a router before failing. In milliseconds.
             timeout: Option<u64>,
             /// In peer mode, the period dedicated to scouting remote peers before attempting other operations. In milliseconds.
             delay: Option<u64>,
-
-            pub open_wait: #[derive(Default)]
-            OpenWaitConf {
-                connect_multicast_scouted: Option<bool>,
-                connect_gossip_scouted: Option<bool>,
-                initial_interest: Option<bool>,
-            },
             /// The multicast scouting configuration.
             pub multicast: #[derive(Default)]
             ScoutingMulticastConf {

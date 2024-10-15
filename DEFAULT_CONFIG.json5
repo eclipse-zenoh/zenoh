@@ -91,17 +91,22 @@
       period_increase_factor: 2,
     },
   },
+  /// Configure the session open behavior.
+  open: {
+    /// Configure the conditions to be met before session open returns.
+    return_conditions: {
+      /// Session open waits to connect to scouted peers and routers before returning.
+      connect_scouted: true,
+      /// Session open waits to receive initial declares from connected peers before returning.
+      declares: true,
+    }
+  },
   /// Configure the scouting mechanisms and their behaviours
   scouting: {
     /// In client mode, the period in milliseconds dedicated to scouting for a router before failing.
     timeout: 3000,
     /// In peer mode, the maximum period in milliseconds dedicated to scouting remote peers before attempting other operations.
     delay: 500,
-    open_wait: {
-        connect_multicast_scouted: true,
-        connect_gossip_scouted: true,
-        initial_interest: false,
-    }
     /// The multicast scouting configuration.
     multicast: {
       /// Whether multicast scouting is enabled or not
