@@ -62,7 +62,7 @@ pub mod listen {
 pub mod open {
     pub mod return_conditions {
         pub const connect_scouted: bool = true;
-        pub const declares: bool = false;
+        pub const declares: bool = true;
     }
 }
 
