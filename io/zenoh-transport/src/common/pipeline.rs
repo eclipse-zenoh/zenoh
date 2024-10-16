@@ -460,6 +460,7 @@ impl StageOutIn {
     #[inline]
     fn try_pull(&mut self) -> Pull {
         if let Some(batch) = self.s_out_r.pull() {
+            self.backoff.atomic.active.store(false, Ordering::Relaxed);
             return Pull::Some(batch);
         }
 
@@ -746,9 +747,8 @@ impl TransmissionPipelineConsumer {
                         return Some((batch, prio));
                     }
                     Pull::Backoff(deadline) => {
-                        if deadline < backoff {
-                            backoff = deadline;
-                        }
+                        backoff = deadline;
+                        break;
                     }
                     Pull::None => {}
                 }
