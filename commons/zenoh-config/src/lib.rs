@@ -270,8 +270,10 @@ validated_struct::validator! {
             pub return_conditions: #[derive(Default)]
             ReturnConditionsConf {
                 /// Session open waits to connect to scouted peers and routers before returning.
+                /// When set to false, first publications and queries after session open from peers may be lost.
                 connect_scouted: Option<bool>,
                 /// Session open waits to receive initial declares from connected peers before returning.
+                /// Setting to false may cause extra traffic at startup from peers.
                 declares: Option<bool>,
             },
         },
