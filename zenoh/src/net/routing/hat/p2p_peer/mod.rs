@@ -75,6 +75,13 @@ mod pubsub;
 mod queries;
 mod token;
 
+macro_rules! hat {
+    ($t:expr) => {
+        $t.hat.downcast_ref::<HatTables>().unwrap()
+    };
+}
+use hat;
+
 macro_rules! hat_mut {
     ($t:expr) => {
         $t.hat.downcast_mut::<HatTables>().unwrap()
@@ -120,6 +127,7 @@ impl HatBaseTrait for HatCode {
         } else {
             WhatAmIMatcher::empty()
         };
+        let wait_declares = unwrap_or_default!(config.open().return_conditions().declares());
         let router_peers_failover_brokering =
             unwrap_or_default!(config.routing().router().peers_failover_brokering());
         drop(config_guard);
@@ -132,6 +140,7 @@ impl HatBaseTrait for HatCode {
             gossip,
             gossip_multihop,
             autoconnect,
+            wait_declares,
         ));
     }
 
@@ -346,7 +355,7 @@ impl HatBaseTrait for HatCode {
                     let whatami = transport.get_whatami()?;
                     if whatami != WhatAmI::Client {
                         if let Some(net) = hat_mut!(tables).gossip.as_mut() {
-                            net.link_states(list.link_states, zid);
+                            net.link_states(list.link_states, zid, whatami);
                         }
                     };
                 }

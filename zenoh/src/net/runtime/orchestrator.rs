@@ -171,7 +171,18 @@ impl Runtime {
     }
 
     async fn start_peer(&self) -> ZResult<()> {
-        let (listeners, peers, scouting, listen, autoconnect, addr, ifaces, delay, linkstate) = {
+        let (
+            listeners,
+            peers,
+            scouting,
+            wait_scouting,
+            listen,
+            autoconnect,
+            addr,
+            ifaces,
+            delay,
+            linkstate,
+        ) = {
             let guard = &self.state.config.lock().0;
             (
                 guard.listen().endpoints().peer().unwrap_or(&vec![]).clone(),
@@ -182,6 +193,7 @@ impl Runtime {
                     .unwrap_or(&vec![])
                     .clone(),
                 unwrap_or_default!(guard.scouting().multicast().enabled()),
+                unwrap_or_default!(guard.open().return_conditions().connect_scouted()),
                 *unwrap_or_default!(guard.scouting().multicast().listen().peer()),
                 *unwrap_or_default!(guard.scouting().multicast().autoconnect().peer()),
                 unwrap_or_default!(guard.scouting().multicast().address()),
@@ -201,7 +213,8 @@ impl Runtime {
 
         if linkstate {
             tokio::time::sleep(delay).await;
-        } else if (scouting || !peers.is_empty())
+        } else if wait_scouting
+            && (scouting || !peers.is_empty())
             && tokio::time::timeout(delay, self.state.start_conditions.notified())
                 .await
                 .is_err()
@@ -748,6 +761,7 @@ impl Runtime {
             let config_guard = this.config().lock();
             let config = &config_guard.0;
             let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
+            let wait_declares = unwrap_or_default!(config.open().return_conditions().declares());
             drop(config_guard);
             self.spawn(async move {
                 if let Ok(zid) = this.peer_connector_retry(peer).await {
@@ -756,7 +770,7 @@ impl Runtime {
                         .set_peer_connector_zid(idx, zid)
                         .await;
                 }
-                if !gossip {
+                if !gossip && (!wait_declares || this.whatami() != WhatAmI::Peer) {
                     this.state
                         .start_conditions
                         .terminate_peer_connector(idx)

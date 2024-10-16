@@ -59,6 +59,15 @@ pub mod listen {
 
 #[allow(non_upper_case_globals)]
 #[allow(dead_code)]
+pub mod open {
+    pub mod return_conditions {
+        pub const connect_scouted: bool = true;
+        pub const declares: bool = true;
+    }
+}
+
+#[allow(non_upper_case_globals)]
+#[allow(dead_code)]
 pub mod scouting {
     pub const timeout: u64 = 3000;
     pub const delay: u64 = 500;

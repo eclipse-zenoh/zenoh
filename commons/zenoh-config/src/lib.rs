@@ -263,6 +263,20 @@ validated_struct::validator! {
             pub exit_on_failure: Option<ModeDependentValue<bool>>,
             pub retry: Option<connection_retry::ConnectionRetryModeDependentConf>,
         },
+        /// Configure the session open behavior.
+        pub open: #[derive(Default)]
+        OpenConf {
+            /// Configure the conditions to be met before session open returns.
+            pub return_conditions: #[derive(Default)]
+            ReturnConditionsConf {
+                /// Session open waits to connect to scouted peers and routers before returning.
+                /// When set to false, first publications and queries after session open from peers may be lost.
+                connect_scouted: Option<bool>,
+                /// Session open waits to receive initial declares from connected peers before returning.
+                /// Setting to false may cause extra traffic at startup from peers.
+                declares: Option<bool>,
+            },
+        },
         pub scouting: #[derive(Default)]
         ScoutingConf {
             /// In client mode, the period dedicated to scouting for a router before failing. In milliseconds.

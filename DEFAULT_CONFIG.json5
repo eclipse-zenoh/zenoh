@@ -91,6 +91,18 @@
       period_increase_factor: 2,
     },
   },
+  /// Configure the session open behavior.
+  open: {
+    /// Configure the conditions to be met before session open returns.
+    return_conditions: {
+      /// Session open waits to connect to scouted peers and routers before returning.
+      /// When set to false, first publications and queries after session open from peers may be lost.
+      connect_scouted: true,
+      /// Session open waits to receive initial declares from connected peers before returning.
+      /// Setting to false may cause extra traffic at startup from peers.
+      declares: true,
+    }
+  },
   /// Configure the scouting mechanisms and their behaviours
   scouting: {
     /// In client mode, the period in milliseconds dedicated to scouting for a router before failing.
