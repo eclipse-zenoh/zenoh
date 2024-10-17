@@ -246,7 +246,11 @@ impl<'s> IKeFormatStorage<'s> for Vec<Segment<'s>> {
         constructor: IterativeConstructor<Self, Self::PartialConstruct, Self::ConstructionError>,
         segment: Segment<'s>,
     ) -> IterativeConstructor<Self, Self::PartialConstruct, Self::ConstructionError> {
-        let IterativeConstructor::Complete(mut this) = constructor else {
+        // NOTE(fuzzypixelz): Rust 1.82.0 can detect that this pattern is irrefutable but that's not
+        // necessarily the case for prior versions. Thus we silence this lint to keep the MSRV minimal.
+        #[allow(irrefutable_let_patterns)]
+        let IterativeConstructor::Complete(mut this) = constructor
+        else {
             unsafe { core::hint::unreachable_unchecked() }
         };
         this.push(segment);

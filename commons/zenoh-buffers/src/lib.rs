@@ -59,17 +59,21 @@ macro_rules! unsafe_slice_mut {
 #[cfg(all(not(test), not(feature = "test")))]
 #[macro_export]
 macro_rules! unsafe_slice {
-    ($s:expr,$r:expr) => {
-        unsafe { $s.get_unchecked($r) }
-    };
+    ($s:expr,$r:expr) => {{
+        let slice = &*$s;
+        let index = $r;
+        unsafe { slice.get_unchecked(index) }
+    }};
 }
 
 #[cfg(all(not(test), not(feature = "test")))]
 #[macro_export]
 macro_rules! unsafe_slice_mut {
-    ($s:expr,$r:expr) => {
-        unsafe { $s.get_unchecked_mut($r) }
-    };
+    ($s:expr,$r:expr) => {{
+        let slice = &mut *$s;
+        let index = $r;
+        unsafe { slice.get_unchecked_mut(index) }
+    }};
 }
 
 pub mod buffer {
