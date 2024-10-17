@@ -78,7 +78,7 @@ pub trait TrySerialize {
     }
 }
 
-/// Infallible serialization implementation. Implemeted automatically for types
+/// Infallible serialization implementation. Implemented automatically for types
 /// that implement `TrySerialize<Error = Infallible>`.
 /// Can be implemented manually when necessary, e.g. in case when the type already
 /// have automatic implementation of `TrySerialize` with the error type not `Infallible`.
