@@ -26,8 +26,8 @@ mod subscriber_ext;
 #[cfg(feature = "internal")]
 pub use crate::serialization::VarInt;
 pub use crate::serialization::{
-    z_deserialize, z_serialize, Deserialize, Serialize, ZDeserializeError, ZDeserializer,
-    ZReadIter, ZSerializer,
+    z_deserialize, z_serialize, z_try_serialize, Deserialize, TrySerialize, ZDeserializeError,
+    ZDeserializer, ZReadIter, ZSerializeError, ZSerializer,
 };
 #[cfg(feature = "unstable")]
 pub use crate::{

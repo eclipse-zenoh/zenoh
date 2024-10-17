@@ -1,13 +1,15 @@
+use core::fmt;
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
-    fmt,
+    convert::Infallible,
     hash::Hash,
     io::{Read, Write},
     marker::PhantomData,
     mem::MaybeUninit,
 };
 
+use unwrap_infallible::UnwrapInfallible;
 use zenoh::bytes::{ZBytes, ZBytesReader, ZBytesWriter};
 
 #[derive(Debug)]
@@ -19,25 +21,67 @@ impl fmt::Display for ZDeserializeError {
 }
 impl std::error::Error for ZDeserializeError {}
 
-fn default_serialize_n<T: Serialize>(slice: &[T], serializer: &mut ZSerializer) {
-    for t in slice {
-        t.serialize(serializer)
+#[derive(Debug)]
+pub struct ZSerializeError(String);
+impl fmt::Display for ZSerializeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "serialization error: {}", self.0)
+    }
+}
+impl From<String> for ZSerializeError {
+    fn from(s: String) -> Self {
+        Self(s)
     }
 }
 
-pub trait Serialize {
-    fn serialize(&self, serializer: &mut ZSerializer);
+impl std::error::Error for ZSerializeError {}
+
+fn default_serialize_n<T: TrySerialize>(
+    slice: &[T],
+    serializer: &mut ZSerializer,
+) -> Result<(), T::Error> {
+    for t in slice {
+        t.try_serialize(serializer)?;
+    }
+    Ok(())
+}
+
+pub trait TrySerialize {
+    type Error: std::error::Error;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error>;
+    #[doc(hidden)]
+    fn try_serialize_n(slice: &[Self], serializer: &mut ZSerializer) -> Result<(), Self::Error>
+    where
+        Self: Sized,
+    {
+        default_serialize_n(slice, serializer)
+    }
+}
+
+pub trait Serialize: TrySerialize {
+    fn serialize(&self, serializer: &mut ZSerializer) {
+        self.try_serialize(serializer).unwrap();
+    }
     #[doc(hidden)]
     fn serialize_n(slice: &[Self], serializer: &mut ZSerializer)
     where
         Self: Sized,
     {
-        default_serialize_n(slice, serializer);
+        for t in slice {
+            t.serialize(serializer);
+        }
     }
 }
-impl<T: Serialize + ?Sized> Serialize for &T {
+impl<T: TrySerialize<Error = Infallible> + ?Sized> Serialize for T {
     fn serialize(&self, serializer: &mut ZSerializer) {
-        T::serialize(*self, serializer)
+        T::try_serialize(self, serializer).unwrap_infallible();
+    }
+}
+
+impl<T: TrySerialize + ?Sized> TrySerialize for &T {
+    type Error = T::Error;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        T::try_serialize(*self, serializer)
     }
 }
 
@@ -82,8 +126,14 @@ pub trait Deserialize: Sized {
 
 pub fn z_serialize<T: Serialize + ?Sized>(t: &T) -> ZBytes {
     let mut serializer = ZSerializer::new();
-    serializer.serialize(t);
+    t.serialize(&mut serializer);
     serializer.finish()
+}
+
+pub fn z_try_serialize<T: TrySerialize + ?Sized>(t: &T) -> Result<ZBytes, T::Error> {
+    let mut serializer = ZSerializer::new();
+    t.try_serialize(&mut serializer)?;
+    Ok(serializer.finish())
 }
 
 pub fn z_deserialize<T: Deserialize>(zbytes: &ZBytes) -> Result<T, ZDeserializeError> {
@@ -103,8 +153,23 @@ impl ZSerializer {
         Self(ZBytes::writer())
     }
 
-    pub fn serialize<T: Serialize>(&mut self, t: T) {
-        t.serialize(self)
+    fn writer(&mut self) -> &mut ZBytesWriter {
+        &mut self.0
+    }
+
+    pub fn try_serialize_iter<T: TrySerialize, I: IntoIterator<Item = T>>(
+        &mut self,
+        iter: I,
+    ) -> Result<(), T::Error>
+    where
+        I::IntoIter: ExactSizeIterator,
+    {
+        let iter = iter.into_iter();
+        VarInt(iter.len()).serialize(self);
+        for t in iter {
+            t.try_serialize(self)?;
+        }
+        Ok(())
     }
 
     pub fn serialize_iter<T: Serialize, I: IntoIterator<Item = T>>(&mut self, iter: I)
@@ -112,14 +177,10 @@ impl ZSerializer {
         I::IntoIter: ExactSizeIterator,
     {
         let iter = iter.into_iter();
-        self.serialize(VarInt(iter.len()));
+        VarInt(iter.len()).serialize(self);
         for t in iter {
-            t.serialize(self);
+            t.serialize(self)
         }
-    }
-
-    pub fn serialize_n<T: Serialize>(&mut self, ts: &[T]) {
-        T::serialize_n(ts, self);
     }
 
     pub fn finish(self) -> ZBytes {
@@ -196,26 +257,32 @@ impl<T: Deserialize> Drop for ZReadIter<'_, '_, T> {
     }
 }
 
-impl Serialize for ZBytes {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        serializer.serialize(VarInt(self.len()));
-        serializer.0.append(self.clone());
+impl TrySerialize for ZBytes {
+    type Error = Infallible;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        VarInt(self.len()).serialize(serializer);
+        serializer.writer().append(self.clone());
+        Ok(())
     }
 }
 
 macro_rules! impl_num {
     ($($ty:ty),* $(,)?) => {$(
-        impl Serialize for $ty {
-            fn serialize(&self, serializer: &mut ZSerializer) {
+        impl TrySerialize for $ty {
+            type Error = Infallible;
+            fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
                 serializer.0.write_all(&(*self).to_le_bytes()).unwrap();
+                Ok(())
             }
-            fn serialize_n(slice: &[Self], serializer: &mut ZSerializer) where Self: Sized {
+            fn try_serialize_n(slice: &[Self], serializer: &mut ZSerializer) -> Result<(), Self::Error>
+            where Self: Sized {
                 if cfg!(target_endian = "little") || std::mem::size_of::<Self>() == 1 {
                     // SAFETY: transmuting numeric types to their little endian bytes is safe
                     serializer.0.write_all(unsafe { slice.align_to().1 }).unwrap();
                 } else {
-                    default_serialize_n(slice, serializer)
+                    default_serialize_n(slice, serializer)?;
                 }
+                Ok(())
             }
         }
         impl Deserialize for $ty {
@@ -252,9 +319,11 @@ macro_rules! impl_num {
 }
 impl_num!(i8, i16, i32, i64, i128, u8, u16, u32, u64, u128, f32, f64);
 
-impl Serialize for bool {
-    fn serialize(&self, serializer: &mut ZSerializer) {
+impl TrySerialize for bool {
+    type Error = Infallible;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
         (*self as u8).serialize(serializer);
+        Ok(())
     }
 }
 impl Deserialize for bool {
@@ -267,9 +336,12 @@ impl Deserialize for bool {
     }
 }
 
-fn serialize_slice<T: Serialize>(slice: &[T], serializer: &mut ZSerializer) {
-    serializer.serialize(VarInt(slice.len()));
-    T::serialize_n(slice, serializer);
+fn serialize_slice<T: TrySerialize>(
+    slice: &[T],
+    serializer: &mut ZSerializer,
+) -> Result<(), T::Error> {
+    VarInt(slice.len()).serialize(serializer);
+    T::try_serialize_n(slice, serializer)
 }
 
 fn deserialize_slice<T: Deserialize>(
@@ -285,27 +357,31 @@ fn deserialize_slice<T: Deserialize>(
     Ok(vec.into_boxed_slice())
 }
 
-impl<T: Serialize> Serialize for [T] {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        serialize_slice(self, serializer);
+impl<T: TrySerialize> TrySerialize for [T] {
+    type Error = T::Error;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        serialize_slice(self, serializer)
     }
 }
-impl<T: Serialize, const N: usize> Serialize for [T; N] {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        serialize_slice(self.as_slice(), serializer);
+impl<T: TrySerialize, const N: usize> TrySerialize for [T; N] {
+    type Error = T::Error;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        serialize_slice(self.as_slice(), serializer)
     }
 }
-impl<'a, T: Serialize + 'a> Serialize for Cow<'a, [T]>
+impl<'a, T: TrySerialize + 'a> TrySerialize for Cow<'a, [T]>
 where
     [T]: ToOwned,
 {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        serialize_slice(self, serializer);
+    type Error = T::Error;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        serialize_slice(self, serializer)
     }
 }
-impl<T: Serialize> Serialize for Box<[T]> {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        serialize_slice(self, serializer);
+impl<T: TrySerialize> TrySerialize for Box<[T]> {
+    type Error = T::Error;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        serialize_slice(self, serializer)
     }
 }
 impl<T: Deserialize> Deserialize for Box<[T]> {
@@ -313,8 +389,9 @@ impl<T: Deserialize> Deserialize for Box<[T]> {
         deserialize_slice(deserializer)
     }
 }
-impl<T: Serialize> Serialize for Vec<T> {
-    fn serialize(&self, serializer: &mut ZSerializer) {
+impl<T: TrySerialize> TrySerialize for Vec<T> {
+    type Error = T::Error;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
         serialize_slice(self, serializer)
     }
 }
@@ -336,59 +413,70 @@ impl<T: Deserialize> Deserialize for Vec<T> {
         Ok(deserialize_slice(deserializer)?.into_vec())
     }
 }
-impl<T: Serialize + Eq + Hash> Serialize for HashSet<T> {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        serializer.serialize_iter(self);
+impl<T: TrySerialize + Eq + Hash> TrySerialize for HashSet<T> {
+    type Error = T::Error;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        serializer.try_serialize_iter(self)
     }
 }
+
 impl<T: Deserialize + Eq + Hash> Deserialize for HashSet<T> {
     fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
         deserializer.deserialize_iter()?.collect()
     }
 }
-impl<T: Serialize + Ord> Serialize for BTreeSet<T> {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        serializer.serialize_iter(self);
+impl<T: TrySerialize + Ord> TrySerialize for BTreeSet<T> {
+    type Error = T::Error;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        serializer.try_serialize_iter(self)
     }
 }
+
 impl<T: Deserialize + Ord> Deserialize for BTreeSet<T> {
     fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
         deserializer.deserialize_iter()?.collect()
     }
 }
-impl<K: Serialize + Eq + Hash, V: Serialize> Serialize for HashMap<K, V> {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        serializer.serialize_iter(self);
+impl<K: TrySerialize + Eq + Hash, V: TrySerialize> TrySerialize for HashMap<K, V> {
+    type Error = ZSerializeError;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        serializer.try_serialize_iter(self)
     }
 }
+impl<K: Serialize + Eq + Hash, V: Serialize> Serialize for HashMap<K, V> {}
 impl<K: Deserialize + Eq + Hash, V: Deserialize> Deserialize for HashMap<K, V> {
     fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
         deserializer.deserialize_iter()?.collect()
     }
 }
-impl<K: Serialize + Ord, V: Serialize> Serialize for BTreeMap<K, V> {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        serializer.serialize_iter(self);
+impl<K: TrySerialize + Ord, V: TrySerialize> TrySerialize for BTreeMap<K, V> {
+    type Error = ZSerializeError;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        serializer.try_serialize_iter(self)
     }
 }
+impl<K: Serialize + Ord, V: Serialize> Serialize for BTreeMap<K, V> {}
 impl<K: Deserialize + Ord, V: Deserialize> Deserialize for BTreeMap<K, V> {
     fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
         deserializer.deserialize_iter()?.collect()
     }
 }
-impl Serialize for str {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        self.as_bytes().serialize(serializer);
+impl TrySerialize for str {
+    type Error = Infallible;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        self.as_bytes().try_serialize(serializer)
     }
 }
-impl Serialize for Cow<'_, str> {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        self.as_bytes().serialize(serializer);
+impl TrySerialize for Cow<'_, str> {
+    type Error = Infallible;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        self.as_bytes().try_serialize(serializer)
     }
 }
-impl Serialize for String {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        self.as_bytes().serialize(serializer);
+impl TrySerialize for String {
+    type Error = Infallible;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        self.as_bytes().try_serialize(serializer)
     }
 }
 impl Deserialize for String {
@@ -409,6 +497,14 @@ macro_rules! impl_tuple {
         impl_tuple!(@@$($ty/$i),*);
     };
     (@@$($ty:ident/$i:tt),* $(,)?) => {
+        #[allow(unused)]
+        impl<$($ty: TrySerialize),*> TrySerialize for ($($ty,)*) {
+            type Error = ZSerializeError;
+            fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+                $(self.$i.try_serialize(serializer).map_err(|e| e.to_string())?;)*
+                Ok(())
+            }
+        }
         #[allow(unused)]
         impl<$($ty: Serialize),*> Serialize for ($($ty,)*) {
             fn serialize(&self, serializer: &mut ZSerializer) {
@@ -445,9 +541,11 @@ impl_tuple!(
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VarInt<T>(pub T);
-impl Serialize for VarInt<usize> {
-    fn serialize(&self, serializer: &mut ZSerializer) {
+impl TrySerialize for VarInt<usize> {
+    type Error = Infallible;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
         leb128::write::unsigned(&mut serializer.0, self.0 as u64).unwrap();
+        Ok(())
     }
 }
 impl Deserialize for VarInt<usize> {

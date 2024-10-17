@@ -45,6 +45,7 @@ futures = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 leb128 = { workspace = true }
+unwrap-infallible = { workspace = true }
 zenoh = { workspace = true, default-features = false }
 zenoh-macros = { workspace = true }
 
