@@ -108,10 +108,21 @@ impl ZBytes {
         self.0.len()
     }
 
+    /// Access raw bytes contained in the [`ZBytes`].
+    ///
+    /// In the case `ZBytes` contains non-contiguous regions of memory, an allocation and a copy
+    /// will be done, that's why the method returns a [`Cow`].
+    /// It's also possible to use [`ZBytes::slices`] instead to avoid this copy.
     pub fn to_bytes(&self) -> Cow<[u8]> {
         self.0.contiguous()
     }
 
+    /// Try to access a string contained in the [`ZBytes`], fail if it contains non-UTF8 bytes.
+    ///
+    /// In the case `ZBytes` contains non-contiguous regions of memory, an allocation and a copy
+    /// will be done, that's why the method returns a [`Cow`].
+    /// It's also possible to use [`ZBytes::slices`] instead to avoid this copy, but then the UTF8
+    /// check has to be done manually.
     pub fn try_to_string(&self) -> Result<Cow<str>, Utf8Error> {
         Ok(match self.to_bytes() {
             Cow::Borrowed(s) => std::str::from_utf8(s)?.into(),
