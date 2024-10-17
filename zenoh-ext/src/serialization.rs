@@ -484,6 +484,21 @@ impl Deserialize for String {
         String::from_utf8(Deserialize::deserialize(deserializer)?).or(Err(ZDeserializeError))
     }
 }
+impl TrySerialize for std::ffi::CString {
+    type Error = ZSerializeError;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        // make sure the string is valid UTF-8
+        let s = self.to_str().map_err(|e| e.to_string())?;
+        s.serialize(serializer);
+        Ok(())
+    }
+}
+impl Deserialize for std::ffi::CString {
+    fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
+        let s = String::deserialize(deserializer)?;
+        std::ffi::CString::new(s).or(Err(ZDeserializeError))
+    }
+}
 
 macro_rules! impl_tuple {
     ($($ty:ident/$i:tt),* $(,)?) => {
@@ -572,6 +587,15 @@ mod tests {
         };
     }
 
+    macro_rules! try_serialize_deserialize {
+        ($ty:ty, $expr:expr) => {
+            let expr: &$ty = &$expr;
+            let payload = z_try_serialize(expr).unwrap();
+            let output = z_deserialize::<$ty>(&payload).unwrap();
+            assert_eq!(*expr, output);
+        };
+    }
+
     const RANDOM_TESTS: Range<usize> = 0..1_000;
 
     #[test]
@@ -636,5 +660,15 @@ mod tests {
         let mut map = HashMap::new();
         map.insert("hello".to_string(), "world".to_string());
         serialize_deserialize!(HashMap<String, String>, map);
+    }
+
+    #[test]
+    fn c_string_serialization() {
+        let cstr = std::ffi::CString::new("hello").unwrap();
+        try_serialize_deserialize!(std::ffi::CString, cstr);
+        // test that invalid UTF-8 strings are not serialized
+        let cstr = std::ffi::CString::new(b"\xff").unwrap();
+        let res = z_try_serialize(&cstr);
+        assert!(res.err().unwrap().to_string().contains("invalid utf-8"));
     }
 }
