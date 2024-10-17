@@ -189,7 +189,7 @@ pub fn z_serialize<T: Serialize + ?Sized>(t: &T) -> ZBytes {
 ///
 /// ```rust
 /// use zenoh_ext::*;
-/// let zbytes = z_try_serialize(&CString::new("new(b"Invalid utf8: \xff");
+/// let zbytes = z_try_serialize(&CString::new(b"Invalid utf8: \xff");
 /// assert!(zbytes.is_err());
 /// ```
 ///
