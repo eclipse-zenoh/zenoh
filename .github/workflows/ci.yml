@@ -45,6 +45,12 @@ jobs:
       - name: Install Stable Rust toolchain
         run: rustup install 1.78.0
 
+      - name: Install rustfmt
+        run: rustup component add --toolchain 1.78.0 rustfmt
+
+      - name: Install clippy
+        run: rustup component add --toolchain 1.78.0 clippy
+
       - name: Install latest cargo-deny
         uses: taiki-e/install-action@cargo-deny
 
