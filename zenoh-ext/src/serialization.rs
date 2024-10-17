@@ -59,9 +59,7 @@ pub trait TrySerialize {
 }
 
 pub trait Serialize: TrySerialize {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        self.try_serialize(serializer).unwrap();
-    }
+    fn serialize(&self, serializer: &mut ZSerializer);
     #[doc(hidden)]
     fn serialize_n(slice: &[Self], serializer: &mut ZSerializer)
     where
@@ -336,7 +334,7 @@ impl Deserialize for bool {
     }
 }
 
-fn serialize_slice<T: TrySerialize>(
+fn try_serialize_slice<T: TrySerialize>(
     slice: &[T],
     serializer: &mut ZSerializer,
 ) -> Result<(), T::Error> {
@@ -360,13 +358,13 @@ fn deserialize_slice<T: Deserialize>(
 impl<T: TrySerialize> TrySerialize for [T] {
     type Error = T::Error;
     fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
-        serialize_slice(self, serializer)
+        try_serialize_slice(self, serializer)
     }
 }
 impl<T: TrySerialize, const N: usize> TrySerialize for [T; N] {
     type Error = T::Error;
     fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
-        serialize_slice(self.as_slice(), serializer)
+        try_serialize_slice(self.as_slice(), serializer)
     }
 }
 impl<'a, T: TrySerialize + 'a> TrySerialize for Cow<'a, [T]>
@@ -375,13 +373,13 @@ where
 {
     type Error = T::Error;
     fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
-        serialize_slice(self, serializer)
+        try_serialize_slice(self, serializer)
     }
 }
 impl<T: TrySerialize> TrySerialize for Box<[T]> {
     type Error = T::Error;
     fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
-        serialize_slice(self, serializer)
+        try_serialize_slice(self, serializer)
     }
 }
 impl<T: Deserialize> Deserialize for Box<[T]> {
@@ -392,7 +390,7 @@ impl<T: Deserialize> Deserialize for Box<[T]> {
 impl<T: TrySerialize> TrySerialize for Vec<T> {
     type Error = T::Error;
     fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
-        serialize_slice(self, serializer)
+        try_serialize_slice(self, serializer)
     }
 }
 impl<T: Deserialize, const N: usize> Deserialize for [T; N] {
@@ -443,7 +441,14 @@ impl<K: TrySerialize + Eq + Hash, V: TrySerialize> TrySerialize for HashMap<K, V
         serializer.try_serialize_iter(self)
     }
 }
-impl<K: Serialize + Eq + Hash, V: Serialize> Serialize for HashMap<K, V> {}
+impl<K: Serialize + Eq + Hash, V: Serialize> Serialize for HashMap<K, V>
+where
+    for<'a> (&'a K, &'a V): Serialize,
+{
+    fn serialize(&self, serializer: &mut ZSerializer) {
+        serializer.serialize_iter(self.iter())
+    }
+}
 impl<K: Deserialize + Eq + Hash, V: Deserialize> Deserialize for HashMap<K, V> {
     fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
         deserializer.deserialize_iter()?.collect()
@@ -455,7 +460,14 @@ impl<K: TrySerialize + Ord, V: TrySerialize> TrySerialize for BTreeMap<K, V> {
         serializer.try_serialize_iter(self)
     }
 }
-impl<K: Serialize + Ord, V: Serialize> Serialize for BTreeMap<K, V> {}
+impl<K: Serialize + Ord, V: Serialize> Serialize for BTreeMap<K, V>
+where
+    for<'a> (&'a K, &'a V): Serialize,
+{
+    fn serialize(&self, serializer: &mut ZSerializer) {
+        serializer.serialize_iter(self)
+    }
+}
 impl<K: Deserialize + Ord, V: Deserialize> Deserialize for BTreeMap<K, V> {
     fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
         deserializer.deserialize_iter()?.collect()
