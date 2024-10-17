@@ -14,6 +14,7 @@
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    convert::Infallible,
     fmt,
     hash::Hash,
     io::{Read, Write},
@@ -21,6 +22,7 @@ use std::{
     mem::MaybeUninit,
 };
 
+use unwrap_infallible::UnwrapInfallible;
 use zenoh::bytes::{ZBytes, ZBytesReader, ZBytesWriter};
 
 /// Error occurring in deserialization.
@@ -33,18 +35,54 @@ impl fmt::Display for ZDeserializeError {
 }
 impl std::error::Error for ZDeserializeError {}
 
-fn default_serialize_n<T: Serialize>(slice: &[T], serializer: &mut ZSerializer) {
-    for t in slice {
-        t.serialize(serializer)
+#[derive(Debug)]
+
+pub struct ZSerializeError;
+impl fmt::Display for ZSerializeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "serialization error")
     }
 }
 
-/// Serialization implementation.
+impl std::error::Error for ZSerializeError {}
+
+fn default_serialize_n<T: TrySerialize>(
+    slice: &[T],
+    serializer: &mut ZSerializer,
+) -> Result<(), T::Error> {
+    for t in slice {
+        t.try_serialize(serializer)?;
+    }
+    Ok(())
+}
+
+/// Serialization implementation. If serialization never fails,
+/// the `Error` associated type should be set to `Infallible`.
 ///
 /// See [Zenoh serialization format RFC][1].
 ///
 /// [1]: https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Serialization.md
-pub trait Serialize {
+pub trait TrySerialize {
+    type Error: std::error::Error;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error>;
+    #[doc(hidden)]
+    fn try_serialize_n(slice: &[Self], serializer: &mut ZSerializer) -> Result<(), Self::Error>
+    where
+        Self: Sized,
+    {
+        default_serialize_n(slice, serializer)
+    }
+}
+
+/// Infallible serialization implementation. Implemented automatically for types
+/// that implement `TrySerialize<Error = Infallible>`.
+/// Can be implemented manually when necessary, e.g. in case when the type already
+/// have automatic implementation of `TrySerialize` with the error type not `Infallible`.
+///
+/// See [Zenoh serialization format RFC][1].
+///
+/// [1]: https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Serialization.md
+pub trait Serialize: TrySerialize {
     /// Serialize the given object into a [`ZSerializer`].
     ///
     /// User may prefer to use [`ZSerializer::serialize`] instead of this function.
@@ -54,12 +92,21 @@ pub trait Serialize {
     where
         Self: Sized,
     {
-        default_serialize_n(slice, serializer);
+        for t in slice {
+            t.serialize(serializer);
+        }
     }
 }
-impl<T: Serialize + ?Sized> Serialize for &T {
+impl<T: TrySerialize<Error = Infallible> + ?Sized> Serialize for T {
     fn serialize(&self, serializer: &mut ZSerializer) {
-        T::serialize(*self, serializer)
+        T::try_serialize(self, serializer).unwrap_infallible();
+    }
+}
+
+impl<T: TrySerialize + ?Sized> TrySerialize for &T {
+    type Error = T::Error;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        T::try_serialize(*self, serializer)
     }
 }
 
@@ -125,8 +172,28 @@ pub trait Deserialize: Sized {
 /// [1]: https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Serialization.md
 pub fn z_serialize<T: Serialize + ?Sized>(t: &T) -> ZBytes {
     let mut serializer = ZSerializer::new();
-    serializer.serialize(t);
+    t.serialize(&mut serializer);
     serializer.finish()
+}
+
+/// Serialize an object according to the [Zenoh serialization format][1].
+/// Returns an error if serialization fails.
+///
+/// Serialization doesn't take the ownership of the data.
+///
+/// # Examples
+///
+/// ```rust
+/// use zenoh_ext::*;
+/// let zbytes = z_try_serialize(&std::ffi::CString::new(b"Invalid utf8 \xF0").unwrap());
+/// assert!(zbytes.is_err());
+/// ```
+///
+/// [1]: https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Serialization.md
+pub fn z_try_serialize<T: TrySerialize + ?Sized>(t: &T) -> Result<ZBytes, T::Error> {
+    let mut serializer = ZSerializer::new();
+    t.try_serialize(&mut serializer)?;
+    Ok(serializer.finish())
 }
 
 /// Deserialize an object according to the [Zenoh serialization format][1].
@@ -174,11 +241,45 @@ impl ZSerializer {
         Self(ZBytes::writer())
     }
 
+    fn writer(&mut self) -> &mut ZBytesWriter {
+        &mut self.0
+    }
+
+    /// Serialize the given object into a [`ZSerializer`].
+    /// Returns an error if serialization fails.
+    ///
+    /// Serialization doesn't take the ownership of the data.
+    pub fn try_serialize<T: TrySerialize>(&mut self, t: T) -> Result<(), T::Error> {
+        t.try_serialize(self)
+    }
+
     /// Serialize the given object into a [`ZSerializer`].
     ///
     /// Serialization doesn't take the ownership of the data.
     pub fn serialize<T: Serialize>(&mut self, t: T) {
         t.serialize(self)
+    }
+
+    /// Serialize the given iterator into a [`ZSerializer`].
+    /// Returns an error if serialization of an element fails.
+    ///
+    /// Sequence serialized with this method may be deserialized with [`ZDeserializer::deserialize_iter`].
+    /// See [Zenoh serialization format RFC][1].
+    ///
+    /// [1]: https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Serialization.md#sequences
+    pub fn try_serialize_iter<T: TrySerialize, I: IntoIterator<Item = T>>(
+        &mut self,
+        iter: I,
+    ) -> Result<(), T::Error>
+    where
+        I::IntoIter: ExactSizeIterator,
+    {
+        let iter = iter.into_iter();
+        VarInt(iter.len()).serialize(self);
+        for t in iter {
+            t.try_serialize(self)?;
+        }
+        Ok(())
     }
 
     /// Serialize the given iterator into a [`ZSerializer`].
@@ -192,9 +293,9 @@ impl ZSerializer {
         I::IntoIter: ExactSizeIterator,
     {
         let iter = iter.into_iter();
-        self.serialize(VarInt(iter.len()));
+        VarInt(iter.len()).serialize(self);
         for t in iter {
-            t.serialize(self);
+            t.serialize(self)
         }
     }
 
@@ -299,26 +400,32 @@ impl<T: Deserialize> Drop for ZReadIter<'_, '_, T> {
     }
 }
 
-impl Serialize for ZBytes {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        serializer.serialize(VarInt(self.len()));
-        serializer.0.append(self.clone());
+impl TrySerialize for ZBytes {
+    type Error = Infallible;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        VarInt(self.len()).serialize(serializer);
+        serializer.writer().append(self.clone());
+        Ok(())
     }
 }
 
 macro_rules! impl_num {
     ($($ty:ty),* $(,)?) => {$(
-        impl Serialize for $ty {
-            fn serialize(&self, serializer: &mut ZSerializer) {
+        impl TrySerialize for $ty {
+            type Error = Infallible;
+            fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
                 serializer.0.write_all(&(*self).to_le_bytes()).unwrap();
+                Ok(())
             }
-            fn serialize_n(slice: &[Self], serializer: &mut ZSerializer) where Self: Sized {
+            fn try_serialize_n(slice: &[Self], serializer: &mut ZSerializer) -> Result<(), Self::Error>
+            where Self: Sized {
                 if cfg!(target_endian = "little") || std::mem::size_of::<Self>() == 1 {
                     // SAFETY: transmuting numeric types to their little endian bytes is safe
                     serializer.0.write_all(unsafe { slice.align_to().1 }).unwrap();
                 } else {
-                    default_serialize_n(slice, serializer)
+                    default_serialize_n(slice, serializer)?;
                 }
+                Ok(())
             }
         }
         impl Deserialize for $ty {
@@ -355,9 +462,11 @@ macro_rules! impl_num {
 }
 impl_num!(i8, i16, i32, i64, i128, u8, u16, u32, u64, u128, f32, f64);
 
-impl Serialize for bool {
-    fn serialize(&self, serializer: &mut ZSerializer) {
+impl TrySerialize for bool {
+    type Error = Infallible;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
         (*self as u8).serialize(serializer);
+        Ok(())
     }
 }
 impl Deserialize for bool {
@@ -370,9 +479,12 @@ impl Deserialize for bool {
     }
 }
 
-fn serialize_slice<T: Serialize>(slice: &[T], serializer: &mut ZSerializer) {
-    serializer.serialize(VarInt(slice.len()));
-    T::serialize_n(slice, serializer);
+fn try_serialize_slice<T: TrySerialize>(
+    slice: &[T],
+    serializer: &mut ZSerializer,
+) -> Result<(), T::Error> {
+    VarInt(slice.len()).serialize(serializer);
+    T::try_serialize_n(slice, serializer)
 }
 
 fn deserialize_slice<T: Deserialize>(
@@ -388,27 +500,31 @@ fn deserialize_slice<T: Deserialize>(
     Ok(vec.into_boxed_slice())
 }
 
-impl<T: Serialize> Serialize for [T] {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        serialize_slice(self, serializer);
+impl<T: TrySerialize> TrySerialize for [T] {
+    type Error = T::Error;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        try_serialize_slice(self, serializer)
     }
 }
-impl<T: Serialize, const N: usize> Serialize for [T; N] {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        serialize_slice(self.as_slice(), serializer);
+impl<T: TrySerialize, const N: usize> TrySerialize for [T; N] {
+    type Error = T::Error;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        try_serialize_slice(self.as_slice(), serializer)
     }
 }
-impl<'a, T: Serialize + 'a> Serialize for Cow<'a, [T]>
+impl<'a, T: TrySerialize + 'a> TrySerialize for Cow<'a, [T]>
 where
     [T]: ToOwned,
 {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        serialize_slice(self, serializer);
+    type Error = T::Error;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        try_serialize_slice(self, serializer)
     }
 }
-impl<T: Serialize> Serialize for Box<[T]> {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        serialize_slice(self, serializer);
+impl<T: TrySerialize> TrySerialize for Box<[T]> {
+    type Error = T::Error;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        try_serialize_slice(self, serializer)
     }
 }
 impl<T: Deserialize> Deserialize for Box<[T]> {
@@ -416,9 +532,10 @@ impl<T: Deserialize> Deserialize for Box<[T]> {
         deserialize_slice(deserializer)
     }
 }
-impl<T: Serialize> Serialize for Vec<T> {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        serialize_slice(self, serializer)
+impl<T: TrySerialize> TrySerialize for Vec<T> {
+    type Error = T::Error;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        try_serialize_slice(self, serializer)
     }
 }
 impl<T: Deserialize, const N: usize> Deserialize for [T; N] {
@@ -439,29 +556,42 @@ impl<T: Deserialize> Deserialize for Vec<T> {
         Ok(deserialize_slice(deserializer)?.into_vec())
     }
 }
-impl<T: Serialize + Eq + Hash> Serialize for HashSet<T> {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        serializer.serialize_iter(self);
+impl<T: TrySerialize + Eq + Hash> TrySerialize for HashSet<T> {
+    type Error = T::Error;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        serializer.try_serialize_iter(self)
     }
 }
+
 impl<T: Deserialize + Eq + Hash> Deserialize for HashSet<T> {
     fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
         deserializer.deserialize_iter()?.collect()
     }
 }
-impl<T: Serialize + Ord> Serialize for BTreeSet<T> {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        serializer.serialize_iter(self);
+impl<T: TrySerialize + Ord> TrySerialize for BTreeSet<T> {
+    type Error = T::Error;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        serializer.try_serialize_iter(self)
     }
 }
+
 impl<T: Deserialize + Ord> Deserialize for BTreeSet<T> {
     fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
         deserializer.deserialize_iter()?.collect()
     }
 }
-impl<K: Serialize + Eq + Hash, V: Serialize> Serialize for HashMap<K, V> {
+impl<K: TrySerialize + Eq + Hash, V: TrySerialize> TrySerialize for HashMap<K, V> {
+    type Error = ZSerializeError;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        serializer.try_serialize_iter(self)
+    }
+}
+impl<K: Serialize + Eq + Hash, V: Serialize> Serialize for HashMap<K, V>
+where
+    for<'a> (&'a K, &'a V): Serialize,
+{
     fn serialize(&self, serializer: &mut ZSerializer) {
-        serializer.serialize_iter(self);
+        serializer.serialize_iter(self.iter())
     }
 }
 impl<K: Deserialize + Eq + Hash, V: Deserialize> Deserialize for HashMap<K, V> {
@@ -469,9 +599,18 @@ impl<K: Deserialize + Eq + Hash, V: Deserialize> Deserialize for HashMap<K, V> {
         deserializer.deserialize_iter()?.collect()
     }
 }
-impl<K: Serialize + Ord, V: Serialize> Serialize for BTreeMap<K, V> {
+impl<K: TrySerialize + Ord, V: TrySerialize> TrySerialize for BTreeMap<K, V> {
+    type Error = ZSerializeError;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        serializer.try_serialize_iter(self)
+    }
+}
+impl<K: Serialize + Ord, V: Serialize> Serialize for BTreeMap<K, V>
+where
+    for<'a> (&'a K, &'a V): Serialize,
+{
     fn serialize(&self, serializer: &mut ZSerializer) {
-        serializer.serialize_iter(self);
+        serializer.serialize_iter(self)
     }
 }
 impl<K: Deserialize + Ord, V: Deserialize> Deserialize for BTreeMap<K, V> {
@@ -479,24 +618,42 @@ impl<K: Deserialize + Ord, V: Deserialize> Deserialize for BTreeMap<K, V> {
         deserializer.deserialize_iter()?.collect()
     }
 }
-impl Serialize for str {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        self.as_bytes().serialize(serializer);
+impl TrySerialize for str {
+    type Error = Infallible;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        self.as_bytes().try_serialize(serializer)
     }
 }
-impl Serialize for Cow<'_, str> {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        self.as_bytes().serialize(serializer);
+impl TrySerialize for Cow<'_, str> {
+    type Error = Infallible;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        self.as_bytes().try_serialize(serializer)
     }
 }
-impl Serialize for String {
-    fn serialize(&self, serializer: &mut ZSerializer) {
-        self.as_bytes().serialize(serializer);
+impl TrySerialize for String {
+    type Error = Infallible;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        self.as_bytes().try_serialize(serializer)
     }
 }
 impl Deserialize for String {
     fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
         String::from_utf8(Deserialize::deserialize(deserializer)?).or(Err(ZDeserializeError))
+    }
+}
+impl TrySerialize for std::ffi::CString {
+    type Error = ZSerializeError;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+        // make sure the string is valid UTF-8
+        let s = self.to_str().map_err(|_| ZSerializeError)?;
+        s.serialize(serializer);
+        Ok(())
+    }
+}
+impl Deserialize for std::ffi::CString {
+    fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError> {
+        let s = String::deserialize(deserializer)?;
+        std::ffi::CString::new(s).or(Err(ZDeserializeError))
     }
 }
 
@@ -512,6 +669,14 @@ macro_rules! impl_tuple {
         impl_tuple!(@@$($ty/$i),*);
     };
     (@@$($ty:ident/$i:tt),* $(,)?) => {
+        #[allow(unused)]
+        impl<$($ty: TrySerialize),*> TrySerialize for ($($ty,)*) {
+            type Error = ZSerializeError;
+            fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
+                $(self.$i.try_serialize(serializer).map_err(|_| ZSerializeError)?;)*
+                Ok(())
+            }
+        }
         #[allow(unused)]
         impl<$($ty: Serialize),*> Serialize for ($($ty,)*) {
             fn serialize(&self, serializer: &mut ZSerializer) {
@@ -548,9 +713,11 @@ impl_tuple!(
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VarInt<T>(pub T);
-impl Serialize for VarInt<usize> {
-    fn serialize(&self, serializer: &mut ZSerializer) {
+impl TrySerialize for VarInt<usize> {
+    type Error = Infallible;
+    fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
         leb128::write::unsigned(&mut serializer.0, self.0 as u64).unwrap();
+        Ok(())
     }
 }
 impl Deserialize for VarInt<usize> {
@@ -572,6 +739,15 @@ mod tests {
         ($ty:ty, $expr:expr) => {
             let expr: &$ty = &$expr;
             let payload = z_serialize(expr);
+            let output = z_deserialize::<$ty>(&payload).unwrap();
+            assert_eq!(*expr, output);
+        };
+    }
+
+    macro_rules! try_serialize_deserialize {
+        ($ty:ty, $expr:expr) => {
+            let expr: &$ty = &$expr;
+            let payload = z_try_serialize(expr).unwrap();
             let output = z_deserialize::<$ty>(&payload).unwrap();
             assert_eq!(*expr, output);
         };
@@ -641,5 +817,15 @@ mod tests {
         let mut map = HashMap::new();
         map.insert("hello".to_string(), "world".to_string());
         serialize_deserialize!(HashMap<String, String>, map);
+    }
+
+    #[test]
+    fn c_string_serialization() {
+        let cstr = std::ffi::CString::new("hello").unwrap();
+        try_serialize_deserialize!(std::ffi::CString, cstr);
+        // test that invalid UTF-8 strings are not serialized
+        let cstr = std::ffi::CString::new(b"\xff").unwrap();
+        let res = z_try_serialize(&cstr);
+        assert!(res.is_err());
     }
 }
