@@ -39,11 +39,11 @@ jobs:
       - name: Clone this repository
         uses: actions/checkout@v4
 
-      - name: Setup rust-cache
-        uses: Swatinem/rust-cache@v2
-
       - name: Update Stable Rust toolchain
         run: rustup update stable
+
+      - name: Setup rust-cache
+        uses: Swatinem/rust-cache@v2
 
       - name: Install latest cargo-deny
         uses: taiki-e/install-action@cargo-deny

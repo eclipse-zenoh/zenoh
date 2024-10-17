@@ -1,8 +1,21 @@
-use core::fmt;
+//
+// Copyright (c) 2024 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     convert::Infallible,
+    fmt,
     hash::Hash,
     io::{Read, Write},
     marker::PhantomData,
@@ -12,6 +25,7 @@ use std::{
 use unwrap_infallible::UnwrapInfallible;
 use zenoh::bytes::{ZBytes, ZBytesReader, ZBytesWriter};
 
+/// Error occurring in deserialization.
 #[derive(Debug)]
 pub struct ZDeserializeError;
 impl fmt::Display for ZDeserializeError {
@@ -46,6 +60,12 @@ fn default_serialize_n<T: TrySerialize>(
     Ok(())
 }
 
+/// Serialization implementation. If serialization never fails,
+/// the `Error` associated type should be set to `Infallible`.
+///
+/// See [Zenoh serialization format RFC][1].
+///
+/// [1]: https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Serialization.md
 pub trait TrySerialize {
     type Error: std::error::Error;
     fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error>;
@@ -58,7 +78,18 @@ pub trait TrySerialize {
     }
 }
 
+/// Infallible serialization implementation. Implemeted automatically for types
+/// that implement `TrySerialize<Error = Infallible>`.
+/// Can be implemented manually when necessary, e.g. in case when the type already
+/// have automatic implementation of `TrySerialize` with the error type not `Infallible`.
+///
+/// See [Zenoh serialization format RFC][1].
+///
+/// [1]: https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Serialization.md
 pub trait Serialize: TrySerialize {
+    /// Serialize the given object into a [`ZSerializer`].
+    ///
+    /// User may prefer to use [`ZSerializer::serialize`] instead of this function.
     fn serialize(&self, serializer: &mut ZSerializer);
     #[doc(hidden)]
     fn serialize_n(slice: &[Self], serializer: &mut ZSerializer)
@@ -104,7 +135,15 @@ fn default_deserialize_n_uninit<'a, T: Deserialize>(
     Ok(unsafe { &mut *(in_place as *mut [MaybeUninit<T>] as *mut [T]) })
 }
 
+/// Deserialization implementation.
+///
+/// See [Zenoh serialization format RFC][1].
+///
+/// [1]: https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Serialization.md
 pub trait Deserialize: Sized {
+    /// Deserialize the given type from a [`ZDeserializer`].
+    ///
+    /// User may prefer to use [`ZDeserializer::deserialize`] instead of this function.
     fn deserialize(deserializer: &mut ZDeserializer) -> Result<Self, ZDeserializeError>;
     #[doc(hidden)]
     fn deserialize_n(
@@ -122,18 +161,56 @@ pub trait Deserialize: Sized {
     }
 }
 
+/// Serialize an object according to the [Zenoh serialization format][1].
+///
+/// Serialization doesn't take the ownership of the data.
+///
+/// # Examples
+///
+/// ```rust
+/// use zenoh_ext::*;
+/// let zbytes = z_serialize(&(42i32, vec![1u8, 2, 3]));
+/// assert_eq!(z_deserialize::<(i32, Vec<u8>)>(&zbytes).unwrap(), (42i32, vec![1u8, 2, 3]));
+/// ```
+///
+/// [1]: https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Serialization.md
 pub fn z_serialize<T: Serialize + ?Sized>(t: &T) -> ZBytes {
     let mut serializer = ZSerializer::new();
     t.serialize(&mut serializer);
     serializer.finish()
 }
 
+/// Serialize an object according to the [Zenoh serialization format][1].
+/// Returns an error if serialization fails.
+///
+/// Serialization doesn't take the ownership of the data.
+///
+/// # Examples
+///
+/// ```rust
+/// use zenoh_ext::*;
+/// let zbytes = z_try_serialize(&CString::new("new(b"Invalid utf8: \xff");
+/// assert!(zbytes.is_err());
+/// ```
+///
+/// [1]: https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Serialization.md
 pub fn z_try_serialize<T: TrySerialize + ?Sized>(t: &T) -> Result<ZBytes, T::Error> {
     let mut serializer = ZSerializer::new();
     t.try_serialize(&mut serializer)?;
     Ok(serializer.finish())
 }
 
+/// Deserialize an object according to the [Zenoh serialization format][1].
+///
+/// # Examples
+///
+/// ```rust
+/// use zenoh_ext::*;
+/// let zbytes = z_serialize(&(42i32, vec![1u8, 2, 3]));
+/// assert_eq!(z_deserialize::<(i32, Vec<u8>)>(&zbytes).unwrap(), (42i32, vec![1u8, 2, 3]));
+/// ```
+///
+/// [1]: https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Serialization.md
 pub fn z_deserialize<T: Deserialize>(zbytes: &ZBytes) -> Result<T, ZDeserializeError> {
     let mut deserializer = ZDeserializer::new(zbytes);
     let t = T::deserialize(&mut deserializer)?;
@@ -143,10 +220,27 @@ pub fn z_deserialize<T: Deserialize>(zbytes: &ZBytes) -> Result<T, ZDeserializeE
     Ok(t)
 }
 
+/// Serializer implementing the [Zenoh serialization format][1].
+///
+/// Serializing objects one after the other is equivalent to serialize a tuple of these objects.
+///
+/// # Examples
+///
+/// ```rust
+/// use zenoh_ext::*;
+/// let mut serializer = ZSerializer::new();
+/// serializer.serialize(42i32);
+/// serializer.serialize(vec![1u8, 2, 3]);
+/// let zbytes = serializer.finish();
+/// assert_eq!(z_deserialize::<(i32, Vec<u8>)>(&zbytes).unwrap(), (42i32, vec![1u8, 2, 3]));
+/// ```
+///
+/// [1]: https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Serialization.md
 #[derive(Debug)]
 pub struct ZSerializer(ZBytesWriter);
 
 impl ZSerializer {
+    /// Instantiate a [`ZSerializer`].
     pub fn new() -> Self {
         Self(ZBytes::writer())
     }
@@ -155,6 +249,20 @@ impl ZSerializer {
         &mut self.0
     }
 
+    /// Serialize the given object into a [`ZSerializer`].
+    ///
+    /// Serialization doesn't take the ownership of the data.
+    pub fn serialize<T: Serialize>(&mut self, t: T) {
+        t.serialize(self)
+    }
+
+    /// Serialize the given iterator into a [`ZSerializer`].
+    /// Returns an error if serialization of an element fails.
+    ///
+    /// Sequence serialized with this method may be deserialized with [`ZDeserializer::deserialize_iter`].
+    /// See [Zenoh serialization format RFC][1].
+    ///
+    /// [1]: https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Serialization.md#sequences
     pub fn try_serialize_iter<T: TrySerialize, I: IntoIterator<Item = T>>(
         &mut self,
         iter: I,
@@ -170,6 +278,12 @@ impl ZSerializer {
         Ok(())
     }
 
+    /// Serialize the given iterator into a [`ZSerializer`].
+    ///
+    /// Sequence serialized with this method may be deserialized with [`ZDeserializer::deserialize_iter`].
+    /// See [Zenoh serialization format RFC][1].
+    ///
+    /// [1]: https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Serialization.md#sequences
     pub fn serialize_iter<T: Serialize, I: IntoIterator<Item = T>>(&mut self, iter: I)
     where
         I::IntoIter: ExactSizeIterator,
@@ -181,6 +295,7 @@ impl ZSerializer {
         }
     }
 
+    /// Finish serialization by returning a [`ZBytes`].
     pub fn finish(self) -> ZBytes {
         self.0.finish()
     }
@@ -198,22 +313,47 @@ impl From<ZSerializer> for ZBytes {
     }
 }
 
+/// Deserializer implementing the [Zenoh serialization format][1].
+///
+/// Deserializing objects one after the other is equivalent to serialize a tuple of these objects.
+///
+/// # Examples
+///
+/// ```rust
+/// use zenoh_ext::*;
+/// let zbytes = z_serialize(&(42i32, vec![1u8, 2, 3]));
+/// let mut deserializer = ZDeserializer::new(&zbytes);
+/// assert_eq!(deserializer.deserialize::<i32>().unwrap(), 42i32);
+/// assert_eq!(deserializer.deserialize::<Vec<u8>>().unwrap(), vec![1u8, 2, 3]);
+/// assert!(deserializer.done())
+/// ```
+///
+/// [1]: https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Serialization.md
 #[derive(Debug)]
 pub struct ZDeserializer<'a>(ZBytesReader<'a>);
 
 impl<'a> ZDeserializer<'a> {
+    /// Instantiate a [`ZDeserializer`] from a [`ZBytes`].
     pub fn new(zbytes: &'a ZBytes) -> Self {
         Self(zbytes.reader())
     }
 
+    /// Return true if there is no data left to deserialize.
     pub fn done(&self) -> bool {
         self.0.is_empty()
     }
 
+    /// Deserialize the given type from a [`ZDeserializer`].
     pub fn deserialize<T: Deserialize>(&mut self) -> Result<T, ZDeserializeError> {
         T::deserialize(self)
     }
 
+    /// Deserialize an iterator into a [`ZDeserializer`].
+    ///
+    /// Sequence deserialized with this method may have been serialized with [`ZSerializer::serialize_iter`].
+    /// See [Zenoh serialization format RFC][1].
+    ///
+    /// [1]: https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Serialization.md#sequences
     pub fn deserialize_iter<'b, T: Deserialize>(
         &'b mut self,
     ) -> Result<ZReadIter<'a, 'b, T>, ZDeserializeError> {
@@ -226,6 +366,7 @@ impl<'a> ZDeserializer<'a> {
     }
 }
 
+/// Iterator returned by [`ZDeserializer::deserialize_iter`].
 pub struct ZReadIter<'a, 'b, T: Deserialize> {
     deserializer: &'b mut ZDeserializer<'a>,
     len: usize,
