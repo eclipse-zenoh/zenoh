@@ -114,6 +114,33 @@ pub struct LocatorInspector {
     vsock_inspector: VsockLocatorInspector,
 }
 impl LocatorInspector {
+    pub fn is_reliable(&self, locator: &Locator) -> ZResult<bool> {
+        #[allow(unused_imports)]
+        use zenoh_link_commons::LocatorInspector;
+        let protocol = locator.protocol();
+        match protocol.as_str() {
+            #[cfg(feature = "transport_tcp")]
+            TCP_LOCATOR_PREFIX => self.tcp_inspector.is_reliable(locator),
+            #[cfg(feature = "transport_udp")]
+            UDP_LOCATOR_PREFIX => self.udp_inspector.is_reliable(locator),
+            #[cfg(feature = "transport_tls")]
+            TLS_LOCATOR_PREFIX => self.tls_inspector.is_reliable(locator),
+            #[cfg(feature = "transport_quic")]
+            QUIC_LOCATOR_PREFIX => self.quic_inspector.is_reliable(locator),
+            #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+            UNIXSOCKSTREAM_LOCATOR_PREFIX => self.unixsock_stream_inspector.is_reliable(locator),
+            #[cfg(feature = "transport_ws")]
+            WS_LOCATOR_PREFIX => self.ws_inspector.is_reliable(locator),
+            #[cfg(feature = "transport_serial")]
+            SERIAL_LOCATOR_PREFIX => self.serial_inspector.is_reliable(locator),
+            #[cfg(feature = "transport_unixpipe")]
+            UNIXPIPE_LOCATOR_PREFIX => self.unixpipe_inspector.is_reliable(locator),
+            #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
+            VSOCK_LOCATOR_PREFIX => self.vsock_inspector.is_reliable(locator),
+            _ => bail!("Unsupported protocol: {}.", protocol),
+        }
+    }
+
     pub async fn is_multicast(&self, locator: &Locator) -> ZResult<bool> {
         #[allow(unused_imports)]
         use zenoh_link_commons::LocatorInspector;

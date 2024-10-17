@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
+    ops::Add,
     sync::{
         atomic::{AtomicBool, AtomicU32, Ordering},
         Arc, Mutex, MutexGuard,
@@ -127,6 +128,73 @@ impl StageInMutex {
     }
 }
 
+enum DeadlineSetting {
+    Immediate,
+    Infinite,
+    Finite(Instant),
+}
+
+struct LazyDeadline {
+    deadline: Option<DeadlineSetting>,
+    wait_time: Option<Duration>,
+}
+
+impl LazyDeadline {
+    fn new(wait_time: Option<Duration>) -> Self {
+        Self {
+            deadline: None,
+            wait_time,
+        }
+    }
+
+    fn advance(&mut self) {
+        let wait_time = self.wait_time;
+        match &mut self.deadline() {
+            DeadlineSetting::Immediate => {}
+            DeadlineSetting::Infinite => {}
+            DeadlineSetting::Finite(instant) => {
+                *instant = instant.add(unsafe { wait_time.unwrap_unchecked() });
+            }
+        }
+    }
+
+    #[inline]
+    fn deadline(&mut self) -> &mut DeadlineSetting {
+        self.deadline.get_or_insert_with(|| match self.wait_time {
+            Some(wait_time) => match wait_time.is_zero() {
+                true => DeadlineSetting::Immediate,
+                false => DeadlineSetting::Finite(Instant::now().add(wait_time)),
+            },
+            None => DeadlineSetting::Infinite,
+        })
+    }
+}
+
+struct Deadline {
+    lazy_deadline: LazyDeadline,
+}
+
+impl Deadline {
+    fn new(wait_time: Option<Duration>) -> Self {
+        Self {
+            lazy_deadline: LazyDeadline::new(wait_time),
+        }
+    }
+
+    #[inline]
+    fn wait(&mut self, s_ref: &StageInRefill) -> bool {
+        match self.lazy_deadline.deadline() {
+            DeadlineSetting::Immediate => false,
+            DeadlineSetting::Infinite => s_ref.wait(),
+            DeadlineSetting::Finite(instant) => s_ref.wait_deadline(*instant),
+        }
+    }
+
+    fn on_next_fragment(&mut self) {
+        self.lazy_deadline.advance();
+    }
+}
+
 // This is the initial stage of the pipeline where messages are serliazed on
 struct StageIn {
     s_ref: StageInRefill,
@@ -141,44 +209,33 @@ impl StageIn {
         &mut self,
         msg: &mut NetworkMessage,
         priority: Priority,
-        deadline_before_drop: Option<Instant>,
+        deadline: &mut Deadline,
     ) -> bool {
         // Lock the current serialization batch.
         let mut c_guard = self.mutex.current();
 
         macro_rules! zgetbatch_rets {
-            ($fragment:expr, $restore_sn:expr) => {
+            ($restore_sn:expr) => {
                 loop {
                     match c_guard.take() {
                         Some(batch) => break batch,
                         None => match self.s_ref.pull() {
                             Some(mut batch) => {
                                 batch.clear();
-                                self.s_out.atomic_backoff.first_write.store(LOCAL_EPOCH.elapsed().as_micros() as MicroSeconds, Ordering::Relaxed);
+                                self.s_out.atomic_backoff.first_write.store(
+                                    LOCAL_EPOCH.elapsed().as_micros() as MicroSeconds,
+                                    Ordering::Relaxed,
+                                );
                                 break batch;
                             }
                             None => {
                                 drop(c_guard);
-                                match deadline_before_drop {
-                                    Some(deadline) if !$fragment => {
-                                        // We are in the congestion scenario and message is droppable
-                                        // Wait for an available batch until deadline
-                                        if !self.s_ref.wait_deadline(deadline) {
-                                            // Still no available batch.
-                                            // Restore the sequence number and drop the message
-                                            $restore_sn;
-                                            return false
-                                        }
-                                    }
-                                    _ => {
-                                        // Block waiting for an available batch
-                                        if !self.s_ref.wait() {
-                                            // Some error prevented the queue to wait and give back an available batch
-                                            // Restore the sequence number and drop the message
-                                            $restore_sn;
-                                            return false;
-                                        }
-                                    }
+                                // Wait for an available batch until deadline
+                                if !deadline.wait(&self.s_ref) {
+                                    // Still no available batch.
+                                    // Restore the sequence number and drop the message
+                                    $restore_sn;
+                                    return false;
                                 }
                                 c_guard = self.mutex.current();
                             }
@@ -205,7 +262,7 @@ impl StageIn {
         }
 
         // Get the current serialization batch.
-        let mut batch = zgetbatch_rets!(false, {});
+        let mut batch = zgetbatch_rets!({});
         // Attempt the serialization on the current batch
         let e = match batch.encode(&*msg) {
             Ok(_) => zretok!(batch, msg),
@@ -235,7 +292,7 @@ impl StageIn {
         if !batch.is_empty() {
             // Move out existing batch
             self.s_out.move_batch(batch);
-            batch = zgetbatch_rets!(false, tch.sn.set(sn).unwrap());
+            batch = zgetbatch_rets!(tch.sn.set(sn).unwrap());
         }
 
         // Attempt a second serialization on fully empty batch
@@ -265,8 +322,7 @@ impl StageIn {
         let mut reader = self.fragbuf.reader();
         while reader.can_read() {
             // Get the current serialization batch
-            // Treat all messages as non-droppable once we start fragmenting
-            batch = zgetbatch_rets!(true, tch.sn.set(sn).unwrap());
+            batch = zgetbatch_rets!(tch.sn.set(sn).unwrap());
 
             // Serialize the message fragment
             match batch.encode((&mut reader, &mut fragment)) {
@@ -288,6 +344,9 @@ impl StageIn {
                     break;
                 }
             }
+
+            // adopt deadline for the next fragment
+            deadline.on_next_fragment();
         }
 
         // Clean the fragbuf
@@ -401,6 +460,7 @@ impl StageOutIn {
     #[inline]
     fn try_pull(&mut self) -> Pull {
         if let Some(batch) = self.s_out_r.pull() {
+            self.backoff.atomic.active.store(false, Ordering::Relaxed);
             return Pull::Some(batch);
         }
 
@@ -513,6 +573,7 @@ pub(crate) struct TransmissionPipelineConf {
     pub(crate) batch: BatchConfig,
     pub(crate) queue_size: [usize; Priority::NUM],
     pub(crate) wait_before_drop: Duration,
+    pub(crate) wait_before_close: Duration,
     pub(crate) batching_enabled: bool,
     pub(crate) batching_time_limit: Duration,
 }
@@ -597,6 +658,7 @@ impl TransmissionPipeline {
             stage_in: stage_in.into_boxed_slice().into(),
             active: active.clone(),
             wait_before_drop: config.wait_before_drop,
+            wait_before_close: config.wait_before_close,
         };
         let consumer = TransmissionPipelineConsumer {
             stage_out: stage_out.into_boxed_slice(),
@@ -614,6 +676,7 @@ pub(crate) struct TransmissionPipelineProducer {
     stage_in: Arc<[Mutex<StageIn>]>,
     active: Arc<AtomicBool>,
     wait_before_drop: Duration,
+    wait_before_close: Duration,
 }
 
 impl TransmissionPipelineProducer {
@@ -627,14 +690,15 @@ impl TransmissionPipelineProducer {
             (0, Priority::DEFAULT)
         };
         // If message is droppable, compute a deadline after which the sample could be dropped
-        let deadline_before_drop = if msg.is_droppable() {
-            Some(Instant::now() + self.wait_before_drop)
+        let wait_time = if msg.is_droppable() {
+            self.wait_before_drop
         } else {
-            None
+            self.wait_before_close
         };
+        let mut deadline = Deadline::new(Some(wait_time));
         // Lock the channel. We are the only one that will be writing on it.
         let mut queue = zlock!(self.stage_in[idx]);
-        queue.push_network_message(&mut msg, priority, deadline_before_drop)
+        queue.push_network_message(&mut msg, priority, &mut deadline)
     }
 
     #[inline]
@@ -683,9 +747,8 @@ impl TransmissionPipelineConsumer {
                         return Some((batch, prio));
                     }
                     Pull::Backoff(deadline) => {
-                        if deadline < backoff {
-                            backoff = deadline;
-                        }
+                        backoff = deadline;
+                        break;
                     }
                     Pull::None => {}
                 }
@@ -789,6 +852,7 @@ mod tests {
         queue_size: [1; Priority::NUM],
         batching_enabled: true,
         wait_before_drop: Duration::from_millis(1),
+        wait_before_close: Duration::from_secs(5),
         batching_time_limit: Duration::from_micros(1),
     };
 
@@ -802,6 +866,7 @@ mod tests {
         queue_size: [1; Priority::NUM],
         batching_enabled: true,
         wait_before_drop: Duration::from_millis(1),
+        wait_before_close: Duration::from_secs(5),
         batching_time_limit: Duration::from_micros(1),
     };
 

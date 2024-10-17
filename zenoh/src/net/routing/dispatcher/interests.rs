@@ -13,6 +13,7 @@
 //
 
 use std::{
+    fmt,
     sync::{Arc, Weak},
     time::Duration,
 };
@@ -47,6 +48,28 @@ pub(crate) struct CurrentInterest {
     pub(crate) src_face: Arc<FaceState>,
     pub(crate) src_interest_id: InterestId,
     pub(crate) mode: InterestMode,
+}
+
+#[derive(PartialEq, Clone)]
+pub(crate) struct RemoteInterest {
+    pub(crate) res: Option<Arc<Resource>>,
+    pub(crate) options: InterestOptions,
+    pub(crate) mode: InterestMode,
+}
+
+impl fmt::Debug for RemoteInterest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RemoteInterest")
+            .field("res", &self.res.as_ref().map(|res| res.expr()))
+            .field("options", &self.options)
+            .finish()
+    }
+}
+
+impl RemoteInterest {
+    pub(crate) fn matches(&self, res: &Arc<Resource>) -> bool {
+        self.res.as_ref().map(|r| r.matches(res)).unwrap_or(true)
+    }
 }
 
 pub(crate) fn declare_final(

@@ -18,12 +18,13 @@ use zenoh_core::{Resolvable, Result as ZResult, Wait};
 use zenoh_protocol::core::Reliability;
 use zenoh_protocol::{core::CongestionControl, network::Mapping};
 
-use super::sample::TimestampBuilderTrait;
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
 use crate::{
     api::{
-        builders::sample::{EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait},
+        builders::sample::{
+            EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
+        },
         bytes::{OptionZBytes, ZBytes},
         encoding::Encoding,
         key_expr::KeyExpr,
@@ -52,8 +53,13 @@ pub struct PublicationBuilderPut {
 #[derive(Debug, Clone)]
 pub struct PublicationBuilderDelete;
 
-/// A builder for initializing  [`Session::put`](crate::session::Session::put), [`Session::delete`](crate::session::Session::delete),
-/// [`Publisher::put`](crate::pubsub::Publisher::put), and [`Publisher::delete`](crate::pubsub::Publisher::delete) operations.
+/// A publication builder.
+///
+/// This object is returned by the following methods:
+/// - [`crate::session::Session::put`]
+/// - [`crate::session::Session::delete`]
+/// - [`crate::pubsub::Publisher::put`]
+/// - [`crate::pubsub::Publisher::delete`]
 ///
 /// # Examples
 /// ```
@@ -70,7 +76,7 @@ pub struct PublicationBuilderDelete;
 ///     .unwrap();
 /// # }
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[derive(Debug, Clone)]
 pub struct PublicationBuilder<P, T> {
     pub(crate) publisher: P,
@@ -83,6 +89,7 @@ pub struct PublicationBuilder<P, T> {
 
 #[zenoh_macros::internal_trait]
 impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
+    /// Changes the [`crate::qos::CongestionControl`] to apply when routing the data.
     #[inline]
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         Self {
@@ -90,6 +97,8 @@ impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
             ..self
         }
     }
+
+    /// Changes the [`crate::qos::Priority`] of the written data.
     #[inline]
     fn priority(self, priority: Priority) -> Self {
         Self {
@@ -97,6 +106,11 @@ impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
             ..self
         }
     }
+
+    /// Changes the Express policy to apply when routing the data.
+    ///
+    /// When express is set to `true`, then the message will not be batched.
+    /// This usually has a positive impact on latency but negative impact on throughput.
     #[inline]
     fn express(self, is_express: bool) -> Self {
         Self {
@@ -107,19 +121,22 @@ impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
 }
 
 impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
+    /// Changes the [`crate::sample::Locality`] applied when routing the data.
     ///
-    ///
-    /// Restrict the matching subscribers that will receive the published data
-    /// to the ones that have the given [`Locality`](Locality).
+    /// This restricts the matching subscribers that will receive the published data to the ones
+    /// that have the given [`crate::sample::Locality`].
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
         self.publisher = self.publisher.allowed_destination(destination);
         self
     }
-    /// Change the `reliability` to apply when routing the data.
-    /// NOTE: Currently `reliability` does not trigger any data retransmission on the wire.
-    ///             It is rather used as a marker on the wire and it may be used to select the best link available (e.g. TCP for reliable data and UDP for best effort data).
+
+    /// Changes the [`crate::qos::Reliability`] to apply when routing the data.
+    ///
+    /// **NOTE**: Currently `reliability` does not trigger any data retransmission on the wire. It
+    ///   is rather used as a marker on the wire and it may be used to select the best link
+    ///   available (e.g. TCP for reliable data and UDP for best effort data).
     #[zenoh_macros::unstable]
     #[inline]
     pub fn reliability(self, reliability: Reliability) -> Self {
@@ -212,7 +229,7 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDel
     fn wait(self) -> <Self as Resolvable>::To {
         self.publisher.session.0.resolve_put(
             &self.publisher.key_expr?,
-            ZBytes::empty(),
+            ZBytes::new(),
             SampleKind::Delete,
             Encoding::ZENOH_BYTES,
             self.publisher.congestion_control,
@@ -263,7 +280,7 @@ impl IntoFuture for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuil
 ///     .unwrap();
 /// # }
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[derive(Debug)]
 pub struct PublisherBuilder<'a, 'b> {
     pub(crate) session: &'a Session,
@@ -298,7 +315,7 @@ impl<'a, 'b> Clone for PublisherBuilder<'a, 'b> {
 
 #[zenoh_macros::internal_trait]
 impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
-    /// Change the `congestion_control` to apply when routing the data.
+    /// Changes the [`crate::qos::CongestionControl`] to apply when routing the data.
     #[inline]
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         Self {
@@ -307,13 +324,14 @@ impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
         }
     }
 
-    /// Change the priority of the written data.
+    /// Changes the [`crate::qos::Priority`] of the written data.
     #[inline]
     fn priority(self, priority: Priority) -> Self {
         Self { priority, ..self }
     }
 
-    /// Change the `express` policy to apply when routing the data.
+    /// Changes the Express policy to apply when routing the data.
+    ///
     /// When express is set to `true`, then the message will not be batched.
     /// This usually has a positive impact on latency but negative impact on throughput.
     #[inline]
@@ -323,10 +341,10 @@ impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
 }
 
 impl<'a, 'b> PublisherBuilder<'a, 'b> {
+    /// Changes the [`crate::sample::Locality`] applied when routing the data.
     ///
-    ///
-    /// Restrict the matching subscribers that will receive the published data
-    /// to the ones that have the given [`Locality`](Locality).
+    /// This restricts the matching subscribers that will receive the published data to the ones
+    /// that have the given [`crate::sample::Locality`].
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
@@ -334,9 +352,11 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
         self
     }
 
-    /// Change the `reliability`` to apply when routing the data.
-    /// NOTE: Currently `reliability` does not trigger any data retransmission on the wire.
-    ///             It is rather used as a marker on the wire and it may be used to select the best link available (e.g. TCP for reliable data and UDP for best effort data).
+    /// Changes the [`crate::qos::Reliability`] to apply when routing the data.
+    ///
+    /// **NOTE**: Currently `reliability` does not trigger any data retransmission on the wire. It
+    ///   is rather used as a marker on the wire and it may be used to select the best link
+    ///   available (e.g. TCP for reliable data and UDP for best effort data).
     #[zenoh_macros::unstable]
     #[inline]
     pub fn reliability(self, reliability: Reliability) -> Self {
@@ -440,7 +460,7 @@ impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
     fn wait(self) -> <Self as Resolvable>::To {
         self.publisher.session.resolve_put(
             &self.publisher.key_expr,
-            ZBytes::empty(),
+            ZBytes::new(),
             SampleKind::Delete,
             Encoding::ZENOH_BYTES,
             self.publisher.congestion_control,

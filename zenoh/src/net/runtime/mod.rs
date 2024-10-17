@@ -24,6 +24,7 @@ pub mod orchestrator;
 use std::sync::{Mutex, MutexGuard};
 use std::{
     any::Any,
+    collections::HashSet,
     sync::{
         atomic::{AtomicU32, Ordering},
         Arc, Weak,
@@ -40,7 +41,7 @@ use zenoh_config::{unwrap_or_default, ModeDependent, ZenohId};
 use zenoh_link::{EndPoint, Link};
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_protocol::{
-    core::{Locator, WhatAmI},
+    core::{Locator, WhatAmI, ZenohIdProto},
     network::NetworkMessage,
 };
 use zenoh_result::{bail, ZResult};
@@ -80,6 +81,7 @@ pub(crate) struct RuntimeState {
     #[cfg(feature = "plugins")]
     plugins_manager: Mutex<PluginsManager>,
     start_conditions: Arc<StartConditions>,
+    pending_connections: tokio::sync::Mutex<HashSet<ZenohIdProto>>,
 }
 
 pub struct WeakRuntime {
@@ -182,6 +184,7 @@ impl RuntimeBuilder {
                 #[cfg(feature = "plugins")]
                 plugins_manager: Mutex::new(plugins_manager),
                 start_conditions: Arc::new(StartConditions::default()),
+                pending_connections: tokio::sync::Mutex::new(HashSet::new()),
             }),
         };
         *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);
@@ -358,6 +361,14 @@ impl Runtime {
     pub(crate) fn start_conditions(&self) -> &Arc<StartConditions> {
         &self.state.start_conditions
     }
+
+    pub(crate) async fn insert_pending_connection(&self, zid: ZenohIdProto) -> bool {
+        self.state.pending_connections.lock().await.insert(zid)
+    }
+
+    pub(crate) async fn remove_pending_connection(&self, zid: &ZenohIdProto) -> bool {
+        self.state.pending_connections.lock().await.remove(zid)
+    }
 }
 
 struct RuntimeTransportEventHandler {
@@ -446,16 +457,9 @@ impl TransportPeerEventHandler for RuntimeSession {
         }
     }
 
-    fn closing(&self) {
-        self.main_handler.closing();
-        Runtime::closing_session(self);
-        for handler in &self.slave_handlers {
-            handler.closing();
-        }
-    }
-
     fn closed(&self) {
         self.main_handler.closed();
+        Runtime::closed_session(self);
         for handler in &self.slave_handlers {
             handler.closed();
         }
@@ -487,12 +491,6 @@ impl TransportMulticastEventHandler for RuntimeMulticastGroup {
                 .new_peer_multicast(self.transport.clone(), peer)?,
             slave_handlers,
         }))
-    }
-
-    fn closing(&self) {
-        for handler in &self.slave_handlers {
-            handler.closed();
-        }
     }
 
     fn closed(&self) {
@@ -527,13 +525,6 @@ impl TransportPeerEventHandler for RuntimeMulticastSession {
         self.main_handler.del_link(link.clone());
         for handler in &self.slave_handlers {
             handler.del_link(link.clone());
-        }
-    }
-
-    fn closing(&self) {
-        self.main_handler.closing();
-        for handler in &self.slave_handlers {
-            handler.closing();
         }
     }
 

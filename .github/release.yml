@@ -14,12 +14,22 @@
 
 changelog:
   categories:
+    - title: Breaking changes 💥
+      labels:
+        - breaking-change
     - title: New features 🎉
       labels:
         - enhancement
+        - new feature
     - title: Bug fixes 🐞
       labels:
         - bug
+    - title: Documentation 📝
+      labels:
+        - documentation
+    - title: Dependencies 👷
+      labels:
+        - dependencies
     - title: Other changes
       labels:
         - "*"

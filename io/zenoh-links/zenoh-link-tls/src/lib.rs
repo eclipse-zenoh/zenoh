@@ -17,10 +17,15 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
+use std::str::FromStr;
+
 use async_trait::async_trait;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
-use zenoh_protocol::{core::Locator, transport::BatchSize};
+use zenoh_protocol::{
+    core::{Locator, Metadata, Reliability},
+    transport::BatchSize,
+};
 use zenoh_result::ZResult;
 
 mod unicast;
@@ -37,6 +42,8 @@ pub use utils::TlsConfigurator;
 const TLS_MAX_MTU: BatchSize = BatchSize::MAX;
 pub const TLS_LOCATOR_PREFIX: &str = "tls";
 
+const IS_RELIABLE: bool = true;
+
 #[derive(Default, Clone, Copy)]
 pub struct TlsLocatorInspector;
 #[async_trait]
@@ -47,6 +54,19 @@ impl LocatorInspector for TlsLocatorInspector {
 
     async fn is_multicast(&self, _locator: &Locator) -> ZResult<bool> {
         Ok(false)
+    }
+
+    fn is_reliable(&self, locator: &Locator) -> ZResult<bool> {
+        if let Some(reliability) = locator
+            .metadata()
+            .get(Metadata::RELIABILITY)
+            .map(Reliability::from_str)
+            .transpose()?
+        {
+            Ok(reliability == Reliability::Reliable)
+        } else {
+            Ok(IS_RELIABLE)
+        }
     }
 }
 
@@ -68,23 +88,28 @@ pub mod config {
     pub const TLS_ROOT_CA_CERTIFICATE_RAW: &str = "root_ca_certificate_raw";
     pub const TLS_ROOT_CA_CERTIFICATE_BASE64: &str = "root_ca_certificate_base64";
 
-    pub const TLS_SERVER_PRIVATE_KEY_FILE: &str = "server_private_key_file";
-    pub const TLS_SERVER_PRIVATE_KEY_RAW: &str = "server_private_key_raw";
-    pub const TLS_SERVER_PRIVATE_KEY_BASE_64: &str = "server_private_key_base64";
+    pub const TLS_LISTEN_PRIVATE_KEY_FILE: &str = "listen_private_key_file";
+    pub const TLS_LISTEN_PRIVATE_KEY_RAW: &str = "listen_private_key_raw";
+    pub const TLS_LISTEN_PRIVATE_KEY_BASE_64: &str = "listen_private_key_base64";
 
-    pub const TLS_SERVER_CERTIFICATE_FILE: &str = "server_certificate_file";
-    pub const TLS_SERVER_CERTIFICATE_RAW: &str = "server_certificate_raw";
-    pub const TLS_SERVER_CERTIFICATE_BASE64: &str = "server_certificate_base64";
+    pub const TLS_LISTEN_CERTIFICATE_FILE: &str = "listen_certificate_file";
+    pub const TLS_LISTEN_CERTIFICATE_RAW: &str = "listen_certificate_raw";
+    pub const TLS_LISTEN_CERTIFICATE_BASE64: &str = "listen_certificate_base64";
 
-    pub const TLS_CLIENT_PRIVATE_KEY_FILE: &str = "client_private_key_file";
-    pub const TLS_CLIENT_PRIVATE_KEY_RAW: &str = "client_private_key_raw";
-    pub const TLS_CLIENT_PRIVATE_KEY_BASE64: &str = "client_private_key_base64";
+    pub const TLS_CONNECT_PRIVATE_KEY_FILE: &str = "connect_private_key_file";
+    pub const TLS_CONNECT_PRIVATE_KEY_RAW: &str = "connect_private_key_raw";
+    pub const TLS_CONNECT_PRIVATE_KEY_BASE64: &str = "connect_private_key_base64";
 
-    pub const TLS_CLIENT_CERTIFICATE_FILE: &str = "client_certificate_file";
-    pub const TLS_CLIENT_CERTIFICATE_RAW: &str = "client_certificate_raw";
-    pub const TLS_CLIENT_CERTIFICATE_BASE64: &str = "client_certificate_base64";
+    pub const TLS_CONNECT_CERTIFICATE_FILE: &str = "connect_certificate_file";
+    pub const TLS_CONNECT_CERTIFICATE_RAW: &str = "connect_certificate_raw";
+    pub const TLS_CONNECT_CERTIFICATE_BASE64: &str = "connect_certificate_base64";
 
-    pub const TLS_CLIENT_AUTH: &str = "client_auth";
+    pub const TLS_ENABLE_MTLS: &str = "enable_mtls";
 
-    pub const TLS_SERVER_NAME_VERIFICATION: &str = "server_name_verification";
+    pub const TLS_VERIFY_NAME_ON_CONNECT: &str = "verify_name_on_connect";
+    pub const TLS_VERIFY_NAME_ON_CONNECT_DEFAULT: bool = true;
+
+    /// The time duration in milliseconds to wait for the TLS handshake to complete.
+    pub const TLS_HANDSHAKE_TIMEOUT_MS: &str = "tls_handshake_timeout_ms";
+    pub const TLS_HANDSHAKE_TIMEOUT_MS_DEFAULT: u64 = 10_000;
 }

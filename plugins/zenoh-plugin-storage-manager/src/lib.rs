@@ -26,9 +26,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use flume::Sender;
 use memory_backend::MemoryBackend;
 use storages_mgt::StorageMessage;
+use tokio::sync::broadcast::Sender;
 use zenoh::{
     internal::{
         bail,
@@ -37,9 +37,8 @@ use zenoh::{
         zlock, LibLoader,
     },
     key_expr::{keyexpr, KeyExpr, OwnedKeyExpr},
-    prelude::Wait,
     session::Session,
-    Result as ZResult,
+    Result as ZResult, Wait,
 };
 use zenoh_backend_traits::{
     config::{ConfigDiff, PluginConfig, StorageConfig, VolumeConfig},
@@ -50,6 +49,7 @@ use zenoh_plugin_trait::{
 };
 
 mod memory_backend;
+mod replication;
 mod storages_mgt;
 use storages_mgt::*;
 
@@ -139,7 +139,8 @@ impl StorageRuntimeInner {
         //       Hence, in that scenario, we refuse to start the storage manager and any storage.
         if session.hlc().is_none() {
             tracing::error!(
-                "Cannot start storage manager (and thus any storage) without the 'timestamping' setting enabled in the Zenoh configuration"
+                "Cannot start storage manager (and thus any storage) without the 'timestamping' \
+                 setting enabled in the Zenoh configuration"
             );
             bail!("Cannot start storage manager, 'timestamping' is disabled in the configuration");
         }
@@ -455,17 +456,29 @@ pub fn strip_prefix(
     }
 }
 
-/// Returns the key with an additional prefix, if one was provided.
+/// Returns the key with an additional prefix, if both were provided.
 ///
 /// If no prefix is provided, this function returns `maybe_stripped_key`.
 ///
+/// If no key is provided, this function returns the `maybe_prefix`.
+///
 /// If a prefix is provided, this function returns the concatenation of both.
+///
+/// # Error
+///
+/// This function will return an error if both `maybe_prefix` and `maybe_stripped_key` are equal to
+/// `None`. This situation can happen if (i) the "backend" associated to a Storage is first started
+/// with a `strip_prefix` set to some value, (ii) a key equal to the `strip_prefix` is published
+/// (hence storing `None`) then (iii) the Storage is stopped and the "backend" is associated to
+/// another Storage without a `strip_prefix` configured.
 pub fn prefix(
     maybe_prefix: Option<&OwnedKeyExpr>,
-    maybe_stripped_key: &OwnedKeyExpr,
-) -> OwnedKeyExpr {
-    match maybe_prefix {
-        Some(prefix) => prefix / maybe_stripped_key,
-        None => maybe_stripped_key.clone(),
+    maybe_stripped_key: Option<&OwnedKeyExpr>,
+) -> ZResult<OwnedKeyExpr> {
+    match (maybe_prefix, maybe_stripped_key) {
+        (Some(prefix), Some(stripped_key)) => Ok(prefix / stripped_key),
+        (Some(prefix), None) => Ok(prefix.clone()),
+        (None, Some(key)) => Ok(key.clone()),
+        (None, None) => bail!("Fatal internal error: empty prefix with empty key"),
     }
 }

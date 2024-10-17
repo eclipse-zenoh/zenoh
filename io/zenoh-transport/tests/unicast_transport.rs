@@ -296,7 +296,6 @@ impl TransportPeerEventHandler for SCRouter {
 
     fn new_link(&self, _link: Link) {}
     fn del_link(&self, _link: Link) {}
-    fn closing(&self) {}
     fn closed(&self) {}
 
     fn as_any(&self) -> &dyn Any {
@@ -336,7 +335,6 @@ impl TransportPeerEventHandler for SCClient {
 
     fn new_link(&self, _link: Link) {}
     fn del_link(&self, _link: Link) {}
-    fn closing(&self) {}
     fn closed(&self) {}
 
     fn as_any(&self) -> &dyn Any {
@@ -469,6 +467,7 @@ async fn test_transport(
         Reliability::Reliable => CongestionControl::Block,
         Reliability::BestEffort => CongestionControl::Drop,
     };
+
     // Create the message to send
     let message: NetworkMessage = Push {
         wire_expr: "test".into(),
@@ -1008,8 +1007,8 @@ async fn transport_unicast_tls_only_server() {
         .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
-                (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
-                (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
+                (TLS_LISTEN_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, SERVER_KEY),
             ]
             .iter()
             .copied(),
@@ -1053,8 +1052,8 @@ async fn transport_unicast_quic_only_server() {
         .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
-                (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
-                (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
+                (TLS_LISTEN_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, SERVER_KEY),
             ]
             .iter()
             .copied(),
@@ -1101,9 +1100,9 @@ async fn transport_unicast_tls_only_mutual_success() {
         .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
-                (TLS_CLIENT_CERTIFICATE_RAW, CLIENT_CERT),
-                (TLS_CLIENT_PRIVATE_KEY_RAW, CLIENT_KEY),
-                (TLS_CLIENT_AUTH, client_auth),
+                (TLS_CONNECT_CERTIFICATE_RAW, CLIENT_CERT),
+                (TLS_CONNECT_PRIVATE_KEY_RAW, CLIENT_KEY),
+                (TLS_ENABLE_MTLS, client_auth),
             ]
             .iter()
             .copied(),
@@ -1117,9 +1116,9 @@ async fn transport_unicast_tls_only_mutual_success() {
         .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
-                (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
-                (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
-                (TLS_CLIENT_AUTH, client_auth),
+                (TLS_LISTEN_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, SERVER_KEY),
+                (TLS_ENABLE_MTLS, client_auth),
             ]
             .iter()
             .copied(),
@@ -1179,9 +1178,9 @@ async fn transport_unicast_tls_only_mutual_no_client_certs_failure() {
         .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
-                (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
-                (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
-                (TLS_CLIENT_AUTH, "true"),
+                (TLS_LISTEN_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, SERVER_KEY),
+                (TLS_ENABLE_MTLS, "true"),
             ]
             .iter()
             .copied(),
@@ -1242,9 +1241,9 @@ fn transport_unicast_tls_only_mutual_wrong_client_certs_failure() {
                 // wrong certificates and keys. The SERVER_CA (cetificate authority) will not recognize
                 // these certificates as it is expecting to receive CLIENT_CERT and CLIENT_KEY from the
                 // client.
-                (TLS_CLIENT_CERTIFICATE_RAW, SERVER_CERT),
-                (TLS_CLIENT_PRIVATE_KEY_RAW, SERVER_KEY),
-                (TLS_CLIENT_AUTH, client_auth),
+                (TLS_CONNECT_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_CONNECT_PRIVATE_KEY_RAW, SERVER_KEY),
+                (TLS_ENABLE_MTLS, client_auth),
             ]
             .iter()
             .copied(),
@@ -1258,9 +1257,9 @@ fn transport_unicast_tls_only_mutual_wrong_client_certs_failure() {
         .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
-                (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
-                (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
-                (TLS_CLIENT_AUTH, client_auth),
+                (TLS_LISTEN_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, SERVER_KEY),
+                (TLS_ENABLE_MTLS, client_auth),
             ]
             .iter()
             .copied(),
@@ -1317,9 +1316,9 @@ async fn transport_unicast_quic_only_mutual_success() {
         .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
-                (TLS_CLIENT_CERTIFICATE_RAW, CLIENT_CERT),
-                (TLS_CLIENT_PRIVATE_KEY_RAW, CLIENT_KEY),
-                (TLS_CLIENT_AUTH, client_auth),
+                (TLS_CONNECT_CERTIFICATE_RAW, CLIENT_CERT),
+                (TLS_CONNECT_PRIVATE_KEY_RAW, CLIENT_KEY),
+                (TLS_ENABLE_MTLS, client_auth),
             ]
             .iter()
             .copied(),
@@ -1333,9 +1332,9 @@ async fn transport_unicast_quic_only_mutual_success() {
         .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
-                (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
-                (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
-                (TLS_CLIENT_AUTH, client_auth),
+                (TLS_LISTEN_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, SERVER_KEY),
+                (TLS_ENABLE_MTLS, client_auth),
             ]
             .iter()
             .copied(),
@@ -1395,9 +1394,9 @@ async fn transport_unicast_quic_only_mutual_no_client_certs_failure() {
         .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
-                (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
-                (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
-                (TLS_CLIENT_AUTH, "true"),
+                (TLS_LISTEN_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, SERVER_KEY),
+                (TLS_ENABLE_MTLS, "true"),
             ]
             .iter()
             .copied(),
@@ -1458,9 +1457,9 @@ fn transport_unicast_quic_only_mutual_wrong_client_certs_failure() {
                 // wrong certificates and keys. The SERVER_CA (cetificate authority) will not recognize
                 // these certificates as it is expecting to receive CLIENT_CERT and CLIENT_KEY from the
                 // client.
-                (TLS_CLIENT_CERTIFICATE_RAW, SERVER_CERT),
-                (TLS_CLIENT_PRIVATE_KEY_RAW, SERVER_KEY),
-                (TLS_CLIENT_AUTH, client_auth),
+                (TLS_CONNECT_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_CONNECT_PRIVATE_KEY_RAW, SERVER_KEY),
+                (TLS_ENABLE_MTLS, client_auth),
             ]
             .iter()
             .copied(),
@@ -1474,9 +1473,9 @@ fn transport_unicast_quic_only_mutual_wrong_client_certs_failure() {
         .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
-                (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
-                (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
-                (TLS_CLIENT_AUTH, client_auth),
+                (TLS_LISTEN_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, SERVER_KEY),
+                (TLS_ENABLE_MTLS, client_auth),
             ]
             .iter()
             .copied(),

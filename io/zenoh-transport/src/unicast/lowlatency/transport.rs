@@ -117,12 +117,7 @@ impl TransportUnicastLowlatency {
         // to avoid concurrent new_transport and closing/closed notifications
         let mut a_guard = self.get_alive().await;
         *a_guard = false;
-
-        // Notify the callback that we are going to close the transport
         let callback = zwrite!(self.callback).take();
-        if let Some(cb) = callback.as_ref() {
-            cb.closing();
-        }
 
         // Delete the transport on the manager
         let _ = self.manager.del_transport_unicast(&self.config.zid).await;
@@ -274,7 +269,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
             self.internal_start_rx(other_lease);
         });
 
-        Ok((start_tx, start_rx, ack))
+        Ok((start_tx, start_rx, ack, None))
     }
 
     /*************************************/

@@ -450,7 +450,7 @@ impl TransportManager {
         }
 
         // Add the link to the transport
-        let (start_tx, start_rx, ack) = transport
+        let (start_tx, start_rx, ack, add_link_guard) = transport
             .add_link(link, other_initial_sn, other_lease)
             .await
             .map_err(InitTransportError::Link)?;
@@ -468,6 +468,8 @@ impl TransportManager {
         Self::notify_new_link_unicast(&transport, c_link);
 
         start_rx();
+
+        drop(add_link_guard);
 
         Ok(transport)
     }
@@ -556,14 +558,14 @@ impl TransportManager {
         };
 
         // Add the link to the transport
-        let (start_tx, start_rx, ack) = match t.add_link(link, other_initial_sn, other_lease).await
-        {
-            Ok(val) => val,
-            Err(e) => {
-                let _ = t.close(e.2).await;
-                return Err(InitTransportError::Link(e));
-            }
-        };
+        let (start_tx, start_rx, ack, add_link_guard) =
+            match t.add_link(link, other_initial_sn, other_lease).await {
+                Ok(val) => val,
+                Err(e) => {
+                    let _ = t.close(e.2).await;
+                    return Err(InitTransportError::Link(e));
+                }
+            };
 
         macro_rules! transport_error {
             ($s:expr, $reason:expr) => {
@@ -597,6 +599,8 @@ impl TransportManager {
 
         start_rx();
 
+        drop(add_link_guard);
+
         zcondfeat!(
             "shared-memory",
             {
@@ -615,7 +619,7 @@ impl TransportManager {
             },
             {
                 tracing::debug!(
-            "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {}, multilink: {}, lowlatency: {}",
+            "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {:?}, multilink: {}, lowlatency: {}",
             self.config.zid,
             config.zid,
             config.whatami,
@@ -707,9 +711,9 @@ impl TransportManager {
         };
 
         // Create a new link associated by calling the Link Manager
-        let link = manager.new_link(endpoint).await?;
+        let link = manager.new_link(endpoint.clone()).await?;
         // Open the link
-        super::establishment::open::open_link(link, self).await
+        super::establishment::open::open_link(endpoint, link, self).await
     }
 
     pub async fn get_transport_unicast(&self, peer: &ZenohIdProto) -> Option<TransportUnicast> {

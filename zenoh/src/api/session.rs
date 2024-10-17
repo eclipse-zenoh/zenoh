@@ -17,7 +17,6 @@ use std::{
     collections::HashMap,
     convert::TryInto,
     fmt,
-    future::{IntoFuture, Ready},
     ops::Deref,
     sync::{
         atomic::{AtomicU16, Ordering},
@@ -33,7 +32,7 @@ use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::{unwrap_or_default, wrappers::ZenohId};
-use zenoh_core::{zconfigurable, zread, Resolvable, Resolve, ResolveClosure, ResolveFuture, Wait};
+use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Wait};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::network::{
     declare::{DeclareToken, SubscriberId, TokenId, UndeclareToken},
@@ -68,39 +67,43 @@ use zenoh_result::ZResult;
 use zenoh_shm::api::client_storage::ShmClientStorage;
 use zenoh_task::TaskController;
 
-use super::{
-    admin,
-    builders::publisher::{
-        PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder, SessionDeleteBuilder,
-        SessionPutBuilder,
-    },
-    bytes::ZBytes,
-    encoding::Encoding,
-    handlers::{Callback, DefaultHandler},
-    info::SessionInfo,
-    key_expr::{KeyExpr, KeyExprInner},
-    publisher::{Priority, PublisherState},
-    query::{
-        ConsolidationMode, QueryConsolidation, QueryState, QueryTarget, Reply, SessionGetBuilder,
-    },
-    queryable::{Query, QueryInner, QueryableBuilder, QueryableState},
-    sample::{DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind},
-    selector::Selector,
-    subscriber::{SubscriberBuilder, SubscriberKind, SubscriberState},
-    value::Value,
-    Id,
-};
 #[cfg(feature = "unstable")]
-use super::{
+use crate::api::selector::ZenohParameters;
+#[cfg(feature = "unstable")]
+use crate::api::{
     liveliness::{Liveliness, LivelinessTokenState},
     publisher::Publisher,
     publisher::{MatchingListenerState, MatchingStatus},
     query::LivelinessQueryState,
     sample::SourceInfo,
 };
-#[cfg(feature = "unstable")]
-use crate::api::selector::ZenohParameters;
 use crate::{
+    api::{
+        admin,
+        builders::{
+            publisher::{
+                PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
+                SessionDeleteBuilder, SessionPutBuilder,
+            },
+            query::SessionGetBuilder,
+            queryable::QueryableBuilder,
+            session::OpenBuilder,
+            subscriber::SubscriberBuilder,
+        },
+        bytes::ZBytes,
+        encoding::Encoding,
+        handlers::{Callback, DefaultHandler},
+        info::SessionInfo,
+        key_expr::{KeyExpr, KeyExprInner},
+        publisher::{Priority, PublisherState},
+        query::{ConsolidationMode, QueryConsolidation, QueryState, QueryTarget, Reply},
+        queryable::{Query, QueryInner, QueryableState},
+        sample::{DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind},
+        selector::Selector,
+        subscriber::{SubscriberKind, SubscriberState},
+        value::Value,
+        Id,
+    },
     net::{
         primitives::Primitives,
         routing::dispatcher::face::Face,
@@ -185,7 +188,7 @@ impl SessionState {
         self.primitives
             .as_ref()
             .cloned()
-            .ok_or_else(|| zerror!("session closed").into())
+            .ok_or_else(|| SessionClosedError.into())
     }
 
     #[inline]
@@ -516,6 +519,21 @@ impl Drop for WeakSession {
     }
 }
 
+/// Error indicating the operation cannot proceed because the session is closed.
+///
+/// It may be returned by operations like [`Session::get`] or [`Publisher::put`] when
+/// [`Session::close`] has been called before.
+#[derive(Debug)]
+pub struct SessionClosedError;
+
+impl fmt::Display for SessionClosedError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "session closed")
+    }
+}
+
+impl std::error::Error for SessionClosedError {}
+
 static SESSION_ID_COUNTER: AtomicU16 = AtomicU16::new(0);
 impl Session {
     pub(crate) fn init(
@@ -681,12 +699,6 @@ impl Session {
             }
         }
     }
-
-    /// Wrap the session into an `Arc`.
-    #[deprecated(since = "1.0.0", note = "use `Session` directly instead")]
-    pub fn into_arc(self) -> Arc<Session> {
-        Arc::new(self)
-    }
 }
 
 impl Session {
@@ -742,7 +754,6 @@ impl Session {
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
             origin: Locality::default(),
             handler: DefaultHandler::default(),
-            undeclare_on_drop: true,
         }
     }
 
@@ -786,7 +797,6 @@ impl Session {
             complete: false,
             origin: Locality::default(),
             handler: DefaultHandler::default(),
-            undeclare_on_drop: true,
         }
     }
 
@@ -1619,7 +1629,7 @@ impl SessionInner {
                     for token in known_tokens {
                         callback.call(Sample {
                             key_expr: token,
-                            payload: ZBytes::empty(),
+                            payload: ZBytes::new(),
                             kind: SampleKind::Put,
                             encoding: Encoding::default(),
                             timestamp: None,
@@ -1858,6 +1868,9 @@ impl SessionInner {
     ) {
         let mut callbacks = SingleOrVec::default();
         let state = zread!(self.state);
+        if state.primitives.is_none() {
+            return; // Session closing or closed
+        }
         if key_expr.suffix.is_empty() {
             match state.get_res(&key_expr.scope, key_expr.mapping, local) {
                 Some(Resource::Node(res)) => {
@@ -2209,6 +2222,9 @@ impl SessionInner {
     ) {
         let (primitives, key_expr, queryables) = {
             let state = zread!(self.state);
+            if state.primitives.is_none() {
+                return; // Session closing or closed
+            }
             let Ok(primitives) = state.primitives() else {
                 return;
             };
@@ -2284,6 +2300,9 @@ impl Primitives for WeakSession {
             zenoh_protocol::network::DeclareBody::DeclareKeyExpr(m) => {
                 trace!("recv DeclareKeyExpr {} {:?}", m.id, m.wire_expr);
                 let state = &mut zwrite!(self.state);
+                if state.primitives.is_none() {
+                    return; // Session closing or closed
+                }
                 match state.remote_key_to_expr(&m.wire_expr) {
                     Ok(key_expr) => {
                         let mut res_node = ResourceNode::new(key_expr.clone().into());
@@ -2316,6 +2335,9 @@ impl Primitives for WeakSession {
                 #[cfg(feature = "unstable")]
                 {
                     let mut state = zwrite!(self.state);
+                    if state.primitives.is_none() {
+                        return; // Session closing or closed
+                    }
                     match state
                         .wireexpr_to_keyexpr(&m.wire_expr, false)
                         .map(|e| e.into_owned())
@@ -2338,6 +2360,9 @@ impl Primitives for WeakSession {
                 #[cfg(feature = "unstable")]
                 {
                     let mut state = zwrite!(self.state);
+                    if state.primitives.is_none() {
+                        return; // Session closing or closed
+                    }
                     if let Some(expr) = state.remote_subscribers.remove(&m.id) {
                         self.update_status_down(&state, &expr);
                     } else {
@@ -2356,6 +2381,9 @@ impl Primitives for WeakSession {
             #[cfg(feature = "unstable")]
             zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
                 let mut state = zwrite!(self.state);
+                if state.primitives.is_none() {
+                    return; // Session closing or closed
+                }
                 match state
                     .wireexpr_to_keyexpr(&m.wire_expr, false)
                     .map(|e| e.into_owned())
@@ -2366,7 +2394,7 @@ impl Primitives for WeakSession {
                                 let reply = Reply {
                                     result: Ok(Sample {
                                         key_expr,
-                                        payload: ZBytes::empty(),
+                                        payload: ZBytes::new(),
                                         kind: SampleKind::Put,
                                         encoding: Encoding::default(),
                                         timestamp: None,
@@ -2413,6 +2441,9 @@ impl Primitives for WeakSession {
                 #[cfg(feature = "unstable")]
                 {
                     let mut state = zwrite!(self.state);
+                    if state.primitives.is_none() {
+                        return; // Session closing or closed
+                    }
                     if let Some(key_expr) = state.remote_tokens.remove(&m.id) {
                         drop(state);
 
@@ -2546,6 +2577,9 @@ impl Primitives for WeakSession {
         match msg.payload {
             ResponseBody::Err(e) => {
                 let mut state = zwrite!(self.state);
+                if state.primitives.is_none() {
+                    return; // Session closing or closed
+                }
                 match state.queries.get_mut(&msg.rid) {
                     Some(query) => {
                         let callback = query.callback.clone();
@@ -2568,6 +2602,9 @@ impl Primitives for WeakSession {
             }
             ResponseBody::Reply(m) => {
                 let mut state = zwrite!(self.state);
+                if state.primitives.is_none() {
+                    return; // Session closing or closed
+                }
                 let key_expr = match state.remote_key_to_expr(&msg.wire_expr) {
                     Ok(key) => key.into_owned(),
                     Err(e) => {
@@ -2743,6 +2780,9 @@ impl Primitives for WeakSession {
     fn send_response_final(&self, msg: ResponseFinal) {
         trace!("recv ResponseFinal {:?}", msg);
         let mut state = zwrite!(self.state);
+        if state.primitives.is_none() {
+            return; // Session closing or closed
+        }
         match state.queries.get_mut(&msg.rid) {
             Some(query) => {
                 query.nb_final -= 1;
@@ -2838,146 +2878,5 @@ where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
-    OpenBuilder {
-        config,
-        #[cfg(feature = "shared-memory")]
-        shm_clients: None,
-    }
-}
-
-/// A builder returned by [`open`] used to open a zenoh [`Session`].
-///
-/// # Examples
-/// ```
-/// # #[tokio::main]
-/// # async fn main() {
-///
-/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-/// # }
-/// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-pub struct OpenBuilder<TryIntoConfig>
-where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
-{
-    config: TryIntoConfig,
-    #[cfg(feature = "shared-memory")]
-    shm_clients: Option<Arc<ShmClientStorage>>,
-}
-
-#[cfg(feature = "shared-memory")]
-impl<TryIntoConfig> OpenBuilder<TryIntoConfig>
-where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
-{
-    pub fn with_shm_clients(mut self, shm_clients: Arc<ShmClientStorage>) -> Self {
-        self.shm_clients = Some(shm_clients);
-        self
-    }
-}
-
-impl<TryIntoConfig> Resolvable for OpenBuilder<TryIntoConfig>
-where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
-{
-    type To = ZResult<Session>;
-}
-
-impl<TryIntoConfig> Wait for OpenBuilder<TryIntoConfig>
-where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
-{
-    fn wait(self) -> <Self as Resolvable>::To {
-        let config: crate::config::Config = self
-            .config
-            .try_into()
-            .map_err(|e| zerror!("Invalid Zenoh configuration {:?}", &e))?;
-        Session::new(
-            config,
-            #[cfg(feature = "shared-memory")]
-            self.shm_clients,
-        )
-        .wait()
-    }
-}
-
-impl<TryIntoConfig> IntoFuture for OpenBuilder<TryIntoConfig>
-where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
-{
-    type Output = <Self as Resolvable>::To;
-    type IntoFuture = Ready<<Self as Resolvable>::To>;
-
-    fn into_future(self) -> Self::IntoFuture {
-        std::future::ready(self.wait())
-    }
-}
-
-/// Initialize a Session with an existing Runtime.
-/// This operation is used by the plugins to share the same Runtime as the router.
-#[zenoh_macros::internal]
-pub fn init(runtime: Runtime) -> InitBuilder {
-    InitBuilder {
-        runtime,
-        aggregated_subscribers: vec![],
-        aggregated_publishers: vec![],
-    }
-}
-
-/// A builder returned by [`init`] and used to initialize a Session with an existing Runtime.
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-#[doc(hidden)]
-#[zenoh_macros::internal]
-pub struct InitBuilder {
-    runtime: Runtime,
-    aggregated_subscribers: Vec<OwnedKeyExpr>,
-    aggregated_publishers: Vec<OwnedKeyExpr>,
-}
-
-#[zenoh_macros::internal]
-impl InitBuilder {
-    #[inline]
-    pub fn aggregated_subscribers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
-        self.aggregated_subscribers = exprs;
-        self
-    }
-
-    #[inline]
-    pub fn aggregated_publishers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
-        self.aggregated_publishers = exprs;
-        self
-    }
-}
-
-#[zenoh_macros::internal]
-impl Resolvable for InitBuilder {
-    type To = ZResult<Session>;
-}
-
-#[zenoh_macros::internal]
-impl Wait for InitBuilder {
-    fn wait(self) -> <Self as Resolvable>::To {
-        Ok(Session::init(
-            self.runtime,
-            self.aggregated_subscribers,
-            self.aggregated_publishers,
-            false,
-        )
-        .wait())
-    }
-}
-
-#[zenoh_macros::internal]
-impl IntoFuture for InitBuilder {
-    type Output = <Self as Resolvable>::To;
-    type IntoFuture = Ready<<Self as Resolvable>::To>;
-
-    fn into_future(self) -> Self::IntoFuture {
-        std::future::ready(self.wait())
-    }
+    OpenBuilder::new(config)
 }

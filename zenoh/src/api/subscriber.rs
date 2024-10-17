@@ -21,20 +21,14 @@ use tracing::error;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
 #[cfg(feature = "unstable")]
-use {
-    crate::qos::Reliability, zenoh_config::wrappers::EntityGlobalId,
-    zenoh_protocol::core::EntityGlobalIdProto,
-};
+use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
 
-use crate::{
-    api::{
-        handlers::{locked, Callback, DefaultHandler, IntoHandler},
-        key_expr::KeyExpr,
-        sample::{Locality, Sample},
-        session::{UndeclarableSealed, WeakSession},
-        Id,
-    },
-    Session,
+use crate::api::{
+    handlers::Callback,
+    key_expr::KeyExpr,
+    sample::{Locality, Sample},
+    session::{UndeclarableSealed, WeakSession},
+    Id,
 };
 
 pub(crate) struct SubscriberState {
@@ -78,7 +72,7 @@ pub(crate) struct SubscriberInner {
 /// subscriber.undeclare().await.unwrap();
 /// # }
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct SubscriberUndeclaration<Handler>(Subscriber<Handler>);
 
 impl<Handler> Resolvable for SubscriberUndeclaration<Handler> {
@@ -92,255 +86,6 @@ impl<Handler> Wait for SubscriberUndeclaration<Handler> {
 }
 
 impl<Handler> IntoFuture for SubscriberUndeclaration<Handler> {
-    type Output = <Self as Resolvable>::To;
-    type IntoFuture = Ready<<Self as Resolvable>::To>;
-
-    fn into_future(self) -> Self::IntoFuture {
-        std::future::ready(self.wait())
-    }
-}
-
-/// A builder for initializing a [`FlumeSubscriber`].
-///
-/// # Examples
-/// ```
-/// # #[tokio::main]
-/// # async fn main() {
-///
-/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-/// let subscriber = session
-///     .declare_subscriber("key/expression")
-///     .await
-///     .unwrap();
-/// # }
-/// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-#[derive(Debug)]
-pub struct SubscriberBuilder<'a, 'b, Handler> {
-    #[cfg(feature = "unstable")]
-    pub session: &'a Session,
-    #[cfg(not(feature = "unstable"))]
-    pub(crate) session: &'a Session,
-
-    #[cfg(feature = "unstable")]
-    pub key_expr: ZResult<KeyExpr<'b>>,
-    #[cfg(not(feature = "unstable"))]
-    pub(crate) key_expr: ZResult<KeyExpr<'b>>,
-
-    #[cfg(feature = "unstable")]
-    pub origin: Locality,
-    #[cfg(not(feature = "unstable"))]
-    pub(crate) origin: Locality,
-
-    #[cfg(feature = "unstable")]
-    pub handler: Handler,
-    #[cfg(not(feature = "unstable"))]
-    pub(crate) handler: Handler,
-
-    #[cfg(feature = "unstable")]
-    pub undeclare_on_drop: bool,
-    #[cfg(not(feature = "unstable"))]
-    pub(crate) undeclare_on_drop: bool,
-}
-
-impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
-    /// Receive the samples for this subscription with a callback.
-    ///
-    /// Subscriber will not be undeclared when dropped, with the callback running
-    /// in background until the session is closed.
-    ///
-    /// It is in fact just a convenient shortcut for
-    /// `.with(my_callback).undeclare_on_drop(false)`.
-    ///
-    /// # Examples
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    ///
-    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let subscriber = session
-    ///     .declare_subscriber("key/expression")
-    ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr(), sample.payload()); })
-    ///     .await
-    ///     .unwrap();
-    /// # }
-    /// ```
-    #[inline]
-    pub fn callback<Callback>(self, callback: Callback) -> SubscriberBuilder<'a, 'b, Callback>
-    where
-        Callback: Fn(Sample) + Send + Sync + 'static,
-    {
-        self.with(callback).undeclare_on_drop(false)
-    }
-
-    /// Receive the samples for this subscription with a mutable callback.
-    ///
-    /// Using this guarantees that your callback will never be called concurrently.
-    /// If your callback is also accepted by the [`callback`](SubscriberBuilder::callback) method, we suggest you use it instead of `callback_mut`.
-    ///
-    /// Subscriber will not be undeclared when dropped, with the callback running
-    /// in background until the session is closed.
-    ///
-    /// # Examples
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    ///
-    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let mut n = 0;
-    /// let subscriber = session
-    ///     .declare_subscriber("key/expression")
-    ///     .callback_mut(move |_sample| { n += 1; })
-    ///     .await
-    ///     .unwrap();
-    /// # }
-    /// ```
-    #[inline]
-    pub fn callback_mut<CallbackMut>(
-        self,
-        callback: CallbackMut,
-    ) -> SubscriberBuilder<'a, 'b, impl Fn(Sample) + Send + Sync + 'static>
-    where
-        CallbackMut: FnMut(Sample) + Send + Sync + 'static,
-    {
-        self.callback(locked(callback))
-    }
-
-    /// Receive the samples for this subscription with a [`Handler`](crate::handlers::IntoHandler).
-    ///
-    /// # Examples
-    /// ```no_run
-    /// # #[tokio::main]
-    /// # async fn main() {
-    ///
-    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let subscriber = session
-    ///     .declare_subscriber("key/expression")
-    ///     .with(flume::bounded(32))
-    ///     .await
-    ///     .unwrap();
-    /// while let Ok(sample) = subscriber.recv_async().await {
-    ///     println!("Received: {} {:?}", sample.key_expr(), sample.payload());
-    /// }
-    /// # }
-    /// ```
-    #[inline]
-    pub fn with<Handler>(self, handler: Handler) -> SubscriberBuilder<'a, 'b, Handler>
-    where
-        Handler: IntoHandler<Sample>,
-    {
-        let SubscriberBuilder {
-            session,
-            key_expr,
-            origin,
-            handler: _,
-            undeclare_on_drop,
-        } = self;
-        SubscriberBuilder {
-            session,
-            key_expr,
-            origin,
-            handler,
-            undeclare_on_drop,
-        }
-    }
-}
-
-impl<Handler> SubscriberBuilder<'_, '_, Handler> {
-    /// Change the subscription reliability.
-    #[cfg(feature = "unstable")]
-    #[deprecated(
-        since = "1.0.0",
-        note = "please use `reliability` on `declare_publisher` or `put`"
-    )]
-    #[allow(unused_mut, unused_variables)]
-    pub fn reliability(mut self, reliability: Reliability) -> Self {
-        self
-    }
-
-    /// Change the subscription reliability to `Reliable`.
-    #[cfg(feature = "unstable")]
-    #[deprecated(
-        since = "1.0.0",
-        note = "please use `reliability` on `declare_publisher` or `put`"
-    )]
-    #[allow(unused_mut)]
-    pub fn reliable(mut self) -> Self {
-        self
-    }
-
-    /// Change the subscription reliability to `BestEffort`.
-    #[cfg(feature = "unstable")]
-    #[deprecated(
-        since = "1.0.0",
-        note = "please use `reliability` on `declare_publisher` or `put`"
-    )]
-    #[allow(unused_mut)]
-    pub fn best_effort(mut self) -> Self {
-        self
-    }
-
-    /// Restrict the matching publications that will be receive by this [`Subscriber`]
-    /// to the ones that have the given [`Locality`](Locality).
-    #[zenoh_macros::unstable]
-    #[inline]
-    pub fn allowed_origin(mut self, origin: Locality) -> Self {
-        self.origin = origin;
-        self
-    }
-
-    /// Set whether the subscriber will be undeclared when dropped.
-    ///
-    /// The method is usually used in combination with a callback like in
-    /// [`callback`](Self::callback) method, or a channel sender.
-    /// Be careful when using it, as subscribers not undeclared will consume
-    /// resources until the session is closed.
-    #[inline]
-    pub fn undeclare_on_drop(mut self, undeclare_on_drop: bool) -> Self {
-        self.undeclare_on_drop = undeclare_on_drop;
-        self
-    }
-}
-
-// Push mode
-impl<Handler> Resolvable for SubscriberBuilder<'_, '_, Handler>
-where
-    Handler: IntoHandler<Sample> + Send,
-    Handler::Handler: Send,
-{
-    type To = ZResult<Subscriber<Handler::Handler>>;
-}
-
-impl<Handler> Wait for SubscriberBuilder<'_, '_, Handler>
-where
-    Handler: IntoHandler<Sample> + Send,
-    Handler::Handler: Send,
-{
-    fn wait(self) -> <Self as Resolvable>::To {
-        let key_expr = self.key_expr?;
-        let session = self.session;
-        let (callback, receiver) = self.handler.into_handler();
-        session
-            .0
-            .declare_subscriber_inner(&key_expr, self.origin, callback)
-            .map(|sub_state| Subscriber {
-                inner: SubscriberInner {
-                    session: session.downgrade(),
-                    id: sub_state.id,
-                    key_expr: sub_state.key_expr.clone(),
-                    kind: SubscriberKind::Subscriber,
-                    undeclare_on_drop: self.undeclare_on_drop,
-                },
-                handler: receiver,
-            })
-    }
-}
-
-impl<Handler> IntoFuture for SubscriberBuilder<'_, '_, Handler>
-where
-    Handler: IntoHandler<Sample> + Send,
-    Handler::Handler: Send,
-{
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
@@ -429,15 +174,15 @@ impl<Handler> Subscriber<Handler> {
     }
 
     /// Returns a reference to this subscriber's handler.
-    /// An handler is anything that implements [`IntoHandler`].
-    /// The default handler is [`DefaultHandler`].
+    /// An handler is anything that implements [`crate::handlers::IntoHandler`].
+    /// The default handler is [`crate::handlers::DefaultHandler`].
     pub fn handler(&self) -> &Handler {
         &self.handler
     }
 
     /// Returns a mutable reference to this subscriber's handler.
-    /// An handler is anything that implements [`IntoHandler`].
-    /// The default handler is [`DefaultHandler`].
+    /// An handler is anything that implements [`crate::handlers::IntoHandler`].
+    /// The default handler is [`crate::handlers::DefaultHandler`].
     pub fn handler_mut(&mut self) -> &mut Handler {
         &mut self.handler
     }
@@ -471,6 +216,11 @@ impl<Handler> Subscriber<Handler> {
             .session
             .undeclare_subscriber_inner(self.inner.id, self.inner.kind)
     }
+
+    #[zenoh_macros::internal]
+    pub fn set_background(&mut self, background: bool) {
+        self.inner.undeclare_on_drop = !background;
+    }
 }
 
 impl<Handler> Drop for Subscriber<Handler> {
@@ -503,9 +253,6 @@ impl<Handler> DerefMut for Subscriber<Handler> {
         self.handler_mut()
     }
 }
-
-/// A [`Subscriber`] that provides data through a `flume` channel.
-pub type FlumeSubscriber = Subscriber<flume::Receiver<Sample>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SubscriberKind {

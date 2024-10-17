@@ -56,7 +56,7 @@ pub const EMPTY_EXPR_ID: ExprId = 0;
 // ~    suffix     ~ if flag K==1 in Message's header
 // +---------------+
 //
-#[derive(PartialEq, Eq, Hash, Clone)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct WireExpr<'a> {
     pub scope: ExprId, // 0 marks global scope
     pub suffix: Cow<'a, str>,
@@ -174,16 +174,6 @@ impl<'a> From<&'a keyexpr> for WireExpr<'a> {
             scope: 0,
             suffix: Cow::Borrowed(val.as_str()),
             mapping: Mapping::Sender,
-        }
-    }
-}
-
-impl fmt::Debug for WireExpr<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.scope == 0 {
-            write!(f, "{}", self.suffix)
-        } else {
-            write!(f, "{}:{:?}:{}", self.scope, self.mapping, self.suffix)
         }
     }
 }

@@ -36,17 +36,16 @@ clap = { workspace = true, features = ["derive"] }
 futures = { workspace = true }
 prost = { workspace = true }
 serde_json = { workspace = true }
-serde_yaml = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "time", "io-std"] }
-unwrap-infallible = { workspace = true }
 zenoh = { workspace = true, default-features = true }
-zenoh-ext = { workspace = true }
+zenoh-ext = { workspace = true, features = ["unstable"] }
 
 [dev-dependencies]
 rand = { workspace = true, features = ["default"] }
 
 [build-dependencies]
-rustc_version = { workspace = true }
+prost-build = "0.13"
+which = "6"
 
 [[example]]
 name = "z_scout"

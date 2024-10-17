@@ -18,14 +18,14 @@ use zenoh_config::WhatAmI;
 use zenoh_protocol::network::{
     declare::{common::ext::WireExprType, TokenId},
     ext,
-    interest::{InterestId, InterestMode, InterestOptions},
+    interest::{InterestId, InterestMode},
     Declare, DeclareBody, DeclareToken, UndeclareToken,
 };
 use zenoh_sync::get_mut_unchecked;
 
 use super::{face_hat, face_hat_mut, HatCode, HatFace, INITIAL_INTEREST_ID};
 use crate::net::routing::{
-    dispatcher::{face::FaceState, tables::Tables},
+    dispatcher::{face::FaceState, interests::RemoteInterest, tables::Tables},
     hat::{CurrentFutureTrait, HatTokenTrait, SendDeclare},
     router::{NodeId, Resource, SessionContext},
     RoutingContext,
@@ -86,15 +86,20 @@ fn propagate_simple_token_to(
             let matching_interests = face_hat!(dst_face)
                 .remote_interests
                 .values()
-                .filter(|(r, m, o)| {
-                    o.tokens()
-                        && r.as_ref().map(|r| r.matches(res)).unwrap_or(true)
-                        && (m.current() || src_interest_id.is_none())
+                .filter(|i| {
+                    i.options.tokens()
+                        && i.matches(res)
+                        && (i.mode.current() || src_interest_id.is_none())
                 })
                 .cloned()
-                .collect::<Vec<(Option<Arc<Resource>>, InterestMode, InterestOptions)>>();
+                .collect::<Vec<_>>();
 
-            for (int_res, _, options) in matching_interests {
+            for RemoteInterest {
+                res: int_res,
+                options,
+                ..
+            } in matching_interests
+            {
                 let res = if options.aggregate() {
                     int_res.as_ref().unwrap_or(res)
                 } else {
@@ -189,23 +194,25 @@ fn declare_simple_token(
 ) {
     if let Some(interest_id) = interest_id {
         if let Some((interest, _)) = face.pending_current_interests.get(&interest_id) {
-            if interest.mode == InterestMode::Current {
-                let wire_expr = Resource::get_best_key(res, "", interest.src_face.id);
-                send_declare(
-                    &interest.src_face.primitives,
-                    RoutingContext::with_expr(
-                        Declare {
-                            interest_id: Some(interest.src_interest_id),
-                            ext_qos: ext::QoSType::default(),
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::default(),
-                            body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
-                        },
-                        res.expr(),
-                    ),
-                );
-                return;
+            if interest.mode == InterestMode::CurrentFuture {
+                register_simple_token(tables, &mut face.clone(), id, res);
             }
+            let id = make_token_id(res, &mut interest.src_face.clone(), interest.mode);
+            let wire_expr = Resource::get_best_key(res, "", interest.src_face.id);
+            send_declare(
+                &interest.src_face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        interest_id: Some(interest.src_interest_id),
+                        ext_qos: ext::QoSType::default(),
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::default(),
+                        body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
+                    },
+                    res.expr(),
+                ),
+            );
+            return;
         } else if !face.local_interests.contains_key(&interest_id) {
             println!(
                 "Received DeclareToken for {} from {} with unknown interest_id {}. Ignore.",
@@ -266,9 +273,10 @@ fn propagate_forget_simple_token(
                 ),
             );
         } else if src_face.id != face.id
-            && face_hat!(face).remote_interests.values().any(|(r, _, o)| {
-                o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true) && !o.aggregate()
-            })
+            && face_hat!(face)
+                .remote_interests
+                .values()
+                .any(|i| i.options.tokens() && i.matches(res) && !i.options.aggregate())
         {
             // Token has never been declared on this face.
             // Send an Undeclare with a one shot generated id and a WireExpr ext.
@@ -318,11 +326,11 @@ fn propagate_forget_simple_token(
                             res.expr(),
                         ),
                     );
-                } else if face_hat!(face).remote_interests.values().any(|(r, _, o)| {
-                    o.tokens()
-                        && r.as_ref().map(|r| r.matches(&res)).unwrap_or(true)
-                        && !o.aggregate()
-                }) {
+                } else if face_hat!(face)
+                    .remote_interests
+                    .values()
+                    .any(|i| i.options.tokens() && i.matches(&res) && !i.options.aggregate())
+                {
                     // Token has never been declared on this face.
                     // Send an Undeclare with a one shot generated id and a WireExpr ext.
                     send_declare(

@@ -53,6 +53,10 @@ impl ZBuf {
         self.slices.as_mut().iter_mut()
     }
 
+    pub fn into_zslices(self) -> impl Iterator<Item = ZSlice> {
+        self.slices.into_iter()
+    }
+
     pub fn push_zslice(&mut self, zslice: ZSlice) {
         if !zslice.is_empty() {
             self.slices.push(zslice);
@@ -404,7 +408,7 @@ impl<'a> io::Seek for ZBufReader<'a> {
             .fold(0, |acc, s| acc + s.len())
             + self.cursor.byte;
         let current_pos = i64::try_from(current_pos)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("{}", e)))?;
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
 
         let offset = match pos {
             std::io::SeekFrom::Start(s) => i64::try_from(s).unwrap_or(i64::MAX) - current_pos,

@@ -110,7 +110,6 @@ mod tests {
 
         fn new_link(&self, _link: Link) {}
         fn del_link(&self, _link: Link) {}
-        fn closing(&self) {}
         fn closed(&self) {}
 
         fn as_any(&self) -> &dyn Any {
@@ -150,7 +149,6 @@ mod tests {
 
         fn new_link(&self, _link: Link) {}
         fn del_link(&self, _link: Link) {}
-        fn closing(&self) {}
         fn closed(&self) {}
 
         fn as_any(&self) -> &dyn Any {

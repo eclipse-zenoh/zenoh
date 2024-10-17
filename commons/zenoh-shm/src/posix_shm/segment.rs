@@ -20,6 +20,9 @@ use zenoh_result::{bail, zerror, ZResult};
 
 use crate::cleanup::CLEANUP;
 
+#[cfg(target_os = "linux")]
+use super::segment_lock::unix::{ExclusiveShmLock, ShmLock};
+
 const SEGMENT_DEDICATE_TRIES: usize = 100;
 const ECMA: crc::Crc<u64> = crc::Crc::<u64>::new(&crc::CRC_64_ECMA_182);
 
@@ -29,8 +32,26 @@ where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
     ID: Clone + Display,
 {
-    shmem: Shmem,
-    id: ID,
+    shmem: Shmem, // <-------------|
+    id: ID,       //               |
+    #[cfg(target_os = "linux")] // | location of these two fields matters!
+    _lock: Option<ShmLock>, // <---|
+}
+
+#[cfg(target_os = "linux")]
+impl<ID> Drop for Segment<ID>
+where
+    rand::distributions::Standard: rand::distributions::Distribution<ID>,
+    ID: Clone + Display,
+{
+    fn drop(&mut self) {
+        if let Some(lock) = self._lock.take() {
+            if let Ok(_exclusive) = std::convert::TryInto::<ExclusiveShmLock>::try_into(lock) {
+                // in case if we are the last holder of this segment make ourselves owner to unlink it
+                self.shmem.set_owner(true);
+            }
+        }
+    }
 }
 
 impl<ID> Debug for Segment<ID>
@@ -59,6 +80,15 @@ where
             let id: ID = rand::thread_rng().gen();
             let os_id = Self::os_id(id.clone(), id_prefix);
 
+            #[cfg(target_os = "linux")]
+            // Create lock to indicate that segment is managed
+            let lock = {
+                match ShmLock::create(&os_id) {
+                    Ok(lock) => lock,
+                    Err(_) => continue,
+                }
+            };
+
             // Register cleanup routine to make sure Segment will be unlinked on exit
             let c_os_id = os_id.clone();
             CLEANUP.read().register_cleanup(Box::new(move || {
@@ -76,7 +106,18 @@ where
                     tracing::debug!(
                         "Created SHM segment, size: {alloc_size}, prefix: {id_prefix}, id: {id}"
                     );
-                    return Ok(Segment { shmem, id });
+                    #[cfg(target_os = "linux")]
+                    let shmem = {
+                        let mut shmem = shmem;
+                        shmem.set_owner(false);
+                        shmem
+                    };
+                    return Ok(Segment {
+                        shmem,
+                        id,
+                        #[cfg(target_os = "linux")]
+                        _lock: Some(lock),
+                    });
                 }
                 Err(ShmemError::LinkExists) => {}
                 Err(ShmemError::MappingIdExists) => {}
@@ -88,25 +129,34 @@ where
 
     // Open an existing segment identified by id
     pub fn open(id: ID, id_prefix: &str) -> ZResult<Self> {
-        let shmem = ShmemConf::new()
-            .os_id(Self::os_id(id.clone(), id_prefix))
-            .open()
-            .map_err(|e| {
-                zerror!(
-                    "Error opening POSIX shm segment id {id}, prefix: {id_prefix}: {}",
-                    e
-                )
-            })?;
+        let os_id = Self::os_id(id.clone(), id_prefix);
+
+        #[cfg(target_os = "linux")]
+        // Open lock to indicate that segment is managed
+        let lock = ShmLock::open(&os_id)?;
+
+        // Open SHM segment
+        let shmem = ShmemConf::new().os_id(os_id).open().map_err(|e| {
+            zerror!(
+                "Error opening POSIX shm segment id {id}, prefix: {id_prefix}: {}",
+                e
+            )
+        })?;
 
         tracing::debug!("Opened SHM segment, prefix: {id_prefix}, id: {id}");
 
-        Ok(Self { shmem, id })
+        Ok(Self {
+            shmem,
+            id,
+            #[cfg(target_os = "linux")]
+            _lock: Some(lock),
+        })
     }
 
     fn os_id(id: ID, id_prefix: &str) -> String {
         let os_id_str = format!("{id_prefix}_{id}");
         let crc_os_id_str = ECMA.checksum(os_id_str.as_bytes());
-        format!("{:x}", crc_os_id_str)
+        format!("{:x}.zenoh", crc_os_id_str)
     }
 
     pub fn as_ptr(&self) -> *mut u8 {

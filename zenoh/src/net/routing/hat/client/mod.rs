@@ -27,7 +27,7 @@ use token::{token_new_face, undeclare_simple_token};
 use zenoh_config::WhatAmI;
 use zenoh_protocol::network::{
     declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
-    interest::{InterestId, InterestOptions},
+    interest::InterestId,
     Oam,
 };
 use zenoh_result::ZResult;
@@ -48,7 +48,7 @@ use super::{
 };
 use crate::net::{
     routing::{
-        dispatcher::face::Face,
+        dispatcher::{face::Face, interests::RemoteInterest},
         router::{compute_data_routes, compute_query_routes, RoutesIndexes},
     },
     runtime::Runtime,
@@ -130,6 +130,7 @@ impl HatBaseTrait for HatCode {
     fn close_face(
         &self,
         tables: &TablesLock,
+        _tables_ref: &Arc<TablesLock>,
         face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
@@ -260,16 +261,6 @@ impl HatBaseTrait for HatCode {
         0
     }
 
-    fn closing(
-        &self,
-        _tables: &mut Tables,
-        _tables_ref: &Arc<TablesLock>,
-        _transport: &TransportUnicast,
-        _send_declare: &mut SendDeclare,
-    ) -> ZResult<()> {
-        Ok(())
-    }
-
     #[inline]
     fn ingress_filter(&self, _tables: &Tables, _face: &FaceState, _expr: &mut RoutingExpr) -> bool {
         true
@@ -305,7 +296,7 @@ impl HatContext {
 
 struct HatFace {
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
-    remote_interests: HashMap<InterestId, (Option<Arc<Resource>>, InterestOptions)>,
+    remote_interests: HashMap<InterestId, RemoteInterest>,
     local_subs: HashMap<Arc<Resource>, SubscriberId>,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
     local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,

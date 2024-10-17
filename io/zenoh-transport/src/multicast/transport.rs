@@ -178,11 +178,7 @@ impl TransportMulticastInner {
     pub(super) async fn delete(&self) -> ZResult<()> {
         tracing::debug!("Closing multicast transport on {:?}", self.locator);
 
-        // Notify the callback that we are going to close the transport
         let callback = zwrite!(self.callback).take();
-        if let Some(cb) = callback.as_ref() {
-            cb.closing();
-        }
 
         // Delete the transport on the manager
         let _ = self.manager.del_transport_multicast(&self.locator).await;
@@ -333,7 +329,7 @@ impl TransportMulticastInner {
     /*               PEER                */
     /*************************************/
     pub(super) fn new_peer(&self, locator: &Locator, join: Join) -> ZResult<()> {
-        let mut link = Link::from(self.get_link());
+        let mut link = Link::new_multicast(&self.get_link().link);
         link.dst = locator.clone();
 
         let is_shm = zcondfeat!("shared-memory", join.ext_shm.is_some(), false);
@@ -441,7 +437,6 @@ impl TransportMulticastInner {
 
             // TODO(yuyuan): Unify the termination
             peer.token.cancel();
-            peer.handler.closing();
             drop(guard);
             peer.handler.closed();
         }
@@ -452,7 +447,7 @@ impl TransportMulticastInner {
         zread!(self.peers)
             .values()
             .map(|p| {
-                let mut link = Link::from(self.get_link());
+                let mut link = Link::new_multicast(&self.get_link().link);
                 link.dst = p.locator.clone();
 
                 TransportPeer {

@@ -118,23 +118,25 @@ fn declare_simple_token(
 ) {
     if let Some(interest_id) = interest_id {
         if let Some((interest, _)) = face.pending_current_interests.get(&interest_id) {
-            if interest.mode == InterestMode::Current {
-                let wire_expr = Resource::get_best_key(res, "", interest.src_face.id);
-                send_declare(
-                    &interest.src_face.primitives,
-                    RoutingContext::with_expr(
-                        Declare {
-                            interest_id: Some(interest.src_interest_id),
-                            ext_qos: ext::QoSType::default(),
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::default(),
-                            body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
-                        },
-                        res.expr(),
-                    ),
-                );
-                return;
+            if interest.mode == InterestMode::CurrentFuture {
+                register_simple_token(tables, &mut face.clone(), id, res);
             }
+            let id = make_token_id(res, &mut interest.src_face.clone(), interest.mode);
+            let wire_expr = Resource::get_best_key(res, "", interest.src_face.id);
+            send_declare(
+                &interest.src_face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        interest_id: Some(interest.src_interest_id),
+                        ext_qos: ext::QoSType::default(),
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::default(),
+                        body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
+                    },
+                    res.expr(),
+                ),
+            );
+            return;
         } else if !face.local_interests.contains_key(&interest_id) {
             tracing::debug!(
                 "Received DeclareToken for {} from {} with unknown interest_id {}. Ignore.",
@@ -189,7 +191,7 @@ fn propagate_forget_simple_token(
         } else if face_hat!(face)
             .remote_interests
             .values()
-            .any(|(r, o)| o.tokens() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true))
+            .any(|i| i.options.tokens() && i.matches(res))
         {
             // Token has never been declared on this face.
             // Send an Undeclare with a one shot generated id and a WireExpr ext.

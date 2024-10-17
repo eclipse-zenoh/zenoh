@@ -14,6 +14,7 @@
 use std::{
     collections::HashSet,
     net::{IpAddr, Ipv6Addr, SocketAddr},
+    str::FromStr,
     time::Duration,
 };
 
@@ -33,7 +34,7 @@ use zenoh_config::{
 };
 use zenoh_link::{Locator, LocatorInspector};
 use zenoh_protocol::{
-    core::{whatami::WhatAmIMatcher, EndPoint, WhatAmI, ZenohIdProto},
+    core::{whatami::WhatAmIMatcher, EndPoint, Metadata, PriorityRange, WhatAmI, ZenohIdProto},
     scouting::{HelloProto, Scout, ScoutingBody, ScoutingMessage},
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -170,7 +171,18 @@ impl Runtime {
     }
 
     async fn start_peer(&self) -> ZResult<()> {
-        let (listeners, peers, scouting, listen, autoconnect, addr, ifaces, delay, linkstate) = {
+        let (
+            listeners,
+            peers,
+            scouting,
+            wait_scouting,
+            listen,
+            autoconnect,
+            addr,
+            ifaces,
+            delay,
+            linkstate,
+        ) = {
             let guard = &self.state.config.lock().0;
             (
                 guard.listen().endpoints().peer().unwrap_or(&vec![]).clone(),
@@ -181,6 +193,7 @@ impl Runtime {
                     .unwrap_or(&vec![])
                     .clone(),
                 unwrap_or_default!(guard.scouting().multicast().enabled()),
+                unwrap_or_default!(guard.open().return_conditions().connect_scouted()),
                 *unwrap_or_default!(guard.scouting().multicast().listen().peer()),
                 *unwrap_or_default!(guard.scouting().multicast().autoconnect().peer()),
                 unwrap_or_default!(guard.scouting().multicast().address()),
@@ -200,7 +213,8 @@ impl Runtime {
 
         if linkstate {
             tokio::time::sleep(delay).await;
-        } else if (scouting || !peers.is_empty())
+        } else if wait_scouting
+            && (scouting || !peers.is_empty())
             && tokio::time::timeout(delay, self.state.start_conditions.notified())
                 .await
                 .is_err()
@@ -747,6 +761,7 @@ impl Runtime {
             let config_guard = this.config().lock();
             let config = &config_guard.0;
             let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
+            let wait_declares = unwrap_or_default!(config.open().return_conditions().declares());
             drop(config_guard);
             self.spawn(async move {
                 if let Ok(zid) = this.peer_connector_retry(peer).await {
@@ -755,7 +770,7 @@ impl Runtime {
                         .set_peer_connector_zid(idx, zid)
                         .await;
                 }
-                if !gossip {
+                if !gossip && (!wait_declares || this.whatami() != WhatAmI::Peer) {
                     this.state
                         .start_conditions
                         .terminate_peer_connector(idx)
@@ -910,8 +925,14 @@ impl Runtime {
         }
     }
 
+    /// Returns `true` if a new Transport instance is established with `zid` or had already been established.
     #[must_use]
     async fn connect(&self, zid: &ZenohIdProto, scouted_locators: &[Locator]) -> bool {
+        if !self.insert_pending_connection(*zid).await {
+            tracing::debug!("Already connecting to {}. Ignore.", zid);
+            return false;
+        }
+
         const ERR: &str = "Unable to connect to newly scouted peer";
 
         let configured_locators = self
@@ -930,6 +951,8 @@ impl Runtime {
             .iter()
             .filter(|l| !configured_locators.contains(l));
 
+        let manager = self.manager();
+
         let inspector = LocatorInspector::default();
         for locator in locators {
             let is_multicast = match inspector.is_multicast(locator).await {
@@ -942,43 +965,66 @@ impl Runtime {
 
             let endpoint = locator.to_owned().into();
             let retry_config = self.get_connect_retry_config(&endpoint);
-            let manager = self.manager();
-            if is_multicast {
-                match tokio::time::timeout(
-                    retry_config.timeout(),
-                    manager.open_transport_multicast(endpoint),
-                )
+            let priorities = locator
+                .metadata()
+                .get(Metadata::PRIORITIES)
+                .and_then(|p| PriorityRange::from_str(p).ok());
+            let reliability = inspector.is_reliable(locator).ok();
+            if !manager
+                .get_transport_unicast(zid)
                 .await
-                {
-                    Ok(Ok(transport)) => {
-                        tracing::debug!(
-                            "Successfully connected to newly scouted peer: {:?}",
-                            transport
-                        );
-                        return true;
+                .as_ref()
+                .is_some_and(|t| {
+                    t.get_links().is_ok_and(|ls| {
+                        ls.iter().any(|l| {
+                            l.priorities == priorities
+                                && inspector.is_reliable(&l.dst).ok() == reliability
+                        })
+                    })
+                })
+            {
+                if is_multicast {
+                    match tokio::time::timeout(
+                        retry_config.timeout(),
+                        manager.open_transport_multicast(endpoint),
+                    )
+                    .await
+                    {
+                        Ok(Ok(transport)) => {
+                            tracing::debug!(
+                                "Successfully connected to newly scouted peer: {:?}",
+                                transport
+                            );
+                        }
+                        Ok(Err(e)) => tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e),
+                        Err(e) => tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e),
                     }
-                    Ok(Err(e)) => tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e),
-                    Err(e) => tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e),
+                } else {
+                    match tokio::time::timeout(
+                        retry_config.timeout(),
+                        manager.open_transport_unicast(endpoint),
+                    )
+                    .await
+                    {
+                        Ok(Ok(transport)) => {
+                            tracing::debug!(
+                                "Successfully connected to newly scouted peer: {:?}",
+                                transport
+                            );
+                        }
+                        Ok(Err(e)) => tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e),
+                        Err(e) => tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e),
+                    }
                 }
             } else {
-                match tokio::time::timeout(
-                    retry_config.timeout(),
-                    manager.open_transport_unicast(endpoint),
-                )
-                .await
-                {
-                    Ok(Ok(transport)) => {
-                        tracing::debug!(
-                            "Successfully connected to newly scouted peer: {:?}",
-                            transport
-                        );
-                        return true;
-                    }
-                    Ok(Err(e)) => tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e),
-                    Err(e) => tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e),
-                }
+                tracing::trace!(
+                    "Will not attempt to connect to {} via {}: already connected to this peer for this PriorityRange-Reliability pair",
+                    zid, locator
+                );
             }
         }
+
+        self.remove_pending_connection(zid).await;
 
         if self.manager().get_transport_unicast(zid).await.is_none() {
             tracing::warn!(
@@ -986,16 +1032,14 @@ impl Runtime {
                 zid,
                 scouted_locators
             );
+            false
         } else {
-            tracing::trace!(
-                "Unable to connect to any locator of scouted peer {}: Already connected!",
-                zid
-            );
+            true
         }
-        false
     }
 
-    pub async fn connect_peer(&self, zid: &ZenohIdProto, locators: &[Locator]) {
+    /// Returns `true` if a new Transport instance is established with `zid` or had already been established.
+    pub async fn connect_peer(&self, zid: &ZenohIdProto, locators: &[Locator]) -> bool {
         let manager = self.manager();
         if zid != &manager.zid() {
             let has_unicast = manager.get_transport_unicast(zid).await.is_some();
@@ -1013,10 +1057,13 @@ impl Runtime {
 
             if !has_unicast && !has_multicast {
                 tracing::debug!("Try to connect to peer {} via any of {:?}", zid, locators);
-                let _ = self.connect(zid, locators).await;
+                self.connect(zid, locators).await
             } else {
                 tracing::trace!("Already connected scouted peer: {}", zid);
+                true
             }
+        } else {
+            true
         }
     }
 
@@ -1060,7 +1107,7 @@ impl Runtime {
     ) {
         Runtime::scout(ucast_sockets, what, addr, move |hello| async move {
             if !hello.locators.is_empty() {
-                self.connect_peer(&hello.zid, &hello.locators).await
+                self.connect_peer(&hello.zid, &hello.locators).await;
             } else {
                 tracing::warn!("Received Hello with no locators: {:?}", hello);
             }
@@ -1151,7 +1198,7 @@ impl Runtime {
         }
     }
 
-    pub(super) fn closing_session(session: &RuntimeSession) {
+    pub(super) fn closed_session(session: &RuntimeSession) {
         if session.runtime.is_closed() {
             return;
         }

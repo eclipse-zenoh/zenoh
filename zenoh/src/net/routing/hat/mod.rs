@@ -131,17 +131,10 @@ pub(crate) trait HatBaseTrait {
 
     fn info(&self, tables: &Tables, kind: WhatAmI) -> String;
 
-    fn closing(
-        &self,
-        tables: &mut Tables,
-        tables_ref: &Arc<TablesLock>,
-        transport: &TransportUnicast,
-        send_declare: &mut SendDeclare,
-    ) -> ZResult<()>;
-
     fn close_face(
         &self,
         tables: &TablesLock,
+        tables_ref: &Arc<TablesLock>,
         face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     );

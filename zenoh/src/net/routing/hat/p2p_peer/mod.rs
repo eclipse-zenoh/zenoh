@@ -33,7 +33,7 @@ use zenoh_protocol::{
             queryable::ext::QueryableInfoType,
             QueryableId, SubscriberId, TokenId,
         },
-        interest::{InterestId, InterestMode, InterestOptions},
+        interest::{InterestId, InterestOptions},
         oam::id::OAM_LINKSTATE,
         Declare, DeclareBody, DeclareFinal, Oam,
     },
@@ -59,7 +59,10 @@ use crate::net::{
     codec::Zenoh080Routing,
     protocol::linkstate::LinkStateList,
     routing::{
-        dispatcher::face::{Face, InterestState},
+        dispatcher::{
+            face::{Face, InterestState},
+            interests::RemoteInterest,
+        },
         router::{compute_data_routes, compute_query_routes, RoutesIndexes},
         RoutingContext,
     },
@@ -71,6 +74,13 @@ mod interests;
 mod pubsub;
 mod queries;
 mod token;
+
+macro_rules! hat {
+    ($t:expr) => {
+        $t.hat.downcast_ref::<HatTables>().unwrap()
+    };
+}
+use hat;
 
 macro_rules! hat_mut {
     ($t:expr) => {
@@ -117,6 +127,7 @@ impl HatBaseTrait for HatCode {
         } else {
             WhatAmIMatcher::empty()
         };
+        let wait_declares = unwrap_or_default!(config.open().return_conditions().declares());
         let router_peers_failover_brokering =
             unwrap_or_default!(config.routing().router().peers_failover_brokering());
         drop(config_guard);
@@ -129,6 +140,7 @@ impl HatBaseTrait for HatCode {
             gossip,
             gossip_multihop,
             autoconnect,
+            wait_declares,
         ));
     }
 
@@ -205,6 +217,7 @@ impl HatBaseTrait for HatCode {
     fn close_face(
         &self,
         tables: &TablesLock,
+        _tables_ref: &Arc<TablesLock>,
         face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
@@ -311,6 +324,14 @@ impl HatBaseTrait for HatCode {
             Resource::clean(&mut res);
         }
         wtables.faces.remove(&face.id);
+
+        if face.whatami != WhatAmI::Client {
+            hat_mut!(wtables)
+                .gossip
+                .as_mut()
+                .unwrap()
+                .remove_link(&face.zid);
+        };
         drop(wtables);
     }
 
@@ -334,7 +355,7 @@ impl HatBaseTrait for HatCode {
                     let whatami = transport.get_whatami()?;
                     if whatami != WhatAmI::Client {
                         if let Some(net) = hat_mut!(tables).gossip.as_mut() {
-                            net.link_states(list.link_states, zid);
+                            net.link_states(list.link_states, zid, whatami);
                         }
                     };
                 }
@@ -352,24 +373,6 @@ impl HatBaseTrait for HatCode {
         _routing_context: NodeId,
     ) -> NodeId {
         0
-    }
-
-    fn closing(
-        &self,
-        tables: &mut Tables,
-        _tables_ref: &Arc<TablesLock>,
-        transport: &TransportUnicast,
-        _send_declare: &mut SendDeclare,
-    ) -> ZResult<()> {
-        match (transport.get_zid(), transport.get_whatami()) {
-            (Ok(zid), Ok(whatami)) => {
-                if whatami != WhatAmI::Client {
-                    hat_mut!(tables).gossip.as_mut().unwrap().remove_link(&zid);
-                };
-            }
-            (_, _) => tracing::error!("Closed transport in session closing!"),
-        }
-        Ok(())
     }
 
     #[inline]
@@ -407,7 +410,7 @@ impl HatContext {
 
 struct HatFace {
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
-    remote_interests: HashMap<InterestId, (Option<Arc<Resource>>, InterestMode, InterestOptions)>,
+    remote_interests: HashMap<InterestId, RemoteInterest>,
     local_subs: HashMap<Arc<Resource>, SubscriberId>,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
     local_tokens: HashMap<Arc<Resource>, TokenId>,

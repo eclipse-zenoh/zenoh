@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -16,8 +18,7 @@ use zenoh::{
     bytes::ZBytes,
     key_expr::KeyExpr,
     shm::{
-        zshm, BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder,
-        POSIX_PROTOCOL_ID,
+        BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID,
     },
     Config, Wait,
 };
@@ -126,7 +127,7 @@ fn parse_args() -> (Config, KeyExpr<'static>, String, bool) {
     (args.common.into(), args.key, args.payload, args.complete)
 }
 
-fn handle_bytes(bytes: &ZBytes) -> (&str, String) {
+fn handle_bytes(bytes: &ZBytes) -> (&str, Cow<str>) {
     // Determine buffer type for indication purpose
     let bytes_type = {
         // if Zenoh is built without SHM support, the only buffer type it can receive is RAW
@@ -144,9 +145,9 @@ fn handle_bytes(bytes: &ZBytes) -> (&str, String) {
 
         // if Zenoh is built with SHM support and with SHM API  we can detect the exact buffer type
         #[cfg(all(feature = "shared-memory", feature = "unstable"))]
-        match bytes.deserialize::<&zshm>() {
-            Ok(_) => "SHM",
-            Err(_) => "RAW",
+        match bytes.as_shm() {
+            Some(_) => "SHM",
+            None => "RAW",
         }
     };
 
@@ -157,8 +158,8 @@ fn handle_bytes(bytes: &ZBytes) -> (&str, String) {
     //
     // Refer to z_bytes.rs to see how to deserialize different types of message
     let bytes_string = bytes
-        .deserialize::<String>()
-        .unwrap_or_else(|e| format!("{}", e));
+        .try_to_string()
+        .unwrap_or_else(|e| e.to_string().into());
 
     (bytes_type, bytes_string)
 }

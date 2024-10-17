@@ -13,7 +13,7 @@
 //
 
 //! Value primitives.
-use super::{bytes::ZBytes, encoding::Encoding};
+use crate::api::{bytes::ZBytes, encoding::Encoding};
 
 /// A zenoh [`Value`] contains a `payload` and an [`Encoding`] that indicates how the payload's [`ZBytes`] should be interpreted.
 #[non_exhaustive]
@@ -38,7 +38,7 @@ impl Value {
     /// Creates an empty [`Value`].
     pub const fn empty() -> Self {
         Value {
-            payload: ZBytes::empty(),
+            payload: ZBytes::new(),
             encoding: Encoding::default(),
         }
     }

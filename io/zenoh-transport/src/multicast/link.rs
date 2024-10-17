@@ -21,7 +21,7 @@ use std::{
 use tokio::task::JoinHandle;
 use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
 use zenoh_core::{zcondfeat, zlock};
-use zenoh_link::{Link, LinkMulticast, Locator};
+use zenoh_link::{LinkMulticast, Locator};
 use zenoh_protocol::{
     core::{Bits, Priority, Resolution, WhatAmI, ZenohIdProto},
     transport::{BatchSize, Close, Join, PrioritySn, TransportMessage, TransportSn},
@@ -123,18 +123,6 @@ impl fmt::Debug for TransportLinkMulticast {
             .field("link", &self.link)
             .field("config", &self.config)
             .finish()
-    }
-}
-
-impl From<&TransportLinkMulticast> for Link {
-    fn from(link: &TransportLinkMulticast) -> Self {
-        Link::from(&link.link)
-    }
-}
-
-impl From<TransportLinkMulticast> for Link {
-    fn from(link: TransportLinkMulticast) -> Self {
-        Link::from(link.link)
     }
 }
 
@@ -321,6 +309,7 @@ impl TransportLinkMulticastUniversal {
                 batch: self.link.config.batch,
                 queue_size: self.transport.manager.config.queue_size,
                 wait_before_drop: self.transport.manager.config.wait_before_drop,
+                wait_before_close: self.transport.manager.config.wait_before_close,
                 batching_enabled: self.transport.manager.config.batching,
                 batching_time_limit: self.transport.manager.config.queue_backoff,
             };

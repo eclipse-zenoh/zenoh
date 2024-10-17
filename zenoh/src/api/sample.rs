@@ -15,8 +15,7 @@
 //! Sample primitives
 use std::{convert::TryFrom, fmt};
 
-#[cfg(feature = "unstable")]
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use zenoh_config::wrappers::EntityGlobalId;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Reliability;
@@ -25,7 +24,7 @@ use zenoh_protocol::{
     network::declare::ext::QoSType,
 };
 
-use super::{
+use crate::api::{
     builders::sample::QoSBuilderTrait, bytes::ZBytes, encoding::Encoding, key_expr::KeyExpr,
     publisher::Priority, value::Value,
 };
@@ -251,7 +250,7 @@ impl Default for SourceInfo {
 
 /// The kind of a `Sample`.
 #[repr(u8)]
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub enum SampleKind {
     /// if the `Sample` was issued by a `put` operation.
     #[default]

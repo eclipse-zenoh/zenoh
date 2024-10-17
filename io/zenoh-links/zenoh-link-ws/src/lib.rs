@@ -17,14 +17,14 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
-use std::net::SocketAddr;
+use std::{net::SocketAddr, str::FromStr};
 
 use async_trait::async_trait;
 use url::Url;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
 use zenoh_protocol::{
-    core::{endpoint::Address, Locator},
+    core::{endpoint::Address, Locator, Metadata, Reliability},
     transport::BatchSize,
 };
 use zenoh_result::{bail, ZResult};
@@ -41,6 +41,8 @@ const WS_MAX_MTU: BatchSize = BatchSize::MAX;
 
 pub const WS_LOCATOR_PREFIX: &str = "ws";
 
+const IS_RELIABLE: bool = true;
+
 #[derive(Default, Clone, Copy)]
 pub struct WsLocatorInspector;
 #[async_trait]
@@ -50,6 +52,19 @@ impl LocatorInspector for WsLocatorInspector {
     }
     async fn is_multicast(&self, _locator: &Locator) -> ZResult<bool> {
         Ok(false)
+    }
+
+    fn is_reliable(&self, locator: &Locator) -> ZResult<bool> {
+        if let Some(reliability) = locator
+            .metadata()
+            .get(Metadata::RELIABILITY)
+            .map(Reliability::from_str)
+            .transpose()?
+        {
+            Ok(reliability == Reliability::Reliable)
+        } else {
+            Ok(IS_RELIABLE)
+        }
     }
 }
 

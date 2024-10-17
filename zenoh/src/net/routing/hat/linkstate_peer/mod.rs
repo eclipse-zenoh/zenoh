@@ -30,7 +30,7 @@ use zenoh_protocol::{
     core::ZenohIdProto,
     network::{
         declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId},
-        interest::{InterestId, InterestOptions},
+        interest::InterestId,
         oam::id::OAM_LINKSTATE,
         Oam,
     },
@@ -56,7 +56,7 @@ use crate::net::{
     codec::Zenoh080Routing,
     protocol::linkstate::LinkStateList,
     routing::{
-        dispatcher::face::Face,
+        dispatcher::{face::Face, interests::RemoteInterest},
         hat::TREES_COMPUTATION_DELAY_MS,
         router::{compute_data_routes, compute_query_routes, RoutesIndexes},
     },
@@ -261,6 +261,7 @@ impl HatBaseTrait for HatCode {
     fn close_face(
         &self,
         tables: &TablesLock,
+        tables_ref: &Arc<TablesLock>,
         face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
@@ -367,6 +368,21 @@ impl HatBaseTrait for HatCode {
             Resource::clean(&mut res);
         }
         wtables.faces.remove(&face.id);
+
+        if face.whatami != WhatAmI::Client {
+            for (_, removed_node) in hat_mut!(wtables)
+                .linkstatepeers_net
+                .as_mut()
+                .unwrap()
+                .remove_link(&face.zid)
+            {
+                pubsub_remove_node(&mut wtables, &removed_node.zid, send_declare);
+                queries_remove_node(&mut wtables, &removed_node.zid, send_declare);
+                token_remove_node(&mut wtables, &removed_node.zid, send_declare);
+            }
+
+            hat_mut!(wtables).schedule_compute_trees(tables_ref.clone());
+        };
         drop(wtables);
     }
 
@@ -422,35 +438,6 @@ impl HatBaseTrait for HatCode {
             .get_local_context(routing_context, face_hat!(face).link_id)
     }
 
-    fn closing(
-        &self,
-        tables: &mut Tables,
-        tables_ref: &Arc<TablesLock>,
-        transport: &TransportUnicast,
-        send_declare: &mut SendDeclare,
-    ) -> ZResult<()> {
-        match (transport.get_zid(), transport.get_whatami()) {
-            (Ok(zid), Ok(whatami)) => {
-                if whatami != WhatAmI::Client {
-                    for (_, removed_node) in hat_mut!(tables)
-                        .linkstatepeers_net
-                        .as_mut()
-                        .unwrap()
-                        .remove_link(&zid)
-                    {
-                        pubsub_remove_node(tables, &removed_node.zid, send_declare);
-                        queries_remove_node(tables, &removed_node.zid, send_declare);
-                        token_remove_node(tables, &removed_node.zid, send_declare);
-                    }
-
-                    hat_mut!(tables).schedule_compute_trees(tables_ref.clone());
-                };
-            }
-            (_, _) => tracing::error!("Closed transport in session closing!"),
-        }
-        Ok(())
-    }
-
     #[inline]
     fn ingress_filter(&self, _tables: &Tables, _face: &FaceState, _expr: &mut RoutingExpr) -> bool {
         true
@@ -502,7 +489,7 @@ impl HatContext {
 struct HatFace {
     link_id: usize,
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
-    remote_interests: HashMap<InterestId, (Option<Arc<Resource>>, InterestOptions)>,
+    remote_interests: HashMap<InterestId, RemoteInterest>,
     local_subs: HashMap<Arc<Resource>, SubscriberId>,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
     local_tokens: HashMap<Arc<Resource>, SubscriberId>,

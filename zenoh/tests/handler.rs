@@ -32,11 +32,7 @@ fn pubsub_with_ringbuffer() {
     // Should only receive the last three samples ("put7", "put8", "put9")
     for i in 7..10 {
         assert_eq!(
-            sub.recv()
-                .unwrap()
-                .payload()
-                .deserialize::<String>()
-                .unwrap(),
+            sub.recv().unwrap().payload().try_to_string().unwrap(),
             format!("put{i}")
         );
     }
@@ -66,8 +62,5 @@ fn query_with_ringbuffer() {
 
     let query = queryable.recv().unwrap();
     // Only receive the latest query
-    assert_eq!(
-        query.payload().unwrap().deserialize::<String>().unwrap(),
-        "query2"
-    );
+    assert_eq!(query.payload().unwrap().try_to_string().unwrap(), "query2");
 }

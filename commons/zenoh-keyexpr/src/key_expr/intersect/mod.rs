@@ -37,7 +37,7 @@ pub trait Intersector<Left, Right> {
     fn intersect(&self, left: Left, right: Right) -> bool;
 }
 
-pub(crate) mod restiction {
+pub(crate) mod restriction {
     use core::ops::Deref;
 
     #[repr(transparent)]
@@ -82,7 +82,7 @@ impl KeyExprHelpers for keyexpr {
     }
 }
 
-use restiction::NoSubWilds;
+use restriction::NoSubWilds;
 impl<
         T: for<'a> Intersector<&'a [u8], &'a [u8]>
             + for<'a> Intersector<NoSubWilds<&'a [u8]>, NoSubWilds<&'a [u8]>>,

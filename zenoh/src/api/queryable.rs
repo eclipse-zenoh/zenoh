@@ -19,18 +19,16 @@ use std::{
 };
 
 use tracing::error;
-use uhlc::Timestamp;
 use zenoh_core::{Resolvable, Resolve, Wait};
 use zenoh_protocol::{
-    core::{CongestionControl, EntityId, Parameters, WireExpr, ZenohIdProto},
+    core::{EntityId, Parameters, WireExpr, ZenohIdProto},
     network::{response, Mapping, RequestId, Response, ResponseFinal},
     zenoh::{self, reply::ReplyBody, Del, Put, ResponseBody},
 };
 use zenoh_result::ZResult;
 #[zenoh_macros::unstable]
 use {
-    crate::api::{query::ReplyKeyExpr, sample::SourceInfo},
-    zenoh_config::wrappers::EntityGlobalId,
+    crate::api::query::ReplyKeyExpr, zenoh_config::wrappers::EntityGlobalId,
     zenoh_protocol::core::EntityGlobalIdProto,
 };
 
@@ -38,16 +36,11 @@ use {
 use crate::api::selector::ZenohParameters;
 use crate::{
     api::{
-        builders::sample::{
-            EncodingBuilderTrait, QoSBuilderTrait, SampleBuilder, SampleBuilderTrait,
-            TimestampBuilderTrait,
-        },
-        bytes::{OptionZBytes, ZBytes},
+        builders::reply::{ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
+        bytes::ZBytes,
         encoding::Encoding,
-        handlers::{locked, DefaultHandler, IntoHandler},
         key_expr::KeyExpr,
-        publisher::Priority,
-        sample::{Locality, QoSBuilder, Sample, SampleKind},
+        sample::{Locality, Sample, SampleKind},
         selector::Selector,
         session::{UndeclarableSealed, WeakSession},
         value::Value,
@@ -55,7 +48,6 @@ use crate::{
     },
     handlers::Callback,
     net::primitives::Primitives,
-    Session,
 };
 
 pub(crate) struct QueryInner {
@@ -163,19 +155,7 @@ impl Query {
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
         IntoZBytes: Into<ZBytes>,
     {
-        ReplyBuilder {
-            query: self,
-            key_expr: key_expr.try_into().map_err(Into::into),
-            qos: response::ext::QoSType::RESPONSE.into(),
-            kind: ReplyBuilderPut {
-                payload: payload.into(),
-                encoding: Encoding::default(),
-            },
-            timestamp: None,
-            #[cfg(feature = "unstable")]
-            source_info: SourceInfo::empty(),
-            attachment: None,
-        }
+        ReplyBuilder::<'_, 'b, ReplyBuilderPut>::new(self, key_expr, payload)
     }
 
     /// Sends a [`crate::query::ReplyError`] as a reply to this Query.
@@ -184,10 +164,7 @@ impl Query {
     where
         IntoZBytes: Into<ZBytes>,
     {
-        ReplyErrBuilder {
-            query: self,
-            value: Value::new(payload, Encoding::default()),
-        }
+        ReplyErrBuilder::new(self, payload)
     }
 
     /// Sends a [`crate::sample::Sample`] of kind [`crate::sample::SampleKind::Delete`] as a reply to this Query.
@@ -204,16 +181,7 @@ impl Query {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        ReplyBuilder {
-            query: self,
-            key_expr: key_expr.try_into().map_err(Into::into),
-            qos: response::ext::QoSType::RESPONSE.into(),
-            kind: ReplyBuilderDelete,
-            timestamp: None,
-            #[cfg(feature = "unstable")]
-            source_info: SourceInfo::empty(),
-            attachment: None,
-        }
+        ReplyBuilder::<'_, 'b, ReplyBuilderDelete>::new(self, key_expr)
     }
 
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
@@ -282,121 +250,8 @@ impl IntoFuture for ReplySample<'_> {
     }
 }
 
-#[derive(Debug)]
-pub struct ReplyBuilderPut {
-    payload: ZBytes,
-    encoding: Encoding,
-}
-#[derive(Debug)]
-pub struct ReplyBuilderDelete;
-
-/// A builder returned by [`Query::reply()`](Query::reply) and [`Query::reply_del()`](Query::reply_del)
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-#[derive(Debug)]
-pub struct ReplyBuilder<'a, 'b, T> {
-    query: &'a Query,
-    key_expr: ZResult<KeyExpr<'b>>,
-    kind: T,
-    timestamp: Option<Timestamp>,
-    qos: QoSBuilder,
-    #[cfg(feature = "unstable")]
-    source_info: SourceInfo,
-    attachment: Option<ZBytes>,
-}
-
-#[zenoh_macros::internal_trait]
-impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
-    fn timestamp<U: Into<Option<Timestamp>>>(self, timestamp: U) -> Self {
-        Self {
-            timestamp: timestamp.into(),
-            ..self
-        }
-    }
-}
-
-#[zenoh_macros::internal_trait]
-impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
-    fn attachment<U: Into<OptionZBytes>>(self, attachment: U) -> Self {
-        let attachment: OptionZBytes = attachment.into();
-        Self {
-            attachment: attachment.into(),
-            ..self
-        }
-    }
-
-    #[cfg(feature = "unstable")]
-    fn source_info(self, source_info: SourceInfo) -> Self {
-        Self {
-            source_info,
-            ..self
-        }
-    }
-}
-
-#[zenoh_macros::internal_trait]
-impl<T> QoSBuilderTrait for ReplyBuilder<'_, '_, T> {
-    fn congestion_control(self, congestion_control: CongestionControl) -> Self {
-        let qos = self.qos.congestion_control(congestion_control);
-        Self { qos, ..self }
-    }
-
-    fn priority(self, priority: Priority) -> Self {
-        let qos = self.qos.priority(priority);
-        Self { qos, ..self }
-    }
-
-    fn express(self, is_express: bool) -> Self {
-        let qos = self.qos.express(is_express);
-        Self { qos, ..self }
-    }
-}
-
-#[zenoh_macros::internal_trait]
-impl EncodingBuilderTrait for ReplyBuilder<'_, '_, ReplyBuilderPut> {
-    fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
-        Self {
-            kind: ReplyBuilderPut {
-                encoding: encoding.into(),
-                ..self.kind
-            },
-            ..self
-        }
-    }
-}
-
-impl<T> Resolvable for ReplyBuilder<'_, '_, T> {
-    type To = ZResult<()>;
-}
-
-impl Wait for ReplyBuilder<'_, '_, ReplyBuilderPut> {
-    fn wait(self) -> <Self as Resolvable>::To {
-        let key_expr = self.key_expr?.into_owned();
-        let sample = SampleBuilder::put(key_expr, self.kind.payload)
-            .encoding(self.kind.encoding)
-            .timestamp(self.timestamp)
-            .qos(self.qos.into());
-        #[cfg(feature = "unstable")]
-        let sample = sample.source_info(self.source_info);
-        let sample = sample.attachment(self.attachment);
-        self.query._reply_sample(sample.into())
-    }
-}
-
-impl Wait for ReplyBuilder<'_, '_, ReplyBuilderDelete> {
-    fn wait(self) -> <Self as Resolvable>::To {
-        let key_expr = self.key_expr?.into_owned();
-        let sample = SampleBuilder::delete(key_expr)
-            .timestamp(self.timestamp)
-            .qos(self.qos.into());
-        #[cfg(feature = "unstable")]
-        let sample = sample.source_info(self.source_info);
-        let sample = sample.attachment(self.attachment);
-        self.query._reply_sample(sample.into())
-    }
-}
-
 impl Query {
-    fn _reply_sample(&self, sample: Sample) -> ZResult<()> {
+    pub(crate) fn _reply_sample(&self, sample: Sample) -> ZResult<()> {
         let c = zcondfeat!(
             "unstable",
             !self._accepts_any_replies().unwrap_or(false),
@@ -448,83 +303,6 @@ impl Query {
         Ok(())
     }
 }
-
-impl IntoFuture for ReplyBuilder<'_, '_, ReplyBuilderPut> {
-    type Output = <Self as Resolvable>::To;
-    type IntoFuture = Ready<<Self as Resolvable>::To>;
-
-    fn into_future(self) -> Self::IntoFuture {
-        std::future::ready(self.wait())
-    }
-}
-
-impl IntoFuture for ReplyBuilder<'_, '_, ReplyBuilderDelete> {
-    type Output = <Self as Resolvable>::To;
-    type IntoFuture = Ready<<Self as Resolvable>::To>;
-
-    fn into_future(self) -> Self::IntoFuture {
-        std::future::ready(self.wait())
-    }
-}
-
-/// A builder returned by [`Query::reply_err()`](Query::reply_err).
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-#[derive(Debug)]
-pub struct ReplyErrBuilder<'a> {
-    query: &'a Query,
-    value: Value,
-}
-
-#[zenoh_macros::internal_trait]
-impl EncodingBuilderTrait for ReplyErrBuilder<'_> {
-    fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
-        let mut value = self.value.clone();
-        value.encoding = encoding.into();
-        Self { value, ..self }
-    }
-}
-
-impl<'a> Resolvable for ReplyErrBuilder<'a> {
-    type To = ZResult<()>;
-}
-
-impl Wait for ReplyErrBuilder<'_> {
-    fn wait(self) -> <Self as Resolvable>::To {
-        self.query.inner.primitives.send_response(Response {
-            rid: self.query.inner.qid,
-            wire_expr: WireExpr {
-                scope: 0,
-                suffix: std::borrow::Cow::Owned(self.query.key_expr().as_str().to_owned()),
-                mapping: Mapping::Sender,
-            },
-            payload: ResponseBody::Err(zenoh::Err {
-                encoding: self.value.encoding.into(),
-                ext_sinfo: None,
-                #[cfg(feature = "shared-memory")]
-                ext_shm: None,
-                ext_unknown: vec![],
-                payload: self.value.payload.into(),
-            }),
-            ext_qos: response::ext::QoSType::RESPONSE,
-            ext_tstamp: None,
-            ext_respid: Some(response::ext::ResponderIdType {
-                zid: self.query.inner.zid,
-                eid: self.query.eid,
-            }),
-        });
-        Ok(())
-    }
-}
-
-impl<'a> IntoFuture for ReplyErrBuilder<'a> {
-    type Output = <Self as Resolvable>::To;
-    type IntoFuture = Ready<<Self as Resolvable>::To>;
-
-    fn into_future(self) -> Self::IntoFuture {
-        std::future::ready(self.wait())
-    }
-}
-
 pub(crate) struct QueryableState {
     pub(crate) id: Id,
     pub(crate) key_expr: WireExpr<'static>,
@@ -562,7 +340,7 @@ pub(crate) struct QueryableInner {
 /// queryable.undeclare().await.unwrap();
 /// # }
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct QueryableUndeclaration<Handler>(Queryable<Handler>);
 
 impl<Handler> Resolvable for QueryableUndeclaration<Handler> {
@@ -583,166 +361,6 @@ impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
         std::future::ready(self.wait())
     }
 }
-
-/// A builder for initializing a [`Queryable`].
-///
-/// # Examples
-/// ```
-/// # #[tokio::main]
-/// # async fn main() {
-///
-/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-/// let queryable = session.declare_queryable("key/expression").await.unwrap();
-/// # }
-/// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-#[derive(Debug)]
-pub struct QueryableBuilder<'a, 'b, Handler> {
-    pub(crate) session: &'a Session,
-    pub(crate) key_expr: ZResult<KeyExpr<'b>>,
-    pub(crate) complete: bool,
-    pub(crate) origin: Locality,
-    pub(crate) handler: Handler,
-    pub(crate) undeclare_on_drop: bool,
-}
-
-impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
-    /// Receive the queries for this queryable with a callback.
-    ///
-    /// Queryable will not be undeclared when dropped, with the callback running
-    /// in background until the session is closed.
-    ///
-    /// It is in fact just a convenient shortcut for
-    /// `.with(my_callback).undeclare_on_drop(false)`.
-    ///
-    /// # Examples
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    ///
-    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let queryable = session
-    ///     .declare_queryable("key/expression")
-    ///     .callback(|query| {println!(">> Handling query '{}'", query.selector());})
-    ///     .await
-    ///     .unwrap();
-    /// # }
-    /// ```
-    #[inline]
-    pub fn callback<Callback>(self, callback: Callback) -> QueryableBuilder<'a, 'b, Callback>
-    where
-        Callback: Fn(Query) + Send + Sync + 'static,
-    {
-        self.with(callback).undeclare_on_drop(false)
-    }
-
-    /// Receive the queries for this Queryable with a mutable callback.
-    ///
-    /// Using this guarantees that your callback will never be called concurrently.
-    /// If your callback is also accepted by the [`callback`](QueryableBuilder::callback) method, we suggest you use it instead of `callback_mut`.
-    ///
-    /// Queryable will not be undeclared when dropped, with the callback running
-    /// in background until the session is closed.
-    ///
-    /// # Examples
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    ///
-    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let mut n = 0;
-    /// let queryable = session
-    ///     .declare_queryable("key/expression")
-    ///     .callback_mut(move |query| {n += 1;})
-    ///     .await
-    ///     .unwrap();
-    /// # }
-    /// ```
-    #[inline]
-    pub fn callback_mut<CallbackMut>(
-        self,
-        callback: CallbackMut,
-    ) -> QueryableBuilder<'a, 'b, impl Fn(Query) + Send + Sync + 'static>
-    where
-        CallbackMut: FnMut(Query) + Send + Sync + 'static,
-    {
-        self.callback(locked(callback))
-    }
-
-    /// Receive the queries for this Queryable with a [`Handler`](crate::handlers::IntoHandler).
-    ///
-    /// # Examples
-    /// ```no_run
-    /// # #[tokio::main]
-    /// # async fn main() {
-    ///
-    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let queryable = session
-    ///     .declare_queryable("key/expression")
-    ///     .with(flume::bounded(32))
-    ///     .await
-    ///     .unwrap();
-    /// while let Ok(query) = queryable.recv_async().await {
-    ///     println!(">> Handling query '{}'", query.selector());
-    /// }
-    /// # }
-    /// ```
-    #[inline]
-    pub fn with<Handler>(self, handler: Handler) -> QueryableBuilder<'a, 'b, Handler>
-    where
-        Handler: IntoHandler<Query>,
-    {
-        let QueryableBuilder {
-            session,
-            key_expr,
-            complete,
-            origin,
-            handler: _,
-            undeclare_on_drop,
-        } = self;
-        QueryableBuilder {
-            session,
-            key_expr,
-            complete,
-            origin,
-            handler,
-            undeclare_on_drop,
-        }
-    }
-}
-
-impl<Handler> QueryableBuilder<'_, '_, Handler> {
-    /// Change queryable completeness.
-    #[inline]
-    pub fn complete(mut self, complete: bool) -> Self {
-        self.complete = complete;
-        self
-    }
-
-    ///
-    ///
-    /// Restrict the matching queries that will be receive by this [`Queryable`]
-    /// to the ones that have the given [`Locality`](Locality).
-    #[inline]
-    #[zenoh_macros::unstable]
-    pub fn allowed_origin(mut self, origin: Locality) -> Self {
-        self.origin = origin;
-        self
-    }
-
-    /// Set whether the queryable will be undeclared when dropped.
-    ///
-    /// The method is usually used in combination with a callback like in
-    /// [`callback`](Self::callback) method, or a channel sender.
-    /// Be careful when using it, as queryables not undeclared will consume
-    /// resources until the session is closed.
-    #[inline]
-    pub fn undeclare_on_drop(mut self, undeclare_on_drop: bool) -> Self {
-        self.undeclare_on_drop = undeclare_on_drop;
-        self
-    }
-}
-
 /// A queryable that provides data through a [`Handler`](crate::handlers::IntoHandler).
 ///
 /// Queryables can be created from a zenoh [`Session`](crate::Session)
@@ -829,15 +447,15 @@ impl<Handler> Queryable<Handler> {
     }
 
     /// Returns a reference to this queryable's handler.
-    /// An handler is anything that implements [`IntoHandler`].
-    /// The default handler is [`DefaultHandler`].
+    /// An handler is anything that implements [`crate::handlers::IntoHandler`].
+    /// The default handler is [`crate::handlers::DefaultHandler`].
     pub fn handler(&self) -> &Handler {
         &self.handler
     }
 
     /// Returns a mutable reference to this queryable's handler.
-    /// An handler is anything that implements [`IntoHandler`].
-    /// The default handler is [`DefaultHandler`].
+    /// An handler is anything that implements [`crate::handlers::IntoHandler`].
+    /// The default handler is [`crate::handlers::DefaultHandler`].
     pub fn handler_mut(&mut self) -> &mut Handler {
         &mut self.handler
     }
@@ -868,6 +486,11 @@ impl<Handler> Queryable<Handler> {
         // set the flag first to avoid double panic if this function panic
         self.inner.undeclare_on_drop = false;
         self.inner.session.close_queryable(self.inner.id)
+    }
+
+    #[zenoh_macros::internal]
+    pub fn set_background(&mut self, background: bool) {
+        self.inner.undeclare_on_drop = !background;
     }
 }
 
@@ -900,53 +523,5 @@ impl<Handler> Deref for Queryable<Handler> {
 impl<Handler> DerefMut for Queryable<Handler> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.handler_mut()
-    }
-}
-
-impl<Handler> Resolvable for QueryableBuilder<'_, '_, Handler>
-where
-    Handler: IntoHandler<Query> + Send,
-    Handler::Handler: Send,
-{
-    type To = ZResult<Queryable<Handler::Handler>>;
-}
-
-impl<Handler> Wait for QueryableBuilder<'_, '_, Handler>
-where
-    Handler: IntoHandler<Query> + Send,
-    Handler::Handler: Send,
-{
-    fn wait(self) -> <Self as Resolvable>::To {
-        let session = self.session;
-        let (callback, receiver) = self.handler.into_handler();
-        session
-            .0
-            .declare_queryable_inner(
-                &self.key_expr?.to_wire(&session.0),
-                self.complete,
-                self.origin,
-                callback,
-            )
-            .map(|qable_state| Queryable {
-                inner: QueryableInner {
-                    session: self.session.downgrade(),
-                    id: qable_state.id,
-                    undeclare_on_drop: self.undeclare_on_drop,
-                },
-                handler: receiver,
-            })
-    }
-}
-
-impl<Handler> IntoFuture for QueryableBuilder<'_, '_, Handler>
-where
-    Handler: IntoHandler<Query> + Send,
-    Handler::Handler: Send,
-{
-    type Output = <Self as Resolvable>::To;
-    type IntoFuture = Ready<<Self as Resolvable>::To>;
-
-    fn into_future(self) -> Self::IntoFuture {
-        std::future::ready(self.wait())
     }
 }

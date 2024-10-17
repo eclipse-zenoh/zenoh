@@ -13,9 +13,9 @@
 //
 use std::time::Duration;
 
-use flume::r#async::RecvStream;
 use futures::stream::{Forward, Map};
 use zenoh::{
+    handlers::{fifo, FifoChannelHandler},
     liveliness::LivelinessSubscriberBuilder,
     pubsub::{Subscriber, SubscriberBuilder},
     query::{QueryConsolidation, QueryTarget, ReplyKeyExpr},
@@ -28,21 +28,24 @@ use crate::{
 };
 
 /// Allows writing `subscriber.forward(receiver)` instead of `subscriber.stream().map(Ok).forward(publisher)`
+#[zenoh_macros::unstable]
 pub trait SubscriberForward<'a, S> {
     type Output;
     fn forward(&'a mut self, sink: S) -> Self::Output;
 }
-impl<'a, S> SubscriberForward<'a, S> for Subscriber<flume::Receiver<Sample>>
+impl<'a, S> SubscriberForward<'a, S> for Subscriber<FifoChannelHandler<Sample>>
 where
     S: futures::sink::Sink<Sample>,
 {
-    type Output = Forward<Map<RecvStream<'a, Sample>, fn(Sample) -> Result<Sample, S::Error>>, S>;
+    type Output =
+        Forward<Map<fifo::RecvStream<'a, Sample>, fn(Sample) -> Result<Sample, S::Error>>, S>;
     fn forward(&'a mut self, sink: S) -> Self::Output {
         futures::StreamExt::forward(futures::StreamExt::map(self.stream(), Ok), sink)
     }
 }
 
 /// Some extensions to the [`zenoh::subscriber::SubscriberBuilder`](zenoh::pubsub::SubscriberBuilder)
+#[zenoh_macros::unstable]
 pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     type KeySpace;
 
@@ -173,7 +176,6 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
             origin: self.origin,
             fetch,
             handler: self.handler,
-            undeclare_on_drop: true,
             phantom: std::marker::PhantomData,
         }
     }
@@ -220,7 +222,6 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
             query_consolidation: QueryConsolidation::from(zenoh::query::ConsolidationMode::None),
             query_accept_replies: ReplyKeyExpr::default(),
             query_timeout: Duration::from_secs(10),
-            undeclare_on_drop: true,
             handler: self.handler,
         }
     }
@@ -284,7 +285,6 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
             origin: Locality::default(),
             fetch,
             handler: self.handler,
-            undeclare_on_drop: true,
             phantom: std::marker::PhantomData,
         }
     }
@@ -330,7 +330,6 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
             query_consolidation: QueryConsolidation::DEFAULT,
             query_accept_replies: ReplyKeyExpr::MatchingQuery,
             query_timeout: Duration::from_secs(10),
-            undeclare_on_drop: true,
             handler: self.handler,
         }
     }

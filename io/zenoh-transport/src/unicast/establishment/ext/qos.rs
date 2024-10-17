@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use core::marker::PhantomData;
+use std::str::FromStr;
 
 use async_trait::async_trait;
 use zenoh_buffers::{
@@ -19,8 +20,13 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_protocol::transport::{init, open};
-use zenoh_result::Error as ZError;
+use zenoh_core::zerror;
+use zenoh_link::EndPoint;
+use zenoh_protocol::{
+    core::{Metadata, Priority, PriorityRange, Reliability},
+    transport::{init, open},
+};
+use zenoh_result::{Error as ZError, ZResult};
 
 use crate::unicast::establishment::{AcceptFsm, OpenFsm};
 
@@ -35,21 +41,226 @@ impl<'a> QoSFsm<'a> {
     }
 }
 
-/*************************************/
-/*              OPEN                 */
-/*************************************/
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct StateOpen {
-    is_qos: bool,
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum State {
+    NoQoS,
+    QoS {
+        reliability: Option<Reliability>,
+        priorities: Option<PriorityRange>,
+    },
+}
+
+impl State {
+    fn new(is_qos: bool, endpoint: &EndPoint) -> ZResult<Self> {
+        if !is_qos {
+            Ok(State::NoQoS)
+        } else {
+            let metadata = endpoint.metadata();
+
+            let reliability = metadata
+                .get(Metadata::RELIABILITY)
+                .map(Reliability::from_str)
+                .transpose()?;
+
+            let priorities = metadata
+                .get(Metadata::PRIORITIES)
+                .map(PriorityRange::from_str)
+                .transpose()?;
+
+            Ok(State::QoS {
+                priorities,
+                reliability,
+            })
+        }
+    }
+
+    fn try_from_u64(value: u64) -> ZResult<Self> {
+        match value {
+            0b000_u64 => Ok(State::NoQoS),
+            0b001_u64 => Ok(State::QoS {
+                priorities: None,
+                reliability: None,
+            }),
+            value if value & 0b110_u64 != 0 => {
+                let tag = value & 0b111_u64;
+
+                let priorities = if tag & 0b010_u64 != 0 {
+                    let start = Priority::try_from(((value >> 3) & 0xff) as u8)?;
+                    let end = Priority::try_from(((value >> (3 + 8)) & 0xff) as u8)?;
+
+                    Some(PriorityRange::new(start..=end))
+                } else {
+                    None
+                };
+
+                let reliability = if tag & 0b100_u64 != 0 {
+                    let bit = ((value >> (3 + 8 + 8)) & 0x1) as u8 == 1;
+
+                    Some(Reliability::from(bit))
+                } else {
+                    None
+                };
+
+                Ok(State::QoS {
+                    priorities,
+                    reliability,
+                })
+            }
+            _ => Err(zerror!("invalid QoS").into()),
+        }
+    }
+
+    /// Encodes [`QoS`] as a [`u64`].
+    ///
+    /// This function is used for encoding both of [`StateAccept`] in
+    /// [`crate::unicast::establishment::cookie::Cookie::ext_qos`] and
+    /// [`zenoh_protocol::transport::init::ext::QoS`].
+    ///
+    /// The three least significant bits are used to discrimnate five states:
+    ///
+    /// 1. QoS is disabled
+    /// 2. QoS is enabled but no priority range and no reliability setting are available
+    /// 3. QoS is enabled and priority range is available but reliability is unavailable
+    /// 4. QoS is enabled and reliability is available but priority range is unavailable
+    /// 5. QoS is enabled and both priority range and reliability are available
+    fn to_u64(&self) -> u64 {
+        match self {
+            State::NoQoS => 0b000_u64,
+            State::QoS {
+                priorities,
+                reliability,
+            } => {
+                if reliability.is_none() && priorities.is_none() {
+                    return 0b001_u64;
+                }
+
+                let mut value = 0b000_u64;
+
+                if let Some(priorities) = priorities {
+                    value |= 0b010_u64;
+                    value |= (*priorities.start() as u64) << 3;
+                    value |= (*priorities.end() as u64) << (3 + 8);
+                }
+
+                if let Some(reliability) = reliability {
+                    value |= 0b100_u64;
+                    value |= (bool::from(*reliability) as u64) << (3 + 8 + 8);
+                }
+
+                value
+            }
+        }
+    }
+
+    fn to_exts(&self) -> (Option<init::ext::QoS>, Option<init::ext::QoSOptimized>) {
+        match self {
+            State::NoQoS => (None, None),
+            State::QoS {
+                reliability: None,
+                priorities: None,
+            } => (None, Some(init::ext::QoSOptimized::new())),
+            State::QoS {
+                reliability: Some(_),
+                ..
+            }
+            | State::QoS {
+                priorities: Some(_),
+                ..
+            } => (Some(init::ext::QoS::new(self.to_u64())), None),
+        }
+    }
+
+    fn try_from_exts(
+        (qos, qos_optimized): (Option<init::ext::QoS>, Option<init::ext::QoSOptimized>),
+    ) -> ZResult<Self> {
+        match (qos, qos_optimized) {
+            (Some(_), Some(_)) => Err(zerror!(
+                "Extensions QoS and QoSOptimized cannot both be enabled at once"
+            )
+            .into()),
+            (None, None) => Ok(State::NoQoS),
+            (None, Some(_)) => Ok(State::QoS {
+                reliability: None,
+                priorities: None,
+            }),
+            (Some(qos), None) => State::try_from_u64(qos.value),
+        }
+    }
+
+    fn is_qos(&self) -> bool {
+        matches!(self, State::QoS { .. })
+    }
+
+    fn priorities(&self) -> Option<PriorityRange> {
+        match self {
+            State::NoQoS
+            | State::QoS {
+                priorities: None, ..
+            } => None,
+            State::QoS {
+                priorities: Some(priorities),
+                ..
+            } => Some(priorities.clone()),
+        }
+    }
+
+    fn reliability(&self) -> Option<Reliability> {
+        match self {
+            State::NoQoS
+            | State::QoS {
+                reliability: None, ..
+            } => None,
+            State::QoS {
+                reliability: Some(reliability),
+                ..
+            } => Some(*reliability),
+        }
+    }
+
+    #[cfg(test)]
+    fn rand() -> Self {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        if rng.gen_bool(0.5) {
+            State::NoQoS
+        } else {
+            let priorities = rng.gen_bool(0.5).then(PriorityRange::rand);
+            let reliability = rng
+                .gen_bool(0.5)
+                .then(|| Reliability::from(rng.gen_bool(0.5)));
+
+            State::QoS {
+                priorities,
+                reliability,
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct StateOpen(State);
+
+impl From<State> for StateOpen {
+    fn from(value: State) -> Self {
+        StateOpen(value)
+    }
 }
 
 impl StateOpen {
-    pub(crate) const fn new(is_qos: bool) -> Self {
-        Self { is_qos }
+    pub(crate) fn new(is_qos: bool, endpoint: &EndPoint) -> ZResult<Self> {
+        State::new(is_qos, endpoint).map(StateOpen)
     }
 
-    pub(crate) const fn is_qos(&self) -> bool {
-        self.is_qos
+    pub(crate) fn is_qos(&self) -> bool {
+        self.0.is_qos()
+    }
+
+    pub(crate) fn priorities(&self) -> Option<PriorityRange> {
+        self.0.priorities()
+    }
+
+    pub(crate) fn reliability(&self) -> Option<Reliability> {
+        self.0.reliability()
     }
 }
 
@@ -58,23 +269,76 @@ impl<'a> OpenFsm for &'a QoSFsm<'a> {
     type Error = ZError;
 
     type SendInitSynIn = &'a StateOpen;
-    type SendInitSynOut = Option<init::ext::QoS>;
+    type SendInitSynOut = (Option<init::ext::QoS>, Option<init::ext::QoSOptimized>);
     async fn send_init_syn(
         self,
         state: Self::SendInitSynIn,
     ) -> Result<Self::SendInitSynOut, Self::Error> {
-        let output = state.is_qos.then_some(init::ext::QoS::new());
-        Ok(output)
+        Ok(state.0.to_exts())
     }
 
-    type RecvInitAckIn = (&'a mut StateOpen, Option<init::ext::QoS>);
+    type RecvInitAckIn = (
+        &'a mut StateOpen,
+        (Option<init::ext::QoS>, Option<init::ext::QoSOptimized>),
+    );
     type RecvInitAckOut = ();
     async fn recv_init_ack(
         self,
         input: Self::RecvInitAckIn,
     ) -> Result<Self::RecvInitAckOut, Self::Error> {
-        let (state, other_ext) = input;
-        state.is_qos &= other_ext.is_some();
+        let (state_self, other_ext) = input;
+
+        let state_other = State::try_from_exts(other_ext)?;
+
+        let (
+            State::QoS {
+                reliability: self_reliability,
+                priorities: self_priorities,
+            },
+            State::QoS {
+                reliability: other_reliability,
+                priorities: other_priorities,
+            },
+        ) = (state_self.0.clone(), state_other)
+        else {
+            *state_self = State::NoQoS.into();
+            return Ok(());
+        };
+
+        let priorities = match (self_priorities, other_priorities) {
+            (None, priorities) | (priorities, None) => priorities,
+            (Some(self_priorities), Some(other_priorities)) => {
+                if other_priorities.includes(&self_priorities) {
+                    Some(self_priorities)
+                } else {
+                    return Err(zerror!(
+                        "The PriorityRange received in InitAck is not a superset of my PriorityRange"
+                    )
+                    .into());
+                }
+            }
+        };
+
+        let reliability = match (self_reliability, other_reliability) {
+            (None, reliability) | (reliability, None) => reliability,
+            (Some(self_reliability), Some(other_reliability)) => {
+                if self_reliability == other_reliability {
+                    Some(self_reliability)
+                } else {
+                    return Err(zerror!(
+                        "The Reliability received in InitAck doesn't match my Reliability"
+                    )
+                    .into());
+                }
+            }
+        };
+
+        *state_self = State::QoS {
+            reliability,
+            priorities,
+        }
+        .into();
+
         Ok(())
     }
 
@@ -97,28 +361,35 @@ impl<'a> OpenFsm for &'a QoSFsm<'a> {
     }
 }
 
-/*************************************/
-/*            ACCEPT                 */
-/*************************************/
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct StateAccept {
-    is_qos: bool,
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct StateAccept(State);
+
+impl From<State> for StateAccept {
+    fn from(value: State) -> Self {
+        StateAccept(value)
+    }
 }
 
 impl StateAccept {
-    pub(crate) const fn new(is_qos: bool) -> Self {
-        Self { is_qos }
+    pub(crate) fn new(is_qos: bool, endpoint: &EndPoint) -> ZResult<Self> {
+        State::new(is_qos, endpoint).map(StateAccept::from)
     }
 
-    pub(crate) const fn is_qos(&self) -> bool {
-        self.is_qos
+    pub(crate) fn is_qos(&self) -> bool {
+        self.0.is_qos()
+    }
+
+    pub(crate) fn priorities(&self) -> Option<PriorityRange> {
+        self.0.priorities()
+    }
+
+    pub(crate) fn reliability(&self) -> Option<Reliability> {
+        self.0.reliability()
     }
 
     #[cfg(test)]
     pub(crate) fn rand() -> Self {
-        use rand::Rng;
-        let mut rng = rand::thread_rng();
-        Self::new(rng.gen_bool(0.5))
+        State::rand().into()
     }
 }
 
@@ -130,9 +401,7 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &StateAccept) -> Self::Output {
-        let is_qos = u8::from(x.is_qos);
-        self.write(&mut *writer, is_qos)?;
-        Ok(())
+        self.write(writer, &x.0.to_u64())
     }
 }
 
@@ -143,9 +412,9 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<StateAccept, Self::Error> {
-        let is_qos: u8 = self.read(&mut *reader)?;
-        let is_qos = is_qos == 1;
-        Ok(StateAccept { is_qos })
+        Ok(State::try_from_u64(self.read(reader)?)
+            .map_err(|_| DidntRead)?
+            .into())
     }
 }
 
@@ -153,25 +422,78 @@ where
 impl<'a> AcceptFsm for &'a QoSFsm<'a> {
     type Error = ZError;
 
-    type RecvInitSynIn = (&'a mut StateAccept, Option<init::ext::QoS>);
+    type RecvInitSynIn = (
+        &'a mut StateAccept,
+        (Option<init::ext::QoS>, Option<init::ext::QoSOptimized>),
+    );
     type RecvInitSynOut = ();
     async fn recv_init_syn(
         self,
         input: Self::RecvInitSynIn,
     ) -> Result<Self::RecvInitSynOut, Self::Error> {
-        let (state, other_ext) = input;
-        state.is_qos &= other_ext.is_some();
+        let (state_self, other_ext) = input;
+
+        let state_other = State::try_from_exts(other_ext)?;
+
+        let (
+            State::QoS {
+                reliability: self_reliability,
+                priorities: self_priorities,
+            },
+            State::QoS {
+                reliability: other_reliability,
+                priorities: other_priorities,
+            },
+        ) = (state_self.0.clone(), state_other)
+        else {
+            *state_self = State::NoQoS.into();
+            return Ok(());
+        };
+
+        let priorities = match (self_priorities, other_priorities) {
+            (None, priorities) | (priorities, None) => priorities,
+            (Some(self_priorities), Some(other_priorities)) => {
+                if self_priorities.includes(&other_priorities) {
+                    Some(other_priorities)
+                } else {
+                    return Err(zerror!(
+                        "The PriorityRange received in InitSyn is not a subset of my PriorityRange"
+                    )
+                    .into());
+                }
+            }
+        };
+
+        let reliability = match (self_reliability, other_reliability) {
+            (None, reliability) | (reliability, None) => reliability,
+            (Some(self_reliability), Some(other_reliability)) => {
+                if self_reliability == other_reliability {
+                    Some(other_reliability)
+                } else {
+                    return Err(zerror!(
+                        "The Reliability received in InitSyn doesn't match my Reliability"
+                    )
+                    .into());
+                }
+            }
+        };
+
+        *state_self = State::QoS {
+            reliability,
+            priorities,
+        }
+        .into();
+
         Ok(())
     }
 
     type SendInitAckIn = &'a StateAccept;
-    type SendInitAckOut = Option<init::ext::QoS>;
+    type SendInitAckOut = (Option<init::ext::QoS>, Option<init::ext::QoSOptimized>);
     async fn send_init_ack(
         self,
         state: Self::SendInitAckIn,
     ) -> Result<Self::SendInitAckOut, Self::Error> {
-        let output = state.is_qos.then_some(init::ext::QoS::new());
-        Ok(output)
+        Ok(state.0.to_exts())
     }
 
     type RecvOpenSynIn = (&'a mut StateAccept, Option<open::ext::QoS>);
@@ -190,5 +512,254 @@ impl<'a> AcceptFsm for &'a QoSFsm<'a> {
         _state: Self::SendOpenAckIn,
     ) -> Result<Self::SendOpenAckOut, Self::Error> {
         Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use zenoh_protocol::core::{PriorityRange, Reliability};
+    use zenoh_result::ZResult;
+
+    use super::{QoSFsm, State, StateAccept, StateOpen};
+    use crate::unicast::establishment::{AcceptFsm, OpenFsm};
+
+    macro_rules! priority_range {
+        ($start:literal, $end:literal) => {
+            PriorityRange::new($start.try_into().unwrap()..=$end.try_into().unwrap())
+        };
+    }
+
+    async fn test_negotiation(
+        state_open: &mut StateOpen,
+        state_accept: &mut StateAccept,
+    ) -> ZResult<()> {
+        let fsm = QoSFsm::new();
+
+        let ext = fsm.send_init_syn(&*state_open).await?;
+        fsm.recv_init_syn((state_accept, ext)).await?;
+
+        let ext = fsm.send_init_ack(&*state_accept).await?;
+        fsm.recv_init_ack((state_open, ext)).await?;
+
+        Ok(())
+    }
+
+    async fn test_negotiation_ok(state_open: State, state_accept: State, state_expected: State) {
+        let mut state_open = state_open.into();
+        let mut state_accept = state_accept.into();
+
+        match test_negotiation(&mut state_open, &mut state_accept).await {
+            Err(err) => panic!("expected `Ok(())`, got: {err}"),
+            Ok(()) => {
+                assert_eq!(state_open.0, state_accept.0);
+                assert_eq!(state_open.0, state_expected);
+            }
+        };
+    }
+
+    async fn test_negotiation_err(state_open: State, state_accept: State) {
+        let mut state_open = state_open.into();
+        let mut state_accept = state_accept.into();
+
+        if let Ok(()) = test_negotiation(&mut state_open, &mut state_accept).await {
+            panic!("expected `Err(_)`, got `Ok(())`")
+        }
+    }
+
+    #[tokio::test]
+    async fn test_priority_range_negotiation_scenario_1() {
+        test_negotiation_ok(
+            State::QoS {
+                priorities: None,
+                reliability: None,
+            },
+            State::QoS {
+                priorities: None,
+                reliability: None,
+            },
+            State::QoS {
+                priorities: None,
+                reliability: None,
+            },
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn test_priority_range_negotiation_scenario_2() {
+        test_negotiation_ok(
+            State::QoS {
+                priorities: None,
+                reliability: None,
+            },
+            State::QoS {
+                priorities: Some(priority_range!(1, 3)),
+                reliability: None,
+            },
+            State::QoS {
+                priorities: Some(priority_range!(1, 3)),
+                reliability: None,
+            },
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn test_priority_range_negotiation_scenario_3() {
+        test_negotiation_ok(
+            State::QoS {
+                priorities: Some(priority_range!(1, 3)),
+                reliability: None,
+            },
+            State::QoS {
+                priorities: None,
+                reliability: None,
+            },
+            State::QoS {
+                priorities: Some(priority_range!(1, 3)),
+                reliability: None,
+            },
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn test_priority_range_negotiation_scenario_4() {
+        test_negotiation_ok(
+            State::QoS {
+                priorities: Some(priority_range!(1, 3)),
+                reliability: None,
+            },
+            State::QoS {
+                priorities: Some(priority_range!(1, 3)),
+                reliability: None,
+            },
+            State::QoS {
+                priorities: Some(priority_range!(1, 3)),
+                reliability: None,
+            },
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn test_priority_range_negotiation_scenario_5() {
+        test_negotiation_ok(
+            State::QoS {
+                priorities: Some(priority_range!(1, 3)),
+                reliability: None,
+            },
+            State::QoS {
+                priorities: Some(priority_range!(0, 4)),
+                reliability: None,
+            },
+            State::QoS {
+                priorities: Some(priority_range!(1, 3)),
+                reliability: None,
+            },
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn test_priority_range_negotiation_scenario_6() {
+        test_negotiation_err(
+            State::QoS {
+                priorities: Some(priority_range!(1, 3)),
+                reliability: None,
+            },
+            State::QoS {
+                priorities: Some(priority_range!(2, 3)),
+                reliability: None,
+            },
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn test_reliability_negotiation_scenario_2() {
+        test_negotiation_ok(
+            State::QoS {
+                reliability: None,
+                priorities: None,
+            },
+            State::QoS {
+                reliability: Some(Reliability::BestEffort),
+                priorities: None,
+            },
+            State::QoS {
+                reliability: Some(Reliability::BestEffort),
+                priorities: None,
+            },
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn test_reliability_negotiation_scenario_3() {
+        test_negotiation_err(
+            State::QoS {
+                reliability: Some(Reliability::Reliable),
+                priorities: None,
+            },
+            State::QoS {
+                reliability: Some(Reliability::BestEffort),
+                priorities: None,
+            },
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn test_reliability_negotiation_scenario_4() {
+        test_negotiation_ok(
+            State::QoS {
+                reliability: Some(Reliability::Reliable),
+                priorities: None,
+            },
+            State::QoS {
+                reliability: Some(Reliability::Reliable),
+                priorities: None,
+            },
+            State::QoS {
+                reliability: Some(Reliability::Reliable),
+                priorities: None,
+            },
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn test_reliability_negotiation_scenario_5() {
+        test_negotiation_err(
+            State::QoS {
+                reliability: Some(Reliability::BestEffort),
+                priorities: None,
+            },
+            State::QoS {
+                reliability: Some(Reliability::Reliable),
+                priorities: None,
+            },
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn test_priority_range_and_reliability_negotiation_scenario_1() {
+        test_negotiation_ok(
+            State::QoS {
+                reliability: Some(Reliability::BestEffort),
+                priorities: Some(priority_range!(1, 3)),
+            },
+            State::QoS {
+                reliability: Some(Reliability::BestEffort),
+                priorities: Some(priority_range!(1, 4)),
+            },
+            State::QoS {
+                reliability: Some(Reliability::BestEffort),
+                priorities: Some(priority_range!(1, 3)),
+            },
+        )
+        .await
     }
 }

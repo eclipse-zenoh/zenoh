@@ -51,12 +51,18 @@ const W_TO_SECS: f64 = D_TO_SECS * 7.0;
 /// The `[<start>..<end>[` pattern may however be useful to guarantee that a same timestamp never appears twice when
 /// iteratively getting values for `[t0..t1[`, `[t1..t2[`, `[t2..t3[`...
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct TimeRange<T = TimeExpr>(pub TimeBound<T>, pub TimeBound<T>);
+pub struct TimeRange<T = TimeExpr> {
+    pub start: TimeBound<T>,
+    pub end: TimeBound<T>,
+}
 
 impl TimeRange<TimeExpr> {
     /// Resolves the offset bounds in the range using `now` as reference.
     pub fn resolve_at(self, now: SystemTime) -> TimeRange<SystemTime> {
-        TimeRange(self.0.resolve_at(now), self.1.resolve_at(now))
+        TimeRange {
+            start: self.start.resolve_at(now),
+            end: self.end.resolve_at(now),
+        }
     }
 
     /// Resolves the offset bounds in the range using [`SystemTime::now`] as reference.
@@ -71,12 +77,12 @@ impl TimeRange<TimeExpr> {
     /// [`TimeRange::<SystemTime>::contains`] instead.
     pub fn contains(&self, instant: SystemTime) -> bool {
         let now = SystemTime::now();
-        match &self.0.resolve_at(now) {
+        match &self.start.resolve_at(now) {
             TimeBound::Inclusive(t) if t > &instant => return false,
             TimeBound::Exclusive(t) if t >= &instant => return false,
             _ => {}
         }
-        match &self.1.resolve_at(now) {
+        match &self.end.resolve_at(now) {
             TimeBound::Inclusive(t) => t >= &instant,
             TimeBound::Exclusive(t) => t > &instant,
             _ => true,
@@ -87,12 +93,12 @@ impl TimeRange<TimeExpr> {
 impl TimeRange<SystemTime> {
     /// Returns `true` if the provided `instant` belongs to `self`.
     pub fn contains(&self, instant: SystemTime) -> bool {
-        match &self.0 {
+        match &self.start {
             TimeBound::Inclusive(t) if *t > instant => return false,
             TimeBound::Exclusive(t) if *t >= instant => return false,
             _ => {}
         }
-        match &self.1 {
+        match &self.end {
             TimeBound::Inclusive(t) => *t >= instant,
             TimeBound::Exclusive(t) => *t > instant,
             _ => true,
@@ -102,25 +108,31 @@ impl TimeRange<SystemTime> {
 
 impl From<TimeRange<SystemTime>> for TimeRange<TimeExpr> {
     fn from(value: TimeRange<SystemTime>) -> Self {
-        TimeRange(value.0.into(), value.1.into())
+        TimeRange {
+            start: value.start.into(),
+            end: value.end.into(),
+        }
     }
 }
 
 impl TryFrom<TimeRange<TimeExpr>> for TimeRange<SystemTime> {
     type Error = ();
     fn try_from(value: TimeRange<TimeExpr>) -> Result<Self, Self::Error> {
-        Ok(TimeRange(value.0.try_into()?, value.1.try_into()?))
+        Ok(TimeRange {
+            start: value.start.try_into()?,
+            end: value.end.try_into()?,
+        })
     }
 }
 
 impl Display for TimeRange<TimeExpr> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.0 {
+        match &self.start {
             TimeBound::Inclusive(t) => write!(f, "[{t}..")?,
             TimeBound::Exclusive(t) => write!(f, "]{t}..")?,
             TimeBound::Unbounded => f.write_str("[..")?,
         }
-        match &self.1 {
+        match &self.end {
             TimeBound::Inclusive(t) => write!(f, "{t}]"),
             TimeBound::Exclusive(t) => write!(f, "{t}["),
             TimeBound::Unbounded => f.write_str("]"),
@@ -130,12 +142,12 @@ impl Display for TimeRange<TimeExpr> {
 
 impl Display for TimeRange<SystemTime> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.0 {
+        match &self.start {
             TimeBound::Inclusive(t) => write!(f, "[{}..", TimeExpr::Fixed(*t))?,
             TimeBound::Exclusive(t) => write!(f, "]{}..", TimeExpr::Fixed(*t))?,
             TimeBound::Unbounded => f.write_str("[..")?,
         }
-        match &self.1 {
+        match &self.end {
             TimeBound::Inclusive(t) => write!(f, "{}]", TimeExpr::Fixed(*t)),
             TimeBound::Exclusive(t) => write!(f, "{}[", TimeExpr::Fixed(*t)),
             TimeBound::Unbounded => f.write_str("]"),
@@ -166,10 +178,10 @@ impl FromStr for TimeRange<TimeExpr> {
 
         let s = &s[1..len - 1];
         if let Some((start, end)) = s.split_once("..") {
-            Ok(TimeRange(
-                parse_time_bound(start, inclusive_start)?,
-                parse_time_bound(end, inclusive_end)?,
-            ))
+            Ok(TimeRange {
+                start: parse_time_bound(start, inclusive_start)?,
+                end: parse_time_bound(end, inclusive_end)?,
+            })
         } else if let Some((start, duration)) = s.split_once(';') {
             let start_bound = parse_time_bound(start, inclusive_start)?;
             let duration = parse_duration(duration)?;
@@ -186,7 +198,10 @@ impl FromStr for TimeRange<TimeExpr> {
                     s
                 ),
             };
-            Ok(TimeRange(start_bound, end_bound))
+            Ok(TimeRange {
+                start: start_bound,
+                end: end_bound,
+            })
         } else {
             bail!(
                 r#"Invalid TimeRange (must contain ".." or ";" as separator)"): {}"#,
@@ -485,29 +500,32 @@ mod tests {
         use TimeBound::*;
         assert_eq!(
             "[..]".parse::<TimeRange>().unwrap(),
-            TimeRange(Unbounded, Unbounded)
+            TimeRange {
+                start: Unbounded,
+                end: Unbounded
+            }
         );
         assert_eq!(
             "[now(-1h)..now(1h)]".parse::<TimeRange>().unwrap(),
-            TimeRange(
-                Inclusive(TimeExpr::Now {
+            TimeRange {
+                start: Inclusive(TimeExpr::Now {
                     offset_secs: -3600.0
                 }),
-                Inclusive(TimeExpr::Now {
+                end: Inclusive(TimeExpr::Now {
                     offset_secs: 3600.0
                 })
-            )
+            }
         );
         assert_eq!(
             "]now(-1h)..now(1h)[".parse::<TimeRange>().unwrap(),
-            TimeRange(
-                Exclusive(TimeExpr::Now {
+            TimeRange {
+                start: Exclusive(TimeExpr::Now {
                     offset_secs: -3600.0
                 }),
-                Exclusive(TimeExpr::Now {
+                end: Exclusive(TimeExpr::Now {
                     offset_secs: 3600.0
                 })
-            )
+            }
         );
 
         assert!("".parse::<TimeExpr>().is_err());

@@ -86,6 +86,7 @@ lazy_static::lazy_static!(
 );
 
 const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
+#[doc(hidden)]
 pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
     prefix = "zenoh",
     features = [
@@ -108,8 +109,6 @@ pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
     ]
 );
 
-#[allow(deprecated)]
-pub use zenoh_core::{AsyncResolve, SyncResolve};
 pub use zenoh_core::{Resolvable, Resolve, Wait};
 /// A zenoh error.
 pub use zenoh_result::Error;
@@ -124,9 +123,6 @@ pub use crate::{
     scouting::scout,
     session::{open, Session},
 };
-
-#[deprecated(since = "1.0.0")]
-pub mod prelude;
 
 /// [Key expression](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md) are Zenoh's address space.
 ///
@@ -192,12 +188,16 @@ pub mod session {
     pub use zenoh_protocol::core::EntityId;
 
     #[zenoh_macros::internal]
-    pub use crate::api::session::{init, InitBuilder};
+    pub use crate::api::builders::session::{init, InitBuilder};
     pub use crate::api::{
-        builders::publisher::{SessionDeleteBuilder, SessionPutBuilder},
-        info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, SessionInfo, ZenohIdBuilder},
-        query::SessionGetBuilder,
-        session::{open, OpenBuilder, Session, Undeclarable},
+        builders::{
+            info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, ZenohIdBuilder},
+            publisher::{SessionDeleteBuilder, SessionPutBuilder},
+            query::SessionGetBuilder,
+            session::OpenBuilder,
+        },
+        info::SessionInfo,
+        session::{open, Session, SessionClosedError, Undeclarable},
     };
 }
 
@@ -218,10 +218,7 @@ pub mod sample {
 /// Payload primitives
 pub mod bytes {
     pub use crate::api::{
-        bytes::{
-            Deserialize, OptionZBytes, Serialize, ZBytes, ZBytesIterator, ZBytesReader,
-            ZBytesSliceIterator, ZBytesWriter, ZDeserializeError, ZSerde,
-        },
+        bytes::{OptionZBytes, ZBytes, ZBytesReader, ZBytesSliceIterator, ZBytesWriter},
         encoding::Encoding,
     };
 }
@@ -229,16 +226,20 @@ pub mod bytes {
 /// Pub/sub primitives
 pub mod pubsub {
     #[zenoh_macros::unstable]
-    pub use crate::api::publisher::{
-        MatchingListener, MatchingListenerBuilder, MatchingListenerUndeclaration, MatchingStatus,
+    pub use crate::api::{
+        builders::matching_listener::MatchingListenerBuilder,
+        publisher::{MatchingListener, MatchingListenerUndeclaration, MatchingStatus},
     };
     pub use crate::api::{
-        builders::publisher::{
-            PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
-            PublisherDeleteBuilder, PublisherPutBuilder,
+        builders::{
+            publisher::{
+                PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut,
+                PublisherBuilder, PublisherDeleteBuilder, PublisherPutBuilder,
+            },
+            subscriber::SubscriberBuilder,
         },
         publisher::{Publisher, PublisherUndeclaration},
-        subscriber::{FlumeSubscriber, Subscriber, SubscriberBuilder},
+        subscriber::Subscriber,
     };
 }
 
@@ -250,24 +251,32 @@ pub mod query {
 
     #[zenoh_macros::internal]
     pub use crate::api::queryable::ReplySample;
-    #[zenoh_macros::unstable]
-    pub use crate::api::{query::ReplyKeyExpr, selector::ZenohParameters};
     pub use crate::api::{
-        query::{ConsolidationMode, QueryConsolidation, QueryTarget, Reply, ReplyError},
-        queryable::{
-            Query, Queryable, QueryableBuilder, QueryableUndeclaration, ReplyBuilder,
-            ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder,
+        builders::{
+            queryable::QueryableBuilder,
+            reply::{ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
         },
+        query::{ConsolidationMode, QueryConsolidation, QueryTarget, Reply, ReplyError},
+        queryable::{Query, Queryable, QueryableUndeclaration},
         selector::Selector,
     };
+    #[zenoh_macros::unstable]
+    pub use crate::api::{query::ReplyKeyExpr, selector::ZenohParameters};
 }
 
 /// Callback handler trait
 pub mod handlers {
+    #[zenoh_macros::internal]
+    pub use crate::api::handlers::locked;
     pub use crate::api::handlers::{
-        locked, Callback, CallbackDrop, DefaultHandler, FifoChannel, IntoHandler, RingChannel,
-        RingChannelHandler,
+        Callback, CallbackDrop, DefaultHandler, FifoChannel, FifoChannelHandler, IntoHandler,
+        RingChannel, RingChannelHandler,
     };
+    pub mod fifo {
+        pub use crate::api::handlers::{
+            Drain, FifoChannel, FifoChannelHandler, IntoIter, Iter, RecvFut, RecvStream, TryIter,
+        };
+    }
 }
 
 /// Quality of service primitives
@@ -283,7 +292,10 @@ pub mod qos {
 pub mod scouting {
     pub use zenoh_config::wrappers::Hello;
 
-    pub use crate::api::scouting::{scout, Scout, ScoutBuilder};
+    pub use crate::api::{
+        builders::scouting::ScoutBuilder,
+        scouting::{scout, Scout},
+    };
 }
 
 /// Liveliness primitives
@@ -427,6 +439,7 @@ pub mod shm {
             zshm::{zshm, ZShm},
             zshmmut::{zshmmut, ZShmMut},
         },
+        cleanup::cleanup_orphaned_shm_segments,
         client::{shm_client::ShmClient, shm_segment::ShmSegment},
         client_storage::{ShmClientStorage, GLOBAL_CLIENT_STORAGE},
         common::types::{ChunkID, ProtocolID, SegmentID},

@@ -263,6 +263,20 @@ validated_struct::validator! {
             pub exit_on_failure: Option<ModeDependentValue<bool>>,
             pub retry: Option<connection_retry::ConnectionRetryModeDependentConf>,
         },
+        /// Configure the session open behavior.
+        pub open: #[derive(Default)]
+        OpenConf {
+            /// Configure the conditions to be met before session open returns.
+            pub return_conditions: #[derive(Default)]
+            ReturnConditionsConf {
+                /// Session open waits to connect to scouted peers and routers before returning.
+                /// When set to false, first publications and queries after session open from peers may be lost.
+                connect_scouted: Option<bool>,
+                /// Session open waits to receive initial declares from connected peers before returning.
+                /// Setting to false may cause extra traffic at startup from peers.
+                declares: Option<bool>,
+            },
+        },
         pub scouting: #[derive(Default)]
         ScoutingConf {
             /// In client mode, the period dedicated to scouting for a router before failing. In milliseconds.
@@ -421,9 +435,20 @@ validated_struct::validator! {
                         /// Congestion occurs when the queue is empty (no available batch).
                         /// Using CongestionControl::Block the caller is blocked until a batch is available and re-inserted into the queue.
                         /// Using CongestionControl::Drop the message might be dropped, depending on conditions configured here.
-                        pub congestion_control: CongestionControlConf {
-                            /// The maximum time in microseconds to wait for an available batch before dropping the message if still no batch is available.
-                            pub wait_before_drop: u64,
+                        pub congestion_control: #[derive(Default)]
+                        CongestionControlConf {
+                            /// Behavior pushing CongestionControl::Drop messages to the queue.
+                            pub drop: CongestionControlDropConf {
+                                /// The maximum time in microseconds to wait for an available batch before dropping a droppable message
+                                /// if still no batch is available.
+                                wait_before_drop: i64,
+                            },
+                            /// Behavior pushing CongestionControl::Block messages to the queue.
+                            pub block: CongestionControlBlockConf {
+                                /// The maximum time in microseconds to wait for an available batch before closing the transport session
+                                /// when sending a blocking message if still no batch is available.
+                                wait_before_close: i64,
+                            },
                         },
                         pub batching: BatchingConf {
                             /// Perform adaptive batching of messages if they are smaller of the batch_size.
@@ -452,23 +477,23 @@ validated_struct::validator! {
                 pub tls: #[derive(Default)]
                 TLSConf {
                     root_ca_certificate: Option<String>,
-                    server_private_key: Option<String>,
-                    server_certificate: Option<String>,
-                    client_auth: Option<bool>,
-                    client_private_key: Option<String>,
-                    client_certificate: Option<String>,
-                    server_name_verification: Option<bool>,
+                    listen_private_key: Option<String>,
+                    listen_certificate: Option<String>,
+                    enable_mtls: Option<bool>,
+                    connect_private_key: Option<String>,
+                    connect_certificate: Option<String>,
+                    verify_name_on_connect: Option<bool>,
                     // Skip serializing field because they contain secrets
                     #[serde(skip_serializing)]
                     root_ca_certificate_base64: Option<SecretValue>,
                     #[serde(skip_serializing)]
-                    server_private_key_base64:  Option<SecretValue>,
+                    listen_private_key_base64:  Option<SecretValue>,
                     #[serde(skip_serializing)]
-                    server_certificate_base64: Option<SecretValue>,
+                    listen_certificate_base64: Option<SecretValue>,
                     #[serde(skip_serializing)]
-                    client_private_key_base64 :  Option<SecretValue>,
+                    connect_private_key_base64 :  Option<SecretValue>,
                     #[serde(skip_serializing)]
-                    client_certificate_base64 :  Option<SecretValue>,
+                    connect_certificate_base64 :  Option<SecretValue>,
                 },
                 pub unixpipe: #[derive(Default)]
                 UnixPipeConf {

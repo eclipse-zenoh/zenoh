@@ -54,17 +54,6 @@ impl<T> IntoHandler<T> for Callback<T> {
     }
 }
 
-impl<T, F> IntoHandler<T> for F
-where
-    F: Fn(T) + Send + Sync + 'static,
-{
-    type Handler = ();
-
-    fn into_handler(self) -> (Callback<T>, Self::Handler) {
-        (Callback::new(Arc::new(self)), ())
-    }
-}
-
 impl<T, F, H> IntoHandler<T> for (F, H)
 where
     F: Fn(T) + Send + Sync + 'static,
@@ -72,7 +61,7 @@ where
     type Handler = H;
 
     fn into_handler(self) -> (Callback<T>, Self::Handler) {
-        (self.0.into_handler().0, self.1)
+        (Callback::new(Arc::new(self.0)), self.1)
     }
 }
 
@@ -134,6 +123,6 @@ where
     type Handler = ();
 
     fn into_handler(self) -> (Callback<Event>, Self::Handler) {
-        (move |evt| (self.callback)(evt)).into_handler()
+        (move |evt| (self.callback)(evt), ()).into_handler()
     }
 }

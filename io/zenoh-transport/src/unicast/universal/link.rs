@@ -15,6 +15,7 @@ use std::time::Duration;
 
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh_buffers::ZSliceBuffer;
+use zenoh_link::Link;
 use zenoh_protocol::transport::{KeepAlive, TransportMessage};
 use zenoh_result::{zerror, ZResult};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool};
@@ -62,6 +63,7 @@ impl TransportLinkUnicastUniversal {
             },
             queue_size: transport.manager.config.queue_size,
             wait_before_drop: transport.manager.config.wait_before_drop,
+            wait_before_close: transport.manager.config.wait_before_close,
             batching_enabled: transport.manager.config.batching,
             batching_time_limit: transport.manager.config.queue_backoff,
         };
@@ -113,6 +115,8 @@ impl TransportLinkUnicastUniversal {
     }
 
     pub(super) fn start_rx(&mut self, transport: TransportUnicastUniversal, lease: Duration) {
+        let priorities = self.link.config.priorities.clone();
+        let reliability = self.link.config.reliability;
         let mut rx = self.link.rx();
         let token = self.token.clone();
         let task = async move {
@@ -133,8 +137,12 @@ impl TransportLinkUnicastUniversal {
                 // Spawn a task to avoid a deadlock waiting for this same task
                 // to finish in the close() joining its handle
                 // WARN: Must be spawned on RX
-                zenoh_runtime::ZRuntime::RX
-                    .spawn(async move { transport.del_link((&rx.link).into()).await });
+
+                zenoh_runtime::ZRuntime::RX.spawn(async move {
+                    transport
+                        .del_link(Link::new_unicast(&rx.link, priorities, reliability))
+                        .await
+                });
 
                 // // WARN: This ZRuntime blocks
                 // zenoh_runtime::ZRuntime::Net
@@ -248,14 +256,18 @@ async fn rx_task(
     }
 
     // The pool of buffers
-    let mtu = link.batch.mtu as usize;
+    let mtu = link.config.batch.mtu as usize;
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
     }
 
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
-    let l = (&link.link).into();
+    let l = Link::new_unicast(
+        &link.link,
+        link.config.priorities.clone(),
+        link.config.reliability,
+    );
 
     loop {
         tokio::select! {

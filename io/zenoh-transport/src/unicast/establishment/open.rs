@@ -18,7 +18,7 @@ use zenoh_buffers::ZSlice;
 #[cfg(feature = "transport_auth")]
 use zenoh_core::zasynclock;
 use zenoh_core::{zcondfeat, zerror};
-use zenoh_link::LinkUnicast;
+use zenoh_link::{EndPoint, LinkUnicast};
 use zenoh_protocol::{
     core::{Field, Resolution, WhatAmI, ZenohIdProto},
     transport::{
@@ -139,7 +139,7 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
         let (link, state, input) = input;
 
         // Extension QoS
-        let ext_qos = self
+        let (ext_qos, ext_qos_optimized) = self
             .ext_qos
             .send_init_syn(&state.transport.ext_qos)
             .await
@@ -199,6 +199,7 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             batch_size: state.transport.batch_size,
             resolution: state.transport.resolution,
             ext_qos,
+            ext_qos_optimized,
             #[cfg(feature = "shared-memory")]
             ext_shm,
             ext_auth,
@@ -302,7 +303,10 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
 
         // Extension QoS
         self.ext_qos
-            .recv_init_ack((&mut state.transport.ext_qos, init_ack.ext_qos))
+            .recv_init_ack((
+                &mut state.transport.ext_qos,
+                (init_ack.ext_qos, init_ack.ext_qos_optimized),
+            ))
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -537,18 +541,22 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
 }
 
 pub(crate) async fn open_link(
+    endpoint: EndPoint,
     link: LinkUnicast,
     manager: &TransportManager,
 ) -> ZResult<TransportUnicast> {
+    let direction = TransportLinkUnicastDirection::Outbound;
     let is_streamed = link.is_streamed();
     let config = TransportLinkUnicastConfig {
-        direction: TransportLinkUnicastDirection::Outbound,
+        direction,
         batch: BatchConfig {
             mtu: link.get_mtu(),
             is_streamed,
             #[cfg(feature = "transport_compression")]
             is_compression: false, // Perform the exchange Init/Open exchange with no compression
         },
+        priorities: None,
+        reliability: None,
     };
     let mut link = TransportLinkUnicast::new(link, config);
     let mut fsm = OpenLink {
@@ -582,7 +590,7 @@ pub(crate) async fn open_link(
         transport: StateTransport {
             batch_size,
             resolution: manager.config.resolution,
-            ext_qos: ext::qos::StateOpen::new(manager.config.unicast.is_qos),
+            ext_qos: ext::qos::StateOpen::new(manager.config.unicast.is_qos, &endpoint)?,
             #[cfg(feature = "transport_multilink")]
             ext_mlink: manager
                 .state
@@ -664,13 +672,15 @@ pub(crate) async fn open_link(
     };
 
     let o_config = TransportLinkUnicastConfig {
-        direction: TransportLinkUnicastDirection::Outbound,
+        direction,
         batch: BatchConfig {
             mtu: state.transport.batch_size,
             is_streamed,
             #[cfg(feature = "transport_compression")]
             is_compression: state.link.ext_compression.is_compression(),
         },
+        priorities: state.transport.ext_qos.priorities(),
+        reliability: state.transport.ext_qos.reliability(),
     };
     let o_link = link.reconfigure(o_config);
     let s_link = format!("{:?}", o_link);

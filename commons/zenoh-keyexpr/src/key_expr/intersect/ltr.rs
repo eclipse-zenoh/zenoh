@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 // use super::{
-//     restiction::{NoBigWilds, NoSubWilds},
+//     restriction::{NoBigWilds, NoSubWilds},
 //     Intersector,
 // };
 // use crate::key_expr::{utils::Split, DELIMITER};

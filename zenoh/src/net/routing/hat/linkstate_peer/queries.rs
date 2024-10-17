@@ -183,7 +183,7 @@ fn propagate_simple_queryable(
             && face_hat!(dst_face)
                 .remote_interests
                 .values()
-                .any(|(r, o)| o.queryables() && r.as_ref().map(|r| r.matches(res)).unwrap_or(true))
+                .any(|i| i.options.queryables() && i.matches(res))
         {
             let id = current
                 .map(|c| c.0)

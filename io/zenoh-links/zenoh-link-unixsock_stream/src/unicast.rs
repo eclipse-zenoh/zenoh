@@ -136,7 +136,7 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
 
     #[inline(always)]
     fn is_reliable(&self) -> bool {
-        true
+        super::IS_RELIABLE
     }
 
     #[inline(always)]
@@ -392,15 +392,17 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         let c_token = token.clone();
         let mut listeners = zasyncwrite!(self.listeners);
 
-        let c_manager = self.manager.clone();
-        let c_listeners = self.listeners.clone();
-        let c_path = local_path_str.to_owned();
+        let task = {
+            let manager = self.manager.clone();
+            let listeners = self.listeners.clone();
+            let path = local_path_str.to_owned();
 
-        let task = async move {
-            // Wait for the accept loop to terminate
-            let res = accept_task(socket, c_token, c_manager).await;
-            zasyncwrite!(c_listeners).remove(&c_path);
-            res
+            async move {
+                // Wait for the accept loop to terminate
+                let res = accept_task(socket, c_token, manager).await;
+                zasyncwrite!(listeners).remove(&path);
+                res
+            }
         };
         let handle = zenoh_runtime::ZRuntime::Acceptor.spawn(task);
 

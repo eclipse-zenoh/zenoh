@@ -23,11 +23,11 @@ fn main() {
     );
 
     let schema = serde_json::to_value(schema_for!(PluginConfig)).unwrap();
-    let schema = jsonschema::JSONSchema::compile(&schema).unwrap();
+    let validator = jsonschema::validator_for(&schema).unwrap();
     let config = std::fs::read_to_string("config.json5").unwrap();
     let config: serde_json::Value = serde_json::from_str(&config).unwrap();
-    if let Err(es) = schema.validate(&config) {
-        let es = es.map(|e| format!("{}", e)).collect::<Vec<_>>().join("\n");
+    if let Err(es) = validator.validate(&config) {
+        let es = es.map(|e| e.to_string()).collect::<Vec<_>>().join("\n");
         panic!("config.json5 schema validation error: {}", es);
     };
 }

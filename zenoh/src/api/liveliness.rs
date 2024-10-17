@@ -23,16 +23,18 @@ use tracing::error;
 use zenoh_config::unwrap_or_default;
 use zenoh_core::{Resolvable, Resolve, Result as ZResult, Wait};
 
-use super::{
-    handlers::{locked, DefaultHandler, IntoHandler},
-    key_expr::KeyExpr,
-    query::Reply,
-    sample::{Locality, Sample},
-    session::{Session, UndeclarableSealed},
-    subscriber::{Subscriber, SubscriberInner},
-    Id,
+use crate::{
+    api::{
+        handlers::{locked, DefaultHandler, IntoHandler},
+        key_expr::KeyExpr,
+        query::Reply,
+        sample::{Locality, Sample},
+        session::{Session, UndeclarableSealed, WeakSession},
+        subscriber::{Subscriber, SubscriberInner},
+        Id,
+    },
+    handlers::Callback,
 };
-use crate::api::session::WeakSession;
 
 /// A structure with functions to declare a [`LivelinessToken`](LivelinessToken),
 /// query existing [`LivelinessTokens`](LivelinessToken)
@@ -169,7 +171,6 @@ impl<'a> Liveliness<'a> {
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
             handler: DefaultHandler::default(),
             history: false,
-            undeclare_on_drop: true,
         }
     }
 
@@ -231,7 +232,7 @@ impl<'a> Liveliness<'a> {
 ///     .unwrap();
 /// # }
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[zenoh_macros::unstable]
 #[derive(Debug)]
 pub struct LivelinessTokenBuilder<'a, 'b> {
@@ -328,7 +329,7 @@ pub struct LivelinessToken {
 /// liveliness.undeclare().await.unwrap();
 /// # }
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[zenoh_macros::unstable]
 pub struct LivelinessTokenUndeclaration(LivelinessToken);
 
@@ -420,26 +421,19 @@ impl Drop for LivelinessToken {
 ///     .unwrap();
 /// # }
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[zenoh_macros::unstable]
 #[derive(Debug)]
-pub struct LivelinessSubscriberBuilder<'a, 'b, Handler> {
+pub struct LivelinessSubscriberBuilder<'a, 'b, Handler, const BACKGROUND: bool = false> {
     pub session: &'a Session,
     pub key_expr: ZResult<KeyExpr<'b>>,
     pub handler: Handler,
     pub history: bool,
-    pub undeclare_on_drop: bool,
 }
 
 #[zenoh_macros::unstable]
 impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// Receive the samples for this liveliness subscription with a callback.
-    ///
-    /// Liveliness subscriber will not be undeclared when dropped,
-    /// with the callback running in background until the session is closed.
-    ///
-    /// It is in fact just a convenient shortcut for
-    /// `.with(my_callback).undeclare_on_drop(false)`.
     ///
     /// # Examples
     /// ```
@@ -457,23 +451,17 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
-    pub fn callback<Callback>(
-        self,
-        callback: Callback,
-    ) -> LivelinessSubscriberBuilder<'a, 'b, Callback>
+    pub fn callback<F>(self, callback: F) -> LivelinessSubscriberBuilder<'a, 'b, Callback<Sample>>
     where
-        Callback: Fn(Sample) + Send + Sync + 'static,
+        F: Fn(Sample) + Send + Sync + 'static,
     {
-        self.with(callback).undeclare_on_drop(false)
+        self.with(Callback::new(Arc::new(callback)))
     }
 
     /// Receive the samples for this liveliness subscription with a mutable callback.
     ///
     /// Using this guarantees that your callback will never be called concurrently.
     /// If your callback is also accepted by the [`callback`](LivelinessSubscriberBuilder::callback) method, we suggest you use it instead of `callback_mut`.
-    ///
-    /// Liveliness subscriber will not be undeclared when dropped,
-    /// with the callback running in background until the session is closed.
     ///
     /// # Examples
     /// ```
@@ -492,12 +480,12 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
-    pub fn callback_mut<CallbackMut>(
+    pub fn callback_mut<F>(
         self,
-        callback: CallbackMut,
-    ) -> LivelinessSubscriberBuilder<'a, 'b, impl Fn(Sample) + Send + Sync + 'static>
+        callback: F,
+    ) -> LivelinessSubscriberBuilder<'a, 'b, Callback<Sample>>
     where
-        CallbackMut: FnMut(Sample) + Send + Sync + 'static,
+        F: FnMut(Sample) + Send + Sync + 'static,
     {
         self.callback(locked(callback))
     }
@@ -525,38 +513,55 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     #[zenoh_macros::unstable]
     pub fn with<Handler>(self, handler: Handler) -> LivelinessSubscriberBuilder<'a, 'b, Handler>
     where
-        Handler: crate::handlers::IntoHandler<Sample>,
+        Handler: IntoHandler<Sample>,
     {
         let LivelinessSubscriberBuilder {
             session,
             key_expr,
             handler: _,
             history,
-            undeclare_on_drop,
         } = self;
         LivelinessSubscriberBuilder {
             session,
             key_expr,
             handler,
             history,
-            undeclare_on_drop,
         }
     }
 }
 
-impl<Handler> LivelinessSubscriberBuilder<'_, '_, Handler> {
-    /// Set whether the liveliness subscriber will be undeclared when dropped.
+impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, Callback<Sample>> {
+    /// Register the subscriber callback to be run in background until the session is closed.
     ///
-    /// The method is usually used in combination with a callback like in
-    /// [`callback`](Self::callback) method, or a channel sender.
-    /// Be careful when using it, as liveliness subscribers not undeclared will consume
-    /// resources until the session is closed.
-    #[inline]
-    pub fn undeclare_on_drop(mut self, undeclare_on_drop: bool) -> Self {
-        self.undeclare_on_drop = undeclare_on_drop;
-        self
+    /// Background builder doesn't return a `Subscriber` object anymore.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// // no need to assign and keep a variable with a background subscriber
+    /// session
+    ///     .liveliness()
+    ///     .declare_subscriber("key/expression")
+    ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr(), sample.payload()); })
+    ///     .background()
+    ///     .await
+    ///     .unwrap();
+    /// # }
+    /// ```
+    pub fn background(self) -> LivelinessSubscriberBuilder<'a, 'b, Callback<Sample>, true> {
+        LivelinessSubscriberBuilder {
+            session: self.session,
+            key_expr: self.key_expr,
+            handler: self.handler,
+            history: self.history,
+        }
     }
+}
 
+impl<Handler, const BACKGROUND: bool> LivelinessSubscriberBuilder<'_, '_, Handler, BACKGROUND> {
     #[inline]
     #[zenoh_macros::unstable]
     pub fn history(mut self, history: bool) -> Self {
@@ -566,7 +571,7 @@ impl<Handler> LivelinessSubscriberBuilder<'_, '_, Handler> {
 }
 
 #[zenoh_macros::unstable]
-impl<'a, Handler> Resolvable for LivelinessSubscriberBuilder<'a, '_, Handler>
+impl<Handler> Resolvable for LivelinessSubscriberBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
@@ -601,7 +606,7 @@ where
                     id: sub_state.id,
                     key_expr: sub_state.key_expr.clone(),
                     kind: SubscriberKind::LivelinessSubscriber,
-                    undeclare_on_drop: self.undeclare_on_drop,
+                    undeclare_on_drop: true,
                 },
                 handler,
             })
@@ -614,6 +619,36 @@ where
     Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
 {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
+
+    #[zenoh_macros::unstable]
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
+    }
+}
+
+#[zenoh_macros::unstable]
+impl Resolvable for LivelinessSubscriberBuilder<'_, '_, Callback<Sample>, true> {
+    type To = ZResult<()>;
+}
+
+#[zenoh_macros::unstable]
+impl Wait for LivelinessSubscriberBuilder<'_, '_, Callback<Sample>, true> {
+    #[zenoh_macros::unstable]
+    fn wait(self) -> <Self as Resolvable>::To {
+        self.session.0.declare_liveliness_subscriber_inner(
+            &self.key_expr?,
+            Locality::default(),
+            self.history,
+            self.handler,
+        )?;
+        Ok(())
+    }
+}
+
+#[zenoh_macros::unstable]
+impl IntoFuture for LivelinessSubscriberBuilder<'_, '_, Callback<Sample>, true> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
@@ -645,7 +680,7 @@ where
 /// }
 /// # }
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[derive(Debug)]
 pub struct LivelinessGetBuilder<'a, 'b, Handler> {
     pub(crate) session: &'a Session,
@@ -672,11 +707,11 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    pub fn callback<Callback>(self, callback: Callback) -> LivelinessGetBuilder<'a, 'b, Callback>
+    pub fn callback<F>(self, callback: F) -> LivelinessGetBuilder<'a, 'b, Callback<Reply>>
     where
-        Callback: Fn(Reply) + Send + Sync + 'static,
+        F: Fn(Reply) + Send + Sync + 'static,
     {
-        self.with(callback)
+        self.with(Callback::new(Arc::new(callback)))
     }
 
     /// Receive the replies for this liveliness query with a mutable callback.
@@ -700,12 +735,9 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    pub fn callback_mut<CallbackMut>(
-        self,
-        callback: CallbackMut,
-    ) -> LivelinessGetBuilder<'a, 'b, impl Fn(Reply) + Send + Sync + 'static>
+    pub fn callback_mut<F>(self, callback: F) -> LivelinessGetBuilder<'a, 'b, Callback<Reply>>
     where
-        CallbackMut: FnMut(Reply) + Send + Sync + 'static,
+        F: FnMut(Reply) + Send + Sync + 'static,
     {
         self.callback(locked(callback))
     }

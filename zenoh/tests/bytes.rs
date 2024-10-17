@@ -14,10 +14,7 @@
 #![cfg(all(feature = "shared-memory", feature = "unstable"))]
 use zenoh::{
     bytes::ZBytes,
-    shm::{
-        zshm, zshmmut, PosixShmProviderBackend, ShmProviderBuilder, ZShm, ZShmMut,
-        POSIX_PROTOCOL_ID,
-    },
+    shm::{zshmmut, PosixShmProviderBackend, ShmProviderBuilder, ZShm, ZShmMut, POSIX_PROTOCOL_ID},
     Wait,
 };
 
@@ -53,7 +50,7 @@ fn shm_bytes_single_buf() {
     // branch to illustrate immutable access to SHM data
     {
         // deserialize ZBytes as an immutably borrowed zshm (ZBytes -> &zshm)
-        let borrowed_shm_buf: &zshm = payload.deserialize().unwrap();
+        let borrowed_shm_buf = payload.as_shm().unwrap();
 
         // construct owned buffer from borrowed type (&zshm -> ZShm)
         let owned = borrowed_shm_buf.to_owned();
@@ -67,7 +64,7 @@ fn shm_bytes_single_buf() {
     // branch to illustrate mutable access to SHM data
     {
         // deserialize ZBytes as mutably borrowed zshm (ZBytes -> &mut zshm)
-        let borrowed_shm_buf: &mut zshm = payload.deserialize_mut().unwrap();
+        let borrowed_shm_buf = payload.as_shm_mut().unwrap();
 
         // convert zshm to zshmmut (&mut zshm -> &mut zshmmut)
         let _borrowed_shm_buf_mut: &mut zshmmut = borrowed_shm_buf.try_into().unwrap();

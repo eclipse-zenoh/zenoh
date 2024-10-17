@@ -70,7 +70,6 @@ impl TransportPeerEventHandler for MHRouterAuthenticator {
     }
     fn new_link(&self, _link: Link) {}
     fn del_link(&self, _link: Link) {}
-    fn closing(&self) {}
     fn closed(&self) {}
 
     fn as_any(&self) -> &dyn Any {
@@ -797,8 +796,8 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
         .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
-                (TLS_SERVER_CERTIFICATE_RAW, cert),
-                (TLS_SERVER_PRIVATE_KEY_RAW, key),
+                (TLS_LISTEN_CERTIFICATE_RAW, cert),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, key),
             ]
             .iter()
             .copied(),
@@ -897,8 +896,8 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
         .extend_from_iter(
             [
                 (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
-                (TLS_SERVER_CERTIFICATE_RAW, cert),
-                (TLS_SERVER_PRIVATE_KEY_RAW, key),
+                (TLS_LISTEN_CERTIFICATE_RAW, cert),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, key),
             ]
             .iter()
             .copied(),

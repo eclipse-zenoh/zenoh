@@ -42,13 +42,6 @@ use crate::{
     TransportManager, TransportPeerEventHandler,
 };
 
-macro_rules! zlinkindex {
-    ($guard:expr, $link:expr) => {
-        // Compare LinkUnicast link to not compare TransportLinkUnicast direction
-        $guard.iter().position(|tl| tl.link == $link)
-    };
-}
-
 /*************************************/
 /*        UNIVERSAL TRANSPORT        */
 /*************************************/
@@ -136,12 +129,7 @@ impl TransportUnicastUniversal {
         // to avoid concurrent new_transport and closing/closed notifications
         let mut a_guard = self.get_alive().await;
         *a_guard = false;
-
-        // Notify the callback that we are going to close the transport
         let callback = zwrite!(self.callback).take();
-        if let Some(cb) = callback.as_ref() {
-            cb.closing();
-        }
 
         // Delete the transport on the manager
         let _ = self.manager.del_transport_unicast(&self.config.zid).await;
@@ -175,7 +163,15 @@ impl TransportUnicastUniversal {
         let target = {
             let mut guard = zwrite!(self.links);
 
-            if let Some(index) = zlinkindex!(guard, link) {
+            if let Some(index) = guard.iter().position(|tl| {
+                // Compare LinkUnicast link to not compare TransportLinkUnicast direction
+                Link::new_unicast(
+                    &tl.link.link,
+                    tl.link.config.priorities.clone(),
+                    tl.link.config.reliability,
+                )
+                .eq(&link)
+            }) {
                 let is_last = guard.len() == 1;
                 if is_last {
                     // Close the whole transport
@@ -293,7 +289,6 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         *guard = links.into_boxed_slice();
 
         drop(guard);
-        drop(add_link_guard);
 
         // create a callback to start the link
         let transport = self.clone();
@@ -311,7 +306,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
             link.start_rx(transport, other_lease);
         });
 
-        Ok((start_tx, start_rx, ack))
+        Ok((start_tx, start_rx, ack, Some(add_link_guard)))
     }
 
     /*************************************/

@@ -46,4 +46,4 @@ nix = { workspace = true }
 filepath = "0.1.2"
 
 [target.'cfg(all(not(target_os="macos"), unix))'.dependencies]
-advisory-lock = "0.3.0"
+advisory-lock = { workspace = true }

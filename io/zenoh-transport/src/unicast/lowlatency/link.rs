@@ -152,7 +152,7 @@ impl TransportUnicastLowlatency {
 
             // The pool of buffers
             let pool = {
-                let mtu = link_rx.batch.mtu as usize;
+                let mtu = link_rx.config.batch.mtu as usize;
                 let mut n = rx_buffer_size / mtu;
                 if rx_buffer_size % mtu != 0 {
                     n += 1;

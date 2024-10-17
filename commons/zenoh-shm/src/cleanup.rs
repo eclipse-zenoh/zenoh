@@ -14,6 +14,8 @@
 
 use static_init::dynamic;
 
+use crate::posix_shm::cleanup::cleanup_orphaned_segments;
+
 /// A global cleanup, that is guaranteed to be dropped at normal program exit and that will
 /// execute all registered cleanup routines at this moment
 #[dynamic(lazy, drop)]
@@ -26,6 +28,8 @@ pub(crate) struct Cleanup {
 
 impl Cleanup {
     fn new() -> Self {
+        // on first cleanup subsystem touch we perform zenoh segment cleanup
+        cleanup_orphaned_segments();
         Self {
             cleanups: Default::default(),
         }
@@ -34,14 +38,20 @@ impl Cleanup {
     pub(crate) fn register_cleanup(&self, cleanup_fn: Box<dyn FnOnce() + Send>) {
         self.cleanups.push(Some(cleanup_fn));
     }
-}
 
-impl Drop for Cleanup {
-    fn drop(&mut self) {
+    fn cleanup(&self) {
         while let Some(cleanup) = self.cleanups.pop() {
             if let Some(f) = cleanup {
                 f();
             }
         }
+    }
+}
+
+impl Drop for Cleanup {
+    fn drop(&mut self) {
+        // on finalization stage we perform zenoh segment cleanup
+        cleanup_orphaned_segments();
+        self.cleanup();
     }
 }

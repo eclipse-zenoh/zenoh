@@ -11,9 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
-use zenoh::{sample::SampleKind, Wait};
-use zenoh_config::{EndPoint, WhatAmI};
+#![cfg(feature = "unstable")]
+use zenoh::{
+    config::{EndPoint, WhatAmI},
+    sample::SampleKind,
+    Wait,
+};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_querying_subscriber_clique() {

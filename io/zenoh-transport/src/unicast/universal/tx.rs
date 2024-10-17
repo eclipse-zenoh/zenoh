@@ -11,51 +11,127 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh_core::zread;
-use zenoh_protocol::network::NetworkMessage;
+use zenoh_protocol::{
+    core::{Priority, PriorityRange, Reliability},
+    network::NetworkMessage,
+    transport::close,
+};
 
 use super::transport::TransportUnicastUniversal;
 #[cfg(feature = "shared-memory")]
 use crate::shm::map_zmsg_to_partner;
+use crate::unicast::transport_unicast_inner::TransportUnicastTrait;
 
 impl TransportUnicastUniversal {
-    fn schedule_on_link(&self, msg: NetworkMessage) -> bool {
-        macro_rules! zpush {
-            ($guard:expr, $pipeline:expr, $msg:expr) => {
-                // Drop the guard before the push_zenoh_message since
-                // the link could be congested and this operation could
-                // block for fairly long time
-                let pl = $pipeline.clone();
-                drop($guard);
-                tracing::trace!("Scheduled: {:?}", $msg);
-                return pl.push_network_message($msg);
-            };
+    /// Returns the index of the best matching [`Reliability`]-[`PriorityRange`] pair.
+    ///
+    /// The result is either:
+    /// 1. A "full match" where the pair matches both `reliability` and `priority`. In case of
+    ///    multiple candidates, the pair with the smaller range is selected.
+    /// 2. A "partial match" where the pair match `reliability` and **not** `priority`.
+    /// 3. An "any match" where any available pair is selected.
+    ///
+    /// If `elements` is empty then [`None`] is returned.
+    fn select(
+        elements: impl Iterator<Item = (Reliability, Option<PriorityRange>)>,
+        reliability: Reliability,
+        priority: Priority,
+    ) -> Option<usize> {
+        #[derive(Default)]
+        struct Match {
+            full: Option<usize>,
+            partial: Option<usize>,
+            any: Option<usize>,
         }
 
-        let guard = zread!(self.links);
-        // First try to find the best match between msg and link reliability
-        if let Some(pl) = guard.iter().find_map(|tl| {
-            if msg.is_reliable() == tl.link.link.is_reliable() {
-                Some(&tl.pipeline)
-            } else {
-                None
-            }
-        }) {
-            zpush!(guard, pl, msg);
-        }
+        let (match_, _) = elements.enumerate().fold(
+            (Match::default(), Option::<PriorityRange>::None),
+            |(mut match_, mut prev_priorities), (i, (r, ps))| {
+                match (r.eq(&reliability), ps.filter(|ps| ps.contains(&priority))) {
+                    (true, Some(priorities))
+                        if prev_priorities
+                            .as_ref()
+                            .map_or(true, |ps| ps.len() > priorities.len()) =>
+                    {
+                        match_.full = Some(i);
+                        prev_priorities = Some(priorities);
+                    }
+                    (true, None) if match_.partial.is_none() => match_.partial = Some(i),
+                    _ if match_.any.is_none() => match_.any = Some(i),
+                    _ => {}
+                };
 
-        // No best match found, take the first available link
-        if let Some(pl) = guard.iter().map(|tl| &tl.pipeline).next() {
-            zpush!(guard, pl, msg);
-        }
-
-        // No Link found
-        tracing::trace!(
-            "Message dropped because the transport has no links: {}",
-            msg
+                (match_, prev_priorities)
+            },
         );
 
-        false
+        match_.full.or(match_.partial).or(match_.any)
+    }
+
+    fn schedule_on_link(&self, msg: NetworkMessage) -> bool {
+        let transport_links = self
+            .links
+            .read()
+            .expect("reading `TransportUnicastUniversal::links` should not fail");
+
+        let Some(transport_link_index) = Self::select(
+            transport_links.iter().map(|tl| {
+                (
+                    tl.link
+                        .config
+                        .reliability
+                        .unwrap_or(Reliability::from(tl.link.link.is_reliable())),
+                    tl.link.config.priorities.clone(),
+                )
+            }),
+            Reliability::from(msg.is_reliable()),
+            msg.priority(),
+        ) else {
+            tracing::trace!(
+                "Message dropped because the transport has no links: {}",
+                msg
+            );
+
+            // No Link found
+            return false;
+        };
+
+        let transport_link = transport_links
+            .get(transport_link_index)
+            .expect("transport link index should be valid");
+
+        let pipeline = transport_link.pipeline.clone();
+        tracing::trace!(
+            "Scheduled {:?} for transmission to {} ({})",
+            msg,
+            transport_link.link.link.get_dst(),
+            self.get_zid()
+        );
+        // Drop the guard before the push_zenoh_message since
+        // the link could be congested and this operation could
+        // block for fairly long time
+        drop(transport_links);
+        let droppable = msg.is_droppable();
+        let push = pipeline.push_network_message(msg);
+        if !push && !droppable {
+            tracing::error!(
+                "Unable to push non droppable network message to {}. Closing transport!",
+                self.config.zid
+            );
+            zenoh_runtime::ZRuntime::RX.spawn({
+                let transport = self.clone();
+                async move {
+                    if let Err(e) = transport.close(close::reason::UNRESPONSIVE).await {
+                        tracing::error!(
+                            "Error closing transport with {}: {}",
+                            transport.config.zid,
+                            e
+                        );
+                    }
+                }
+            });
+        }
+        push
     }
 
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled
@@ -80,5 +156,75 @@ impl TransportUnicastUniversal {
         }
 
         res
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use zenoh_protocol::core::{Priority, PriorityRange, Reliability};
+
+    use crate::unicast::universal::transport::TransportUnicastUniversal;
+
+    macro_rules! priority_range {
+        ($start:literal, $end:literal) => {
+            PriorityRange::new($start.try_into().unwrap()..=$end.try_into().unwrap())
+        };
+    }
+
+    #[test]
+    /// Tests the "full match" scenario with exactly one candidate.
+    fn test_link_selection_scenario_1() {
+        let selection = TransportUnicastUniversal::select(
+            [
+                (Reliability::Reliable, Some(priority_range!(0, 1))),
+                (Reliability::Reliable, Some(priority_range!(1, 2))),
+                (Reliability::BestEffort, Some(priority_range!(0, 1))),
+            ]
+            .into_iter(),
+            Reliability::Reliable,
+            Priority::try_from(0).unwrap(),
+        );
+        assert_eq!(selection, Some(0));
+    }
+
+    #[test]
+    /// Tests the "full match" scenario with multiple candidates.
+    fn test_link_selection_scenario_2() {
+        let selection = TransportUnicastUniversal::select(
+            [
+                (Reliability::Reliable, Some(priority_range!(0, 2))),
+                (Reliability::Reliable, Some(priority_range!(0, 1))),
+            ]
+            .into_iter(),
+            Reliability::Reliable,
+            Priority::try_from(0).unwrap(),
+        );
+        assert_eq!(selection, Some(1));
+    }
+
+    #[test]
+    /// Tests the "partial match" scenario.
+    fn test_link_selection_scenario_3() {
+        let selection = TransportUnicastUniversal::select(
+            [
+                (Reliability::BestEffort, Some(priority_range!(0, 1))),
+                (Reliability::Reliable, None),
+            ]
+            .into_iter(),
+            Reliability::Reliable,
+            Priority::try_from(0).unwrap(),
+        );
+        assert_eq!(selection, Some(1));
+    }
+
+    #[test]
+    /// Tests the "any match" scenario.
+    fn test_link_selection_scenario_4() {
+        let selection = TransportUnicastUniversal::select(
+            [(Reliability::BestEffort, None)].into_iter(),
+            Reliability::Reliable,
+            Priority::try_from(0).unwrap(),
+        );
+        assert_eq!(selection, Some(0));
     }
 }
