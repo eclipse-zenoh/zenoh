@@ -36,15 +36,11 @@ impl fmt::Display for ZDeserializeError {
 impl std::error::Error for ZDeserializeError {}
 
 #[derive(Debug)]
-pub struct ZSerializeError(String);
+
+pub struct ZSerializeError;
 impl fmt::Display for ZSerializeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "serialization error: {}", self.0)
-    }
-}
-impl From<String> for ZSerializeError {
-    fn from(s: String) -> Self {
-        Self(s)
+        write!(f, "serialization error")
     }
 }
 
@@ -247,6 +243,14 @@ impl ZSerializer {
 
     fn writer(&mut self) -> &mut ZBytesWriter {
         &mut self.0
+    }
+
+    /// Serialize the given object into a [`ZSerializer`].
+    /// Returns an error if serialization fails.
+    ///
+    /// Serialization doesn't take the ownership of the data.
+    pub fn try_serialize<T: TrySerialize>(&mut self, t: T) -> Result<(), T::Error> {
+        t.try_serialize(self)
     }
 
     /// Serialize the given object into a [`ZSerializer`].
@@ -641,7 +645,7 @@ impl TrySerialize for std::ffi::CString {
     type Error = ZSerializeError;
     fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
         // make sure the string is valid UTF-8
-        let s = self.to_str().map_err(|e| e.to_string())?;
+        let s = self.to_str().map_err(|_| ZSerializeError)?;
         s.serialize(serializer);
         Ok(())
     }
@@ -669,7 +673,7 @@ macro_rules! impl_tuple {
         impl<$($ty: TrySerialize),*> TrySerialize for ($($ty,)*) {
             type Error = ZSerializeError;
             fn try_serialize(&self, serializer: &mut ZSerializer) -> Result<(), Self::Error> {
-                $(self.$i.try_serialize(serializer).map_err(|e| e.to_string())?;)*
+                $(self.$i.try_serialize(serializer).map_err(|_| ZSerializeError)?;)*
                 Ok(())
             }
         }
@@ -822,6 +826,6 @@ mod tests {
         // test that invalid UTF-8 strings are not serialized
         let cstr = std::ffi::CString::new(b"\xff").unwrap();
         let res = z_try_serialize(&cstr);
-        assert!(res.err().unwrap().to_string().contains("invalid utf-8"));
+        assert!(res.is_err());
     }
 }
