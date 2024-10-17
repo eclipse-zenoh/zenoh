@@ -46,6 +46,9 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
+      - name: Install Stable Rust toolchain
+        run: rustup install 1.78.0
+
       - name: Clone this repository
         uses: actions/checkout@v4
 
@@ -53,18 +56,18 @@ jobs:
         run: rustup component add rustfmt clippy
 
       - name: Code format check
-        run: cargo fmt --check
+        run: cargo +1.78.0 fmt --check
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
       - name: Clippy check
-        run: cargo +stable clippy --all-targets --features=${{ inputs.features }} -- --deny warnings
+        run: cargo +1.78.0 clippy --all-targets --features=${{ inputs.features }} -- --deny warnings
 
       - name: Clippy unstable check
-        run: cargo +stable clippy --all-targets  -- --deny warnings
+        run: cargo +1.78.0 clippy --all-targets  -- --deny warnings
 
       - name: Clippy all features
-        run: cargo +stable clippy --all-targets --all-features -- --deny warnings
+        run: cargo +1.78.0 clippy --all-targets --all-features -- --deny warnings
 
   tests:
     name: Tests

@@ -42,24 +42,24 @@ jobs:
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Update Stable Rust toolchain
-        run: rustup update stable
+      - name: Install Stable Rust toolchain
+        run: rustup install 1.78.0
 
       - name: Install latest cargo-deny
         uses: taiki-e/install-action@cargo-deny
 
       - name: Code format check
-        run: cargo fmt --check
+        run: cargo +1.78.0 fmt --check
 
       - name: Clippy
-        run: cargo +stable clippy --all-targets -- --deny warnings
+        run: cargo +1.78.0 clippy --all-targets -- --deny warnings
 
       - name: Clippy unstable targets
-        run: cargo +stable clippy --all-targets --features unstable -- --deny warnings
+        run: cargo +1.78.0 clippy --all-targets --features unstable -- --deny warnings
 
       - name: Clippy all features
         if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest' }}
-        run: cargo +stable clippy --all-targets --all-features -- --deny warnings
+        run: cargo +1.78.0 clippy --all-targets --all-features -- --deny warnings
 
       - name: Install generic no_std target
         # Generic no_std target architecture is x86_64-unknown-none
