@@ -139,7 +139,7 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
         let (link, state, input) = input;
 
         // Extension QoS
-        let (ext_qos, ext_qos_optimized) = self
+        let (ext_qos, ext_qos_link) = self
             .ext_qos
             .send_init_syn(&state.transport.ext_qos)
             .await
@@ -199,7 +199,7 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             batch_size: state.transport.batch_size,
             resolution: state.transport.resolution,
             ext_qos,
-            ext_qos_optimized,
+            ext_qos_link,
             #[cfg(feature = "shared-memory")]
             ext_shm,
             ext_auth,
@@ -305,7 +305,7 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
         self.ext_qos
             .recv_init_ack((
                 &mut state.transport.ext_qos,
-                (init_ack.ext_qos, init_ack.ext_qos_optimized),
+                (init_ack.ext_qos, init_ack.ext_qos_link),
             ))
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
