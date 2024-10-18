@@ -88,6 +88,13 @@ impl LinkMulticastTrait for LinkMulticastUdp {
         {
             Ok(size) => Ok(size),
             std::io::Result::Err(e) => {
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let e = zerror!("Write error on UDP link {}: {}", self, e);
+                    tracing::trace!("{}", e);
+                    Err(e.into())
+                }
+                #[cfg(target_os = "macos")]
                 if let Some(55) = e.raw_os_error() {
                     // No buffer space available
                     tracing::trace!("Write error on UDP link {}: {}", self, e);
