@@ -81,14 +81,23 @@ impl LinkMulticastTrait for LinkMulticastUdp {
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        self.unicast_socket
+        match self
+            .unicast_socket
             .send_to(buffer, self.multicast_addr)
             .await
-            .map_err(|e| {
-                let e = zerror!("Write error on UDP link {}: {}", self, e);
-                tracing::trace!("{}", e);
-                e.into()
-            })
+        {
+            Ok(size) => Ok(size),
+            std::io::Result::Err(e) => {
+                if let Some(55) = e.raw_os_error() {
+                    // No buffer space available
+                    tracing::trace!("{}", e);
+                    Ok(0)
+                } else {
+                    let e = zerror!("Write error on UDP link {}: {}", self, e);
+                    Err(e.into())
+                }
+            }
+        }
     }
 
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
