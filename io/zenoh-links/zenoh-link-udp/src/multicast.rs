@@ -90,10 +90,11 @@ impl LinkMulticastTrait for LinkMulticastUdp {
             std::io::Result::Err(e) => {
                 if let Some(55) = e.raw_os_error() {
                     // No buffer space available
-                    tracing::trace!("{}", e);
+                    tracing::trace!("Write error on UDP link {}: {}", self, e);
                     Ok(0)
                 } else {
                     let e = zerror!("Write error on UDP link {}: {}", self, e);
+                    tracing::trace!("{}", e);
                     Err(e.into())
                 }
             }
