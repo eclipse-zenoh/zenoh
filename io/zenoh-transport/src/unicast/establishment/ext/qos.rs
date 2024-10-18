@@ -152,13 +152,13 @@ impl State {
         }
     }
 
-    fn to_exts(&self) -> (Option<init::ext::QoS>, Option<init::ext::QoSOptimized>) {
+    fn to_exts(&self) -> (Option<init::ext::QoS>, Option<init::ext::QoSLink>) {
         match self {
             State::NoQoS => (None, None),
             State::QoS {
                 reliability: None,
                 priorities: None,
-            } => (None, Some(init::ext::QoSOptimized::new())),
+            } => (Some(init::ext::QoS::new()), None),
             State::QoS {
                 reliability: Some(_),
                 ..
@@ -166,24 +166,24 @@ impl State {
             | State::QoS {
                 priorities: Some(_),
                 ..
-            } => (Some(init::ext::QoS::new(self.to_u64())), None),
+            } => (None, Some(init::ext::QoSLink::new(self.to_u64()))),
         }
     }
 
     fn try_from_exts(
-        (qos, qos_optimized): (Option<init::ext::QoS>, Option<init::ext::QoSOptimized>),
+        (qos, qos_link): (Option<init::ext::QoS>, Option<init::ext::QoSLink>),
     ) -> ZResult<Self> {
-        match (qos, qos_optimized) {
+        match (qos, qos_link) {
             (Some(_), Some(_)) => Err(zerror!(
                 "Extensions QoS and QoSOptimized cannot both be enabled at once"
             )
             .into()),
-            (None, None) => Ok(State::NoQoS),
-            (None, Some(_)) => Ok(State::QoS {
+            (Some(_), None) => Ok(State::QoS {
                 reliability: None,
                 priorities: None,
             }),
-            (Some(qos), None) => State::try_from_u64(qos.value),
+            (None, Some(qos)) => State::try_from_u64(qos.value),
+            (None, None) => Ok(State::NoQoS),
         }
     }
 
@@ -269,7 +269,7 @@ impl<'a> OpenFsm for &'a QoSFsm<'a> {
     type Error = ZError;
 
     type SendInitSynIn = &'a StateOpen;
-    type SendInitSynOut = (Option<init::ext::QoS>, Option<init::ext::QoSOptimized>);
+    type SendInitSynOut = (Option<init::ext::QoS>, Option<init::ext::QoSLink>);
     async fn send_init_syn(
         self,
         state: Self::SendInitSynIn,
@@ -279,7 +279,7 @@ impl<'a> OpenFsm for &'a QoSFsm<'a> {
 
     type RecvInitAckIn = (
         &'a mut StateOpen,
-        (Option<init::ext::QoS>, Option<init::ext::QoSOptimized>),
+        (Option<init::ext::QoS>, Option<init::ext::QoSLink>),
     );
     type RecvInitAckOut = ();
     async fn recv_init_ack(
@@ -424,7 +424,7 @@ impl<'a> AcceptFsm for &'a QoSFsm<'a> {
 
     type RecvInitSynIn = (
         &'a mut StateAccept,
-        (Option<init::ext::QoS>, Option<init::ext::QoSOptimized>),
+        (Option<init::ext::QoS>, Option<init::ext::QoSLink>),
     );
     type RecvInitSynOut = ();
     async fn recv_init_syn(
@@ -488,7 +488,7 @@ impl<'a> AcceptFsm for &'a QoSFsm<'a> {
     }
 
     type SendInitAckIn = &'a StateAccept;
-    type SendInitAckOut = (Option<init::ext::QoS>, Option<init::ext::QoSOptimized>);
+    type SendInitAckOut = (Option<init::ext::QoS>, Option<init::ext::QoSLink>);
     async fn send_init_ack(
         self,
         state: Self::SendInitAckIn,
