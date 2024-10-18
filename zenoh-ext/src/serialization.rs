@@ -642,4 +642,33 @@ mod tests {
         map.insert("hello".to_string(), "world".to_string());
         serialize_deserialize!(HashMap<String, String>, map);
     }
+
+    macro_rules! check_binary_format {
+        ($expr:expr, $out:expr) => {
+            let payload = z_serialize(&$expr);
+            assert_eq!(payload.to_bytes(), $out);
+        };
+    }
+
+    #[test]
+    fn binary_format() {
+        let i1: i32 = 1234566;
+        check_binary_format!(i1, vec![134, 214, 18, 0]);
+        let i2: i32 = -49245;
+        check_binary_format!(i2, vec![163, 63, 255, 255]);
+        let s: &str = "test";
+        check_binary_format!(s, vec![4, 116, 101, 115, 116]);
+        let t: (u16, f32, &str) = (500, 1234.0, "test");
+        check_binary_format!(t, vec![244, 1, 0, 64, 154, 68, 4, 116, 101, 115, 116]);
+        let v: Vec<i64> = vec![-100, 500, 100000, -20000000];
+        check_binary_format!(
+            v,
+            vec![
+                4, 156, 255, 255, 255, 255, 255, 255, 255, 244, 1, 0, 0, 0, 0, 0, 0, 160, 134, 1,
+                0, 0, 0, 0, 0, 0, 211, 206, 254, 255, 255, 255, 255
+            ]
+        );
+        let vp: Vec<(&str, i16)> = vec![("s1", 10), ("s2", -10000)];
+        check_binary_format!(vp, vec![2, 2, 115, 49, 10, 0, 2, 115, 50, 240, 216]);
+    }
 }
