@@ -172,8 +172,8 @@ impl InitSyn {
         let zid = ZenohIdProto::default();
         let resolution = Resolution::rand();
         let batch_size: BatchSize = rng.gen();
-        let ext_qos_link = rng.gen_bool(0.5).then_some(ZExtZ64::rand());
         let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        let ext_qos_link = rng.gen_bool(0.5).then_some(ZExtZ64::rand());
         #[cfg(feature = "shared-memory")]
         let ext_shm = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
