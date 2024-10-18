@@ -457,23 +457,13 @@ impl TryFrom<u8> for Priority {
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Serialize)]
 #[repr(u8)]
 pub enum Reliability {
+    BestEffort = 0,
     #[default]
-    Reliable,
-    BestEffort,
+    Reliable = 1,
 }
 
 impl Reliability {
     pub const DEFAULT: Self = Self::Reliable;
-
-    const BEST_EFFORT_STR: &'static str = "best_effort";
-    const RELIABLE_STR: &'static str = "reliable";
-
-    pub fn as_str(&self) -> &str {
-        match self {
-            Reliability::BestEffort => Reliability::BEST_EFFORT_STR,
-            Reliability::Reliable => Reliability::RELIABLE_STR,
-        }
-    }
 
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
@@ -508,6 +498,12 @@ impl From<Reliability> for bool {
     }
 }
 
+impl Display for Reliability {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", *self as u8)
+    }
+}
+
 #[derive(Debug)]
 pub struct InvalidReliability {
     found: String,
@@ -518,8 +514,8 @@ impl Display for InvalidReliability {
         write!(
             f,
             "invalid Reliability string, expected `{}` or `{}` but found {}",
-            Reliability::BEST_EFFORT_STR,
-            Reliability::RELIABLE_STR,
+            Reliability::Reliable as u8,
+            Reliability::BestEffort as u8,
             self.found
         )
     }
@@ -532,12 +528,20 @@ impl FromStr for Reliability {
     type Err = InvalidReliability;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            Reliability::RELIABLE_STR => Ok(Reliability::Reliable),
-            Reliability::BEST_EFFORT_STR => Ok(Reliability::BestEffort),
-            other => Err(InvalidReliability {
-                found: other.to_string(),
-            }),
+        let Ok(desc) = s.parse::<u8>() else {
+            return Err(InvalidReliability {
+                found: s.to_string(),
+            });
+        };
+
+        if desc == Reliability::BestEffort as u8 {
+            Ok(Reliability::BestEffort)
+        } else if desc == Reliability::Reliable as u8 {
+            Ok(Reliability::Reliable)
+        } else {
+            return Err(InvalidReliability {
+                found: s.to_string(),
+            });
         }
     }
 }

@@ -187,8 +187,8 @@ impl fmt::Debug for AddressMut<'_> {
 pub struct Metadata<'a>(pub(super) &'a str);
 
 impl<'a> Metadata<'a> {
-    pub const RELIABILITY: &'static str = "reliability";
-    pub const PRIORITIES: &'static str = "priorities";
+    pub const RELIABILITY: &'static str = "rel";
+    pub const PRIORITIES: &'static str = "prio";
 
     pub fn as_str(&self) -> &'a str {
         self.0

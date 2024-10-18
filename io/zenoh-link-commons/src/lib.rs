@@ -117,7 +117,7 @@ impl Link {
         let mut locator = locator.clone();
         let mut metadata = locator.metadata_mut();
         reliability
-            .map(|r| metadata.insert(Metadata::RELIABILITY, r.as_str()))
+            .map(|r| metadata.insert(Metadata::RELIABILITY, r.to_string()))
             .transpose()
             .expect("adding `reliability` to Locator metadata should not fail");
         priorities
