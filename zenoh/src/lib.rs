@@ -180,6 +180,8 @@ pub mod key_expr {
 }
 
 /// Zenoh [`Session`] and associated types
+///
+/// The [`Session`] is the main component of the Zenoh.
 pub mod session {
     #[zenoh_macros::unstable]
     pub use zenoh_config::wrappers::EntityGlobalId;
@@ -202,6 +204,9 @@ pub mod session {
 }
 
 /// Sample primitives
+///
+/// The [`Sample`](crate::sample::Sample) structure is the data unit received from [`Subscriber`](crate::pubsub::Subscriber)
+/// or [`Queryable`](crate::query::Queryable) instances. It contains the payload and all the metadata associated with the data.
 pub mod sample {
     #[zenoh_macros::unstable]
     pub use crate::api::sample::Locality;
@@ -218,11 +223,11 @@ pub mod sample {
 /// Payload primitives
 ///
 /// The [`ZBytes`](crate::bytes::ZBytes) type is Zenoh's representation of raw byte data.
-/// It provides mechanisms for zero-copy creation (by implementing `From<Vec<u8>>`)
-/// and access ([`ZBytes::slices`](crate::bytes::ZBytes::slices)), as well as methods for sequential
+/// It provides mechanisms for zero-copy creation and access (`From<Vec<u8>>` and
+/// [`ZBytes::slices`](crate::bytes::ZBytes::slices)), as well as methods for sequential
 /// reading/writing ([`ZBytes::reader`](crate::bytes::ZBytes::reader), [`ZBytes::writer`](crate::bytes::ZBytes::writer)).
 ///
-/// There is also basic types serialization provided by the `zenoh_ext` crate:
+/// The`zenoh_ext` crate provides serialization and deserialization of basic types and structures for `ZBytes`
 /// [`z_serialize`](../../zenoh_ext/fn.z_serialize.html) /
 /// [`z_deserialize`](../../zenoh_ext/fn.z_deserialize.html).
 
@@ -234,6 +239,14 @@ pub mod bytes {
 }
 
 /// Pub/sub primitives
+///
+/// The [`Publisher`](crate::pubsub::Publisher) instance is declared by a
+/// [`Session::declare_publisher`](crate::Session::declare_publisher) method.
+///
+/// The data [`Sample`](crate::sample::Sample)s
+/// are received by [`Subscriber`](crate::pubsub::Subscriber)s
+/// declared by a [`Session::declare_subscriber`](crate::Session::declare_subscriber)
+///
 pub mod pubsub {
     #[zenoh_macros::unstable]
     pub use crate::api::{
@@ -254,6 +267,12 @@ pub mod pubsub {
 }
 
 /// Query/reply primitives
+///
+/// The [`Queryable`](crate::query::Queryable) instance is declared by a
+/// [`Session::declare_queryable`](crate::Session::declare_queryable) method.
+/// It is requested by a [`Session::get`](crate::Session::get) operation which
+/// receives data in [`Reply`](crate::query::Reply) structures.
+///
 pub mod query {
     pub use zenoh_protocol::core::Parameters;
     #[zenoh_macros::unstable]
@@ -276,28 +295,33 @@ pub mod query {
 
 /// Callback handler trait.
 ///
-/// Zenoh primitives that receive data (e.g., [`Subscriber`](crate::pubsub::Subscriber), 
-/// [`Query`](crate::query::Query), etc.) accept a handler in their 
-/// [`with`](crate::pubsub::SubscriberBuilder::with) method to process received messages. 
-/// The handler is a pair of a [`Callback`](crate::handlers::Callback) and an arbitrary type 
-/// object used to access data received by the callback. When the handler is not needed, 
-/// the handler type can be `()`. For convenience, this case is specailly handled by the 
-/// [`callback`](crate::pubsub::SubscriberBuilder::callback) method, which directly accepts 
-/// a `Fn(T)`.
+/// Zenoh primitives that receive data (e.g., [`Subscriber`](crate::pubsub::Subscriber),
+/// [`Query`](crate::query::Query), etc.) have a
+/// [`with`](crate::pubsub::SubscriberBuilder::with) method which accepts a handler for the data.
 ///
-/// The [`with`](crate::pubsub::SubscriberBuilder::with) method accepts any type that 
-/// implements the [`IntoHandler`](crate::handlers::IntoHandler) trait, which provides a 
+/// The handler is a pair of a [`Callback`](crate::handlers::Callback) and an arbitrary `Handler`
+/// object used to access data received by the callback. When the data is processed by the callback itself
+/// the handler type can be `()`. For convenience, the
+/// [`callback`](crate::pubsub::SubscriberBuilder::callback) method, which accepts
+/// a `Fn(T)` only can be used in this case.
+///
+/// The [`with`](crate::pubsub::SubscriberBuilder::with) method accepts any type that
+/// implements the [`IntoHandler`](crate::handlers::IntoHandler) trait, which provides a
 /// conversion to a pair of [`Callback`](crate::handlers::Callback) and handler.
 ///
-/// The channels [`FifoChannel`](crate::handlers::FifoChannel) and 
-/// [`RingChannel`](crate::handlers::RingChannel) implement the 
-/// [`IntoHandler`](crate::handlers::IntoHandler) trait, returning a pair of 
-/// [`Callback`](crate::handlers::Callback) that pushes data to the channel and the receiving 
-/// channel's end [`FifoChannelHandler`](crate::handlers::FifoChannelHandler) or 
-/// [`RingChannelHandler`](crate::handlers::RingChannelHandler). This receiving end is stored 
-/// in the constructed Zenoh object (e.g., [`Subscriber`](crate::pubsub::Subscriber)), and its 
-/// methods can be accessed directly on this object, as it implements the 
-/// [`Deref`](std::ops::Deref) and [`DerefMut`](std::ops::DerefMut) traits for the handler type.
+/// The `IntoHander` for channels [`FifoChannel`](crate::handlers::FifoChannel) and
+/// [`RingChannel`](crate::handlers::RingChannel)
+/// return a pair of ([`Callback`](crate::handlers::Callback), channel_handler).
+///
+/// The callback pushes data to the channel, the
+/// channel handler [`FifoChannelHandler`](crate::handlers::FifoChannelHandler) or
+/// [`RingChannelHandler`](crate::handlers::RingChannelHandler) allows to take data
+/// from the channel.
+///
+/// The channel handler is stored
+/// in the Zenoh object (e.g., [`Subscriber`](crate::pubsub::Subscriber)). It can be accessed
+/// by [`handler`](crate::pubsub::Subscriber::handler) method or just directly by dereferencing the
+/// Zenoh object.
 pub mod handlers {
     #[zenoh_macros::internal]
     pub use crate::api::handlers::locked;
@@ -322,6 +346,11 @@ pub mod qos {
 }
 
 /// Scouting primitives
+///
+/// Scouting is the prosess of discovering Zenoh nodes in the network.
+/// The scouting process depends on the transport layer and on the zenoh configuration.
+/// See more details at <https://zenoh.io/docs/getting-started/deployment/#scouting>.
+///
 pub mod scouting {
     pub use zenoh_config::wrappers::Hello;
 
@@ -395,7 +424,17 @@ pub mod time {
     pub use zenoh_protocol::core::{Timestamp, TimestampId, NTP64};
 }
 
-/// Configuration to pass to [`open`] and [`scout`] functions and associated constants
+/// Configuration to pass to [`open`] and [`scout`] functions and associated constants.
+///
+/// The zenoh configurattion is stored in a JSON file. The [`Config`] can be constructed from it using
+/// the corresponding `from_...` methods. It's also possible to read or
+/// modify individual elements of the [`Config`] with [`Config::insert_json5`](crate::config::Config::insert_json5)
+/// and [`Config::get_json`](crate::config::Config::get_json) methods.
+///
+/// The example of the configuration file is
+/// [available](https://github.com/eclipse-zenoh/zenoh/blob/release/1.0.0/DEFAULT_CONFIG.json5)
+/// in the zenoh repository.
+///
 pub mod config {
     pub use zenoh_config::{EndPoint, Locator, WhatAmI, WhatAmIMatcher, ZenohId};
 
