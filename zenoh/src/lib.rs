@@ -216,6 +216,16 @@ pub mod sample {
 }
 
 /// Payload primitives
+/// 
+/// The [`ZBytes`](crate::bytes::ZBytes) type is Zenoh's representation of raw byte data.
+/// It provides mechanisms for zero-copy creation (by implementing `From<Vec<u8>>`)
+/// and access ([`ZBytes::slices`](crate::bytes::ZBytes::slices)), as well as methods for sequential
+/// reading/writing ([`ZBytes::reader`](crate::bytes::ZBytes::reader), [`ZBytes::writer`](crate::bytes::ZBytes::writer)).
+/// 
+/// There is also basic types serialization provided by the `zenoh_ext` crate:
+/// [`z_serialize`](../../zenoh_ext/fn.z_serialize.html) / 
+/// [`z_deserialize`](../../zenoh_ext/fn.z_deserialize.html).
+
 pub mod bytes {
     pub use crate::api::{
         bytes::{OptionZBytes, ZBytes, ZBytesReader, ZBytesSliceIterator, ZBytesWriter},
