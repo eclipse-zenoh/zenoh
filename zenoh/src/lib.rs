@@ -276,16 +276,28 @@ pub mod query {
 
 /// Callback handler trait.
 ///
-/// The zenoh primitives which receive data (e.g. [`Subscriber`](crate::pubsub::Subscriber), [`Query`](crate::query::Query), etc.) accept in their [`with()`](crate::pubsub::SubscriberBuilder::with) method a handler
-/// which processes received message. The handler is actually a pair of a [`Callback`] and a handler. The callback is called on each received message, the handler is an object of arbitrary type, which can be used to access
-/// the data received by callback. When the handler is not needed, the handler type can be `()`. This particular case is handled by the [`callback()`](crate::pubsub::SubscriberBuilder::callback) method which directly accepts a `Fn(T)`.
+/// Zenoh primitives that receive data (e.g., [`Subscriber`](crate::pubsub::Subscriber), 
+/// [`Query`](crate::query::Query), etc.) accept a handler in their 
+/// [`with()`](crate::pubsub::SubscriberBuilder::with) method to process received messages. 
+/// The handler is a pair of a [`Callback`](crate::handlers::Callback) and an arbitrary type 
+/// object used to access data received by the callback. When the handler is not needed, 
+/// the handler type can be `()`. This case is handled by the 
+/// [`callback()`](crate::pubsub::SubscriberBuilder::callback) method, which directly accepts 
+/// a `Fn(T)`.
 ///
-/// The [`with()`](crate::pubsub::SubscriberBuilder::with) method accepts any type that implements the [`IntoHandler`] trait which in turn provides a conversion to a pair of [`Callback`] and handler.
+/// The [`with()`](crate::pubsub::SubscriberBuilder::with) method accepts any type that 
+/// implements the [`IntoHandler`](crate::handlers::IntoHandler) trait, which provides a 
+/// conversion to a pair of [`Callback`](crate::handlers::Callback) and handler.
 ///
-/// The channels [`FifoChannel`] and [`RingChannel`] provided by zenoh implements the [`IntoHandler`] trait which returns a pair of [`Callback`] which pushes the data to the channel and the receiving channel's end [`FifoChannelHandler`] or [`RingChannelHandler`]
-/// correspondingly. This receiving end is stored in the constructed zenoh object (e.g[`Subscriber`](crate::pubsub::Subscriber)) and its methods can be accessed directly on this object, as it implements the
+/// The channels [`FifoChannel`](crate::handlers::FifoChannel) and 
+/// [`RingChannel`](crate::handlers::RingChannel) implement the 
+/// [`IntoHandler`](crate::handlers::IntoHandler) trait, returning a pair of 
+/// [`Callback`](crate::handlers::Callback) that pushes data to the channel and the receiving 
+/// channel's end [`FifoChannelHandler`](crate::handlers::FifoChannelHandler) or 
+/// [`RingChannelHandler`](crate::handlers::RingChannelHandler). This receiving end is stored 
+/// in the constructed Zenoh object (e.g., [`Subscriber`](crate::pubsub::Subscriber)), and its 
+/// methods can be accessed directly on this object, as it implements the 
 /// [`Deref`](std::ops::Deref) and [`DerefMut`](std::ops::DerefMut) traits for the handler type.
-
 pub mod handlers {
     #[zenoh_macros::internal]
     pub use crate::api::handlers::locked;
