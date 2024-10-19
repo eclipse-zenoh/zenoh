@@ -278,14 +278,14 @@ pub mod query {
 ///
 /// Zenoh primitives that receive data (e.g., [`Subscriber`](crate::pubsub::Subscriber), 
 /// [`Query`](crate::query::Query), etc.) accept a handler in their 
-/// [`with()`](crate::pubsub::SubscriberBuilder::with) method to process received messages. 
+/// [`with`](crate::pubsub::SubscriberBuilder::with) method to process received messages. 
 /// The handler is a pair of a [`Callback`](crate::handlers::Callback) and an arbitrary type 
 /// object used to access data received by the callback. When the handler is not needed, 
-/// the handler type can be `()`. This case is handled by the 
-/// [`callback()`](crate::pubsub::SubscriberBuilder::callback) method, which directly accepts 
+/// the handler type can be `()`. For convenience, this case is specailly handled by the 
+/// [`callback`](crate::pubsub::SubscriberBuilder::callback) method, which directly accepts 
 /// a `Fn(T)`.
 ///
-/// The [`with()`](crate::pubsub::SubscriberBuilder::with) method accepts any type that 
+/// The [`with`](crate::pubsub::SubscriberBuilder::with) method accepts any type that 
 /// implements the [`IntoHandler`](crate::handlers::IntoHandler) trait, which provides a 
 /// conversion to a pair of [`Callback`](crate::handlers::Callback) and handler.
 ///
