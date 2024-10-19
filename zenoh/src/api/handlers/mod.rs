@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+//! Callback handler trait.
 mod callback;
 mod fifo;
 mod ring;

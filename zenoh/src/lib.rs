@@ -309,7 +309,7 @@ pub mod query {
 /// implements the [`IntoHandler`](crate::handlers::IntoHandler) trait, which provides a
 /// conversion to a pair of [`Callback`](crate::handlers::Callback) and handler.
 ///
-/// The `IntoHander` for channels [`FifoChannel`](crate::handlers::FifoChannel) and
+/// The `IntoHandler` for channels [`FifoChannel`](crate::handlers::FifoChannel) and
 /// [`RingChannel`](crate::handlers::RingChannel)
 /// return a pair of ([`Callback`](crate::handlers::Callback), channel_handler).
 ///
@@ -347,7 +347,7 @@ pub mod qos {
 
 /// Scouting primitives
 ///
-/// Scouting is the prosess of discovering Zenoh nodes in the network.
+/// Scouting is the process of discovering Zenoh nodes in the network.
 /// The scouting process depends on the transport layer and on the zenoh configuration.
 /// See more details at <https://zenoh.io/docs/getting-started/deployment/#scouting>.
 ///
