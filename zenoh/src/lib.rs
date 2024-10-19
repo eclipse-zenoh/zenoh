@@ -216,14 +216,14 @@ pub mod sample {
 }
 
 /// Payload primitives
-/// 
+///
 /// The [`ZBytes`](crate::bytes::ZBytes) type is Zenoh's representation of raw byte data.
 /// It provides mechanisms for zero-copy creation (by implementing `From<Vec<u8>>`)
 /// and access ([`ZBytes::slices`](crate::bytes::ZBytes::slices)), as well as methods for sequential
 /// reading/writing ([`ZBytes::reader`](crate::bytes::ZBytes::reader), [`ZBytes::writer`](crate::bytes::ZBytes::writer)).
-/// 
+///
 /// There is also basic types serialization provided by the `zenoh_ext` crate:
-/// [`z_serialize`](../../zenoh_ext/fn.z_serialize.html) / 
+/// [`z_serialize`](../../zenoh_ext/fn.z_serialize.html) /
 /// [`z_deserialize`](../../zenoh_ext/fn.z_deserialize.html).
 
 pub mod bytes {
@@ -274,7 +274,18 @@ pub mod query {
     pub use crate::api::{query::ReplyKeyExpr, selector::ZenohParameters};
 }
 
-/// Callback handler trait
+/// Callback handler trait.
+///
+/// The zenoh primitives which receive data (e.g. [`Subscriber`](crate::pubsub::Subscriber), [`Query`](crate::query::Query), etc.) accept in their [`with()`](crate::pubsub::SubscriberBuilder::with) method a handler
+/// which processes received message. The handler is actually a pair of a [`Callback`] and a handler. The callback is called on each received message, the handler is an object of arbitrary type, which can be used to access
+/// the data received by callback. When the handler is not needed, the handler type can be `()`. This particular case is handled by the [`callback()`](crate::pubsub::SubscriberBuilder::callback) method which directly accepts a `Fn(T)`.
+///
+/// The [`with()`](crate::pubsub::SubscriberBuilder::with) method accepts any type that implements the [`IntoHandler`] trait which in turn provides a conversion to a pair of [`Callback`] and handler.
+///
+/// The channels [`FifoChannel`] and [`RingChannel`] provided by zenoh implements the [`IntoHandler`] trait which returns a pair of [`Callback`] which pushes the data to the channel and the receiving channel's end [`FifoChannelHandler`] or [`RingChannelHandler`]
+/// correspondingly. This receiving end is stored in the constructed zenoh object (e.g[`Subscriber`](crate::pubsub::Subscriber)) and its methods can be accessed directly on this object, as it implements the
+/// [`Deref`](std::ops::Deref) and [`DerefMut`](std::ops::DerefMut) traits for the handler type.
+
 pub mod handlers {
     #[zenoh_macros::internal]
     pub use crate::api::handlers::locked;
