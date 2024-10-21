@@ -22,13 +22,13 @@ use tracing_subscriber::{
 
 /// A utility function to enable the tracing formatting subscriber.
 ///
-/// The tracing formatting subscriber is initialized from the `RUST_LOG` environment variable.
+/// The [`tracing_subscriber`]` is initialized from the `RUST_LOG` environment variable.
 /// If `RUST_LOG` is not set, then logging is not enabled.
 ///
 /// # Safety
 ///
-/// Calling this function initializes a `lazy_static` in the `tracing` crate
-/// such static is not deallocated prior to process existing, thus tools such as `valgrind`
+/// Calling this function initializes a `lazy_static` in the [`tracing`] crate.
+/// Such static is not deallocated prior to process exiting, thus tools such as `valgrind`
 /// will report a memory leak.
 /// Refer to this issue: <https://github.com/tokio-rs/tracing/issues/2069>
 pub fn try_init_log_from_env() {
@@ -39,12 +39,12 @@ pub fn try_init_log_from_env() {
 
 /// A utility function to enable the tracing formatting subscriber.
 ///
-/// The tracing formatting subscriber is initialized from the `RUST_LOG` environment variable.
+/// The [`tracing_subscriber`] is initialized from the `RUST_LOG` environment variable.
 /// If `RUST_LOG` is not set, then fallback directives are used.
 ///
 /// # Safety
-/// Calling this function initializes a `lazy_static` in the `tracing` crate
-/// such static is not deallocated prior to process existing, thus tools such as `valgrind`
+/// Calling this function initializes a `lazy_static` in the [`tracing`] crate.
+/// Such static is not deallocated prior to process existing, thus tools such as `valgrind`
 /// will report a memory leak.
 /// Refer to this issue: <https://github.com/tokio-rs/tracing/issues/2069>
 pub fn init_log_from_env_or<S>(fallback: S)
