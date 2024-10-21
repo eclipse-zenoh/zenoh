@@ -949,7 +949,16 @@ impl Runtime {
 
         let locators = scouted_locators
             .iter()
-            .filter(|l| !configured_locators.contains(l));
+            .filter(|l| !configured_locators.contains(l))
+            .collect::<Vec<&Locator>>();
+
+        if locators.is_empty() {
+            tracing::debug!(
+                "Already connecting to locators of {} (connect configuration). Ignore.",
+                zid
+            );
+            return false;
+        }
 
         let manager = self.manager();
 

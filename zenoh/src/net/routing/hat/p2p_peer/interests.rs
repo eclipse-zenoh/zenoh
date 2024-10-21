@@ -24,8 +24,8 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 use super::{
-    face_hat, face_hat_mut, hat, initial_interest, pubsub::declare_sub_interest,
-    queries::declare_qabl_interest, token::declare_token_interest, HatCode, HatFace, HatTables,
+    face_hat, face_hat_mut, initial_interest, pubsub::declare_sub_interest,
+    queries::declare_qabl_interest, token::declare_token_interest, HatCode, HatFace,
     INITIAL_INTEREST_ID,
 };
 use crate::net::routing::{
@@ -256,10 +256,13 @@ impl HatInterestTrait for HatCode {
                 }
             }
         }
+    }
+
+    fn declare_final(&self, tables: &mut Tables, face: &mut Arc<FaceState>, id: InterestId) {
         if id == INITIAL_INTEREST_ID {
             zenoh_runtime::ZRuntime::Net.block_in_place(async move {
-                if let Some(net) = &hat!(tables).gossip {
-                    if let Some(runtime) = net.runtime.upgrade() {
+                if let Some(runtime) = &tables.runtime {
+                    if let Some(runtime) = runtime.upgrade() {
                         runtime
                             .start_conditions()
                             .terminate_peer_connector_zid(face.zid)

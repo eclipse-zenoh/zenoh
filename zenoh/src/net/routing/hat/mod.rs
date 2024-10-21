@@ -154,6 +154,7 @@ pub(crate) trait HatInterestTrait {
         send_declare: &mut SendDeclare,
     );
     fn undeclare_interest(&self, tables: &mut Tables, face: &mut Arc<FaceState>, id: InterestId);
+    fn declare_final(&self, tables: &mut Tables, face: &mut Arc<FaceState>, id: InterestId);
 }
 
 pub(crate) trait HatPubSubTrait {

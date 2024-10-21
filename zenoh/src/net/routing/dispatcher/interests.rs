@@ -34,7 +34,7 @@ use zenoh_util::Timed;
 
 use super::{
     face::FaceState,
-    tables::{register_expr_interest, TablesLock},
+    tables::{register_expr_interest, Tables, TablesLock},
 };
 use crate::net::routing::{
     hat::{HatTrait, SendDeclare},
@@ -73,6 +73,8 @@ impl RemoteInterest {
 }
 
 pub(crate) fn declare_final(
+    hat_code: &(dyn HatTrait + Send + Sync),
+    wtables: &mut Tables,
     face: &mut Arc<FaceState>,
     id: InterestId,
     send_declare: &mut SendDeclare,
@@ -83,6 +85,8 @@ pub(crate) fn declare_final(
     {
         finalize_pending_interest(interest, send_declare);
     }
+
+    hat_code.declare_final(wtables, face, id);
 }
 
 pub(crate) fn finalize_pending_interests(

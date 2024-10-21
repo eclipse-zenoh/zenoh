@@ -75,13 +75,6 @@ mod pubsub;
 mod queries;
 mod token;
 
-macro_rules! hat {
-    ($t:expr) => {
-        $t.hat.downcast_ref::<HatTables>().unwrap()
-    };
-}
-use hat;
-
 macro_rules! hat_mut {
     ($t:expr) => {
         $t.hat.downcast_mut::<HatTables>().unwrap()
@@ -132,16 +125,18 @@ impl HatBaseTrait for HatCode {
             unwrap_or_default!(config.routing().router().peers_failover_brokering());
         drop(config_guard);
 
-        hat_mut!(tables).gossip = Some(Network::new(
-            "[Gossip]".to_string(),
-            tables.zid,
-            runtime,
-            router_peers_failover_brokering,
-            gossip,
-            gossip_multihop,
-            autoconnect,
-            wait_declares,
-        ));
+        if gossip {
+            hat_mut!(tables).gossip = Some(Network::new(
+                "[Gossip]".to_string(),
+                tables.zid,
+                runtime,
+                router_peers_failover_brokering,
+                gossip,
+                gossip_multihop,
+                autoconnect,
+                wait_declares,
+            ));
+        }
     }
 
     fn new_tables(&self, _router_peers_failover_brokering: bool) -> Box<dyn Any + Send + Sync> {
@@ -326,11 +321,9 @@ impl HatBaseTrait for HatCode {
         wtables.faces.remove(&face.id);
 
         if face.whatami != WhatAmI::Client {
-            hat_mut!(wtables)
-                .gossip
-                .as_mut()
-                .unwrap()
-                .remove_link(&face.zid);
+            if let Some(net) = hat_mut!(wtables).gossip.as_mut() {
+                net.remove_link(&face.zid);
+            }
         };
         drop(wtables);
     }
@@ -346,15 +339,15 @@ impl HatBaseTrait for HatCode {
         if oam.id == OAM_LINKSTATE {
             if let ZExtBody::ZBuf(buf) = oam.body {
                 if let Ok(zid) = transport.get_zid() {
-                    use zenoh_buffers::reader::HasReader;
-                    use zenoh_codec::RCodec;
-                    let codec = Zenoh080Routing::new();
-                    let mut reader = buf.reader();
-                    let list: LinkStateList = codec.read(&mut reader).unwrap();
-
                     let whatami = transport.get_whatami()?;
                     if whatami != WhatAmI::Client {
                         if let Some(net) = hat_mut!(tables).gossip.as_mut() {
+                            use zenoh_buffers::reader::HasReader;
+                            use zenoh_codec::RCodec;
+                            let codec = Zenoh080Routing::new();
+                            let mut reader = buf.reader();
+                            let list: LinkStateList = codec.read(&mut reader).unwrap();
+
                             net.link_states(list.link_states, zid, whatami);
                         }
                     };
