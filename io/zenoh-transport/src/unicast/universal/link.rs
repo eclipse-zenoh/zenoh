@@ -152,8 +152,10 @@ impl TransportLinkUnicastUniversal {
                 // transport.del_link((&rx.link).into()).await;
             }
         };
-        // WARN: If this is on ZRuntime::TX, a deadlock would occur.
-        self.tracker.spawn_on(task, &zenoh_runtime::ZRuntime::RX);
+
+        // we intentionally do not use tracker to be able to close the transport
+        // asynchronously with blocking operation in RX callback
+        zenoh_runtime::ZRuntime::RX.spawn(task);
     }
 
     pub(super) async fn close(self) -> ZResult<()> {
