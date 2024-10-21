@@ -117,6 +117,10 @@ impl HatInterestTrait for HatCode {
     fn undeclare_interest(&self, _tables: &mut Tables, face: &mut Arc<FaceState>, id: InterestId) {
         face_hat_mut!(face).remote_interests.remove(&id);
     }
+
+    fn declare_final(&self, _tables: &mut Tables, _face: &mut Arc<FaceState>, _id: InterestId) {
+        // Nothing
+    }
 }
 
 #[inline]

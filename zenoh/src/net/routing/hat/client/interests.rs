@@ -231,4 +231,8 @@ impl HatInterestTrait for HatCode {
             }
         }
     }
+
+    fn declare_final(&self, _tables: &mut Tables, _face: &mut Arc<FaceState>, _id: InterestId) {
+        // Nothing
+    }
 }

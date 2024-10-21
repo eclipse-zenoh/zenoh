@@ -359,15 +359,19 @@ impl Primitives for Face {
                         .entry(id)
                         .and_modify(|interest| interest.finalized = true);
 
+                    let mut wtables = zwrite!(self.tables.tables);
                     let mut declares = vec![];
-                    declare_final(&mut self.state.clone(), id, &mut |p, m| {
-                        declares.push((p.clone(), m))
-                    });
+                    declare_final(
+                        ctrl_lock.as_ref(),
+                        &mut wtables,
+                        &mut self.state.clone(),
+                        id,
+                        &mut |p, m| declares.push((p.clone(), m)),
+                    );
 
                     // recompute routes
                     // TODO: disable  routes and recompute them in parallel to avoid holding
                     // tables write lock for a long time.
-                    let mut wtables = zwrite!(self.tables.tables);
                     let mut root_res = wtables.root_res.clone();
                     update_data_routes_from(&mut wtables, &mut root_res);
                     update_query_routes_from(&mut wtables, &mut root_res);
