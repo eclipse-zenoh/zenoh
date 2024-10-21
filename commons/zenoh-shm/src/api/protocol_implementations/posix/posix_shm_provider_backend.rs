@@ -36,13 +36,6 @@ use crate::api::{
     },
 };
 
-// TODO: MIN_FREE_CHUNK_SIZE limitation is made to reduce memory fragmentation and lower
-// the CPU time needed to defragment() - that's reasonable, and there is additional thing here:
-// our SHM\zerocopy functionality outperforms common buffer transmission only starting from 1K
-// buffer size. In other words, there should be some minimal size threshold reasonable to use with
-// SHM - and it would be good to synchronize this threshold with MIN_FREE_CHUNK_SIZE limitation!
-const MIN_FREE_CHUNK_SIZE: usize = 1_024;
-
 #[derive(Eq, Copy, Clone, Debug)]
 struct Chunk {
     offset: ChunkID,
@@ -181,18 +174,18 @@ impl ShmProviderBackend for PosixShmProviderBackend {
             Some(mut chunk) if chunk.size >= required_len => {
                 // NOTE: don't loose any chunks here, as it will lead to memory leak
                 tracing::trace!("Allocator selected Chunk ({:?})", &chunk);
-                if chunk.size.get() - required_len.get() >= MIN_FREE_CHUNK_SIZE {
-                    let free_chunk = Chunk {
-                        offset: chunk.offset + required_len.get() as ChunkID,
-                        // SAFETY: this is safe because we always operate on a leftover, which is checked above!
-                        size: unsafe {
-                            NonZeroUsize::new_unchecked(chunk.size.get() - required_len.get())
-                        },
-                    };
-                    tracing::trace!("The allocation will leave a Free Chunk: {:?}", &free_chunk);
-                    guard.push(free_chunk);
-                    chunk.size = required_len;
-                }
+
+                let free_chunk = Chunk {
+                    offset: chunk.offset + required_len.get() as ChunkID,
+                    // SAFETY: this is safe because we always operate on a leftover, which is checked above!
+                    size: unsafe {
+                        NonZeroUsize::new_unchecked(chunk.size.get() - required_len.get())
+                    },
+                };
+                tracing::trace!("The allocation will leave a Free Chunk: {:?}", &free_chunk);
+                guard.push(free_chunk);
+                chunk.size = required_len;
+
                 self.available
                     .fetch_sub(chunk.size.get(), Ordering::Relaxed);
 
