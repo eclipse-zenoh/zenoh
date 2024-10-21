@@ -199,7 +199,7 @@ async fn tx_task(
                         break;
                     },
                     Err(_) => {
-                        // A timeout occured, no control/data messages have been sent during
+                        // A timeout occurred, no control/data messages have been sent during
                         // the keep_alive period, we need to send a KeepAlive message
                         let message: TransportMessage = KeepAlive.into();
 
