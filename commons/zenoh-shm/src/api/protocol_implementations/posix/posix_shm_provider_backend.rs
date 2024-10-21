@@ -175,16 +175,18 @@ impl ShmProviderBackend for PosixShmProviderBackend {
                 // NOTE: don't loose any chunks here, as it will lead to memory leak
                 tracing::trace!("Allocator selected Chunk ({:?})", &chunk);
 
-                let free_chunk = Chunk {
-                    offset: chunk.offset + required_len.get() as ChunkID,
-                    // SAFETY: this is safe because we always operate on a leftover, which is checked above!
-                    size: unsafe {
-                        NonZeroUsize::new_unchecked(chunk.size.get() - required_len.get())
-                    },
-                };
-                tracing::trace!("The allocation will leave a Free Chunk: {:?}", &free_chunk);
-                guard.push(free_chunk);
-                chunk.size = required_len;
+                if chunk.size > required_len {
+                    let free_chunk = Chunk {
+                        offset: chunk.offset + required_len.get() as ChunkID,
+                        // SAFETY: this is safe because we always operate on a leftover, which is checked above!
+                        size: unsafe {
+                            NonZeroUsize::new_unchecked(chunk.size.get() - required_len.get())
+                        },
+                    };
+                    tracing::trace!("The allocation will leave a Free Chunk: {:?}", &free_chunk);
+                    guard.push(free_chunk);
+                    chunk.size = required_len;
+                }
 
                 self.available
                     .fetch_sub(chunk.size.get(), Ordering::Relaxed);
