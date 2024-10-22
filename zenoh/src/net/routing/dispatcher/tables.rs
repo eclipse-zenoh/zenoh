@@ -29,9 +29,12 @@ use zenoh_sync::get_mut_unchecked;
 
 use super::face::FaceState;
 pub use super::{pubsub::*, queries::*, resource::*};
-use crate::net::routing::{
-    hat::{self, HatTrait},
-    interceptor::{interceptor_factories, InterceptorFactory},
+use crate::net::{
+    routing::{
+        hat::{self, HatTrait},
+        interceptor::{interceptor_factories, InterceptorFactory},
+    },
+    runtime::WeakRuntime,
 };
 
 pub(crate) struct RoutingExpr<'a> {
@@ -62,6 +65,7 @@ impl<'a> RoutingExpr<'a> {
 pub struct Tables {
     pub(crate) zid: ZenohIdProto,
     pub(crate) whatami: WhatAmI,
+    pub(crate) runtime: Option<WeakRuntime>,
     pub(crate) face_counter: usize,
     #[allow(dead_code)]
     pub(crate) hlc: Option<Arc<HLC>>,
@@ -93,6 +97,7 @@ impl Tables {
         Ok(Tables {
             zid,
             whatami,
+            runtime: None,
             face_counter: 0,
             hlc,
             drop_future_timestamp,
