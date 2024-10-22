@@ -25,6 +25,14 @@ env:
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
   CARGO_PROFILE_DEV_DEBUG: false
   RUSTUP_WINDOWS_PATH_ADD_BIN: 1
+  # NOTE(fuzzypixelz): This should be changed to "minor" during a release cycle
+  # with plans for changes that REQUIRE a minor version bump as defined by the Cargo reference
+  # (https://doc.rust-lang.org/cargo/reference/semver.html).
+  # However, a minor release could be published without such changes, in which case this variable need not be changed.
+  CARGO_SEMVER_CHECKS_RELEASE_TYPE: patch
+  # NOTE(fuzzypixelz): cargo-semver-checks uses the previous released version as a baseline, not the latest released
+  # version on crates.io. Thus this needs to be updated after every release.
+  CARGO_SEMVER_CHECKS_BASELINE_VERSION: 1.0.0
 
 jobs:
   check:
@@ -50,6 +58,9 @@ jobs:
 
       - name: Install latest cargo-machete
         uses: taiki-e/install-action@cargo-machete
+
+      - name: Install latest cargo-semver-checks
+        uses: taiki-e/install-action@cargo-semver-checks
 
       - name: Code format check
         run: cargo fmt --check -- --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate"
@@ -99,6 +110,9 @@ jobs:
 
       - name: Check unused dependencies
         run: cargo machete
+
+      - name: Check SemVer Compatibility
+        run: cargo +stable semver-checks --verbose --default-features --package zenoh --release-type ${{ env.CARGO_SEMVER_CHECKS_RELEASE_TYPE }} --baseline-version ${{ env.CARGO_SEMVER_CHECKS_BASELINE_VERSION }}
 
   test:
     name: Unit tests on ${{ matrix.os }}
