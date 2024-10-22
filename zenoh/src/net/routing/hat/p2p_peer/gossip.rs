@@ -451,7 +451,7 @@ impl Network {
                 }
             }
         }
-        if self.wait_declares && src_whatami != WhatAmI::Peer {
+        if (!self.wait_declares) || src_whatami != WhatAmI::Peer {
             zenoh_runtime::ZRuntime::Net.block_in_place(
                 strong_runtime
                     .start_conditions()
