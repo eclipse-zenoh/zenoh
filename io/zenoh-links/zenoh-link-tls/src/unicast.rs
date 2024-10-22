@@ -11,13 +11,23 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{cell::UnsafeCell, convert::TryInto, fmt, net::SocketAddr, sync::Arc, time::Duration};
+use std::{
+    cell::UnsafeCell,
+    convert::TryInto,
+    fmt,
+    net::SocketAddr,
+    sync::{Arc, Weak},
+    time::Duration,
+};
 
 use async_trait::async_trait;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
-    sync::Mutex as AsyncMutex,
+    sync::{
+        mpsc::{UnboundedReceiver, UnboundedSender},
+        Mutex as AsyncMutex,
+    },
 };
 use tokio_rustls::{TlsAcceptor, TlsConnector, TlsStream};
 use tokio_util::sync::CancellationToken;
@@ -260,14 +270,27 @@ impl fmt::Debug for LinkUnicastTls {
 pub struct LinkManagerUnicastTls {
     manager: NewLinkChannelSender,
     listeners: ListenersUnicastIP,
+    expiration_sender: UnboundedSender<(ASN1Time, Arc<LinkUnicastTls>)>,
 }
 
 impl LinkManagerUnicastTls {
     pub fn new(manager: NewLinkChannelSender) -> Self {
+        let listeners = ListenersUnicastIP::new();
+        let token = listeners.token.child_token();
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<(ASN1Time, Arc<LinkUnicastTls>)>();
+        zenoh_runtime::ZRuntime::Acceptor.spawn(Self::expiration_task(token, rx));
+
         Self {
             manager,
-            listeners: ListenersUnicastIP::new(),
+            listeners,
+            expiration_sender: tx,
         }
+    }
+
+    async fn expiration_task(
+        token: CancellationToken,
+        rx: UnboundedReceiver<(ASN1Time, Arc<LinkUnicastTls>)>,
+    ) {
     }
 }
 
