@@ -52,6 +52,7 @@ jobs:
       - uses: eclipse-zenoh/ci/bump-crates@main
         with:
           repo: ${{ github.repository }}
+          live-run: ${{ inputs.live-run || false }}
           version: ${{ steps.create-release-branch.outputs.version }}
           branch: ${{ steps.create-release-branch.outputs.branch }}
           bump-deps-pattern: zenoh.*
