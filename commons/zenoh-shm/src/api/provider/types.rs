@@ -26,12 +26,12 @@ pub enum ZAllocError {
     /// The provider is out of memory.
     OutOfMemory,
     /// Uncategorized allocation error.
-    Other(zenoh_result::Error),
+    Other,
 }
 
 impl From<zenoh_result::Error> for ZAllocError {
-    fn from(value: zenoh_result::Error) -> Self {
-        Self::Other(value)
+    fn from(_value: zenoh_result::Error) -> Self {
+        Self::Other
     }
 }
 
