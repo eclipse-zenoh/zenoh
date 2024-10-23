@@ -13,6 +13,7 @@
 //
 use std::{
     cell::UnsafeCell,
+    collections::BTreeMap,
     convert::TryInto,
     fmt,
     net::SocketAddr,
@@ -21,17 +22,18 @@ use std::{
 };
 
 use async_trait::async_trait;
+use time::OffsetDateTime;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
     sync::{
-        mpsc::{UnboundedReceiver, UnboundedSender},
+        mpsc::{Receiver, Sender},
         Mutex as AsyncMutex,
     },
 };
 use tokio_rustls::{TlsAcceptor, TlsConnector, TlsStream};
 use tokio_util::sync::CancellationToken;
-use x509_parser::prelude::*;
+use x509_parser::prelude::{FromDer, X509Certificate};
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
     get_ip_interface_names, LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast,
@@ -270,14 +272,15 @@ impl fmt::Debug for LinkUnicastTls {
 pub struct LinkManagerUnicastTls {
     manager: NewLinkChannelSender,
     listeners: ListenersUnicastIP,
-    expiration_sender: UnboundedSender<(ASN1Time, Arc<LinkUnicastTls>)>,
+    expiration_sender: Sender<(OffsetDateTime, Weak<LinkUnicastTls>)>,
 }
 
 impl LinkManagerUnicastTls {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         let listeners = ListenersUnicastIP::new();
         let token = listeners.token.child_token();
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<(ASN1Time, Arc<LinkUnicastTls>)>();
+        // Note: flume might be more efficient
+        let (tx, rx) = tokio::sync::mpsc::channel::<(OffsetDateTime, Weak<LinkUnicastTls>)>(1);
         zenoh_runtime::ZRuntime::Acceptor.spawn(Self::expiration_task(token, rx));
 
         Self {
@@ -289,8 +292,62 @@ impl LinkManagerUnicastTls {
 
     async fn expiration_task(
         token: CancellationToken,
-        rx: UnboundedReceiver<(ASN1Time, Arc<LinkUnicastTls>)>,
+        mut rx: Receiver<(OffsetDateTime, Weak<LinkUnicastTls>)>,
     ) {
+        const DEFAULT_SLEEP_TIME: tokio::time::Duration = tokio::time::Duration::MAX;
+        let mut link_expiration_map: BTreeMap<OffsetDateTime, Vec<Weak<LinkUnicastTls>>> =
+            BTreeMap::new();
+
+        loop {
+            // Get the next expiring link time, or default to DEFAULT_SLEEP_TIME
+            let next_expiration_time = link_expiration_map
+                .first_key_value()
+                .map(|(expiration_time, _)| *expiration_time)
+                .unwrap_or_else(|| OffsetDateTime::now_utc() + DEFAULT_SLEEP_TIME);
+
+            // from OffsetDateTime to Instant
+            let next_expiration_instant = tokio::time::Instant::now()
+                + std::time::Duration::from_secs_f32(
+                    (next_expiration_time - OffsetDateTime::now_utc()).as_seconds_f32(),
+                );
+
+            tokio::select! {
+                _ = token.cancelled() => break,
+
+                maybe_new_link = rx.recv() => {
+                    if let Some(new_link) = maybe_new_link {
+                        link_expiration_map.entry(new_link.0).or_default().push(new_link.1);
+                    }
+                    // else channel was closed, do nothing: we don't expect more links to be created,
+                    // but it's not a reason to stop this task
+                },
+
+                _ = tokio::time::sleep_until(next_expiration_instant) => {
+                    if next_expiration_time >= OffsetDateTime::now_utc() {
+                        if let Some(links_to_close) = link_expiration_map.get(&next_expiration_time) {
+                            for link in links_to_close {
+                                if let Some(link) = link.upgrade() {
+                                    tracing::warn!(
+                                        "Closing link {} => {} : remote certificate expired",
+                                        link.src_locator,
+                                        link.dst_locator,
+                                    );
+                                    if let Err(e) = link.close().await {
+                                        tracing::error!(
+                                            "Error closing link {} => {} : {}",
+                                            link.src_locator,
+                                            link.dst_locator,
+                                            e
+                                        )
+                                    }
+                                }
+                            }
+                            link_expiration_map.remove(&next_expiration_time);
+                        }
+                    }
+                },
+            }
+        }
     }
 }
 
