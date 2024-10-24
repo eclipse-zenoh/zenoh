@@ -18,7 +18,7 @@ use std::{
     fmt,
     net::SocketAddr,
     sync::{Arc, Weak},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use async_trait::async_trait;
@@ -416,6 +416,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
 
         let (_, tls_conn) = tls_stream.get_ref();
         let auth_identifier = get_server_cert_common_name(tls_conn)?;
+        let certchain_expiration_time = get_cert_chain_expiration(&tls_conn.peer_certificates())?
+            .expect("server should have certificate chain");
 
         let tls_stream = TlsStream::Client(tls_stream);
 
@@ -425,6 +427,14 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             dst_addr,
             auth_identifier.into(),
         ));
+
+        if let Err(e) = self
+            .expiration_sender
+            .send((certchain_expiration_time, Arc::downgrade(&link)))
+            .await
+        {
+            tracing::error!("{}-{}: {}", file!(), line!(), e)
+        }
 
         Ok(LinkUnicast(link))
     }
@@ -458,6 +468,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             let acceptor = TlsAcceptor::from(Arc::new(tls_server_config.server_config));
             let token = token.clone();
             let manager = self.manager.clone();
+            let expiration_tx = self.expiration_sender.clone();
 
             async move {
                 accept_task(
@@ -466,6 +477,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
                     token,
                     manager,
                     tls_server_config.tls_handshake_timeout,
+                    expiration_tx,
                 )
                 .await
             }
@@ -506,6 +518,7 @@ async fn accept_task(
     token: CancellationToken,
     manager: NewLinkChannelSender,
     tls_handshake_timeout: Duration,
+    expiration_task_tx: Sender<(OffsetDateTime, Weak<LinkUnicastTls>)>,
 ) -> ZResult<()> {
     let src_addr = socket.local_addr().map_err(|e| {
         let e = zerror!("Can not accept TLS connections: {}", e);
@@ -535,6 +548,9 @@ async fn accept_task(
                         };
                         let auth_identifier = get_client_cert_common_name(tls_conn)?;
 
+                        // Get certificate chain expiration
+                        let maybe_expiration_time = get_cert_chain_expiration(&tls_conn.peer_certificates())?;
+
                         tracing::debug!("Accepted TLS connection on {:?}: {:?}", src_addr, dst_addr);
                         // Create the new link object
                         let link = Arc::new(LinkUnicastTls::new(
@@ -543,6 +559,13 @@ async fn accept_task(
                             dst_addr,
                             auth_identifier.into(),
                         ));
+
+                        // Communicate the link to the expiration task if applicable
+                        if let Some(certchain_expiration_time) = maybe_expiration_time {
+                            if let Err(e) = expiration_task_tx.send((certchain_expiration_time, Arc::downgrade(&link))).await {
+                                tracing::error!("{}-{}: {}", file!(), line!(), e)
+                            }
+                        }
 
                         // Communicate the new link to the initial transport manager
                         if let Err(e) = manager.send_async(LinkUnicast(link)).await {
@@ -605,6 +628,24 @@ fn get_server_cert_common_name(tls_conn: &rustls::ClientConnection) -> ZResult<T
         return Ok(auth_id);
     }
     Ok(auth_id)
+}
+
+/// Returns the minimum value of the `not_after` field in the given certificate chain.
+/// Returns `None` if the input certificate chain is empty or `None`
+fn get_cert_chain_expiration(
+    cert_chain: &Option<&[rustls_pki_types::CertificateDer]>,
+) -> ZResult<Option<OffsetDateTime>> {
+    let mut link_expiration: Option<OffsetDateTime> = None;
+    if let Some(remote_certs) = cert_chain {
+        for cert in *remote_certs {
+            let (_, cert) = X509Certificate::from_der(cert.as_ref())?;
+            let cert_expiration = cert.validity().not_after.to_datetime();
+            link_expiration = link_expiration
+                .map(|current_min| current_min.min(cert_expiration))
+                .or(Some(cert_expiration));
+        }
+    }
+    Ok(link_expiration)
 }
 
 struct TlsAuthId {
