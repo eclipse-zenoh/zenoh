@@ -313,7 +313,7 @@ impl LinkManagerUnicastTls {
                     for link in links_to_close {
                         if let Some(link) = link.upgrade() {
                             tracing::warn!(
-                                "Closing link {} => {} : remote certificate expired",
+                                "Closing link {} => {} : remote certificate chain expired",
                                 link.src_locator,
                                 link.dst_locator,
                             );
