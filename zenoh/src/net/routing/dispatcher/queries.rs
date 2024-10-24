@@ -425,10 +425,11 @@ impl Timed for QueryCleanup {
             {
                 drop(queries_lock);
                 tracing::warn!(
-                    "Didn't receive final reply {}:{} from {}: Timeout({:#?})!",
-                    query.0.src_face,
-                    self.qid,
+                    "Didn't receive final reply {}:{} for {}:{}: Timeout({:#?})!",
                     face,
+                    self.qid,
+                    query.0.src_face,
+                    query.0.src_qid,
                     self.timeout,
                 );
                 finalize_pending_query(query);
@@ -602,8 +603,10 @@ pub fn route_query(
                         ext_tstamp: None,
                     });
                 } else {
-                    for ((outface, key_expr, context), qid) in route.values() {
-                        QueryCleanup::spawn_query_clean_up_task(outface, tables_ref, *qid, timeout);
+                    for ((outface, key_expr, context), outqid) in route.values() {
+                        QueryCleanup::spawn_query_clean_up_task(
+                            outface, tables_ref, *outqid, timeout,
+                        );
                         #[cfg(feature = "stats")]
                         if !admin {
                             inc_req_stats!(outface, tx, user, body)
@@ -611,9 +614,15 @@ pub fn route_query(
                             inc_req_stats!(outface, tx, admin, body)
                         }
 
-                        tracing::trace!("Propagate query {}:{} to {}", face, qid, outface);
+                        tracing::trace!(
+                            "Propagate query {}:{} to {}:{}",
+                            face,
+                            qid,
+                            outface,
+                            outqid
+                        );
                         outface.primitives.send_request(Request {
-                            id: *qid,
+                            id: *outqid,
                             wire_expr: key_expr.into(),
                             ext_qos,
                             ext_tstamp,
@@ -711,19 +720,15 @@ pub(crate) fn route_send_response_final(
         Some(query) => {
             drop(queries_lock);
             tracing::debug!(
-                "Received final reply {}:{} from {}",
-                query.0.src_face,
+                "Received final reply {}:{} for {}:{}",
+                face,
                 qid,
-                face
+                query.0.src_face,
+                query.0.src_qid,
             );
             finalize_pending_query(query);
         }
-        None => tracing::warn!(
-            "Route final reply {}:{} from {}: Query not found!",
-            face,
-            qid,
-            face
-        ),
+        None => tracing::warn!("Route final reply {}:{}: Query not found!", face, qid,),
     }
 }
 
