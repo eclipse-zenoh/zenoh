@@ -18,7 +18,7 @@ use std::{
     fmt,
     net::SocketAddr,
     sync::{Arc, Weak},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use async_trait::async_trait;
@@ -294,25 +294,60 @@ impl LinkManagerUnicastTls {
         token: CancellationToken,
         mut rx: Receiver<(OffsetDateTime, Weak<LinkUnicastTls>)>,
     ) {
-        const DEFAULT_SLEEP_TIME: tokio::time::Duration = tokio::time::Duration::MAX;
+        // TODO: Maybe expose this as a locator parameter?
+        const PERIODIC_SLEEP_DURATION: tokio::time::Duration =
+            tokio::time::Duration::from_secs(600);
         let mut link_expiration_map: BTreeMap<OffsetDateTime, Vec<Weak<LinkUnicastTls>>> =
             BTreeMap::new();
+        let mut next_wakeup_instant: tokio::time::Instant;
 
         loop {
-            // Get the next expiring link time, or default to DEFAULT_SLEEP_TIME
-            let next_expiration_time = link_expiration_map
-                .first_key_value()
-                .map(|(expiration_time, _)| *expiration_time)
-                .unwrap_or_else(|| OffsetDateTime::now_utc() + DEFAULT_SLEEP_TIME);
+            next_wakeup_instant = tokio::time::Instant::now() + PERIODIC_SLEEP_DURATION;
 
-            // from OffsetDateTime to Instant
-            let next_expiration_instant = tokio::time::Instant::now()
-                + std::time::Duration::from_secs_f32(
-                    (next_expiration_time - OffsetDateTime::now_utc()).as_seconds_f32(),
-                );
+            if let Some((&next_expiration_time, links_to_close)) =
+                link_expiration_map.first_key_value()
+            {
+                let now = OffsetDateTime::now_utc();
+                if next_expiration_time <= now {
+                    // Close links
+                    for link in links_to_close {
+                        if let Some(link) = link.upgrade() {
+                            tracing::warn!(
+                                "Closing link {} => {} : remote certificate expired",
+                                link.src_locator,
+                                link.dst_locator,
+                            );
+                            if let Err(e) = link.close().await {
+                                tracing::error!(
+                                    "Error closing link {} => {} : {}",
+                                    link.src_locator,
+                                    link.dst_locator,
+                                    e
+                                )
+                            }
+                        }
+                    }
+                    link_expiration_map.remove(&next_expiration_time);
+                    // loop again to check the next deadline
+                    continue;
+                } else {
+                    // next sleep duration is the minimum between PERIODIC_SLEEP_DURATION and the duration till next expiration
+                    // this mitigates the unsoundness of using `tokio::time::sleep_until` with long durations
+                    let next_expiration_duration = std::time::Duration::from_secs_f32(
+                        (next_expiration_time - now).as_seconds_f32(),
+                    );
+                    next_wakeup_instant = tokio::time::Instant::now()
+                        + tokio::time::Duration::min(
+                            PERIODIC_SLEEP_DURATION,
+                            next_expiration_duration,
+                        );
+                }
+            }
 
             tokio::select! {
                 _ = token.cancelled() => break,
+
+                _ = tokio::time::sleep_until(next_wakeup_instant) => {},
 
                 maybe_new_link = rx.recv() => {
                     if let Some(new_link) = maybe_new_link {
@@ -320,31 +355,7 @@ impl LinkManagerUnicastTls {
                     }
                     // else channel was closed, do nothing: we don't expect more links to be created,
                     // but it's not a reason to stop this task
-                },
-
-                _ = tokio::time::sleep_until(next_expiration_instant) => {
-                    if next_expiration_time >= OffsetDateTime::now_utc() {
-                        if let Some(links_to_close) = link_expiration_map.get(&next_expiration_time) {
-                            for link in links_to_close {
-                                if let Some(link) = link.upgrade() {
-                                    tracing::warn!(
-                                        "Closing link {} => {} : remote certificate expired",
-                                        link.src_locator,
-                                        link.dst_locator,
-                                    );
-                                    if let Err(e) = link.close().await {
-                                        tracing::error!(
-                                            "Error closing link {} => {} : {}",
-                                            link.src_locator,
-                                            link.dst_locator,
-                                            e
-                                        )
-                                    }
-                                }
-                            }
-                            link_expiration_map.remove(&next_expiration_time);
-                        }
-                    }
+                    // FIXME: after this case, this branch of the select will instantly resolve in every loop...
                 },
             }
         }
