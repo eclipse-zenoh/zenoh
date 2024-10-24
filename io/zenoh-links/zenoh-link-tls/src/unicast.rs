@@ -349,13 +349,12 @@ impl LinkManagerUnicastTls {
 
                 _ = tokio::time::sleep_until(next_wakeup_instant) => {},
 
-                maybe_new_link = rx.recv() => {
+                maybe_new_link = rx.recv(), if !rx.is_closed() => {
                     if let Some(new_link) = maybe_new_link {
                         link_expiration_map.entry(new_link.0).or_default().push(new_link.1);
                     }
                     // else channel was closed, do nothing: we don't expect more links to be created,
                     // but it's not a reason to stop this task
-                    // FIXME: after this case, this branch of the select will instantly resolve in every loop...
                 },
             }
         }
