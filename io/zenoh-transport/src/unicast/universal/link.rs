@@ -178,39 +178,42 @@ async fn tx_task(
     token: CancellationToken,
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {
-    let mut interval =
-        tokio::time::interval_at(tokio::time::Instant::now() + keep_alive, keep_alive);
     loop {
         tokio::select! {
-            res = pipeline.pull() => {
-                if let Some((mut batch, priority)) = res {
-                    link.send_batch(&mut batch).await?;
+            res = tokio::time::timeout(keep_alive, pipeline.pull()) => {
+                match res {
+                    Ok(Some((mut batch, priority))) => {
+                        link.send_batch(&mut batch).await?;
 
-                    #[cfg(feature = "stats")]
-                    {
-                        stats.inc_tx_t_msgs(batch.stats.t_msgs);
-                        stats.inc_tx_bytes(batch.len() as usize);
+                        #[cfg(feature = "stats")]
+                        {
+                            stats.inc_tx_t_msgs(batch.stats.t_msgs);
+                            stats.inc_tx_bytes(batch.len() as usize);
+                        }
+
+                        // Reinsert the batch into the queue
+                        pipeline.refill(batch, priority);
+                    },
+                    Ok(None) => {
+                        // The queue has been disabled: break the tx loop, drain the queue, and exit
+                        break;
+                    },
+                    Err(_) => {
+                        // A timeout occurred, no control/data messages have been sent during
+                        // the keep_alive period, we need to send a KeepAlive message
+                        let message: TransportMessage = KeepAlive.into();
+
+                        #[allow(unused_variables)] // Used when stats feature is enabled
+                        let n = link.send(&message).await?;
+
+                        #[cfg(feature = "stats")]
+                        {
+                            stats.inc_tx_t_msgs(1);
+                            stats.inc_tx_bytes(n);
+                        }
                     }
-
-                    // Reinsert the batch into the queue
-                    pipeline.refill(batch, priority);
-                } else {
-                    break
                 }
-            }
-
-            _ = interval.tick() => {
-                let message: TransportMessage = KeepAlive.into();
-
-                #[allow(unused_variables)] // Used when stats feature is enabled
-                let n = link.send(&message).await?;
-
-                #[cfg(feature = "stats")]
-                {
-                    stats.inc_tx_t_msgs(1);
-                    stats.inc_tx_bytes(n);
-                }
-            }
+            },
 
             _ = token.cancelled() => break
         }
