@@ -21,13 +21,16 @@ use std::{
 
 use async_trait::async_trait;
 use quinn::crypto::rustls::{QuicClientConfig, QuicServerConfig};
+use time::OffsetDateTime;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio_util::sync::CancellationToken;
-use x509_parser::prelude::*;
+use x509_parser::prelude::{FromDer, X509Certificate};
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
-    get_ip_interface_names, LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast,
-    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender,
+    get_ip_interface_names,
+    tls::{LinkCertExpirationInfo, LinkCertExpirationManager, NewLinkExpirationSender},
+    LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
+    ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -197,13 +200,18 @@ impl fmt::Debug for LinkUnicastQuic {
 pub struct LinkManagerUnicastQuic {
     manager: NewLinkChannelSender,
     listeners: ListenersUnicastIP,
+    expiration_manager: LinkCertExpirationManager,
 }
 
 impl LinkManagerUnicastQuic {
     pub fn new(manager: NewLinkChannelSender) -> Self {
+        let listener = ListenersUnicastIP::new();
+        let token = listener.token.child_token();
+
         Self {
             manager,
             listeners: ListenersUnicastIP::new(),
+            expiration_manager: LinkCertExpirationManager::new(token),
         }
     }
 }
@@ -259,6 +267,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
 
         let auth_id = get_cert_common_name(&quic_conn)?;
+        let certchain_expiration_time =
+            get_cert_chain_expiration(&quic_conn)?.expect("server should have certificate chain");
 
         let link = Arc::new(LinkUnicastQuic::new(
             quic_conn,
@@ -268,6 +278,22 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             recv,
             auth_id.into(),
         ));
+
+        // send to link expiration manager
+        let link_trait_object: Arc<dyn LinkUnicastTrait> = link.clone();
+        let expiration_info = LinkCertExpirationInfo::new(
+            Arc::downgrade(&link_trait_object),
+            &link.src_locator,
+            &link.dst_locator,
+        );
+        if let Err(e) = self
+            .expiration_manager
+            .tx
+            .send_async((certchain_expiration_time, expiration_info))
+            .await
+        {
+            tracing::error!("{}-{}: {}", file!(), line!(), e)
+        }
 
         Ok(LinkUnicast(link))
     }
@@ -336,8 +362,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let task = {
             let token = token.clone();
             let manager = self.manager.clone();
+            let expiration_tx = self.expiration_manager.tx.clone();
 
-            async move { accept_task(quic_endpoint, token, manager).await }
+            async move { accept_task(quic_endpoint, token, manager, expiration_tx).await }
         };
 
         // Initialize the QuicAcceptor
@@ -369,6 +396,7 @@ async fn accept_task(
     quic_endpoint: quinn::Endpoint,
     token: CancellationToken,
     manager: NewLinkChannelSender,
+    expiration_task_tx: NewLinkExpirationSender,
 ) -> ZResult<()> {
     async fn accept(acceptor: quinn::Accept<'_>) -> ZResult<quinn::Connection> {
         let qc = acceptor
@@ -419,6 +447,9 @@ async fn accept_task(
                         // Get Quic auth identifier
                         let auth_id = get_cert_common_name(&quic_conn)?;
 
+                        // Get certificate chain expiration
+                        let maybe_expiration_time = get_cert_chain_expiration(&quic_conn)?;
+
                         tracing::debug!("Accepted QUIC connection on {:?}: {:?}", src_addr, dst_addr);
                         // Create the new link object
                         let link = Arc::new(LinkUnicastQuic::new(
@@ -429,6 +460,19 @@ async fn accept_task(
                             recv,
                             auth_id.into()
                         ));
+
+                        // Communicate the link to the expiration manager if applicable
+                        if let Some(certchain_expiration_time) = maybe_expiration_time {
+                            let link_trait_object: Arc<dyn LinkUnicastTrait> = link.clone();
+                            let expiration_info = LinkCertExpirationInfo::new(
+                                Arc::downgrade(&link_trait_object),
+                                &link.src_locator,
+                                &link.dst_locator,
+                            );
+                            if let Err(e) = expiration_task_tx.send_async((certchain_expiration_time, expiration_info)).await {
+                                tracing::error!("{}-{}: {}", file!(), line!(), e)
+                            }
+                        }
 
                         // Communicate the new link to the initial transport manager
                         if let Err(e) = manager.send_async(LinkUnicast(link)).await {
@@ -473,6 +517,24 @@ fn get_cert_common_name(conn: &quinn::Connection) -> ZResult<QuicAuthId> {
         }
     }
     Ok(auth_id)
+}
+
+/// Returns the minimum value of the `not_after` field in the remote certificate chain.
+/// Returns `None` if the remote certificate chain is empty
+fn get_cert_chain_expiration(conn: &quinn::Connection) -> ZResult<Option<OffsetDateTime>> {
+    let mut link_expiration: Option<OffsetDateTime> = None;
+    if let Some(pi) = conn.peer_identity() {
+        if let Ok(remote_certs) = pi.downcast::<Vec<rustls_pki_types::CertificateDer>>() {
+            for cert in *remote_certs {
+                let (_, cert) = X509Certificate::from_der(cert.as_ref())?;
+                let cert_expiration = cert.validity().not_after.to_datetime();
+                link_expiration = link_expiration
+                    .map(|current_min| current_min.min(cert_expiration))
+                    .or(Some(cert_expiration));
+            }
+        }
+    }
+    Ok(link_expiration)
 }
 
 #[derive(Debug, Clone)]
