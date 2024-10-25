@@ -23,7 +23,7 @@ use zenoh::{key_expr::OwnedKeyExpr, sample::SampleKind, time::Timestamp, Result 
 use zenoh_backend_traits::config::ReplicaConfig;
 
 use super::{
-    classification::{EventRemoval, Interval, IntervalIdx},
+    classification::{EventLookup, EventRemoval, Interval, IntervalIdx},
     configuration::Configuration,
     digest::{Digest, Fingerprint},
 };
@@ -364,15 +364,52 @@ impl LogLatest {
         &self.configuration
     }
 
-    /// Lookup the provided key expression and, if found, return its associated [Event].
-    pub fn lookup(&self, event_to_lookup: &EventMetadata) -> Option<&Event> {
+    /// Returns the [Event] from the Replication Log with a newer Timestamp and the same key
+    /// expression, or None if no such Event exists in the Replication Log.
+    ///
+    /// To speed up this lookup, only the intervals that contain Events with a more recent Timestamp
+    /// are visited.
+    ///
+    /// # ⚠️ Caveat
+    ///
+    /// It is not because this method returns `None` that the Replication Log does not contain any
+    /// Event with the same key expression. It could return None and *still contain* an Event with
+    /// the same key expression.
+    pub fn lookup_newer(&self, event_to_lookup: &EventMetadata) -> Option<&Event> {
         if !self.bloom_filter_event.check(&event_to_lookup.log_key()) {
             return None;
         }
 
-        for interval in self.intervals.values().rev() {
-            if let Some(event) = interval.lookup(event_to_lookup) {
-                return Some(event);
+        let Ok((event_interval_idx, event_sub_interval_idx)) = self
+            .configuration
+            .get_time_classification(&event_to_lookup.timestamp)
+        else {
+            tracing::error!(
+                "Fatal error: failed to compute the time classification of < {event_to_lookup:?} >"
+            );
+            return None;
+        };
+
+        for (interval_idx, interval) in self
+            .intervals
+            .iter()
+            .filter(|(&idx, _)| idx >= event_interval_idx)
+        {
+            for (_, sub_interval) in interval.sub_intervals().filter(|(&sub_idx, _)| {
+                // All sub-intervals must be visited except in one Interval: the Interval in which
+                // the `event_to_lookup` belongs. In this specific Interval, only the SubIntervals
+                // with a greater index should be visited (lower index means lower timestamp).
+                if *interval_idx == event_interval_idx {
+                    return sub_idx >= event_sub_interval_idx;
+                }
+
+                true
+            }) {
+                match sub_interval.lookup(event_to_lookup) {
+                    EventLookup::NotFound => continue,
+                    EventLookup::NewerOrIdentical(event) => return Some(event),
+                    EventLookup::Older => return None,
+                }
             }
         }
 

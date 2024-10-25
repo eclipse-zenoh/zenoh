@@ -425,16 +425,7 @@ impl Replication {
             return false;
         };
 
-        let maybe_newer_event = replication_log_guard
-            .lookup(replica_event)
-            .and_then(|log_event| {
-                if log_event.timestamp < replica_event.timestamp {
-                    None
-                } else {
-                    Some(log_event)
-                }
-            })
-            .cloned();
+        let maybe_newer_event = replication_log_guard.lookup_newer(replica_event);
 
         match (maybe_wildcard_update, maybe_newer_event) {
             // No Event in the Replication Log or Wildcard Update, we go on, we need to process it.
@@ -491,8 +482,9 @@ impl Replication {
                         .await;
                 }
 
+                let log_event_metadata = log_event.into();
                 if let Some(mut removed_event) =
-                    replication_log_guard.remove_event(&(&log_event).into())
+                    replication_log_guard.remove_event(&log_event_metadata)
                 {
                     removed_event.set_timestamp_and_action(
                         replica_event.timestamp,
