@@ -11,33 +11,24 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{
-    cell::UnsafeCell,
-    collections::BTreeMap,
-    convert::TryInto,
-    fmt,
-    net::SocketAddr,
-    sync::{Arc, Weak},
-    time::Duration,
-};
+use std::{cell::UnsafeCell, convert::TryInto, fmt, net::SocketAddr, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use time::OffsetDateTime;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
-    sync::{
-        mpsc::{Receiver, Sender},
-        Mutex as AsyncMutex,
-    },
+    sync::Mutex as AsyncMutex,
 };
 use tokio_rustls::{TlsAcceptor, TlsConnector, TlsStream};
 use tokio_util::sync::CancellationToken;
 use x509_parser::prelude::{FromDer, X509Certificate};
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
-    get_ip_interface_names, LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast,
-    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender,
+    get_ip_interface_names,
+    tls::{LinkCertExpirationInfo, LinkCertExpirationManager, NewLinkExpirationSender},
+    LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
+    ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -272,91 +263,18 @@ impl fmt::Debug for LinkUnicastTls {
 pub struct LinkManagerUnicastTls {
     manager: NewLinkChannelSender,
     listeners: ListenersUnicastIP,
-    expiration_sender: Sender<(OffsetDateTime, Weak<LinkUnicastTls>)>,
+    expiration_manager: LinkCertExpirationManager,
 }
 
 impl LinkManagerUnicastTls {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         let listeners = ListenersUnicastIP::new();
         let token = listeners.token.child_token();
-        // Note: flume might be more efficient
-        let (tx, rx) = tokio::sync::mpsc::channel::<(OffsetDateTime, Weak<LinkUnicastTls>)>(1);
-        zenoh_runtime::ZRuntime::Acceptor.spawn(Self::expiration_task(token, rx));
 
         Self {
             manager,
             listeners,
-            expiration_sender: tx,
-        }
-    }
-
-    async fn expiration_task(
-        token: CancellationToken,
-        mut rx: Receiver<(OffsetDateTime, Weak<LinkUnicastTls>)>,
-    ) {
-        // TODO: Maybe expose this as a locator parameter?
-        const PERIODIC_SLEEP_DURATION: tokio::time::Duration =
-            tokio::time::Duration::from_secs(600);
-        let mut link_expiration_map: BTreeMap<OffsetDateTime, Vec<Weak<LinkUnicastTls>>> =
-            BTreeMap::new();
-        let mut next_wakeup_instant: tokio::time::Instant;
-
-        loop {
-            next_wakeup_instant = tokio::time::Instant::now() + PERIODIC_SLEEP_DURATION;
-
-            if let Some((&next_expiration_time, links_to_close)) =
-                link_expiration_map.first_key_value()
-            {
-                let now = OffsetDateTime::now_utc();
-                if next_expiration_time <= now {
-                    // Close links
-                    for link in links_to_close {
-                        if let Some(link) = link.upgrade() {
-                            tracing::warn!(
-                                "Closing link {} => {} : remote certificate chain expired",
-                                link.src_locator,
-                                link.dst_locator,
-                            );
-                            if let Err(e) = link.close().await {
-                                tracing::error!(
-                                    "Error closing link {} => {} : {}",
-                                    link.src_locator,
-                                    link.dst_locator,
-                                    e
-                                )
-                            }
-                        }
-                    }
-                    link_expiration_map.remove(&next_expiration_time);
-                    // loop again to check the next deadline
-                    continue;
-                } else {
-                    // next sleep duration is the minimum between PERIODIC_SLEEP_DURATION and the duration till next expiration
-                    // this mitigates the unsoundness of using `tokio::time::sleep_until` with long durations
-                    let next_expiration_duration = std::time::Duration::from_secs_f32(
-                        (next_expiration_time - now).as_seconds_f32(),
-                    );
-                    next_wakeup_instant = tokio::time::Instant::now()
-                        + tokio::time::Duration::min(
-                            PERIODIC_SLEEP_DURATION,
-                            next_expiration_duration,
-                        );
-                }
-            }
-
-            tokio::select! {
-                _ = token.cancelled() => break,
-
-                _ = tokio::time::sleep_until(next_wakeup_instant) => {},
-
-                maybe_new_link = rx.recv(), if !rx.is_closed() => {
-                    if let Some(new_link) = maybe_new_link {
-                        link_expiration_map.entry(new_link.0).or_default().push(new_link.1);
-                    }
-                    // else channel was closed, do nothing: we don't expect more links to be created,
-                    // but it's not a reason to stop this task
-                },
-            }
+            expiration_manager: LinkCertExpirationManager::new(token),
         }
     }
 }
@@ -428,9 +346,17 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             auth_identifier.into(),
         ));
 
+        // send to link expiration manager
+        let link_trait_object: Arc<dyn LinkUnicastTrait> = link.clone();
+        let expiration_info = LinkCertExpirationInfo::new(
+            Arc::downgrade(&link_trait_object),
+            &link.src_locator,
+            &link.dst_locator,
+        );
         if let Err(e) = self
-            .expiration_sender
-            .send((certchain_expiration_time, Arc::downgrade(&link)))
+            .expiration_manager
+            .tx
+            .send_async((certchain_expiration_time, expiration_info))
             .await
         {
             tracing::error!("{}-{}: {}", file!(), line!(), e)
@@ -468,7 +394,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             let acceptor = TlsAcceptor::from(Arc::new(tls_server_config.server_config));
             let token = token.clone();
             let manager = self.manager.clone();
-            let expiration_tx = self.expiration_sender.clone();
+            let expiration_tx = self.expiration_manager.tx.clone();
 
             async move {
                 accept_task(
@@ -518,7 +444,7 @@ async fn accept_task(
     token: CancellationToken,
     manager: NewLinkChannelSender,
     tls_handshake_timeout: Duration,
-    expiration_task_tx: Sender<(OffsetDateTime, Weak<LinkUnicastTls>)>,
+    expiration_task_tx: NewLinkExpirationSender,
 ) -> ZResult<()> {
     let src_addr = socket.local_addr().map_err(|e| {
         let e = zerror!("Can not accept TLS connections: {}", e);
@@ -560,9 +486,15 @@ async fn accept_task(
                             auth_identifier.into(),
                         ));
 
-                        // Communicate the link to the expiration task if applicable
+                        // Communicate the link to the expiration manager if applicable
                         if let Some(certchain_expiration_time) = maybe_expiration_time {
-                            if let Err(e) = expiration_task_tx.send((certchain_expiration_time, Arc::downgrade(&link))).await {
+                            let link_trait_object: Arc<dyn LinkUnicastTrait> = link.clone();
+                            let expiration_info = LinkCertExpirationInfo::new(
+                                Arc::downgrade(&link_trait_object),
+                                &link.src_locator,
+                                &link.dst_locator,
+                            );
+                            if let Err(e) = expiration_task_tx.send_async((certchain_expiration_time, expiration_info)).await {
                                 tracing::error!("{}-{}: {}", file!(), line!(), e)
                             }
                         }
