@@ -1,5 +1,6 @@
-use crate::LinkUnicastTrait;
 use alloc::vec::Vec;
+use std::{collections::BTreeMap, sync::Weak};
+
 use rustls::{
     client::{
         danger::{ServerCertVerified, ServerCertVerifier},
@@ -10,12 +11,13 @@ use rustls::{
     server::ParsedCertificate,
     RootCertStore,
 };
-use std::{collections::BTreeMap, sync::Weak};
 use time::OffsetDateTime;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use webpki::ALL_VERIFICATION_ALGS;
 use zenoh_protocol::core::Locator;
+
+use crate::LinkUnicastTrait;
 
 impl ServerCertVerifier for WebPkiVerifierAnyServerName {
     /// Will verify the certificate is valid in the following ways:
