@@ -107,7 +107,7 @@ impl Replication {
                         .intervals
                         .get(&interval_idx)
                     {
-                        interval.sub_intervals().for_each(|sub_interval| {
+                        interval.sub_intervals().for_each(|(_, sub_interval)| {
                             events_to_retrieve.extend(sub_interval.events().map(Into::into));
                         });
                     }

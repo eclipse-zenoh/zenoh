@@ -126,8 +126,8 @@ impl Interval {
     }
 
     /// Returns an iterator over the [SubInterval]s contained in this `Interval`.
-    pub(crate) fn sub_intervals(&self) -> impl Iterator<Item = &SubInterval> {
-        self.sub_intervals.values()
+    pub(crate) fn sub_intervals(&self) -> impl Iterator<Item = (&SubIntervalIdx, &SubInterval)> {
+        self.sub_intervals.iter()
     }
 
     /// Returns, if one exists, a reference over the [SubInterval] matching the provided
