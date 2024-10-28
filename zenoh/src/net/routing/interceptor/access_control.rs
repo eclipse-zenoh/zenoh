@@ -282,12 +282,38 @@ impl InterceptorTrait for IngressAclEnforcer {
                 }
             }
             NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareSubscriber(_),
+                ..
+            }) => {
+                if self.action(
+                    AclMessage::DeclareSubscriber,
+                    "Undeclare Subscriber (ingress)",
+                    key_expr?,
+                ) == Permission::Deny
+                {
+                    return None;
+                }
+            }
+            NetworkBody::Declare(Declare {
                 body: DeclareBody::DeclareQueryable(_),
                 ..
             }) => {
                 if self.action(
                     AclMessage::DeclareQueryable,
                     "Declare Queryable (ingress)",
+                    key_expr?,
+                ) == Permission::Deny
+                {
+                    return None;
+                }
+            }
+            NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareQueryable(_),
+                ..
+            }) => {
+                if self.action(
+                    AclMessage::DeclareQueryable,
+                    "Undeclare Queryable (ingress)",
                     key_expr?,
                 ) == Permission::Deny
                 {
@@ -314,14 +340,6 @@ impl InterceptorTrait for IngressAclEnforcer {
             })
             | NetworkBody::Declare(Declare {
                 body: DeclareBody::UndeclareToken(_),
-                ..
-            })
-            | NetworkBody::Declare(Declare {
-                body: DeclareBody::UndeclareQueryable(_),
-                ..
-            })
-            | NetworkBody::Declare(Declare {
-                body: DeclareBody::UndeclareSubscriber(_),
                 ..
             }) => {}
             // Unfiltered remaining message types
@@ -396,12 +414,38 @@ impl InterceptorTrait for EgressAclEnforcer {
                 }
             }
             NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareSubscriber(_),
+                ..
+            }) => {
+                if self.action(
+                    AclMessage::DeclareSubscriber,
+                    "Undeclare Subscriber (egress)",
+                    key_expr?,
+                ) == Permission::Deny
+                {
+                    return None;
+                }
+            }
+            NetworkBody::Declare(Declare {
                 body: DeclareBody::DeclareQueryable(_),
                 ..
             }) => {
                 if self.action(
                     AclMessage::DeclareQueryable,
                     "Declare Queryable (egress)",
+                    key_expr?,
+                ) == Permission::Deny
+                {
+                    return None;
+                }
+            }
+            NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareQueryable(_),
+                ..
+            }) => {
+                if self.action(
+                    AclMessage::DeclareQueryable,
+                    "Undeclare Queryable (egress)",
                     key_expr?,
                 ) == Permission::Deny
                 {
@@ -428,14 +472,6 @@ impl InterceptorTrait for EgressAclEnforcer {
             })
             | NetworkBody::Declare(Declare {
                 body: DeclareBody::UndeclareToken(_),
-                ..
-            })
-            | NetworkBody::Declare(Declare {
-                body: DeclareBody::UndeclareQueryable(_),
-                ..
-            })
-            | NetworkBody::Declare(Declare {
-                body: DeclareBody::UndeclareSubscriber(_),
                 ..
             }) => {}
             // Unfiltered remaining message types
