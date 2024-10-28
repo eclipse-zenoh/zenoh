@@ -3,19 +3,9 @@
 //! Check ../README.md for usage.
 //!
 
+use serde_json::json;
 use zenoh::{config::WhatAmI, Config};
 
-#[derive(clap::ValueEnum, Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum Wai {
-    Peer,
-    Client,
-    Router,
-}
-impl core::fmt::Display for Wai {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        core::fmt::Debug::fmt(&self, f)
-    }
-}
 #[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct CommonArgs {
     #[arg(short, long)]
@@ -31,7 +21,7 @@ pub struct CommonArgs {
     cfg: Vec<String>,
     #[arg(short, long)]
     /// The Zenoh session mode [default: peer].
-    mode: Option<Wai>,
+    mode: Option<WhatAmI>,
     #[arg(short = 'e', long)]
     /// Endpoints to connect to.
     connect: Vec<String>,
@@ -58,33 +48,32 @@ impl From<&CommonArgs> for Config {
             Some(path) => Config::from_file(path).unwrap(),
             None => Config::default(),
         };
-        match args.mode {
-            Some(Wai::Peer) => config.set_mode(Some(WhatAmI::Peer)),
-            Some(Wai::Client) => config.set_mode(Some(WhatAmI::Client)),
-            Some(Wai::Router) => config.set_mode(Some(WhatAmI::Router)),
-            None => Ok(None),
+        if let Some(mode) = args.mode {
+            config
+                .insert_json5("mode", &json!(mode.to_str()).to_string())
+                .unwrap();
         }
-        .unwrap();
+
         if !args.connect.is_empty() {
             config
-                .connect
-                .endpoints
-                .set(args.connect.iter().map(|v| v.parse().unwrap()).collect())
+                .insert_json5("connect/endpoints", &json!(args.connect).to_string())
                 .unwrap();
         }
         if !args.listen.is_empty() {
             config
-                .listen
-                .endpoints
-                .set(args.listen.iter().map(|v| v.parse().unwrap()).collect())
+                .insert_json5("listen/endpoints", &json!(args.connect).to_string())
                 .unwrap();
         }
         if args.no_multicast_scouting {
-            config.scouting.multicast.set_enabled(Some(false)).unwrap();
+            config
+                .insert_json5("scouting/multicast/enabled", &json!(false).to_string())
+                .unwrap();
         }
         if args.enable_shm {
             #[cfg(feature = "shared-memory")]
-            config.transport.shared_memory.set_enabled(true).unwrap();
+            config
+                .insert_json5("transport/shared_memory/enabled", &json!(true).to_string())
+                .unwrap();
             #[cfg(not(feature = "shared-memory"))]
             {
                 eprintln!("`--enable-shm` argument: SHM cannot be enabled, because Zenoh is compiled without shared-memory feature!");
