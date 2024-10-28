@@ -39,6 +39,21 @@ pub(crate) enum EventRemoval {
     RemovedOlder(Event),
 }
 
+/// The `EventLookup` enumeration lists the possible outcomes when searching for an [Event] (with a
+/// Timestamp) in the Replication Log.
+///
+/// The Timestamp allows comparing the [Event] that was found, establishing if it is Older, Newer
+/// or Identical.
+///
+/// The Newer or Identical cases were merged as this enumeration was designed with the
+/// `LogLatest::lookup_newer` method in mind, which does not need to distinguish them.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum EventLookup<'a> {
+    NotFound,
+    NewerOrIdentical(&'a Event),
+    Older,
+}
+
 /// An `IntervalIdx` represents the index of an `Interval`.
 ///
 /// It is a thin wrapper around a `u64`.
@@ -126,8 +141,8 @@ impl Interval {
     }
 
     /// Returns an iterator over the [SubInterval]s contained in this `Interval`.
-    pub(crate) fn sub_intervals(&self) -> impl Iterator<Item = &SubInterval> {
-        self.sub_intervals.values()
+    pub(crate) fn sub_intervals(&self) -> impl Iterator<Item = (&SubIntervalIdx, &SubInterval)> {
+        self.sub_intervals.iter()
     }
 
     /// Returns, if one exists, a reference over the [SubInterval] matching the provided
@@ -137,17 +152,6 @@ impl Interval {
         sub_interval_idx: &SubIntervalIdx,
     ) -> Option<&SubInterval> {
         self.sub_intervals.get(sub_interval_idx)
-    }
-
-    /// Lookup the provided key expression and return, if found, its associated [Event].
-    pub(crate) fn lookup(&self, event_to_lookup: &EventMetadata) -> Option<&Event> {
-        for sub_interval in self.sub_intervals.values() {
-            if let Some(event) = sub_interval.lookup(event_to_lookup) {
-                return Some(event);
-            }
-        }
-
-        None
     }
 
     /// Returns an [HashMap] of the index and [Fingerprint] of all the [SubInterval]s contained in
@@ -397,8 +401,25 @@ impl SubInterval {
         EventRemoval::NotFound
     }
 
-    fn lookup(&self, event_to_lookup: &EventMetadata) -> Option<&Event> {
-        self.events.get(&event_to_lookup.log_key())
+    /// Looks up the key expression of the provided `event_to_lookup` in this [SubInterval] and,
+    /// depending on its timestamp and if an [Event] has been found, returns the [EventLookup].
+    ///
+    /// If the Event in the Replication Log has the same or a greater timestamp than
+    /// `event_to_lookup` then `NewerOrIdentical` is returned. If its timestamp is lower then
+    /// `Older` is returned.
+    ///
+    /// If this SubInterval contains no Event with the same key expression, `NotFound` is returned.
+    pub(crate) fn lookup(&self, event_to_lookup: &EventMetadata) -> EventLookup {
+        match self.events.get(&event_to_lookup.log_key()) {
+            Some(event) => {
+                if event.timestamp >= event_to_lookup.timestamp {
+                    EventLookup::NewerOrIdentical(event)
+                } else {
+                    EventLookup::Older
+                }
+            }
+            None => EventLookup::NotFound,
+        }
     }
 
     fn remove_event(&mut self, event_to_remove: &EventMetadata) -> Option<Event> {

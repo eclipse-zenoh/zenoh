@@ -508,10 +508,13 @@ impl StorageService {
         }
 
         if let Some(replication_log) = &self.cache_latest.replication_log {
-            if let Some(event) = replication_log.read().await.lookup(new_event) {
-                if new_event.timestamp <= event.timestamp {
-                    return None;
-                }
+            if replication_log
+                .read()
+                .await
+                .lookup_newer(new_event)
+                .is_some()
+            {
+                return None;
             }
         } else {
             let mut storage = self.storage.lock().await;
