@@ -140,26 +140,6 @@ fn declare_simple_subscription(
     register_simple_subscription(tables, face, id, res, sub_info);
 
     propagate_simple_subscription(tables, res, sub_info, face, send_declare);
-    // This introduced a buffer overflow on windows
-    // @TODO: Let's deactivate this on windows until Fixed
-    #[cfg(not(windows))]
-    for mcast_group in &tables.mcast_groups {
-        mcast_group
-            .primitives
-            .send_declare(RoutingContext::with_expr(
-                Declare {
-                    interest_id: None,
-                    ext_qos: ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                        id: 0, // @TODO use proper SubscriberId
-                        wire_expr: res.expr().into(),
-                    }),
-                },
-                res.expr(),
-            ))
-    }
 }
 
 #[inline]
@@ -417,16 +397,6 @@ impl HatPubSubTrait for HatCode {
                     });
                 }
             }
-        }
-        for mcast_group in &tables.mcast_groups {
-            route.insert(
-                mcast_group.id,
-                (
-                    mcast_group.clone(),
-                    expr.full_expr().to_string().into(),
-                    NodeId::default(),
-                ),
-            );
         }
         Arc::new(route)
     }
