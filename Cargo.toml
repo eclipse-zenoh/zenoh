@@ -190,6 +190,7 @@ x509-parser = "0.16.0"
 z-serial = "0.2.3"
 either = "1.13.0"
 prost = "0.13.2"
+tls-listener = { version = "0.10.1", features = ["rustls"] }
 zenoh-ext = { version = "1.0.0-dev", path = "zenoh-ext" }
 zenoh-shm = { version = "1.0.0-dev", path = "commons/zenoh-shm" }
 zenoh-result = { version = "1.0.0-dev", path = "commons/zenoh-result", default-features = false }
