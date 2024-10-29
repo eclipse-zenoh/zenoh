@@ -632,7 +632,11 @@ impl Session {
     /// assert!(session.is_closed());
     /// # }
     pub fn is_closed(&self) -> bool {
-        zread!(self.0.state).primitives.is_none()
+        if zenoh_runtime::ZRuntime::is_alive() {
+            zread!(self.0.state).primitives.is_none()
+        } else {
+            true
+        }
     }
 
     pub fn undeclare<'a, T>(&'a self, decl: T) -> impl Resolve<ZResult<()>> + 'a
