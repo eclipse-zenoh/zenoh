@@ -140,6 +140,15 @@ impl Reply {
     pub fn replier_id(&self) -> Option<ZenohId> {
         self.replier_id.map(Into::into)
     }
+
+    /// Constructs an uninitialized empty Reply.
+    #[zenoh_macros::internal]
+    pub unsafe fn empty() -> Self {
+        Reply {
+            result: Ok(Sample::empty()),
+            replier_id: None,
+        }
+    }
 }
 
 impl From<Reply> for Result<Sample, ReplyError> {

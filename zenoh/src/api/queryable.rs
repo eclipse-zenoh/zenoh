@@ -200,6 +200,17 @@ impl Query {
     fn _accepts_any_replies(&self) -> ZResult<bool> {
         Ok(self.parameters().reply_key_expr_any())
     }
+
+    /// Constructs an empty Query without payload, nor attachment referencing the same inner query.
+    #[zenoh_macros::internal]
+    pub unsafe fn empty(&self) -> Self {
+        Query {
+            inner: self.inner.clone(),
+            eid: 0,
+            value: None,
+            attachment: None,
+        }
+    }
 }
 
 impl fmt::Debug for Query {

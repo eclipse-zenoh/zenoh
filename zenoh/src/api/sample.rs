@@ -409,6 +409,22 @@ impl Sample {
     pub fn attachment_mut(&mut self) -> Option<&mut ZBytes> {
         self.attachment.as_mut()
     }
+
+    /// Constructs an uninitialized empty Sample.
+    #[zenoh_macros::internal]
+    pub unsafe fn empty() -> Self {
+        Sample {
+            key_expr: KeyExpr::from_str_unchecked(""),
+            payload: ZBytes::new(),
+            kind: SampleKind::Put,
+            encoding: Encoding::default(),
+            timestamp: None,
+            qos: QoS::default(),
+            reliability: Reliability::default(),
+            source_info: SourceInfo::empty(),
+            attachment: None,
+        }
+    }
 }
 
 impl From<Sample> for Value {
