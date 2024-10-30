@@ -19,8 +19,12 @@
 
   /// Which endpoints to connect to. E.g. tcp/localhost:7447.
   /// By configuring the endpoints, it is possible to tell zenoh which router/peer to connect to at startup.
+  ///
   /// For TCP/UDP on Linux, it is possible additionally specify the interface to be connected to:
   /// E.g. tcp/192.168.0.1:7447#iface=eth0, for connect only if the IP address is reachable via the interface eth0
+  ///
+  /// It is also possible to specify a priority range and/or a reliability setting to be used on the link.
+  /// For example `tcp/localhost?prio=6-7;rel=0` assigns priorities "data_low" and "background" to the established link.
   connect: {
     /// timeout waiting for all endpoints connected (0: no retry, -1: infinite timeout)
     /// Accepts a single value (e.g. timeout_ms: 0)
@@ -58,8 +62,12 @@
   /// Which endpoints to listen on. E.g. tcp/0.0.0.0:7447.
   /// By configuring the endpoints, it is possible to tell zenoh which are the endpoints that other routers,
   /// peers, or client can use to establish a zenoh session.
+  ///
   /// For TCP/UDP on Linux, it is possible additionally specify the interface to be listened to:
   /// E.g. tcp/0.0.0.0:7447#iface=eth0, for listen connection only on eth0
+  ///
+  /// It is also possible to specify a priority range and/or a reliability setting to be used on the link.
+  /// For example `tcp/localhost?prio=6-7;rel=0` assigns priorities "data_low" and "background" to the established link.
   listen: {
     /// timeout waiting for all listen endpoints (0: no retry, -1: infinite timeout)
     /// Accepts a single value (e.g. timeout_ms: 0)
@@ -101,7 +109,7 @@
       /// Session open waits to receive initial declares from connected peers before returning.
       /// Setting to false may cause extra traffic at startup from peers.
       declares: true,
-    }
+    },
   },
   /// Configure the scouting mechanisms and their behaviours
   scouting: {
