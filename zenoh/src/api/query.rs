@@ -84,6 +84,15 @@ impl ReplyError {
     pub fn encoding(&self) -> &Encoding {
         &self.encoding
     }
+
+    /// Constructs an uninitialized empty ReplyError.
+    #[zenoh_macros::internal]
+    pub fn empty() -> Self {
+        ReplyError {
+            payload: ZBytes::new(),
+            encoding: Encoding::default(),
+        }
+    }
 }
 
 impl Display for ReplyError {
