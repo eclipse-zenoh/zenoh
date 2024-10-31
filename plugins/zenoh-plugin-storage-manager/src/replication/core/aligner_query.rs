@@ -15,7 +15,11 @@
 use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
-use zenoh::{bytes::ZBytes, internal::Value, key_expr::keyexpr_tree::IKeyExprTree, query::Query};
+use zenoh::{
+    bytes::{Encoding, ZBytes},
+    key_expr::keyexpr_tree::IKeyExprTree,
+    query::Query,
+};
 
 use super::aligner_reply::AlignmentReply;
 use crate::replication::{
@@ -304,7 +308,7 @@ impl Replication {
                     .into_iter()
                     .find(|data| data.timestamp == *event_to_retrieve.timestamp());
                 match requested_data {
-                    Some(data) => Some(data.value),
+                    Some(data) => Some((data.payload, data.encoding)),
                     None => {
                         // NOTE: This is not necessarily an error. There is a possibility that the
                         //       data associated with this specific key was updated between the time
@@ -326,7 +330,7 @@ impl Replication {
                 let wildcard_puts_guard = self.storage_service.wildcard_puts.read().await;
 
                 if let Some(update) = wildcard_puts_guard.weight_at(wildcard_ke) {
-                    Some(update.value().clone())
+                    Some((update.payload().clone(), update.encoding().clone()))
                 } else {
                     tracing::error!(
                         "Ignoring Wildcard Update < {wildcard_ke} >: found no associated `Update`."
@@ -340,9 +344,9 @@ impl Replication {
     }
 }
 
-/// Replies to a Query, adding the [AlignmentReply] as an attachment and, if provided, the [Value]
-/// as the payload (not forgetting to set the Encoding!).
-async fn reply_to_query(query: &Query, reply: AlignmentReply, value: Option<Value>) {
+/// Replies to a Query, adding the [AlignmentReply] as an attachment and, if provided, the payload
+/// with the corresponding [zenoh::bytes::Encoding].
+async fn reply_to_query(query: &Query, reply: AlignmentReply, value: Option<(ZBytes, Encoding)>) {
     let attachment = match bincode::serialize(&reply) {
         Ok(attachment) => attachment,
         Err(e) => {
@@ -353,8 +357,8 @@ async fn reply_to_query(query: &Query, reply: AlignmentReply, value: Option<Valu
 
     let reply_fut = if let Some(value) = value {
         query
-            .reply(query.key_expr(), value.payload)
-            .encoding(value.encoding)
+            .reply(query.key_expr(), value.0)
+            .encoding(value.1)
             .attachment(attachment)
     } else {
         query

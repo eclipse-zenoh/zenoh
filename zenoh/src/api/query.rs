@@ -27,7 +27,7 @@ pub use zenoh_protocol::zenoh::query::ConsolidationMode;
 
 use crate::api::{
     bytes::ZBytes, encoding::Encoding, handlers::Callback, key_expr::KeyExpr, sample::Sample,
-    selector::Selector, value::Value,
+    selector::Selector,
 };
 
 /// The replies consolidation strategy to apply on replies to a [`get`](crate::Session::get).
@@ -73,6 +73,13 @@ pub struct ReplyError {
 }
 
 impl ReplyError {
+    pub(crate) fn new(payload: impl Into<ZBytes>, encoding: Encoding) -> Self {
+        Self {
+            payload: payload.into(),
+            encoding,
+        }
+    }
+
     /// Gets the payload of this ReplyError.
     #[inline]
     pub fn payload(&self) -> &ZBytes {
@@ -98,15 +105,6 @@ impl Display for ReplyError {
 }
 
 impl Error for ReplyError {}
-
-impl From<Value> for ReplyError {
-    fn from(value: Value) -> Self {
-        Self {
-            payload: value.payload,
-            encoding: value.encoding,
-        }
-    }
-}
 
 /// Struct returned by a [`get`](crate::Session::get).
 #[non_exhaustive]

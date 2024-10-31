@@ -43,7 +43,6 @@ use crate::{
         sample::{Locality, Sample, SampleKind},
         selector::Selector,
         session::{UndeclarableSealed, WeakSession},
-        value::Value,
         Id,
     },
     handlers::Callback,
@@ -73,7 +72,7 @@ impl Drop for QueryInner {
 pub struct Query {
     pub(crate) inner: Arc<QueryInner>,
     pub(crate) eid: EntityId,
-    pub(crate) value: Option<Value>,
+    pub(crate) value: Option<(ZBytes, Encoding)>,
     pub(crate) attachment: Option<ZBytes>,
 }
 
@@ -99,19 +98,19 @@ impl Query {
     /// This Query's payload.
     #[inline(always)]
     pub fn payload(&self) -> Option<&ZBytes> {
-        self.value.as_ref().map(|v| &v.payload)
+        self.value.as_ref().map(|v| &v.0)
     }
 
     /// This Query's payload.
     #[inline(always)]
     pub fn payload_mut(&mut self) -> Option<&mut ZBytes> {
-        self.value.as_mut().map(|v| &mut v.payload)
+        self.value.as_mut().map(|v| &mut v.0)
     }
 
     /// This Query's encoding.
     #[inline(always)]
     pub fn encoding(&self) -> Option<&Encoding> {
-        self.value.as_ref().map(|v| &v.encoding)
+        self.value.as_ref().map(|v| &v.1)
     }
 
     /// This Query's attachment.

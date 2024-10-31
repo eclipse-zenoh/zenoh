@@ -123,7 +123,7 @@
 use async_trait::async_trait;
 use const_format::concatcp;
 use zenoh::{
-    internal::Value,
+    bytes::{Encoding, ZBytes},
     key_expr::{keyexpr, OwnedKeyExpr},
     time::Timestamp,
     Result as ZResult,
@@ -176,7 +176,8 @@ pub enum StorageInsertionResult {
 
 #[derive(Debug, Clone)]
 pub struct StoredData {
-    pub value: Value,
+    pub payload: ZBytes,
+    pub encoding: Encoding,
     pub timestamp: Timestamp,
 }
 
@@ -227,7 +228,8 @@ pub trait Storage: Send + Sync {
     async fn put(
         &mut self,
         key: Option<OwnedKeyExpr>,
-        value: Value,
+        payload: ZBytes,
+        encoding: Encoding,
         timestamp: Timestamp,
     ) -> ZResult<StorageInsertionResult>;
 

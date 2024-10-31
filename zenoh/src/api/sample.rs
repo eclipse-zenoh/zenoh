@@ -26,7 +26,7 @@ use zenoh_protocol::{
 
 use crate::api::{
     builders::sample::QoSBuilderTrait, bytes::ZBytes, encoding::Encoding, key_expr::KeyExpr,
-    publisher::Priority, value::Value,
+    publisher::Priority,
 };
 
 /// The sequence number of the [`Sample`] from the source.
@@ -408,12 +408,6 @@ impl Sample {
     #[inline]
     pub fn attachment_mut(&mut self) -> Option<&mut ZBytes> {
         self.attachment.as_mut()
-    }
-}
-
-impl From<Sample> for Value {
-    fn from(sample: Sample) -> Self {
-        Value::new(sample.payload, sample.encoding)
     }
 }
 

@@ -101,7 +101,6 @@ use crate::{
         sample::{DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind},
         selector::Selector,
         subscriber::{SubscriberKind, SubscriberState},
-        value::Value,
         Id,
     },
     net::{
@@ -109,6 +108,7 @@ use crate::{
         routing::dispatcher::face::Face,
         runtime::{Runtime, RuntimeBuilder},
     },
+    query::ReplyError,
     Config,
 };
 
@@ -2032,7 +2032,7 @@ impl SessionInner {
         qos: QoS,
         destination: Locality,
         timeout: Duration,
-        value: Option<Value>,
+        value: Option<(ZBytes, Encoding)>,
         attachment: Option<ZBytes>,
         #[cfg(feature = "unstable")] source: SourceInfo,
         callback: Callback<Reply>,
@@ -2075,7 +2075,7 @@ impl SessionInner {
                                     }
                                 }
                                 query.callback.call(Reply {
-                                    result: Err(Value::new("Timeout", Encoding::ZENOH_STRING).into()),
+                                    result: Err(ReplyError::new("Timeout", Encoding::ZENOH_STRING).into()),
                                     #[cfg(feature = "unstable")]
                                     replier_id: Some(zid.into()),
                                 });
@@ -2124,8 +2124,8 @@ impl SessionInner {
                     ext_body: value.as_ref().map(|v| query::ext::QueryBodyType {
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
-                        encoding: v.encoding.clone().into(),
-                        payload: v.payload.clone().into(),
+                        encoding: v.1.clone().into(),
+                        payload: v.0.clone().into(),
                     }),
                     ext_attachment,
                     ext_unknown: vec![],
@@ -2143,8 +2143,8 @@ impl SessionInner {
                 value.as_ref().map(|v| query::ext::QueryBodyType {
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,
-                    encoding: v.encoding.clone().into(),
-                    payload: v.payload.clone().into(),
+                    encoding: v.1.clone().into(),
+                    payload: v.0.clone().into(),
                 }),
                 attachment,
             );
@@ -2175,7 +2175,7 @@ impl SessionInner {
                                 std::mem::drop(state);
                                 tracing::debug!("Timeout on liveliness query {}! Send error and close.", id);
                                 query.callback.call(Reply {
-                                    result: Err(Value::new("Timeout", Encoding::ZENOH_STRING).into()),
+                                    result: Err(ReplyError::new("Timeout", Encoding::ZENOH_STRING)),
                                     #[cfg(feature = "unstable")]
                                     replier_id: Some(zid.into()),
                                 });
@@ -2278,10 +2278,7 @@ impl SessionInner {
         let mut query = Query {
             inner: query_inner,
             eid: 0,
-            value: body.map(|b| Value {
-                payload: b.payload.into(),
-                encoding: b.encoding.into(),
-            }),
+            value: body.map(|b| (b.payload.into(), b.encoding.into())),
             attachment,
         };
         for (eid, cb) in queryables {
@@ -2584,12 +2581,11 @@ impl Primitives for WeakSession {
                     Some(query) => {
                         let callback = query.callback.clone();
                         std::mem::drop(state);
-                        let value = Value {
-                            payload: e.payload.into(),
-                            encoding: e.encoding.into(),
-                        };
                         let new_reply = Reply {
-                            result: Err(value.into()),
+                            result: Err(ReplyError {
+                                payload: e.payload.into(),
+                                encoding: e.encoding.into(),
+                            }),
                             #[cfg(feature = "unstable")]
                             replier_id: e.ext_sinfo.map(|info| info.id.zid),
                         };
