@@ -417,26 +417,25 @@ async fn accept_task(
     manager: NewLinkChannelSender,
     tls_handshake_timeout: Duration,
 ) -> ZResult<()> {
-    async fn accept(socket: &TcpListener) -> ZResult<(TcpStream, SocketAddr)> {
-        let res = socket.accept().await.map_err(|e| zerror!(e))?;
-        Ok(res)
-    }
-
     let src_addr = socket.local_addr().map_err(|e| {
         let e = zerror!("Can not accept TLS connections: {}", e);
         tracing::warn!("{}", e);
         e
     })?;
 
+    let mut listener = tls_listener::builder(acceptor)
+        .handshake_timeout(tls_handshake_timeout)
+        .listen(socket);
+
     tracing::trace!("Ready to accept TLS connections on: {:?}", src_addr);
     loop {
         tokio::select! {
             _ = token.cancelled() => break,
 
-            res = accept(&socket) => {
+            res = listener.accept() => {
                 match res {
-                    Ok((tcp_stream, dst_addr)) => {
-                        // Get the right source address in case an unsepecified IP (i.e. 0.0.0.0 or [::]) is used
+                    Ok((tls_stream, dst_addr)) => {
+                        let (tcp_stream, tls_conn) = tls_stream.get_ref();
                         let src_addr =  match tcp_stream.local_addr()  {
                             Ok(sa) => sa,
                             Err(e) => {
@@ -444,34 +443,12 @@ async fn accept_task(
                                 continue;
                             }
                         };
-
-                        // Accept the TLS connection
-                        let tls_stream = match tokio::time::timeout(
-                            tls_handshake_timeout,
-                            acceptor.accept(tcp_stream),
-                        )
-                        .await
-                        {
-                            Ok(Ok(stream)) => TlsStream::Server(stream),
-                            Err(e) => {
-                                tracing::warn!("TLS handshake timed out: {e}");
-                                continue;
-                            }
-                            Ok(Err(e)) => {
-                                let e = format!("Can not accept TLS connection: {e}");
-                                tracing::warn!("{}", e);
-                                continue;
-                            }
-                        };
-
-                        // Get TLS auth identifier
-                        let (_, tls_conn) = tls_stream.get_ref();
                         let auth_identifier = get_client_cert_common_name(tls_conn)?;
 
                         tracing::debug!("Accepted TLS connection on {:?}: {:?}", src_addr, dst_addr);
                         // Create the new link object
                         let link = Arc::new(LinkUnicastTls::new(
-                            tls_stream,
+                            tokio_rustls::TlsStream::Server(tls_stream),
                             src_addr,
                             dst_addr,
                             auth_identifier.into(),
