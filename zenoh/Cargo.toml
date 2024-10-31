@@ -79,6 +79,7 @@ git-version = { workspace = true }
 itertools = { workspace = true }
 json5 = { workspace = true }
 lazy_static = { workspace = true }
+nolocal-block-on = { workspace = true }
 tracing = { workspace = true }
 paste = { workspace = true }
 petgraph = { workspace = true }
