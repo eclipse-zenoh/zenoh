@@ -2075,7 +2075,7 @@ impl SessionInner {
                                     }
                                 }
                                 query.callback.call(Reply {
-                                    result: Err(ReplyError::new("Timeout", Encoding::ZENOH_STRING).into()),
+                                    result: Err(ReplyError::new("Timeout", Encoding::ZENOH_STRING)),
                                     #[cfg(feature = "unstable")]
                                     replier_id: Some(zid.into()),
                                 });
