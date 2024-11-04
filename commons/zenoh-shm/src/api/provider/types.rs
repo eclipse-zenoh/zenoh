@@ -166,7 +166,7 @@ impl MemoryLayout {
             return Err(ZLayoutError::IncorrectLayoutArgs);
         };
 
-        // size of an allocation must be a miltiple of it's alignment!
+        // size of an allocation must be a multiple of its alignment!
         match size.get() % alignment.get_alignment_value() {
             0 => Ok(Self { size, alignment }),
             _ => Err(ZLayoutError::IncorrectLayoutArgs),
