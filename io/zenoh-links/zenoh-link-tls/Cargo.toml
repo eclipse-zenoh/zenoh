@@ -39,6 +39,7 @@ tokio-util = { workspace = true, features = ["rt"] }
 tracing = { workspace = true }
 x509-parser = { workspace = true }
 webpki-roots = { workspace = true }
+tls-listener = { workspace = true }
 zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-link-commons = { workspace = true, features = ["tls"] }

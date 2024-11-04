@@ -195,8 +195,8 @@ impl<'a> Liveliness<'a> {
     /// # }
     /// ```
     #[zenoh_macros::unstable]
-    pub fn get<'b: 'a, TryIntoKeyExpr>(
-        &'a self,
+    pub fn get<'b, TryIntoKeyExpr>(
+        &self,
         key_expr: TryIntoKeyExpr,
     ) -> LivelinessGetBuilder<'a, 'b, DefaultHandler>
     where
