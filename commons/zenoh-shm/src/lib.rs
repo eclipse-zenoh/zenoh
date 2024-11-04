@@ -186,16 +186,14 @@ impl ShmBufInner {
 
 impl Drop for ShmBufInner {
     fn drop(&mut self) {
-        // # Safety
-        // obviouly, we need to decrement refcount when dropping ShmBufInner instance
+        // SAFETY: obviously, we need to decrement refcount when dropping ShmBufInner instance
         unsafe { self.dec_ref_count() };
     }
 }
 
 impl Clone for ShmBufInner {
     fn clone(&self) -> Self {
-        // # Safety
-        // obviouly, we need to increment refcount when cloning ShmBufInner instance
+        // SAFETY: obviously, we need to increment refcount when cloning ShmBufInner instance
         unsafe { self.inc_ref_count() };
         let bp = self.buf.load(Ordering::SeqCst);
         ShmBufInner {

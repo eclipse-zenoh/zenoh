@@ -33,7 +33,7 @@
 //!
 //! Static plugin is just a type which implements [`Plugin`] trait. It can be added to [`PluginsManager`] by [`PluginsManager::declare_static_plugin`](crate::manager::PluginsManager::declare_static_plugin) method.
 //!
-//! Dynamic plugin is a shared library which exports set of C-repr (unmangled) functions which allows to check plugin compatibility and create plugin instance. These functiuons are defined automatically by [`declare_plugin`] macro.
+//! Dynamic plugin is a shared library which exports set of C-repr (unmangled) functions which allows to check plugin compatibility and create plugin instance. These functions are defined automatically by [`declare_plugin`] macro.
 //!
 mod compatibility;
 mod manager;
