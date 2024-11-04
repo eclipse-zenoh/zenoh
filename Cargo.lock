@@ -2375,15 +2375,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "43794a0ace135be66a25d3ae77d41b91615fb68ae937f904090203e81f755b65"
 
 [[package]]
-name = "nolocal-block-on"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "acd62b6605db2ca3eb1448fb02436ff88304555104ae38e74a8dc00ce94a877d"
-dependencies = [
- "parking",
-]
-
-[[package]]
 name = "nom"
 version = "7.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5468,7 +5459,6 @@ dependencies = [
  "itertools 0.13.0",
  "json5",
  "lazy_static",
- "nolocal-block-on",
  "once_cell",
  "paste",
  "petgraph",

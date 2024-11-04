@@ -26,6 +26,7 @@ use std::{
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+
 use tracing::{error, info, trace, warn};
 use uhlc::Timestamp;
 #[cfg(feature = "internal")]
@@ -64,6 +65,7 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::ZResult;
+use zenoh_runtime::ZRuntime;
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::api::client_storage::ShmClientStorage;
 use zenoh_task::TaskController;
@@ -1080,16 +1082,14 @@ impl SessionInner {
         self.runtime.zid()
     }
 
-    async fn close(&self, _timeout: Duration) -> ZResult<()> {
+    async fn close(&self, timeout: Duration) -> ZResult<()> {
         let Some(primitives) = zwrite!(self.state).primitives.take() else {
             return Ok(());
         };
         if self.owns_runtime {
             info!(zid = %self.zid(), "close session");
         }
-        self.task_controller
-            .terminate_all_async(Duration::from_secs(10))
-            .await;
+        self.task_controller.terminate_all_async(timeout).await;
         if self.owns_runtime {
             self.runtime.close().await?
         } else {
@@ -2923,7 +2923,7 @@ impl Resolvable for SessionCloseBuilder {
 
 impl Wait for SessionCloseBuilder {
     fn wait(self) -> Self::To {
-        nolocal_block_on::block_on(self.into_future())
+        ZRuntime::Application.block_on(self.into_future())
     }
 }
 
