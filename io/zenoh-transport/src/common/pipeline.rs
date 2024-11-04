@@ -322,7 +322,9 @@ impl StageIn {
         let mut reader = self.fragbuf.reader();
         while reader.can_read() {
             // Get the current serialization batch
-            batch = zgetbatch_rets!(tch.sn.set(sn).unwrap());
+            // If deadline is reached, sequence number is incremented in order to break the
+            // fragment chain already sent.
+            batch = zgetbatch_rets!(tch.sn.set(fragment.sn + 1).unwrap());
 
             // Serialize the message fragment
             match batch.encode((&mut reader, &mut fragment)) {
