@@ -17,9 +17,7 @@ use std::{
     collections::HashMap,
     convert::TryInto,
     fmt,
-    future::{Future, IntoFuture},
     ops::Deref,
-    pin::Pin,
     sync::{
         atomic::{AtomicU16, Ordering},
         Arc, Mutex, RwLock,
@@ -27,6 +25,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use async_trait::async_trait;
 use tracing::{error, info, trace, warn};
 use uhlc::Timestamp;
 #[cfg(feature = "internal")]
@@ -34,7 +33,7 @@ use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::{unwrap_or_default, wrappers::ZenohId};
-use zenoh_core::{zconfigurable, zread, Resolvable, Resolve, ResolveClosure, ResolveFuture, Wait};
+use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Wait};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::network::{
     declare::{DeclareToken, SubscriberId, TokenId, UndeclareToken},
@@ -65,11 +64,11 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::ZResult;
-use zenoh_runtime::ZRuntime;
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::api::client_storage::ShmClientStorage;
 use zenoh_task::TaskController;
 
+use super::builders::close::{CloseBuilder, CloseState, Closeable, Closee};
 #[cfg(feature = "unstable")]
 use crate::api::selector::ZenohParameters;
 #[cfg(feature = "unstable")]
@@ -618,8 +617,8 @@ impl Session {
     /// subscriber_task.await.unwrap();
     /// # }
     /// ```
-    pub fn close(&self) -> SessionCloseBuilder {
-        SessionCloseBuilder::new(self.0.clone())
+    pub fn close(&self) -> CloseBuilder<Self> {
+        CloseBuilder::new(self)
     }
 
     /// Check if the session has been closed.
@@ -1080,33 +1079,6 @@ impl Session {
 impl SessionInner {
     pub fn zid(&self) -> ZenohId {
         self.runtime.zid()
-    }
-
-    async fn close(&self, timeout: Duration) -> ZResult<()> {
-        let Some(primitives) = zwrite!(self.state).primitives.take() else {
-            return Ok(());
-        };
-        if self.owns_runtime {
-            info!(zid = %self.zid(), "close session");
-        }
-        self.task_controller.terminate_all_async(timeout).await;
-        if self.owns_runtime {
-            self.runtime.close().await?
-        } else {
-            primitives.send_close();
-        }
-        let mut state = zwrite!(self.state);
-        state.queryables.clear();
-        state.subscribers.clear();
-        state.liveliness_subscribers.clear();
-        state.local_resources.clear();
-        state.remote_resources.clear();
-        #[cfg(feature = "unstable")]
-        {
-            state.tokens.clear();
-            state.matching_listeners.clear();
-        }
-        Ok(())
     }
 
     pub(crate) fn declare_prefix<'a>(
@@ -2883,55 +2855,41 @@ where
     OpenBuilder::new(config)
 }
 
-/// A builder for closing a [`crate::Session`].
-///
-/// # Examples
-/// ```
-/// # #[tokio::main]
-/// # async fn main() {
-///
-/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-/// session.close()
-///     .timeout(std::time::Duration::from_secs(10))
-///     .await
-///     .unwrap();
-/// # }
-/// ```
+#[async_trait]
+impl Closee for Arc<SessionInner> {
+    async fn close_inner(&self, state: &mut CloseState) -> ZResult<()> {
+        let Some(primitives) = zwrite!(self.state).primitives.take() else {
+            return Ok(());
+        };
 
-pub struct SessionCloseBuilder {
-    inner: Arc<SessionInner>,
-    timeout: Duration,
-}
-
-impl SessionCloseBuilder {
-    fn new(inner: Arc<SessionInner>) -> Self {
-        Self {
-            inner,
-            timeout: Duration::MAX,
+        if self.owns_runtime {
+            info!(zid = %self.zid(), "close session");
+            state.close(&self.task_controller).await?;
+            state.close(&self.runtime.get_closee()).await?;
+        } else {
+            state.close(&self.task_controller).await?;
+            primitives.send_close();
         }
-    }
 
-    pub fn timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = timeout;
-        self
-    }
-}
-
-impl Resolvable for SessionCloseBuilder {
-    type To = ZResult<()>;
-}
-
-impl Wait for SessionCloseBuilder {
-    fn wait(self) -> Self::To {
-        ZRuntime::Application.block_on(self.into_future())
+        let mut state = zwrite!(self.state);
+        state.queryables.clear();
+        state.subscribers.clear();
+        state.liveliness_subscribers.clear();
+        state.local_resources.clear();
+        state.remote_resources.clear();
+        #[cfg(feature = "unstable")]
+        {
+            state.tokens.clear();
+            state.matching_listeners.clear();
+        }
+        Ok(())
     }
 }
 
-impl IntoFuture for SessionCloseBuilder {
-    type Output = <Self as Resolvable>::To;
-    type IntoFuture = Pin<Box<dyn Future<Output = <Self as IntoFuture>::Output> + Send>>;
+impl Closeable for Session {
+    type TClosee = Arc<SessionInner>;
 
-    fn into_future(self) -> Self::IntoFuture {
-        Box::pin(async move { self.inner.close(self.timeout).await }.into_future())
+    fn get_closee(&self) -> Self::TClosee {
+        self.0.clone()
     }
 }
