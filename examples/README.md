@@ -242,7 +242,7 @@
 ### z_liveliness
 
    Declares a liveliness token on a given key expression (`group1/zenoh-rs` by default).
-   This token will be seen alive byt the `z_get_liveliness` and `z_sub_liveliness` until
+   This token will be seen alive by the `z_get_liveliness` and `z_sub_liveliness` until
    user explicitly drops the token by pressing `'d'` or implicitly dropped by terminating
    or killing the `z_liveliness` example.
 
