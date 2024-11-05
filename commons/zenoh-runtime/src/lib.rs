@@ -129,9 +129,16 @@ impl ZRuntime {
     where
         F: Future<Output = R>,
     {
-        if let Ok(handle) = Handle::try_current() {
-            if handle.runtime_flavor() == RuntimeFlavor::CurrentThread {
-                panic!("Zenoh runtime doesn't support Tokio's current thread scheduler. Please use multi thread scheduler instead, e.g. a multi thread scheduler with one worker thread: `#[tokio::main(flavor = \"multi_thread\", worker_threads = 1)]`");
+        match Handle::try_current() {
+            Ok(handle) => {
+                if handle.runtime_flavor() == RuntimeFlavor::CurrentThread {
+                    panic!("Zenoh runtime doesn't support Tokio's current thread scheduler. Please use multi thread scheduler instead, e.g. a multi thread scheduler with one worker thread: `#[tokio::main(flavor = \"multi_thread\", worker_threads = 1)]`");
+                }
+            }
+            Err(e) => {
+                if e.is_thread_local_destroyed() {
+                    panic!("The TLS inside Tokio is destroyed. You might call Zenoh API in the exiting process, which isn't supported now.");
+                }
             }
         }
         tokio::task::block_in_place(move || self.block_on(f))
