@@ -515,7 +515,7 @@ pub fn ke(tokens: TokenStream) -> TokenStream {
     let value: LitStr = syn::parse(tokens).unwrap();
     let ke = value.value();
     match zenoh_keyexpr::keyexpr::new(&ke) {
-        Ok(_) => quote!(unsafe {::zenoh::key_expr::keyexpr::from_str_unchecked(#ke)}).into(),
+        Ok(_) => quote!(unsafe { zenoh::key_expr::keyexpr::from_str_unchecked(#ke)}).into(),
         Err(e) => panic!("{}", e),
     }
 }
