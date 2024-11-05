@@ -272,6 +272,7 @@ impl Runtime {
         self.state.next_id.fetch_add(1, Ordering::SeqCst)
     }
 
+    #[cfg(feature = "internal")]
     pub fn close(&self) -> CloseBuilder<Self> {
         CloseBuilder::new(self)
     }

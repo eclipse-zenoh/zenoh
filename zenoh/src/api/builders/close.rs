@@ -19,6 +19,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use tokio::{select, time::sleep};
 use tracing::warn;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
@@ -50,7 +51,7 @@ impl<TCloseable: Closeable> CloseBuilder<TCloseable> {
     pub(crate) fn new(closeable: &TCloseable) -> Self {
         Self {
             closee: closeable.get_closee(),
-            timeout: Duration::MAX,
+            timeout: Duration::from_secs(3600),
             backoff: CloseBackoff::Fail,
         }
     }
@@ -84,7 +85,7 @@ impl<TCloseable: Closeable> Resolvable for CloseBuilder<TCloseable> {
 
 impl<TCloseable: Closeable> Wait for CloseBuilder<TCloseable> {
     fn wait(self) -> Self::To {
-        ZRuntime::Application.block_on(self.into_future())
+        ZRuntime::Application.block_in_place(self.into_future())
     }
 }
 
@@ -95,7 +96,11 @@ impl<TCloseable: Closeable> IntoFuture for CloseBuilder<TCloseable> {
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(
             async move {
-                let mut state = CloseState::new(Instant::now() + self.timeout, self.backoff);
+                //TODO: this is a workaround because Instant lacks saturating_add operation
+                let time_limit = Instant::now()
+                    .checked_add(self.timeout)
+                    .expect("unsupported timeout value");
+                let mut state = CloseState::new(time_limit, self.backoff);
                 state.close(&self.closee).await
             }
             .into_future(),
@@ -121,9 +126,16 @@ impl CloseState {
     }
 
     pub(crate) async fn close_future<T: Future<Output = ()>>(&mut self, future: T) -> ZResult<()> {
-        tokio::time::timeout(self.timeout()?, future)
-            .await
-            .map_err(|_e| "execution timed out".into())
+        select! {
+            val = future => Ok(val),
+            val = self.timeout_async() => val,
+        }
+    }
+
+    async fn timeout_async(&mut self) -> ZResult<()> {
+        loop {
+            sleep(self.timeout()?).await;
+        }
     }
 
     fn timeout(&mut self) -> ZResult<Duration> {
@@ -132,7 +144,7 @@ impl CloseState {
             self.do_backoff(now)?;
             debug_assert!(now >= self.time_limit);
         }
-        Ok(now - self.time_limit)
+        Ok(self.time_limit - now)
     }
 
     fn do_backoff(&mut self, now: Instant) -> ZResult<()> {
