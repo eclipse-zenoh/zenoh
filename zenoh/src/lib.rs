@@ -172,7 +172,7 @@ pub mod key_expr {
     #[zenoh_macros::unstable]
     pub mod format {
         pub use zenoh_keyexpr::format::*;
-        pub use zenoh_macros::{kedefine, keformat, kewrite};
+        pub use zenoh_macros::{ke, kedefine, keformat, kewrite};
         pub mod macro_support {
             pub use zenoh_keyexpr::format::macro_support::*;
         }

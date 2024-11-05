@@ -19,6 +19,7 @@ use std::{
 
 use zenoh_core::{Result as ZResult, Wait};
 use zenoh_keyexpr::keyexpr;
+use zenoh_macros::ke;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Reliability;
 use zenoh_protocol::{core::WireExpr, network::NetworkMessage};
@@ -26,6 +27,7 @@ use zenoh_transport::{
     TransportEventHandler, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
 
+use crate as zenoh;
 use crate::{
     api::{
         encoding::Encoding,
@@ -38,17 +40,15 @@ use crate::{
     handlers::Callback,
 };
 
-lazy_static::lazy_static!(
-    static ref KE_STARSTAR: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("**") };
-    static ref KE_PREFIX: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("@") };
-    static ref KE_SESSION: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("session") };
-    static ref KE_TRANSPORT_UNICAST: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("transport/unicast") };
-    static ref KE_LINK: &'static keyexpr = unsafe { keyexpr::from_str_unchecked("link") };
-);
+static KE_STARSTAR: &keyexpr = ke!("**");
+static KE_PREFIX: &keyexpr = ke!("@");
+static KE_SESSION: &keyexpr = ke!("session");
+static KE_TRANSPORT_UNICAST: &keyexpr = ke!("transport/unicast");
+static KE_LINK: &keyexpr = ke!("link");
 
 pub(crate) fn init(session: WeakSession) {
     if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
-        let admin_key = KeyExpr::from(*KE_PREFIX / own_zid / *KE_SESSION / *KE_STARSTAR)
+        let admin_key = KeyExpr::from(KE_PREFIX / own_zid / KE_SESSION / KE_STARSTAR)
             .to_wire(&session)
             .to_owned();
 
@@ -68,7 +68,7 @@ pub(crate) fn on_admin_query(session: &WeakSession, query: Query) {
     fn reply_peer(own_zid: &keyexpr, query: &Query, peer: TransportPeer) {
         let zid = peer.zid.to_string();
         if let Ok(zid) = keyexpr::new(&zid) {
-            let key_expr = *KE_PREFIX / own_zid / *KE_SESSION / *KE_TRANSPORT_UNICAST / zid;
+            let key_expr = KE_PREFIX / own_zid / KE_SESSION / KE_TRANSPORT_UNICAST / zid;
             if query.key_expr().intersects(&key_expr) {
                 match serde_json::to_vec(&peer) {
                     Ok(bytes) => {
@@ -82,12 +82,12 @@ pub(crate) fn on_admin_query(session: &WeakSession, query: Query) {
                 let mut s = DefaultHasher::new();
                 link.hash(&mut s);
                 if let Ok(lid) = keyexpr::new(&s.finish().to_string()) {
-                    let key_expr = *KE_PREFIX
+                    let key_expr = KE_PREFIX
                         / own_zid
-                        / *KE_SESSION
-                        / *KE_TRANSPORT_UNICAST
+                        / KE_SESSION
+                        / KE_TRANSPORT_UNICAST
                         / zid
-                        / *KE_LINK
+                        / KE_LINK
                         / lid;
                     if query.key_expr().intersects(&key_expr) {
                         match serde_json::to_vec(&link) {
@@ -156,7 +156,7 @@ impl TransportMulticastEventHandler for Handler {
         if let Ok(own_zid) = keyexpr::new(&self.session.zid().to_string()) {
             if let Ok(zid) = keyexpr::new(&peer.zid.to_string()) {
                 let expr = WireExpr::from(
-                    &(*KE_PREFIX / own_zid / *KE_SESSION / *KE_TRANSPORT_UNICAST / zid),
+                    &(KE_PREFIX / own_zid / KE_SESSION / KE_TRANSPORT_UNICAST / zid),
                 )
                 .to_owned();
                 let info = DataInfo {
