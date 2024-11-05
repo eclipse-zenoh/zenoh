@@ -63,12 +63,13 @@ use super::{primitives::DeMux, routing, routing::router::Router};
 use crate::api::loader::{load_plugins, start_plugins};
 #[cfg(feature = "plugins")]
 use crate::api::plugins::PluginsManager;
+#[cfg(feature = "internal")]
+use crate::session::CloseBuilder;
 use crate::{
     api::{
         builders::close::{CloseState, Closeable, Closee},
         config::{Config, Notifier},
     },
-    session::CloseBuilder,
     GIT_VERSION, LONG_VERSION,
 };
 
