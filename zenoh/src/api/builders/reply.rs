@@ -35,7 +35,6 @@ use crate::api::{
     publisher::Priority,
     queryable::Query,
     sample::QoSBuilder,
-    value::Value,
 };
 
 #[derive(Debug)]
@@ -220,7 +219,8 @@ impl IntoFuture for ReplyBuilder<'_, '_, ReplyBuilderDelete> {
 #[derive(Debug)]
 pub struct ReplyErrBuilder<'a> {
     query: &'a Query,
-    value: Value,
+    payload: ZBytes,
+    encoding: Encoding,
 }
 
 impl<'a> ReplyErrBuilder<'a> {
@@ -230,7 +230,8 @@ impl<'a> ReplyErrBuilder<'a> {
     {
         Self {
             query,
-            value: Value::new(payload, Encoding::default()),
+            payload: payload.into(),
+            encoding: Encoding::default(),
         }
     }
 }
@@ -238,9 +239,10 @@ impl<'a> ReplyErrBuilder<'a> {
 #[zenoh_macros::internal_trait]
 impl EncodingBuilderTrait for ReplyErrBuilder<'_> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
-        let mut value = self.value.clone();
-        value.encoding = encoding.into();
-        Self { value, ..self }
+        Self {
+            encoding: encoding.into(),
+            ..self
+        }
     }
 }
 
@@ -258,12 +260,12 @@ impl Wait for ReplyErrBuilder<'_> {
                 mapping: Mapping::Sender,
             },
             payload: ResponseBody::Err(zenoh::Err {
-                encoding: self.value.encoding.into(),
+                encoding: self.encoding.into(),
                 ext_sinfo: None,
                 #[cfg(feature = "shared-memory")]
                 ext_shm: None,
                 ext_unknown: vec![],
-                payload: self.value.payload.into(),
+                payload: self.payload.into(),
             }),
             ext_qos: response::ext::QoSType::RESPONSE,
             ext_tstamp: None,
