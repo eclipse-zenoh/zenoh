@@ -1101,14 +1101,14 @@ impl SessionInner {
             let _liveliness_subscribers = std::mem::take(&mut state.liveliness_subscribers);
             let _local_resources = std::mem::take(&mut state.local_resources);
             let _remote_resources = std::mem::take(&mut state.remote_resources);
-            drop(state);
+            let _tokens: HashMap<Id, Arc<LivelinessTokenState>>;
+            let _matching_listeners: HashMap<Id, Arc<MatchingListenerState>>;
             #[cfg(feature = "unstable")]
             {
-                let mut state = zwrite!(self.state);
-                let _tokens = std::mem::take(&mut state.tokens);
-                let _matching_listeners = std::mem::take(&mut state.matching_listeners);
-                drop(state);
+                _tokens = std::mem::take(&mut state.tokens);
+                _matching_listeners = std::mem::take(&mut state.matching_listeners);
             }
+            drop(state);
             Ok(())
         })
     }
