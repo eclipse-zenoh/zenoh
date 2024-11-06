@@ -75,6 +75,7 @@ lazy_static::lazy_static! {
 
 type AtomicMicroSeconds = AtomicU32;
 type MicroSeconds = u32;
+type SignedMicroSeconds = i32;
 
 struct AtomicBackoff {
     active: CachePadded<AtomicBool>,
@@ -486,8 +487,10 @@ impl StageOutIn {
         // Verify that we have not been doing backoff for too long
         let mut backoff = 0;
         if !pull {
-            let diff = LOCAL_EPOCH.elapsed().as_micros() as MicroSeconds
-                - self.backoff.atomic.first_write.load(Ordering::Relaxed);
+            let diff = ((-(self.backoff.atomic.first_write.load(Ordering::Relaxed)
+                as SignedMicroSeconds))
+                + (LOCAL_EPOCH.elapsed().as_micros() as SignedMicroSeconds))
+                as MicroSeconds;
             let threshold = self.backoff.threshold.as_micros() as MicroSeconds;
 
             if diff >= threshold {
