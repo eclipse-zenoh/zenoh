@@ -1092,16 +1092,27 @@ impl SessionInner {
             } else {
                 primitives.send_close();
             }
+            // defer the cleanup of internal data structures by taking them out of the locked state
+            // this is needed because callbacks may contain entities which need to acquire the
+            // lock to be dropped, so callback must be dropped without the lock held
             let mut state = zwrite!(self.state);
-            state.queryables.clear();
-            state.subscribers.clear();
-            state.liveliness_subscribers.clear();
-            state.local_resources.clear();
-            state.remote_resources.clear();
+            let _queryables = std::mem::take(&mut state.queryables);
+            let _subscribers = std::mem::take(&mut state.subscribers);
+            let _liveliness_subscribers = std::mem::take(&mut state.liveliness_subscribers);
+            let _local_resources = std::mem::take(&mut state.local_resources);
+            let _remote_resources = std::mem::take(&mut state.remote_resources);
+            drop(state);
             #[cfg(feature = "unstable")]
             {
-                state.tokens.clear();
-                state.matching_listeners.clear();
+                // the lock from the outer scope cannot be reused because the declared variables
+                // would be undeclared at the end of the block, with the lock held, and we want
+                // to avoid that; so we reacquire the lock in the block
+                // anyway, it doesn't really matter, and this code will be cleaned up when the APIs
+                // will be stabilized.
+                let mut state = zwrite!(self.state);
+                let _tokens = std::mem::take(&mut state.tokens);
+                let _matching_listeners = std::mem::take(&mut state.matching_listeners);
+                drop(state);
             }
             Ok(())
         })
