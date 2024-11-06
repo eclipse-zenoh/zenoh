@@ -635,6 +635,16 @@ impl<Handler> MatchingListener<Handler> {
     }
 }
 
+impl<Handler> Drop for MatchingListener<Handler> {
+    fn drop(&mut self) {
+        if self.inner.undeclare_on_drop {
+            if let Err(error) = self.undeclare_impl() {
+                error!(error);
+            }
+        }
+    }
+}
+
 #[zenoh_macros::unstable]
 impl<Handler: Send> UndeclarableSealed<()> for MatchingListener<Handler> {
     type Undeclaration = MatchingListenerUndeclaration<Handler>;
