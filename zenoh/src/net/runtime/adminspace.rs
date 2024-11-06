@@ -45,7 +45,6 @@ use crate::{
         bytes::ZBytes,
         key_expr::KeyExpr,
         queryable::{Query, QueryInner},
-        value::Value,
     },
     bytes::Encoding,
     net::primitives::Primitives,
@@ -466,7 +465,9 @@ impl Primitives for AdminSpace {
                         primitives,
                     }),
                     eid: self.queryable_id,
-                    value: query.ext_body.map(|b| Value::new(b.payload, b.encoding)),
+                    value: query
+                        .ext_body
+                        .map(|b| (b.payload.into(), b.encoding.into())),
                     attachment: query.ext_attachment.map(Into::into),
                 };
 

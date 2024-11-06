@@ -15,7 +15,12 @@ use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use tokio::sync::RwLock;
-use zenoh::{internal::Value, key_expr::OwnedKeyExpr, time::Timestamp, Result as ZResult};
+use zenoh::{
+    bytes::{Encoding, ZBytes},
+    key_expr::OwnedKeyExpr,
+    time::Timestamp,
+    Result as ZResult,
+};
 use zenoh_backend_traits::{
     config::{StorageConfig, VolumeConfig},
     *,
@@ -92,18 +97,27 @@ impl Storage for MemoryStorage {
     async fn put(
         &mut self,
         key: Option<OwnedKeyExpr>,
-        value: Value,
+        payload: ZBytes,
+        encoding: Encoding,
         timestamp: Timestamp,
     ) -> ZResult<StorageInsertionResult> {
         tracing::trace!("put for {:?}", key);
         let mut map = self.map.write().await;
         match map.entry(key) {
             std::collections::hash_map::Entry::Occupied(mut e) => {
-                e.insert(StoredData { value, timestamp });
+                e.insert(StoredData {
+                    payload,
+                    encoding,
+                    timestamp,
+                });
                 return Ok(StorageInsertionResult::Replaced);
             }
             std::collections::hash_map::Entry::Vacant(e) => {
-                e.insert(StoredData { value, timestamp });
+                e.insert(StoredData {
+                    payload,
+                    encoding,
+                    timestamp,
+                });
                 return Ok(StorageInsertionResult::Inserted);
             }
         }

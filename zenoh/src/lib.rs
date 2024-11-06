@@ -499,8 +499,6 @@ pub mod internal {
     }
 
     pub use zenoh_result::ErrNo;
-
-    pub use crate::api::value::Value;
 }
 
 /// Shared memory.

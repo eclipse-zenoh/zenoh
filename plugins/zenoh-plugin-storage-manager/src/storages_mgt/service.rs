@@ -22,14 +22,16 @@ use std::{
 use async_trait::async_trait;
 use tokio::sync::{broadcast::Receiver, Mutex, RwLock, RwLockWriteGuard};
 use zenoh::{
-    internal::{bail, Timed, TimedEvent, Timer, Value},
+    bytes::{Encoding, ZBytes},
+    internal::{bail, Timed, TimedEvent, Timer},
     key_expr::{
+        keyexpr,
         keyexpr_tree::{
             IKeyExprTree, IKeyExprTreeMut, KeBoxTree, KeyedSetProvider, UnknownWildness,
         },
-        KeyExpr, OwnedKeyExpr,
+        OwnedKeyExpr,
     },
-    sample::{Sample, SampleBuilder, SampleKind},
+    sample::{Sample, SampleBuilder, SampleFields, SampleKind},
     session::Session,
     time::{Timestamp, NTP64},
     Result as ZResult,
@@ -60,12 +62,18 @@ impl Update {
         self.kind
     }
 
-    pub(crate) fn value(&self) -> &Value {
-        &self.data.value
+    pub(crate) fn payload(&self) -> &ZBytes {
+        &self.data.payload
     }
 
-    pub(crate) fn into_value(self) -> Value {
-        self.data.value
+    pub(crate) fn encoding(&self) -> &Encoding {
+        &self.data.encoding
+    }
+}
+
+impl From<Update> for StoredData {
+    fn from(update: Update) -> Self {
+        update.data
     }
 }
 
@@ -204,35 +212,40 @@ impl StorageService {
     // during get the trimming during PUT and GET should be handled by the plugin
     pub(crate) async fn process_sample(&self, sample: Sample) -> ZResult<()> {
         tracing::trace!("[STORAGE] Processing sample: {:?}", sample.key_expr());
+        let SampleFields {
+            key_expr,
+            timestamp,
+            payload,
+            encoding,
+            kind,
+            ..
+        } = sample.clone().into();
 
         // A Sample, in theory, will not arrive to a Storage without a Timestamp. This check (which,
         // again, should never enter the `None` branch) ensures that the Storage Manager
         // does not panic even if it ever happens.
-        let sample_timestamp = match sample.timestamp() {
-            Some(timestamp) => timestamp,
-            None => {
-                bail!("Discarding Sample without a Timestamp: {:?}", sample);
-            }
+        let Some(timestamp) = timestamp else {
+            bail!("Discarding Sample without a Timestamp: {:?}", sample);
         };
 
-        let mut action: Action = sample.kind().into();
+        let mut action: Action = kind.into();
         // if wildcard, update wildcard_updates
-        if sample.key_expr().is_wild() {
-            let sample_key_expr: OwnedKeyExpr = sample.key_expr().clone().into();
+        if key_expr.is_wild() {
             self.register_wildcard_update(
-                sample_key_expr.clone(),
-                sample.kind(),
-                *sample_timestamp,
-                sample.clone(),
+                key_expr.clone().into(),
+                kind,
+                timestamp,
+                payload,
+                encoding,
             )
             .await;
 
-            action = match sample.kind() {
-                SampleKind::Put => Action::WildcardPut(sample_key_expr.clone()),
-                SampleKind::Delete => Action::WildcardDelete(sample_key_expr.clone()),
+            action = match kind {
+                SampleKind::Put => Action::WildcardPut(key_expr.clone().into()),
+                SampleKind::Delete => Action::WildcardDelete(key_expr.clone().into()),
             };
 
-            let event = Event::new(Some(sample_key_expr.clone()), *sample_timestamp, &action);
+            let event = Event::new(Some(key_expr.clone().into()), timestamp, &action);
 
             self.cache_latest
                 .latest_updates
@@ -241,14 +254,14 @@ impl StorageService {
                 .insert(event.log_key(), event);
         }
 
-        let matching_keys = if sample.key_expr().is_wild() {
-            self.get_matching_keys(sample.key_expr()).await
+        let matching_keys = if key_expr.is_wild() {
+            self.get_matching_keys(&key_expr).await
         } else {
-            vec![sample.key_expr().clone().into()]
+            vec![key_expr.clone().into()]
         };
         tracing::trace!(
             "The list of keys matching `{}` is : {:?}",
-            sample.key_expr(),
+            &key_expr,
             matching_keys
         );
 
@@ -259,16 +272,14 @@ impl StorageService {
             // update, but not stored yet in the storage. get the relevant wild
             // card entry and use that value and timestamp to update the storage
             let sample_to_store: Sample = if let Some((_, update)) = self
-                .overriding_wild_update(&k, sample_timestamp, &None, &sample.kind().into())
+                .overriding_wild_update(&k, &timestamp, &None, &kind.into())
                 .await
             {
                 match update.kind {
-                    SampleKind::Put => {
-                        SampleBuilder::put(k.clone(), update.data.value.payload().clone())
-                            .encoding(update.data.value.encoding().clone())
-                            .timestamp(update.data.timestamp)
-                            .into()
-                    }
+                    SampleKind::Put => SampleBuilder::put(k.clone(), update.data.payload.clone())
+                        .encoding(update.data.encoding.clone())
+                        .timestamp(update.data.timestamp)
+                        .into(),
                     SampleKind::Delete => SampleBuilder::delete(k.clone())
                         .timestamp(update.data.timestamp)
                         .into(),
@@ -323,10 +334,8 @@ impl StorageService {
                     storage
                         .put(
                             stripped_key.clone(),
-                            Value::new(
-                                sample_to_store.payload().clone(),
-                                sample_to_store.encoding().clone(),
-                            ),
+                            sample_to_store.payload().clone(),
+                            sample_to_store.encoding().clone(),
                             sample_to_store_timestamp,
                         )
                         .await
@@ -377,12 +386,14 @@ impl StorageService {
         key_expr: OwnedKeyExpr,
         kind: SampleKind,
         timestamp: Timestamp,
-        value: impl Into<Value>,
+        payload: ZBytes,
+        encoding: Encoding,
     ) {
         let update = Update {
             kind,
             data: StoredData {
-                value: value.into(),
+                payload,
+                encoding,
                 timestamp,
             },
         };
@@ -561,8 +572,8 @@ impl StorageService {
                     Ok(stored_data) => {
                         for entry in stored_data {
                             if let Err(e) = q
-                                .reply(key.clone(), entry.value.payload().clone())
-                                .encoding(entry.value.encoding().clone())
+                                .reply(key.clone(), entry.payload.clone())
+                                .encoding(entry.encoding.clone())
                                 .timestamp(entry.timestamp)
                                 .await
                             {
@@ -594,8 +605,8 @@ impl StorageService {
                 Ok(stored_data) => {
                     for entry in stored_data {
                         if let Err(e) = q
-                            .reply(q.key_expr().clone(), entry.value.payload().clone())
-                            .encoding(entry.value.encoding().clone())
+                            .reply(q.key_expr().clone(), entry.payload.clone())
+                            .encoding(entry.encoding.clone())
                             .timestamp(entry.timestamp)
                             .await
                         {
@@ -614,7 +625,7 @@ impl StorageService {
         }
     }
 
-    async fn get_matching_keys(&self, key_expr: &KeyExpr<'_>) -> Vec<OwnedKeyExpr> {
+    async fn get_matching_keys(&self, key_expr: &keyexpr) -> Vec<OwnedKeyExpr> {
         let mut result = Vec::new();
         // @TODO: if cache exists, use that to get the list
         let storage = self.storage.lock().await;

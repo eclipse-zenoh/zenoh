@@ -29,7 +29,7 @@
 //! ```
 //! use std::sync::Arc;
 //! use async_trait::async_trait;
-//! use zenoh::{key_expr::OwnedKeyExpr, time::Timestamp, internal::Value};
+//! use zenoh::{key_expr::OwnedKeyExpr, time::Timestamp, bytes::{ZBytes, Encoding}};
 //! use zenoh_backend_traits::*;
 //! use zenoh_backend_traits::config::*;
 //!
@@ -87,7 +87,7 @@
 //!         self.config.to_json_value()
 //!     }
 //!
-//!     async fn put(&mut self, key: Option<OwnedKeyExpr>, value: Value, timestamp: Timestamp) -> zenoh::Result<StorageInsertionResult> {
+//!     async fn put(&mut self, key: Option<OwnedKeyExpr>, payload: ZBytes, encoding: Encoding, timestamp: Timestamp) -> zenoh::Result<StorageInsertionResult> {
 //!         // the key will be None if it exactly matched with the strip_prefix
 //!         // create a storage specific special structure to store it
 //!         // Store the data with timestamp
@@ -123,7 +123,7 @@
 use async_trait::async_trait;
 use const_format::concatcp;
 use zenoh::{
-    internal::Value,
+    bytes::{Encoding, ZBytes},
     key_expr::{keyexpr, OwnedKeyExpr},
     time::Timestamp,
     Result as ZResult,
@@ -176,7 +176,8 @@ pub enum StorageInsertionResult {
 
 #[derive(Debug, Clone)]
 pub struct StoredData {
-    pub value: Value,
+    pub payload: ZBytes,
+    pub encoding: Encoding,
     pub timestamp: Timestamp,
 }
 
@@ -227,7 +228,8 @@ pub trait Storage: Send + Sync {
     async fn put(
         &mut self,
         key: Option<OwnedKeyExpr>,
-        value: Value,
+        payload: ZBytes,
+        encoding: Encoding,
         timestamp: Timestamp,
     ) -> ZResult<StorageInsertionResult>;
 
