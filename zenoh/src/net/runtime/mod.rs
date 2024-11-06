@@ -29,7 +29,6 @@ use std::{
         atomic::{AtomicU32, Ordering},
         Arc, Weak,
     },
-    time::Duration,
 };
 
 pub use adminspace::AdminSpace;
@@ -67,7 +66,7 @@ use crate::api::plugins::PluginsManager;
 use crate::session::CloseBuilder;
 use crate::{
     api::{
-        builders::close::{CloseState, Closeable, Closee},
+        builders::close::{Closeable, Closee},
         config::{Config, Notifier},
     },
     GIT_VERSION, LONG_VERSION,
@@ -531,14 +530,12 @@ impl TransportPeerEventHandler for RuntimeMulticastSession {
 
 #[async_trait]
 impl Closee for Arc<RuntimeState> {
-    async fn close_inner(&self, state: &mut CloseState) -> ZResult<()> {
+    async fn close_inner(&self) {
         tracing::trace!("Runtime::close())");
         // TODO: Plugins should be stopped
         // TODO: Check this whether is able to terminate all spawned task by Runtime::spawn
-        state.close(&self.task_controller).await?;
-        state
-            .close_future(self.manager.close_with_timeout(Duration::MAX))
-            .await?;
+        self.task_controller.terminate_all_async().await;
+        self.manager.close().await;
         // clean up to break cyclic reference of self.state to itself
         self.transport_handlers.write().unwrap().clear();
         // TODO: the call below is needed to prevent intermittent leak
@@ -549,7 +546,6 @@ impl Closee for Arc<RuntimeState> {
         let mut tables = self.router.tables.tables.write().unwrap();
         tables.root_res.close();
         tables.faces.clear();
-        Ok(())
     }
 }
 

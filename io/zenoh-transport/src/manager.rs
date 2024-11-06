@@ -477,12 +477,8 @@ impl TransportManager {
     }
 
     pub async fn close(&self) {
-        self.close_with_timeout(Duration::from_secs(10)).await;
-    }
-
-    pub async fn close_with_timeout(&self, timeout: Duration) {
         self.close_unicast().await;
-        self.task_controller.terminate_all_async(timeout).await;
+        self.task_controller.terminate_all_async().await;
     }
 
     /*************************************/

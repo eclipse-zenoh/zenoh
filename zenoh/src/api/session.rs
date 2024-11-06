@@ -68,7 +68,7 @@ use zenoh_result::ZResult;
 use zenoh_shm::api::client_storage::ShmClientStorage;
 use zenoh_task::TaskController;
 
-use super::builders::close::{CloseBuilder, CloseState, Closeable, Closee};
+use super::builders::close::{CloseBuilder, Closeable, Closee};
 #[cfg(feature = "unstable")]
 use crate::api::selector::ZenohParameters;
 #[cfg(feature = "unstable")]
@@ -2857,17 +2857,17 @@ where
 
 #[async_trait]
 impl Closee for Arc<SessionInner> {
-    async fn close_inner(&self, state: &mut CloseState) -> ZResult<()> {
+    async fn close_inner(&self) {
         let Some(primitives) = zwrite!(self.state).primitives.take() else {
-            return Ok(());
+            return;
         };
 
         if self.owns_runtime {
             info!(zid = %self.zid(), "close session");
-            state.close(&self.task_controller).await?;
-            state.close(&self.runtime.get_closee()).await?;
+            self.task_controller.terminate_all_async().await;
+            self.runtime.get_closee().close_inner().await;
         } else {
-            state.close(&self.task_controller).await?;
+            self.task_controller.terminate_all_async().await;
             primitives.send_close();
         }
 
@@ -2882,7 +2882,6 @@ impl Closee for Arc<SessionInner> {
             state.tokens.clear();
             state.matching_listeners.clear();
         }
-        Ok(())
     }
 }
 
