@@ -1104,6 +1104,11 @@ impl SessionInner {
             drop(state);
             #[cfg(feature = "unstable")]
             {
+                // the lock from the outer scope cannot be reused because the declared variables
+                // would be undeclared at the end of the block, with the lock held, and we want
+                // to avoid that; so we reacquire the lock in the block
+                // anyway, it doesn't really matter, and this code will be cleaned up when the APIs
+                // will be stabilized.
                 let mut state = zwrite!(self.state);
                 let _tokens = std::mem::take(&mut state.tokens);
                 let _matching_listeners = std::mem::take(&mut state.matching_listeners);
