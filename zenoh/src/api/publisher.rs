@@ -635,6 +635,7 @@ impl<Handler> MatchingListener<Handler> {
     }
 }
 
+#[cfg(feature = "unstable")]
 impl<Handler> Drop for MatchingListener<Handler> {
     fn drop(&mut self) {
         if self.inner.undeclare_on_drop {
