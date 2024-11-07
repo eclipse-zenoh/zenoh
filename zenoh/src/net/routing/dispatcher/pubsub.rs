@@ -124,7 +124,6 @@ pub(crate) fn undeclare_subscription(
     node_id: NodeId,
     send_declare: &mut SendDeclare,
 ) {
-    tracing::trace!("Undeclare subscription {}", face);
     let res = if expr.is_empty() {
         None
     } else {
@@ -133,7 +132,7 @@ pub(crate) fn undeclare_subscription(
             Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
                 Some(res) => Some(res),
                 None => {
-                    tracing::trace!(
+                    tracing::error!(
                         "{} Undeclare unknown subscriber {}{}!",
                         face,
                         prefix.expr(),
@@ -143,7 +142,7 @@ pub(crate) fn undeclare_subscription(
                 }
             },
             None => {
-                tracing::trace!(
+                tracing::error!(
                     "{} Undeclare subscriber with unknown scope {}",
                     face,
                     expr.scope
