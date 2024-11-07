@@ -186,7 +186,7 @@ pub(crate) fn undeclare_queryable(
         Resource::clean(&mut res);
         drop(wtables);
     } else {
-        // NOTE: This is expected behavior if queryable declartations are denied with ingress ACL interceptor.
+        // NOTE: This is expected behavior if queryable declarations are denied with ingress ACL interceptor.
         tracing::debug!("{} Undeclare unknown queryable {}", face, id);
     }
 }
