@@ -193,9 +193,7 @@ fn propagate_forget_simple_subscription(
                         ext_nodeid: ext::NodeIdType::DEFAULT,
                         body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
                             id,
-                            ext_wire_expr: WireExprType {
-                                wire_expr: res.expr().into(),
-                            },
+                            ext_wire_expr: WireExprType::null(),
                         }),
                     },
                     res.expr(),
@@ -233,9 +231,7 @@ pub(super) fn undeclare_simple_subscription(
                             ext_nodeid: ext::NodeIdType::DEFAULT,
                             body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
                                 id,
-                                ext_wire_expr: WireExprType {
-                                    wire_expr: res.expr().into(),
-                                },
+                                ext_wire_expr: WireExprType::null(),
                             }),
                         },
                         res.expr(),

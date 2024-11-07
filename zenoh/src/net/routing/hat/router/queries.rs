@@ -560,9 +560,7 @@ fn propagate_forget_simple_queryable(
                         ext_nodeid: ext::NodeIdType::DEFAULT,
                         body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                             id,
-                            ext_wire_expr: WireExprType {
-                                wire_expr: res.expr().into(),
-                            },
+                            ext_wire_expr: WireExprType::null(),
                         }),
                     },
                     res.expr(),
@@ -594,9 +592,7 @@ fn propagate_forget_simple_queryable(
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
                                 body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                                     id,
-                                    ext_wire_expr: WireExprType {
-                                        wire_expr: res.expr().into(),
-                                    },
+                                    ext_wire_expr: WireExprType::null(),
                                 }),
                             },
                             res.expr(),
@@ -644,9 +640,7 @@ fn propagate_forget_simple_queryable_to_peers(
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
                                 body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                                     id,
-                                    ext_wire_expr: WireExprType {
-                                        wire_expr: res.expr().into(),
-                                    },
+                                    ext_wire_expr: WireExprType::null(),
                                 }),
                             },
                             res.expr(),
@@ -825,9 +819,7 @@ pub(super) fn undeclare_simple_queryable(
                             ext_nodeid: ext::NodeIdType::DEFAULT,
                             body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                                 id,
-                                ext_wire_expr: WireExprType {
-                                    wire_expr: res.expr().into(),
-                                },
+                                ext_wire_expr: WireExprType::null(),
                             }),
                         },
                         res.expr(),
@@ -859,9 +851,7 @@ pub(super) fn undeclare_simple_queryable(
                                     ext_nodeid: ext::NodeIdType::DEFAULT,
                                     body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                                         id,
-                                        ext_wire_expr: WireExprType {
-                                            wire_expr: res.expr().into(),
-                                        },
+                                        ext_wire_expr: WireExprType::null(),
                                     }),
                                 },
                                 res.expr(),
