@@ -172,7 +172,8 @@ pub(crate) fn undeclare_subscription(
         Resource::clean(&mut res);
         drop(wtables);
     } else {
-        tracing::trace!("{} Undeclare unknown subscriber {}", face, id);
+        // NOTE: This is expected behavior if subscriber declarations are denied with ingress ACL interceptor.
+        tracing::debug!("{} Undeclare unknown subscriber {}", face, id);
     }
 }
 
