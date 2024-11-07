@@ -137,7 +137,7 @@ impl ZRuntime {
             }
             Err(e) => {
                 if e.is_thread_local_destroyed() {
-                    panic!("The TLS inside Tokio is destroyed. You might call Zenoh API in the exiting process, which isn't supported now.");
+                    panic!("The Thread Local Storage inside Tokio is destroyed. This might happen when Zenoh API is called at process exit, e.g. in the atexit handler. Calling the Zenoh API at process exit is not supported and should be avoided.");
                 }
             }
         }
