@@ -122,6 +122,7 @@ impl TransportPeerEventHandler for SCRouter {
     fn handle_message(&self, message: NetworkMessage) -> ZResult<()> {
         assert_eq!(message, *MSG);
         self.count.fetch_add(1, Ordering::SeqCst);
+        std::thread::sleep(2 * SLEEP_SEND);
         Ok(())
     }
 
@@ -289,9 +290,9 @@ async fn test_transport(router_handler: Arc<SHRouter>, client_transport: Transpo
     ztimeout!(async {
         let mut sent = 0;
         while router_handler.get_count() < MSG_COUNT {
-            let _ = client_transport.schedule(MSG.clone());
+            client_transport.schedule(MSG.clone()).unwrap();
             sent += 1;
-            tokio::time::sleep(SLEEP_SEND).await;
+            // tokio::time::sleep(SLEEP_SEND).await;
         }
         println!(
             "Sent: {sent}. Received: {}/{MSG_COUNT}",
