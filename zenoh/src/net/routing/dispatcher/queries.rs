@@ -146,7 +146,7 @@ pub(crate) fn undeclare_queryable(
             Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
                 Some(res) => Some(res),
                 None => {
-                    tracing::error!(
+                    tracing::trace!(
                         "{} Undeclare unknown queryable {}{}!",
                         face,
                         prefix.expr(),
@@ -156,7 +156,7 @@ pub(crate) fn undeclare_queryable(
                 }
             },
             None => {
-                tracing::error!(
+                tracing::trace!(
                     "{} Undeclare queryable with unknown scope {}",
                     face,
                     expr.scope
@@ -186,7 +186,7 @@ pub(crate) fn undeclare_queryable(
         Resource::clean(&mut res);
         drop(wtables);
     } else {
-        tracing::error!("{} Undeclare unknown queryable {}", face, id);
+        tracing::trace!("{} Undeclare unknown queryable {}", face, id);
     }
 }
 
