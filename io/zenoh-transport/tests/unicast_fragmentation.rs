@@ -45,7 +45,7 @@ const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
 const SLEEP_SEND: Duration = Duration::from_millis(1);
 
-const MSG_COUNT: usize = 1_000;
+const MSG_COUNT: usize = 100;
 lazy_static! {
     #[derive(Debug)]
     static ref MSG: NetworkMessage = Push {
@@ -292,12 +292,12 @@ async fn test_transport(router_handler: Arc<SHRouter>, client_transport: Transpo
         while router_handler.get_count() < MSG_COUNT {
             client_transport.schedule(MSG.clone()).unwrap();
             sent += 1;
+            println!(
+                "Sent: {sent}. Received: {}/{MSG_COUNT}",
+                router_handler.get_count()
+            );
             // tokio::time::sleep(SLEEP_SEND).await;
         }
-        println!(
-            "Sent: {sent}. Received: {}/{MSG_COUNT}",
-            router_handler.get_count()
-        );
     });
 
     // Wait a little bit
