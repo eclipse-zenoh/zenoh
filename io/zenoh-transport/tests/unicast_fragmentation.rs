@@ -290,13 +290,13 @@ async fn test_transport(router_handler: Arc<SHRouter>, client_transport: Transpo
     ztimeout!(async {
         let mut sent = 0;
         while router_handler.get_count() < MSG_COUNT {
-            client_transport.schedule(MSG.clone()).unwrap();
-            sent += 1;
-            println!(
-                "Sent: {sent}. Received: {}/{MSG_COUNT}",
-                router_handler.get_count()
-            );
-            // tokio::time::sleep(SLEEP_SEND).await;
+            if client_transport.schedule(MSG.clone()).is_ok() {
+                sent += 1;
+                println!(
+                    "Sent: {sent}. Received: {}/{MSG_COUNT}",
+                    router_handler.get_count()
+                );
+            }
         }
     });
 
