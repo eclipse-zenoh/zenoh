@@ -15,7 +15,7 @@
 use std::{
     fmt,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
-    sync::Arc,
+    sync::{Arc, OnceLock},
     time::Duration,
 };
 
@@ -28,7 +28,7 @@ use x509_parser::prelude::{FromDer, X509Certificate};
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
     get_ip_interface_names,
-    tls::{LinkCertExpirationInfo, LinkCertExpirationManager, NewLinkExpirationSender},
+    tls::expiration::{LinkCertExpirationInfo, LinkCertExpirationManager},
     LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     ListenersUnicastIP, NewLinkChannelSender,
 };
@@ -51,6 +51,7 @@ pub struct LinkUnicastQuic {
     send: AsyncMutex<quinn::SendStream>,
     recv: AsyncMutex<quinn::RecvStream>,
     auth_identifier: LinkAuthId,
+    expiration_manager: OnceLock<LinkCertExpirationManager>,
 }
 
 impl LinkUnicastQuic {
@@ -71,6 +72,7 @@ impl LinkUnicastQuic {
             send: AsyncMutex::new(send),
             recv: AsyncMutex::new(recv),
             auth_identifier,
+            expiration_manager: OnceLock::new(),
         }
     }
 }
@@ -200,18 +202,13 @@ impl fmt::Debug for LinkUnicastQuic {
 pub struct LinkManagerUnicastQuic {
     manager: NewLinkChannelSender,
     listeners: ListenersUnicastIP,
-    expiration_manager: LinkCertExpirationManager,
 }
 
 impl LinkManagerUnicastQuic {
     pub fn new(manager: NewLinkChannelSender) -> Self {
-        let listener = ListenersUnicastIP::new();
-        let token = listener.token.child_token();
-
         Self {
             manager,
             listeners: ListenersUnicastIP::new(),
-            expiration_manager: LinkCertExpirationManager::new(token),
         }
     }
 }
@@ -279,21 +276,17 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             auth_id.into(),
         ));
 
-        // send to link expiration manager
+        // setup expiration manager
         let link_trait_object: Arc<dyn LinkUnicastTrait> = link.clone();
         let expiration_info = LinkCertExpirationInfo::new(
             Arc::downgrade(&link_trait_object),
+            certchain_expiration_time,
             &link.src_locator,
             &link.dst_locator,
         );
-        if let Err(e) = self
-            .expiration_manager
-            .tx
-            .send_async((certchain_expiration_time, expiration_info))
-            .await
-        {
-            tracing::error!("{}-{}: {}", file!(), line!(), e)
-        }
+        link.expiration_manager
+            .set(LinkCertExpirationManager::new(expiration_info, None))
+            .expect("should be first call to initialize expiration manager");
 
         Ok(LinkUnicast(link))
     }
@@ -362,9 +355,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let task = {
             let token = token.clone();
             let manager = self.manager.clone();
-            let expiration_tx = self.expiration_manager.tx.clone();
 
-            async move { accept_task(quic_endpoint, token, manager, expiration_tx).await }
+            async move { accept_task(quic_endpoint, token, manager).await }
         };
 
         // Initialize the QuicAcceptor
@@ -396,7 +388,6 @@ async fn accept_task(
     quic_endpoint: quinn::Endpoint,
     token: CancellationToken,
     manager: NewLinkChannelSender,
-    expiration_task_tx: NewLinkExpirationSender,
 ) -> ZResult<()> {
     async fn accept(acceptor: quinn::Accept<'_>) -> ZResult<quinn::Connection> {
         let qc = acceptor
@@ -461,17 +452,18 @@ async fn accept_task(
                             auth_id.into()
                         ));
 
-                        // Communicate the link to the expiration manager if applicable
+                        // setup expiration manager if applicable
                         if let Some(certchain_expiration_time) = maybe_expiration_time {
                             let link_trait_object: Arc<dyn LinkUnicastTrait> = link.clone();
                             let expiration_info = LinkCertExpirationInfo::new(
                                 Arc::downgrade(&link_trait_object),
+                                certchain_expiration_time,
                                 &link.src_locator,
                                 &link.dst_locator,
                             );
-                            if let Err(e) = expiration_task_tx.send_async((certchain_expiration_time, expiration_info)).await {
-                                tracing::error!("{}-{}: {}", file!(), line!(), e)
-                            }
+                            link.expiration_manager
+                                .set(LinkCertExpirationManager::new(expiration_info, Some(token.child_token())))
+                                .expect("should be first call to initialize expiration manager");
                         }
 
                         // Communicate the new link to the initial transport manager

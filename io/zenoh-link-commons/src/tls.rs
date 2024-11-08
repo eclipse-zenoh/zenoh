@@ -1,5 +1,4 @@
 use alloc::vec::Vec;
-use std::{collections::BTreeMap, sync::Weak};
 
 use rustls::{
     client::{
@@ -11,13 +10,7 @@ use rustls::{
     server::ParsedCertificate,
     RootCertStore,
 };
-use time::OffsetDateTime;
-use tokio::task::JoinHandle;
-use tokio_util::sync::CancellationToken;
 use webpki::ALL_VERIFICATION_ALGS;
-use zenoh_protocol::core::Locator;
-
-use crate::LinkUnicastTrait;
 
 impl ServerCertVerifier for WebPkiVerifierAnyServerName {
     /// Will verify the certificate is valid in the following ways:
@@ -94,118 +87,114 @@ impl WebPkiVerifierAnyServerName {
     }
 }
 
-pub struct LinkCertExpirationManager {
-    pub token: CancellationToken,
-    pub tx: NewLinkExpirationSender,
-    handle: Option<JoinHandle<()>>,
-}
+pub mod expiration {
+    use std::sync::Weak;
 
-impl Drop for LinkCertExpirationManager {
-    fn drop(&mut self) {
-        if let Some(handle) = self.handle.take() {
-            zenoh_runtime::ZRuntime::Acceptor.block_in_place(async {
-                self.token.cancel();
-                let _ = handle.await;
-            })
-        }
+    use time::OffsetDateTime;
+    use tokio::task::JoinHandle;
+    use tokio_util::sync::CancellationToken;
+    use zenoh_protocol::core::Locator;
+
+    use crate::LinkUnicastTrait;
+
+    #[derive(Debug)]
+    pub struct LinkCertExpirationManager {
+        pub token: CancellationToken,
+        handle: Option<JoinHandle<()>>,
     }
-}
 
-impl LinkCertExpirationManager {
-    pub fn new(token: CancellationToken) -> Self {
-        let (tx, rx) = flume::bounded::<(OffsetDateTime, LinkCertExpirationInfo)>(1);
-        let handle = zenoh_runtime::ZRuntime::Acceptor.spawn(expiration_task(token.clone(), rx));
-        Self {
-            token,
-            handle: Some(handle),
-            tx,
-        }
-    }
-}
-
-async fn expiration_task(
-    token: CancellationToken,
-    rx: flume::Receiver<(OffsetDateTime, LinkCertExpirationInfo)>,
-) {
-    // TODO: Maybe expose this as a locator parameter?
-    const PERIODIC_SLEEP_DURATION: tokio::time::Duration = tokio::time::Duration::from_secs(600);
-    let mut link_expiration_map: BTreeMap<OffsetDateTime, Vec<LinkCertExpirationInfo>> =
-        BTreeMap::new();
-    let mut next_wakeup_instant: tokio::time::Instant;
-
-    loop {
-        next_wakeup_instant = tokio::time::Instant::now() + PERIODIC_SLEEP_DURATION;
-
-        if let Some((&next_expiration_time, links_to_close)) = link_expiration_map.first_key_value()
-        {
-            let now = OffsetDateTime::now_utc();
-            if next_expiration_time <= now {
-                // Close links
-                // NOTE: after closing links, transports are reopened with cert chains that expire instantly.
-                //       It's not an issue, but maybe we should add some throttling before closing the links...
-                for link_info in links_to_close {
-                    if let Some(link) = link_info.link.upgrade() {
-                        tracing::warn!(
-                            "Closing link {} => {} : remote certificate chain expired",
-                            link_info.src_locator,
-                            link_info.dst_locator,
-                        );
-                        if let Err(e) = link.close().await {
-                            tracing::error!(
-                                "Error closing link {} => {} : {}",
-                                link_info.src_locator,
-                                link_info.dst_locator,
-                                e
-                            )
-                        }
-                    }
-                }
-                link_expiration_map.remove(&next_expiration_time);
-                // loop again to check the next deadline
-                continue;
-            } else {
-                // next sleep duration is the minimum between PERIODIC_SLEEP_DURATION and the duration till next expiration
-                // this mitigates the unsoundness of using `tokio::time::sleep_until` with long durations
-                let next_expiration_duration = std::time::Duration::from_secs_f32(
-                    (next_expiration_time - now).as_seconds_f32(),
-                );
-                next_wakeup_instant = tokio::time::Instant::now()
-                    + tokio::time::Duration::min(PERIODIC_SLEEP_DURATION, next_expiration_duration);
+    impl LinkCertExpirationManager {
+        pub fn new(
+            expiration_info: LinkCertExpirationInfo,
+            token: Option<CancellationToken>,
+        ) -> Self {
+            let token = token.unwrap_or_default();
+            let handle = zenoh_runtime::ZRuntime::Acceptor
+                .spawn(expiration_task(expiration_info, token.clone()));
+            Self {
+                token,
+                handle: Some(handle),
             }
         }
+    }
 
-        tokio::select! {
-            _ = token.cancelled() => break,
-
-            _ = tokio::time::sleep_until(next_wakeup_instant) => {},
-
-            Ok(new_link) = rx.recv_async() => {
-                link_expiration_map.entry(new_link.0).or_default().push(new_link.1);
-            },
-            // if channel was closed, do nothing: we don't expect more links to be created,
-            // but it's not a reason to stop this task
+    // Cleanup expiration task when manager is dropped
+    impl Drop for LinkCertExpirationManager {
+        fn drop(&mut self) {
+            if let Some(handle) = self.handle.take() {
+                zenoh_runtime::ZRuntime::Acceptor.block_in_place(async {
+                    self.token.cancel();
+                    let _ = handle.await;
+                })
+            }
         }
     }
-}
 
-pub struct LinkCertExpirationInfo {
-    link: Weak<dyn LinkUnicastTrait>,
-    src_locator: Locator,
-    dst_locator: Locator,
-}
+    async fn expiration_task(expiration_info: LinkCertExpirationInfo, token: CancellationToken) {
+        // TODO: Expose or tune sleep duration
+        const MAX_EXPIRATION_SLEEP_DURATION: tokio::time::Duration =
+            tokio::time::Duration::from_secs(600);
 
-impl LinkCertExpirationInfo {
-    pub fn new(
+        loop {
+            let now = OffsetDateTime::now_utc();
+            if expiration_info.expiration_time <= now {
+                // close link
+                if let Some(link) = expiration_info.link.upgrade() {
+                    tracing::warn!(
+                        "Closing link {} => {} : remote certificate chain expired",
+                        expiration_info.src_locator,
+                        expiration_info.dst_locator,
+                    );
+                    if let Err(e) = link.close().await {
+                        tracing::error!(
+                            "Error closing link {} => {} : {}",
+                            expiration_info.src_locator,
+                            expiration_info.dst_locator,
+                            e
+                        )
+                    }
+                }
+                break;
+            }
+            // next sleep duration is the minimum between PERIODIC_SLEEP_DURATION and the duration till next expiration
+            // this mitigates the unsoundness of using `tokio::time::sleep_until` with long durations
+            let next_expiration_duration = std::time::Duration::from_secs_f32(
+                (expiration_info.expiration_time - now).as_seconds_f32(),
+            );
+            let next_wakeup_instant = tokio::time::Instant::now()
+                + tokio::time::Duration::min(
+                    MAX_EXPIRATION_SLEEP_DURATION,
+                    next_expiration_duration,
+                );
+
+            tokio::select! {
+                _ = token.cancelled() => break,
+                _ = tokio::time::sleep_until(next_wakeup_instant) => {},
+            }
+        }
+    }
+
+    pub struct LinkCertExpirationInfo {
+        // Weak is used instead of Arc, in order to allow cleanup at Drop of the underlying link which owns the expiration manager
         link: Weak<dyn LinkUnicastTrait>,
-        src_locator: &Locator,
-        dst_locator: &Locator,
-    ) -> Self {
-        Self {
-            link,
-            src_locator: src_locator.clone(),
-            dst_locator: dst_locator.clone(),
+        expiration_time: OffsetDateTime,
+        src_locator: Locator,
+        dst_locator: Locator,
+    }
+
+    impl LinkCertExpirationInfo {
+        pub fn new(
+            link: Weak<dyn LinkUnicastTrait>,
+            expiration_time: OffsetDateTime,
+            src_locator: &Locator,
+            dst_locator: &Locator,
+        ) -> Self {
+            Self {
+                link,
+                expiration_time,
+                src_locator: src_locator.clone(),
+                dst_locator: dst_locator.clone(),
+            }
         }
     }
 }
-
-pub type NewLinkExpirationSender = flume::Sender<(OffsetDateTime, LinkCertExpirationInfo)>;

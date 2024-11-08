@@ -11,7 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{cell::UnsafeCell, convert::TryInto, fmt, net::SocketAddr, sync::Arc, time::Duration};
+use std::{
+    cell::UnsafeCell,
+    convert::TryInto,
+    fmt,
+    net::SocketAddr,
+    sync::{Arc, OnceLock},
+    time::Duration,
+};
 
 use async_trait::async_trait;
 use time::OffsetDateTime;
@@ -26,7 +33,7 @@ use x509_parser::prelude::{FromDer, X509Certificate};
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
     get_ip_interface_names,
-    tls::{LinkCertExpirationInfo, LinkCertExpirationManager, NewLinkExpirationSender},
+    tls::expiration::{LinkCertExpirationInfo, LinkCertExpirationManager},
     LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     ListenersUnicastIP, NewLinkChannelSender,
 };
@@ -65,6 +72,7 @@ pub struct LinkUnicastTls {
     read_mtx: AsyncMutex<()>,
     auth_identifier: LinkAuthId,
     mtu: BatchSize,
+    expiration_manager: OnceLock<LinkCertExpirationManager>,
 }
 
 unsafe impl Send for LinkUnicastTls {}
@@ -134,6 +142,7 @@ impl LinkUnicastTls {
             read_mtx: AsyncMutex::new(()),
             auth_identifier,
             mtu,
+            expiration_manager: OnceLock::new(),
         }
     }
 
@@ -263,18 +272,13 @@ impl fmt::Debug for LinkUnicastTls {
 pub struct LinkManagerUnicastTls {
     manager: NewLinkChannelSender,
     listeners: ListenersUnicastIP,
-    expiration_manager: LinkCertExpirationManager,
 }
 
 impl LinkManagerUnicastTls {
     pub fn new(manager: NewLinkChannelSender) -> Self {
-        let listeners = ListenersUnicastIP::new();
-        let token = listeners.token.child_token();
-
         Self {
             manager,
-            listeners,
-            expiration_manager: LinkCertExpirationManager::new(token),
+            listeners: ListenersUnicastIP::new(),
         }
     }
 }
@@ -346,21 +350,17 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             auth_identifier.into(),
         ));
 
-        // send to link expiration manager
+        // setup expiration manager
         let link_trait_object: Arc<dyn LinkUnicastTrait> = link.clone();
         let expiration_info = LinkCertExpirationInfo::new(
             Arc::downgrade(&link_trait_object),
+            certchain_expiration_time,
             &link.src_locator,
             &link.dst_locator,
         );
-        if let Err(e) = self
-            .expiration_manager
-            .tx
-            .send_async((certchain_expiration_time, expiration_info))
-            .await
-        {
-            tracing::error!("{}-{}: {}", file!(), line!(), e)
-        }
+        link.expiration_manager
+            .set(LinkCertExpirationManager::new(expiration_info, None))
+            .expect("should be first call to initialize expiration manager");
 
         Ok(LinkUnicast(link))
     }
@@ -394,7 +394,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             let acceptor = TlsAcceptor::from(Arc::new(tls_server_config.server_config));
             let token = token.clone();
             let manager = self.manager.clone();
-            let expiration_tx = self.expiration_manager.tx.clone();
 
             async move {
                 accept_task(
@@ -403,7 +402,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
                     token,
                     manager,
                     tls_server_config.tls_handshake_timeout,
-                    expiration_tx,
                 )
                 .await
             }
@@ -444,7 +442,6 @@ async fn accept_task(
     token: CancellationToken,
     manager: NewLinkChannelSender,
     tls_handshake_timeout: Duration,
-    expiration_task_tx: NewLinkExpirationSender,
 ) -> ZResult<()> {
     let src_addr = socket.local_addr().map_err(|e| {
         let e = zerror!("Can not accept TLS connections: {}", e);
@@ -486,17 +483,18 @@ async fn accept_task(
                             auth_identifier.into(),
                         ));
 
-                        // Communicate the link to the expiration manager if applicable
+                        // Setup expiration manager if applicable
                         if let Some(certchain_expiration_time) = maybe_expiration_time {
                             let link_trait_object: Arc<dyn LinkUnicastTrait> = link.clone();
                             let expiration_info = LinkCertExpirationInfo::new(
                                 Arc::downgrade(&link_trait_object),
+                                certchain_expiration_time,
                                 &link.src_locator,
                                 &link.dst_locator,
                             );
-                            if let Err(e) = expiration_task_tx.send_async((certchain_expiration_time, expiration_info)).await {
-                                tracing::error!("{}-{}: {}", file!(), line!(), e)
-                            }
+                            link.expiration_manager
+                                .set(LinkCertExpirationManager::new(expiration_info, Some(token.child_token())))
+                                .expect("should be first call to initialize expiration manager");
                         }
 
                         // Communicate the new link to the initial transport manager
