@@ -279,10 +279,10 @@ impl<'a> AdvancedPublisher<'a> {
         delete
     }
 
-    /// Return the [`MatchingStatus`] of the publisher.
+    /// Return the [`MatchingStatus`](zenoh::pubsub::MatchingStatus) of the publisher.
     ///
-    /// [`MatchingStatus::matching_subscribers`] will return true if there exist Subscribers
-    /// matching the Publisher's key expression and false otherwise.
+    /// [`MatchingStatus::matching_subscribers`](zenoh::pubsub::MatchingStatus::matching_subscribers)
+    /// will return true if there exist Subscribers matching the Publisher's key expression and false otherwise.
     ///
     /// # Examples
     /// ```
@@ -303,10 +303,10 @@ impl<'a> AdvancedPublisher<'a> {
         self.publisher.matching_status()
     }
 
-    /// Return a [`MatchingListener`] for this Publisher.
+    /// Return a [`MatchingListener`](zenoh::pubsub::MatchingStatus) for this Publisher.
     ///
-    /// The [`MatchingListener`] that will send a notification each time the [`MatchingStatus`] of
-    /// the Publisher changes.
+    /// The [`MatchingListener`](zenoh::pubsub::MatchingStatus) that will send a notification each time
+    /// the [`MatchingStatus`](zenoh::pubsub::MatchingStatus) of the Publisher changes.
     ///
     /// # Examples
     /// ```no_run

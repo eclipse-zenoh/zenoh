@@ -83,7 +83,7 @@ impl<'a, 'b, 'c> AdvancedCacheBuilder<'a, 'b, 'c> {
     }
 
     /// Restrict the matching publications that will be cached by this [`AdvancedCache`]
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    /// to the ones that have the given [`Locality`](zenoh::sample::Locality).
     #[inline]
     pub fn subscriber_allowed_origin(mut self, origin: Locality) -> Self {
         self.subscriber_origin = origin;
@@ -91,7 +91,7 @@ impl<'a, 'b, 'c> AdvancedCacheBuilder<'a, 'b, 'c> {
     }
 
     /// Restrict the matching queries that will be receive by this [`AdvancedCache`]'s queryable
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    /// to the ones that have the given [`Locality`](zenoh::sample::Locality).
     #[inline]
     pub fn queryable_allowed_origin(mut self, origin: Locality) -> Self {
         self.queryable_origin = origin;
