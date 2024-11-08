@@ -135,6 +135,12 @@ pub mod expiration {
         const MAX_EXPIRATION_SLEEP_DURATION: tokio::time::Duration =
             tokio::time::Duration::from_secs(600);
 
+        tracing::trace!(
+            "Expiration task started for link {} => {}",
+            expiration_info.src_locator,
+            expiration_info.dst_locator,
+        );
+
         loop {
             let now = OffsetDateTime::now_utc();
             if expiration_info.expiration_time <= now {
