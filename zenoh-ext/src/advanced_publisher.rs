@@ -192,9 +192,8 @@ impl<'a> AdvancedPublisher<'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression")
     ///     .await
     ///     .unwrap();
@@ -228,51 +227,14 @@ impl<'a> AdvancedPublisher<'a> {
         self.publisher.priority()
     }
 
-    /// Consumes the given `Publisher`, returning a thread-safe reference-counting
-    /// pointer to it (`Arc<Publisher>`). This is equivalent to `Arc::new(Publisher)`.
-    ///
-    /// This is useful to share ownership of the `Publisher` between several threads
-    /// and tasks. It also allows to create [`MatchingListener`] with static
-    /// lifetime that can be moved to several threads and tasks.
-    ///
-    /// Note: the given zenoh `Publisher` will be undeclared when the last reference to
-    /// it is dropped.
-    ///
-    /// # Examples
-    /// ```no_run
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
-    /// let publisher = session.declare_publisher("key/expression").await.unwrap().into_arc();
-    /// let matching_listener = publisher.matching_listener().await.unwrap();
-    ///
-    /// tokio::task::spawn(async move {
-    ///     while let Ok(matching_status) = matching_listener.recv_async().await {
-    ///         if matching_status.matching_subscribers() {
-    ///             println!("Publisher has matching subscribers.");
-    ///         } else {
-    ///             println!("Publisher has NO MORE matching subscribers.");
-    ///         }
-    ///     }
-    /// }).await;
-    /// # }
-    /// ```
-    #[zenoh_macros::unstable]
-    pub fn into_arc(self) -> std::sync::Arc<Self> {
-        std::sync::Arc::new(self)
-    }
-
     /// Put data.
     ///
     /// # Examples
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
     /// publisher.put("value").await.unwrap();
     /// # }
@@ -300,9 +262,8 @@ impl<'a> AdvancedPublisher<'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
     /// publisher.delete().await.unwrap();
     /// # }
@@ -327,9 +288,8 @@ impl<'a> AdvancedPublisher<'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap().into_arc();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
     /// let matching_subscribers: bool = publisher
     ///     .matching_status()
@@ -352,9 +312,8 @@ impl<'a> AdvancedPublisher<'a> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
     /// let matching_listener = publisher.matching_listener().await.unwrap();
     /// while let Ok(matching_status) = matching_listener.recv_async().await {
@@ -379,9 +338,8 @@ impl<'a> AdvancedPublisher<'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(zenoh::config::peer()).await.unwrap();
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
     /// publisher.undeclare().await.unwrap();
     /// # }
