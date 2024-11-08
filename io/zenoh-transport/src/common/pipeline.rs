@@ -434,7 +434,7 @@ enum Pull {
 // Inner structure to keep track and signal backoff operations
 #[derive(Clone)]
 struct Backoff {
-    threshold: Duration,
+    threshold: MicroSeconds,
     last_bytes: BatchSize,
     atomic: Arc<AtomicBackoff>,
     // active: bool,
@@ -443,7 +443,7 @@ struct Backoff {
 impl Backoff {
     fn new(threshold: Duration, atomic: Arc<AtomicBackoff>) -> Self {
         Self {
-            threshold,
+            threshold: threshold.as_micros() as MicroSeconds,
             last_bytes: 0,
             atomic,
             // active: false,
@@ -486,14 +486,13 @@ impl StageOutIn {
         // Verify that we have not been doing backoff for too long
         let mut backoff = 0;
         if !pull {
-            let diff = LOCAL_EPOCH.elapsed().as_micros() as MicroSeconds
-                - self.backoff.atomic.first_write.load(Ordering::Relaxed);
-            let threshold = self.backoff.threshold.as_micros() as MicroSeconds;
+            let diff = (LOCAL_EPOCH.elapsed().as_micros() as MicroSeconds)
+                .saturating_sub(self.backoff.atomic.first_write.load(Ordering::Relaxed));
 
-            if diff >= threshold {
+            if diff >= self.backoff.threshold {
                 pull = true;
             } else {
-                backoff = threshold - diff;
+                backoff = self.backoff.threshold - diff;
             }
         }
 
