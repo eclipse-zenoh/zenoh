@@ -15,14 +15,14 @@
 use std::{
     fmt,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
-    sync::{Arc, OnceLock},
+    sync::Arc,
     time::Duration,
 };
 
 use async_trait::async_trait;
 use quinn::crypto::rustls::{QuicClientConfig, QuicServerConfig};
 use time::OffsetDateTime;
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::{Mutex as AsyncMutex, OnceCell};
 use tokio_util::sync::CancellationToken;
 use x509_parser::prelude::{FromDer, X509Certificate};
 use zenoh_core::zasynclock;
@@ -51,7 +51,7 @@ pub struct LinkUnicastQuic {
     send: AsyncMutex<quinn::SendStream>,
     recv: AsyncMutex<quinn::RecvStream>,
     auth_identifier: LinkAuthId,
-    expiration_manager: OnceLock<LinkCertExpirationManager>,
+    expiration_manager: OnceCell<LinkCertExpirationManager>,
 }
 
 impl LinkUnicastQuic {
@@ -72,7 +72,7 @@ impl LinkUnicastQuic {
             send: AsyncMutex::new(send),
             recv: AsyncMutex::new(recv),
             auth_identifier,
-            expiration_manager: OnceLock::new(),
+            expiration_manager: OnceCell::new(),
         }
     }
 }
@@ -286,7 +286,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         );
         link.expiration_manager
             .set(LinkCertExpirationManager::new(expiration_info, None))
-            .expect("should be first call to initialize expiration manager");
+            .expect("should be the only call to initialize expiration manager");
 
         Ok(LinkUnicast(link))
     }
@@ -463,7 +463,7 @@ async fn accept_task(
                             );
                             link.expiration_manager
                                 .set(LinkCertExpirationManager::new(expiration_info, Some(token.child_token())))
-                                .expect("should be first call to initialize expiration manager");
+                                .expect("should be the only call to initialize expiration manager");
                         }
 
                         // Communicate the new link to the initial transport manager

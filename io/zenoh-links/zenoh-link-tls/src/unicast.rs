@@ -11,21 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{
-    cell::UnsafeCell,
-    convert::TryInto,
-    fmt,
-    net::SocketAddr,
-    sync::{Arc, OnceLock},
-    time::Duration,
-};
+use std::{cell::UnsafeCell, convert::TryInto, fmt, net::SocketAddr, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use time::OffsetDateTime;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
-    sync::Mutex as AsyncMutex,
+    sync::{Mutex as AsyncMutex, OnceCell},
 };
 use tokio_rustls::{TlsAcceptor, TlsConnector, TlsStream};
 use tokio_util::sync::CancellationToken;
@@ -72,7 +65,7 @@ pub struct LinkUnicastTls {
     read_mtx: AsyncMutex<()>,
     auth_identifier: LinkAuthId,
     mtu: BatchSize,
-    expiration_manager: OnceLock<LinkCertExpirationManager>,
+    expiration_manager: OnceCell<LinkCertExpirationManager>,
 }
 
 unsafe impl Send for LinkUnicastTls {}
@@ -142,7 +135,7 @@ impl LinkUnicastTls {
             read_mtx: AsyncMutex::new(()),
             auth_identifier,
             mtu,
-            expiration_manager: OnceLock::new(),
+            expiration_manager: OnceCell::new(),
         }
     }
 
@@ -360,7 +353,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         );
         link.expiration_manager
             .set(LinkCertExpirationManager::new(expiration_info, None))
-            .expect("should be first call to initialize expiration manager");
+            .expect("should be the only call to initialize expiration manager");
 
         Ok(LinkUnicast(link))
     }
@@ -494,7 +487,7 @@ async fn accept_task(
                             );
                             link.expiration_manager
                                 .set(LinkCertExpirationManager::new(expiration_info, Some(token.child_token())))
-                                .expect("should be first call to initialize expiration manager");
+                                .expect("should be the only call to initialize expiration manager");
                         }
 
                         // Communicate the new link to the initial transport manager
