@@ -156,7 +156,7 @@ pub mod expiration {
                 }
                 break;
             }
-            // next sleep duration is the minimum between PERIODIC_SLEEP_DURATION and the duration till next expiration
+            // next sleep duration is the minimum between MAX_EXPIRATION_SLEEP_DURATION and the duration till next expiration
             // this mitigates the unsoundness of using `tokio::time::sleep_until` with long durations
             let next_expiration_duration = std::time::Duration::from_secs_f32(
                 (expiration_info.expiration_time - now).as_seconds_f32(),
