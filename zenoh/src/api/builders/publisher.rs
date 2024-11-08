@@ -283,8 +283,16 @@ impl IntoFuture for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuil
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[derive(Debug)]
 pub struct PublisherBuilder<'a, 'b> {
+    #[cfg(feature = "internal")]
+    pub session: &'a Session,
+    #[cfg(not(feature = "internal"))]
     pub(crate) session: &'a Session,
+
+    #[cfg(feature = "internal")]
+    pub key_expr: ZResult<KeyExpr<'b>>,
+    #[cfg(not(feature = "internal"))]
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
+
     pub(crate) encoding: Encoding,
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,

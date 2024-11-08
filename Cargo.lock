@@ -5593,6 +5593,7 @@ dependencies = [
 name = "zenoh-ext"
 version = "1.0.0-dev"
 dependencies = [
+ "async-trait",
  "bincode",
  "flume",
  "futures",

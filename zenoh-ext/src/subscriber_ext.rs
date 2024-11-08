@@ -24,7 +24,8 @@ use zenoh::{
 };
 
 use crate::{
-    querying_subscriber::QueryingSubscriberBuilder, ExtractSample, FetchingSubscriberBuilder,
+    querying_subscriber::QueryingSubscriberBuilder, AdvancedSubscriberBuilder, ExtractSample,
+    FetchingSubscriberBuilder,
 };
 
 /// Allows writing `subscriber.forward(receiver)` instead of `subscriber.stream().map(Ok).forward(publisher)`
@@ -121,6 +122,25 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     /// # }
     /// ```
     fn querying(self) -> QueryingSubscriberBuilder<'a, 'b, Self::KeySpace, Handler>;
+}
+
+/// Some extensions to the [`zenoh::subscriber::SubscriberBuilder`](zenoh::pubsub::SubscriberBuilder)
+pub trait DataSubscriberBuilderExt<'a, 'b, Handler> {
+    /// Enable query for historical data.
+    ///
+    /// History can only be retransmitted by Publishers that also activate history.
+    fn history(self) -> AdvancedSubscriberBuilder<'a, 'b, Handler>;
+
+    /// Ask for retransmission of detected lost Samples.
+    ///
+    /// Retransmission can only be achieved by Publishers that also activate retransmission.
+    fn retransmission(self) -> AdvancedSubscriberBuilder<'a, 'b, Handler>;
+
+    /// Enable detection of late joiner publishers and query for their historical data.
+    ///
+    /// Let joiner detectiopn can only be achieved for Publishers that also activate late_joiner.
+    /// History can only be retransmitted by Publishers that also activate history.
+    fn late_joiner(self) -> AdvancedSubscriberBuilder<'a, 'b, Handler>;
 }
 
 impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilder<'a, 'b, Handler> {
@@ -224,6 +244,35 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
             query_timeout: Duration::from_secs(10),
             handler: self.handler,
         }
+    }
+}
+
+impl<'a, 'b, Handler> DataSubscriberBuilderExt<'a, 'b, Handler>
+    for SubscriberBuilder<'a, 'b, Handler>
+{
+    /// Enable query for historical data.
+    ///
+    /// History can only be retransmitted by Publishers that also activate history.
+    fn history(self) -> AdvancedSubscriberBuilder<'a, 'b, Handler> {
+        AdvancedSubscriberBuilder::new(self.session, self.key_expr, self.origin, self.handler)
+            .history()
+    }
+
+    /// Ask for retransmission of detected lost Samples.
+    ///
+    /// Retransmission can only be achieved by Publishers that also activate retransmission.
+    fn retransmission(self) -> AdvancedSubscriberBuilder<'a, 'b, Handler> {
+        AdvancedSubscriberBuilder::new(self.session, self.key_expr, self.origin, self.handler)
+            .retransmission()
+    }
+
+    /// Enable detection of late joiner publishers and query for their historical data.
+    ///
+    /// Let joiner detectiopn can only be achieved for Publishers that also activate late_joiner.
+    /// History can only be retransmitted by Publishers that also activate history.
+    fn late_joiner(self) -> AdvancedSubscriberBuilder<'a, 'b, Handler> {
+        AdvancedSubscriberBuilder::new(self.session, self.key_expr, self.origin, self.handler)
+            .late_joiner()
     }
 }
 
