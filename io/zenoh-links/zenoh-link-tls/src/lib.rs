@@ -109,6 +109,9 @@ pub mod config {
     pub const TLS_VERIFY_NAME_ON_CONNECT: &str = "verify_name_on_connect";
     pub const TLS_VERIFY_NAME_ON_CONNECT_DEFAULT: bool = true;
 
+    pub const TLS_CLOSE_LINK_ON_EXPIRATION: &str = "close_link_on_expiration";
+    pub const TLS_CLOSE_LINK_ON_EXPIRATION_DEFAULT: bool = false;
+
     /// The time duration in milliseconds to wait for the TLS handshake to complete.
     pub const TLS_HANDSHAKE_TIMEOUT_MS: &str = "tls_handshake_timeout_ms";
     pub const TLS_HANDSHAKE_TIMEOUT_MS_DEFAULT: u64 = 10_000;

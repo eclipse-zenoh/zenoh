@@ -343,17 +343,19 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             auth_identifier.into(),
         ));
 
-        // setup expiration manager
-        let link_trait_object: Arc<dyn LinkUnicastTrait> = link.clone();
-        let expiration_info = LinkCertExpirationInfo::new(
-            Arc::downgrade(&link_trait_object),
-            certchain_expiration_time,
-            &link.src_locator,
-            &link.dst_locator,
-        );
-        link.expiration_manager
-            .set(LinkCertExpirationManager::new(expiration_info, None))
-            .expect("should be the only call to initialize expiration manager");
+        if client_config.tls_close_link_on_expiration {
+            // setup expiration manager
+            let link_trait_object: Arc<dyn LinkUnicastTrait> = link.clone();
+            let expiration_info = LinkCertExpirationInfo::new(
+                Arc::downgrade(&link_trait_object),
+                certchain_expiration_time,
+                &link.src_locator,
+                &link.dst_locator,
+            );
+            link.expiration_manager
+                .set(LinkCertExpirationManager::new(expiration_info, None))
+                .expect("should be the only call to initialize expiration manager");
+        }
 
         Ok(LinkUnicast(link))
     }
@@ -395,6 +397,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
                     token,
                     manager,
                     tls_server_config.tls_handshake_timeout,
+                    tls_server_config.tls_close_link_on_expiration,
                 )
                 .await
             }
@@ -435,6 +438,7 @@ async fn accept_task(
     token: CancellationToken,
     manager: NewLinkChannelSender,
     tls_handshake_timeout: Duration,
+    tls_close_link_on_expiration: bool,
 ) -> ZResult<()> {
     let src_addr = socket.local_addr().map_err(|e| {
         let e = zerror!("Can not accept TLS connections: {}", e);
@@ -476,18 +480,26 @@ async fn accept_task(
                             auth_identifier.into(),
                         ));
 
-                        // Setup expiration manager if applicable
-                        if let Some(certchain_expiration_time) = maybe_expiration_time {
-                            let link_trait_object: Arc<dyn LinkUnicastTrait> = link.clone();
-                            let expiration_info = LinkCertExpirationInfo::new(
-                                Arc::downgrade(&link_trait_object),
-                                certchain_expiration_time,
-                                &link.src_locator,
-                                &link.dst_locator,
-                            );
-                            link.expiration_manager
-                                .set(LinkCertExpirationManager::new(expiration_info, Some(token.child_token())))
-                                .expect("should be the only call to initialize expiration manager");
+                        if tls_close_link_on_expiration {
+                            // Setup expiration manager if applicable
+                            if let Some(certchain_expiration_time) = maybe_expiration_time {
+                                let link_trait_object: Arc<dyn LinkUnicastTrait> = link.clone();
+                                let expiration_info = LinkCertExpirationInfo::new(
+                                    Arc::downgrade(&link_trait_object),
+                                    certchain_expiration_time,
+                                    &link.src_locator,
+                                    &link.dst_locator,
+                                );
+                                link.expiration_manager
+                                    .set(LinkCertExpirationManager::new(expiration_info, Some(token.child_token())))
+                                    .expect("should be the only call to initialize expiration manager");
+                            } else {
+                                tracing::warn!(
+                                    "Cannot monitor expiration for link {} -> {} : client does not have certificates",
+                                    link.src_locator,
+                                    link.dst_locator
+                                );
+                            }
                         }
 
                         // Communicate the new link to the initial transport manager

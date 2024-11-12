@@ -276,17 +276,19 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             auth_id.into(),
         ));
 
-        // setup expiration manager
-        let link_trait_object: Arc<dyn LinkUnicastTrait> = link.clone();
-        let expiration_info = LinkCertExpirationInfo::new(
-            Arc::downgrade(&link_trait_object),
-            certchain_expiration_time,
-            &link.src_locator,
-            &link.dst_locator,
-        );
-        link.expiration_manager
-            .set(LinkCertExpirationManager::new(expiration_info, None))
-            .expect("should be the only call to initialize expiration manager");
+        if client_crypto.tls_close_link_on_expiration {
+            // setup expiration manager
+            let link_trait_object: Arc<dyn LinkUnicastTrait> = link.clone();
+            let expiration_info = LinkCertExpirationInfo::new(
+                Arc::downgrade(&link_trait_object),
+                certchain_expiration_time,
+                &link.src_locator,
+                &link.dst_locator,
+            );
+            link.expiration_manager
+                .set(LinkCertExpirationManager::new(expiration_info, None))
+                .expect("should be the only call to initialize expiration manager");
+        }
 
         Ok(LinkUnicast(link))
     }
@@ -356,7 +358,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             let token = token.clone();
             let manager = self.manager.clone();
 
-            async move { accept_task(quic_endpoint, token, manager).await }
+            async move {
+                accept_task(
+                    quic_endpoint,
+                    token,
+                    manager,
+                    server_crypto.tls_close_link_on_expiration,
+                )
+                .await
+            }
         };
 
         // Initialize the QuicAcceptor
@@ -388,6 +398,7 @@ async fn accept_task(
     quic_endpoint: quinn::Endpoint,
     token: CancellationToken,
     manager: NewLinkChannelSender,
+    tls_close_link_on_expiration: bool,
 ) -> ZResult<()> {
     async fn accept(acceptor: quinn::Accept<'_>) -> ZResult<quinn::Connection> {
         let qc = acceptor
@@ -452,18 +463,26 @@ async fn accept_task(
                             auth_id.into()
                         ));
 
-                        // setup expiration manager if applicable
-                        if let Some(certchain_expiration_time) = maybe_expiration_time {
-                            let link_trait_object: Arc<dyn LinkUnicastTrait> = link.clone();
-                            let expiration_info = LinkCertExpirationInfo::new(
-                                Arc::downgrade(&link_trait_object),
-                                certchain_expiration_time,
-                                &link.src_locator,
-                                &link.dst_locator,
-                            );
-                            link.expiration_manager
-                                .set(LinkCertExpirationManager::new(expiration_info, Some(token.child_token())))
-                                .expect("should be the only call to initialize expiration manager");
+                        if tls_close_link_on_expiration {
+                            // setup expiration manager if applicable
+                            if let Some(certchain_expiration_time) = maybe_expiration_time {
+                                let link_trait_object: Arc<dyn LinkUnicastTrait> = link.clone();
+                                let expiration_info = LinkCertExpirationInfo::new(
+                                    Arc::downgrade(&link_trait_object),
+                                    certchain_expiration_time,
+                                    &link.src_locator,
+                                    &link.dst_locator,
+                                );
+                                link.expiration_manager
+                                    .set(LinkCertExpirationManager::new(expiration_info, Some(token.child_token())))
+                                    .expect("should be the only call to initialize expiration manager");
+                            } else {
+                                tracing::warn!(
+                                    "Cannot monitor expiration for link {} -> {} : client does not have certificates",
+                                    link.src_locator,
+                                    link.dst_locator
+                                );
+                            }
                         }
 
                         // Communicate the new link to the initial transport manager
