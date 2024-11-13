@@ -244,7 +244,6 @@ impl<'a> AdvancedPublisher<'a> {
     where
         IntoZBytes: Into<ZBytes>,
     {
-        println!("here");
         let mut put = self.publisher.put(payload);
         if let Some(seqnum) = &self.seqnum {
             println!("there");
