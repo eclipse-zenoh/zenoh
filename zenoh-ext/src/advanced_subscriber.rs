@@ -508,7 +508,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
             let handler = InitialRepliesHandler {
                 statesref: statesref.clone(),
                 callback: callback.clone(),
-                periodic_query,
+                periodic_query: periodic_query.clone(),
             };
             let _ = conf
                 .session
@@ -546,6 +546,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                 let source_id = EntityGlobalId::new(zid, eid);
                                 let (ref mut states, _wait) = &mut *zlock!(statesref);
                                 let entry = states.entry(source_id);
+                                let new = matches!(&entry, Entry::Vacant(_));
                                 let state = entry.or_insert(InnerState {
                                     last_seq_num: None,
                                     pending_queries: 0,
@@ -582,6 +583,15 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                     .target(query_target)
                                     .timeout(query_timeout)
                                     .wait();
+
+                                if new {
+                                    if let Some((timer, period, query)) = periodic_query.as_ref() {
+                                        timer.add(TimedEvent::periodic(
+                                            *period,
+                                            query.clone().with_source_id(source_id),
+                                        ))
+                                    }
+                                }
                             }
                         }
                     } else {
