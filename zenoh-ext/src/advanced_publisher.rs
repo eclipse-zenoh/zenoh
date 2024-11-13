@@ -246,7 +246,6 @@ impl<'a> AdvancedPublisher<'a> {
     {
         let mut put = self.publisher.put(payload);
         if let Some(seqnum) = &self.seqnum {
-            println!("there");
             put = put.source_info(SourceInfo::new(
                 Some(self.publisher.id()),
                 Some(seqnum.fetch_add(1, Ordering::Relaxed)),
