@@ -299,7 +299,7 @@ fn handle_sample(
         sample.source_info().source_sn(),
     ) {
         let entry = states.entry(*source_id);
-        let new = matches!(&entry, Entry::Occupied(_));
+        let new = matches!(&entry, Entry::Vacant(_));
         let state = entry.or_insert(InnerState {
             last_seq_num: None,
             pending_queries: 0,
