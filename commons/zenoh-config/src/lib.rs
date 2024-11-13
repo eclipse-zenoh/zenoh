@@ -356,6 +356,8 @@ validated_struct::validator! {
             subscribers: Vec<OwnedKeyExpr>,
             /// A list of key-expressions for which all included publishers will be aggregated into.
             publishers: Vec<OwnedKeyExpr>,
+            /// A list of key-expressions for which all included queriers will be aggregated into.
+            queriers: Vec<OwnedKeyExpr>,
         },
         pub transport: #[derive(Default)]
         TransportConf {

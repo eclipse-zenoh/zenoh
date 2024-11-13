@@ -74,7 +74,7 @@ use crate::api::{
     liveliness::{Liveliness, LivelinessTokenState},
     publisher::Publisher,
     publisher::{MatchingListenerState, MatchingStatus},
-    query::LivelinessQueryState,
+    query::{LivelinessQueryState, ReplyKeyExpr},
     sample::SourceInfo,
 };
 use crate::{
@@ -85,6 +85,7 @@ use crate::{
                 PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
                 SessionDeleteBuilder, SessionPutBuilder,
             },
+            querier::QuerierBuilder,
             query::SessionGetBuilder,
             queryable::QueryableBuilder,
             session::OpenBuilder,
@@ -96,6 +97,7 @@ use crate::{
         info::SessionInfo,
         key_expr::{KeyExpr, KeyExprInner},
         publisher::{Priority, PublisherState},
+        querier::QuerierState,
         query::{ConsolidationMode, QueryConsolidation, QueryState, QueryTarget, Reply},
         queryable::{Query, QueryInner, QueryableState},
         sample::{DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind},
@@ -130,6 +132,7 @@ pub(crate) struct SessionState {
     #[cfg(feature = "unstable")]
     pub(crate) remote_subscribers: HashMap<SubscriberId, KeyExpr<'static>>,
     pub(crate) publishers: HashMap<Id, PublisherState>,
+    pub(crate) queriers: HashMap<Id, QuerierState>,
     #[cfg(feature = "unstable")]
     pub(crate) remote_tokens: HashMap<TokenId, KeyExpr<'static>>,
     //pub(crate) publications: Vec<OwnedKeyExpr>,
@@ -145,12 +148,14 @@ pub(crate) struct SessionState {
     pub(crate) liveliness_queries: HashMap<InterestId, LivelinessQueryState>,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
     pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
+    pub(crate) aggregated_queriers: Vec<OwnedKeyExpr>,
 }
 
 impl SessionState {
     pub(crate) fn new(
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         aggregated_publishers: Vec<OwnedKeyExpr>,
+        aggregated_queriers: Vec<OwnedKeyExpr>,
     ) -> SessionState {
         SessionState {
             primitives: None,
@@ -163,6 +168,7 @@ impl SessionState {
             #[cfg(feature = "unstable")]
             remote_subscribers: HashMap::new(),
             publishers: HashMap::new(),
+            queriers: HashMap::new(),
             #[cfg(feature = "unstable")]
             remote_tokens: HashMap::new(),
             //publications: Vec::new(),
@@ -178,6 +184,7 @@ impl SessionState {
             liveliness_queries: HashMap::new(),
             aggregated_subscribers,
             aggregated_publishers,
+            aggregated_queriers,
         }
     }
 }
@@ -540,6 +547,7 @@ impl Session {
         runtime: Runtime,
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         aggregated_publishers: Vec<OwnedKeyExpr>,
+        aggregated_queriers: Vec<OwnedKeyExpr>,
         owns_runtime: bool,
     ) -> impl Resolve<Session> {
         ResolveClosure::new(move || {
@@ -547,6 +555,7 @@ impl Session {
             let state = RwLock::new(SessionState::new(
                 aggregated_subscribers,
                 aggregated_publishers,
+                aggregated_queriers,
             ));
             let session = Session(Arc::new(SessionInner {
                 weak_counter: Mutex::new(0),
@@ -839,6 +848,50 @@ impl Session {
         }
     }
 
+    /// Create a [`Querier`](crate::query::Querier) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression matching resources to query
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let querier = session.declare_querier("key/expression")
+    ///     .await
+    ///     .unwrap();
+    /// let replies = querier.get().await.unwrap();
+    /// # }
+    /// ```
+    pub fn declare_querier<'b, TryIntoKeyExpr>(
+        &self,
+        key_expr: TryIntoKeyExpr,
+    ) -> QuerierBuilder<'_, 'b>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
+    {
+        let timeout = {
+            let conf = &self.0.runtime.config().lock().0;
+            Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout()))
+        };
+        let qos: QoS = request::ext::QoSType::REQUEST.into();
+        QuerierBuilder {
+            session: self,
+            key_expr: key_expr.try_into().map_err(Into::into),
+            qos: qos.into(),
+            destination: Locality::default(),
+            target: QueryTarget::default(),
+            consolidation: QueryConsolidation::default(),
+            timeout,
+            #[cfg(feature = "unstable")]
+            accept_replies: ReplyKeyExpr::default(),
+        }
+    }
+
     /// Obtain a [`Liveliness`] struct tied to this Zenoh [`Session`].
     ///
     /// # Examples
@@ -1053,6 +1106,7 @@ impl Session {
             tracing::debug!("Config: {:?}", &config);
             let aggregated_subscribers = config.0.aggregation().subscribers().clone();
             let aggregated_publishers = config.0.aggregation().publishers().clone();
+            let aggregated_queriers = config.0.aggregation().queriers().clone();
             #[allow(unused_mut)] // Required for shared-memory
             let mut runtime = RuntimeBuilder::new(config);
             #[cfg(feature = "shared-memory")]
@@ -1065,6 +1119,7 @@ impl Session {
                 runtime.clone(),
                 aggregated_subscribers,
                 aggregated_publishers,
+                aggregated_queriers,
                 true,
             )
             .await;
@@ -1263,6 +1318,104 @@ impl SessionInner {
             Ok(())
         } else {
             Err(zerror!("Unable to find publisher").into())
+        }
+    }
+
+    pub(crate) fn declare_querier_inner(
+        &self,
+        key_expr: KeyExpr,
+        destination: Locality,
+    ) -> ZResult<EntityId> {
+        let mut state = zwrite!(self.state);
+        tracing::trace!("declare_querier({:?})", key_expr);
+        let id = self.runtime.next_id();
+
+        let mut querier_state = QuerierState {
+            id,
+            remote_id: id,
+            key_expr: key_expr.clone().into_owned(),
+            destination,
+        };
+
+        let declared_querier = (destination != Locality::SessionLocal)
+            .then(|| {
+                match state
+                    .aggregated_queriers
+                    .iter()
+                    .find(|s| s.includes(&key_expr))
+                {
+                    Some(join_querier) => {
+                        if let Some(joined_querier) = state.queriers.values().find(|q| {
+                            q.destination != Locality::SessionLocal
+                                && join_querier.includes(&q.key_expr)
+                        }) {
+                            querier_state.remote_id = joined_querier.remote_id;
+                            None
+                        } else {
+                            Some(join_querier.clone().into())
+                        }
+                    }
+                    None => {
+                        if let Some(twin_querier) = state.queriers.values().find(|p| {
+                            p.destination != Locality::SessionLocal && p.key_expr == key_expr
+                        }) {
+                            querier_state.remote_id = twin_querier.remote_id;
+                            None
+                        } else {
+                            Some(key_expr.clone())
+                        }
+                    }
+                }
+            })
+            .flatten();
+
+        state.queriers.insert(id, querier_state);
+
+        if let Some(res) = declared_querier {
+            let primitives = state.primitives()?;
+            drop(state);
+            primitives.send_interest(Interest {
+                id,
+                mode: InterestMode::CurrentFuture,
+                options: InterestOptions::KEYEXPRS + InterestOptions::QUERYABLES,
+                wire_expr: Some(res.to_wire(self).to_owned()),
+                ext_qos: network::ext::QoSType::DEFAULT,
+                ext_tstamp: None,
+                ext_nodeid: network::ext::NodeIdType::DEFAULT,
+            });
+        }
+        Ok(id)
+    }
+
+    pub(crate) fn undeclare_querier_inner(&self, pid: Id) -> ZResult<()> {
+        let mut state = zwrite!(self.state);
+        let Ok(primitives) = state.primitives() else {
+            return Ok(());
+        };
+        if let Some(querier_state) = state.queriers.remove(&pid) {
+            trace!("undeclare_querier({:?})", querier_state);
+            if querier_state.destination != Locality::SessionLocal {
+                // Note: there might be several queriers on the same KeyExpr.
+                // Before calling forget_queriers(key_expr), check if this was the last one.
+                if !state.queriers.values().any(|p| {
+                    p.destination != Locality::SessionLocal
+                        && p.remote_id == querier_state.remote_id
+                }) {
+                    drop(state);
+                    primitives.send_interest(Interest {
+                        id: querier_state.remote_id,
+                        mode: InterestMode::Final,
+                        options: InterestOptions::empty(),
+                        wire_expr: None,
+                        ext_qos: declare::ext::QoSType::DEFAULT,
+                        ext_tstamp: None,
+                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                    });
+                }
+            }
+            Ok(())
+        } else {
+            Err(zerror!("Unable to find querier").into())
         }
     }
 

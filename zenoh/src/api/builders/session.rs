@@ -122,6 +122,7 @@ pub fn init(runtime: Runtime) -> InitBuilder {
         runtime,
         aggregated_subscribers: vec![],
         aggregated_publishers: vec![],
+        aggregated_queriers: vec![],
     }
 }
 
@@ -133,6 +134,7 @@ pub struct InitBuilder {
     runtime: Runtime,
     aggregated_subscribers: Vec<OwnedKeyExpr>,
     aggregated_publishers: Vec<OwnedKeyExpr>,
+    aggregated_queriers: Vec<OwnedKeyExpr>,
 }
 
 #[zenoh_macros::internal]
@@ -146,6 +148,12 @@ impl InitBuilder {
     #[inline]
     pub fn aggregated_publishers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
         self.aggregated_publishers = exprs;
+        self
+    }
+
+    #[inline]
+    pub fn aggregated_queriers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
+        self.aggregated_queriers = exprs;
         self
     }
 }
@@ -162,6 +170,7 @@ impl Wait for InitBuilder {
             self.runtime,
             self.aggregated_subscribers,
             self.aggregated_publishers,
+            self.aggregated_queriers,
             false,
         )
         .wait())

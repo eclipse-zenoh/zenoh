@@ -14,9 +14,9 @@
 use std::future::{IntoFuture, Ready};
 
 use zenoh_core::{Resolvable, Result as ZResult, Wait};
+use zenoh_protocol::core::CongestionControl;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Reliability;
-use zenoh_protocol::{core::CongestionControl, network::Mapping};
 
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
@@ -375,34 +375,7 @@ impl<'a, 'b> Wait for PublisherBuilder<'a, 'b> {
     fn wait(self) -> <Self as Resolvable>::To {
         let mut key_expr = self.key_expr?;
         if !key_expr.is_fully_optimized(&self.session.0) {
-            let session_id = self.session.0.id;
-            let expr_id = self.session.0.declare_prefix(key_expr.as_str()).wait()?;
-            let prefix_len = key_expr
-                .len()
-                .try_into()
-                .expect("How did you get a key expression with a length over 2^32!?");
-            key_expr = match key_expr.0 {
-                crate::api::key_expr::KeyExprInner::Borrowed(key_expr)
-                | crate::api::key_expr::KeyExprInner::BorrowedWire { key_expr, .. } => {
-                    KeyExpr(crate::api::key_expr::KeyExprInner::BorrowedWire {
-                        key_expr,
-                        expr_id,
-                        mapping: Mapping::Sender,
-                        prefix_len,
-                        session_id,
-                    })
-                }
-                crate::api::key_expr::KeyExprInner::Owned(key_expr)
-                | crate::api::key_expr::KeyExprInner::Wire { key_expr, .. } => {
-                    KeyExpr(crate::api::key_expr::KeyExprInner::Wire {
-                        key_expr,
-                        expr_id,
-                        mapping: Mapping::Sender,
-                        prefix_len,
-                        session_id,
-                    })
-                }
-            }
+            key_expr = self.session.declare_keyexpr(key_expr).wait()?;
         }
         let id = self
             .session
