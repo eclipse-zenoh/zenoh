@@ -543,8 +543,18 @@ impl<Handler> AdvancedSubscriber<Handler> {
                     if let Ok(parsed) = ke_liveliness::parse(s.key_expr().as_keyexpr()) {
                         if let Ok(zid) = ZenohId::from_str(parsed.zid().as_str()) {
                             if let Ok(eid) = EntityId::from_str(parsed.eid().as_str()) {
+                                let source_id = EntityGlobalId::new(zid, eid);
+                                let (ref mut states, _wait) = &mut *zlock!(statesref);
+                                let entry = states.entry(source_id);
+                                let state = entry.or_insert(InnerState {
+                                    last_seq_num: None,
+                                    pending_queries: 0,
+                                    pending_samples: HashMap::new(),
+                                });
+                                state.pending_queries += 1;
+
                                 let handler = RepliesHandler {
-                                    source_id: EntityGlobalId::new(zid, eid),
+                                    source_id,
                                     statesref: statesref.clone(),
                                     callback: callback.clone(),
                                 };
