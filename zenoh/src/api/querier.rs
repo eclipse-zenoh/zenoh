@@ -145,7 +145,7 @@ impl<'a> Querier<'a> {
         }
     }
 
-    /// Undeclare the [`Querier`], informing the network that it needn't optimize publications for its key expression anymore.
+    /// Undeclare the [`Querier`], informing the network that it needn't optimize queries for its key expression anymore.
     ///
     /// # Examples
     /// ```

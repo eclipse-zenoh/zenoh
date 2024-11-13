@@ -134,6 +134,8 @@ pub(crate) struct SessionState {
     pub(crate) publishers: HashMap<Id, PublisherState>,
     pub(crate) queriers: HashMap<Id, QuerierState>,
     #[cfg(feature = "unstable")]
+    pub(crate) liveliness_queriers: HashMap<Id, QuerierState>,
+    #[cfg(feature = "unstable")]
     pub(crate) remote_tokens: HashMap<TokenId, KeyExpr<'static>>,
     //pub(crate) publications: Vec<OwnedKeyExpr>,
     pub(crate) subscribers: HashMap<Id, Arc<SubscriberState>>,
@@ -169,6 +171,8 @@ impl SessionState {
             remote_subscribers: HashMap::new(),
             publishers: HashMap::new(),
             queriers: HashMap::new(),
+            #[cfg(feature = "unstable")]
+            liveliness_queriers: HashMap::new(),
             #[cfg(feature = "unstable")]
             remote_tokens: HashMap::new(),
             //publications: Vec::new(),
@@ -1824,6 +1828,77 @@ impl SessionInner {
         });
 
         Ok(sub_state)
+    }
+
+    #[cfg(feature = "unstable")]
+    pub(crate) fn declare_liveliness_querier_inner(&self, key_expr: &KeyExpr) -> ZResult<EntityId> {
+        let mut state = zwrite!(self.state);
+        trace!("declare_liveliness_querier({:?})", key_expr);
+        let id = self.runtime.next_id();
+
+        let mut querier_state = QuerierState {
+            id,
+            remote_id: id,
+            key_expr: key_expr.clone().into_owned(),
+            destination: Locality::default(),
+        };
+
+        let primitives = state.primitives()?;
+        let declared_querier =
+            if let Some(twin_querier) = state.queriers.values().find(|p| &p.key_expr == key_expr) {
+                querier_state.remote_id = twin_querier.remote_id;
+                None
+            } else {
+                Some(key_expr.clone())
+            };
+        state.liveliness_queriers.insert(id, querier_state);
+        drop(state);
+
+        if let Some(res) = declared_querier {
+            primitives.send_interest(Interest {
+                id,
+                mode: InterestMode::CurrentFuture,
+                options: InterestOptions::KEYEXPRS + InterestOptions::TOKENS,
+                wire_expr: Some(res.to_wire(self).to_owned()),
+                ext_qos: declare::ext::QoSType::DECLARE,
+                ext_tstamp: None,
+                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+            });
+        }
+
+        Ok(id)
+    }
+
+    #[cfg(feature = "unstable")]
+    pub(crate) fn undeclare_liveliness_querier_inner(&self, pid: Id) -> ZResult<()> {
+        let mut state = zwrite!(self.state);
+        let Ok(primitives) = state.primitives() else {
+            return Ok(());
+        };
+        if let Some(querier_state) = state.liveliness_queriers.remove(&pid) {
+            trace!("undeclare_liveliness_querier({:?})", querier_state);
+            // Note: there might be several queriers on the same KeyExpr.
+            // Before calling forget_queriers(key_expr), check if this was the last one.
+            if !state
+                .liveliness_queriers
+                .values()
+                .any(|p| p.remote_id == querier_state.remote_id)
+            {
+                drop(state);
+                primitives.send_interest(Interest {
+                    id: querier_state.remote_id,
+                    mode: InterestMode::Final,
+                    options: InterestOptions::empty(),
+                    wire_expr: None,
+                    ext_qos: declare::ext::QoSType::DEFAULT,
+                    ext_tstamp: None,
+                    ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                });
+            }
+            Ok(())
+        } else {
+            Err(zerror!("Unable to find liveliness querier").into())
+        }
     }
 
     #[zenoh_macros::unstable]
