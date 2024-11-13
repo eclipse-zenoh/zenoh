@@ -28,7 +28,7 @@ async fn test_advanced_history() {
 
     const ADVANCED_HISTORY_KEYEXPR: &str = "test/advanced/history";
 
-    zenoh_util::init_log_from_env_or("debug");
+    zenoh_util::init_log_from_env_or("error");
 
     let peer1 = {
         let mut c = zenoh::Config::default();
