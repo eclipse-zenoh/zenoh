@@ -679,7 +679,7 @@ impl Drop for RepliesHandler {
         let (states, wait) = &mut *zlock!(self.statesref);
         if let Some(state) = states.get_mut(&self.source_id) {
             state.pending_queries = state.pending_queries.saturating_sub(1);
-            if !state.pending_samples.is_empty() && !*wait {
+            if state.pending_queries == 0 && !state.pending_samples.is_empty() && !*wait {
                 tracing::error!("Sample missed: unable to retrieve some missing samples.");
                 let mut pending_samples = state
                     .pending_samples
