@@ -188,6 +188,9 @@ struct ActionPolicy {
     declare_subscriber: PermissionPolicy,
     declare_queryable: PermissionPolicy,
     reply: PermissionPolicy,
+    liveliness_token: PermissionPolicy,
+    declare_liveliness_sub: PermissionPolicy,
+    query_liveliness: PermissionPolicy,
 }
 
 impl ActionPolicy {
@@ -199,6 +202,9 @@ impl ActionPolicy {
             AclMessage::Delete => &self.delete,
             AclMessage::DeclareSubscriber => &self.declare_subscriber,
             AclMessage::DeclareQueryable => &self.declare_queryable,
+            AclMessage::LivelinessToken => &self.liveliness_token,
+            AclMessage::DeclareLivelinessSubscriber => &self.declare_liveliness_sub,
+            AclMessage::QueryLiveliness => &self.query_liveliness,
         }
     }
     fn action_mut(&mut self, action: AclMessage) -> &mut PermissionPolicy {
@@ -209,6 +215,9 @@ impl ActionPolicy {
             AclMessage::Delete => &mut self.delete,
             AclMessage::DeclareSubscriber => &mut self.declare_subscriber,
             AclMessage::DeclareQueryable => &mut self.declare_queryable,
+            AclMessage::LivelinessToken => &mut self.liveliness_token,
+            AclMessage::DeclareLivelinessSubscriber => &mut self.declare_liveliness_sub,
+            AclMessage::QueryLiveliness => &mut self.query_liveliness,
         }
     }
 }
