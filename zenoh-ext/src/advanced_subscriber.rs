@@ -716,6 +716,41 @@ impl<Handler> AdvancedSubscriber<Handler> {
 }
 
 #[zenoh_macros::unstable]
+#[inline]
+fn flush_sequenced_source(state: &mut SourceState<u32>, callback: &Callback<Sample>) {
+    if state.pending_queries == 0 && !state.pending_samples.is_empty() {
+        if state.last_delivered.is_some() {
+            tracing::error!("Sample missed: unable to retrieve some missing samples.");
+        }
+        let mut pending_samples = state
+            .pending_samples
+            .drain()
+            .collect::<Vec<(u32, Sample)>>();
+        pending_samples.sort_by_key(|(k, _s)| *k);
+        for (seq_num, sample) in pending_samples {
+            state.last_delivered = Some(seq_num);
+            callback.call(sample);
+        }
+    }
+}
+
+#[zenoh_macros::unstable]
+#[inline]
+fn flush_timestamped_source(state: &mut SourceState<Timestamp>, callback: &Callback<Sample>) {
+    if state.pending_queries == 0 && !state.pending_samples.is_empty() {
+        let mut pending_samples = state
+            .pending_samples
+            .drain()
+            .collect::<Vec<(Timestamp, Sample)>>();
+        pending_samples.sort_by_key(|(k, _s)| *k);
+        for (seq_num, sample) in pending_samples {
+            state.last_delivered = Some(seq_num);
+            callback.call(sample);
+        }
+    }
+}
+
+#[zenoh_macros::unstable]
 #[derive(Clone)]
 struct InitialRepliesHandler {
     statesref: Arc<Mutex<State>>,
@@ -731,21 +766,7 @@ impl Drop for InitialRepliesHandler {
 
         if states.global_pending_queries == 0 {
             for (source_id, state) in states.sequenced_states.iter_mut() {
-                if state.pending_queries == 0
-                    && !state.pending_samples.is_empty()
-                    && states.global_pending_queries == 0
-                {
-                    tracing::error!("Sample missed: unable to retrieve some missing samples.");
-                    let mut pending_samples = state
-                        .pending_samples
-                        .drain()
-                        .collect::<Vec<(u32, Sample)>>();
-                    pending_samples.sort_by_key(|(k, _s)| *k);
-                    for (seq_num, sample) in pending_samples {
-                        state.last_delivered = Some(seq_num);
-                        self.callback.call(sample);
-                    }
-                }
+                flush_sequenced_source(state, &self.callback);
                 if let Some((timer, period, query)) = self.periodic_query.as_ref() {
                     timer.add(TimedEvent::periodic(
                         *period,
@@ -754,17 +775,7 @@ impl Drop for InitialRepliesHandler {
                 }
             }
             for state in states.timestamped_states.values_mut() {
-                if state.pending_queries == 0 && !state.pending_samples.is_empty() {
-                    let mut pending_samples = state
-                        .pending_samples
-                        .drain()
-                        .collect::<Vec<(Timestamp, Sample)>>();
-                    pending_samples.sort_by_key(|(k, _s)| *k);
-                    for (timestamp, sample) in pending_samples {
-                        state.last_delivered = Some(timestamp);
-                        self.callback.call(sample);
-                    }
-                }
+                flush_timestamped_source(state, &self.callback);
             }
         }
     }
@@ -784,20 +795,8 @@ impl Drop for SequencedRepliesHandler {
         let states = &mut *zlock!(self.statesref);
         if let Some(state) = states.sequenced_states.get_mut(&self.source_id) {
             state.pending_queries = state.pending_queries.saturating_sub(1);
-            if state.pending_queries == 0
-                && !state.pending_samples.is_empty()
-                && states.global_pending_queries == 0
-            {
-                tracing::error!("Sample missed: unable to retrieve some missing samples.");
-                let mut pending_samples = state
-                    .pending_samples
-                    .drain()
-                    .collect::<Vec<(u32, Sample)>>();
-                pending_samples.sort_by_key(|(k, _s)| *k);
-                for (seq_num, sample) in pending_samples {
-                    state.last_delivered = Some(seq_num);
-                    self.callback.call(sample);
-                }
+            if states.global_pending_queries == 0 {
+                flush_sequenced_source(state, &self.callback)
             }
         }
     }
@@ -817,19 +816,8 @@ impl Drop for TimestampedRepliesHandler {
         let states = &mut *zlock!(self.statesref);
         if let Some(state) = states.timestamped_states.get_mut(&self.id) {
             state.pending_queries = state.pending_queries.saturating_sub(1);
-            if state.pending_queries == 0
-                && !state.pending_samples.is_empty()
-                && states.global_pending_queries == 0
-            {
-                let mut pending_samples = state
-                    .pending_samples
-                    .drain()
-                    .collect::<Vec<(Timestamp, Sample)>>();
-                pending_samples.sort_by_key(|(k, _s)| *k);
-                for (timestamp, sample) in pending_samples {
-                    state.last_delivered = Some(timestamp);
-                    self.callback.call(sample);
-                }
+            if states.global_pending_queries == 0 {
+                flush_timestamped_source(state, &self.callback);
             }
         }
     }
