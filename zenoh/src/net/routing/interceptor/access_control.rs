@@ -372,6 +372,18 @@ impl InterceptorTrait for IngressAclEnforcer {
                 }
             }
             NetworkBody::Interest(Interest { mode, options, .. })
+                if options.tokens() && mode.eq(&InterestMode::Current) =>
+            {
+                if self.action(
+                    AclMessage::QueryLiveliness,
+                    "Query Liveliness (ingress)",
+                    key_expr?,
+                ) == Permission::Deny
+                {
+                    return None;
+                }
+            }
+            NetworkBody::Interest(Interest { mode, options, .. })
                 if options.tokens()
                     && (mode.eq(&InterestMode::Future)
                         || mode.eq(&InterestMode::CurrentFuture)) =>
@@ -554,6 +566,18 @@ impl InterceptorTrait for EgressAclEnforcer {
                 if self.action(
                     AclMessage::LivelinessToken,
                     "Undeclare Liveliness Token (egress)",
+                    key_expr?,
+                ) == Permission::Deny
+                {
+                    return None;
+                }
+            }
+            NetworkBody::Interest(Interest { mode, options, .. })
+                if options.tokens() && mode.eq(&InterestMode::Current) =>
+            {
+                if self.action(
+                    AclMessage::QueryLiveliness,
+                    "Query Liveliness (egress)",
                     key_expr?,
                 ) == Permission::Deny
                 {
