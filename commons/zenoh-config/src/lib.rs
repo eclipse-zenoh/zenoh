@@ -172,7 +172,7 @@ pub enum AclMessage {
     Reply,
     LivelinessToken,
     DeclareLivelinessSubscriber,
-    QueryLiveliness,
+    LivelinessQuery,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]

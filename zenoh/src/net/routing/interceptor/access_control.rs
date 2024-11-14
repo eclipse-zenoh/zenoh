@@ -375,8 +375,8 @@ impl InterceptorTrait for IngressAclEnforcer {
                 if options.tokens() && mode.eq(&InterestMode::Current) =>
             {
                 if self.action(
-                    AclMessage::QueryLiveliness,
-                    "Query Liveliness (ingress)",
+                    AclMessage::LivelinessQuery,
+                    "Liveliness Query (ingress)",
                     key_expr?,
                 ) == Permission::Deny
                 {
@@ -576,8 +576,8 @@ impl InterceptorTrait for EgressAclEnforcer {
                 if options.tokens() && mode.eq(&InterestMode::Current) =>
             {
                 if self.action(
-                    AclMessage::QueryLiveliness,
-                    "Query Liveliness (egress)",
+                    AclMessage::LivelinessQuery,
+                    "Liveliness Query (egress)",
                     key_expr?,
                 ) == Permission::Deny
                 {
