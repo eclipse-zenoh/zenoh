@@ -26,7 +26,10 @@ use zenoh_config::{
 };
 use zenoh_protocol::{
     core::ZenohIdProto,
-    network::{Declare, DeclareBody, NetworkBody, NetworkMessage, Push, Request, Response},
+    network::{
+        interest::InterestMode, Declare, DeclareBody, Interest, NetworkBody, NetworkMessage, Push,
+        Request, Response,
+    },
     zenoh::{PushBody, RequestBody},
 };
 use zenoh_result::ZResult;
@@ -368,6 +371,39 @@ impl InterceptorTrait for IngressAclEnforcer {
                     }
                 }
             }
+            NetworkBody::Interest(Interest { mode, options, .. })
+                if options.tokens()
+                    && (mode.eq(&InterestMode::Future)
+                        || mode.eq(&InterestMode::CurrentFuture)) =>
+            {
+                if self.action(
+                    AclMessage::DeclareLivelinessSubscriber,
+                    "Declare Liveliness Subscriber (ingress)",
+                    key_expr?,
+                ) == Permission::Deny
+                {
+                    return None;
+                }
+            }
+            NetworkBody::Interest(Interest { mode, .. }) if mode.eq(&InterestMode::Final) => {
+                // FIXME: This can match Interest<Final> of message types other than liveliness
+
+                // Undeclaration filtering diverges between ingress and egress:
+                // Undeclarations in ingress are only filtered if the ext_wire_expr is set.
+                // If it's not set, we let the undeclaration pass, it will be rejected by the routing logic
+                // if its associated declaration was denied.
+                if let Some(key_expr) = key_expr {
+                    if !key_expr.is_empty()
+                        && self.action(
+                            AclMessage::DeclareLivelinessSubscriber,
+                            "Undeclare Liveliness Subscriber (ingress)",
+                            key_expr,
+                        ) == Permission::Deny
+                    {
+                        return None;
+                    }
+                }
+            }
             // Unfiltered Declare messages
             NetworkBody::Declare(Declare {
                 body: DeclareBody::DeclareKeyExpr(_),
@@ -518,6 +554,34 @@ impl InterceptorTrait for EgressAclEnforcer {
                 if self.action(
                     AclMessage::LivelinessToken,
                     "Undeclare Liveliness Token (egress)",
+                    key_expr?,
+                ) == Permission::Deny
+                {
+                    return None;
+                }
+            }
+            NetworkBody::Interest(Interest { mode, options, .. })
+                if options.tokens()
+                    && (mode.eq(&InterestMode::Future)
+                        || mode.eq(&InterestMode::CurrentFuture)) =>
+            {
+                if self.action(
+                    AclMessage::DeclareLivelinessSubscriber,
+                    "Declare Liveliness Subscriber (egress)",
+                    key_expr?,
+                ) == Permission::Deny
+                {
+                    return None;
+                }
+            }
+            NetworkBody::Interest(Interest { mode, .. }) if mode.eq(&InterestMode::Final) => {
+                // FIXME: This can match Interest<Final> of message types other than liveliness
+
+                // Undeclaration filtering diverges between ingress and egress:
+                // in egress the keyexpr has to be provided in the RoutingContext
+                if self.action(
+                    AclMessage::DeclareLivelinessSubscriber,
+                    "Undeclare Liveliness Subscriber (egress)",
                     key_expr?,
                 ) == Permission::Deny
                 {
