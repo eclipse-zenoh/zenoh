@@ -728,8 +728,14 @@ fn flush_sequenced_source(state: &mut SourceState<u32>, callback: &Callback<Samp
             .collect::<Vec<(u32, Sample)>>();
         pending_samples.sort_by_key(|(k, _s)| *k);
         for (seq_num, sample) in pending_samples {
-            state.last_delivered = Some(seq_num);
-            callback.call(sample);
+            if state
+                .last_delivered
+                .map(|last| seq_num > last)
+                .unwrap_or(true)
+            {
+                state.last_delivered = Some(seq_num);
+                callback.call(sample);
+            }
         }
     }
 }
@@ -743,9 +749,15 @@ fn flush_timestamped_source(state: &mut SourceState<Timestamp>, callback: &Callb
             .drain()
             .collect::<Vec<(Timestamp, Sample)>>();
         pending_samples.sort_by_key(|(k, _s)| *k);
-        for (seq_num, sample) in pending_samples {
-            state.last_delivered = Some(seq_num);
-            callback.call(sample);
+        for (timestamp, sample) in pending_samples {
+            if state
+                .last_delivered
+                .map(|last| timestamp > last)
+                .unwrap_or(true)
+            {
+                state.last_delivered = Some(timestamp);
+                callback.call(sample);
+            }
         }
     }
 }
