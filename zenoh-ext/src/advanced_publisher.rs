@@ -79,6 +79,7 @@ impl<'a, 'b> AdvancedPublisherBuilder<'a, 'b> {
     /// Change the history size for each resource.
     pub fn history(mut self, history: usize) -> Self {
         self.cache = true;
+        self.sequencing = Sequencing::Timestamp;
         self.history = history;
         self
     }

@@ -13,7 +13,7 @@
 //
 
 use zenoh::sample::SampleKind;
-use zenoh_config::{EndPoint, WhatAmI};
+use zenoh_config::{EndPoint, ModeDependentValue, WhatAmI};
 use zenoh_ext::{DataSubscriberBuilderExt, PublisherBuilderExt};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -37,6 +37,9 @@ async fn test_advanced_history() {
             .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        c.timestamping
+            .set_enabled(Some(ModeDependentValue::Unique(true)))
+            .unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
         let s = ztimeout!(zenoh::open(c)).unwrap();
         tracing::info!("Peer (1) ZID: {}", s.zid());
@@ -369,6 +372,9 @@ async fn test_advanced_late_joiner() {
             .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        c.timestamping
+            .set_enabled(Some(ModeDependentValue::Unique(true)))
+            .unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
         let s = ztimeout!(zenoh::open(c)).unwrap();
         tracing::info!("Peer (1) ZID: {}", s.zid());
