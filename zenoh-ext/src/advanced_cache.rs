@@ -39,6 +39,8 @@ pub(crate) static KE_STAR: &keyexpr = ke!("*");
 #[zenoh_macros::unstable]
 pub(crate) static KE_PREFIX: &keyexpr = ke!("@cache");
 #[zenoh_macros::unstable]
+pub(crate) static KE_UHLC: &keyexpr = ke!("uhlc");
+#[zenoh_macros::unstable]
 kedefine!(
     pub(crate) ke_liveliness: "@cache/${zid:*}/${eid:*}/${remaining:**}",
 );

@@ -29,7 +29,7 @@ use zenoh::{
 };
 
 use crate::{
-    advanced_cache::{AdvancedCache, KE_PREFIX},
+    advanced_cache::{AdvancedCache, KE_PREFIX, KE_UHLC},
     SessionExt,
 };
 
@@ -134,9 +134,14 @@ impl<'a> AdvancedPublisher<'a> {
             .declare_publisher(key_expr.clone().into_owned())
             .wait()?;
         let id = publisher.id();
-        let prefix = KE_PREFIX
-            / &id.zid().into_keyexpr()
-            / &KeyExpr::try_from(id.eid().to_string()).unwrap();
+        let prefix = match conf.sequencing {
+            Sequencing::SequenceNumber => {
+                KE_PREFIX
+                    / &id.zid().into_keyexpr()
+                    / &KeyExpr::try_from(id.eid().to_string()).unwrap()
+            }
+            _ => KE_PREFIX / &id.zid().into_keyexpr() / KE_UHLC,
+        };
 
         let seqnum = match conf.sequencing {
             Sequencing::SequenceNumber => Some(AtomicU32::new(0)),

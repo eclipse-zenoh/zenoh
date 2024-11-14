@@ -5602,6 +5602,7 @@ dependencies = [
  "serde",
  "tokio",
  "tracing",
+ "uhlc",
  "zenoh",
  "zenoh-config",
  "zenoh-macros",

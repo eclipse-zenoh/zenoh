@@ -18,7 +18,7 @@ use zenoh::{
     handlers::{Callback, IntoHandler},
     key_expr::KeyExpr,
     query::{ConsolidationMode, Selector},
-    sample::{Locality, Sample},
+    sample::{Locality, Sample, SampleKind},
     session::{EntityGlobalId, EntityId},
     Resolvable, Resolve, Session, Wait,
 };
@@ -32,14 +32,16 @@ use {
     std::future::Ready,
     std::sync::{Arc, Mutex},
     std::time::Duration,
+    uhlc::ID,
     zenoh::handlers::{locked, DefaultHandler},
     zenoh::internal::zlock,
     zenoh::pubsub::Subscriber,
     zenoh::query::{QueryTarget, Reply, ReplyKeyExpr},
+    zenoh::time::Timestamp,
     zenoh::Result as ZResult,
 };
 
-use crate::advanced_cache::{ke_liveliness, KE_PREFIX, KE_STAR};
+use crate::advanced_cache::{ke_liveliness, KE_PREFIX, KE_STAR, KE_UHLC};
 
 /// The builder of AdvancedSubscriber, allowing to configure it.
 #[zenoh_macros::unstable]
@@ -259,10 +261,24 @@ where
 }
 
 #[zenoh_macros::unstable]
-struct InnerState {
+struct State {
+    global_pending_queries: u64,
+    sequenced_states: HashMap<EntityGlobalId, SequencedState>,
+    timestamped_states: HashMap<ID, TimestampedState>,
+}
+
+#[zenoh_macros::unstable]
+struct SequencedState {
     last_seq_num: Option<u32>,
     pending_queries: u64,
     pending_samples: HashMap<u32, Sample>,
+}
+
+#[zenoh_macros::unstable]
+struct TimestampedState {
+    last_timestamp: Option<Timestamp>,
+    pending_queries: u64,
+    pending_samples: HashMap<Timestamp, Sample>,
 }
 
 #[zenoh_macros::unstable]
@@ -288,24 +304,19 @@ impl<Receiver> std::ops::DerefMut for AdvancedSubscriber<Receiver> {
 }
 
 #[zenoh_macros::unstable]
-fn handle_sample(
-    states: &mut HashMap<EntityGlobalId, InnerState>,
-    wait: bool,
-    sample: Sample,
-    callback: &Callback<Sample>,
-) -> bool {
+fn handle_sample(states: &mut State, sample: Sample, callback: &Callback<Sample>) -> bool {
     if let (Some(source_id), Some(source_sn)) = (
         sample.source_info().source_id(),
         sample.source_info().source_sn(),
     ) {
-        let entry = states.entry(*source_id);
+        let entry = states.sequenced_states.entry(*source_id);
         let new = matches!(&entry, Entry::Vacant(_));
-        let state = entry.or_insert(InnerState {
+        let state = entry.or_insert(SequencedState {
             last_seq_num: None,
             pending_queries: 0,
             pending_samples: HashMap::new(),
         });
-        if wait {
+        if states.global_pending_queries != 0 {
             state.pending_samples.insert(source_sn, sample);
         } else if state.last_seq_num.is_some() && source_sn != state.last_seq_num.unwrap() + 1 {
             if source_sn > state.last_seq_num.unwrap() {
@@ -322,9 +333,25 @@ fn handle_sample(
             }
         }
         new
+    } else if let Some(timestamp) = sample.timestamp() {
+        let entry = states.timestamped_states.entry(*timestamp.get_id());
+        let state = entry.or_insert(TimestampedState {
+            last_timestamp: None,
+            pending_queries: 0,
+            pending_samples: HashMap::new(),
+        });
+        if state.last_timestamp.map(|t| t < *timestamp).unwrap_or(true) {
+            if states.global_pending_queries == 0 && state.pending_queries == 0 {
+                state.last_timestamp = Some(*timestamp);
+                callback.call(sample);
+            } else {
+                state.pending_samples.entry(*timestamp).or_insert(sample);
+            }
+        }
+        false
     } else {
         callback.call(sample);
-        true
+        false
     }
 }
 
@@ -342,7 +369,7 @@ fn seq_num_range(start: Option<u32>, end: Option<u32>) -> String {
 #[derive(Clone)]
 struct PeriodicQuery {
     source_id: Option<EntityGlobalId>,
-    statesref: Arc<Mutex<(HashMap<EntityGlobalId, InnerState>, bool)>>,
+    statesref: Arc<Mutex<State>>,
     key_expr: KeyExpr<'static>,
     session: Session,
     query_target: QueryTarget,
@@ -363,9 +390,9 @@ impl PeriodicQuery {
 impl Timed for PeriodicQuery {
     async fn run(&mut self) {
         let mut lock = zlock!(self.statesref);
-        let (states, _wait) = &mut *lock;
+        let states = &mut *lock;
         if let Some(source_id) = &self.source_id {
-            if let Some(state) = states.get_mut(source_id) {
+            if let Some(state) = states.sequenced_states.get_mut(source_id) {
                 state.pending_queries += 1;
                 let query_expr = KE_PREFIX
                     / &source_id.zid().into_keyexpr()
@@ -373,7 +400,7 @@ impl Timed for PeriodicQuery {
                     / &self.key_expr;
                 let seq_num_range = seq_num_range(Some(state.last_seq_num.unwrap() + 1), None);
                 drop(lock);
-                let handler = RepliesHandler {
+                let handler = SequencedRepliesHandler {
                     source_id: *source_id,
                     statesref: self.statesref.clone(),
                     callback: self.callback.clone(),
@@ -386,8 +413,8 @@ impl Timed for PeriodicQuery {
                         move |r: Reply| {
                             if let Ok(s) = r.into_result() {
                                 if key_expr.intersects(s.key_expr()) {
-                                    let (ref mut states, wait) = &mut *zlock!(handler.statesref);
-                                    handle_sample(states, *wait, s, &handler.callback);
+                                    let states = &mut *zlock!(handler.statesref);
+                                    handle_sample(states, s, &handler.callback);
                                 }
                             }
                         }
@@ -408,7 +435,11 @@ impl<Handler> AdvancedSubscriber<Handler> {
     where
         H: IntoHandler<Sample, Handler = Handler> + Send,
     {
-        let statesref = Arc::new(Mutex::new((HashMap::new(), conf.history)));
+        let statesref = Arc::new(Mutex::new(State {
+            sequenced_states: HashMap::new(),
+            timestamped_states: HashMap::new(),
+            global_pending_queries: if conf.history { 1 } else { 0 },
+        }));
         let (callback, receiver) = conf.handler.into_handler();
         let key_expr = conf.key_expr?;
         let retransmission = conf.retransmission;
@@ -440,9 +471,9 @@ impl<Handler> AdvancedSubscriber<Handler> {
 
             move |s: Sample| {
                 let mut lock = zlock!(statesref);
-                let (states, wait) = &mut *lock;
+                let states = &mut *lock;
                 let source_id = s.source_info().source_id().cloned();
-                let new = handle_sample(states, *wait, s, &callback);
+                let new = handle_sample(states, s, &callback);
 
                 if let Some(source_id) = source_id {
                     if new {
@@ -454,7 +485,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                         }
                     }
 
-                    if let Some(state) = states.get_mut(&source_id) {
+                    if let Some(state) = states.sequenced_states.get_mut(&source_id) {
                         if retransmission
                             && state.pending_queries == 0
                             && !state.pending_samples.is_empty()
@@ -467,7 +498,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                             let seq_num_range =
                                 seq_num_range(Some(state.last_seq_num.unwrap() + 1), None);
                             drop(lock);
-                            let handler = RepliesHandler {
+                            let handler = SequencedRepliesHandler {
                                 source_id,
                                 statesref: statesref.clone(),
                                 callback: callback.clone(),
@@ -479,9 +510,8 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                     move |r: Reply| {
                                         if let Ok(s) = r.into_result() {
                                             if key_expr.intersects(s.key_expr()) {
-                                                let (ref mut states, wait) =
-                                                    &mut *zlock!(handler.statesref);
-                                                handle_sample(states, *wait, s, &handler.callback);
+                                                let states = &mut *zlock!(handler.statesref);
+                                                handle_sample(states, s, &handler.callback);
                                             }
                                         }
                                     }
@@ -521,8 +551,8 @@ impl<Handler> AdvancedSubscriber<Handler> {
                     move |r: Reply| {
                         if let Ok(s) = r.into_result() {
                             if key_expr.intersects(s.key_expr()) {
-                                let (ref mut states, wait) = &mut *zlock!(handler.statesref);
-                                handle_sample(states, *wait, s, &handler.callback);
+                                let states = &mut *zlock!(handler.statesref);
+                                handle_sample(states, s, &handler.callback);
                             }
                         }
                     }
@@ -540,23 +570,98 @@ impl<Handler> AdvancedSubscriber<Handler> {
                 let statesref = statesref.clone();
                 let key_expr = key_expr.clone().into_owned();
                 move |s: Sample| {
-                    if let Ok(parsed) = ke_liveliness::parse(s.key_expr().as_keyexpr()) {
-                        if let Ok(zid) = ZenohId::from_str(parsed.zid().as_str()) {
-                            if let Ok(eid) = EntityId::from_str(parsed.eid().as_str()) {
-                                let source_id = EntityGlobalId::new(zid, eid);
-                                let (ref mut states, _wait) = &mut *zlock!(statesref);
-                                let entry = states.entry(source_id);
-                                let new = matches!(&entry, Entry::Vacant(_));
-                                let state = entry.or_insert(InnerState {
-                                    last_seq_num: None,
-                                    pending_queries: 0,
-                                    pending_samples: HashMap::new(),
-                                });
-                                state.pending_queries += 1;
+                    if s.kind() == SampleKind::Put {
+                        if let Ok(parsed) = ke_liveliness::parse(s.key_expr().as_keyexpr()) {
+                            if let Ok(zid) = ZenohId::from_str(parsed.zid().as_str()) {
+                                if parsed.eid() == KE_UHLC {
+                                    let states = &mut *zlock!(statesref);
+                                    let entry = states.timestamped_states.entry(ID::from(zid));
+                                    let state = entry.or_insert(TimestampedState {
+                                        last_timestamp: None,
+                                        pending_queries: 0,
+                                        pending_samples: HashMap::new(),
+                                    });
+                                    state.pending_queries += 1;
 
-                                let handler = RepliesHandler {
-                                    source_id,
+                                    let handler = TimestampedRepliesHandler {
+                                        id: ID::from(zid),
+                                        statesref: statesref.clone(),
+                                        callback: callback.clone(),
+                                    };
+                                    let _ = session
+                                        .get(Selector::from((s.key_expr(), "0..")))
+                                        .callback({
+                                            let key_expr = key_expr.clone().into_owned();
+                                            move |r: Reply| {
+                                                if let Ok(s) = r.into_result() {
+                                                    if key_expr.intersects(s.key_expr()) {
+                                                        let states =
+                                                            &mut *zlock!(handler.statesref);
+                                                        handle_sample(states, s, &handler.callback);
+                                                    }
+                                                }
+                                            }
+                                        })
+                                        .consolidation(ConsolidationMode::None)
+                                        .accept_replies(ReplyKeyExpr::Any)
+                                        .target(query_target)
+                                        .timeout(query_timeout)
+                                        .wait();
+                                } else if let Ok(eid) = EntityId::from_str(parsed.eid().as_str()) {
+                                    let source_id = EntityGlobalId::new(zid, eid);
+                                    let states = &mut *zlock!(statesref);
+                                    let entry = states.sequenced_states.entry(source_id);
+                                    let new = matches!(&entry, Entry::Vacant(_));
+                                    let state = entry.or_insert(SequencedState {
+                                        last_seq_num: None,
+                                        pending_queries: 0,
+                                        pending_samples: HashMap::new(),
+                                    });
+                                    state.pending_queries += 1;
+
+                                    let handler = SequencedRepliesHandler {
+                                        source_id,
+                                        statesref: statesref.clone(),
+                                        callback: callback.clone(),
+                                    };
+                                    let _ = session
+                                        .get(Selector::from((s.key_expr(), "0..")))
+                                        .callback({
+                                            let key_expr = key_expr.clone().into_owned();
+                                            move |r: Reply| {
+                                                if let Ok(s) = r.into_result() {
+                                                    if key_expr.intersects(s.key_expr()) {
+                                                        let states =
+                                                            &mut *zlock!(handler.statesref);
+                                                        handle_sample(states, s, &handler.callback);
+                                                    }
+                                                }
+                                            }
+                                        })
+                                        .consolidation(ConsolidationMode::None)
+                                        .accept_replies(ReplyKeyExpr::Any)
+                                        .target(query_target)
+                                        .timeout(query_timeout)
+                                        .wait();
+
+                                    if new {
+                                        if let Some((timer, period, query)) =
+                                            periodic_query.as_ref()
+                                        {
+                                            timer.add(TimedEvent::periodic(
+                                                *period,
+                                                query.clone().with_source_id(source_id),
+                                            ))
+                                        }
+                                    }
+                                }
+                            } else {
+                                let states = &mut *zlock!(statesref);
+                                states.global_pending_queries += 1;
+
+                                let handler = InitialRepliesHandler {
                                     statesref: statesref.clone(),
+                                    periodic_query: None,
                                     callback: callback.clone(),
                                 };
                                 let _ = session
@@ -566,14 +671,8 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                         move |r: Reply| {
                                             if let Ok(s) = r.into_result() {
                                                 if key_expr.intersects(s.key_expr()) {
-                                                    let (ref mut states, wait) =
-                                                        &mut *zlock!(handler.statesref);
-                                                    handle_sample(
-                                                        states,
-                                                        *wait,
-                                                        s,
-                                                        &handler.callback,
-                                                    );
+                                                    let states = &mut *zlock!(handler.statesref);
+                                                    handle_sample(states, s, &handler.callback);
                                                 }
                                             }
                                         }
@@ -583,22 +682,13 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                     .target(query_target)
                                     .timeout(query_timeout)
                                     .wait();
-
-                                if new {
-                                    if let Some((timer, period, query)) = periodic_query.as_ref() {
-                                        timer.add(TimedEvent::periodic(
-                                            *period,
-                                            query.clone().with_source_id(source_id),
-                                        ))
-                                    }
-                                }
                             }
+                        } else {
+                            tracing::warn!(
+                                "Received malformed liveliness token key expression: {}",
+                                s.key_expr()
+                            );
                         }
-                    } else {
-                        tracing::warn!(
-                            "Received malformed liveliness token key expression: {}",
-                            s.key_expr()
-                        );
                     }
                 }
             };
@@ -635,7 +725,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
 #[zenoh_macros::unstable]
 #[derive(Clone)]
 struct InitialRepliesHandler {
-    statesref: Arc<Mutex<(HashMap<EntityGlobalId, InnerState>, bool)>>,
+    statesref: Arc<Mutex<State>>,
     periodic_query: Option<(Arc<Timer>, Duration, PeriodicQuery)>,
     callback: Callback<Sample>,
 }
@@ -643,43 +733,68 @@ struct InitialRepliesHandler {
 #[zenoh_macros::unstable]
 impl Drop for InitialRepliesHandler {
     fn drop(&mut self) {
-        let (states, wait) = &mut *zlock!(self.statesref);
-        for (source_id, state) in states.iter_mut() {
-            let mut pending_samples = state
-                .pending_samples
-                .drain()
-                .collect::<Vec<(u32, Sample)>>();
-            pending_samples.sort_by_key(|(k, _s)| *k);
-            for (seq_num, sample) in pending_samples {
-                state.last_seq_num = Some(seq_num);
-                self.callback.call(sample);
+        let states = &mut *zlock!(self.statesref);
+        states.global_pending_queries = states.global_pending_queries.saturating_sub(1);
+
+        if states.global_pending_queries == 0 {
+            for (source_id, state) in states.sequenced_states.iter_mut() {
+                if state.pending_queries == 0
+                    && !state.pending_samples.is_empty()
+                    && states.global_pending_queries == 0
+                {
+                    tracing::error!("Sample missed: unable to retrieve some missing samples.");
+                    let mut pending_samples = state
+                        .pending_samples
+                        .drain()
+                        .collect::<Vec<(u32, Sample)>>();
+                    pending_samples.sort_by_key(|(k, _s)| *k);
+                    for (seq_num, sample) in pending_samples {
+                        state.last_seq_num = Some(seq_num);
+                        self.callback.call(sample);
+                    }
+                }
+                if let Some((timer, period, query)) = self.periodic_query.as_ref() {
+                    timer.add(TimedEvent::periodic(
+                        *period,
+                        query.clone().with_source_id(*source_id),
+                    ))
+                }
             }
-            if let Some((timer, period, query)) = self.periodic_query.as_ref() {
-                timer.add(TimedEvent::periodic(
-                    *period,
-                    query.clone().with_source_id(*source_id),
-                ))
+            for state in states.timestamped_states.values_mut() {
+                if state.pending_queries == 0 && !state.pending_samples.is_empty() {
+                    let mut pending_samples = state
+                        .pending_samples
+                        .drain()
+                        .collect::<Vec<(Timestamp, Sample)>>();
+                    pending_samples.sort_by_key(|(k, _s)| *k);
+                    for (timestamp, sample) in pending_samples {
+                        state.last_timestamp = Some(timestamp);
+                        self.callback.call(sample);
+                    }
+                }
             }
         }
-        *wait = false;
     }
 }
 
 #[zenoh_macros::unstable]
 #[derive(Clone)]
-struct RepliesHandler {
+struct SequencedRepliesHandler {
     source_id: EntityGlobalId,
-    statesref: Arc<Mutex<(HashMap<EntityGlobalId, InnerState>, bool)>>,
+    statesref: Arc<Mutex<State>>,
     callback: Callback<Sample>,
 }
 
 #[zenoh_macros::unstable]
-impl Drop for RepliesHandler {
+impl Drop for SequencedRepliesHandler {
     fn drop(&mut self) {
-        let (states, wait) = &mut *zlock!(self.statesref);
-        if let Some(state) = states.get_mut(&self.source_id) {
+        let states = &mut *zlock!(self.statesref);
+        if let Some(state) = states.sequenced_states.get_mut(&self.source_id) {
             state.pending_queries = state.pending_queries.saturating_sub(1);
-            if state.pending_queries == 0 && !state.pending_samples.is_empty() && !*wait {
+            if state.pending_queries == 0
+                && !state.pending_samples.is_empty()
+                && states.global_pending_queries == 0
+            {
                 tracing::error!("Sample missed: unable to retrieve some missing samples.");
                 let mut pending_samples = state
                     .pending_samples
@@ -688,6 +803,38 @@ impl Drop for RepliesHandler {
                 pending_samples.sort_by_key(|(k, _s)| *k);
                 for (seq_num, sample) in pending_samples {
                     state.last_seq_num = Some(seq_num);
+                    self.callback.call(sample);
+                }
+            }
+        }
+    }
+}
+
+#[zenoh_macros::unstable]
+#[derive(Clone)]
+struct TimestampedRepliesHandler {
+    id: ID,
+    statesref: Arc<Mutex<State>>,
+    callback: Callback<Sample>,
+}
+
+#[zenoh_macros::unstable]
+impl Drop for TimestampedRepliesHandler {
+    fn drop(&mut self) {
+        let states = &mut *zlock!(self.statesref);
+        if let Some(state) = states.timestamped_states.get_mut(&self.id) {
+            state.pending_queries = state.pending_queries.saturating_sub(1);
+            if state.pending_queries == 0
+                && !state.pending_samples.is_empty()
+                && states.global_pending_queries == 0
+            {
+                let mut pending_samples = state
+                    .pending_samples
+                    .drain()
+                    .collect::<Vec<(Timestamp, Sample)>>();
+                pending_samples.sort_by_key(|(k, _s)| *k);
+                for (timestamp, sample) in pending_samples {
+                    state.last_timestamp = Some(timestamp);
                     self.callback.call(sample);
                 }
             }
