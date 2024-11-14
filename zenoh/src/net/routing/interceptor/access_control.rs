@@ -334,6 +334,40 @@ impl InterceptorTrait for IngressAclEnforcer {
                     }
                 }
             }
+            NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareToken(_),
+                ..
+            }) => {
+                if self.action(
+                    AclMessage::LivelinessToken,
+                    "Liveliness Token (ingress)",
+                    key_expr?,
+                ) == Permission::Deny
+                {
+                    return None;
+                }
+            }
+
+            NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareToken(_),
+                ..
+            }) => {
+                // Undeclaration filtering diverges between ingress and egress:
+                // Undeclarations in ingress are only filtered if the ext_wire_expr is set.
+                // If it's not set, we let the undeclaration pass, it will be rejected by the routing logic
+                // if its associated declaration was denied.
+                if let Some(key_expr) = key_expr {
+                    if !key_expr.is_empty()
+                        && self.action(
+                            AclMessage::LivelinessToken,
+                            "Undeclare Liveliness Token (ingress)",
+                            key_expr,
+                        ) == Permission::Deny
+                    {
+                        return None;
+                    }
+                }
+            }
             // Unfiltered Declare messages
             NetworkBody::Declare(Declare {
                 body: DeclareBody::DeclareKeyExpr(_),
@@ -342,18 +376,10 @@ impl InterceptorTrait for IngressAclEnforcer {
             | NetworkBody::Declare(Declare {
                 body: DeclareBody::DeclareFinal(_),
                 ..
-            })
-            | NetworkBody::Declare(Declare {
-                body: DeclareBody::DeclareToken(_),
-                ..
             }) => {}
             // Unfiltered Undeclare messages
             NetworkBody::Declare(Declare {
                 body: DeclareBody::UndeclareKeyExpr(_),
-                ..
-            })
-            | NetworkBody::Declare(Declare {
-                body: DeclareBody::UndeclareToken(_),
                 ..
             }) => {}
             // Unfiltered remaining message types
@@ -470,6 +496,34 @@ impl InterceptorTrait for EgressAclEnforcer {
                     return None;
                 }
             }
+            NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareToken(_),
+                ..
+            }) => {
+                if self.action(
+                    AclMessage::LivelinessToken,
+                    "Liveliness Token (egress)",
+                    key_expr?,
+                ) == Permission::Deny
+                {
+                    return None;
+                }
+            }
+            NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareToken(_),
+                ..
+            }) => {
+                // Undeclaration filtering diverges between ingress and egress:
+                // in egress the keyexpr has to be provided in the RoutingContext
+                if self.action(
+                    AclMessage::LivelinessToken,
+                    "Undeclare Liveliness Token (egress)",
+                    key_expr?,
+                ) == Permission::Deny
+                {
+                    return None;
+                }
+            }
             // Unfiltered Declare messages
             NetworkBody::Declare(Declare {
                 body: DeclareBody::DeclareKeyExpr(_),
@@ -478,18 +532,10 @@ impl InterceptorTrait for EgressAclEnforcer {
             | NetworkBody::Declare(Declare {
                 body: DeclareBody::DeclareFinal(_),
                 ..
-            })
-            | NetworkBody::Declare(Declare {
-                body: DeclareBody::DeclareToken(_),
-                ..
             }) => {}
             // Unfiltered Undeclare messages
             NetworkBody::Declare(Declare {
                 body: DeclareBody::UndeclareKeyExpr(_),
-                ..
-            })
-            | NetworkBody::Declare(Declare {
-                body: DeclareBody::UndeclareToken(_),
                 ..
             }) => {}
             // Unfiltered remaining message types
