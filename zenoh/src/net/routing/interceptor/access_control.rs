@@ -398,23 +398,8 @@ impl InterceptorTrait for IngressAclEnforcer {
                 }
             }
             NetworkBody::Interest(Interest { mode, .. }) if mode.eq(&InterestMode::Final) => {
-                // FIXME: This can match Interest<Final> of message types other than liveliness
-
-                // Undeclaration filtering diverges between ingress and egress:
-                // Undeclarations in ingress are only filtered if the ext_wire_expr is set.
-                // If it's not set, we let the undeclaration pass, it will be rejected by the routing logic
-                // if its associated declaration was denied.
-                if let Some(key_expr) = key_expr {
-                    if !key_expr.is_empty()
-                        && self.action(
-                            AclMessage::DeclareLivelinessSubscriber,
-                            "Undeclare Liveliness Subscriber (ingress)",
-                            key_expr,
-                        ) == Permission::Deny
-                    {
-                        return None;
-                    }
-                }
+                // InterestMode::Final filtering diverges between ingress and egress:
+                // InterestMode::Final ingress is always allowed, it will be rejected by routing logic if its associated Interest was denied
             }
             // Unfiltered Declare messages
             NetworkBody::Declare(Declare {
@@ -598,10 +583,11 @@ impl InterceptorTrait for EgressAclEnforcer {
                     return None;
                 }
             }
-            NetworkBody::Interest(Interest { mode, .. }) if mode.eq(&InterestMode::Final) => {
-                // FIXME: This can match Interest<Final> of message types other than liveliness
-
-                // Undeclaration filtering diverges between ingress and egress:
+            NetworkBody::Interest(Interest { mode, options, .. })
+                // options are set for InterestMode::Final for internal use only by egress interceptors
+                if mode.eq(&InterestMode::Final) && options.tokens() =>
+            {
+                // InterestMode::Final filtering diverges between ingress and egress:
                 // in egress the keyexpr has to be provided in the RoutingContext
                 if self.action(
                     AclMessage::DeclareLivelinessSubscriber,
