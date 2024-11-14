@@ -263,22 +263,15 @@ where
 #[zenoh_macros::unstable]
 struct State {
     global_pending_queries: u64,
-    sequenced_states: HashMap<EntityGlobalId, SequencedState>,
-    timestamped_states: HashMap<ID, TimestampedState>,
+    sequenced_states: HashMap<EntityGlobalId, SourceState<u32>>,
+    timestamped_states: HashMap<ID, SourceState<Timestamp>>,
 }
 
 #[zenoh_macros::unstable]
-struct SequencedState {
-    last_seq_num: Option<u32>,
+struct SourceState<T> {
+    last_delivered: Option<T>,
     pending_queries: u64,
-    pending_samples: HashMap<u32, Sample>,
-}
-
-#[zenoh_macros::unstable]
-struct TimestampedState {
-    last_timestamp: Option<Timestamp>,
-    pending_queries: u64,
-    pending_samples: HashMap<Timestamp, Sample>,
+    pending_samples: HashMap<T, Sample>,
 }
 
 #[zenoh_macros::unstable]
@@ -311,38 +304,38 @@ fn handle_sample(states: &mut State, sample: Sample, callback: &Callback<Sample>
     ) {
         let entry = states.sequenced_states.entry(*source_id);
         let new = matches!(&entry, Entry::Vacant(_));
-        let state = entry.or_insert(SequencedState {
-            last_seq_num: None,
+        let state = entry.or_insert(SourceState::<u32> {
+            last_delivered: None,
             pending_queries: 0,
             pending_samples: HashMap::new(),
         });
         if states.global_pending_queries != 0 {
             state.pending_samples.insert(source_sn, sample);
-        } else if state.last_seq_num.is_some() && source_sn != state.last_seq_num.unwrap() + 1 {
-            if source_sn > state.last_seq_num.unwrap() {
+        } else if state.last_delivered.is_some() && source_sn != state.last_delivered.unwrap() + 1 {
+            if source_sn > state.last_delivered.unwrap() {
                 state.pending_samples.insert(source_sn, sample);
             }
         } else {
             callback.call(sample);
             let mut last_seq_num = source_sn;
-            state.last_seq_num = Some(last_seq_num);
+            state.last_delivered = Some(last_seq_num);
             while let Some(s) = state.pending_samples.remove(&(last_seq_num + 1)) {
                 callback.call(s);
                 last_seq_num += 1;
-                state.last_seq_num = Some(last_seq_num);
+                state.last_delivered = Some(last_seq_num);
             }
         }
         new
     } else if let Some(timestamp) = sample.timestamp() {
         let entry = states.timestamped_states.entry(*timestamp.get_id());
-        let state = entry.or_insert(TimestampedState {
-            last_timestamp: None,
+        let state = entry.or_insert(SourceState::<Timestamp> {
+            last_delivered: None,
             pending_queries: 0,
             pending_samples: HashMap::new(),
         });
-        if state.last_timestamp.map(|t| t < *timestamp).unwrap_or(true) {
+        if state.last_delivered.map(|t| t < *timestamp).unwrap_or(true) {
             if states.global_pending_queries == 0 && state.pending_queries == 0 {
-                state.last_timestamp = Some(*timestamp);
+                state.last_delivered = Some(*timestamp);
                 callback.call(sample);
             } else {
                 state.pending_samples.entry(*timestamp).or_insert(sample);
@@ -398,7 +391,7 @@ impl Timed for PeriodicQuery {
                     / &source_id.zid().into_keyexpr()
                     / &KeyExpr::try_from(source_id.eid().to_string()).unwrap()
                     / &self.key_expr;
-                let seq_num_range = seq_num_range(Some(state.last_seq_num.unwrap() + 1), None);
+                let seq_num_range = seq_num_range(Some(state.last_delivered.unwrap() + 1), None);
                 drop(lock);
                 let handler = SequencedRepliesHandler {
                     source_id: *source_id,
@@ -496,7 +489,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                 / &KeyExpr::try_from(source_id.eid().to_string()).unwrap()
                                 / &key_expr;
                             let seq_num_range =
-                                seq_num_range(Some(state.last_seq_num.unwrap() + 1), None);
+                                seq_num_range(Some(state.last_delivered.unwrap() + 1), None);
                             drop(lock);
                             let handler = SequencedRepliesHandler {
                                 source_id,
@@ -576,8 +569,8 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                 if parsed.eid() == KE_UHLC {
                                     let states = &mut *zlock!(statesref);
                                     let entry = states.timestamped_states.entry(ID::from(zid));
-                                    let state = entry.or_insert(TimestampedState {
-                                        last_timestamp: None,
+                                    let state = entry.or_insert(SourceState::<Timestamp> {
+                                        last_delivered: None,
                                         pending_queries: 0,
                                         pending_samples: HashMap::new(),
                                     });
@@ -612,8 +605,8 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                     let states = &mut *zlock!(statesref);
                                     let entry = states.sequenced_states.entry(source_id);
                                     let new = matches!(&entry, Entry::Vacant(_));
-                                    let state = entry.or_insert(SequencedState {
-                                        last_seq_num: None,
+                                    let state = entry.or_insert(SourceState::<u32> {
+                                        last_delivered: None,
                                         pending_queries: 0,
                                         pending_samples: HashMap::new(),
                                     });
@@ -749,7 +742,7 @@ impl Drop for InitialRepliesHandler {
                         .collect::<Vec<(u32, Sample)>>();
                     pending_samples.sort_by_key(|(k, _s)| *k);
                     for (seq_num, sample) in pending_samples {
-                        state.last_seq_num = Some(seq_num);
+                        state.last_delivered = Some(seq_num);
                         self.callback.call(sample);
                     }
                 }
@@ -768,7 +761,7 @@ impl Drop for InitialRepliesHandler {
                         .collect::<Vec<(Timestamp, Sample)>>();
                     pending_samples.sort_by_key(|(k, _s)| *k);
                     for (timestamp, sample) in pending_samples {
-                        state.last_timestamp = Some(timestamp);
+                        state.last_delivered = Some(timestamp);
                         self.callback.call(sample);
                     }
                 }
@@ -802,7 +795,7 @@ impl Drop for SequencedRepliesHandler {
                     .collect::<Vec<(u32, Sample)>>();
                 pending_samples.sort_by_key(|(k, _s)| *k);
                 for (seq_num, sample) in pending_samples {
-                    state.last_seq_num = Some(seq_num);
+                    state.last_delivered = Some(seq_num);
                     self.callback.call(sample);
                 }
             }
@@ -834,7 +827,7 @@ impl Drop for TimestampedRepliesHandler {
                     .collect::<Vec<(Timestamp, Sample)>>();
                 pending_samples.sort_by_key(|(k, _s)| *k);
                 for (timestamp, sample) in pending_samples {
-                    state.last_timestamp = Some(timestamp);
+                    state.last_delivered = Some(timestamp);
                     self.callback.call(sample);
                 }
             }
