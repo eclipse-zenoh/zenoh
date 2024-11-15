@@ -471,27 +471,31 @@ async fn accept_task(
                         let auth_identifier = get_client_cert_common_name(tls_conn)?;
 
                         // Get certificate chain expiration
-                        let maybe_expiration_time = get_cert_chain_expiration(&tls_conn.peer_certificates())?;
+                        let mut maybe_expiration_time = None;
+                        if tls_close_link_on_expiration {
+                            match get_cert_chain_expiration(&tls_conn.peer_certificates())? {
+                                exp @ Some(_) => maybe_expiration_time = exp,
+                                None => tracing::warn!(
+                                    "Cannot monitor expiration for TLS link {:?} => {:?} : client does not have certificates",
+                                    src_addr,
+                                    dst_addr,
+                                ),
+                            }
+                        }
 
                         tracing::debug!("Accepted TLS connection on {:?}: {:?}", src_addr, dst_addr);
                         // Create the new link object
                         let link = Arc::<LinkUnicastTls>::new_cyclic(|weak_link| {
                             let mut expiration_manager = None;
-                            if tls_close_link_on_expiration {
-                                if let Some(certchain_expiration_time) = maybe_expiration_time {
-                                    // setup expiration manager
-                                    expiration_manager = Some(LinkCertExpirationManager::new(
-                                        weak_link.clone(),
-                                        src_addr,
-                                        dst_addr,
-                                        TLS_LOCATOR_PREFIX,
-                                        certchain_expiration_time,
-                                    ));
-                                } else {
-                                    tracing::warn!(
-                                        "Cannot monitor expiration for TLS link {src_addr:?} => {dst_addr:?} : client does not have certificates",
-                                    );
-                                }
+                            if let Some(certchain_expiration_time) = maybe_expiration_time {
+                                // setup expiration manager
+                                expiration_manager = Some(LinkCertExpirationManager::new(
+                                    weak_link.clone(),
+                                    src_addr,
+                                    dst_addr,
+                                    TLS_LOCATOR_PREFIX,
+                                    certchain_expiration_time,
+                                ));
                             }
                             LinkUnicastTls::new(
                                 tokio_rustls::TlsStream::Server(tls_stream),

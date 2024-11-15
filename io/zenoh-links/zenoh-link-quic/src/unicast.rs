@@ -453,29 +453,31 @@ async fn accept_task(
                         let auth_id = get_cert_common_name(&quic_conn)?;
 
                         // Get certificate chain expiration
-                        let maybe_expiration_time = get_cert_chain_expiration(&quic_conn)?;
+                        let mut maybe_expiration_time = None;
+                        if tls_close_link_on_expiration {
+                            match get_cert_chain_expiration(&quic_conn)? {
+                                exp @ Some(_) => maybe_expiration_time = exp,
+                                None => tracing::warn!(
+                                    "Cannot monitor expiration for QUIC link {:?} => {:?} : client does not have certificates",
+                                    src_addr,
+                                    dst_addr,
+                                ),
+                            }
+                        }
 
                         tracing::debug!("Accepted QUIC connection on {:?}: {:?}", src_addr, dst_addr);
                         // Create the new link object
                         let link = Arc::<LinkUnicastQuic>::new_cyclic(|weak_link| {
                             let mut expiration_manager = None;
-                            if tls_close_link_on_expiration {
-                                if let Some(certchain_expiration_time) = maybe_expiration_time {
-                                    // setup expiration manager
-                                    expiration_manager = Some(LinkCertExpirationManager::new(
-                                        weak_link.clone(),
-                                        src_addr,
-                                        dst_addr,
-                                        QUIC_LOCATOR_PREFIX,
-                                        certchain_expiration_time,
-                                    ));
-                                } else {
-                                    tracing::warn!(
-                                        "Cannot monitor expiration for QUIC link {:?} => {:?} : client does not have certificates",
-                                        src_addr,
-                                        dst_addr,
-                                    );
-                                }
+                            if let Some(certchain_expiration_time) = maybe_expiration_time {
+                                // setup expiration manager
+                                expiration_manager = Some(LinkCertExpirationManager::new(
+                                    weak_link.clone(),
+                                    src_addr,
+                                    dst_addr,
+                                    QUIC_LOCATOR_PREFIX,
+                                    certchain_expiration_time,
+                                ));
                             }
                             LinkUnicastQuic::new(
                                 quic_conn,
