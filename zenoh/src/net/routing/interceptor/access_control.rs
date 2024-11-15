@@ -371,9 +371,11 @@ impl InterceptorTrait for IngressAclEnforcer {
                     }
                 }
             }
-            NetworkBody::Interest(Interest { mode, options, .. })
-                if options.tokens() && mode.eq(&InterestMode::Current) =>
-            {
+            NetworkBody::Interest(Interest {
+                mode: InterestMode::Current,
+                options,
+                ..
+            }) if options.tokens() => {
                 if self.action(
                     AclMessage::LivelinessQuery,
                     "Liveliness Query (ingress)",
@@ -383,11 +385,11 @@ impl InterceptorTrait for IngressAclEnforcer {
                     return None;
                 }
             }
-            NetworkBody::Interest(Interest { mode, options, .. })
-                if options.tokens()
-                    && (mode.eq(&InterestMode::Future)
-                        || mode.eq(&InterestMode::CurrentFuture)) =>
-            {
+            NetworkBody::Interest(Interest {
+                mode: InterestMode::Current | InterestMode::CurrentFuture,
+                options,
+                ..
+            }) if options.tokens() => {
                 if self.action(
                     AclMessage::DeclareLivelinessSubscriber,
                     "Declare Liveliness Subscriber (ingress)",
@@ -397,7 +399,10 @@ impl InterceptorTrait for IngressAclEnforcer {
                     return None;
                 }
             }
-            NetworkBody::Interest(Interest { mode, .. }) if mode.eq(&InterestMode::Final) => {
+            NetworkBody::Interest(Interest {
+                mode: InterestMode::Final,
+                ..
+            }) => {
                 // InterestMode::Final filtering diverges between ingress and egress:
                 // InterestMode::Final ingress is always allowed, it will be rejected by routing logic if its associated Interest was denied
             }
@@ -557,9 +562,11 @@ impl InterceptorTrait for EgressAclEnforcer {
                     return None;
                 }
             }
-            NetworkBody::Interest(Interest { mode, options, .. })
-                if options.tokens() && mode.eq(&InterestMode::Current) =>
-            {
+            NetworkBody::Interest(Interest {
+                mode: InterestMode::Current,
+                options,
+                ..
+            }) if options.tokens() => {
                 if self.action(
                     AclMessage::LivelinessQuery,
                     "Liveliness Query (egress)",
@@ -569,11 +576,11 @@ impl InterceptorTrait for EgressAclEnforcer {
                     return None;
                 }
             }
-            NetworkBody::Interest(Interest { mode, options, .. })
-                if options.tokens()
-                    && (mode.eq(&InterestMode::Future)
-                        || mode.eq(&InterestMode::CurrentFuture)) =>
-            {
+            NetworkBody::Interest(Interest {
+                mode: InterestMode::Future | InterestMode::CurrentFuture,
+                options,
+                ..
+            }) if options.tokens() => {
                 if self.action(
                     AclMessage::DeclareLivelinessSubscriber,
                     "Declare Liveliness Subscriber (egress)",
@@ -583,10 +590,13 @@ impl InterceptorTrait for EgressAclEnforcer {
                     return None;
                 }
             }
-            NetworkBody::Interest(Interest { mode, options, .. })
-                // options are set for InterestMode::Final for internal use only by egress interceptors
-                if mode.eq(&InterestMode::Final) && options.tokens() =>
-            {
+            NetworkBody::Interest(Interest {
+                mode: InterestMode::Final,
+                options,
+                ..
+            }) if options.tokens() => {
+                // Note: options are set for InterestMode::Final for internal use only by egress interceptors.
+
                 // InterestMode::Final filtering diverges between ingress and egress:
                 // in egress the keyexpr has to be provided in the RoutingContext
                 if self.action(
