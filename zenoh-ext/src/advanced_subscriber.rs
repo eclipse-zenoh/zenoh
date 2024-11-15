@@ -44,7 +44,7 @@ use {
 use crate::advanced_cache::{ke_liveliness, KE_PREFIX, KE_STAR, KE_UHLC};
 
 #[derive(Debug, Default, Clone)]
-/// Configure the history size of an [`AdvancedCache`].
+/// Configure retransmission.
 pub struct RetransmissionConf {
     periodic_queries: Option<Duration>,
 }
