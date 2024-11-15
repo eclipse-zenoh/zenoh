@@ -339,10 +339,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let tls_stream = TlsStream::Client(tls_stream);
 
         let link = Arc::<LinkUnicastTls>::new_cyclic(|weak_link| {
-            let mut maybe_expiration_manager = None;
+            let mut expiration_manager = None;
             if client_config.tls_close_link_on_expiration {
                 // setup expiration manager
-                maybe_expiration_manager = Some(LinkCertExpirationManager::new(
+                expiration_manager = Some(LinkCertExpirationManager::new(
                     weak_link.clone(),
                     src_addr,
                     dst_addr,
@@ -355,7 +355,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
                 dst_addr,
                 src_addr,
                 auth_identifier.into(),
-                maybe_expiration_manager,
+                expiration_manager,
             )
         });
 
@@ -476,11 +476,11 @@ async fn accept_task(
                         tracing::debug!("Accepted TLS connection on {:?}: {:?}", src_addr, dst_addr);
                         // Create the new link object
                         let link = Arc::<LinkUnicastTls>::new_cyclic(|weak_link| {
-                            let mut maybe_expiration_manager = None;
+                            let mut expiration_manager = None;
                             if tls_close_link_on_expiration {
                                 if let Some(certchain_expiration_time) = maybe_expiration_time {
                                     // setup expiration manager
-                                    maybe_expiration_manager = Some(LinkCertExpirationManager::new(
+                                    expiration_manager = Some(LinkCertExpirationManager::new(
                                         weak_link.clone(),
                                         src_addr,
                                         dst_addr,
@@ -498,7 +498,7 @@ async fn accept_task(
                                 dst_addr,
                                 src_addr,
                                 auth_identifier.into(),
-                                maybe_expiration_manager,
+                                expiration_manager,
                             )
                         });
 
