@@ -13,7 +13,7 @@
 //
 use zenoh::pubsub::PublisherBuilder;
 
-use crate::AdvancedPublisherBuilder;
+use crate::{advanced_cache::HistoryConf, AdvancedPublisherBuilder};
 
 /// Some extensions to the [`zenoh::publication::PublisherBuilder`](zenoh::publication::PublisherBuilder)
 #[zenoh_macros::unstable]
@@ -21,7 +21,7 @@ pub trait PublisherBuilderExt<'a, 'b> {
     /// Allow matching Subscribers to detect lost samples and ask for retransimission.
     ///
     /// Retransmission can only be achieved if history is enabled.
-    fn history(self, history: usize) -> AdvancedPublisherBuilder<'a, 'b>;
+    fn history(self, history: HistoryConf) -> AdvancedPublisherBuilder<'a, 'b>;
 
     /// Allow this publisher to be detected by subscribers.
     ///
@@ -33,7 +33,7 @@ impl<'a, 'b> PublisherBuilderExt<'a, 'b> for PublisherBuilder<'a, 'b> {
     /// Allow matching Subscribers to detect lost samples and ask for retransimission.
     ///
     /// Retransmission can only be achieved if history is enabled.
-    fn history(self, history: usize) -> AdvancedPublisherBuilder<'a, 'b> {
+    fn history(self, history: HistoryConf) -> AdvancedPublisherBuilder<'a, 'b> {
         AdvancedPublisherBuilder::new(self.session, self.key_expr).history(history)
     }
 

@@ -14,7 +14,7 @@
 
 use zenoh::sample::SampleKind;
 use zenoh_config::{EndPoint, ModeDependentValue, WhatAmI};
-use zenoh_ext::{DataSubscriberBuilderExt, PublisherBuilderExt};
+use zenoh_ext::{DataSubscriberBuilderExt, HistoryConf, PublisherBuilderExt, RetransmissionConf};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_advanced_history() {
@@ -46,7 +46,10 @@ async fn test_advanced_history() {
         s
     };
 
-    let publ = ztimeout!(peer1.declare_publisher(ADVANCED_HISTORY_KEYEXPR).history(3)).unwrap();
+    let publ = ztimeout!(peer1
+        .declare_publisher(ADVANCED_HISTORY_KEYEXPR)
+        .history(HistoryConf::default().sample_depth(3)))
+    .unwrap();
     ztimeout!(publ.put("1")).unwrap();
     ztimeout!(publ.put("2")).unwrap();
     ztimeout!(publ.put("3")).unwrap();
@@ -154,13 +157,13 @@ async fn test_advanced_retransmission() {
 
     let sub = ztimeout!(client2
         .declare_subscriber(ADVANCED_RETRANSMISSION_KEYEXPR)
-        .retransmission())
+        .retransmission(RetransmissionConf::default()))
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let publ = ztimeout!(client1
         .declare_publisher(ADVANCED_RETRANSMISSION_KEYEXPR)
-        .history(10)
+        .history(HistoryConf::default().sample_depth(10))
         .retransmission())
     .unwrap();
     ztimeout!(publ.put("1")).unwrap();
@@ -283,14 +286,15 @@ async fn test_advanced_retransmission_periodic() {
 
     let sub = ztimeout!(client2
         .declare_subscriber(ADVANCED_RETRANSMISSION_PERIODIC_KEYEXPR)
-        .retransmission()
-        .periodic_queries(Some(Duration::from_secs(1))))
+        .retransmission(
+            RetransmissionConf::default().periodic_queries(Some(Duration::from_secs(1)))
+        ))
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let publ = ztimeout!(client1
         .declare_publisher(ADVANCED_RETRANSMISSION_PERIODIC_KEYEXPR)
-        .history(10)
+        .history(HistoryConf::default().sample_depth(10))
         .retransmission())
     .unwrap();
     ztimeout!(publ.put("1")).unwrap();
@@ -403,7 +407,7 @@ async fn test_advanced_late_joiner() {
 
     let publ = ztimeout!(peer1
         .declare_publisher(ADVANCED_LATE_JOINER_KEYEXPR)
-        .history(10)
+        .history(HistoryConf::default().sample_depth(10))
         .late_joiner())
     .unwrap();
     ztimeout!(publ.put("1")).unwrap();

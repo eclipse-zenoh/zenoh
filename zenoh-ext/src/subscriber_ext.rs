@@ -25,7 +25,7 @@ use zenoh::{
 
 use crate::{
     querying_subscriber::QueryingSubscriberBuilder, AdvancedSubscriberBuilder, ExtractSample,
-    FetchingSubscriberBuilder,
+    FetchingSubscriberBuilder, RetransmissionConf,
 };
 
 /// Allows writing `subscriber.forward(receiver)` instead of `subscriber.stream().map(Ok).forward(publisher)`
@@ -129,12 +129,13 @@ pub trait DataSubscriberBuilderExt<'a, 'b, Handler> {
     /// Enable query for historical data.
     ///
     /// History can only be retransmitted by Publishers that also activate history.
-    fn history(self) -> AdvancedSubscriberBuilder<'a, 'b, Handler>;
+    fn history(self) -> AdvancedSubscriberBuilder<'a, 'b, Handler>; // TODO take HistoryConf as parameter
 
     /// Ask for retransmission of detected lost Samples.
     ///
     /// Retransmission can only be achieved by Publishers that also activate retransmission.
-    fn retransmission(self) -> AdvancedSubscriberBuilder<'a, 'b, Handler>;
+    fn retransmission(self, conf: RetransmissionConf)
+        -> AdvancedSubscriberBuilder<'a, 'b, Handler>;
 
     /// Enable detection of late joiner publishers and query for their historical data.
     ///
@@ -261,9 +262,12 @@ impl<'a, 'b, Handler> DataSubscriberBuilderExt<'a, 'b, Handler>
     /// Ask for retransmission of detected lost Samples.
     ///
     /// Retransmission can only be achieved by Publishers that also activate retransmission.
-    fn retransmission(self) -> AdvancedSubscriberBuilder<'a, 'b, Handler> {
+    fn retransmission(
+        self,
+        conf: RetransmissionConf,
+    ) -> AdvancedSubscriberBuilder<'a, 'b, Handler> {
         AdvancedSubscriberBuilder::new(self.session, self.key_expr, self.origin, self.handler)
-            .retransmission()
+            .retransmission(conf)
     }
 
     /// Enable detection of late joiner publishers and query for their historical data.

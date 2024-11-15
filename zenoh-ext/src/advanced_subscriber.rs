@@ -43,16 +43,38 @@ use {
 
 use crate::advanced_cache::{ke_liveliness, KE_PREFIX, KE_STAR, KE_UHLC};
 
+#[derive(Debug, Default, Clone)]
+/// Configure the history size of an [`AdvancedCache`].
+pub struct RetransmissionConf {
+    periodic_queries: Option<Duration>,
+}
+
+impl RetransmissionConf {
+    /// Enable periodic queries for not yet received Samples and specify their period.
+    ///
+    /// This allows to retrieve the last Sample(s) if the last Sample(s) is/are lost.
+    /// So it is useful for sporadic publications but useless for periodic publications
+    /// with a period smaller or equal to this period.
+    /// Retransmission can only be achieved by Publishers that also activate retransmission.
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn periodic_queries(mut self, period: Option<Duration>) -> Self {
+        self.periodic_queries = period;
+        self
+    }
+
+    // TODO pub fn sample_miss_callback(mut self, callback: Callback) -> Self
+}
+
 /// The builder of AdvancedSubscriber, allowing to configure it.
 #[zenoh_macros::unstable]
 pub struct AdvancedSubscriberBuilder<'a, 'b, Handler, const BACKGROUND: bool = false> {
     pub(crate) session: &'a Session,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) origin: Locality,
-    pub(crate) retransmission: bool,
+    pub(crate) retransmission: Option<RetransmissionConf>,
     pub(crate) query_target: QueryTarget,
     pub(crate) query_timeout: Duration,
-    pub(crate) period: Option<Duration>,
     pub(crate) history: bool,
     pub(crate) liveliness: bool,
     pub(crate) handler: Handler,
@@ -71,12 +93,11 @@ impl<'a, 'b, Handler> AdvancedSubscriberBuilder<'a, 'b, Handler> {
             key_expr,
             origin,
             handler,
-            retransmission: false,
+            retransmission: None,
             query_target: QueryTarget::All,
             query_timeout: Duration::from_secs(10),
             history: false,
             liveliness: false,
-            period: None,
         }
     }
 }
@@ -99,7 +120,6 @@ impl<'a, 'b> AdvancedSubscriberBuilder<'a, 'b, DefaultHandler> {
             retransmission: self.retransmission,
             query_target: self.query_target,
             query_timeout: self.query_timeout,
-            period: self.period,
             history: self.history,
             liveliness: self.liveliness,
             handler: callback,
@@ -134,7 +154,6 @@ impl<'a, 'b> AdvancedSubscriberBuilder<'a, 'b, DefaultHandler> {
             retransmission: self.retransmission,
             query_target: self.query_target,
             query_timeout: self.query_timeout,
-            period: self.period,
             history: self.history,
             liveliness: self.liveliness,
             handler,
@@ -158,8 +177,8 @@ impl<'a, 'b, Handler> AdvancedSubscriberBuilder<'a, 'b, Handler> {
     /// Retransmission can only be achieved by Publishers that also activate retransmission.
     #[zenoh_macros::unstable]
     #[inline]
-    pub fn retransmission(mut self) -> Self {
-        self.retransmission = true;
+    pub fn retransmission(mut self, conf: RetransmissionConf) -> Self {
+        self.retransmission = Some(conf);
         self
     }
 
@@ -179,25 +198,13 @@ impl<'a, 'b, Handler> AdvancedSubscriberBuilder<'a, 'b, Handler> {
         self
     }
 
-    /// Enable periodic queries for not yet received Samples and specify their period.
-    ///
-    /// This allows to retrieve the last Sample(s) if the last Sample(s) is/are lost.
-    /// So it is useful for sporadic publications but useless for periodic publications
-    /// with a period smaller or equal to this period.
-    /// Retransmission can only be achieved by Publishers that also activate retransmission.
-    #[zenoh_macros::unstable]
-    #[inline]
-    pub fn periodic_queries(mut self, period: Option<Duration>) -> Self {
-        self.period = period;
-        self
-    }
-
     /// Enable query for historical data.
     ///
     /// History can only be retransmitted by Publishers that also activate history.
     #[zenoh_macros::unstable]
     #[inline]
     pub fn history(mut self) -> Self {
+        // TODO take HistoryConf as parameter
         self.history = true;
         self
     }
@@ -221,7 +228,6 @@ impl<'a, 'b, Handler> AdvancedSubscriberBuilder<'a, 'b, Handler> {
             retransmission: self.retransmission,
             query_target: self.query_target,
             query_timeout: self.query_timeout,
-            period: self.period,
             history: self.history,
             liveliness: self.liveliness,
             handler: self.handler,
@@ -439,20 +445,22 @@ impl<Handler> AdvancedSubscriber<Handler> {
         let query_target = conf.query_target;
         let query_timeout = conf.query_timeout;
         let session = conf.session.clone();
-        let periodic_query = conf.period.map(|period| {
-            (
-                Arc::new(Timer::new(false)),
-                period,
-                PeriodicQuery {
-                    source_id: None,
-                    statesref: statesref.clone(),
-                    key_expr: key_expr.clone().into_owned(),
-                    session,
-                    query_target,
-                    query_timeout,
-                    callback: callback.clone(),
-                },
-            )
+        let periodic_query = retransmission.as_ref().and_then(|r| {
+            r.periodic_queries.map(|period| {
+                (
+                    Arc::new(Timer::new(false)),
+                    period,
+                    PeriodicQuery {
+                        source_id: None,
+                        statesref: statesref.clone(),
+                        key_expr: key_expr.clone().into_owned(),
+                        session,
+                        query_target,
+                        query_timeout,
+                        callback: callback.clone(),
+                    },
+                )
+            })
         });
 
         let sub_callback = {
@@ -479,7 +487,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                     }
 
                     if let Some(state) = states.sequenced_states.get_mut(&source_id) {
-                        if retransmission
+                        if retransmission.is_some()
                             && state.pending_queries == 0
                             && !state.pending_samples.is_empty()
                         {

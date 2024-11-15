@@ -45,6 +45,38 @@ kedefine!(
     pub(crate) ke_liveliness: "@cache/${zid:*}/${eid:*}/${remaining:**}",
 );
 
+#[derive(Debug, Clone)]
+/// Configure the history size of an [`AdvancedCache`].
+pub struct HistoryConf {
+    sample_depth: usize,
+    resources_limit: Option<usize>,
+}
+
+impl Default for HistoryConf {
+    fn default() -> Self {
+        Self {
+            sample_depth: 1,
+            resources_limit: None,
+        }
+    }
+}
+
+impl HistoryConf {
+    /// Specify how many samples to keep for each resource.
+    pub fn sample_depth(mut self, depth: usize) -> Self {
+        self.sample_depth = depth;
+        self
+    }
+
+    // TODO pub fn time_depth(mut self, depth: Duration) -> Self
+
+    /// Specify the maximum total number of samples to keep.
+    pub fn resources_limit(mut self, limit: usize) -> Self {
+        self.resources_limit = Some(limit);
+        self
+    }
+}
+
 /// The builder of AdvancedCache, allowing to configure it.
 pub struct AdvancedCacheBuilder<'a, 'b, 'c> {
     session: &'a Session,
@@ -52,9 +84,8 @@ pub struct AdvancedCacheBuilder<'a, 'b, 'c> {
     queryable_prefix: Option<ZResult<KeyExpr<'c>>>,
     subscriber_origin: Locality,
     queryable_origin: Locality,
-    history: usize,
+    history: HistoryConf,
     liveliness: bool,
-    resources_limit: Option<usize>,
 }
 
 impl<'a, 'b, 'c> AdvancedCacheBuilder<'a, 'b, 'c> {
@@ -68,9 +99,8 @@ impl<'a, 'b, 'c> AdvancedCacheBuilder<'a, 'b, 'c> {
             queryable_prefix: Some(Ok((KE_PREFIX / KE_STAR / KE_STAR).into())),
             subscriber_origin: Locality::default(),
             queryable_origin: Locality::default(),
-            history: 1024,
+            history: HistoryConf::default(),
             liveliness: false,
-            resources_limit: None,
         }
     }
 
@@ -101,14 +131,8 @@ impl<'a, 'b, 'c> AdvancedCacheBuilder<'a, 'b, 'c> {
     }
 
     /// Change the history size for each resource.
-    pub fn history(mut self, history: usize) -> Self {
+    pub fn history(mut self, history: HistoryConf) -> Self {
         self.history = history;
-        self
-    }
-
-    /// Change the limit number of cached resources.
-    pub fn resources_limit(mut self, limit: usize) -> Self {
-        self.resources_limit = Some(limit);
         self
     }
 
@@ -180,10 +204,9 @@ impl AdvancedCache {
                 Some(Err(e)) => bail!("Invalid key expression for queryable_prefix: {}", e),
             };
         tracing::debug!(
-            "Create AdvancedCache on {} with history={} resource_limit={:?}",
+            "Create AdvancedCache on {} with history={:?}",
             &key_expr,
             conf.history,
-            conf.resources_limit
         );
 
         // declare the local subscriber that will store the local publications
@@ -204,14 +227,13 @@ impl AdvancedCache {
         let sub_recv = sub.handler().clone();
         let quer_recv = queryable.handler().clone();
         let pub_key_expr = key_expr.into_owned();
-        let resources_limit = conf.resources_limit;
         let history = conf.history;
 
         let (stoptx, stoprx) = bounded::<bool>(1);
         task::spawn(async move {
             let mut cache: HashMap<OwnedKeyExpr, VecDeque<Sample>> =
-                HashMap::with_capacity(resources_limit.unwrap_or(32));
-            let limit = resources_limit.unwrap_or(usize::MAX);
+                HashMap::with_capacity(history.resources_limit.unwrap_or(32));
+            let limit = history.resources_limit.unwrap_or(usize::MAX);
 
             loop {
                 select!(
@@ -225,7 +247,7 @@ impl AdvancedCache {
                             };
 
                             if let Some(queue) = cache.get_mut(queryable_key_expr.as_keyexpr()) {
-                                if queue.len() >= history {
+                                if queue.len() >= history.sample_depth {
                                     queue.pop_front();
                                 }
                                 queue.push_back(sample);

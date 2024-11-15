@@ -29,7 +29,7 @@ use zenoh::{
 };
 
 use crate::{
-    advanced_cache::{AdvancedCache, KE_PREFIX, KE_UHLC},
+    advanced_cache::{AdvancedCache, HistoryConf, KE_PREFIX, KE_UHLC},
     SessionExt,
 };
 
@@ -47,8 +47,7 @@ pub struct AdvancedPublisherBuilder<'a, 'b> {
     sequencing: Sequencing,
     liveliness: bool,
     cache: bool,
-    history: usize,
-    resources_limit: Option<usize>,
+    history: HistoryConf,
 }
 
 impl<'a, 'b> AdvancedPublisherBuilder<'a, 'b> {
@@ -62,8 +61,7 @@ impl<'a, 'b> AdvancedPublisherBuilder<'a, 'b> {
             sequencing: Sequencing::None,
             liveliness: false,
             cache: false,
-            history: 1,
-            resources_limit: None,
+            history: HistoryConf::default(),
         }
     }
 
@@ -77,16 +75,10 @@ impl<'a, 'b> AdvancedPublisherBuilder<'a, 'b> {
     }
 
     /// Change the history size for each resource.
-    pub fn history(mut self, history: usize) -> Self {
+    pub fn history(mut self, history: HistoryConf) -> Self {
         self.cache = true;
         self.sequencing = Sequencing::Timestamp;
         self.history = history;
-        self
-    }
-
-    /// Change the limit number of cached resources.
-    pub fn resources_limit(mut self, limit: usize) -> Self {
-        self.resources_limit = Some(limit);
         self
     }
 
@@ -159,16 +151,14 @@ impl<'a> AdvancedPublisher<'a> {
         };
 
         let cache = if conf.cache {
-            let mut builder = conf
-                .session
-                .declare_advanced_cache(key_expr.clone().into_owned())
-                .subscriber_allowed_origin(Locality::SessionLocal)
-                .history(conf.history)
-                .queryable_prefix(&prefix);
-            if let Some(resources_limit) = conf.resources_limit {
-                builder = builder.resources_limit(resources_limit);
-            }
-            Some(builder.wait()?)
+            Some(
+                conf.session
+                    .declare_advanced_cache(key_expr.clone().into_owned())
+                    .subscriber_allowed_origin(Locality::SessionLocal)
+                    .history(conf.history)
+                    .queryable_prefix(&prefix)
+                    .wait()?,
+            )
         } else {
             None
         };
