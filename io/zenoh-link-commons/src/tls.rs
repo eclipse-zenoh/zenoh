@@ -146,13 +146,9 @@ pub mod expiration {
         expiration_time: OffsetDateTime,
         token: CancellationToken,
     ) {
-        // NOTE: should expose or tune sleep duration
-        const MAX_EXPIRATION_SLEEP_DURATION: tokio::time::Duration =
-            tokio::time::Duration::from_secs(600);
-
-        loop {
-            let now = OffsetDateTime::now_utc();
-            if expiration_time <= now {
+        tokio::select! {
+            _ = token.cancelled() => {},
+            _ = sleep_until_date(expiration_time) => {
                 // close link
                 if let Some(link) = link.upgrade() {
                     tracing::warn!(
@@ -171,19 +167,23 @@ pub mod expiration {
                         )
                     }
                 }
+            },
+        }
+    }
+
+    async fn sleep_until_date(wakeup_time: OffsetDateTime) {
+        const MAX_SLEEP_DURATION: tokio::time::Duration = tokio::time::Duration::from_secs(600);
+        loop {
+            let now = OffsetDateTime::now_utc();
+            if wakeup_time <= now {
                 break;
             }
-            // next sleep duration is the minimum between MAX_EXPIRATION_SLEEP_DURATION and the duration till next expiration
+            // next sleep duration is the minimum between MAX_SLEEP_DURATION and the duration till wakeup
             // this mitigates the unsoundness of using `tokio::time::sleep` with long durations
-            let next_expiration_duration = std::time::Duration::try_from(expiration_time - now)
-                .expect("expiration_time should be greater than now");
-            let sleep_duration =
-                tokio::time::Duration::min(MAX_EXPIRATION_SLEEP_DURATION, next_expiration_duration);
-
-            tokio::select! {
-                _ = token.cancelled() => break,
-                _ = tokio::time::sleep(sleep_duration) => {},
-            }
+            let wakeup_duration = std::time::Duration::try_from(wakeup_time - now)
+                .expect("wakeup_time should be greater than now");
+            let sleep_duration = tokio::time::Duration::min(MAX_SLEEP_DURATION, wakeup_duration);
+            tokio::time::sleep(sleep_duration).await;
         }
     }
 }
