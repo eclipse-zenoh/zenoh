@@ -60,7 +60,6 @@ impl TransportLinkUnicastUniversal {
                 is_streamed: link.link.is_streamed(),
                 #[cfg(feature = "transport_compression")]
                 is_compression: link.config.batch.is_compression,
-                ephemeral: false,
             },
             queue_size: transport.manager.config.queue_size,
             wait_before_drop: transport.manager.config.wait_before_drop,
@@ -192,7 +191,7 @@ async fn tx_task(
                             stats.inc_tx_bytes(batch.len() as usize);
                         }
 
-                        if !batch.config.ephemeral {
+                        if !batch.is_ephemeral() {
                             // Reinsert the batch into the queue
                             pipeline.refill(batch, priority);
                         }
