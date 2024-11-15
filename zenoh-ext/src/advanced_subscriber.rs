@@ -566,6 +566,8 @@ impl<Handler> AdvancedSubscriber<Handler> {
                     if s.kind() == SampleKind::Put {
                         if let Ok(parsed) = ke_liveliness::parse(s.key_expr().as_keyexpr()) {
                             if let Ok(zid) = ZenohId::from_str(parsed.zid().as_str()) {
+                                // TODO : If we already have a state associated to this discovered source
+                                // we should query with the appropriate range to avoid unnecessary retransmissions
                                 if parsed.eid() == KE_UHLC {
                                     let states = &mut *zlock!(statesref);
                                     let entry = states.timestamped_states.entry(ID::from(zid));
@@ -692,6 +694,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                 .liveliness()
                 .declare_subscriber(KE_PREFIX / KE_STAR / KE_STAR / &key_expr)
                 // .declare_subscriber(keformat!(ke_liveliness_all::formatter(), zid = 0, eid = 0, remaining = key_expr).unwrap())
+                .history(true)
                 .callback(live_callback)
                 .wait()?,
             )
