@@ -346,7 +346,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
                     weak_link.clone(),
                     src_addr,
                     dst_addr,
-                    TLS_LOCATOR_PREFIX.to_string(),
+                    TLS_LOCATOR_PREFIX,
                     certchain_expiration_time,
                 ))
             }
@@ -484,7 +484,7 @@ async fn accept_task(
                                         weak_link.clone(),
                                         src_addr,
                                         dst_addr,
-                                        TLS_LOCATOR_PREFIX.to_string(),
+                                        TLS_LOCATOR_PREFIX,
                                         certchain_expiration_time,
                                     ));
                                 } else {

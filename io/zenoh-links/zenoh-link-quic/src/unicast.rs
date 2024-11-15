@@ -277,7 +277,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
                     weak_link.clone(),
                     src_addr,
                     dst_addr,
-                    QUIC_LOCATOR_PREFIX.to_string(),
+                    QUIC_LOCATOR_PREFIX,
                     certchain_expiration_time,
                 ))
             }
@@ -466,7 +466,7 @@ async fn accept_task(
                                         weak_link.clone(),
                                         src_addr,
                                         dst_addr,
-                                        QUIC_LOCATOR_PREFIX.to_string(),
+                                        QUIC_LOCATOR_PREFIX,
                                         certchain_expiration_time,
                                     ));
                                 } else {

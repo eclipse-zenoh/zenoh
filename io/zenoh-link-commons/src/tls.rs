@@ -107,7 +107,7 @@ pub mod expiration {
             link: Weak<dyn LinkUnicastTrait>,
             src_addr: SocketAddr,
             dst_addr: SocketAddr,
-            link_type: String,
+            link_type: &'static str,
             expiration_time: OffsetDateTime,
         ) -> Self {
             let token = CancellationToken::new();
@@ -142,7 +142,7 @@ pub mod expiration {
         link: Weak<dyn LinkUnicastTrait>,
         src_addr: SocketAddr,
         dst_addr: SocketAddr,
-        link_type: String,
+        link_type: &'static str,
         expiration_time: OffsetDateTime,
         token: CancellationToken,
     ) {
