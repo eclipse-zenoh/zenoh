@@ -22,15 +22,14 @@ use std::{
 use async_trait::async_trait;
 use quinn::crypto::rustls::{QuicClientConfig, QuicServerConfig};
 use time::OffsetDateTime;
-use tokio::sync::{Mutex as AsyncMutex, OnceCell};
+use tokio::sync::Mutex as AsyncMutex;
 use tokio_util::sync::CancellationToken;
 use x509_parser::prelude::{FromDer, X509Certificate};
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
-    get_ip_interface_names,
-    tls::expiration::{LinkCertExpirationInfo, LinkCertExpirationManager},
-    LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
-    ListenersUnicastIP, NewLinkChannelSender,
+    get_ip_interface_names, tls::expiration::LinkCertExpirationManager, LinkAuthId, LinkAuthType,
+    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
+    NewLinkChannelSender,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -51,7 +50,9 @@ pub struct LinkUnicastQuic {
     send: AsyncMutex<quinn::SendStream>,
     recv: AsyncMutex<quinn::RecvStream>,
     auth_identifier: LinkAuthId,
-    expiration_manager: OnceCell<LinkCertExpirationManager>,
+    // expiration_manager is unused:
+    // its initialization and drop handle the spawn and clean-up of expiration task
+    _expiration_manager: Option<LinkCertExpirationManager>,
 }
 
 impl LinkUnicastQuic {
@@ -62,6 +63,7 @@ impl LinkUnicastQuic {
         send: quinn::SendStream,
         recv: quinn::RecvStream,
         auth_identifier: LinkAuthId,
+        expiration_manager: Option<LinkCertExpirationManager>,
     ) -> LinkUnicastQuic {
         // Build the Quic object
         LinkUnicastQuic {
@@ -72,7 +74,7 @@ impl LinkUnicastQuic {
             send: AsyncMutex::new(send),
             recv: AsyncMutex::new(recv),
             auth_identifier,
-            expiration_manager: OnceCell::new(),
+            _expiration_manager: expiration_manager,
         }
     }
 }
@@ -224,17 +226,17 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .ok_or("Endpoints must be of the form quic/<address>:<port>")?;
         let epconf = endpoint.config();
 
-        let addr = get_quic_addr(&epaddr).await?;
+        let dst_addr = get_quic_addr(&epaddr).await?;
 
         // Initialize the QUIC connection
         let mut client_crypto = TlsClientConfig::new(&epconf)
             .await
-            .map_err(|e| zerror!("Cannot create a new QUIC client on {addr}: {e}"))?;
+            .map_err(|e| zerror!("Cannot create a new QUIC client on {dst_addr}: {e}"))?;
 
         client_crypto.client_config.alpn_protocols =
             ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
-        let ip_addr: IpAddr = if addr.is_ipv4() {
+        let ip_addr: IpAddr = if dst_addr.is_ipv4() {
             Ipv4Addr::UNSPECIFIED.into()
         } else {
             Ipv6Addr::UNSPECIFIED.into()
@@ -253,7 +255,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
 
         let quic_conn = quic_endpoint
-            .connect(addr, host)
+            .connect(dst_addr, host)
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?
             .await
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
@@ -267,28 +269,33 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let certchain_expiration_time =
             get_cert_chain_expiration(&quic_conn)?.expect("server should have certificate chain");
 
-        let link = Arc::new(LinkUnicastQuic::new(
-            quic_conn,
-            src_addr,
-            endpoint.into(),
-            send,
-            recv,
-            auth_id.into(),
-        ));
-
-        if client_crypto.tls_close_link_on_expiration {
-            // setup expiration manager
-            let link_trait_object: Arc<dyn LinkUnicastTrait> = link.clone();
-            let expiration_info = LinkCertExpirationInfo::new(
-                Arc::downgrade(&link_trait_object),
-                certchain_expiration_time,
-                &link.src_locator,
-                &link.dst_locator,
-            );
-            link.expiration_manager
-                .set(LinkCertExpirationManager::new(expiration_info, None))
-                .expect("should be the only call to initialize expiration manager");
-        }
+        let link = Arc::<LinkUnicastQuic>::new_cyclic(|weak_link| {
+            let mut maybe_expiration_manager = None;
+            if client_crypto.tls_close_link_on_expiration {
+                // setup expiration manager
+                tracing::trace!(
+                    "Expiration task started for QUIC link {:?} => {:?}",
+                    src_addr,
+                    dst_addr,
+                );
+                maybe_expiration_manager = Some(LinkCertExpirationManager::new(
+                    weak_link.clone(),
+                    src_addr,
+                    dst_addr,
+                    QUIC_LOCATOR_PREFIX.to_string(),
+                    certchain_expiration_time,
+                ))
+            }
+            LinkUnicastQuic::new(
+                quic_conn,
+                src_addr,
+                endpoint.into(),
+                send,
+                recv,
+                auth_id.into(),
+                maybe_expiration_manager,
+            )
+        });
 
         Ok(LinkUnicast(link))
     }
@@ -446,6 +453,7 @@ async fn accept_task(
                             }
                         };
                         let dst_addr = quic_conn.remote_address();
+                        let dst_locator = Locator::new(QUIC_LOCATOR_PREFIX, dst_addr.to_string(), "")?;
                         // Get Quic auth identifier
                         let auth_id = get_cert_common_name(&quic_conn)?;
 
@@ -454,36 +462,41 @@ async fn accept_task(
 
                         tracing::debug!("Accepted QUIC connection on {:?}: {:?}", src_addr, dst_addr);
                         // Create the new link object
-                        let link = Arc::new(LinkUnicastQuic::new(
-                            quic_conn,
-                            src_addr,
-                            Locator::new(QUIC_LOCATOR_PREFIX, dst_addr.to_string(), "")?,
-                            send,
-                            recv,
-                            auth_id.into()
-                        ));
-
-                        if tls_close_link_on_expiration {
-                            // setup expiration manager if applicable
-                            if let Some(certchain_expiration_time) = maybe_expiration_time {
-                                let link_trait_object: Arc<dyn LinkUnicastTrait> = link.clone();
-                                let expiration_info = LinkCertExpirationInfo::new(
-                                    Arc::downgrade(&link_trait_object),
-                                    certchain_expiration_time,
-                                    &link.src_locator,
-                                    &link.dst_locator,
-                                );
-                                link.expiration_manager
-                                    .set(LinkCertExpirationManager::new(expiration_info, Some(token.child_token())))
-                                    .expect("should be the only call to initialize expiration manager");
-                            } else {
-                                tracing::warn!(
-                                    "Cannot monitor expiration for link {} -> {} : client does not have certificates",
-                                    link.src_locator,
-                                    link.dst_locator
-                                );
+                        let link = Arc::<LinkUnicastQuic>::new_cyclic(|weak_link| {
+                            let mut maybe_expiration_manager = None;
+                            if tls_close_link_on_expiration {
+                                if let Some(certchain_expiration_time) = maybe_expiration_time {
+                                    // setup expiration manager
+                                    tracing::trace!(
+                                        "Expiration task started for QUIC link {:?} => {:?}",
+                                        src_addr,
+                                        dst_addr,
+                                    );
+                                    maybe_expiration_manager = Some(LinkCertExpirationManager::new(
+                                        weak_link.clone(),
+                                        src_addr,
+                                        dst_addr,
+                                        QUIC_LOCATOR_PREFIX.to_string(),
+                                        certchain_expiration_time,
+                                    ));
+                                } else {
+                                    tracing::warn!(
+                                        "Cannot monitor expiration for QUIC link {:?} => {:?} : client does not have certificates",
+                                        src_addr,
+                                        dst_addr,
+                                    );
+                                }
                             }
-                        }
+                            LinkUnicastQuic::new(
+                                quic_conn,
+                                src_addr,
+                                dst_locator,
+                                send,
+                                recv,
+                                auth_id.into(),
+                                maybe_expiration_manager,
+                            )
+                        });
 
                         // Communicate the new link to the initial transport manager
                         if let Err(e) = manager.send_async(LinkUnicast(link)).await {

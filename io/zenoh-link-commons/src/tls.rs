@@ -88,29 +88,37 @@ impl WebPkiVerifierAnyServerName {
 }
 
 pub mod expiration {
-    use std::sync::Weak;
+    use std::{net::SocketAddr, sync::Weak};
 
     use time::OffsetDateTime;
     use tokio::task::JoinHandle;
     use tokio_util::sync::CancellationToken;
-    use zenoh_protocol::core::Locator;
 
     use crate::LinkUnicastTrait;
 
     #[derive(Debug)]
     pub struct LinkCertExpirationManager {
-        pub token: CancellationToken,
+        token: CancellationToken,
         handle: Option<JoinHandle<()>>,
     }
 
     impl LinkCertExpirationManager {
         pub fn new(
-            expiration_info: LinkCertExpirationInfo,
-            token: Option<CancellationToken>,
+            link: Weak<dyn LinkUnicastTrait>,
+            src_addr: SocketAddr,
+            dst_addr: SocketAddr,
+            link_type: String,
+            expiration_time: OffsetDateTime,
         ) -> Self {
-            let token = token.unwrap_or_default();
-            let handle = zenoh_runtime::ZRuntime::Acceptor
-                .spawn(expiration_task(expiration_info, token.clone()));
+            let token = CancellationToken::new();
+            let handle = zenoh_runtime::ZRuntime::Acceptor.spawn(expiration_task(
+                link,
+                src_addr,
+                dst_addr,
+                link_type,
+                expiration_time,
+                token.clone(),
+            ));
             Self {
                 token,
                 handle: Some(handle),
@@ -122,40 +130,43 @@ pub mod expiration {
     impl Drop for LinkCertExpirationManager {
         fn drop(&mut self) {
             if let Some(handle) = self.handle.take() {
+                self.token.cancel();
                 zenoh_runtime::ZRuntime::Acceptor.block_in_place(async {
-                    self.token.cancel();
                     let _ = handle.await;
                 })
             }
         }
     }
 
-    async fn expiration_task(expiration_info: LinkCertExpirationInfo, token: CancellationToken) {
-        // TODO: Expose or tune sleep duration
+    async fn expiration_task(
+        link: Weak<dyn LinkUnicastTrait>,
+        src_addr: SocketAddr,
+        dst_addr: SocketAddr,
+        link_type: String,
+        expiration_time: OffsetDateTime,
+        token: CancellationToken,
+    ) {
+        // NOTE: should expose or tune sleep duration
         const MAX_EXPIRATION_SLEEP_DURATION: tokio::time::Duration =
             tokio::time::Duration::from_secs(600);
 
-        tracing::trace!(
-            "Expiration task started for link {} => {}",
-            expiration_info.src_locator,
-            expiration_info.dst_locator,
-        );
-
         loop {
             let now = OffsetDateTime::now_utc();
-            if expiration_info.expiration_time <= now {
+            if expiration_time <= now {
                 // close link
-                if let Some(link) = expiration_info.link.upgrade() {
+                if let Some(link) = link.upgrade() {
                     tracing::warn!(
-                        "Closing link {} => {} : remote certificate chain expired",
-                        expiration_info.src_locator,
-                        expiration_info.dst_locator,
+                        "Closing {} link {:?} => {:?} : remote certificate chain expired",
+                        link_type.to_uppercase(),
+                        src_addr,
+                        dst_addr,
                     );
                     if let Err(e) = link.close().await {
                         tracing::error!(
-                            "Error closing link {} => {} : {}",
-                            expiration_info.src_locator,
-                            expiration_info.dst_locator,
+                            "Error closing {} link {:?} => {:?} : {}",
+                            link_type.to_uppercase(),
+                            src_addr,
+                            dst_addr,
                             e
                         )
                     }
@@ -172,30 +183,6 @@ pub mod expiration {
             tokio::select! {
                 _ = token.cancelled() => break,
                 _ = tokio::time::sleep(sleep_duration) => {},
-            }
-        }
-    }
-
-    pub struct LinkCertExpirationInfo {
-        // Weak is used instead of Arc, in order to allow cleanup at Drop of the underlying link which owns the expiration manager
-        link: Weak<dyn LinkUnicastTrait>,
-        expiration_time: OffsetDateTime,
-        src_locator: Locator,
-        dst_locator: Locator,
-    }
-
-    impl LinkCertExpirationInfo {
-        pub fn new(
-            link: Weak<dyn LinkUnicastTrait>,
-            expiration_time: OffsetDateTime,
-            src_locator: &Locator,
-            dst_locator: &Locator,
-        ) -> Self {
-            Self {
-                link,
-                expiration_time,
-                src_locator: src_locator.clone(),
-                dst_locator: dst_locator.clone(),
             }
         }
     }
