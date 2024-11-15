@@ -146,6 +146,12 @@ pub mod expiration {
         expiration_time: OffsetDateTime,
         token: CancellationToken,
     ) {
+        tracing::trace!(
+            "Expiration task started for {} link {:?} => {:?}",
+            link_type.to_uppercase(),
+            src_addr,
+            dst_addr,
+        );
         tokio::select! {
             _ = token.cancelled() => {},
             _ = sleep_until_date(expiration_time) => {

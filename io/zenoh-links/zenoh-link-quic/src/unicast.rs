@@ -273,11 +273,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             let mut maybe_expiration_manager = None;
             if client_crypto.tls_close_link_on_expiration {
                 // setup expiration manager
-                tracing::trace!(
-                    "Expiration task started for QUIC link {:?} => {:?}",
-                    src_addr,
-                    dst_addr,
-                );
                 maybe_expiration_manager = Some(LinkCertExpirationManager::new(
                     weak_link.clone(),
                     src_addr,
@@ -467,11 +462,6 @@ async fn accept_task(
                             if tls_close_link_on_expiration {
                                 if let Some(certchain_expiration_time) = maybe_expiration_time {
                                     // setup expiration manager
-                                    tracing::trace!(
-                                        "Expiration task started for QUIC link {:?} => {:?}",
-                                        src_addr,
-                                        dst_addr,
-                                    );
                                     maybe_expiration_manager = Some(LinkCertExpirationManager::new(
                                         weak_link.clone(),
                                         src_addr,
