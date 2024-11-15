@@ -15,6 +15,33 @@
 
 ## Examples description
 
+### z_advanced_pub
+
+   Declares an AdvancedPublisher with a given key expression.  
+   All the publications are locally cached (with a configurable history size - i.e. max number of cached data per resource, default 1). The cache can be queried by an AdvancedSubscriber for hsitory
+   or retransmission.
+
+   Typical usage:
+   ```bash
+      z_advanced_pub
+   ```
+   or
+   ```bash
+      z_advanced_pub --history 10
+   ```
+
+### z_advanced_sub
+
+   Declares an AdvancedSubscriber with a given key expression.  
+   The AdvancedSubscriber can query for AdvancedPublisher history at startup
+   and on late joiner publisher detection. The AdvancedSubscriber can detect
+   sample loss and ask for retransmission.
+
+   Typical usage:
+   ```bash
+      z_advanced_sub
+   ```
+
 ### z_pub_cache
 
    Declares a publisher and an associated publication cache with a given key expression.  
