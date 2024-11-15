@@ -554,6 +554,7 @@ pub(crate) async fn open_link(
             is_streamed,
             #[cfg(feature = "transport_compression")]
             is_compression: false, // Perform the exchange Init/Open exchange with no compression
+            ephemeral: false,
         },
         priorities: None,
         reliability: None,
@@ -678,6 +679,7 @@ pub(crate) async fn open_link(
             is_streamed,
             #[cfg(feature = "transport_compression")]
             is_compression: state.link.ext_compression.is_compression(),
+            ephemeral: false,
         },
         priorities: state.transport.ext_qos.priorities(),
         reliability: state.transport.ext_qos.reliability(),

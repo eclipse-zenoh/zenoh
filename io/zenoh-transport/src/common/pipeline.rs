@@ -34,6 +34,7 @@ use zenoh_protocol::{
     core::Priority,
     network::NetworkMessage,
     transport::{
+        fragment,
         fragment::FragmentHeader,
         frame::{self, FrameHeader},
         AtomicBatchSize, BatchSize, TransportMessage,
@@ -202,6 +203,8 @@ struct StageIn {
     mutex: StageInMutex,
     fragbuf: ZBuf,
     batching: bool,
+    // used for stop fragment
+    ephermeral_batch_config: BatchConfig,
 }
 
 impl StageIn {
@@ -318,19 +321,32 @@ impl StageIn {
             more: true,
             sn,
             ext_qos: frame.ext_qos,
+            ext_start: Some(fragment::ext::Start::new()),
+            ext_stop: None,
         };
         let mut reader = self.fragbuf.reader();
         while reader.can_read() {
             // Get the current serialization batch
-            // If deadline is reached, sequence number is incremented with `SeqNumGenerator::get`
-            // in order to break the fragment chain already sent.
-            batch = zgetbatch_rets!(let _ = tch.sn.get());
+            batch = zgetbatch_rets!({
+                // If no fragment has been sent, the sequence number is just reset
+                if fragment.ext_start.is_some() {
+                    tch.sn.set(sn).unwrap()
+                // Otherwise, an ephemeral batch is created to send the stop fragment
+                } else {
+                    let mut batch = WBatch::new(self.ephermeral_batch_config);
+                    self.fragbuf.clear();
+                    fragment.ext_stop = Some(fragment::ext::Stop::new());
+                    let _ = batch.encode((&mut self.fragbuf.reader(), &mut fragment));
+                    self.s_out.move_batch(batch);
+                }
+            });
 
             // Serialize the message fragment
             match batch.encode((&mut reader, &mut fragment)) {
                 Ok(_) => {
                     // Update the SN
                     fragment.sn = tch.sn.get();
+                    fragment.ext_start = None;
                     // Move the serialization batch into the OUT pipeline
                     self.s_out.move_batch(batch);
                 }
@@ -641,6 +657,10 @@ impl TransmissionPipeline {
                 },
                 fragbuf: ZBuf::empty(),
                 batching: config.batching_enabled,
+                ephermeral_batch_config: BatchConfig {
+                    ephemeral: true,
+                    ..config.batch
+                },
             }));
 
             // The stage out for this priority
@@ -849,6 +869,7 @@ mod tests {
             is_streamed: true,
             #[cfg(feature = "transport_compression")]
             is_compression: true,
+            ephemeral: false,
         },
         queue_size: [1; Priority::NUM],
         batching_enabled: true,
@@ -863,6 +884,7 @@ mod tests {
             is_streamed: false,
             #[cfg(feature = "transport_compression")]
             is_compression: false,
+            ephemeral: false,
         },
         queue_size: [1; Priority::NUM],
         batching_enabled: true,

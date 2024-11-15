@@ -84,6 +84,9 @@ pub struct BatchConfig {
     pub is_streamed: bool,
     #[cfg(feature = "transport_compression")]
     pub is_compression: bool,
+    // an ephemeral batch will not be recycled in the pipeline
+    // it can be used to push a stop fragment when no batch are available
+    pub ephemeral: bool,
 }
 
 impl Default for BatchConfig {
@@ -93,6 +96,7 @@ impl Default for BatchConfig {
             is_streamed: false,
             #[cfg(feature = "transport_compression")]
             is_compression: false,
+            ephemeral: false,
         }
     }
 }
@@ -525,6 +529,7 @@ mod tests {
                     is_streamed: rng.gen_bool(0.5),
                     #[cfg(feature = "transport_compression")]
                     is_compression: rng.gen_bool(0.5),
+                    ephemeral: false,
                 };
                 let mut wbatch = WBatch::new(config);
                 wbatch.encode(&msg_in).unwrap();
@@ -566,6 +571,7 @@ mod tests {
             is_streamed: false,
             #[cfg(feature = "transport_compression")]
             is_compression: false,
+            ephemeral: false,
         };
         let mut batch = WBatch::new(config);
 

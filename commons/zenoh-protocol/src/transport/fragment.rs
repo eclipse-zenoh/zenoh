@@ -75,14 +75,26 @@ pub struct Fragment {
     pub sn: TransportSn,
     pub payload: ZSlice,
     pub ext_qos: ext::QoSType,
+    pub ext_start: Option<ext::Start>,
+    pub ext_stop: Option<ext::Stop>,
 }
 
 // Extensions
 pub mod ext {
-    use crate::{common::ZExtZ64, zextz64};
+    use crate::{
+        common::{ZExtUnit, ZExtZ64},
+        zextunit, zextz64,
+    };
 
     pub type QoS = zextz64!(0x1, true);
     pub type QoSType = crate::transport::ext::QoSType<{ QoS::ID }>;
+
+    /// # Start extension
+    /// Mark the first fragment of a fragmented message
+    pub type Start = zextunit!(0x2, false);
+    /// # Stop extension
+    /// Indicate that the remaining fragments has been dropped
+    pub type Stop = zextunit!(0x3, false);
 }
 
 impl Fragment {
@@ -97,6 +109,8 @@ impl Fragment {
         let sn: TransportSn = rng.gen();
         let payload = ZSlice::rand(rng.gen_range(8..128));
         let ext_qos = ext::QoSType::rand();
+        let ext_start = rng.gen_bool(0.5).then(ext::Start::rand);
+        let ext_stop = rng.gen_bool(0.5).then(ext::Stop::rand);
 
         Fragment {
             reliability,
@@ -104,6 +118,8 @@ impl Fragment {
             more,
             payload,
             ext_qos,
+            ext_start,
+            ext_stop,
         }
     }
 }
@@ -115,6 +131,8 @@ pub struct FragmentHeader {
     pub more: bool,
     pub sn: TransportSn,
     pub ext_qos: ext::QoSType,
+    pub ext_start: Option<ext::Start>,
+    pub ext_stop: Option<ext::Stop>,
 }
 
 impl FragmentHeader {
@@ -128,12 +146,16 @@ impl FragmentHeader {
         let more = rng.gen_bool(0.5);
         let sn: TransportSn = rng.gen();
         let ext_qos = ext::QoSType::rand();
+        let ext_start = rng.gen_bool(0.5).then(ext::Start::rand);
+        let ext_stop = rng.gen_bool(0.5).then(ext::Stop::rand);
 
         FragmentHeader {
             reliability,
             more,
             sn,
             ext_qos,
+            ext_start,
+            ext_stop,
         }
     }
 }

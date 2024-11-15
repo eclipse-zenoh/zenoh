@@ -657,6 +657,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
             is_streamed,
             #[cfg(feature = "transport_compression")]
             is_compression: false,
+            ephemeral: false,
         },
         priorities: None,
         reliability: None,
@@ -795,6 +796,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
             is_streamed,
             #[cfg(feature = "transport_compression")]
             is_compression: state.link.ext_compression.is_compression(),
+            ephemeral: false,
         },
         priorities: state.transport.ext_qos.priorities(),
         reliability: state.transport.ext_qos.reliability(),

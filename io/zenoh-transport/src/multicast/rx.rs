@@ -183,6 +183,8 @@ impl TransportMulticastInner {
             more,
             sn,
             ext_qos,
+            ext_start,
+            ext_stop,
             payload,
         } = fragment;
 
@@ -209,7 +211,15 @@ impl TransportMulticastInner {
             // Drop invalid message and continue
             return Ok(());
         }
+        if ext_stop.is_some() {
+            return Ok(());
+        }
         if guard.defrag.is_empty() {
+            if ext_start.is_none() {
+                // TODO better message
+                tracing::warn!("a fragment chain was received without the start marker");
+                return Ok(());
+            }
             let _ = guard.defrag.sync(sn);
         }
         if let Err(e) = guard.defrag.push(sn, payload) {
