@@ -163,19 +163,15 @@ pub mod expiration {
                 break;
             }
             // next sleep duration is the minimum between MAX_EXPIRATION_SLEEP_DURATION and the duration till next expiration
-            // this mitigates the unsoundness of using `tokio::time::sleep_until` with long durations
-            let next_expiration_duration = std::time::Duration::from_secs_f32(
-                (expiration_info.expiration_time - now).as_seconds_f32(),
-            );
-            let next_wakeup_instant = tokio::time::Instant::now()
-                + tokio::time::Duration::min(
-                    MAX_EXPIRATION_SLEEP_DURATION,
-                    next_expiration_duration,
-                );
+            // this mitigates the unsoundness of using `tokio::time::sleep` with long durations
+            let next_expiration_duration = std::time::Duration::try_from(expiration_time - now)
+                .expect("expiration_time should be greater than now");
+            let sleep_duration =
+                tokio::time::Duration::min(MAX_EXPIRATION_SLEEP_DURATION, next_expiration_duration);
 
             tokio::select! {
                 _ = token.cancelled() => break,
-                _ = tokio::time::sleep_until(next_wakeup_instant) => {},
+                _ = tokio::time::sleep(sleep_duration) => {},
             }
         }
     }
