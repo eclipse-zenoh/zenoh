@@ -43,10 +43,19 @@ use {
 
 use crate::advanced_cache::{ke_liveliness, KE_PREFIX, KE_STAR, KE_UHLC};
 
-#[derive(Debug, Default, Clone)]
+#[derive(Default)]
 /// Configure retransmission.
 pub struct RetransmissionConf {
     periodic_queries: Option<Duration>,
+    sample_miss_callback: Option<Arc<dyn Fn(EntityGlobalId, u32) + Send + Sync>>,
+}
+
+impl std::fmt::Debug for RetransmissionConf {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut s = f.debug_struct("RetransmissionConf");
+        s.field("periodic_queries", &self.periodic_queries);
+        s.finish()
+    }
 }
 
 impl RetransmissionConf {
@@ -63,7 +72,15 @@ impl RetransmissionConf {
         self
     }
 
-    // TODO pub fn sample_miss_callback(mut self, callback: Callback) -> Self
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn sample_miss_callback(
+        mut self,
+        callback: impl Fn(EntityGlobalId, u32) + Send + Sync + 'static,
+    ) -> Self {
+        self.sample_miss_callback = Some(Arc::new(callback));
+        self
+    }
 }
 
 /// The builder of AdvancedSubscriber, allowing to configure it.
@@ -282,6 +299,7 @@ struct State {
     query_target: QueryTarget,
     query_timeout: Duration,
     callback: Callback<Sample>,
+    miss_callback: Option<Arc<dyn Fn(EntityGlobalId, u32) + Send + Sync>>,
 }
 
 macro_rules! spawn_periodoic_queries {
@@ -467,6 +485,9 @@ impl<Handler> AdvancedSubscriber<Handler> {
             query_target: conf.query_target,
             query_timeout: conf.query_timeout,
             callback: callback.clone(),
+            miss_callback: retransmission
+                .as_ref()
+                .and_then(|r| r.sample_miss_callback.clone()),
         }));
 
         let sub_callback = {
@@ -718,24 +739,43 @@ impl<Handler> AdvancedSubscriber<Handler> {
 
 #[zenoh_macros::unstable]
 #[inline]
-fn flush_sequenced_source(state: &mut SourceState<u32>, callback: &Callback<Sample>) {
+fn flush_sequenced_source(
+    state: &mut SourceState<u32>,
+    callback: &Callback<Sample>,
+    source_id: &EntityGlobalId,
+    miss_callback: Option<&Arc<dyn Fn(EntityGlobalId, u32) + Send + Sync>>,
+) {
     if state.pending_queries == 0 && !state.pending_samples.is_empty() {
-        if state.last_delivered.is_some() {
-            tracing::error!("Sample missed: unable to retrieve some missing samples.");
-        }
         let mut pending_samples = state
             .pending_samples
             .drain()
             .collect::<Vec<(u32, Sample)>>();
         pending_samples.sort_by_key(|(k, _s)| *k);
         for (seq_num, sample) in pending_samples {
-            if state
-                .last_delivered
-                .map(|last| seq_num > last)
-                .unwrap_or(true)
-            {
-                state.last_delivered = Some(seq_num);
-                callback.call(sample);
+            match state.last_delivered {
+                None => {
+                    state.last_delivered = Some(seq_num);
+                    callback.call(sample);
+                }
+                Some(last) if seq_num == last + 1 => {
+                    state.last_delivered = Some(seq_num);
+                    callback.call(sample);
+                }
+                Some(last) if seq_num > last + 1 => {
+                    tracing::warn!(
+                        "Sample missed: missed {} samples from {:?}.",
+                        seq_num - last - 1,
+                        source_id,
+                    );
+                    if let Some(miss_callback) = miss_callback {
+                        (miss_callback)(*source_id, seq_num - last - 1)
+                    }
+                    state.last_delivered = Some(seq_num);
+                    callback.call(sample);
+                }
+                _ => {
+                    // duplicate
+                }
             }
         }
     }
@@ -777,7 +817,12 @@ impl Drop for InitialRepliesHandler {
 
         if states.global_pending_queries == 0 {
             for (source_id, state) in states.sequenced_states.iter_mut() {
-                flush_sequenced_source(state, &states.callback);
+                flush_sequenced_source(
+                    state,
+                    &states.callback,
+                    source_id,
+                    states.miss_callback.as_ref(),
+                );
                 spawn_periodoic_queries!(states, *source_id, self.statesref.clone());
             }
             for state in states.timestamped_states.values_mut() {
@@ -801,7 +846,12 @@ impl Drop for SequencedRepliesHandler {
         if let Some(state) = states.sequenced_states.get_mut(&self.source_id) {
             state.pending_queries = state.pending_queries.saturating_sub(1);
             if states.global_pending_queries == 0 {
-                flush_sequenced_source(state, &states.callback)
+                flush_sequenced_source(
+                    state,
+                    &states.callback,
+                    &self.source_id,
+                    states.miss_callback.as_ref(),
+                )
             }
         }
     }
