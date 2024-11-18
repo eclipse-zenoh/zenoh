@@ -339,37 +339,19 @@ impl HatPubSubTrait for HatCode {
                 .values()
                 .filter(|f| f.whatami != WhatAmI::Client)
             {
-                if face.local_interests.values().any(|interest| {
+                if !face.local_interests.values().any(|interest| {
                     interest.finalized
                         && interest.options.subscribers()
                         && interest
                             .res
                             .as_ref()
-                            .map(|res| {
-                                KeyExpr::try_from(res.expr())
-                                    .and_then(|intres| {
-                                        KeyExpr::try_from(expr.full_expr())
-                                            .map(|putres| intres.includes(&putres))
-                                    })
-                                    .unwrap_or(false)
-                            })
+                            .map(|res| KeyExpr::string_includes(&res.expr(), expr.full_expr()))
                             .unwrap_or(true)
-                }) {
-                    if face_hat!(face).remote_subs.values().any(|sub| {
-                        KeyExpr::try_from(sub.expr())
-                            .and_then(|subres| {
-                                KeyExpr::try_from(expr.full_expr())
-                                    .map(|putres| subres.intersects(&putres))
-                            })
-                            .unwrap_or(false)
-                    }) {
-                        let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-                        route.insert(
-                            face.id,
-                            (face.clone(), key_expr.to_owned(), NodeId::default()),
-                        );
-                    }
-                } else {
+                }) || face_hat!(face)
+                    .remote_subs
+                    .values()
+                    .any(|sub| KeyExpr::string_intersects(&sub.expr(), expr.full_expr()))
+                {
                     let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
                     route.insert(
                         face.id,

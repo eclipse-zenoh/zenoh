@@ -88,6 +88,22 @@ impl KeyExpr<'static> {
             s,
         )))
     }
+
+    pub(crate) fn string_intersects(left: &str, right: &str) -> bool {
+        if let (Ok(l), Ok(r)) = (KeyExpr::try_from(left), KeyExpr::try_from(right)) {
+            l.intersects(&r)
+        } else {
+            false
+        }
+    }
+
+    pub(crate) fn string_includes(left: &str, right: &str) -> bool {
+        if let (Ok(l), Ok(r)) = (KeyExpr::try_from(left), KeyExpr::try_from(right)) {
+            l.includes(&r)
+        } else {
+            false
+        }
+    }
 }
 impl<'a> KeyExpr<'a> {
     /// Equivalent to `<KeyExpr as TryFrom>::try_from(t)`.

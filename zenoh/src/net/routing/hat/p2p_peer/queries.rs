@@ -36,15 +36,20 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 use super::{face_hat, face_hat_mut, get_routes_entries, HatCode, HatFace};
-use crate::net::routing::{
-    dispatcher::{
-        face::FaceState,
-        resource::{NodeId, Resource, SessionContext},
-        tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
+use crate::{
+    key_expr::KeyExpr,
+    net::routing::{
+        dispatcher::{
+            face::FaceState,
+            resource::{NodeId, Resource, SessionContext},
+            tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
+        },
+        hat::{
+            p2p_peer::initial_interest, CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources,
+        },
+        router::{update_query_routes_from, RoutesIndexes},
+        RoutingContext,
     },
-    hat::{p2p_peer::initial_interest, CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
-    router::{update_query_routes_from, RoutesIndexes},
-    RoutingContext,
 };
 
 #[inline]
@@ -589,13 +594,31 @@ impl HatQueriesTrait for HatCode {
         };
 
         if source_type == WhatAmI::Client {
-            // TODO: BNestMatching: What if there is a local compete ?
-            if let Some(face) = tables.faces.values().find(|f| f.whatami == WhatAmI::Router) {
-                let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-                route.push(QueryTargetQabl {
-                    direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
-                    info: None,
-                });
+            // TODO: BestMatching: What if there is a local compete ?
+            for face in tables
+                .faces
+                .values()
+                .filter(|f| f.whatami == WhatAmI::Router)
+            {
+                if !face.local_interests.values().any(|interest| {
+                    interest.finalized
+                        && interest.options.queryables()
+                        && interest
+                            .res
+                            .as_ref()
+                            .map(|res| KeyExpr::string_includes(&res.expr(), expr.full_expr()))
+                            .unwrap_or(true)
+                }) || face_hat!(face)
+                    .remote_qabls
+                    .values()
+                    .any(|sub| KeyExpr::string_intersects(&sub.expr(), expr.full_expr()))
+                {
+                    let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+                    route.push(QueryTargetQabl {
+                        direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
+                        info: None,
+                    });
+                }
             }
 
             for face in tables.faces.values().filter(|f| {
