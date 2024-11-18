@@ -266,14 +266,36 @@ where
     }
 }
 
+struct Period {
+    timer: Timer,
+    period: Duration,
+}
+
 #[zenoh_macros::unstable]
 struct State {
     global_pending_queries: u64,
     sequenced_states: HashMap<EntityGlobalId, SourceState<u32>>,
     timestamped_states: HashMap<ID, SourceState<Timestamp>>,
+    session: Session,
+    key_expr: KeyExpr<'static>,
+    period: Option<Period>,
     query_target: QueryTarget,
     query_timeout: Duration,
     callback: Callback<Sample>,
+}
+
+macro_rules! spawn_periodoic_queries {
+    ($p:expr,$s:expr,$r:expr) => {{
+        if let Some(period) = &$p.period {
+            period.timer.add(TimedEvent::periodic(
+                period.period,
+                PeriodicQuery {
+                    source_id: $s,
+                    statesref: $r,
+                },
+            ))
+        }
+    }};
 }
 
 #[zenoh_macros::unstable]
@@ -370,18 +392,8 @@ fn seq_num_range(start: Option<u32>, end: Option<u32>) -> String {
 #[zenoh_macros::unstable]
 #[derive(Clone)]
 struct PeriodicQuery {
-    source_id: Option<EntityGlobalId>,
+    source_id: EntityGlobalId,
     statesref: Arc<Mutex<State>>,
-    key_expr: KeyExpr<'static>,
-    session: Session,
-}
-
-#[zenoh_macros::unstable]
-impl PeriodicQuery {
-    fn with_source_id(mut self, source_id: EntityGlobalId) -> Self {
-        self.source_id = Some(source_id);
-        self
-    }
 }
 
 #[zenoh_macros::unstable]
@@ -390,42 +402,40 @@ impl Timed for PeriodicQuery {
     async fn run(&mut self) {
         let mut lock = zlock!(self.statesref);
         let states = &mut *lock;
-        if let Some(source_id) = &self.source_id {
-            if let Some(state) = states.sequenced_states.get_mut(source_id) {
-                state.pending_queries += 1;
-                let query_expr = KE_PREFIX
-                    / &source_id.zid().into_keyexpr()
-                    / &KeyExpr::try_from(source_id.eid().to_string()).unwrap()
-                    / &self.key_expr;
-                let seq_num_range = seq_num_range(Some(state.last_delivered.unwrap() + 1), None);
+        if let Some(state) = states.sequenced_states.get_mut(&self.source_id) {
+            state.pending_queries += 1;
+            let query_expr = KE_PREFIX
+                / &self.source_id.zid().into_keyexpr()
+                / &KeyExpr::try_from(self.source_id.eid().to_string()).unwrap()
+                / &states.key_expr;
+            let seq_num_range = seq_num_range(Some(state.last_delivered.unwrap() + 1), None);
 
-                let query_target = states.query_target;
-                let query_timeout = states.query_timeout;
-                drop(lock);
-                let handler = SequencedRepliesHandler {
-                    source_id: *source_id,
-                    statesref: self.statesref.clone(),
-                };
-                let _ = self
-                    .session
-                    .get(Selector::from((query_expr, seq_num_range)))
-                    .callback({
-                        let key_expr = self.key_expr.clone().into_owned();
-                        move |r: Reply| {
-                            if let Ok(s) = r.into_result() {
-                                if key_expr.intersects(s.key_expr()) {
-                                    let states = &mut *zlock!(handler.statesref);
-                                    handle_sample(states, s);
-                                }
+            let session = states.session.clone();
+            let key_expr = states.key_expr.clone().into_owned();
+            let query_target = states.query_target;
+            let query_timeout = states.query_timeout;
+            drop(lock);
+            let handler = SequencedRepliesHandler {
+                source_id: self.source_id,
+                statesref: self.statesref.clone(),
+            };
+            let _ = session
+                .get(Selector::from((query_expr, seq_num_range)))
+                .callback({
+                    move |r: Reply| {
+                        if let Ok(s) = r.into_result() {
+                            if key_expr.intersects(s.key_expr()) {
+                                let states = &mut *zlock!(handler.statesref);
+                                handle_sample(states, s);
                             }
                         }
-                    })
-                    .consolidation(ConsolidationMode::None)
-                    .accept_replies(ReplyKeyExpr::Any)
-                    .target(query_target)
-                    .timeout(query_timeout)
-                    .wait();
-            }
+                    }
+                })
+                .consolidation(ConsolidationMode::None)
+                .accept_replies(ReplyKeyExpr::Any)
+                .target(query_target)
+                .timeout(query_timeout)
+                .wait();
         }
     }
 }
@@ -437,39 +447,32 @@ impl<Handler> AdvancedSubscriber<Handler> {
         H: IntoHandler<Sample, Handler = Handler> + Send,
     {
         let (callback, receiver) = conf.handler.into_handler();
-        let statesref = Arc::new(Mutex::new(State {
-            sequenced_states: HashMap::new(),
-            timestamped_states: HashMap::new(),
-            global_pending_queries: if conf.history { 1 } else { 0 },
-            query_target: conf.query_target,
-            query_timeout: conf.query_timeout,
-            callback: callback.clone(),
-        }));
         let key_expr = conf.key_expr?;
         let retransmission = conf.retransmission;
         let query_target = conf.query_target;
         let query_timeout = conf.query_timeout;
         let session = conf.session.clone();
-        let periodic_query = retransmission.as_ref().and_then(|r| {
-            r.periodic_queries.map(|period| {
-                (
-                    Arc::new(Timer::new(false)),
-                    period,
-                    PeriodicQuery {
-                        source_id: None,
-                        statesref: statesref.clone(),
-                        key_expr: key_expr.clone().into_owned(),
-                        session,
-                    },
-                )
-            })
-        });
+        let statesref = Arc::new(Mutex::new(State {
+            sequenced_states: HashMap::new(),
+            timestamped_states: HashMap::new(),
+            global_pending_queries: if conf.history { 1 } else { 0 },
+            session,
+            period: retransmission.as_ref().and_then(|r| {
+                r.periodic_queries.map(|p| Period {
+                    timer: Timer::new(false),
+                    period: p,
+                })
+            }),
+            key_expr: key_expr.clone().into_owned(),
+            query_target: conf.query_target,
+            query_timeout: conf.query_timeout,
+            callback: callback.clone(),
+        }));
 
         let sub_callback = {
             let statesref = statesref.clone();
             let session = conf.session.clone();
             let key_expr = key_expr.clone().into_owned();
-            let periodic_query = periodic_query.clone();
 
             move |s: Sample| {
                 let mut lock = zlock!(statesref);
@@ -479,12 +482,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
 
                 if let Some(source_id) = source_id {
                     if new {
-                        if let Some((timer, period, query)) = periodic_query.as_ref() {
-                            timer.add(TimedEvent::periodic(
-                                *period,
-                                query.clone().with_source_id(source_id),
-                            ))
-                        }
+                        spawn_periodoic_queries!(states, source_id, statesref.clone());
                     }
 
                     if let Some(state) = states.sequenced_states.get_mut(&source_id) {
@@ -538,8 +536,6 @@ impl<Handler> AdvancedSubscriber<Handler> {
         if conf.history {
             let handler = InitialRepliesHandler {
                 statesref: statesref.clone(),
-                callback: callback.clone(),
-                periodic_query: periodic_query.clone(),
             };
             let _ = conf
                 .session
@@ -647,14 +643,11 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                         .wait();
 
                                     if new {
-                                        if let Some((timer, period, query)) =
-                                            periodic_query.as_ref()
-                                        {
-                                            timer.add(TimedEvent::periodic(
-                                                *period,
-                                                query.clone().with_source_id(source_id),
-                                            ))
-                                        }
+                                        spawn_periodoic_queries!(
+                                            states,
+                                            source_id,
+                                            statesref.clone()
+                                        );
                                     }
                                 }
                             } else {
@@ -663,8 +656,6 @@ impl<Handler> AdvancedSubscriber<Handler> {
 
                                 let handler = InitialRepliesHandler {
                                     statesref: statesref.clone(),
-                                    periodic_query: None,
-                                    callback: callback.clone(),
                                 };
                                 let _ = session
                                     .get(Selector::from((s.key_expr(), "0..")))
@@ -776,8 +767,6 @@ fn flush_timestamped_source(state: &mut SourceState<Timestamp>, callback: &Callb
 #[derive(Clone)]
 struct InitialRepliesHandler {
     statesref: Arc<Mutex<State>>,
-    periodic_query: Option<(Arc<Timer>, Duration, PeriodicQuery)>,
-    callback: Callback<Sample>,
 }
 
 #[zenoh_macros::unstable]
@@ -788,16 +777,11 @@ impl Drop for InitialRepliesHandler {
 
         if states.global_pending_queries == 0 {
             for (source_id, state) in states.sequenced_states.iter_mut() {
-                flush_sequenced_source(state, &self.callback);
-                if let Some((timer, period, query)) = self.periodic_query.as_ref() {
-                    timer.add(TimedEvent::periodic(
-                        *period,
-                        query.clone().with_source_id(*source_id),
-                    ))
-                }
+                flush_sequenced_source(state, &states.callback);
+                spawn_periodoic_queries!(states, *source_id, self.statesref.clone());
             }
             for state in states.timestamped_states.values_mut() {
-                flush_timestamped_source(state, &self.callback);
+                flush_timestamped_source(state, &states.callback);
             }
         }
     }
