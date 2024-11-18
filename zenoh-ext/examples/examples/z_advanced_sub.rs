@@ -33,7 +33,11 @@ async fn main() {
         .declare_subscriber(key_expr)
         .history()
         .retransmission(
-            RetransmissionConf::default().periodic_queries(Some(Duration::from_secs(1))),
+            RetransmissionConf::default()
+                .periodic_queries(Some(Duration::from_secs(1)))
+                .sample_miss_callback(|s, m| {
+                    println!(">> [Subscriber] Missed {} samples from {:?} !!!", m, s);
+                }),
         )
         .late_joiner()
         .await
