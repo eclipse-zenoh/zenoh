@@ -355,6 +355,142 @@ async fn test_advanced_retransmission_periodic() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_advanced_retransmission_sample_miss() {
+    use std::time::Duration;
+
+    use zenoh::internal::ztimeout;
+
+    const TIMEOUT: Duration = Duration::from_secs(60);
+    const SLEEP: Duration = Duration::from_secs(1);
+    const RECONNECT_SLEEP: Duration = Duration::from_secs(5);
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:47453";
+
+    const ADVANCED_RETRANSMISSION_SAMPLE_MISS_KEYEXPR: &str =
+        "test/advanced/retransmission/sample_miss";
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let router = {
+        let mut c = zenoh::Config::default();
+        c.listen
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router ZID: {}", s.zid());
+        s
+    };
+
+    let client1 = {
+        let mut c = zenoh::Config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Client));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Client (1) ZID: {}", s.zid());
+        s
+    };
+
+    let client2 = {
+        let mut c = zenoh::Config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Client));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Client (2) ZID: {}", s.zid());
+        s
+    };
+
+    let (miss_sender, miss_receiver) = flume::unbounded();
+
+    let sub = ztimeout!(client2
+        .declare_subscriber(ADVANCED_RETRANSMISSION_SAMPLE_MISS_KEYEXPR)
+        .retransmission(
+            RetransmissionConf::default()
+                .periodic_queries(Some(Duration::from_secs(1)))
+                .sample_miss_callback(move |s, m| {
+                    miss_sender.send((s, m)).unwrap();
+                })
+        ))
+    .unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let publ = ztimeout!(client1
+        .declare_publisher(ADVANCED_RETRANSMISSION_SAMPLE_MISS_KEYEXPR)
+        .history(HistoryConf::default().sample_depth(1))
+        .retransmission())
+    .unwrap();
+    ztimeout!(publ.put("1")).unwrap();
+
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert_eq!(sample.kind(), SampleKind::Put);
+    assert_eq!(sample.payload().try_to_string().unwrap().as_ref(), "1");
+
+    assert!(sub.try_recv().unwrap().is_none());
+
+    router.close().await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    ztimeout!(publ.put("2")).unwrap();
+    ztimeout!(publ.put("3")).unwrap();
+    ztimeout!(publ.put("4")).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    assert!(sub.try_recv().unwrap().is_none());
+
+    let router = {
+        let mut c = zenoh::Config::default();
+        c.listen
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router ZID: {}", s.zid());
+        s
+    };
+    tokio::time::sleep(RECONNECT_SLEEP).await;
+
+    ztimeout!(publ.put("5")).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let miss = ztimeout!(miss_receiver.recv_async()).unwrap();
+    assert_eq!(miss.0, publ.id());
+    assert_eq!(miss.1, 2);
+
+    assert!(miss_receiver.try_recv().is_err());
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert_eq!(sample.kind(), SampleKind::Put);
+    assert_eq!(sample.payload().try_to_string().unwrap().as_ref(), "4");
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert_eq!(sample.kind(), SampleKind::Put);
+    assert_eq!(sample.payload().try_to_string().unwrap().as_ref(), "5");
+
+    assert!(sub.try_recv().unwrap().is_none());
+
+    publ.undeclare().await.unwrap();
+    // sub.undeclare().await.unwrap();
+
+    client1.close().await.unwrap();
+    client2.close().await.unwrap();
+
+    router.close().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_advanced_late_joiner() {
     use std::time::Duration;
 
@@ -363,7 +499,7 @@ async fn test_advanced_late_joiner() {
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
     const RECONNECT_SLEEP: Duration = Duration::from_secs(8);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47453";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:47454";
 
     const ADVANCED_LATE_JOINER_KEYEXPR: &str = "test/advanced/late_joiner";
 
