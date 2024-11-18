@@ -386,7 +386,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                 }
             }
             NetworkBody::Interest(Interest {
-                mode: InterestMode::Current | InterestMode::CurrentFuture,
+                mode: InterestMode::Future | InterestMode::CurrentFuture,
                 options,
                 ..
             }) if options.tokens() => {
