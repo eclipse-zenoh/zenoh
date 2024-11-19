@@ -88,23 +88,34 @@ impl WebPkiVerifierAnyServerName {
 }
 
 pub mod expiration {
-    use std::{net::SocketAddr, sync::Weak};
+    use std::{
+        net::SocketAddr,
+        sync::{atomic::AtomicBool, Weak},
+    };
 
+    use async_trait::async_trait;
     use time::OffsetDateTime;
-    use tokio::task::JoinHandle;
+    use tokio::{sync::Mutex as AsyncMutex, task::JoinHandle};
     use tokio_util::sync::CancellationToken;
+    use zenoh_result::ZResult;
 
-    use crate::LinkUnicastTrait;
+    #[async_trait]
+    pub trait LinkWithCertExpiration: Send + Sync {
+        async fn expire(&self) -> ZResult<()>;
+    }
 
     #[derive(Debug)]
     pub struct LinkCertExpirationManager {
         token: CancellationToken,
-        handle: Option<JoinHandle<()>>,
+        handle: AsyncMutex<Option<JoinHandle<ZResult<()>>>>,
+        /// Closing the link is a critical section that requires exclusive access to expiration_task
+        /// or the transport. `link_closing` is used to synchronize the access to this operation.
+        link_closing: AtomicBool,
     }
 
     impl LinkCertExpirationManager {
         pub fn new(
-            link: Weak<dyn LinkUnicastTrait>,
+            link: Weak<dyn LinkWithCertExpiration>,
             src_addr: SocketAddr,
             dst_addr: SocketAddr,
             link_type: &'static str,
@@ -121,31 +132,41 @@ pub mod expiration {
             ));
             Self {
                 token,
-                handle: Some(handle),
+                handle: AsyncMutex::new(Some(handle)),
+                link_closing: AtomicBool::new(false),
             }
         }
-    }
 
-    // Cleanup expiration task when manager is dropped
-    impl Drop for LinkCertExpirationManager {
-        fn drop(&mut self) {
-            if let Some(handle) = self.handle.take() {
-                self.token.cancel();
-                zenoh_runtime::ZRuntime::Acceptor.block_in_place(async {
-                    let _ = handle.await;
-                })
-            }
+        /// Takes exclusive access to closing the link.
+        ///
+        /// Returns `true` if successful, `false` if another task is (or finished) closing the link.
+        pub fn set_closing(&self) -> bool {
+            !self
+                .link_closing
+                .swap(true, std::sync::atomic::Ordering::Relaxed)
+        }
+
+        /// Sends cancelation signal to expiration_task
+        pub fn cancel_expiration_task(&self) {
+            self.token.cancel()
+        }
+
+        /// Waits for expiration task to complete, returning its return value.
+        pub async fn wait_for_expiration_task(&self) -> ZResult<()> {
+            let mut lock = self.handle.lock().await;
+            let handle = lock.take().expect("handle should be set");
+            handle.await?
         }
     }
 
     async fn expiration_task(
-        link: Weak<dyn LinkUnicastTrait>,
+        link: Weak<dyn LinkWithCertExpiration>,
         src_addr: SocketAddr,
         dst_addr: SocketAddr,
         link_type: &'static str,
         expiration_time: OffsetDateTime,
         token: CancellationToken,
-    ) {
+    ) -> ZResult<()> {
         tracing::trace!(
             "Expiration task started for {} link {:?} => {:?}",
             link_type.to_uppercase(),
@@ -155,7 +176,7 @@ pub mod expiration {
         tokio::select! {
             _ = token.cancelled() => {},
             _ = sleep_until_date(expiration_time) => {
-                // close link
+                // expire the link
                 if let Some(link) = link.upgrade() {
                     tracing::warn!(
                         "Closing {} link {:?} => {:?} : remote certificate chain expired",
@@ -163,18 +184,11 @@ pub mod expiration {
                         src_addr,
                         dst_addr,
                     );
-                    if let Err(e) = link.close().await {
-                        tracing::error!(
-                            "Error closing {} link {:?} => {:?} : {}",
-                            link_type.to_uppercase(),
-                            src_addr,
-                            dst_addr,
-                            e
-                        )
-                    }
+                    return link.expire().await;
                 }
             },
         }
+        Ok(())
     }
 
     async fn sleep_until_date(wakeup_time: OffsetDateTime) {

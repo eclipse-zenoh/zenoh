@@ -27,9 +27,10 @@ use tokio_util::sync::CancellationToken;
 use x509_parser::prelude::{FromDer, X509Certificate};
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
-    get_ip_interface_names, tls::expiration::LinkCertExpirationManager, LinkAuthId, LinkAuthType,
-    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
-    NewLinkChannelSender,
+    get_ip_interface_names,
+    tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
+    LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
+    ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -50,9 +51,7 @@ pub struct LinkUnicastQuic {
     send: AsyncMutex<quinn::SendStream>,
     recv: AsyncMutex<quinn::RecvStream>,
     auth_identifier: LinkAuthId,
-    // expiration_manager is unused:
-    // its initialization and drop handle the spawn and clean-up of expiration task
-    _expiration_manager: Option<LinkCertExpirationManager>,
+    expiration_manager: Option<LinkCertExpirationManager>,
 }
 
 impl LinkUnicastQuic {
@@ -74,13 +73,10 @@ impl LinkUnicastQuic {
             send: AsyncMutex::new(send),
             recv: AsyncMutex::new(recv),
             auth_identifier,
-            _expiration_manager: expiration_manager,
+            expiration_manager,
         }
     }
-}
 
-#[async_trait]
-impl LinkUnicastTrait for LinkUnicastQuic {
     async fn close(&self) -> ZResult<()> {
         tracing::trace!("Closing QUIC link: {}", self);
         // Flush the QUIC stream
@@ -90,6 +86,22 @@ impl LinkUnicastTrait for LinkUnicastQuic {
         }
         self.connection.close(quinn::VarInt::from_u32(0), &[0]);
         Ok(())
+    }
+}
+
+#[async_trait]
+impl LinkUnicastTrait for LinkUnicastQuic {
+    async fn close(&self) -> ZResult<()> {
+        if let Some(expiration_manager) = &self.expiration_manager {
+            if !expiration_manager.set_closing() {
+                // expiration_task is closing link, return its returned ZResult to Transport
+                return expiration_manager.wait_for_expiration_task().await;
+            }
+            // cancel the expiration task
+            expiration_manager.cancel_expiration_task();
+            let _ = expiration_manager.wait_for_expiration_task().await;
+        }
+        self.close().await
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
@@ -171,6 +183,21 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     #[inline(always)]
     fn get_auth_id(&self) -> &LinkAuthId {
         &self.auth_identifier
+    }
+}
+
+#[async_trait]
+impl LinkWithCertExpiration for LinkUnicastQuic {
+    async fn expire(&self) -> ZResult<()> {
+        let expiration_manager = self
+            .expiration_manager
+            .as_ref()
+            .expect("expiration_manager should be set");
+        if expiration_manager.set_closing() {
+            return self.close().await;
+        }
+        // Transport is already closing the link
+        Ok(())
     }
 }
 

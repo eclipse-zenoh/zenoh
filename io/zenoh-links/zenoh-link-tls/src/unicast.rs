@@ -25,9 +25,10 @@ use tokio_util::sync::CancellationToken;
 use x509_parser::prelude::{FromDer, X509Certificate};
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
-    get_ip_interface_names, tls::expiration::LinkCertExpirationManager, LinkAuthId, LinkAuthType,
-    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
-    NewLinkChannelSender,
+    get_ip_interface_names,
+    tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
+    LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
+    ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -64,9 +65,7 @@ pub struct LinkUnicastTls {
     read_mtx: AsyncMutex<()>,
     auth_identifier: LinkAuthId,
     mtu: BatchSize,
-    // expiration_manager is unused:
-    // its initialization and drop handle the spawn and clean-up of expiration task
-    _expiration_manager: Option<LinkCertExpirationManager>,
+    expiration_manager: Option<LinkCertExpirationManager>,
 }
 
 unsafe impl Send for LinkUnicastTls {}
@@ -137,7 +136,7 @@ impl LinkUnicastTls {
             read_mtx: AsyncMutex::new(()),
             auth_identifier,
             mtu,
-            _expiration_manager: expiration_manager,
+            expiration_manager,
         }
     }
 
@@ -148,10 +147,7 @@ impl LinkUnicastTls {
     fn get_mut_socket(&self) -> &mut TlsStream<TcpStream> {
         unsafe { &mut *self.inner.get() }
     }
-}
 
-#[async_trait]
-impl LinkUnicastTrait for LinkUnicastTls {
     async fn close(&self) -> ZResult<()> {
         tracing::trace!("Closing TLS link: {}", self);
         // Flush the TLS stream
@@ -164,6 +160,22 @@ impl LinkUnicastTrait for LinkUnicastTls {
         let res = tcp_stream.shutdown().await;
         tracing::trace!("TLS link shutdown {}: {:?}", self, res);
         res.map_err(|e| zerror!(e).into())
+    }
+}
+
+#[async_trait]
+impl LinkUnicastTrait for LinkUnicastTls {
+    async fn close(&self) -> ZResult<()> {
+        if let Some(expiration_manager) = &self.expiration_manager {
+            if !expiration_manager.set_closing() {
+                // expiration_task is closing link, return its returned ZResult to Transport
+                return expiration_manager.wait_for_expiration_task().await;
+            }
+            // cancel the expiration task
+            expiration_manager.cancel_expiration_task();
+            let _ = expiration_manager.wait_for_expiration_task().await;
+        }
+        self.close().await
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
@@ -236,6 +248,21 @@ impl LinkUnicastTrait for LinkUnicastTls {
     #[inline(always)]
     fn get_auth_id(&self) -> &LinkAuthId {
         &self.auth_identifier
+    }
+}
+
+#[async_trait]
+impl LinkWithCertExpiration for LinkUnicastTls {
+    async fn expire(&self) -> ZResult<()> {
+        let expiration_manager = self
+            .expiration_manager
+            .as_ref()
+            .expect("expiration_manager should be set");
+        if expiration_manager.set_closing() {
+            return self.close().await;
+        }
+        // Transport is already closing the link
+        Ok(())
     }
 }
 
