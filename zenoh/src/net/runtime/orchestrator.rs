@@ -894,10 +894,33 @@ impl Runtime {
                             let mut reader = buf.as_slice()[..n].reader();
                             let codec = Zenoh080::new();
                             let res: Result<ScoutingMessage, DidntRead> = codec.read(&mut reader);
+
                             if let Ok(msg) = res {
                                 tracing::trace!("Received {:?} from {}", msg.body, peer);
+
                                 if let ScoutingBody::Hello(hello) = &msg.body {
+
                                     if matcher.matches(hello.whatami) {
+
+                                        if let Ok(local_addr) = socket.local_addr() {
+                                            if let Ok(iface) = zenoh_util::net::get_interface_names_by_addr(local_addr.ip()) {
+
+                                                let hello_iface = HelloProto {
+                                                    version: hello.version,
+                                                    whatami: hello.whatami,
+                                                    zid: hello.zid,
+                                                    locators: hello.locators.iter().map(|locator| Locator::new_with_config(locator.protocol(),
+                                                                        locator.address(),
+                                                                        locator.metadata(),
+                                                                        "iface=".to_string() + &iface[0]).unwrap()).collect()
+                                                };
+
+                                                if let Loop::Break = f(hello_iface.clone()).await {
+                                                    break;
+                                                }
+                                            }
+                                        }
+
                                         if let Loop::Break = f(hello.clone()).await {
                                             break;
                                         }
