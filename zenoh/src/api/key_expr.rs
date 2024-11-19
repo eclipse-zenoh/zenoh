@@ -88,22 +88,6 @@ impl KeyExpr<'static> {
             s,
         )))
     }
-
-    pub(crate) fn string_intersects(left: &str, right: &str) -> bool {
-        if let (Ok(l), Ok(r)) = (KeyExpr::try_from(left), KeyExpr::try_from(right)) {
-            l.intersects(&r)
-        } else {
-            false
-        }
-    }
-
-    pub(crate) fn string_includes(left: &str, right: &str) -> bool {
-        if let (Ok(l), Ok(r)) = (KeyExpr::try_from(left), KeyExpr::try_from(right)) {
-            l.includes(&r)
-        } else {
-            false
-        }
-    }
 }
 impl<'a> KeyExpr<'a> {
     /// Equivalent to `<KeyExpr as TryFrom>::try_from(t)`.
@@ -286,6 +270,30 @@ impl<'a> KeyExpr<'a> {
             }))
         } else {
             Ok(r.into())
+        }
+    }
+
+    pub(crate) fn keyexpr_intersect<'b, L, R>(left: L, right: R) -> bool
+    where
+        L: TryInto<KeyExpr<'a>>,
+        R: TryInto<KeyExpr<'b>>,
+    {
+        if let (Ok(l), Ok(r)) = (left.try_into(), right.try_into()) {
+            l.intersects(&r)
+        } else {
+            false
+        }
+    }
+
+    pub(crate) fn keyexpr_include<'b, L, R>(left: L, right: R) -> bool
+    where
+        L: TryInto<KeyExpr<'a>>,
+        R: TryInto<KeyExpr<'b>>,
+    {
+        if let (Ok(l), Ok(r)) = (left.try_into(), right.try_into()) {
+            l.includes(&r)
+        } else {
+            false
         }
     }
 }

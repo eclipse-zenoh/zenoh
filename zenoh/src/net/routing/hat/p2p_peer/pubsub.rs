@@ -609,12 +609,12 @@ impl HatPubSubTrait for HatCode {
                         && interest
                             .res
                             .as_ref()
-                            .map(|res| KeyExpr::string_includes(&res.expr(), expr.full_expr()))
+                            .map(|res| KeyExpr::keyexpr_include(res.expr(), expr.full_expr()))
                             .unwrap_or(true)
                 }) || face_hat!(face)
                     .remote_subs
                     .values()
-                    .any(|sub| KeyExpr::string_intersects(&sub.expr(), expr.full_expr()))
+                    .any(|sub| KeyExpr::keyexpr_intersect(sub.expr(), expr.full_expr()))
                 {
                     let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
                     route.insert(

@@ -365,12 +365,12 @@ impl HatQueriesTrait for HatCode {
                         && interest
                             .res
                             .as_ref()
-                            .map(|res| KeyExpr::string_includes(&res.expr(), expr.full_expr()))
+                            .map(|res| KeyExpr::keyexpr_include(res.expr(), expr.full_expr()))
                             .unwrap_or(true)
                 }) || face_hat!(face)
                     .remote_qabls
                     .values()
-                    .any(|qbl| KeyExpr::string_intersects(&qbl.expr(), expr.full_expr()))
+                    .any(|qbl| KeyExpr::keyexpr_intersect(qbl.expr(), expr.full_expr()))
                 {
                     let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
                     route.push(QueryTargetQabl {
