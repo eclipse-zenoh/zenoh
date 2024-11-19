@@ -171,9 +171,11 @@ impl LinkUnicastTrait for LinkUnicastTls {
                 // expiration_task is closing link, return its returned ZResult to Transport
                 return expiration_manager.wait_for_expiration_task().await;
             }
-            // cancel the expiration task
+            // cancel the expiration task and close link
             expiration_manager.cancel_expiration_task();
+            let res = self.close().await;
             let _ = expiration_manager.wait_for_expiration_task().await;
+            return res;
         }
         self.close().await
     }
