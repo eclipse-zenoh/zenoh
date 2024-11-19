@@ -219,10 +219,3 @@ impl Drop for Querier<'_> {
         }
     }
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum QueriersKind {
-    Querier,
-    #[allow(dead_code)]
-    LivelinessQuerier,
-}
