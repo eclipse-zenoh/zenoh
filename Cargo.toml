@@ -167,6 +167,7 @@ socket2 = { version = "0.5.7", features = ["all"] }
 stop-token = "0.7.0"
 syn = "2.0"
 tide = "0.16.0"
+time = "0.3.36"
 token-cell = { version = "1.5.0", default-features = false }
 tokio = { version = "1.40.0", default-features = false } # Default features are disabled due to some crates' requirements
 tokio-util = "0.7.12"
