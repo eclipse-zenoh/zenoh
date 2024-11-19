@@ -894,12 +894,9 @@ impl Runtime {
                             let mut reader = buf.as_slice()[..n].reader();
                             let codec = Zenoh080::new();
                             let res: Result<ScoutingMessage, DidntRead> = codec.read(&mut reader);
-
                             if let Ok(msg) = res {
                                 tracing::trace!("Received {:?} from {}", msg.body, peer);
-
                                 if let ScoutingBody::Hello(hello) = &msg.body {
-
                                     if matcher.matches(hello.whatami) {
 
                                         if let Ok(local_addr) = socket.local_addr() {
