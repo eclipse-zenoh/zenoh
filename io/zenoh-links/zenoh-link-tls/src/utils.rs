@@ -168,7 +168,7 @@ impl TlsServerConfig {
             Some(s) => s
                 .parse()
                 .map_err(|_| zerror!("Unknown enable mTLS argument: {}", s))?,
-            None => false,
+            None => TLS_ENABLE_MTLS_DEFAULT,
         };
         let tls_close_link_on_expiration: bool = match config.get(TLS_CLOSE_LINK_ON_EXPIRATION) {
             Some(s) => s
@@ -282,21 +282,18 @@ impl TlsClientConfig {
             Some(s) => s
                 .parse()
                 .map_err(|_| zerror!("Unknown enable mTLS auth argument: {}", s))?,
-            None => false,
+            None => TLS_ENABLE_MTLS_DEFAULT,
         };
 
         let tls_server_name_verification: bool = match config.get(TLS_VERIFY_NAME_ON_CONNECT) {
-            Some(s) => {
-                let s: bool = s
-                    .parse()
-                    .map_err(|_| zerror!("Unknown server name verification argument: {}", s))?;
-                if s {
-                    tracing::warn!("Skipping name verification of servers");
-                }
-                s
-            }
-            None => false,
+            Some(s) => s
+                .parse()
+                .map_err(|_| zerror!("Unknown server name verification argument: {}", s))?,
+            None => TLS_VERIFY_NAME_ON_CONNECT_DEFAULT,
         };
+        if !tls_server_name_verification {
+            tracing::warn!("Skipping name verification of TLS server");
+        }
 
         let tls_close_link_on_expiration: bool = match config.get(TLS_CLOSE_LINK_ON_EXPIRATION) {
             Some(s) => s
