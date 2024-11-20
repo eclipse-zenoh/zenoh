@@ -49,7 +49,7 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
     /// let matching_listener = publisher
     ///     .matching_listener()
     ///     .callback(|matching_status| {
-    ///         if matching_status.matching_subscribers() {
+    ///         if matching_status.matching() {
     ///             println!("Publisher has matching subscribers.");
     ///         } else {
     ///             println!("Publisher has NO MORE matching subscribers.");
@@ -115,7 +115,7 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
     ///     .await
     ///     .unwrap();
     /// while let Ok(matching_status) = matching_listener.recv_async().await {
-    ///     if matching_status.matching_subscribers() {
+    ///     if matching_status.matching() {
     ///         println!("Publisher has matching subscribers.");
     ///     } else {
     ///         println!("Publisher has NO MORE matching subscribers.");
@@ -154,7 +154,7 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, Callback<MatchingStatus>> {
     /// publisher
     ///     .matching_listener()
     ///     .callback(|matching_status| {
-    ///         if matching_status.matching_subscribers() {
+    ///         if matching_status.matching() {
     ///             println!("Publisher has matching subscribers.");
     ///         } else {
     ///             println!("Publisher has NO MORE matching subscribers.");

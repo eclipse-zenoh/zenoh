@@ -37,6 +37,11 @@ async fn main() {
     println!("Press CTRL-C to quit...");
     for idx in 0..u32::MAX {
         tokio::time::sleep(Duration::from_secs(1)).await;
+        #[cfg(feature = "unstable")]
+        println!(
+            "Matching status: {}",
+            querier.matching_status().await.unwrap().matching()
+        );
         let buf = format!("[{idx:4}] {}", payload.clone().unwrap_or_default());
         println!(
             "Querying '{}' with payload: '{}')...",

@@ -73,7 +73,7 @@ use crate::api::selector::ZenohParameters;
 use crate::api::{
     liveliness::{Liveliness, LivelinessTokenState},
     publisher::Publisher,
-    publisher::{MatchingListenerState, MatchingStatus},
+    publisher::{MatchingListenerState, MatchingStatus, MatchingStatusType},
     query::{LivelinessQueryState, ReplyKeyExpr},
     sample::SourceInfo,
 };
@@ -1884,8 +1884,12 @@ impl SessionInner {
         match listener_state.current.lock() {
             Ok(mut current) => {
                 if self
-                    .matching_status(&publisher.key_expr, listener_state.destination)
-                    .map(|s| s.matching_subscribers())
+                    .matching_status(
+                        &publisher.key_expr,
+                        listener_state.destination,
+                        MatchingStatusType::Subscribers,
+                    )
+                    .map(|s| s.matching())
                     .unwrap_or(true)
                 {
                     *current = true;
@@ -1904,30 +1908,37 @@ impl SessionInner {
         &self,
         key_expr: &KeyExpr,
         destination: Locality,
+        matching_type: MatchingStatusType,
     ) -> ZResult<MatchingStatus> {
         let router = self.runtime.router();
         let tables = zread!(router.tables.tables);
 
-        let matching_subscriptions =
-            crate::net::routing::dispatcher::pubsub::get_matching_subscriptions(&tables, key_expr);
+        let matches = match matching_type {
+            MatchingStatusType::Subscribers => {
+                crate::net::routing::dispatcher::pubsub::get_matching_subscriptions(
+                    &tables, key_expr,
+                )
+            }
+            MatchingStatusType::Queryables(complete) => {
+                crate::net::routing::dispatcher::queries::get_matching_queryables(
+                    &tables, key_expr, complete,
+                )
+            }
+        };
 
         drop(tables);
         let matching = match destination {
-            Locality::Any => !matching_subscriptions.is_empty(),
+            Locality::Any => !matches.is_empty(),
             Locality::Remote => {
                 if let Some(face) = zread!(self.state).primitives.as_ref() {
-                    matching_subscriptions
-                        .values()
-                        .any(|dir| !Arc::ptr_eq(dir, &face.state))
+                    matches.values().any(|dir| !Arc::ptr_eq(dir, &face.state))
                 } else {
-                    !matching_subscriptions.is_empty()
+                    !matches.is_empty()
                 }
             }
             Locality::SessionLocal => {
                 if let Some(face) = zread!(self.state).primitives.as_ref() {
-                    matching_subscriptions
-                        .values()
-                        .any(|dir| Arc::ptr_eq(dir, &face.state))
+                    matches.values().any(|dir| Arc::ptr_eq(dir, &face.state))
                 } else {
                     false
                 }
@@ -1950,10 +1961,12 @@ impl SessionInner {
                             match msub.current.lock() {
                                 Ok(mut current) => {
                                     if !*current {
-                                        if let Ok(status) = session
-                                            .matching_status(&msub.key_expr, msub.destination)
-                                        {
-                                            if status.matching_subscribers() {
+                                        if let Ok(status) = session.matching_status(
+                                            &msub.key_expr,
+                                            msub.destination,
+                                            MatchingStatusType::Subscribers,
+                                        ) {
+                                            if status.matching() {
                                                 *current = true;
                                                 let callback = msub.callback.clone();
                                                 callback.call(status)
@@ -1988,10 +2001,12 @@ impl SessionInner {
                             match msub.current.lock() {
                                 Ok(mut current) => {
                                     if *current {
-                                        if let Ok(status) = session
-                                            .matching_status(&msub.key_expr, msub.destination)
-                                        {
-                                            if !status.matching_subscribers() {
+                                        if let Ok(status) = session.matching_status(
+                                            &msub.key_expr,
+                                            msub.destination,
+                                            MatchingStatusType::Subscribers,
+                                        ) {
+                                            if !status.matching() {
                                                 *current = false;
                                                 let callback = msub.callback.clone();
                                                 callback.call(status)

@@ -4,19 +4,6 @@ use std::{
     time::Duration,
 };
 
-use tracing::error;
-use zenoh_core::{Resolvable, Resolve, Wait};
-use zenoh_protocol::{
-    core::{CongestionControl, Parameters},
-    network::request::ext::QueryTarget,
-};
-use zenoh_result::ZResult;
-#[cfg(feature = "unstable")]
-use {
-    crate::api::sample::SourceInfo, crate::query::ReplyKeyExpr,
-    zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto,
-};
-
 use super::{
     builders::querier::QuerierGetBuilder,
     key_expr::KeyExpr,
@@ -26,6 +13,21 @@ use super::{
     Id,
 };
 use crate::{api::handlers::DefaultHandler, qos::Priority};
+use tracing::error;
+use zenoh_core::{Resolvable, Resolve, Wait};
+use zenoh_protocol::{
+    core::{CongestionControl, Parameters},
+    network::request::ext::QueryTarget,
+};
+use zenoh_result::ZResult;
+#[cfg(feature = "unstable")]
+use {
+    crate::api::publisher::{MatchingStatus, MatchingStatusType},
+    crate::api::sample::SourceInfo,
+    crate::query::ReplyKeyExpr,
+    zenoh_config::wrappers::EntityGlobalId,
+    zenoh_protocol::core::EntityGlobalIdProto,
+};
 
 pub(crate) struct QuerierState {
     pub(crate) id: Id,
@@ -165,6 +167,36 @@ impl<'a> Querier<'a> {
         // set the flag first to avoid double panic if this function panic
         self.undeclare_on_drop = false;
         self.session.undeclare_querier_inner(self.id)
+    }
+
+    /// Return the [`MatchingStatus`] of the querier.
+    ///
+    /// [`MatchingStatus::matching`] will return true if there exist Queryables
+    /// matching the Queriers's key expression and target and false otherwise.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let querier = session.declare_querier("key/expression").await.unwrap();
+    /// let matching_queriers: bool = querier
+    ///     .matching_status()
+    ///     .await
+    ///     .unwrap()
+    ///     .matching();
+    /// # }
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn matching_status(&self) -> impl Resolve<ZResult<MatchingStatus>> + '_ {
+        zenoh_core::ResolveFuture::new(async move {
+            self.session.matching_status(
+                self.key_expr(),
+                self.destination,
+                MatchingStatusType::Queryables(self.target == QueryTarget::AllComplete),
+            )
+        })
     }
 }
 

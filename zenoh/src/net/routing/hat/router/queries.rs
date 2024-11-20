@@ -53,6 +53,8 @@ use crate::net::routing::{
     RoutingContext,
 };
 
+use crate::key_expr::KeyExpr;
+
 #[inline]
 fn merge_qabl_infos(mut this: QueryableInfoType, info: &QueryableInfoType) -> QueryableInfoType {
     this.complete = this.complete || info.complete;
@@ -1493,5 +1495,109 @@ impl HatQueriesTrait for HatCode {
 
     fn get_query_routes_entries(&self, tables: &Tables) -> RoutesIndexes {
         get_routes_entries(tables)
+    }
+
+    #[cfg(feature = "unstable")]
+    fn get_matching_queryables(
+        &self,
+        tables: &Tables,
+        key_expr: &KeyExpr<'_>,
+        complete: bool,
+    ) -> HashMap<usize, Arc<FaceState>> {
+        let mut matching_queryables = HashMap::new();
+        if key_expr.ends_with('/') {
+            return matching_queryables;
+        }
+        tracing::trace!(
+            "get_matching_queryables({}; complete: {})",
+            key_expr,
+            complete
+        );
+        crate::net::routing::dispatcher::pubsub::get_matching_subscriptions(&tables, key_expr);
+        let res = Resource::get_resource(&tables.root_res, key_expr);
+        let matches = res
+            .as_ref()
+            .and_then(|res| res.context.as_ref())
+            .map(|ctx| Cow::from(&ctx.matches))
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
+
+        let master = !hat!(tables).full_net(WhatAmI::Peer)
+            || *hat!(tables).elect_router(&tables.zid, key_expr, hat!(tables).shared_nodes.iter())
+                == tables.zid;
+
+        for mres in matches.iter() {
+            let mres = mres.upgrade().unwrap();
+            if complete && !KeyExpr::keyexpr_include(mres.expr(), key_expr) {
+                continue;
+            }
+
+            if master {
+                let net = hat!(tables).routers_net.as_ref().unwrap();
+                insert_faces_for_qbls(
+                    &mut matching_queryables,
+                    tables,
+                    net,
+                    &res_hat!(mres).router_qabls,
+                    complete,
+                );
+            }
+
+            if hat!(tables).full_net(WhatAmI::Peer) {
+                let net = hat!(tables).linkstatepeers_net.as_ref().unwrap();
+                insert_faces_for_qbls(
+                    &mut matching_queryables,
+                    tables,
+                    net,
+                    &res_hat!(mres).linkstatepeer_qabls,
+                    complete,
+                );
+            }
+
+            if master {
+                for (sid, context) in &mres.session_ctxs {
+                    if match complete {
+                        true => context.qabl.map_or(false, |q| q.complete),
+                        false => context.qabl.is_some(),
+                    } && context.face.whatami != WhatAmI::Router
+                    {
+                        matching_queryables
+                            .entry(*sid)
+                            .or_insert_with(|| context.face.clone());
+                    }
+                }
+            }
+        }
+        matching_queryables
+    }
+}
+
+#[inline]
+fn insert_faces_for_qbls(
+    route: &mut HashMap<usize, Arc<FaceState>>,
+    tables: &Tables,
+    net: &Network,
+    qbls: &HashMap<ZenohIdProto, QueryableInfoType>,
+    complete: bool,
+) {
+    let source = net.idx.index();
+    if net.trees.len() > source {
+        for qbl in qbls {
+            if complete && !qbl.1.complete {
+                continue;
+            }
+            if let Some(qbl_idx) = net.get_idx(qbl.0) {
+                if net.trees[source].directions.len() > qbl_idx.index() {
+                    if let Some(direction) = net.trees[source].directions[qbl_idx.index()] {
+                        if net.graph.contains_node(direction) {
+                            if let Some(face) = tables.get_face(&net.graph[direction].zid) {
+                                route.entry(face.id).or_insert_with(|| face.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        tracing::trace!("Tree for node sid:{} not yet ready", source);
     }
 }

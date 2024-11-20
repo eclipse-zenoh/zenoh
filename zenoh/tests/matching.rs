@@ -61,7 +61,7 @@ async fn zenoh_matching_status_any() -> ZResult<()> {
     assert!(received_status.unwrap().is_none());
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
-    assert!(!matching_status.matching_subscribers());
+    assert!(!matching_status.matching());
 
     let sub = ztimeout!(session1.declare_subscriber("zenoh_matching_status_any_test")).unwrap();
 
@@ -69,11 +69,11 @@ async fn zenoh_matching_status_any() -> ZResult<()> {
     assert!(received_status
         .ok()
         .flatten()
-        .map(|s| s.matching_subscribers())
+        .map(|s| s.matching())
         .eq(&Some(true)));
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
-    assert!(matching_status.matching_subscribers());
+    assert!(matching_status.matching());
 
     ztimeout!(sub.undeclare()).unwrap();
 
@@ -81,11 +81,11 @@ async fn zenoh_matching_status_any() -> ZResult<()> {
     assert!(received_status
         .ok()
         .flatten()
-        .map(|s| s.matching_subscribers())
+        .map(|s| s.matching())
         .eq(&Some(false)));
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
-    assert!(!matching_status.matching_subscribers());
+    assert!(!matching_status.matching());
 
     let sub = ztimeout!(session2.declare_subscriber("zenoh_matching_status_any_test")).unwrap();
 
@@ -93,11 +93,11 @@ async fn zenoh_matching_status_any() -> ZResult<()> {
     assert!(received_status
         .ok()
         .flatten()
-        .map(|s| s.matching_subscribers())
+        .map(|s| s.matching())
         .eq(&Some(true)));
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
-    assert!(matching_status.matching_subscribers());
+    assert!(matching_status.matching());
 
     ztimeout!(sub.undeclare()).unwrap();
 
@@ -105,11 +105,11 @@ async fn zenoh_matching_status_any() -> ZResult<()> {
     assert!(received_status
         .ok()
         .flatten()
-        .map(|s| s.matching_subscribers())
+        .map(|s| s.matching())
         .eq(&Some(false)));
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
-    assert!(!matching_status.matching_subscribers());
+    assert!(!matching_status.matching());
     Ok(())
 }
 
@@ -131,7 +131,7 @@ async fn zenoh_matching_status_remote() -> ZResult<()> {
     assert!(received_status.unwrap().is_none());
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
-    assert!(!matching_status.matching_subscribers());
+    assert!(!matching_status.matching());
 
     let sub = ztimeout!(session1.declare_subscriber("zenoh_matching_status_remote_test")).unwrap();
 
@@ -139,7 +139,7 @@ async fn zenoh_matching_status_remote() -> ZResult<()> {
     assert!(received_status.unwrap().is_none());
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
-    assert!(!matching_status.matching_subscribers());
+    assert!(!matching_status.matching());
 
     ztimeout!(sub.undeclare()).unwrap();
 
@@ -147,7 +147,7 @@ async fn zenoh_matching_status_remote() -> ZResult<()> {
     assert!(received_status.unwrap().is_none());
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
-    assert!(!matching_status.matching_subscribers());
+    assert!(!matching_status.matching());
 
     let sub = ztimeout!(session2.declare_subscriber("zenoh_matching_status_remote_test")).unwrap();
 
@@ -155,11 +155,11 @@ async fn zenoh_matching_status_remote() -> ZResult<()> {
     assert!(received_status
         .ok()
         .flatten()
-        .map(|s| s.matching_subscribers())
+        .map(|s| s.matching())
         .eq(&Some(true)));
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
-    assert!(matching_status.matching_subscribers());
+    assert!(matching_status.matching());
 
     ztimeout!(sub.undeclare()).unwrap();
 
@@ -167,11 +167,11 @@ async fn zenoh_matching_status_remote() -> ZResult<()> {
     assert!(received_status
         .ok()
         .flatten()
-        .map(|s| s.matching_subscribers())
+        .map(|s| s.matching())
         .eq(&Some(false)));
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
-    assert!(!matching_status.matching_subscribers());
+    assert!(!matching_status.matching());
 
     Ok(())
 }
@@ -194,7 +194,7 @@ async fn zenoh_matching_status_local() -> ZResult<()> {
     assert!(received_status.unwrap().is_none());
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
-    assert!(!matching_status.matching_subscribers());
+    assert!(!matching_status.matching());
 
     let sub = ztimeout!(session1.declare_subscriber("zenoh_matching_status_local_test")).unwrap();
 
@@ -202,11 +202,11 @@ async fn zenoh_matching_status_local() -> ZResult<()> {
     assert!(received_status
         .ok()
         .flatten()
-        .map(|s| s.matching_subscribers())
+        .map(|s| s.matching())
         .eq(&Some(true)));
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
-    assert!(matching_status.matching_subscribers());
+    assert!(matching_status.matching());
 
     ztimeout!(sub.undeclare()).unwrap();
 
@@ -214,11 +214,11 @@ async fn zenoh_matching_status_local() -> ZResult<()> {
     assert!(received_status
         .ok()
         .flatten()
-        .map(|s| s.matching_subscribers())
+        .map(|s| s.matching())
         .eq(&Some(false)));
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
-    assert!(!matching_status.matching_subscribers());
+    assert!(!matching_status.matching());
 
     let sub = ztimeout!(session2.declare_subscriber("zenoh_matching_status_local_test")).unwrap();
 
@@ -226,7 +226,7 @@ async fn zenoh_matching_status_local() -> ZResult<()> {
     assert!(received_status.unwrap().is_none());
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
-    assert!(!matching_status.matching_subscribers());
+    assert!(!matching_status.matching());
 
     ztimeout!(sub.undeclare()).unwrap();
 
@@ -234,7 +234,7 @@ async fn zenoh_matching_status_local() -> ZResult<()> {
     assert!(received_status.unwrap().is_none());
 
     let matching_status = ztimeout!(publisher1.matching_status()).unwrap();
-    assert!(!matching_status.matching_subscribers());
+    assert!(!matching_status.matching());
 
     Ok(())
 }

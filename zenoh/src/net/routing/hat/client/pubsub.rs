@@ -410,17 +410,13 @@ impl HatPubSubTrait for HatCode {
                     && interest
                         .res
                         .as_ref()
-                        .map(|res| {
-                            KeyExpr::try_from(res.expr())
-                                .map(|intres| intres.includes(key_expr))
-                                .unwrap_or(false)
-                        })
+                        .map(|res| KeyExpr::keyexpr_include(res.expr(), key_expr))
                         .unwrap_or(true)
-            }) && face_hat!(face).remote_subs.values().any(|sub| {
-                KeyExpr::try_from(sub.expr())
-                    .map(|subres| subres.intersects(key_expr))
-                    .unwrap_or(false)
-            }) {
+            }) && face_hat!(face)
+                .remote_subs
+                .values()
+                .any(|sub| KeyExpr::keyexpr_intersect(sub.expr(), key_expr))
+            {
                 matching_subscriptions.insert(face.id, face.clone());
             }
         }

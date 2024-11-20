@@ -222,7 +222,7 @@ impl<'a> Publisher<'a> {
 
     /// Return the [`MatchingStatus`] of the publisher.
     ///
-    /// [`MatchingStatus::matching_subscribers`] will return true if there exist Subscribers
+    /// [`MatchingStatus::matching`] will return true if there exist Subscribers
     /// matching the Publisher's key expression and false otherwise.
     ///
     /// # Examples
@@ -236,14 +236,17 @@ impl<'a> Publisher<'a> {
     ///     .matching_status()
     ///     .await
     ///     .unwrap()
-    ///     .matching_subscribers();
+    ///     .matching();
     /// # }
     /// ```
     #[zenoh_macros::unstable]
     pub fn matching_status(&self) -> impl Resolve<ZResult<MatchingStatus>> + '_ {
         zenoh_core::ResolveFuture::new(async move {
-            self.session
-                .matching_status(self.key_expr(), self.destination)
+            self.session.matching_status(
+                self.key_expr(),
+                self.destination,
+                MatchingStatusType::Subscribers,
+            )
         })
     }
 
@@ -261,7 +264,7 @@ impl<'a> Publisher<'a> {
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
     /// let matching_listener = publisher.matching_listener().await.unwrap();
     /// while let Ok(matching_status) = matching_listener.recv_async().await {
-    ///     if matching_status.matching_subscribers() {
+    ///     if matching_status.matching() {
     ///         println!("Publisher has matching subscribers.");
     ///     } else {
     ///         println!("Publisher has NO MORE matching subscribers.");
@@ -500,7 +503,7 @@ impl TryFrom<ProtocolPriority> for Priority {
     }
 }
 
-/// A struct that indicates if there exist Subscribers matching the Publisher's key expression.
+/// A struct that indicates if there exist entities matching the key expression.
 ///
 /// # Examples
 /// ```
@@ -518,6 +521,12 @@ pub struct MatchingStatus {
     pub(crate) matching: bool,
 }
 
+#[cfg(feature = "unstable")]
+pub(crate) enum MatchingStatusType {
+    Subscribers,
+    Queryables(bool),
+}
+
 #[zenoh_macros::unstable]
 impl MatchingStatus {
     /// Return true if there exist Subscribers matching the Publisher's key expression.
@@ -533,10 +542,10 @@ impl MatchingStatus {
     ///     .matching_status()
     ///     .await
     ///     .unwrap()
-    ///     .matching_subscribers();
+    ///     .matching();
     /// # }
     /// ```
-    pub fn matching_subscribers(&self) -> bool {
+    pub fn matching(&self) -> bool {
         self.matching
     }
 }
@@ -583,7 +592,7 @@ pub(crate) struct MatchingListenerInner {
 /// let publisher = session.declare_publisher("key/expression").await.unwrap();
 /// let matching_listener = publisher.matching_listener().await.unwrap();
 /// while let Ok(matching_status) = matching_listener.recv_async().await {
-///     if matching_status.matching_subscribers() {
+///     if matching_status.matching() {
 ///         println!("Publisher has matching subscribers.");
 ///     } else {
 ///         println!("Publisher has NO MORE matching subscribers.");
