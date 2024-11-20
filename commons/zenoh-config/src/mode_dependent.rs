@@ -189,6 +189,13 @@ impl<'a> serde::Deserialize<'a> for ModeDependentValue<i64> {
                 Ok(ModeDependentValue::Unique(value))
             }
 
+            fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(ModeDependentValue::Unique(value as i64))
+            }
+
             fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
             where
                 M: MapAccess<'de>,
@@ -220,6 +227,13 @@ impl<'a> serde::Deserialize<'a> for ModeDependentValue<f64> {
                 E: de::Error,
             {
                 Ok(ModeDependentValue::Unique(value))
+            }
+
+            fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(ModeDependentValue::Unique(value as f64))
             }
 
             fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
