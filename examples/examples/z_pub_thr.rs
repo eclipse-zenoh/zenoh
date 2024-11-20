@@ -46,6 +46,12 @@ fn main() {
         .congestion_control(CongestionControl::Block)
         .priority(prio)
         .express(args.express)
+        .allowed_destination({
+            match args.remote {
+                true => zenoh::sample::Locality::Remote,
+                false => zenoh::sample::Locality::Any,
+            }
+        })
         .wait()
         .unwrap();
 
@@ -70,6 +76,9 @@ fn main() {
 
 #[derive(Parser, Clone, PartialEq, Eq, Hash, Debug)]
 struct Args {
+    /// remote-only locality for sending data
+    #[arg(short, long, default_value = "false")]
+    remote: bool,
     /// express for sending data
     #[arg(long, default_value = "false")]
     express: bool,
