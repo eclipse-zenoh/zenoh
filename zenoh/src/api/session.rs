@@ -1252,7 +1252,9 @@ impl SessionInner {
                     primitives.send_interest(Interest {
                         id: pub_state.remote_id,
                         mode: InterestMode::Final,
-                        options: InterestOptions::empty(),
+                        // Note: InterestMode::Final options are undefined in the current protocol specification,
+                        //       they are initialized here for internal use by local egress interceptors.
+                        options: InterestOptions::SUBSCRIBERS,
                         wire_expr: None,
                         ext_qos: declare::ext::QoSType::DEFAULT,
                         ext_tstamp: None,
@@ -1458,7 +1460,9 @@ impl SessionInner {
                     primitives.send_interest(Interest {
                         id: sub_state.id,
                         mode: InterestMode::Final,
-                        options: InterestOptions::empty(),
+                        // Note: InterestMode::Final options are undefined in the current protocol specification,
+                        //       they are initialized here for internal use by local egress interceptors.
+                        options: InterestOptions::TOKENS,
                         wire_expr: None,
                         ext_qos: declare::ext::QoSType::DEFAULT,
                         ext_tstamp: None,

@@ -16,7 +16,7 @@
 #![cfg(target_family = "unix")]
 mod test {
     use std::{
-        sync::{Arc, Mutex},
+        sync::{atomic::AtomicBool, Arc, Mutex},
         time::Duration,
     };
 
@@ -54,6 +54,23 @@ mod test {
         // Only test cases not covered by `test_acl_get_queryable`
         test_reply_deny(27449).await;
         test_reply_allow_then_deny(27449).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_acl_liveliness() {
+        zenoh::init_log_from_env_or("error");
+
+        test_liveliness_allow(27450).await;
+        test_liveliness_deny(27450).await;
+
+        test_liveliness_allow_deny_token(27450).await;
+        test_liveliness_deny_allow_token(27450).await;
+
+        test_liveliness_allow_deny_sub(27450).await;
+        test_liveliness_deny_allow_sub(27450).await;
+
+        test_liveliness_allow_deny_query(27450).await;
+        test_liveliness_deny_allow_query(27450).await;
     }
 
     async fn get_basic_router_config(port: u16) -> Config {
@@ -803,6 +820,720 @@ mod test {
             ztimeout!(qbl.undeclare()).unwrap();
         }
         close_sessions(get_session, qbl_session).await;
+        close_router_session(session).await;
+    }
+
+    async fn test_liveliness_deny(port: u16) {
+        println!("test_liveliness_deny");
+
+        let mut config_router = get_basic_router_config(port).await;
+        config_router
+            .insert_json5(
+                "access_control",
+                r#"{
+                    "enabled": true,
+                    "default_permission": "deny",
+                    "rules": [],
+                    "subjects": [],
+                    "policies": [],
+                }"#,
+            )
+            .unwrap();
+        println!("Opening router session");
+
+        let session = ztimeout!(zenoh::open(config_router)).unwrap();
+        let (reader_session, writer_session) = get_client_sessions(port).await;
+
+        let received_token = Arc::new(AtomicBool::new(false));
+        let dropped_token = Arc::new(AtomicBool::new(false));
+        let received_token_reply = Arc::new(AtomicBool::new(false));
+
+        let cloned_received_token = received_token.clone();
+        let cloned_dropped_token = dropped_token.clone();
+        let cloned_received_token_reply = received_token_reply.clone();
+
+        let subscriber = reader_session
+            .liveliness()
+            .declare_subscriber(KEY_EXPR)
+            .callback(move |sample| {
+                if sample.kind() == SampleKind::Put {
+                    cloned_received_token.store(true, std::sync::atomic::Ordering::Relaxed);
+                } else if sample.kind() == SampleKind::Delete {
+                    cloned_dropped_token.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+            })
+            .await
+            .unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        // test if sub receives token declaration
+        let liveliness = writer_session
+            .liveliness()
+            .declare_token(KEY_EXPR)
+            .await
+            .unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(!received_token.load(std::sync::atomic::Ordering::Relaxed));
+
+        // test if query receives token reply
+        reader_session
+            .liveliness()
+            .get(KEY_EXPR)
+            .timeout(TIMEOUT)
+            .callback(move |reply| match reply.result() {
+                Ok(_) => {
+                    cloned_received_token_reply.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+                Err(e) => println!("Error : {:?}", e),
+            })
+            .await
+            .unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(!received_token_reply.load(std::sync::atomic::Ordering::Relaxed));
+
+        // test if sub receives token undeclaration
+        ztimeout!(liveliness.undeclare()).unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(!dropped_token.load(std::sync::atomic::Ordering::Relaxed));
+
+        ztimeout!(subscriber.undeclare()).unwrap();
+        close_sessions(reader_session, writer_session).await;
+        close_router_session(session).await;
+    }
+
+    async fn test_liveliness_allow(port: u16) {
+        println!("test_liveliness_allow");
+
+        let mut config_router = get_basic_router_config(port).await;
+        config_router
+            .insert_json5(
+                "access_control",
+                r#"{
+                    "enabled": true,
+                    "default_permission": "allow",
+                    "rules": [],
+                    "subjects": [],
+                    "policies": [],
+                }"#,
+            )
+            .unwrap();
+        println!("Opening router session");
+
+        let session = ztimeout!(zenoh::open(config_router)).unwrap();
+        let (reader_session, writer_session) = get_client_sessions(port).await;
+
+        let received_token = Arc::new(AtomicBool::new(false));
+        let dropped_token = Arc::new(AtomicBool::new(false));
+        let received_token_reply = Arc::new(AtomicBool::new(false));
+
+        let cloned_received_token = received_token.clone();
+        let cloned_dropped_token = dropped_token.clone();
+        let cloned_received_token_reply = received_token_reply.clone();
+
+        let subscriber = reader_session
+            .liveliness()
+            .declare_subscriber(KEY_EXPR)
+            .callback(move |sample| {
+                if sample.kind() == SampleKind::Put {
+                    cloned_received_token.store(true, std::sync::atomic::Ordering::Relaxed);
+                } else if sample.kind() == SampleKind::Delete {
+                    cloned_dropped_token.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+            })
+            .await
+            .unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        // test if sub receives token declaration
+        let liveliness = writer_session
+            .liveliness()
+            .declare_token(KEY_EXPR)
+            .await
+            .unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(received_token.load(std::sync::atomic::Ordering::Relaxed));
+
+        // test if query receives token reply
+        reader_session
+            .liveliness()
+            .get(KEY_EXPR)
+            .timeout(TIMEOUT)
+            .callback(move |reply| match reply.result() {
+                Ok(_) => {
+                    cloned_received_token_reply.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+                Err(e) => println!("Error : {:?}", e),
+            })
+            .await
+            .unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(received_token_reply.load(std::sync::atomic::Ordering::Relaxed));
+
+        // test if sub receives token undeclaration
+        ztimeout!(liveliness.undeclare()).unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(dropped_token.load(std::sync::atomic::Ordering::Relaxed));
+
+        ztimeout!(subscriber.undeclare()).unwrap();
+        close_sessions(reader_session, writer_session).await;
+        close_router_session(session).await;
+    }
+
+    async fn test_liveliness_allow_deny_token(port: u16) {
+        println!("test_liveliness_allow_deny_token");
+
+        let mut config_router = get_basic_router_config(port).await;
+        config_router
+            .insert_json5(
+                "access_control",
+                r#"{
+                    "enabled": true,
+                    "default_permission": "allow",
+                    "rules": [
+                        {
+                            id: "filter token",
+                            permission: "deny",
+                            messages: ["liveliness_token"],
+                            flows: ["ingress", "egress"],
+                            key_exprs: ["test/demo"],
+                        },
+                    ],
+                    "subjects": [
+                        { id: "all" },
+                    ],
+                    "policies": [
+                        {
+                            "subjects": ["all"],
+                            "rules": ["filter token"],
+                        },
+                    ],
+                }"#,
+            )
+            .unwrap();
+        println!("Opening router session");
+
+        let session = ztimeout!(zenoh::open(config_router)).unwrap();
+        let (reader_session, writer_session) = get_client_sessions(port).await;
+
+        let received_token = Arc::new(AtomicBool::new(false));
+        let dropped_token = Arc::new(AtomicBool::new(false));
+        let received_token_reply = Arc::new(AtomicBool::new(false));
+
+        let cloned_received_token = received_token.clone();
+        let cloned_dropped_token = dropped_token.clone();
+        let cloned_received_token_reply = received_token_reply.clone();
+
+        let subscriber = reader_session
+            .liveliness()
+            .declare_subscriber(KEY_EXPR)
+            .callback(move |sample| {
+                if sample.kind() == SampleKind::Put {
+                    cloned_received_token.store(true, std::sync::atomic::Ordering::Relaxed);
+                } else if sample.kind() == SampleKind::Delete {
+                    cloned_dropped_token.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+            })
+            .await
+            .unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        // test if sub receives token declaration
+        let liveliness = writer_session
+            .liveliness()
+            .declare_token(KEY_EXPR)
+            .await
+            .unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(!received_token.load(std::sync::atomic::Ordering::Relaxed));
+
+        // test if query receives token reply
+        reader_session
+            .liveliness()
+            .get(KEY_EXPR)
+            .timeout(TIMEOUT)
+            .callback(move |reply| match reply.result() {
+                Ok(_) => {
+                    cloned_received_token_reply.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+                Err(e) => println!("Error : {:?}", e),
+            })
+            .await
+            .unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(!received_token_reply.load(std::sync::atomic::Ordering::Relaxed));
+
+        // test if sub receives token undeclaration
+        ztimeout!(liveliness.undeclare()).unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(!dropped_token.load(std::sync::atomic::Ordering::Relaxed));
+
+        ztimeout!(subscriber.undeclare()).unwrap();
+        close_sessions(reader_session, writer_session).await;
+        close_router_session(session).await;
+    }
+
+    async fn test_liveliness_deny_allow_token(port: u16) {
+        println!("test_liveliness_deny_allow_token");
+
+        let mut config_router = get_basic_router_config(port).await;
+        config_router
+            .insert_json5(
+                "access_control",
+                r#"{
+                    "enabled": true,
+                    "default_permission": "deny",
+                    "rules": [
+                        {
+                            id: "filter token",
+                            permission: "allow",
+                            messages: ["liveliness_token"],
+                            flows: ["ingress", "egress"],
+                            key_exprs: ["test/demo"],
+                        },
+                    ],
+                    "subjects": [
+                        { id: "all" },
+                    ],
+                    "policies": [
+                        {
+                            "subjects": ["all"],
+                            "rules": ["filter token"],
+                        },
+                    ],
+                }"#,
+            )
+            .unwrap();
+        println!("Opening router session");
+
+        let session = ztimeout!(zenoh::open(config_router)).unwrap();
+        let (reader_session, writer_session) = get_client_sessions(port).await;
+
+        let received_token = Arc::new(AtomicBool::new(false));
+        let dropped_token = Arc::new(AtomicBool::new(false));
+        let received_token_reply = Arc::new(AtomicBool::new(false));
+
+        let cloned_received_token = received_token.clone();
+        let cloned_dropped_token = dropped_token.clone();
+        let cloned_received_token_reply = received_token_reply.clone();
+
+        let subscriber = reader_session
+            .liveliness()
+            .declare_subscriber(KEY_EXPR)
+            .callback(move |sample| {
+                if sample.kind() == SampleKind::Put {
+                    cloned_received_token.store(true, std::sync::atomic::Ordering::Relaxed);
+                } else if sample.kind() == SampleKind::Delete {
+                    cloned_dropped_token.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+            })
+            .await
+            .unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        // test if sub receives token declaration
+        let liveliness = writer_session
+            .liveliness()
+            .declare_token(KEY_EXPR)
+            .await
+            .unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(!received_token.load(std::sync::atomic::Ordering::Relaxed));
+
+        // test if query receives token reply
+        reader_session
+            .liveliness()
+            .get(KEY_EXPR)
+            .timeout(TIMEOUT)
+            .callback(move |reply| match reply.result() {
+                Ok(_) => {
+                    cloned_received_token_reply.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+                Err(e) => println!("Error : {:?}", e),
+            })
+            .await
+            .unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(!received_token_reply.load(std::sync::atomic::Ordering::Relaxed));
+
+        // test if sub receives token undeclaration
+        ztimeout!(liveliness.undeclare()).unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(!dropped_token.load(std::sync::atomic::Ordering::Relaxed));
+
+        ztimeout!(subscriber.undeclare()).unwrap();
+        close_sessions(reader_session, writer_session).await;
+        close_router_session(session).await;
+    }
+
+    async fn test_liveliness_allow_deny_sub(port: u16) {
+        println!("test_liveliness_allow_deny_sub");
+
+        let mut config_router = get_basic_router_config(port).await;
+        config_router
+            .insert_json5(
+                "access_control",
+                r#"{
+                    "enabled": true,
+                    "default_permission": "allow",
+                    "rules": [
+                        {
+                            id: "filter sub",
+                            permission: "deny",
+                            messages: ["declare_liveliness_subscriber"],
+                            flows: ["ingress", "egress"],
+                            key_exprs: ["test/demo"],
+                        },
+                    ],
+                    "subjects": [
+                        { id: "all" },
+                    ],
+                    "policies": [
+                        {
+                            "subjects": ["all"],
+                            "rules": ["filter sub"],
+                        },
+                    ],
+                }"#,
+            )
+            .unwrap();
+        println!("Opening router session");
+
+        let session = ztimeout!(zenoh::open(config_router)).unwrap();
+        let (reader_session, writer_session) = get_client_sessions(port).await;
+
+        let received_token = Arc::new(AtomicBool::new(false));
+        let dropped_token = Arc::new(AtomicBool::new(false));
+        let received_token_reply = Arc::new(AtomicBool::new(false));
+
+        let cloned_received_token = received_token.clone();
+        let cloned_dropped_token = dropped_token.clone();
+        let cloned_received_token_reply = received_token_reply.clone();
+
+        let subscriber = reader_session
+            .liveliness()
+            .declare_subscriber(KEY_EXPR)
+            .callback(move |sample| {
+                if sample.kind() == SampleKind::Put {
+                    cloned_received_token.store(true, std::sync::atomic::Ordering::Relaxed);
+                } else if sample.kind() == SampleKind::Delete {
+                    cloned_dropped_token.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+            })
+            .await
+            .unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        // test if sub receives token declaration
+        let liveliness = writer_session
+            .liveliness()
+            .declare_token(KEY_EXPR)
+            .await
+            .unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(!received_token.load(std::sync::atomic::Ordering::Relaxed));
+
+        // test if query receives token reply
+        reader_session
+            .liveliness()
+            .get(KEY_EXPR)
+            .timeout(TIMEOUT)
+            .callback(move |reply| match reply.result() {
+                Ok(_) => {
+                    cloned_received_token_reply.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+                Err(e) => println!("Error : {:?}", e),
+            })
+            .await
+            .unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(received_token_reply.load(std::sync::atomic::Ordering::Relaxed));
+
+        // test if sub receives token undeclaration
+        ztimeout!(liveliness.undeclare()).unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(!dropped_token.load(std::sync::atomic::Ordering::Relaxed));
+
+        ztimeout!(subscriber.undeclare()).unwrap();
+        close_sessions(reader_session, writer_session).await;
+        close_router_session(session).await;
+    }
+
+    async fn test_liveliness_deny_allow_sub(port: u16) {
+        println!("test_liveliness_deny_allow_sub");
+
+        let mut config_router = get_basic_router_config(port).await;
+        config_router
+            .insert_json5(
+                "access_control",
+                r#"{
+                        "enabled": true,
+                        "default_permission": "deny",
+                        "rules": [
+                            {
+                                id: "filter sub",
+                                permission: "allow",
+                                messages: ["declare_liveliness_subscriber", "liveliness_token"],
+                                flows: ["ingress", "egress"],
+                                key_exprs: ["test/demo"],
+                            },
+                        ],
+                        "subjects": [
+                            { id: "all" },
+                        ],
+                        "policies": [
+                            {
+                                "subjects": ["all"],
+                                "rules": ["filter sub"],
+                            },
+                        ],
+                    }"#,
+            )
+            .unwrap();
+        println!("Opening router session");
+
+        let session = ztimeout!(zenoh::open(config_router)).unwrap();
+        let (reader_session, writer_session) = get_client_sessions(port).await;
+
+        let received_token = Arc::new(AtomicBool::new(false));
+        let dropped_token = Arc::new(AtomicBool::new(false));
+        let received_token_reply = Arc::new(AtomicBool::new(false));
+
+        let cloned_received_token = received_token.clone();
+        let cloned_dropped_token = dropped_token.clone();
+        let cloned_received_token_reply = received_token_reply.clone();
+
+        let subscriber = reader_session
+            .liveliness()
+            .declare_subscriber(KEY_EXPR)
+            .callback(move |sample| {
+                if sample.kind() == SampleKind::Put {
+                    cloned_received_token.store(true, std::sync::atomic::Ordering::Relaxed);
+                } else if sample.kind() == SampleKind::Delete {
+                    cloned_dropped_token.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+            })
+            .await
+            .unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        // test if sub receives token declaration
+        let liveliness = writer_session
+            .liveliness()
+            .declare_token(KEY_EXPR)
+            .await
+            .unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(received_token.load(std::sync::atomic::Ordering::Relaxed));
+
+        // test if query receives token reply
+        reader_session
+            .liveliness()
+            .get(KEY_EXPR)
+            .timeout(TIMEOUT)
+            .callback(move |reply| match reply.result() {
+                Ok(_) => {
+                    cloned_received_token_reply.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+                Err(e) => println!("Error : {:?}", e),
+            })
+            .await
+            .unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(!received_token_reply.load(std::sync::atomic::Ordering::Relaxed));
+
+        // test if sub receives token undeclaration
+        ztimeout!(liveliness.undeclare()).unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(dropped_token.load(std::sync::atomic::Ordering::Relaxed));
+
+        ztimeout!(subscriber.undeclare()).unwrap();
+        close_sessions(reader_session, writer_session).await;
+        close_router_session(session).await;
+    }
+
+    async fn test_liveliness_allow_deny_query(port: u16) {
+        println!("test_liveliness_allow_deny_query");
+
+        let mut config_router = get_basic_router_config(port).await;
+        config_router
+            .insert_json5(
+                "access_control",
+                r#"{
+                    "enabled": true,
+                    "default_permission": "allow",
+                    "rules": [
+                        {
+                            id: "filter query",
+                            permission: "deny",
+                            messages: ["liveliness_query"],
+                            flows: ["ingress", "egress"],
+                            key_exprs: ["test/demo"],
+                        },
+                    ],
+                    "subjects": [
+                        { id: "all" },
+                    ],
+                    "policies": [
+                        {
+                            "subjects": ["all"],
+                            "rules": ["filter query"],
+                        },
+                    ],
+                }"#,
+            )
+            .unwrap();
+        println!("Opening router session");
+
+        let session = ztimeout!(zenoh::open(config_router)).unwrap();
+        let (reader_session, writer_session) = get_client_sessions(port).await;
+
+        let received_token = Arc::new(AtomicBool::new(false));
+        let dropped_token = Arc::new(AtomicBool::new(false));
+        let received_token_reply = Arc::new(AtomicBool::new(false));
+
+        let cloned_received_token = received_token.clone();
+        let cloned_dropped_token = dropped_token.clone();
+        let cloned_received_token_reply = received_token_reply.clone();
+
+        let subscriber = reader_session
+            .liveliness()
+            .declare_subscriber(KEY_EXPR)
+            .callback(move |sample| {
+                if sample.kind() == SampleKind::Put {
+                    cloned_received_token.store(true, std::sync::atomic::Ordering::Relaxed);
+                } else if sample.kind() == SampleKind::Delete {
+                    cloned_dropped_token.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+            })
+            .await
+            .unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        // test if sub receives token declaration
+        let liveliness = writer_session
+            .liveliness()
+            .declare_token(KEY_EXPR)
+            .await
+            .unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(received_token.load(std::sync::atomic::Ordering::Relaxed));
+
+        // test if query receives token reply
+        reader_session
+            .liveliness()
+            .get(KEY_EXPR)
+            .timeout(TIMEOUT)
+            .callback(move |reply| match reply.result() {
+                Ok(_) => {
+                    cloned_received_token_reply.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+                Err(e) => println!("Error : {:?}", e),
+            })
+            .await
+            .unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(!received_token_reply.load(std::sync::atomic::Ordering::Relaxed));
+
+        // test if sub receives token undeclaration
+        ztimeout!(liveliness.undeclare()).unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(dropped_token.load(std::sync::atomic::Ordering::Relaxed));
+
+        ztimeout!(subscriber.undeclare()).unwrap();
+        close_sessions(reader_session, writer_session).await;
+        close_router_session(session).await;
+    }
+
+    async fn test_liveliness_deny_allow_query(port: u16) {
+        println!("test_liveliness_deny_allow_query");
+
+        let mut config_router = get_basic_router_config(port).await;
+        config_router
+            .insert_json5(
+                "access_control",
+                r#"{
+                        "enabled": true,
+                        "default_permission": "deny",
+                        "rules": [
+                            {
+                                id: "filter query",
+                                permission: "allow",
+                                messages: ["liveliness_query", "liveliness_token"],
+                                flows: ["ingress", "egress"],
+                                key_exprs: ["test/demo"],
+                            },
+                        ],
+                        "subjects": [
+                            { id: "all" },
+                        ],
+                        "policies": [
+                            {
+                                "subjects": ["all"],
+                                "rules": ["filter query"],
+                            },
+                        ],
+                    }"#,
+            )
+            .unwrap();
+        println!("Opening router session");
+
+        let session = ztimeout!(zenoh::open(config_router)).unwrap();
+        let (reader_session, writer_session) = get_client_sessions(port).await;
+
+        let received_token = Arc::new(AtomicBool::new(false));
+        let dropped_token = Arc::new(AtomicBool::new(false));
+        let received_token_reply = Arc::new(AtomicBool::new(false));
+
+        let cloned_received_token = received_token.clone();
+        let cloned_dropped_token = dropped_token.clone();
+        let cloned_received_token_reply = received_token_reply.clone();
+
+        let subscriber = reader_session
+            .liveliness()
+            .declare_subscriber(KEY_EXPR)
+            .callback(move |sample| {
+                if sample.kind() == SampleKind::Put {
+                    cloned_received_token.store(true, std::sync::atomic::Ordering::Relaxed);
+                } else if sample.kind() == SampleKind::Delete {
+                    cloned_dropped_token.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+            })
+            .await
+            .unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        // test if sub receives token declaration
+        let liveliness = writer_session
+            .liveliness()
+            .declare_token(KEY_EXPR)
+            .await
+            .unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(!received_token.load(std::sync::atomic::Ordering::Relaxed));
+
+        // test if query receives token reply
+        reader_session
+            .liveliness()
+            .get(KEY_EXPR)
+            .timeout(TIMEOUT)
+            .callback(move |reply| match reply.result() {
+                Ok(_) => {
+                    cloned_received_token_reply.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+                Err(e) => println!("Error : {:?}", e),
+            })
+            .await
+            .unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(received_token_reply.load(std::sync::atomic::Ordering::Relaxed));
+
+        // test if sub receives token undeclaration
+        ztimeout!(liveliness.undeclare()).unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(!dropped_token.load(std::sync::atomic::Ordering::Relaxed));
+
+        ztimeout!(subscriber.undeclare()).unwrap();
+        close_sessions(reader_session, writer_session).await;
         close_router_session(session).await;
     }
 }
