@@ -94,11 +94,9 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
             _ => {}
         }
 
-        if let Some(client_auth) = c.enable_mtls() {
-            match client_auth {
-                true => ps.push((TLS_ENABLE_MTLS, "true")),
-                false => ps.push((TLS_ENABLE_MTLS, "false")),
-            };
+        match c.enable_mtls().unwrap_or(TLS_ENABLE_MTLS_DEFAULT) {
+            true => ps.push((TLS_ENABLE_MTLS, "true")),
+            false => ps.push((TLS_ENABLE_MTLS, "false")),
         }
 
         match (c.connect_private_key(), c.connect_private_key_base64()) {
