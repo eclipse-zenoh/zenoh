@@ -43,7 +43,7 @@ use super::{
 use crate::{
     api::key_expr::KeyExpr,
     net::{
-        primitives::{McastMux, Mux, Primitives},
+        primitives::{McastMux, Mux, OptPrimitives, Primitives},
         routing::{
             dispatcher::interests::finalize_pending_interests,
             interceptor::{InterceptorTrait, InterceptorsChain},
@@ -212,6 +212,13 @@ impl Face {
             tables: Arc::downgrade(&self.tables),
             state: Arc::downgrade(&self.state),
         }
+    }
+}
+
+impl OptPrimitives for Face {
+    #[inline]
+    fn opt_send_push<F: FnOnce()->Push>(&self,wire_expr: &zenoh_protocol::core::WireExpr<'_>, fn_msg: F, reliability: Reliability) {
+        opt_route_data(&self.tables, &self.state, wire_expr, fn_msg, reliability);
     }
 }
 

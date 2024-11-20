@@ -19,11 +19,15 @@ use std::any::Any;
 pub use demux::*;
 pub use mux::*;
 use zenoh_protocol::{
-    core::Reliability,
+    core::{Reliability, WireExpr},
     network::{interest::Interest, Declare, Push, Request, Response, ResponseFinal},
 };
 
 use super::routing::RoutingContext;
+
+pub trait OptPrimitives: Send + Sync {
+    fn opt_send_push<F: FnOnce()->Push>(&self,wire_expr: &WireExpr<'_>, fn_msg: F, reliability: Reliability);
+}
 
 pub trait Primitives: Send + Sync {
     fn send_interest(&self, msg: Interest);
