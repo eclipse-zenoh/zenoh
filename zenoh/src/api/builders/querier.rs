@@ -176,6 +176,8 @@ impl<'a, 'b> Wait for QuerierBuilder<'a, 'b> {
             timeout: self.timeout,
             #[cfg(feature = "unstable")]
             accept_replies: self.accept_replies,
+            #[cfg(feature = "unstable")]
+            matching_listeners: Default::default(),
         })
     }
 }

@@ -1,6 +1,8 @@
 use core::fmt;
 use std::{
+    collections::HashSet,
     future::{IntoFuture, Ready},
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
@@ -24,6 +26,7 @@ use zenoh_result::ZResult;
 use {
     crate::api::publisher::{MatchingStatus, MatchingStatusType},
     crate::api::sample::SourceInfo,
+    crate::pubsub::MatchingListenerBuilder,
     crate::query::ReplyKeyExpr,
     zenoh_config::wrappers::EntityGlobalId,
     zenoh_protocol::core::EntityGlobalIdProto,
@@ -63,6 +66,8 @@ pub struct Querier<'a> {
     #[cfg(feature = "unstable")]
     pub(crate) accept_replies: ReplyKeyExpr,
     pub(crate) undeclare_on_drop: bool,
+    #[cfg(feature = "unstable")]
+    pub(crate) matching_listeners: Arc<Mutex<HashSet<Id>>>,
 }
 
 impl fmt::Debug for QuerierState {
@@ -166,6 +171,13 @@ impl<'a> Querier<'a> {
     fn undeclare_impl(&mut self) -> ZResult<()> {
         // set the flag first to avoid double panic if this function panic
         self.undeclare_on_drop = false;
+        #[cfg(feature = "unstable")]
+        {
+            let ids: Vec<Id> = zlock!(self.matching_listeners).drain().collect();
+            for id in ids {
+                self.session.undeclare_matches_listener_inner(id)?
+            }
+        }
         self.session.undeclare_querier_inner(self.id)
     }
 
@@ -197,6 +209,42 @@ impl<'a> Querier<'a> {
                 MatchingStatusType::Queryables(self.target == QueryTarget::AllComplete),
             )
         })
+    }
+
+    /// Return a [`MatchingListener`] for this Publisher.
+    ///
+    /// The [`MatchingListener`] that will send a notification each time the [`MatchingStatus`] of
+    /// the Publisher changes.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let publisher = session.declare_querier("key/expression").await.unwrap();
+    /// let matching_listener = querier.matching_listener().await.unwrap();
+    /// while let Ok(matching_status) = matching_listener.recv_async().await {
+    ///     if matching_status.matching() {
+    ///         println!("Querier has matching queryables.");
+    ///     } else {
+    ///         println!("Querier has NO MORE matching queryables.");
+    ///     }
+    /// }
+    /// # }
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn matching_listener(&self) -> MatchingListenerBuilder<'_, DefaultHandler> {
+        MatchingListenerBuilder {
+            session: &self.session,
+            key_expr: &self.key_expr,
+            destination: self.destination,
+            matching_listeners: &self.matching_listeners,
+            matching_status_type: MatchingStatusType::Queryables(
+                self.target == QueryTarget::AllComplete,
+            ),
+            handler: DefaultHandler::default(),
+        }
     }
 }
 

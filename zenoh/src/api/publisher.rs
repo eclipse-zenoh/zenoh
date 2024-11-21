@@ -273,9 +273,13 @@ impl<'a> Publisher<'a> {
     /// # }
     /// ```
     #[zenoh_macros::unstable]
-    pub fn matching_listener(&self) -> MatchingListenerBuilder<'_, 'a, DefaultHandler> {
+    pub fn matching_listener(&self) -> MatchingListenerBuilder<'_, DefaultHandler> {
         MatchingListenerBuilder {
-            publisher: self,
+            session: &self.session,
+            key_expr: &self.key_expr,
+            destination: self.destination,
+            matching_listeners: &self.matching_listeners,
+            matching_status_type: MatchingStatusType::Subscribers,
             handler: DefaultHandler::default(),
         }
     }
@@ -522,6 +526,7 @@ pub struct MatchingStatus {
 }
 
 #[cfg(feature = "unstable")]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum MatchingStatusType {
     Subscribers,
     Queryables(bool),
@@ -555,7 +560,29 @@ pub(crate) struct MatchingListenerState {
     pub(crate) current: Mutex<bool>,
     pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) destination: Locality,
+    pub(crate) match_type: MatchingStatusType,
     pub(crate) callback: Callback<MatchingStatus>,
+}
+
+impl MatchingListenerState {
+    pub(crate) fn is_matching(&self, key_expr: &KeyExpr, match_type: &MatchingStatusType) -> bool {
+        match match_type {
+            MatchingStatusType::Subscribers => {
+                self.match_type == MatchingStatusType::Subscribers
+                    && self.key_expr.intersects(key_expr)
+            }
+            MatchingStatusType::Queryables(false) => {
+                self.match_type == MatchingStatusType::Queryables(false)
+                    && self.key_expr.intersects(key_expr)
+            }
+            MatchingStatusType::Queryables(true) => {
+                (self.match_type == MatchingStatusType::Queryables(false)
+                    && self.key_expr.intersects(key_expr))
+                    || (self.match_type == MatchingStatusType::Queryables(true)
+                        && key_expr.includes(&self.key_expr))
+            }
+        }
+    }
 }
 
 #[zenoh_macros::unstable]
@@ -564,6 +591,7 @@ impl fmt::Debug for MatchingListenerState {
         f.debug_struct("MatchingListener")
             .field("id", &self.id)
             .field("key_expr", &self.key_expr)
+            .field("match_type", &self.match_type)
             .finish()
     }
 }

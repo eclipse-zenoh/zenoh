@@ -72,7 +72,6 @@ use crate::api::selector::ZenohParameters;
 #[cfg(feature = "unstable")]
 use crate::api::{
     liveliness::{Liveliness, LivelinessTokenState},
-    publisher::Publisher,
     publisher::{MatchingListenerState, MatchingStatus, MatchingStatusType},
     query::{LivelinessQueryState, ReplyKeyExpr},
     sample::SourceInfo,
@@ -140,6 +139,8 @@ pub(crate) struct SessionState {
     pub(crate) liveliness_subscribers: HashMap<Id, Arc<SubscriberState>>,
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
     #[cfg(feature = "unstable")]
+    pub(crate) remote_queryables: HashMap<Id, (KeyExpr<'static>, bool)>,
+    #[cfg(feature = "unstable")]
     pub(crate) tokens: HashMap<Id, Arc<LivelinessTokenState>>,
     #[cfg(feature = "unstable")]
     pub(crate) matching_listeners: HashMap<Id, Arc<MatchingListenerState>>,
@@ -175,6 +176,8 @@ impl SessionState {
             subscribers: HashMap::new(),
             liveliness_subscribers: HashMap::new(),
             queryables: HashMap::new(),
+            #[cfg(feature = "unstable")]
+            remote_queryables: HashMap::new(),
             #[cfg(feature = "unstable")]
             tokens: HashMap::new(),
             #[cfg(feature = "unstable")]
@@ -1549,7 +1552,12 @@ impl SessionInner {
             #[cfg(feature = "unstable")]
             {
                 let state = zread!(self.state);
-                self.update_status_up(&state, &key_expr)
+                self.update_matching_status(
+                    &state,
+                    &key_expr,
+                    MatchingStatusType::Subscribers,
+                    true,
+                )
             }
         }
 
@@ -1606,7 +1614,12 @@ impl SessionInner {
                     #[cfg(feature = "unstable")]
                     {
                         let state = zread!(self.state);
-                        self.update_status_down(&state, &sub_state.key_expr)
+                        self.update_matching_status(
+                            &state,
+                            &sub_state.key_expr,
+                            MatchingStatusType::Subscribers,
+                            false,
+                        )
                     }
                 }
             } else {
@@ -1634,25 +1647,25 @@ impl SessionInner {
     }
 
     pub(crate) fn declare_queryable_inner(
-        &self,
-        key_expr: &WireExpr,
+        self: &Arc<Self>,
+        key_expr: &KeyExpr,
         complete: bool,
         origin: Locality,
         callback: Callback<Query>,
     ) -> ZResult<Arc<QueryableState>> {
+        let wire_expr = key_expr.to_wire(self);
         let mut state = zwrite!(self.state);
         tracing::trace!("declare_queryable({:?})", key_expr);
         let id = self.runtime.next_id();
         let qable_state = Arc::new(QueryableState {
             id,
-            key_expr: key_expr.to_owned(),
+            key_expr: wire_expr.to_owned(),
             complete,
             origin,
             callback,
         });
 
         state.queryables.insert(id, qable_state.clone());
-
         if origin != Locality::SessionLocal {
             let primitives = state.primitives()?;
             drop(state);
@@ -1667,15 +1680,29 @@ impl SessionInner {
                 ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                 body: DeclareBody::DeclareQueryable(DeclareQueryable {
                     id,
-                    wire_expr: key_expr.to_owned(),
+                    wire_expr: wire_expr.to_owned(),
                     ext_info: qabl_info,
                 }),
             });
+        } else {
+            drop(state);
         }
+
+        #[cfg(feature = "unstable")]
+        {
+            let state = zread!(self.state);
+            self.update_matching_status(
+                &state,
+                key_expr,
+                MatchingStatusType::Queryables(complete),
+                true,
+            )
+        }
+
         Ok(qable_state)
     }
 
-    pub(crate) fn close_queryable(&self, qid: Id) -> ZResult<()> {
+    pub(crate) fn close_queryable(self: &Arc<Self>, qid: Id) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         let Ok(primitives) = state.primitives() else {
             return Ok(());
@@ -1696,6 +1723,18 @@ impl SessionInner {
                         },
                     }),
                 });
+            } else {
+                drop(state);
+            }
+            #[cfg(feature = "unstable")]
+            {
+                let state = zread!(self.state);
+                self.update_matching_status(
+                    &state,
+                    &state.local_wireexpr_to_expr(&qable_state.key_expr)?,
+                    MatchingStatusType::Queryables(qable_state.complete),
+                    false,
+                )
             }
             Ok(())
         } else {
@@ -1866,17 +1905,20 @@ impl SessionInner {
     #[zenoh_macros::unstable]
     pub(crate) fn declare_matches_listener_inner(
         &self,
-        publisher: &Publisher,
+        key_expr: &KeyExpr,
+        destination: Locality,
+        match_type: MatchingStatusType,
         callback: Callback<MatchingStatus>,
     ) -> ZResult<Arc<MatchingListenerState>> {
         let mut state = zwrite!(self.state);
         let id = self.runtime.next_id();
-        tracing::trace!("matches_listener({:?}) => {id}", publisher.key_expr);
+        tracing::trace!("matches_listener({:?}: {:?}) => {id}", match_type, key_expr);
         let listener_state = Arc::new(MatchingListenerState {
             id,
             current: std::sync::Mutex::new(false),
-            destination: publisher.destination,
-            key_expr: publisher.key_expr.clone().into_owned(),
+            destination,
+            key_expr: key_expr.clone().into_owned(),
+            match_type: match_type.clone(),
             callback,
         });
         state.matching_listeners.insert(id, listener_state.clone());
@@ -1884,11 +1926,7 @@ impl SessionInner {
         match listener_state.current.lock() {
             Ok(mut current) => {
                 if self
-                    .matching_status(
-                        &publisher.key_expr,
-                        listener_state.destination,
-                        MatchingStatusType::Subscribers,
-                    )
+                    .matching_status(key_expr, listener_state.destination, match_type)
                     .map(|s| s.matching())
                     .unwrap_or(true)
                 {
@@ -1948,66 +1986,33 @@ impl SessionInner {
     }
 
     #[zenoh_macros::unstable]
-    pub(crate) fn update_status_up(self: &Arc<Self>, state: &SessionState, key_expr: &KeyExpr) {
+    pub(crate) fn update_matching_status(
+        self: &Arc<Self>,
+        state: &SessionState,
+        key_expr: &KeyExpr,
+        match_type: MatchingStatusType,
+        status_value: bool,
+    ) {
         for msub in state.matching_listeners.values() {
-            if key_expr.intersects(&msub.key_expr) {
+            if msub.is_matching(key_expr, &match_type) {
                 // Cannot hold session lock when calling tables (matching_status())
                 // TODO: check which ZRuntime should be used
                 self.task_controller
                     .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
                         let session = WeakSession::new(self);
                         let msub = msub.clone();
+                        let match_type = match_type.clone();
                         async move {
                             match msub.current.lock() {
                                 Ok(mut current) => {
-                                    if !*current {
+                                    if *current != status_value {
                                         if let Ok(status) = session.matching_status(
                                             &msub.key_expr,
                                             msub.destination,
-                                            MatchingStatusType::Subscribers,
+                                            match_type,
                                         ) {
-                                            if status.matching() {
-                                                *current = true;
-                                                let callback = msub.callback.clone();
-                                                callback.call(status)
-                                            }
-                                        }
-                                    }
-                                }
-                                Err(e) => {
-                                    tracing::error!(
-                                        "Error trying to acquire MathginListener lock: {}",
-                                        e
-                                    );
-                                }
-                            }
-                        }
-                    });
-            }
-        }
-    }
-
-    #[zenoh_macros::unstable]
-    pub(crate) fn update_status_down(self: &Arc<Self>, state: &SessionState, key_expr: &KeyExpr) {
-        for msub in state.matching_listeners.values() {
-            if key_expr.intersects(&msub.key_expr) {
-                // Cannot hold session lock when calling tables (matching_status())
-                // TODO: check which ZRuntime should be used
-                self.task_controller
-                    .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
-                        let session = WeakSession::new(self);
-                        let msub = msub.clone();
-                        async move {
-                            match msub.current.lock() {
-                                Ok(mut current) => {
-                                    if *current {
-                                        if let Ok(status) = session.matching_status(
-                                            &msub.key_expr,
-                                            msub.destination,
-                                            MatchingStatusType::Subscribers,
-                                        ) {
-                                            if !status.matching() {
-                                                *current = false;
+                                            if status.matching() == status_value {
+                                                *current = status_value;
                                                 let callback = msub.callback.clone();
                                                 callback.call(status)
                                             }
@@ -2527,7 +2532,12 @@ impl Primitives for WeakSession {
                     {
                         Ok(expr) => {
                             state.remote_subscribers.insert(m.id, expr.clone());
-                            self.update_status_up(&state, &expr);
+                            self.update_matching_status(
+                                &state,
+                                &expr,
+                                MatchingStatusType::Subscribers,
+                                true,
+                            );
                         }
                         Err(err) => {
                             tracing::error!(
@@ -2547,7 +2557,12 @@ impl Primitives for WeakSession {
                         return; // Session closing or closed
                     }
                     if let Some(expr) = state.remote_subscribers.remove(&m.id) {
-                        self.update_status_down(&state, &expr);
+                        self.update_matching_status(
+                            &state,
+                            &expr,
+                            MatchingStatusType::Subscribers,
+                            false,
+                        );
                     } else {
                         tracing::error!("Received Undeclare Subscriber for unknown id: {}", m.id);
                     }
@@ -2555,9 +2570,55 @@ impl Primitives for WeakSession {
             }
             zenoh_protocol::network::DeclareBody::DeclareQueryable(m) => {
                 trace!("recv DeclareQueryable {} {:?}", m.id, m.wire_expr);
+                #[cfg(feature = "unstable")]
+                {
+                    let mut state = zwrite!(self.state);
+                    if state.primitives.is_none() {
+                        return; // Session closing or closed
+                    }
+                    match state
+                        .wireexpr_to_keyexpr(&m.wire_expr, false)
+                        .map(|e| e.into_owned())
+                    {
+                        Ok(expr) => {
+                            state
+                                .remote_queryables
+                                .insert(m.id, (expr.clone(), m.ext_info.complete));
+                            self.update_matching_status(
+                                &state,
+                                &expr,
+                                MatchingStatusType::Queryables(m.ext_info.complete),
+                                true,
+                            );
+                        }
+                        Err(err) => {
+                            tracing::error!(
+                                "Received DeclareQueryable for unknown wire_expr: {}",
+                                err
+                            )
+                        }
+                    }
+                }
             }
             zenoh_protocol::network::DeclareBody::UndeclareQueryable(m) => {
                 trace!("recv UndeclareQueryable {:?}", m.id);
+                #[cfg(feature = "unstable")]
+                {
+                    let mut state = zwrite!(self.state);
+                    if state.primitives.is_none() {
+                        return; // Session closing or closed
+                    }
+                    if let Some((expr, complete)) = state.remote_queryables.remove(&m.id) {
+                        self.update_matching_status(
+                            &state,
+                            &expr,
+                            MatchingStatusType::Queryables(complete),
+                            false,
+                        );
+                    } else {
+                        tracing::error!("Received Undeclare Queryable for unknown id: {}", m.id);
+                    }
+                }
             }
             #[cfg(not(feature = "unstable"))]
             zenoh_protocol::network::DeclareBody::DeclareToken(_) => {}
