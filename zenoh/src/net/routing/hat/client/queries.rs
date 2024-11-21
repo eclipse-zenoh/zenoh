@@ -472,15 +472,15 @@ impl HatQueriesTrait for HatCode {
                 continue;
             }
             for (sid, context) in &mres.session_ctxs {
-                if context.face.whatami == WhatAmI::Client {
-                    if match complete {
+                if context.face.whatami == WhatAmI::Client
+                    && match complete {
                         true => context.qabl.map_or(false, |q| q.complete),
                         false => context.qabl.is_some(),
-                    } {
-                        matching_queryables
-                            .entry(*sid)
-                            .or_insert_with(|| context.face.clone());
                     }
+                {
+                    matching_queryables
+                        .entry(*sid)
+                        .or_insert_with(|| context.face.clone());
                 }
             }
         }
