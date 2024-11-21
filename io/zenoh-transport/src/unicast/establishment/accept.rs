@@ -61,6 +61,7 @@ struct StateTransport {
     #[cfg(feature = "shared-memory")]
     ext_shm: ext::shm::StateAccept,
     ext_lowlatency: ext::lowlatency::StateAccept,
+    ext_patch: ext::patch::StateAccept,
 }
 
 #[cfg(any(feature = "transport_auth", feature = "transport_compression"))]
@@ -143,6 +144,7 @@ struct AcceptLink<'a> {
     ext_lowlatency: ext::lowlatency::LowLatencyFsm<'a>,
     #[cfg(feature = "transport_compression")]
     ext_compression: ext::compression::CompressionFsm<'a>,
+    ext_patch: ext::patch::PatchFsm<'a>,
 }
 
 #[async_trait]
@@ -268,6 +270,12 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
+        // Extension Patch
+        self.ext_patch
+            .recv_init_syn((&mut state.transport.ext_patch, init_syn.ext_patch))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         let output = RecvInitSynOut {
             other_zid: init_syn.zid,
             other_whatami: init_syn.whatami,
@@ -330,7 +338,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
-        // Extension MultiLink
+        // Extension Compression
         let ext_compression = zcondfeat!(
             "transport_compression",
             self.ext_compression
@@ -339,6 +347,13 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
                 .map_err(|e| (e, Some(close::reason::GENERIC)))?,
             None
         );
+
+        // Extension Patch
+        let ext_patch = self
+            .ext_patch
+            .send_init_ack(&state.transport.ext_patch)
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Create the cookie
         let cookie_nonce: u64 = zasynclock!(self.prng).gen();
@@ -358,6 +373,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             ext_lowlatency: state.transport.ext_lowlatency,
             #[cfg(feature = "transport_compression")]
             ext_compression: state.link.ext_compression,
+            ext_patch: state.transport.ext_patch,
         };
 
         let mut encrypted = vec![];
@@ -391,6 +407,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             ext_mlink,
             ext_lowlatency,
             ext_compression,
+            ext_patch,
         }
         .into();
 
@@ -491,6 +508,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
                 #[cfg(feature = "shared-memory")]
                 ext_shm: cookie.ext_shm,
                 ext_lowlatency: cookie.ext_lowlatency,
+                ext_patch: cookie.ext_patch,
             },
             #[cfg(any(feature = "transport_auth", feature = "transport_compression"))]
             link: StateLink {
@@ -542,6 +560,13 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         #[cfg(feature = "transport_compression")]
         self.ext_compression
             .recv_open_syn((&mut state.link.ext_compression, open_syn.ext_compression))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
+        // Extension Patch
+        #[cfg(feature = "transport_compression")]
+        self.ext_patch
+            .recv_open_syn((&mut state.transport.ext_patch, open_syn.ext_patch))
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -618,6 +643,13 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             None
         );
 
+        // Extension Patch
+        let ext_patch = self
+            .ext_patch
+            .send_open_ack(&state.transport.ext_patch)
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         // Build OpenAck message
         let mine_initial_sn =
             compute_sn(input.mine_zid, input.other_zid, state.transport.resolution);
@@ -631,6 +663,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             ext_mlink,
             ext_lowlatency,
             ext_compression,
+            ext_patch,
         };
 
         // Do not send the OpenAck right now since we might still incur in MAX_LINKS error
@@ -681,6 +714,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         ext_lowlatency: ext::lowlatency::LowLatencyFsm::new(),
         #[cfg(feature = "transport_compression")]
         ext_compression: ext::compression::CompressionFsm::new(),
+        ext_patch: ext::patch::PatchFsm::new(),
     };
 
     // Init handshake
@@ -719,6 +753,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
                 ext_lowlatency: ext::lowlatency::StateAccept::new(
                     manager.config.unicast.is_lowlatency,
                 ),
+                ext_patch: ext::patch::StateAccept::new(),
             },
             #[cfg(any(feature = "transport_auth", feature = "transport_compression"))]
             link: StateLink {
@@ -786,6 +821,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
         #[cfg(feature = "auth_usrpwd")]
         auth_id: osyn_out.other_auth_id,
+        patch: state.transport.ext_patch.get(),
     };
 
     let a_config = TransportLinkUnicastConfig {

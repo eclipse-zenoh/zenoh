@@ -58,6 +58,7 @@ struct StateTransport {
     #[cfg(feature = "shared-memory")]
     ext_shm: ext::shm::StateOpen,
     ext_lowlatency: ext::lowlatency::StateOpen,
+    ext_patch: ext::patch::StateOpen,
 }
 
 #[cfg(any(feature = "transport_auth", feature = "transport_compression"))]
@@ -124,6 +125,7 @@ struct OpenLink<'a> {
     ext_lowlatency: ext::lowlatency::LowLatencyFsm<'a>,
     #[cfg(feature = "transport_compression")]
     ext_compression: ext::compression::CompressionFsm<'a>,
+    ext_patch: ext::patch::PatchFsm<'a>,
 }
 
 #[async_trait]
@@ -192,6 +194,13 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             None
         );
 
+        // Extension Patch
+        let ext_patch = self
+            .ext_patch
+            .send_init_syn(&state.transport.ext_patch)
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         let msg: TransportMessage = InitSyn {
             version: input.mine_version,
             whatami: input.mine_whatami,
@@ -206,6 +215,7 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             ext_mlink,
             ext_lowlatency,
             ext_compression,
+            ext_patch,
         }
         .into();
 
@@ -419,6 +429,13 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             None
         );
 
+        // Extension Patch
+        let ext_patch = self
+            .ext_patch
+            .send_open_syn(&state.transport.ext_patch)
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         // Build and send an OpenSyn message
         let mine_initial_sn =
             compute_sn(input.mine_zid, input.other_zid, state.transport.resolution);
@@ -433,6 +450,7 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             ext_mlink,
             ext_lowlatency,
             ext_compression,
+            ext_patch,
         }
         .into();
 
@@ -575,6 +593,7 @@ pub(crate) async fn open_link(
         ext_lowlatency: ext::lowlatency::LowLatencyFsm::new(),
         #[cfg(feature = "transport_compression")]
         ext_compression: ext::compression::CompressionFsm::new(),
+        ext_patch: ext::patch::PatchFsm::new(),
     };
 
     // Clippy raises a warning because `batch_size::UNICAST` is currently equal to `BatchSize::MAX`.
@@ -599,8 +618,8 @@ pub(crate) async fn open_link(
                 .open(manager.config.unicast.max_links > 1),
             #[cfg(feature = "shared-memory")]
             ext_shm: ext::shm::StateOpen::new(),
-
             ext_lowlatency: ext::lowlatency::StateOpen::new(manager.config.unicast.is_lowlatency),
+            ext_patch: ext::patch::StateOpen::new(),
         },
         #[cfg(any(feature = "transport_auth", feature = "transport_compression"))]
         link: StateLink {
@@ -669,6 +688,7 @@ pub(crate) async fn open_link(
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
         #[cfg(feature = "auth_usrpwd")]
         auth_id: UsrPwdId(None),
+        patch: state.transport.ext_patch.get(),
     };
 
     let o_config = TransportLinkUnicastConfig {

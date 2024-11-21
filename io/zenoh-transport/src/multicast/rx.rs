@@ -211,11 +211,11 @@ impl TransportMulticastInner {
             // Drop invalid message and continue
             return Ok(());
         }
-        if ext_stop.is_some() {
+        if peer.patch.has_fragmentation_start_stop() && ext_stop.is_some() {
             return Ok(());
         }
         if guard.defrag.is_empty() {
-            if ext_start.is_none() {
+            if peer.patch.has_fragmentation_start_stop() && ext_start.is_none() {
                 // TODO better message
                 tracing::warn!("a fragment chain was received without the start marker");
                 return Ok(());

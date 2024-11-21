@@ -18,6 +18,7 @@ pub(crate) mod compression;
 pub(crate) mod lowlatency;
 #[cfg(feature = "transport_multilink")]
 pub(crate) mod multilink;
+pub(crate) mod patch;
 pub(crate) mod qos;
 #[cfg(feature = "shared-memory")]
 pub(crate) mod shm;

@@ -86,17 +86,14 @@ pub struct OpenSyn {
     pub ext_mlink: Option<ext::MultiLinkSyn>,
     pub ext_lowlatency: Option<ext::LowLatency>,
     pub ext_compression: Option<ext::Compression>,
+    pub ext_patch: ext::PatchType,
 }
 
 // Extensions
 pub mod ext {
-    #[cfg(feature = "shared-memory")]
-    use crate::common::ZExtZ64;
-    #[cfg(feature = "shared-memory")]
-    use crate::zextz64;
     use crate::{
-        common::{ZExtUnit, ZExtZBuf},
-        zextunit, zextzbuf,
+        common::{ZExtUnit, ZExtZ64, ZExtZBuf},
+        zextunit, zextz64, zextzbuf,
     };
 
     /// # QoS extension
@@ -124,6 +121,13 @@ pub mod ext {
     /// # Compression extension
     /// Used to negotiate the use of compression on the link
     pub type Compression = zextunit!(0x6, false);
+
+    /// # Patch extension
+    /// Used to negotiate the patch version of the protocol
+    /// if not present (or 0), then protocol as released with 1.0.0
+    /// if >= 1, then fragmentation start/stop marker
+    pub type Patch = zextz64!(0x7, false);
+    pub type PatchType = crate::transport::ext::PatchType<{ Patch::ID }>;
 }
 
 impl OpenSyn {
@@ -155,6 +159,7 @@ impl OpenSyn {
         let ext_mlink = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_lowlatency = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_compression = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        let ext_patch = ext::PatchType::rand();
 
         Self {
             lease,
@@ -167,6 +172,7 @@ impl OpenSyn {
             ext_mlink,
             ext_lowlatency,
             ext_compression,
+            ext_patch,
         }
     }
 }
@@ -182,6 +188,7 @@ pub struct OpenAck {
     pub ext_mlink: Option<ext::MultiLinkAck>,
     pub ext_lowlatency: Option<ext::LowLatency>,
     pub ext_compression: Option<ext::Compression>,
+    pub ext_patch: ext::PatchType,
 }
 
 impl OpenAck {
@@ -209,6 +216,7 @@ impl OpenAck {
         let ext_mlink = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_lowlatency = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_compression = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        let ext_patch = ext::PatchType::rand();
 
         Self {
             lease,
@@ -220,6 +228,7 @@ impl OpenAck {
             ext_mlink,
             ext_lowlatency,
             ext_compression,
+            ext_patch,
         }
     }
 }
