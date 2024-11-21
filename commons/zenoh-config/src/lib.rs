@@ -170,6 +170,9 @@ pub enum AclMessage {
     Query,
     DeclareQueryable,
     Reply,
+    LivelinessToken,
+    DeclareLivelinessSubscriber,
+    LivelinessQuery,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
@@ -485,6 +488,7 @@ validated_struct::validator! {
                     connect_private_key: Option<String>,
                     connect_certificate: Option<String>,
                     verify_name_on_connect: Option<bool>,
+                    close_link_on_expiration: Option<bool>,
                     // Skip serializing field because they contain secrets
                     #[serde(skip_serializing)]
                     root_ca_certificate_base64: Option<SecretValue>,
