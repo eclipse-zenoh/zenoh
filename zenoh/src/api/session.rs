@@ -1571,7 +1571,7 @@ impl SessionInner {
             }
         } else if origin == Locality::SessionLocal {
             #[cfg(feature = "unstable")]
-            self.update_matching_status(&state, &key_expr, MatchingStatusType::Subscribers, true)
+            self.update_matching_status(&state, key_expr, MatchingStatusType::Subscribers, true)
         }
 
         Ok(sub_state)
