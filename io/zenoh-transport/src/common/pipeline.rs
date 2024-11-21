@@ -128,6 +128,32 @@ impl StageInMutex {
     }
 }
 
+struct WaitTime {
+    wait_time: Duration,
+    ttl: usize,
+}
+
+impl WaitTime {
+    fn new(wait_time: Duration, ttl: usize) -> Self {
+        Self { wait_time, ttl }
+    }
+
+    fn wait_time(&mut self) -> Duration {
+        let result = self.wait_time;
+        match self.ttl.checked_sub(1) {
+            Some(new_ttl) => {
+                self.ttl = new_ttl;
+                self.wait_time = result * 2;
+            }
+            None => {
+                self.wait_time = Duration::ZERO;
+            }
+        }
+        result
+    }
+}
+
+#[derive(Clone)]
 enum DeadlineSetting {
     Immediate,
     Infinite,
@@ -136,11 +162,11 @@ enum DeadlineSetting {
 
 struct LazyDeadline {
     deadline: Option<DeadlineSetting>,
-    wait_time: Option<Duration>,
+    wait_time: Option<WaitTime>,
 }
 
 impl LazyDeadline {
-    fn new(wait_time: Option<Duration>) -> Self {
+    fn new(wait_time: Option<WaitTime>) -> Self {
         Self {
             deadline: None,
             wait_time,
@@ -148,25 +174,31 @@ impl LazyDeadline {
     }
 
     fn advance(&mut self) {
-        let wait_time = self.wait_time;
-        match &mut self.deadline() {
+        match self.deadline().to_owned() {
             DeadlineSetting::Immediate => {}
             DeadlineSetting::Infinite => {}
-            DeadlineSetting::Finite(instant) => {
-                *instant = instant.add(unsafe { wait_time.unwrap_unchecked() });
+            DeadlineSetting::Finite(mut instant) => {
+                // SAFETY: this is safe because DeadlineSetting::Finite is returned by
+                // deadline() only if wait_time is Some(_)
+                instant =
+                    instant.add(unsafe { self.wait_time.as_mut().unwrap_unchecked().wait_time() });
+                self.deadline = Some(DeadlineSetting::Finite(instant));
             }
         }
     }
 
     #[inline]
     fn deadline(&mut self) -> &mut DeadlineSetting {
-        self.deadline.get_or_insert_with(|| match self.wait_time {
-            Some(wait_time) => match wait_time.is_zero() {
-                true => DeadlineSetting::Immediate,
-                false => DeadlineSetting::Finite(Instant::now().add(wait_time)),
-            },
-            None => DeadlineSetting::Infinite,
-        })
+        self.deadline
+            .get_or_insert_with(|| match self.wait_time.as_mut() {
+                Some(wait_time) => match wait_time.wait_time() {
+                    Duration::ZERO => DeadlineSetting::Immediate,
+                    nonzero_wait_time => {
+                        DeadlineSetting::Finite(Instant::now().add(nonzero_wait_time))
+                    }
+                },
+                None => DeadlineSetting::Infinite,
+            })
     }
 }
 
@@ -177,7 +209,9 @@ struct Deadline {
 impl Deadline {
     fn new(wait_time: Option<Duration>) -> Self {
         Self {
-            lazy_deadline: LazyDeadline::new(wait_time),
+            lazy_deadline: LazyDeadline::new(
+                wait_time.map(|wait_time| WaitTime::new(wait_time, 10)),
+            ),
         }
     }
 
