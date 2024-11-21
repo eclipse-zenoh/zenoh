@@ -53,6 +53,7 @@ use crate::net::routing::{
     RoutingContext,
 };
 
+#[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
 
 #[inline]
@@ -1571,6 +1572,7 @@ impl HatQueriesTrait for HatCode {
     }
 }
 
+#[cfg(feature = "unstable")]
 #[inline]
 fn insert_faces_for_qbls(
     route: &mut HashMap<usize, Arc<FaceState>>,

@@ -40,6 +40,7 @@ use super::{
     face_hat, face_hat_mut, get_peer, get_routes_entries, hat, hat_mut, network::Network, res_hat,
     res_hat_mut, HatCode, HatContext, HatFace, HatTables,
 };
+#[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
 use crate::net::routing::{
     dispatcher::{
@@ -1067,6 +1068,7 @@ impl HatQueriesTrait for HatCode {
     }
 }
 
+#[cfg(feature = "unstable")]
 #[inline]
 fn insert_faces_for_qbls(
     route: &mut HashMap<usize, Arc<FaceState>>,

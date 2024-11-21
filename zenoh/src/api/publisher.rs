@@ -564,6 +564,7 @@ pub(crate) struct MatchingListenerState {
     pub(crate) callback: Callback<MatchingStatus>,
 }
 
+#[cfg(feature = "unstable")]
 impl MatchingListenerState {
     pub(crate) fn is_matching(&self, key_expr: &KeyExpr, match_type: &MatchingStatusType) -> bool {
         match match_type {

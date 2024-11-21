@@ -1,8 +1,6 @@
 use core::fmt;
 use std::{
-    collections::HashSet,
     future::{IntoFuture, Ready},
-    sync::{Arc, Mutex},
     time::Duration,
 };
 
@@ -30,6 +28,8 @@ use {
     crate::query::ReplyKeyExpr,
     zenoh_config::wrappers::EntityGlobalId,
     zenoh_protocol::core::EntityGlobalIdProto,
+    std::sync::{Arc, Mutex},
+    std::collections::HashSet,
 };
 
 pub(crate) struct QuerierState {

@@ -43,6 +43,7 @@ use super::{
     resource::{QueryRoute, QueryRoutes, QueryTargetQablSet, Resource},
     tables::{NodeId, RoutingExpr, Tables, TablesLock},
 };
+#[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
 use crate::net::routing::hat::{HatTrait, SendDeclare};
 
