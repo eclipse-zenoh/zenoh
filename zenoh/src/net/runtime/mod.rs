@@ -70,7 +70,7 @@ use crate::{
 pub(crate) struct RuntimeState {
     zid: ZenohId,
     whatami: WhatAmI,
-    next_id: AtomicU32,
+    next_id: AtomicU32, // @TODO: manage rollover and uniqueness
     router: Arc<Router>,
     config: Notifier<Config>,
     manager: TransportManager,

@@ -11,13 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use core::sync::atomic::AtomicU32;
-
 use crate::{core::WireExpr, zenoh::RequestBody};
 
 /// The resolution of a RequestId
 pub type RequestId = u32;
-pub type AtomicRequestId = AtomicU32;
 
 pub mod flag {
     pub const N: u8 = 1 << 5; // 0x20 Named         if N==1 then the key expr has name/suffix

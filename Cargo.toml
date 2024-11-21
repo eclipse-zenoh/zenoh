@@ -158,6 +158,7 @@ serde = { version = "1.0.210", default-features = false, features = [
 ] } # Default features are disabled due to usage in no_std crates
 serde_json = "1.0.128"
 serde_yaml = "0.9.34"
+slab = "0.4.9"
 static_init = "1.0.3"
 stabby = "36.1.1"
 sha3 = "0.10.8"
