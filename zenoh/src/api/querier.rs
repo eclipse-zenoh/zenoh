@@ -212,10 +212,10 @@ impl<'a> Querier<'a> {
         })
     }
 
-    /// Return a [`MatchingListener`] for this Publisher.
+    /// Return a [`MatchingListener`](crate::api::publisher::MatchingListener) for this Querier.
     ///
-    /// The [`MatchingListener`] that will send a notification each time the [`MatchingStatus`] of
-    /// the Publisher changes.
+    /// The [`MatchingListener`](crate::api::publisher::MatchingListener) that will send a notification each time the [`MatchingStatus`](crate::api::publisher::MatchingStatus) of
+    /// the Querier changes.
     ///
     /// # Examples
     /// ```no_run

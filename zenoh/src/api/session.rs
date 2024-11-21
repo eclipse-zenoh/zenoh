@@ -579,7 +579,7 @@ impl Drop for WeakSession {
 
 /// Error indicating the operation cannot proceed because the session is closed.
 ///
-/// It may be returned by operations like [`Session::get`] or [`Publisher::put`] when
+/// It may be returned by operations like [`Session::get`] or [`Publisher::put`](crate::api::publisher::Publisher::put) when
 /// [`Session::close`] has been called before.
 #[derive(Debug)]
 pub struct SessionClosedError;
