@@ -15,10 +15,7 @@
 use std::future::{IntoFuture, Ready};
 
 #[cfg(feature = "unstable")]
-use crate::{
-    api::session::WeakSession,
-    key_expr::KeyExpr,
-};
+use crate::{api::session::WeakSession, key_expr::KeyExpr};
 #[cfg(feature = "unstable")]
 use zenoh_core::{Resolvable, Wait};
 #[cfg(feature = "unstable")]
@@ -29,11 +26,11 @@ use {
     crate::api::{
         handlers::{Callback, DefaultHandler, IntoHandler},
         publisher::{MatchingListener, MatchingListenerInner, MatchingStatus, MatchingStatusType},
-        Id
+        Id,
     },
     crate::sample::Locality,
     std::sync::Arc,
-    std::{collections::HashSet, sync::Mutex}
+    std::{collections::HashSet, sync::Mutex},
 };
 
 /// A builder for initializing a [`MatchingListener`].

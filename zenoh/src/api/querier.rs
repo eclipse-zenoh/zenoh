@@ -26,10 +26,10 @@ use {
     crate::api::sample::SourceInfo,
     crate::pubsub::MatchingListenerBuilder,
     crate::query::ReplyKeyExpr,
+    std::collections::HashSet,
+    std::sync::{Arc, Mutex},
     zenoh_config::wrappers::EntityGlobalId,
     zenoh_protocol::core::EntityGlobalIdProto,
-    std::sync::{Arc, Mutex},
-    std::collections::HashSet,
 };
 
 pub(crate) struct QuerierState {
