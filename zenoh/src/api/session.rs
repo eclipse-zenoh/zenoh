@@ -358,6 +358,88 @@ impl SessionState {
         self.queriers.insert(id, querier_state);
         declared_querier
     }
+
+    fn register_subscriber<'a>(
+        &mut self,
+        id: EntityId,
+        key_expr: &'a KeyExpr,
+        origin: Locality,
+        callback: Callback<Sample>,
+    ) -> (Arc<SubscriberState>, Option<KeyExpr<'a>>) {
+        let mut sub_state = SubscriberState {
+            id,
+            remote_id: id,
+            key_expr: key_expr.clone().into_owned(),
+            origin,
+            callback,
+        };
+
+        let declared_sub = origin != Locality::SessionLocal;
+
+        let declared_sub = declared_sub
+            .then(|| {
+                match self
+                    .aggregated_subscribers
+                    .iter()
+                    .find(|s| s.includes(key_expr))
+                {
+                    Some(join_sub) => {
+                        if let Some(joined_sub) = self
+                            .subscribers(SubscriberKind::Subscriber)
+                            .values()
+                            .find(|s| {
+                                s.origin != Locality::SessionLocal && join_sub.includes(&s.key_expr)
+                            })
+                        {
+                            sub_state.remote_id = joined_sub.remote_id;
+                            None
+                        } else {
+                            Some(join_sub.clone().into())
+                        }
+                    }
+                    None => {
+                        if let Some(twin_sub) = self
+                            .subscribers(SubscriberKind::Subscriber)
+                            .values()
+                            .find(|s| s.origin != Locality::SessionLocal && s.key_expr == *key_expr)
+                        {
+                            sub_state.remote_id = twin_sub.remote_id;
+                            None
+                        } else {
+                            Some(key_expr.clone())
+                        }
+                    }
+                }
+            })
+            .flatten();
+
+        let sub_state = Arc::new(sub_state);
+
+        self.subscribers_mut(SubscriberKind::Subscriber)
+            .insert(sub_state.id, sub_state.clone());
+        for res in self
+            .local_resources
+            .values_mut()
+            .filter_map(Resource::as_node_mut)
+        {
+            if key_expr.intersects(&res.key_expr) {
+                res.subscribers_mut(SubscriberKind::Subscriber)
+                    .push(sub_state.clone());
+            }
+        }
+        for res in self
+            .remote_resources
+            .values_mut()
+            .filter_map(Resource::as_node_mut)
+        {
+            if key_expr.intersects(&res.key_expr) {
+                res.subscribers_mut(SubscriberKind::Subscriber)
+                    .push(sub_state.clone());
+            }
+        }
+
+        (sub_state, declared_sub)
+    }
 }
 
 impl fmt::Debug for SessionState {
@@ -1438,80 +1520,7 @@ impl SessionInner {
         let mut state = zwrite!(self.state);
         tracing::trace!("declare_subscriber({:?})", key_expr);
         let id = self.runtime.next_id();
-
-        let mut sub_state = SubscriberState {
-            id,
-            remote_id: id,
-            key_expr: key_expr.clone().into_owned(),
-            origin,
-            callback,
-        };
-
-        let declared_sub = origin != Locality::SessionLocal;
-
-        let declared_sub = declared_sub
-            .then(|| {
-                match state
-                    .aggregated_subscribers
-                    .iter()
-                    .find(|s| s.includes(key_expr))
-                {
-                    Some(join_sub) => {
-                        if let Some(joined_sub) = state
-                            .subscribers(SubscriberKind::Subscriber)
-                            .values()
-                            .find(|s| {
-                                s.origin != Locality::SessionLocal && join_sub.includes(&s.key_expr)
-                            })
-                        {
-                            sub_state.remote_id = joined_sub.remote_id;
-                            None
-                        } else {
-                            Some(join_sub.clone().into())
-                        }
-                    }
-                    None => {
-                        if let Some(twin_sub) = state
-                            .subscribers(SubscriberKind::Subscriber)
-                            .values()
-                            .find(|s| s.origin != Locality::SessionLocal && s.key_expr == *key_expr)
-                        {
-                            sub_state.remote_id = twin_sub.remote_id;
-                            None
-                        } else {
-                            Some(key_expr.clone())
-                        }
-                    }
-                }
-            })
-            .flatten();
-
-        let sub_state = Arc::new(sub_state);
-
-        state
-            .subscribers_mut(SubscriberKind::Subscriber)
-            .insert(sub_state.id, sub_state.clone());
-        for res in state
-            .local_resources
-            .values_mut()
-            .filter_map(Resource::as_node_mut)
-        {
-            if key_expr.intersects(&res.key_expr) {
-                res.subscribers_mut(SubscriberKind::Subscriber)
-                    .push(sub_state.clone());
-            }
-        }
-        for res in state
-            .remote_resources
-            .values_mut()
-            .filter_map(Resource::as_node_mut)
-        {
-            if key_expr.intersects(&res.key_expr) {
-                res.subscribers_mut(SubscriberKind::Subscriber)
-                    .push(sub_state.clone());
-            }
-        }
-
+        let (sub_state, declared_sub) = state.register_subscriber(id, key_expr, origin, callback);
         if let Some(key_expr) = declared_sub {
             let primitives = state.primitives()?;
             drop(state);
@@ -1548,7 +1557,6 @@ impl SessionInner {
                     wire_expr: key_expr.to_wire(self).to_owned(),
                 }),
             });
-
             #[cfg(feature = "unstable")]
             {
                 let state = zread!(self.state);
@@ -1559,6 +1567,9 @@ impl SessionInner {
                     true,
                 )
             }
+        } else if origin == Locality::SessionLocal {
+            #[cfg(feature = "unstable")]
+            self.update_matching_status(&state, &key_expr, MatchingStatusType::Subscribers, true)
         }
 
         Ok(sub_state)
@@ -1592,25 +1603,31 @@ impl SessionInner {
                     .retain(|sub| sub.id != sub_state.id);
             }
 
-            if sub_state.origin != Locality::SessionLocal && kind == SubscriberKind::Subscriber {
-                // Note: there might be several Subscribers on the same KeyExpr.
-                // Before calling forget_subscriber(key_expr), check if this was the last one.
-                if !state.subscribers(kind).values().any(|s| {
-                    s.origin != Locality::SessionLocal && s.remote_id == sub_state.remote_id
-                }) {
-                    drop(state);
-                    primitives.send_declare(Declare {
-                        interest_id: None,
-                        ext_qos: declare::ext::QoSType::DECLARE,
-                        ext_tstamp: None,
-                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                        body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                            id: sub_state.remote_id,
-                            ext_wire_expr: WireExprType {
-                                wire_expr: WireExpr::empty(),
-                            },
-                        }),
-                    });
+            match kind {
+                SubscriberKind::Subscriber => {
+                    if sub_state.origin != Locality::SessionLocal {
+                        // Note: there might be several Subscribers on the same KeyExpr.
+                        // Before calling forget_subscriber(key_expr), check if this was the last one.
+                        if !state.subscribers(kind).values().any(|s| {
+                            s.origin != Locality::SessionLocal && s.remote_id == sub_state.remote_id
+                        }) {
+                            drop(state);
+                            primitives.send_declare(Declare {
+                                interest_id: None,
+                                ext_qos: declare::ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                                    id: sub_state.remote_id,
+                                    ext_wire_expr: WireExprType {
+                                        wire_expr: WireExpr::empty(),
+                                    },
+                                }),
+                            });
+                        }
+                    } else {
+                        drop(state);
+                    }
                     #[cfg(feature = "unstable")]
                     {
                         let state = zread!(self.state);
@@ -1622,21 +1639,22 @@ impl SessionInner {
                         )
                     }
                 }
-            } else {
-                #[cfg(feature = "unstable")]
-                if kind == SubscriberKind::LivelinessSubscriber {
-                    let primitives = state.primitives()?;
-                    drop(state);
+                SubscriberKind::LivelinessSubscriber => {
+                    #[cfg(feature = "unstable")]
+                    if kind == SubscriberKind::LivelinessSubscriber {
+                        let primitives = state.primitives()?;
+                        drop(state);
 
-                    primitives.send_interest(Interest {
-                        id: sub_state.id,
-                        mode: InterestMode::Final,
-                        options: InterestOptions::empty(),
-                        wire_expr: None,
-                        ext_qos: declare::ext::QoSType::DEFAULT,
-                        ext_tstamp: None,
-                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                    });
+                        primitives.send_interest(Interest {
+                            id: sub_state.id,
+                            mode: InterestMode::Final,
+                            options: InterestOptions::empty(),
+                            wire_expr: None,
+                            ext_qos: declare::ext::QoSType::DEFAULT,
+                            ext_tstamp: None,
+                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                        });
+                    }
                 }
             }
 
@@ -1942,7 +1960,34 @@ impl SessionInner {
     }
 
     #[zenoh_macros::unstable]
-    pub(crate) fn matching_status(
+    fn matching_status_local(
+        &self,
+        key_expr: &KeyExpr,
+        matching_type: MatchingStatusType,
+    ) -> MatchingStatus {
+        let state = zread!(self.state);
+        let matching = match matching_type {
+            MatchingStatusType::Subscribers => state
+                .subscribers(SubscriberKind::Subscriber)
+                .values()
+                .any(|s| s.key_expr.intersects(key_expr)),
+            MatchingStatusType::Queryables(false) => state.queryables.values().any(|q| {
+                state
+                    .local_wireexpr_to_expr(&q.key_expr)
+                    .map_or(false, |ke| ke.intersects(key_expr))
+            }),
+            MatchingStatusType::Queryables(true) => state.queryables.values().any(|q| {
+                q.complete
+                    && state
+                        .local_wireexpr_to_expr(&q.key_expr)
+                        .map_or(false, |ke| ke.includes(key_expr))
+            }),
+        };
+        MatchingStatus { matching }
+    }
+
+    #[zenoh_macros::unstable]
+    fn matching_status_remote(
         &self,
         key_expr: &KeyExpr,
         destination: Locality,
@@ -1983,6 +2028,27 @@ impl SessionInner {
             }
         };
         Ok(MatchingStatus { matching })
+    }
+
+    #[zenoh_macros::unstable]
+    pub(crate) fn matching_status(
+        &self,
+        key_expr: &KeyExpr,
+        destination: Locality,
+        matching_type: MatchingStatusType,
+    ) -> ZResult<MatchingStatus> {
+        match destination {
+            Locality::SessionLocal => Ok(self.matching_status_local(key_expr, matching_type)),
+            Locality::Remote => self.matching_status_remote(key_expr, destination, matching_type),
+            Locality::Any => {
+                let local_match = self.matching_status_local(key_expr, matching_type);
+                if local_match.matching() {
+                    Ok(local_match)
+                } else {
+                    self.matching_status_remote(key_expr, destination, matching_type)
+                }
+            }
+        }
     }
 
     #[zenoh_macros::unstable]

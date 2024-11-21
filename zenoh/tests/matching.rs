@@ -238,3 +238,50 @@ async fn zenoh_matching_status_local() -> ZResult<()> {
 
     Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn zenoh_matching_status_session_local() -> ZResult<()> {
+    zenoh_util::init_log_from_env_or("error");
+
+    let session = ztimeout!(zenoh::open(zenoh::Config::default())).unwrap();
+
+    let publisher =
+        ztimeout!(session.declare_publisher("zenoh_matching_status_session_local_test")).unwrap();
+
+    let matching_listener = ztimeout!(publisher.matching_listener()).unwrap();
+
+    let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
+    assert!(received_status.unwrap().is_none());
+
+    let matching_status = ztimeout!(publisher.matching_status()).unwrap();
+    assert!(!matching_status.matching());
+
+    let sub = ztimeout!(session
+        .declare_subscriber("zenoh_matching_status_session_local_test")
+        .allowed_origin(Locality::SessionLocal))
+    .unwrap();
+
+    let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
+    assert!(received_status
+        .ok()
+        .flatten()
+        .map(|s| s.matching())
+        .eq(&Some(true)));
+
+    let matching_status = ztimeout!(publisher.matching_status()).unwrap();
+    assert!(matching_status.matching());
+
+    ztimeout!(sub.undeclare()).unwrap();
+
+    let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
+    assert!(received_status
+        .ok()
+        .flatten()
+        .map(|s| s.matching())
+        .eq(&Some(false)));
+
+    let matching_status = ztimeout!(publisher.matching_status()).unwrap();
+    assert!(!matching_status.matching());
+
+    Ok(())
+}
