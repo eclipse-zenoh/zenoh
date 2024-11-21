@@ -4,15 +4,6 @@ use std::{
     time::Duration,
 };
 
-use super::{
-    builders::querier::QuerierGetBuilder,
-    key_expr::KeyExpr,
-    query::QueryConsolidation,
-    sample::{Locality, QoS},
-    session::{UndeclarableSealed, WeakSession},
-    Id,
-};
-use crate::{api::handlers::DefaultHandler, qos::Priority};
 use tracing::error;
 use zenoh_core::{Resolvable, Resolve, Wait};
 use zenoh_protocol::{
@@ -31,6 +22,16 @@ use {
     zenoh_config::wrappers::EntityGlobalId,
     zenoh_protocol::core::EntityGlobalIdProto,
 };
+
+use super::{
+    builders::querier::QuerierGetBuilder,
+    key_expr::KeyExpr,
+    query::QueryConsolidation,
+    sample::{Locality, QoS},
+    session::{UndeclarableSealed, WeakSession},
+    Id,
+};
+use crate::{api::handlers::DefaultHandler, qos::Priority};
 
 pub(crate) struct QuerierState {
     pub(crate) id: Id,

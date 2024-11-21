@@ -1918,7 +1918,7 @@ impl SessionInner {
             current: std::sync::Mutex::new(false),
             destination,
             key_expr: key_expr.clone().into_owned(),
-            match_type: match_type.clone(),
+            match_type,
             callback,
         });
         state.matching_listeners.insert(id, listener_state.clone());
@@ -1994,14 +1994,13 @@ impl SessionInner {
         status_value: bool,
     ) {
         for msub in state.matching_listeners.values() {
-            if msub.is_matching(key_expr, &match_type) {
+            if msub.is_matching(key_expr, match_type) {
                 // Cannot hold session lock when calling tables (matching_status())
                 // TODO: check which ZRuntime should be used
                 self.task_controller
                     .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
                         let session = WeakSession::new(self);
                         let msub = msub.clone();
-                        let match_type = match_type.clone();
                         async move {
                             match msub.current.lock() {
                                 Ok(mut current) => {

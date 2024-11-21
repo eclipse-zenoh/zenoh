@@ -41,6 +41,8 @@ use super::{
     interests::push_declaration_profile, network::Network, res_hat, res_hat_mut, HatCode,
     HatContext, HatFace, HatTables,
 };
+#[cfg(feature = "unstable")]
+use crate::key_expr::KeyExpr;
 use crate::net::routing::{
     dispatcher::{
         face::FaceState,
@@ -52,9 +54,6 @@ use crate::net::routing::{
     router::RoutesIndexes,
     RoutingContext,
 };
-
-#[cfg(feature = "unstable")]
-use crate::key_expr::KeyExpr;
 
 #[inline]
 fn merge_qabl_infos(mut this: QueryableInfoType, info: &QueryableInfoType) -> QueryableInfoType {

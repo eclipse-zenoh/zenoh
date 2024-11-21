@@ -15,12 +15,9 @@
 use std::future::{IntoFuture, Ready};
 
 #[cfg(feature = "unstable")]
-use crate::{api::session::WeakSession, key_expr::KeyExpr};
-#[cfg(feature = "unstable")]
 use zenoh_core::{Resolvable, Wait};
 #[cfg(feature = "unstable")]
 use zenoh_result::ZResult;
-
 #[cfg(feature = "unstable")]
 use {
     crate::api::{
@@ -32,6 +29,9 @@ use {
     std::sync::Arc,
     std::{collections::HashSet, sync::Mutex},
 };
+
+#[cfg(feature = "unstable")]
+use crate::{api::session::WeakSession, key_expr::KeyExpr};
 
 /// A builder for initializing a [`MatchingListener`].
 #[zenoh_macros::unstable]

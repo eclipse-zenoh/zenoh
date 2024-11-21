@@ -526,7 +526,7 @@ pub struct MatchingStatus {
 }
 
 #[cfg(feature = "unstable")]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub(crate) enum MatchingStatusType {
     Subscribers,
     Queryables(bool),
@@ -566,7 +566,7 @@ pub(crate) struct MatchingListenerState {
 
 #[cfg(feature = "unstable")]
 impl MatchingListenerState {
-    pub(crate) fn is_matching(&self, key_expr: &KeyExpr, match_type: &MatchingStatusType) -> bool {
+    pub(crate) fn is_matching(&self, key_expr: &KeyExpr, match_type: MatchingStatusType) -> bool {
         match match_type {
             MatchingStatusType::Subscribers => {
                 self.match_type == MatchingStatusType::Subscribers
