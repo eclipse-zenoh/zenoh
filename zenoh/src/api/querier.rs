@@ -223,7 +223,7 @@ impl<'a> Querier<'a> {
     /// # async fn main() {
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let publisher = session.declare_querier("key/expression").await.unwrap();
+    /// let querier = session.declare_querier("key/expression").await.unwrap();
     /// let matching_listener = querier.matching_listener().await.unwrap();
     /// while let Ok(matching_status) = matching_listener.recv_async().await {
     ///     if matching_status.matching() {
