@@ -23,10 +23,9 @@ use tokio_util::sync::CancellationToken;
 use zenoh_protocol::{
     core::{ExprId, Reliability, WhatAmI, ZenohIdProto},
     network::{
-        interest::{InterestId, InterestMode, InterestOptions},
-        Mapping, Push, Request, RequestId, Response, ResponseFinal,
+        interest::{InterestId, InterestMode, InterestOptions}, push, Mapping, Push, Request, RequestId, Response, ResponseFinal
     },
-    zenoh::RequestBody,
+    zenoh::{PushBody, RequestBody},
 };
 use zenoh_sync::get_mut_unchecked;
 use zenoh_task::TaskController;
@@ -217,7 +216,7 @@ impl Face {
 
 impl OptPrimitives for Face {
     #[inline]
-    fn opt_send_push<F: FnOnce()->Push>(&self,wire_expr: &zenoh_protocol::core::WireExpr<'_>, fn_msg: F, reliability: Reliability) {
+    fn opt_send_push<F: FnOnce()->(push::ext::QoSType, PushBody)>(&self,wire_expr: &zenoh_protocol::core::WireExpr<'_>, fn_msg: F, reliability: Reliability) {
         opt_route_data(&self.tables, &self.state, wire_expr, fn_msg, reliability);
     }
 }

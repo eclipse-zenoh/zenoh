@@ -1972,7 +1972,38 @@ impl SessionInner {
             let primitives = zread!(self.state).primitives()?;
             primitives.opt_send_push(
                 &wire_expr,
-                || Push {
+                || { (
+                    push::ext::QoSType::new(
+                        priority.into(),
+                        congestion_control,
+                        is_express,
+                    ),
+                    match kind {
+                        SampleKind::Put => PushBody::Put(Put {
+                            timestamp,
+                            encoding: encoding.clone().into(),
+                            #[cfg(feature = "unstable")]
+                            ext_sinfo: source_info.into(),
+                            #[cfg(not(feature = "unstable"))]
+                            ext_sinfo: None,
+                            #[cfg(feature = "shared-memory")]
+                            ext_shm: None,
+                            ext_attachment: attachment.clone().map(|a| a.into()),
+                            ext_unknown: vec![],
+                            payload: payload.clone().into(),
+                        }),
+                        SampleKind::Delete => PushBody::Del(Del {
+                            timestamp,
+                            #[cfg(feature = "unstable")]
+                            ext_sinfo: source_info.into(),
+                            #[cfg(not(feature = "unstable"))]
+                            ext_sinfo: None,
+                            ext_attachment: attachment.clone().map(|a| a.into()),
+                            ext_unknown: vec![],
+                        }),
+                    },
+                    )
+                    /*Push {
                     wire_expr: wire_expr.to_owned(),
                     ext_qos: push::ext::QoSType::new(
                         priority.into(),
@@ -2005,7 +2036,8 @@ impl SessionInner {
                             ext_unknown: vec![],
                         }),
                     },
-                },
+                }*/
+            },
                 #[cfg(feature = "unstable")]
                 reliability,
                 #[cfg(not(feature = "unstable"))]

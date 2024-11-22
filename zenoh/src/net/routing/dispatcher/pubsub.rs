@@ -17,8 +17,7 @@ use zenoh_core::zread;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, Reliability, WhatAmI, WireExpr},
     network::{
-        declare::{ext, SubscriberId},
-        Push,
+        declare::{ext, SubscriberId}, push, Push
     },
     zenoh::PushBody,
 };
@@ -524,7 +523,7 @@ pub fn route_data(
 }
 
 
-pub fn opt_route_data<F: FnOnce()->Push>(
+pub fn opt_route_data<F: FnOnce()->(push::ext::QoSType, PushBody)>(
     tables_ref: &Arc<TablesLock>,
     face: &FaceState,
     wire_expr: &WireExpr<'_>,
@@ -537,14 +536,13 @@ pub fn opt_route_data<F: FnOnce()->Push>(
         .cloned()
     {
         Some(prefix) => {
-            let mut msg = fn_msg();
             tracing::trace!(
                 "{} Route data for res {}{}",
                 face,
                 prefix.expr(),
-                msg.wire_expr.suffix.as_ref()
+                wire_expr.suffix.as_ref()
             );
-            let mut expr = RoutingExpr::new(&prefix, msg.wire_expr.suffix.as_ref());
+            let mut expr = RoutingExpr::new(&prefix, wire_expr.suffix.as_ref());
 
             #[cfg(feature = "stats")]
             let admin = expr.full_expr().starts_with("@/");
@@ -558,10 +556,11 @@ pub fn opt_route_data<F: FnOnce()->Push>(
             if tables.hat_code.ingress_filter(&tables, face, &mut expr) {
                 let res = Resource::get_resource(&prefix, expr.suffix);
 
-                let route = get_data_route(&tables, face, &res, &mut expr, msg.ext_nodeid.node_id);
+                let route = get_data_route(&tables, face, &res, &mut expr, push::ext::NodeIdType::DEFAULT.node_id);
 
                 if !route.is_empty() {
-                    treat_timestamp!(&tables.hlc, msg.payload, tables.drop_future_timestamp);
+                    let (ext_qos, mut payload) = fn_msg();
+                    treat_timestamp!(&tables.hlc, payload, tables.drop_future_timestamp);
 
                     if route.len() == 1 {
                         let (outface, key_expr, context) = route.values().next().unwrap();
@@ -580,10 +579,10 @@ pub fn opt_route_data<F: FnOnce()->Push>(
                             outface.primitives.send_push(
                                 Push {
                                     wire_expr: key_expr.into(),
-                                    ext_qos: msg.ext_qos,
-                                    ext_tstamp: msg.ext_tstamp,
+                                    ext_qos,
+                                    ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType { node_id: *context },
-                                    payload: msg.payload,
+                                    payload,
                                 },
                                 reliability,
                             )
@@ -611,10 +610,10 @@ pub fn opt_route_data<F: FnOnce()->Push>(
                             outface.primitives.send_push(
                                 Push {
                                     wire_expr: key_expr,
-                                    ext_qos: msg.ext_qos,
+                                    ext_qos,
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType { node_id: context },
-                                    payload: msg.payload.clone(),
+                                    payload: payload.clone(),
                                 },
                                 reliability,
                             )
@@ -638,10 +637,10 @@ pub fn opt_route_data<F: FnOnce()->Push>(
                                 outface.primitives.send_push(
                                     Push {
                                         wire_expr: key_expr.into(),
-                                        ext_qos: msg.ext_qos,
+                                        ext_qos,
                                         ext_tstamp: None,
                                         ext_nodeid: ext::NodeIdType { node_id: *context },
-                                        payload: msg.payload.clone(),
+                                        payload: payload.clone(),
                                     },
                                     reliability,
                                 )
