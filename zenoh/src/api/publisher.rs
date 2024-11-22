@@ -534,7 +534,7 @@ pub(crate) enum MatchingStatusType {
 
 #[zenoh_macros::unstable]
 impl MatchingStatus {
-    /// Return true if there exist Subscribers matching the Publisher's key expression.
+    /// Return true if there exist entities matching the target (i.e either Subscribers matching Publisher's key expression or Queryables matching Querier's key expression and target).
     ///
     /// # Examples
     /// ```
