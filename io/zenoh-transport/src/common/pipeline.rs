@@ -138,8 +138,9 @@ impl WaitTime {
         Self { wait_time, ttl }
     }
 
-    fn advance(&mut self) {
+    fn advance(&mut self, instant: &mut Instant) {
         if let Some(new_ttl) = self.ttl.checked_sub(1) {
+            *instant += self.wait_time;
             self.ttl = new_ttl;
             self.wait_time *= 2;
         }
@@ -178,9 +179,7 @@ impl LazyDeadline {
                 // SAFETY: this is safe because DeadlineSetting::Finite is returned by
                 // deadline() only if wait_time is Some(_)
                 let wait_time = unsafe { self.wait_time.as_mut().unwrap_unchecked() };
-
-                instant = instant.add(wait_time.wait_time());
-                wait_time.advance();
+                wait_time.advance(&mut instant);
 
                 self.deadline = Some(DeadlineSetting::Finite(instant));
             }
