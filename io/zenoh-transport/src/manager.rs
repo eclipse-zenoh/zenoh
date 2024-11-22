@@ -109,8 +109,8 @@ pub struct TransportManagerConfig {
     pub resolution: Resolution,
     pub batch_size: BatchSize,
     pub batching: bool,
-    pub wait_before_drop: Duration,
-    pub wait_before_close: Duration,
+    pub wait_before_drop: (Duration, usize),
+    pub wait_before_close: (Duration, usize),
     pub queue_size: [usize; Priority::NUM],
     pub queue_backoff: Duration,
     pub defrag_buff_size: usize,
@@ -141,8 +141,8 @@ pub struct TransportManagerBuilder {
     batch_size: BatchSize,
     batching_enabled: bool,
     batching_time_limit: Duration,
-    wait_before_drop: Duration,
-    wait_before_close: Duration,
+    wait_before_drop: (Duration, usize),
+    wait_before_close: (Duration, usize),
     queue_size: QueueSizeConf,
     defrag_buff_size: usize,
     link_rx_buffer_size: usize,
@@ -192,12 +192,12 @@ impl TransportManagerBuilder {
         self
     }
 
-    pub fn wait_before_drop(mut self, wait_before_drop: Duration) -> Self {
+    pub fn wait_before_drop(mut self, wait_before_drop: (Duration, usize)) -> Self {
         self.wait_before_drop = wait_before_drop;
         self
     }
 
-    pub fn wait_before_close(mut self, wait_before_close: Duration) -> Self {
+    pub fn wait_before_close(mut self, wait_before_close: (Duration, usize)) -> Self {
         self.wait_before_close = wait_before_close;
         self
     }
@@ -249,6 +249,8 @@ impl TransportManagerBuilder {
         }
 
         let link = config.transport().link();
+        let cc_drop = link.tx().queue().congestion_control().drop();
+        let cc_block = link.tx().queue().congestion_control().block();
         let mut resolution = Resolution::default();
         resolution.set(Field::FrameSN, *link.tx().sequence_number_resolution());
         self = self.resolution(resolution);
@@ -259,21 +261,13 @@ impl TransportManagerBuilder {
         ));
         self = self.defrag_buff_size(*link.rx().max_message_size());
         self = self.link_rx_buffer_size(*link.rx().buffer_size());
-        self = self.wait_before_drop(duration_from_i64us(
-            *link
-                .tx()
-                .queue()
-                .congestion_control()
-                .drop()
-                .wait_before_drop(),
+        self = self.wait_before_drop((
+            duration_from_i64us(*cc_drop.wait_before_drop()),
+            *cc_drop.ttl(),
         ));
-        self = self.wait_before_close(duration_from_i64us(
-            *link
-                .tx()
-                .queue()
-                .congestion_control()
-                .block()
-                .wait_before_close(),
+        self = self.wait_before_close((
+            duration_from_i64us(*cc_block.wait_before_close()),
+            *cc_block.ttl(),
         ));
         self = self.queue_size(link.tx().queue().size().clone());
         self = self.tx_threads(*link.tx().threads());
@@ -372,8 +366,8 @@ impl Default for TransportManagerBuilder {
         let link_rx = LinkRxConf::default();
         let queue = QueueConf::default();
         let backoff = *queue.batching().time_limit();
-        let wait_before_drop = *queue.congestion_control().drop().wait_before_drop();
-        let wait_before_close = *queue.congestion_control().block().wait_before_close();
+        let cc_drop = queue.congestion_control().drop();
+        let cc_block = queue.congestion_control().block();
         Self {
             version: VERSION,
             zid: ZenohIdProto::rand(),
@@ -381,8 +375,14 @@ impl Default for TransportManagerBuilder {
             resolution: Resolution::default(),
             batch_size: BatchSize::MAX,
             batching_enabled: true,
-            wait_before_drop: duration_from_i64us(wait_before_drop),
-            wait_before_close: duration_from_i64us(wait_before_close),
+            wait_before_drop: (
+                duration_from_i64us(*cc_drop.wait_before_drop()),
+                *cc_drop.ttl(),
+            ),
+            wait_before_close: (
+                duration_from_i64us(*cc_block.wait_before_close()),
+                *cc_block.ttl(),
+            ),
             queue_size: queue.size,
             batching_time_limit: Duration::from_millis(backoff),
             defrag_buff_size: *link_rx.max_message_size(),

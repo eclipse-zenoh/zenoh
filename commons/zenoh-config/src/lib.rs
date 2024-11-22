@@ -445,12 +445,26 @@ validated_struct::validator! {
                                 /// The maximum time in microseconds to wait for an available batch before dropping a droppable message
                                 /// if still no batch is available.
                                 wait_before_drop: i64,
+                                /// The maximum deadline limit for multi-fragment messages.
+                                /// When sending multi-fragment message, for each consecutive fragment the deadline from
+                                /// the start point of message transmission is calculated as
+                                /// wait_before_drop * 2 ^ min(N, ttl) where N is a fragment number.
+                                /// Thus, this parameter allows setting a limitation for maximum time for multi-fragment
+                                /// message transmission as wait_before_drop * 2 ^ ttl
+                                ttl: usize,
                             },
                             /// Behavior pushing CongestionControl::Block messages to the queue.
                             pub block: CongestionControlBlockConf {
                                 /// The maximum time in microseconds to wait for an available batch before closing the transport session
                                 /// when sending a blocking message if still no batch is available.
                                 wait_before_close: i64,
+                                /// The maximum deadline limit for multi-fragment messages.
+                                /// When sending multi-fragment message, for each consecutive fragment the deadline from
+                                /// the start point of message transmission is calculated as
+                                /// wait_before_close * 2 ^ min(N, ttl) where N is a fragment number.
+                                /// Thus, this parameter allows setting a limitation for maximum time for multi-fragment
+                                /// message transmission as wait_before_close * 2 ^ ttl
+                                ttl: usize,
                             },
                         },
                         pub batching: BatchingConf {
