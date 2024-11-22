@@ -411,6 +411,7 @@ where
         let (callback, receiver) = self.handler.into_handler();
 
         #[allow(unused_mut)]
+        // mut is only needed when building with "unstable" feature, which might add extra internal parameters on top of the user-provided ones
         let mut parameters = self.parameters.clone();
         #[cfg(feature = "unstable")]
         if self.querier.accept_replies() == ReplyKeyExpr::Any {
