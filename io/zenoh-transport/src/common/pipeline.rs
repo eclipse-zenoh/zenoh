@@ -236,8 +236,8 @@ impl StageIn {
                                     // Restore the sequence number and drop the message
                                     $($restore_sn)?
                                     tracing::trace!(
-                                        "Zenoh message dropped because it's over the deadline {:?}",
-                                        deadline.lazy_deadline.wait_time
+                                        "Zenoh message dropped because it's over the deadline {:?}: {:?}",
+                                        deadline.lazy_deadline.wait_time, msg
                                     );
                                     return false;
                                 }
