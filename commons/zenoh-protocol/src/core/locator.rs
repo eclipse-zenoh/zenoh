@@ -37,16 +37,6 @@ impl Locator {
         Ok(Self(ep))
     }
 
-    pub fn new_with_config<A, B, C>(protocol: A, address: B, metadata: C, config: String) -> ZResult<Self>
-    where
-        A: AsRef<str>,
-        B: AsRef<str>,
-        C: AsRef<str>,
-    {
-        let ep = EndPoint::new(protocol, address, metadata, config)?;
-        Ok(Self(ep))
-    }
-
     pub fn protocol(&self) -> Protocol {
         self.0.protocol()
     }

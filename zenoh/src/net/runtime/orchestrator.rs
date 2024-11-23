@@ -35,7 +35,7 @@ use zenoh_config::{
 use zenoh_link::{Locator, LocatorInspector};
 use zenoh_protocol::{
     core::{whatami::WhatAmIMatcher, EndPoint, Metadata, PriorityRange, WhatAmI, ZenohIdProto},
-    scouting::{HelloProto, Scout, ScoutingBody, ScoutingMessage},
+    scouting::{HelloProto, Scout, ScoutingBody, ScoutingMessage, hello::HelloEndPoint},
 };
 use zenoh_result::{bail, zerror, ZResult};
 
@@ -835,7 +835,7 @@ impl Runtime {
         mcast_addr: &SocketAddr,
         f: F,
     ) where
-        F: Fn(HelloProto) -> Fut + std::marker::Send + std::marker::Sync + Clone,
+        F: Fn(HelloEndPoint) -> Fut + std::marker::Send + std::marker::Sync + Clone,
         Fut: Future<Output = Loop> + std::marker::Send,
         Self: Sized,
     {
@@ -898,27 +898,35 @@ impl Runtime {
                                 tracing::trace!("Received {:?} from {}", msg.body, peer);
                                 if let ScoutingBody::Hello(hello) = &msg.body {
                                     if matcher.matches(hello.whatami) {
-
                                         if let Ok(local_addr) = socket.local_addr() {
                                             if let Ok(iface) = zenoh_util::net::get_interface_names_by_addr(local_addr.ip()) {
-
-                                                let hello_iface = HelloProto {
+                                                let endpoint = HelloEndPoint {
                                                     version: hello.version,
                                                     whatami: hello.whatami,
                                                     zid: hello.zid,
-                                                    locators: hello.locators.iter().map(|locator| Locator::new_with_config(locator.protocol(),
-                                                                        locator.address(),
-                                                                        locator.metadata(),
-                                                                        "iface=".to_string() + &iface[0]).unwrap()).collect()
+                                                    endpoints: hello.locators
+                                                        .iter()
+                                                        .map(|locator| EndPoint::new(locator.protocol(),
+                                                            locator.address(),
+                                                            locator.metadata(),
+                                                            "iface=".to_string() + &iface[0]).unwrap())
+                                                        .collect()
                                                 };
-
-                                                if let Loop::Break = f(hello_iface.clone()).await {
+                                                if let Loop::Break = f(endpoint.clone()).await {
                                                     break;
                                                 }
                                             }
                                         }
-
-                                        if let Loop::Break = f(hello.clone()).await {
+                                        let endpoint = HelloEndPoint {
+                                            version: hello.version,
+                                            whatami: hello.whatami,
+                                            zid: hello.zid,
+                                            endpoints: hello.locators
+                                                .iter()
+                                                .map(|locator| locator.to_endpoint())
+                                                .collect()
+                                        };
+                                        if let Loop::Break = f(endpoint.clone()).await {
                                             break;
                                         }
                                     } else {
@@ -947,7 +955,7 @@ impl Runtime {
 
     /// Returns `true` if a new Transport instance is established with `zid` or had already been established.
     #[must_use]
-    async fn connect(&self, zid: &ZenohIdProto, scouted_locators: &[Locator]) -> bool {
+    async fn connect(&self, zid: &ZenohIdProto, scouted_endpoints: &[EndPoint]) -> bool {
         if !self.insert_pending_connection(*zid).await {
             tracing::debug!("Already connecting to {}. Ignore.", zid);
             return false;
@@ -955,7 +963,7 @@ impl Runtime {
 
         const ERR: &str = "Unable to connect to newly scouted peer";
 
-        let configured_locators = self
+        let configured_endpoints = self
             .state
             .config
             .lock()
@@ -964,17 +972,18 @@ impl Runtime {
             .endpoints()
             .get(self.whatami())
             .iter()
-            .flat_map(|e| e.iter().map(EndPoint::to_locator))
+            .flat_map(|e| e.iter())
+            .cloned()
             .collect::<HashSet<_>>();
 
-        let locators = scouted_locators
+        let endpoints = scouted_endpoints
             .iter()
-            .filter(|l| !configured_locators.contains(l))
-            .collect::<Vec<&Locator>>();
+            .filter(|e| !configured_endpoints.contains(e))
+            .collect::<Vec<&EndPoint>>();
 
-        if locators.is_empty() {
+        if endpoints.is_empty() {
             tracing::debug!(
-                "Already connecting to locators of {} (connect configuration). Ignore.",
+                "Already connecting to endpoints of {} (connect configuration). Ignore.",
                 zid
             );
             return false;
@@ -983,22 +992,21 @@ impl Runtime {
         let manager = self.manager();
 
         let inspector = LocatorInspector::default();
-        for locator in locators {
-            let is_multicast = match inspector.is_multicast(locator).await {
+        for endpoint in endpoints {
+            let is_multicast = match inspector.is_multicast(&endpoint.to_locator()).await {
                 Ok(im) => im,
                 Err(e) => {
-                    tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e);
+                    tracing::trace!("{} {} on {}: {}", ERR, zid, endpoint, e);
                     continue;
                 }
             };
 
-            let endpoint = locator.to_owned().into();
-            let retry_config = self.get_connect_retry_config(&endpoint);
-            let priorities = locator
+            let retry_config = self.get_connect_retry_config(endpoint);
+            let priorities = endpoint
                 .metadata()
                 .get(Metadata::PRIORITIES)
                 .and_then(|p| PriorityRange::from_str(p).ok());
-            let reliability = inspector.is_reliable(locator).ok();
+            let reliability = inspector.is_reliable(&endpoint.to_locator()).ok();
             if !manager
                 .get_transport_unicast(zid)
                 .await
@@ -1015,7 +1023,7 @@ impl Runtime {
                 if is_multicast {
                     match tokio::time::timeout(
                         retry_config.timeout(),
-                        manager.open_transport_multicast(endpoint),
+                        manager.open_transport_multicast(endpoint.clone()),
                     )
                     .await
                     {
@@ -1025,13 +1033,13 @@ impl Runtime {
                                 transport
                             );
                         }
-                        Ok(Err(e)) => tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e),
-                        Err(e) => tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e),
+                        Ok(Err(e)) => tracing::trace!("{} {} on {}: {}", ERR, zid, endpoint, e),
+                        Err(e) => tracing::trace!("{} {} on {}: {}", ERR, zid, endpoint, e),
                     }
                 } else {
                     match tokio::time::timeout(
                         retry_config.timeout(),
-                        manager.open_transport_unicast(endpoint),
+                        manager.open_transport_unicast(endpoint.clone()),
                     )
                     .await
                     {
@@ -1041,14 +1049,14 @@ impl Runtime {
                                 transport
                             );
                         }
-                        Ok(Err(e)) => tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e),
-                        Err(e) => tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e),
+                        Ok(Err(e)) => tracing::trace!("{} {} on {}: {}", ERR, zid, endpoint, e),
+                        Err(e) => tracing::trace!("{} {} on {}: {}", ERR, zid, endpoint, e),
                     }
                 }
             } else {
                 tracing::trace!(
                     "Will not attempt to connect to {} via {}: already connected to this peer for this PriorityRange-Reliability pair",
-                    zid, locator
+                    zid, endpoint
                 );
             }
         }
@@ -1057,9 +1065,9 @@ impl Runtime {
 
         if self.manager().get_transport_unicast(zid).await.is_none() {
             tracing::warn!(
-                "Unable to connect to any locator of scouted peer {}: {:?}",
+                "Unable to connect to any endpoint of scouted peer {}: {:?}",
                 zid,
-                scouted_locators
+                scouted_endpoints
             );
             false
         } else {
@@ -1068,7 +1076,7 @@ impl Runtime {
     }
 
     /// Returns `true` if a new Transport instance is established with `zid` or had already been established.
-    pub async fn connect_peer(&self, zid: &ZenohIdProto, locators: &[Locator]) -> bool {
+    async fn connect_endpoints(&self, zid: &ZenohIdProto, endpoints: &[EndPoint]) -> bool {
         let manager = self.manager();
         if zid != &manager.zid() {
             let has_unicast = manager.get_transport_unicast(zid).await.is_some();
@@ -1077,7 +1085,7 @@ impl Runtime {
                 for t in manager.get_transports_multicast().await {
                     if let Ok(l) = t.get_link() {
                         if let Some(g) = l.group.as_ref() {
-                            hm |= locators.iter().any(|l| l == g);
+                            hm |= endpoints.iter().any(|l| l == &g.to_endpoint());
                         }
                     }
                 }
@@ -1085,8 +1093,8 @@ impl Runtime {
             };
 
             if !has_unicast && !has_multicast {
-                tracing::debug!("Try to connect to peer {} via any of {:?}", zid, locators);
-                self.connect(zid, locators).await
+                tracing::debug!("Try to connect to peer {} via any of {:?}", zid, endpoints);
+                self.connect(zid, endpoints).await
             } else {
                 tracing::trace!("Already connected scouted peer: {}", zid);
                 true
@@ -1094,6 +1102,13 @@ impl Runtime {
         } else {
             true
         }
+    }
+
+    pub async fn connect_peer(&self, zid: &ZenohIdProto, locators: &[Locator]) -> bool {
+        let endpoints: Vec<EndPoint> = locators.iter()
+            .map(|locator| locator.to_endpoint().clone())
+            .collect();
+        self.connect_endpoints(zid, &endpoints).await
     }
 
     async fn connect_first(
@@ -1106,12 +1121,12 @@ impl Runtime {
         let scout = async {
             Runtime::scout(sockets, what, addr, move |hello| async move {
                 tracing::info!("Found {:?}", hello);
-                if !hello.locators.is_empty() {
-                    if self.connect(&hello.zid, &hello.locators).await {
+                if !hello.endpoints.is_empty() {
+                    if self.connect(&hello.zid, &hello.endpoints).await {
                         return Loop::Break;
                     }
                 } else {
-                    tracing::warn!("Received Hello with no locators: {:?}", hello);
+                    tracing::warn!("Received Hello with no endpoints: {:?}", hello);
                 }
                 Loop::Continue
             })
@@ -1135,10 +1150,10 @@ impl Runtime {
         addr: &SocketAddr,
     ) {
         Runtime::scout(ucast_sockets, what, addr, move |hello| async move {
-            if !hello.locators.is_empty() {
-                self.connect_peer(&hello.zid, &hello.locators).await;
+            if !hello.endpoints.is_empty() {
+                self.connect_endpoints(&hello.zid, &hello.endpoints).await;
             } else {
-                tracing::warn!("Received Hello with no locators: {:?}", hello);
+                tracing::warn!("Received Hello with no endpoints: {:?}", hello);
             }
             Loop::Continue
         })

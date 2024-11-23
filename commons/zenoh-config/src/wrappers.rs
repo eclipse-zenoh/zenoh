@@ -20,8 +20,8 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, EntityGlobalIdProto, Locator, WhatAmI, ZenohIdProto},
-    scouting::HelloProto,
+    core::{key_expr::OwnedKeyExpr, EntityGlobalIdProto, EndPoint, WhatAmI, ZenohIdProto},
+    scouting::hello::HelloEndPoint
 };
 
 /// The global unique id of a Zenoh session.
@@ -102,12 +102,12 @@ impl FromStr for ZenohId {
 /// A zenoh Hello message.
 #[derive(Clone)]
 #[repr(transparent)]
-pub struct Hello(HelloProto);
+pub struct Hello(HelloEndPoint);
 
 impl Hello {
     /// Get the locators of this Hello message.
-    pub fn locators(&self) -> &[Locator] {
-        &self.0.locators
+    pub fn endpoints(&self) -> &[EndPoint] {
+        &self.0.endpoints
     }
 
     /// Get the zenoh id of this Hello message.
@@ -121,8 +121,8 @@ impl Hello {
     }
 }
 
-impl From<HelloProto> for Hello {
-    fn from(inner: HelloProto) -> Self {
+impl From<HelloEndPoint> for Hello {
+    fn from(inner: HelloEndPoint) -> Self {
         Hello(inner)
     }
 }
@@ -138,7 +138,7 @@ impl fmt::Display for Hello {
         f.debug_struct("Hello")
             .field("zid", &self.zid())
             .field("whatami", &self.whatami())
-            .field("locators", &self.locators())
+            .field("endpoints", &self.endpoints())
             .finish()
     }
 }
