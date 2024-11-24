@@ -563,13 +563,6 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
-        // Extension Patch
-        #[cfg(feature = "transport_compression")]
-        self.ext_patch
-            .recv_open_syn((&mut state.transport.ext_patch, open_syn.ext_patch))
-            .await
-            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
-
         let output = RecvOpenSynOut {
             other_zid: cookie.zid,
             other_whatami: cookie.whatami,
@@ -643,13 +636,6 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             None
         );
 
-        // Extension Patch
-        let ext_patch = self
-            .ext_patch
-            .send_open_ack(&state.transport.ext_patch)
-            .await
-            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
-
         // Build OpenAck message
         let mine_initial_sn =
             compute_sn(input.mine_zid, input.other_zid, state.transport.resolution);
@@ -663,7 +649,6 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             ext_mlink,
             ext_lowlatency,
             ext_compression,
-            ext_patch,
         };
 
         // Do not send the OpenAck right now since we might still incur in MAX_LINKS error

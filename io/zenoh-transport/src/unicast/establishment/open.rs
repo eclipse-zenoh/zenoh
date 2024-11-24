@@ -357,6 +357,12 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
+        // Extension Patch
+        self.ext_patch
+            .recv_init_ack((&mut state.transport.ext_patch, init_ack.ext_patch))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         let output = RecvInitAckOut {
             other_zid: init_ack.zid,
             other_whatami: init_ack.whatami,
@@ -429,13 +435,6 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             None
         );
 
-        // Extension Patch
-        let ext_patch = self
-            .ext_patch
-            .send_open_syn(&state.transport.ext_patch)
-            .await
-            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
-
         // Build and send an OpenSyn message
         let mine_initial_sn =
             compute_sn(input.mine_zid, input.other_zid, state.transport.resolution);
@@ -450,7 +449,6 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             ext_mlink,
             ext_lowlatency,
             ext_compression,
-            ext_patch,
         }
         .into();
 

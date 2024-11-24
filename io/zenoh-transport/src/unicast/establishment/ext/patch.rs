@@ -19,7 +19,7 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_protocol::transport::{init, open};
+use zenoh_protocol::transport::init;
 use zenoh_result::Error as ZError;
 
 use crate::unicast::establishment::{AcceptFsm, OpenFsm};
@@ -46,7 +46,7 @@ pub(crate) struct StateOpen {
 impl StateOpen {
     pub(crate) const fn new() -> Self {
         Self {
-            patch: init::ext::PatchType::CURRENT,
+            patch: init::ext::PatchType::NONE,
         }
     }
 
@@ -75,26 +75,26 @@ impl<'a> OpenFsm for &'a PatchFsm<'a> {
         input: Self::RecvInitAckIn,
     ) -> Result<Self::RecvInitAckOut, Self::Error> {
         let (state, other_ext) = input;
-        state.patch = std::cmp::min(state.patch, other_ext);
+        state.patch = other_ext;
         Ok(())
     }
 
     type SendOpenSynIn = &'a StateOpen;
-    type SendOpenSynOut = open::ext::PatchType;
+    type SendOpenSynOut = ();
     async fn send_open_syn(
         self,
         _state: Self::SendOpenSynIn,
     ) -> Result<Self::SendOpenSynOut, Self::Error> {
-        Ok(open::ext::PatchType::DEFAULT)
+        unimplemented!()
     }
 
-    type RecvOpenAckIn = (&'a mut StateOpen, open::ext::PatchType);
+    type RecvOpenAckIn = (&'a mut StateOpen, ());
     type RecvOpenAckOut = ();
     async fn recv_open_ack(
         self,
         _state: Self::RecvOpenAckIn,
     ) -> Result<Self::RecvOpenAckOut, Self::Error> {
-        Ok(())
+        unimplemented!()
     }
 }
 
@@ -109,7 +109,7 @@ pub(crate) struct StateAccept {
 impl StateAccept {
     pub(crate) const fn new() -> Self {
         Self {
-            patch: init::ext::PatchType::CURRENT,
+            patch: init::ext::PatchType::NONE,
         }
     }
 
@@ -163,7 +163,7 @@ impl<'a> AcceptFsm for &'a PatchFsm<'a> {
         input: Self::RecvInitSynIn,
     ) -> Result<Self::RecvInitSynOut, Self::Error> {
         let (state, other_ext) = input;
-        state.patch = std::cmp::min(state.patch, other_ext);
+        state.patch = other_ext;
         Ok(())
     }
 
@@ -176,21 +176,21 @@ impl<'a> AcceptFsm for &'a PatchFsm<'a> {
         Ok(init::ext::PatchType::CURRENT)
     }
 
-    type RecvOpenSynIn = (&'a mut StateAccept, init::ext::PatchType);
+    type RecvOpenSynIn = (&'a mut StateAccept, ());
     type RecvOpenSynOut = ();
     async fn recv_open_syn(
         self,
         _state: Self::RecvOpenSynIn,
     ) -> Result<Self::RecvOpenSynOut, Self::Error> {
-        Ok(())
+        unimplemented!()
     }
 
     type SendOpenAckIn = &'a StateAccept;
-    type SendOpenAckOut = init::ext::PatchType;
+    type SendOpenAckOut = ();
     async fn send_open_ack(
         self,
         _state: Self::SendOpenAckIn,
     ) -> Result<Self::SendOpenAckOut, Self::Error> {
-        Ok(init::ext::PatchType::DEFAULT)
+        unimplemented!()
     }
 }

@@ -163,7 +163,7 @@ where
         }
         let mut n_exts = (ext_qos.is_some() as u8)
             + (ext_shm.is_some() as u8)
-            + (*ext_patch != ext::PatchType::DEFAULT) as u8;
+            + (*ext_patch != ext::PatchType::NONE) as u8;
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -204,7 +204,7 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (shm, n_exts != 0))?;
         }
-        if *ext_patch != ext::PatchType::DEFAULT {
+        if *ext_patch != ext::PatchType::NONE {
             n_exts -= 1;
             self.write(&mut *writer, (*ext_patch, n_exts != 0))?;
         }
@@ -271,7 +271,7 @@ where
         // Extensions
         let mut ext_qos = None;
         let mut ext_shm = None;
-        let mut ext_patch = ext::PatchType::DEFAULT;
+        let mut ext_patch = ext::PatchType::NONE;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {

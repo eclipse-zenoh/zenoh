@@ -802,7 +802,9 @@ impl TransmissionPipelineConsumer {
     }
 
     pub(crate) fn refill(&mut self, batch: WBatch, priority: usize) {
-        self.stage_out[priority].refill(batch);
+        if !batch.is_ephemeral() {
+            self.stage_out[priority].refill(batch);
+        }
     }
 
     pub(crate) fn drain(&mut self) -> Vec<(WBatch, usize)> {

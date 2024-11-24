@@ -312,11 +312,11 @@ pub mod ext {
         }
     }
 
-    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
     pub struct PatchType<const ID: u8>(u8);
 
     impl<const ID: u8> PatchType<ID> {
-        pub const DEFAULT: Self = Self(0);
+        pub const NONE: Self = Self(0);
         pub const CURRENT: Self = Self(1);
 
         pub fn new(int: u8) -> Self {

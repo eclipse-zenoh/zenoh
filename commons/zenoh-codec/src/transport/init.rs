@@ -66,7 +66,7 @@ where
             + (ext_mlink.is_some() as u8)
             + (ext_lowlatency.is_some() as u8)
             + (ext_compression.is_some() as u8)
-            + (*ext_patch != ext::PatchType::DEFAULT) as u8;
+            + (*ext_patch != ext::PatchType::NONE) as u8;
 
         #[cfg(feature = "shared-memory")]
         {
@@ -127,7 +127,7 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (compression, n_exts != 0))?;
         }
-        if *ext_patch != ext::PatchType::DEFAULT {
+        if *ext_patch != ext::PatchType::NONE {
             n_exts -= 1;
             self.write(&mut *writer, (*ext_patch, n_exts != 0))?;
         }
@@ -192,7 +192,7 @@ where
         let mut ext_mlink = None;
         let mut ext_lowlatency = None;
         let mut ext_compression = None;
-        let mut ext_patch = ext::PatchType::DEFAULT;
+        let mut ext_patch = ext::PatchType::NONE;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -302,7 +302,7 @@ where
             + (ext_mlink.is_some() as u8)
             + (ext_lowlatency.is_some() as u8)
             + (ext_compression.is_some() as u8)
-            + (*ext_patch != ext::PatchType::DEFAULT) as u8;
+            + (*ext_patch != ext::PatchType::NONE) as u8;
 
         #[cfg(feature = "shared-memory")]
         {
@@ -366,7 +366,7 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (compression, n_exts != 0))?;
         }
-        if *ext_patch != ext::PatchType::DEFAULT {
+        if *ext_patch != ext::PatchType::NONE {
             n_exts -= 1;
             self.write(&mut *writer, (*ext_patch, n_exts != 0))?;
         }
@@ -434,7 +434,7 @@ where
         let mut ext_mlink = None;
         let mut ext_lowlatency = None;
         let mut ext_compression = None;
-        let mut ext_patch = ext::PatchType::DEFAULT;
+        let mut ext_patch = ext::PatchType::NONE;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {

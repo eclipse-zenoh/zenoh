@@ -191,10 +191,8 @@ async fn tx_task(
                             stats.inc_tx_bytes(batch.len() as usize);
                         }
 
-                        if !batch.is_ephemeral() {
-                            // Reinsert the batch into the queue
-                            pipeline.refill(batch, priority);
-                        }
+                        // Reinsert the batch into the queue
+                        pipeline.refill(batch, priority);
                     },
                     Ok(None) => {
                         // The queue has been disabled: break the tx loop, drain the queue, and exit
