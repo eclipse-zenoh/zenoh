@@ -20,8 +20,8 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, EntityGlobalIdProto, EndPoint, WhatAmI, ZenohIdProto},
-    scouting::hello::HelloEndPoint
+    core::{key_expr::OwnedKeyExpr, EndPoint, EntityGlobalIdProto, WhatAmI, ZenohIdProto},
+    scouting::hello::HelloEndPoint,
 };
 
 /// The global unique id of a Zenoh session.

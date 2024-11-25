@@ -35,7 +35,7 @@ use zenoh_config::{
 use zenoh_link::{Locator, LocatorInspector};
 use zenoh_protocol::{
     core::{whatami::WhatAmIMatcher, EndPoint, Metadata, PriorityRange, WhatAmI, ZenohIdProto},
-    scouting::{HelloProto, Scout, ScoutingBody, ScoutingMessage, hello::HelloEndPoint},
+    scouting::{hello::HelloEndPoint, HelloProto, Scout, ScoutingBody, ScoutingMessage},
 };
 use zenoh_result::{bail, zerror, ZResult};
 
@@ -899,17 +899,27 @@ impl Runtime {
                                 if let ScoutingBody::Hello(hello) = &msg.body {
                                     if matcher.matches(hello.whatami) {
                                         if let Ok(local_addr) = socket.local_addr() {
-                                            if let Ok(iface) = zenoh_util::net::get_interface_names_by_addr(local_addr.ip()) {
+                                            if let Ok(iface) =
+                                                zenoh_util::net::get_interface_names_by_addr(
+                                                    local_addr.ip()
+                                                )
+                                            {
                                                 let endpoint = HelloEndPoint {
                                                     version: hello.version,
                                                     whatami: hello.whatami,
                                                     zid: hello.zid,
-                                                    endpoints: hello.locators
+                                                    endpoints: hello
+                                                        .locators
                                                         .iter()
-                                                        .map(|locator| EndPoint::new(locator.protocol(),
-                                                            locator.address(),
-                                                            locator.metadata(),
-                                                            "iface=".to_string() + &iface[0]).unwrap())
+                                                        .map(|locator|
+                                                            EndPoint::new(
+                                                                locator.protocol(),
+                                                                locator.address(),
+                                                                locator.metadata(),
+                                                                "iface=".to_string() + &iface[0],
+                                                            )
+                                                            .unwrap()
+                                                        )
                                                         .collect()
                                                 };
                                                 if let Loop::Break = f(endpoint.clone()).await {
@@ -921,10 +931,11 @@ impl Runtime {
                                             version: hello.version,
                                             whatami: hello.whatami,
                                             zid: hello.zid,
-                                            endpoints: hello.locators
+                                            endpoints: hello
+                                                .locators
                                                 .iter()
                                                 .map(|locator| locator.to_endpoint())
-                                                .collect()
+                                                .collect(),
                                         };
                                         if let Loop::Break = f(endpoint.clone()).await {
                                             break;
@@ -1105,7 +1116,8 @@ impl Runtime {
     }
 
     pub async fn connect_peer(&self, zid: &ZenohIdProto, locators: &[Locator]) -> bool {
-        let endpoints: Vec<EndPoint> = locators.iter()
+        let endpoints: Vec<EndPoint> = locators
+            .iter()
             .map(|locator| locator.to_endpoint().clone())
             .collect();
         self.connect_endpoints(zid, &endpoints).await
