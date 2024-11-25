@@ -21,8 +21,10 @@ use zenoh_examples::CommonArgs;
 async fn main() {
     // initiate logging
     zenoh::init_log_from_env_or("error");
-
-    let (config, keyexpr, payload, target, timeout) = parse_args();
+    #[cfg(feature = "unstable")]
+    let (config, keyexpr, payload, target, timeout, add_matching_listener) = parse_args();
+    #[cfg(not(feature = "unstable"))]
+    let (config, keyexpr, payload, target, timeout, _) = parse_args();
 
     println!("Opening session...");
     let session = zenoh::open(config).await.unwrap();
@@ -36,18 +38,20 @@ async fn main() {
         .unwrap();
 
     #[cfg(feature = "unstable")]
-    querier
-        .matching_listener()
-        .callback(|matching_status| {
-            if matching_status.matching() {
-                println!("Querier has matching queryables.");
-            } else {
-                println!("Querier has NO MORE matching queryables.");
-            }
-        })
-        .background()
-        .await
-        .unwrap();
+    if add_matching_listener {
+        querier
+            .matching_listener()
+            .callback(|matching_status| {
+                if matching_status.matching() {
+                    println!("Querier has matching queryables.");
+                } else {
+                    println!("Querier has NO MORE matching queryables.");
+                }
+            })
+            .background()
+            .await
+            .unwrap();
+    }
 
     println!("Press CTRL-C to quit...");
     for idx in 0..u32::MAX {
@@ -116,6 +120,10 @@ struct Args {
     #[arg(short = 'o', long, default_value = "10000")]
     /// The query timeout in milliseconds.
     timeout: u64,
+    /// Enable matching listener.
+    #[cfg(feature = "unstable")]
+    #[arg(long)]
+    add_matching_listener: bool,
     #[command(flatten)]
     common: CommonArgs,
 }
@@ -126,6 +134,7 @@ fn parse_args() -> (
     Option<String>,
     QueryTarget,
     Duration,
+    bool,
 ) {
     let args = Args::parse();
     (
@@ -138,5 +147,9 @@ fn parse_args() -> (
             Qt::AllComplete => QueryTarget::AllComplete,
         },
         Duration::from_millis(args.timeout),
+        #[cfg(feature = "unstable")]
+        args.add_matching_listener,
+        #[cfg(not(feature = "unstable"))]
+        false,
     )
 }
