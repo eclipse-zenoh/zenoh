@@ -11,7 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::future::{IntoFuture, Ready};
+use std::{
+    future::{IntoFuture, Ready},
+    sync::atomic::AtomicU64,
+};
 
 use itertools::Itertools;
 use zenoh_config::qos::PublisherQoSConfig;
@@ -210,6 +213,7 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.publisher = self.publisher.apply_qos_overwrites();
         self.publisher.session.0.resolve_put(
+            None,
             &self.publisher.key_expr?,
             self.kind.payload,
             SampleKind::Put,
@@ -233,6 +237,7 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDel
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.publisher = self.publisher.apply_qos_overwrites();
         self.publisher.session.0.resolve_put(
+            None,
             &self.publisher.key_expr?,
             ZBytes::new(),
             SampleKind::Delete,
@@ -468,6 +473,8 @@ impl Wait for PublisherBuilder<'_, '_> {
             .declare_publisher_inner(key_expr.clone(), self.destination)?;
         Ok(Publisher {
             session: self.session.downgrade(),
+            // TODO use constants here
+            cache: AtomicU64::new(0b11),
             id,
             key_expr,
             encoding: self.encoding,
@@ -496,6 +503,7 @@ impl IntoFuture for PublisherBuilder<'_, '_> {
 impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
     fn wait(self) -> <Self as Resolvable>::To {
         self.publisher.session.resolve_put(
+            Some(&self.publisher.cache),
             &self.publisher.key_expr,
             self.kind.payload,
             SampleKind::Put,
@@ -517,6 +525,7 @@ impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
 impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
     fn wait(self) -> <Self as Resolvable>::To {
         self.publisher.session.resolve_put(
+            Some(&self.publisher.cache),
             &self.publisher.key_expr,
             ZBytes::new(),
             SampleKind::Delete,

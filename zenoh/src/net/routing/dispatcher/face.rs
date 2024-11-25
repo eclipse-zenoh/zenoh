@@ -213,6 +213,11 @@ impl Face {
             state: Arc::downgrade(&self.state),
         }
     }
+
+    #[inline]
+    pub fn route_data(&self, msg: Push, reliability: Reliability) -> bool {
+        route_data(&self.tables, &self.state, msg, reliability)
+    }
 }
 
 impl Primitives for Face {

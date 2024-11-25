@@ -17,6 +17,7 @@ use std::{
     fmt,
     future::{IntoFuture, Ready},
     pin::Pin,
+    sync::atomic::AtomicU64,
     task::{Context, Poll},
 };
 
@@ -101,6 +102,7 @@ impl fmt::Debug for PublisherState {
 #[derive(Debug)]
 pub struct Publisher<'a> {
     pub(crate) session: WeakSession,
+    pub(crate) cache: AtomicU64,
     pub(crate) id: Id,
     pub(crate) key_expr: KeyExpr<'a>,
     pub(crate) encoding: Encoding,
@@ -391,6 +393,7 @@ impl Sink<Sample> for Publisher<'_> {
             ..
         } = item.into();
         self.session.resolve_put(
+            Some(&self.cache),
             &self.key_expr,
             payload,
             kind,

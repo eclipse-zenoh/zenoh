@@ -17,7 +17,7 @@ use std::{
     fmt,
     ops::Deref,
     sync::{
-        atomic::{AtomicU16, Ordering},
+        atomic::{AtomicU16, AtomicU64, Ordering},
         Arc, Mutex, RwLock,
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -125,6 +125,7 @@ zconfigurable! {
 }
 
 pub(crate) struct SessionState {
+    pub(crate) subscription_version: u64,
     pub(crate) primitives: Option<Arc<Face>>, // @TODO replace with MaybeUninit ??
     pub(crate) expr_id_counter: AtomicExprId, // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicRequestId,
@@ -159,6 +160,7 @@ impl SessionState {
         publisher_qos_tree: KeBoxTree<PublisherQoSConfig>,
     ) -> SessionState {
         SessionState {
+            subscription_version: 0,
             primitives: None,
             expr_id_counter: AtomicExprId::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
             qid_counter: AtomicRequestId::new(0),
@@ -1473,6 +1475,7 @@ impl SessionInner {
         callback: Callback<Sample>,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
+        state.subscription_version += 1;
         tracing::trace!("declare_subscriber({:?})", key_expr);
         let id = self.runtime.next_id();
         let (sub_state, declared_sub) = state.register_subscriber(id, key_expr, origin, callback);
@@ -2061,11 +2064,11 @@ impl SessionInner {
         kind: SubscriberKind,
         #[cfg(feature = "unstable")] reliability: Reliability,
         attachment: Option<ZBytes>,
-    ) {
+    ) -> bool {
         let mut callbacks = SingleOrVec::default();
         let state = zread!(self.state);
         if state.primitives.is_none() {
-            return; // Session closing or closed
+            return false; // Session closing or closed
         }
         if key_expr.suffix.is_empty() {
             match state.get_res(&key_expr.scope, key_expr.mapping, local) {
@@ -2083,11 +2086,11 @@ impl SessionInner {
                         "Received Data for `{}`, which isn't a key expression",
                         prefix
                     );
-                    return;
+                    return false;
                 }
                 None => {
                     tracing::error!("Received Data for unknown expr_id: {}", key_expr.scope);
-                    return;
+                    return false;
                 }
             }
         } else {
@@ -2104,11 +2107,14 @@ impl SessionInner {
                 }
                 Err(err) => {
                     tracing::error!("Received Data for unknown key_expr: {}", err);
-                    return;
+                    return false;
                 }
             }
         };
         drop(state);
+        if callbacks.is_empty() {
+            return false;
+        }
         let mut sample = info.clone().into_sample(
             // SAFETY: the keyexpr is valid
             unsafe { KeyExpr::from_str_unchecked("dummy") },
@@ -2126,11 +2132,14 @@ impl SessionInner {
             sample.key_expr = key_expr;
             cb.call(sample);
         }
+        true
     }
 
     #[allow(clippy::too_many_arguments)] // TODO fixme
+    #[inline(always)]
     pub(crate) fn resolve_put(
         &self,
+        cache: Option<&AtomicU64>,
         key_expr: &KeyExpr,
         payload: ZBytes,
         kind: SampleKind,
@@ -2144,12 +2153,32 @@ impl SessionInner {
         #[cfg(feature = "unstable")] source_info: SourceInfo,
         attachment: Option<ZBytes>,
     ) -> ZResult<()> {
+        const REMOTE_TAG: u64 = 0b01;
+        const LOCAL_TAG: u64 = 0b10;
+        const VERSION_SHIFT: u64 = 2;
         trace!("write({:?}, [...])", key_expr);
-        let primitives = zread!(self.state).primitives()?;
+        let state = zread!(self.state);
+        let primitives = state
+            .primitives
+            .as_ref()
+            .cloned()
+            .ok_or(SessionClosedError)?;
+        let mut cached = REMOTE_TAG | LOCAL_TAG;
+        let mut to_cache = REMOTE_TAG | LOCAL_TAG;
+        if let Some(cache) = cache {
+            cached = cache.load(Ordering::Relaxed);
+            let version = cached >> VERSION_SHIFT;
+            if version == state.subscription_version {
+                to_cache = cached;
+            } else {
+                to_cache = (state.subscription_version << VERSION_SHIFT) | REMOTE_TAG | LOCAL_TAG;
+            }
+        }
+        drop(state);
         let timestamp = timestamp.or_else(|| self.runtime.new_timestamp());
         let wire_expr = key_expr.to_wire(self);
-        if destination != Locality::SessionLocal {
-            primitives.send_push(
+        if (to_cache & REMOTE_TAG) != 0 && destination != Locality::SessionLocal {
+            let remote = primitives.route_data(
                 Push {
                     wire_expr: wire_expr.to_owned(),
                     ext_qos: push::ext::QoSType::new(
@@ -2189,8 +2218,11 @@ impl SessionInner {
                 #[cfg(not(feature = "unstable"))]
                 Reliability::DEFAULT,
             );
+            if !remote {
+                to_cache &= !REMOTE_TAG;
+            }
         }
-        if destination != Locality::Remote {
+        if (to_cache & LOCAL_TAG) != 0 && destination != Locality::Remote {
             let data_info = DataInfo {
                 kind,
                 encoding: Some(encoding),
@@ -2210,7 +2242,7 @@ impl SessionInner {
                 )),
             };
 
-            self.execute_subscriber_callbacks(
+            let local = self.execute_subscriber_callbacks(
                 true,
                 &wire_expr,
                 Some(data_info),
@@ -2220,6 +2252,12 @@ impl SessionInner {
                 reliability,
                 attachment,
             );
+            if !local {
+                to_cache &= !LOCAL_TAG;
+            }
+        }
+        if let Some(cache) = cache.filter(|_| to_cache != cached) {
+            let _ = cache.compare_exchange(cached, to_cache, Ordering::Relaxed, Ordering::Relaxed);
         }
         Ok(())
     }
@@ -2530,6 +2568,7 @@ impl Primitives for WeakSession {
                 #[cfg(feature = "unstable")]
                 {
                     let mut state = zwrite!(self.state);
+                    state.subscription_version += 1;
                     if state.primitives.is_none() {
                         return; // Session closing or closed
                     }
@@ -2772,7 +2811,7 @@ impl Primitives for WeakSession {
                     #[cfg(feature = "unstable")]
                     _reliability,
                     m.ext_attachment.map(Into::into),
-                )
+                );
             }
             PushBody::Del(m) => {
                 let info = DataInfo {
@@ -2792,7 +2831,7 @@ impl Primitives for WeakSession {
                     #[cfg(feature = "unstable")]
                     _reliability,
                     m.ext_attachment.map(Into::into),
-                )
+                );
             }
         }
     }
