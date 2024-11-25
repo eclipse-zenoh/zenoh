@@ -11,7 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::future::{IntoFuture, Ready};
+use std::{
+    future::{IntoFuture, Ready},
+    sync::atomic::AtomicU64,
+};
 
 use zenoh_core::{Resolvable, Result as ZResult, Wait};
 use zenoh_protocol::core::CongestionControl;
@@ -206,6 +209,7 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut
     #[inline]
     fn wait(self) -> <Self as Resolvable>::To {
         self.publisher.session.0.resolve_put(
+            None,
             &self.publisher.key_expr?,
             self.kind.payload,
             SampleKind::Put,
@@ -228,6 +232,7 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDel
     #[inline]
     fn wait(self) -> <Self as Resolvable>::To {
         self.publisher.session.0.resolve_put(
+            None,
             &self.publisher.key_expr?,
             ZBytes::new(),
             SampleKind::Delete,
@@ -383,6 +388,8 @@ impl Wait for PublisherBuilder<'_, '_> {
             .declare_publisher_inner(key_expr.clone(), self.destination)?;
         Ok(Publisher {
             session: self.session.downgrade(),
+            // TODO use constants here
+            cache: AtomicU64::new(0b11),
             id,
             key_expr,
             encoding: self.encoding,
@@ -411,6 +418,7 @@ impl IntoFuture for PublisherBuilder<'_, '_> {
 impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
     fn wait(self) -> <Self as Resolvable>::To {
         self.publisher.session.resolve_put(
+            Some(&self.publisher.cache),
             &self.publisher.key_expr,
             self.kind.payload,
             SampleKind::Put,
@@ -432,6 +440,7 @@ impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
 impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
     fn wait(self) -> <Self as Resolvable>::To {
         self.publisher.session.resolve_put(
+            Some(&self.publisher.cache),
             &self.publisher.key_expr,
             ZBytes::new(),
             SampleKind::Delete,
