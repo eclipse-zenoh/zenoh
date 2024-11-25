@@ -14,6 +14,7 @@
 use std::{cell::UnsafeCell, convert::TryInto, fmt, net::SocketAddr, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
+use time::OffsetDateTime;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
@@ -21,11 +22,13 @@ use tokio::{
 };
 use tokio_rustls::{TlsAcceptor, TlsConnector, TlsStream};
 use tokio_util::sync::CancellationToken;
-use x509_parser::prelude::*;
+use x509_parser::prelude::{FromDer, X509Certificate};
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
-    get_ip_interface_names, LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast,
-    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender,
+    get_ip_interface_names,
+    tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
+    LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
+    ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -62,6 +65,7 @@ pub struct LinkUnicastTls {
     read_mtx: AsyncMutex<()>,
     auth_identifier: LinkAuthId,
     mtu: BatchSize,
+    expiration_manager: Option<LinkCertExpirationManager>,
 }
 
 unsafe impl Send for LinkUnicastTls {}
@@ -73,6 +77,7 @@ impl LinkUnicastTls {
         src_addr: SocketAddr,
         dst_addr: SocketAddr,
         auth_identifier: LinkAuthId,
+        expiration_manager: Option<LinkCertExpirationManager>,
     ) -> LinkUnicastTls {
         let (tcp_stream, _) = socket.get_ref();
         // Set the TLS nodelay option
@@ -131,6 +136,7 @@ impl LinkUnicastTls {
             read_mtx: AsyncMutex::new(()),
             auth_identifier,
             mtu,
+            expiration_manager,
         }
     }
 
@@ -141,10 +147,7 @@ impl LinkUnicastTls {
     fn get_mut_socket(&self) -> &mut TlsStream<TcpStream> {
         unsafe { &mut *self.inner.get() }
     }
-}
 
-#[async_trait]
-impl LinkUnicastTrait for LinkUnicastTls {
     async fn close(&self) -> ZResult<()> {
         tracing::trace!("Closing TLS link: {}", self);
         // Flush the TLS stream
@@ -157,6 +160,24 @@ impl LinkUnicastTrait for LinkUnicastTls {
         let res = tcp_stream.shutdown().await;
         tracing::trace!("TLS link shutdown {}: {:?}", self, res);
         res.map_err(|e| zerror!(e).into())
+    }
+}
+
+#[async_trait]
+impl LinkUnicastTrait for LinkUnicastTls {
+    async fn close(&self) -> ZResult<()> {
+        if let Some(expiration_manager) = &self.expiration_manager {
+            if !expiration_manager.set_closing() {
+                // expiration_task is closing link, return its returned ZResult to Transport
+                return expiration_manager.wait_for_expiration_task().await;
+            }
+            // cancel the expiration task and close link
+            expiration_manager.cancel_expiration_task();
+            let res = self.close().await;
+            let _ = expiration_manager.wait_for_expiration_task().await;
+            return res;
+        }
+        self.close().await
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
@@ -229,6 +250,21 @@ impl LinkUnicastTrait for LinkUnicastTls {
     #[inline(always)]
     fn get_auth_id(&self) -> &LinkAuthId {
         &self.auth_identifier
+    }
+}
+
+#[async_trait]
+impl LinkWithCertExpiration for LinkUnicastTls {
+    async fn expire(&self) -> ZResult<()> {
+        let expiration_manager = self
+            .expiration_manager
+            .as_ref()
+            .expect("expiration_manager should be set");
+        if expiration_manager.set_closing() {
+            return self.close().await;
+        }
+        // Transport is already closing the link
+        Ok(())
     }
 }
 
@@ -326,15 +362,31 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
 
         let (_, tls_conn) = tls_stream.get_ref();
         let auth_identifier = get_server_cert_common_name(tls_conn)?;
+        let certchain_expiration_time = get_cert_chain_expiration(&tls_conn.peer_certificates())?
+            .expect("server should have certificate chain");
 
         let tls_stream = TlsStream::Client(tls_stream);
 
-        let link = Arc::new(LinkUnicastTls::new(
-            tls_stream,
-            src_addr,
-            dst_addr,
-            auth_identifier.into(),
-        ));
+        let link = Arc::<LinkUnicastTls>::new_cyclic(|weak_link| {
+            let mut expiration_manager = None;
+            if client_config.tls_close_link_on_expiration {
+                // setup expiration manager
+                expiration_manager = Some(LinkCertExpirationManager::new(
+                    weak_link.clone(),
+                    src_addr,
+                    dst_addr,
+                    TLS_LOCATOR_PREFIX,
+                    certchain_expiration_time,
+                ))
+            }
+            LinkUnicastTls::new(
+                tls_stream,
+                dst_addr,
+                src_addr,
+                auth_identifier.into(),
+                expiration_manager,
+            )
+        });
 
         Ok(LinkUnicast(link))
     }
@@ -376,6 +428,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
                     token,
                     manager,
                     tls_server_config.tls_handshake_timeout,
+                    tls_server_config.tls_close_link_on_expiration,
                 )
                 .await
             }
@@ -416,6 +469,7 @@ async fn accept_task(
     token: CancellationToken,
     manager: NewLinkChannelSender,
     tls_handshake_timeout: Duration,
+    tls_close_link_on_expiration: bool,
 ) -> ZResult<()> {
     let src_addr = socket.local_addr().map_err(|e| {
         let e = zerror!("Can not accept TLS connections: {}", e);
@@ -445,14 +499,41 @@ async fn accept_task(
                         };
                         let auth_identifier = get_client_cert_common_name(tls_conn)?;
 
+                        // Get certificate chain expiration
+                        let mut maybe_expiration_time = None;
+                        if tls_close_link_on_expiration {
+                            match get_cert_chain_expiration(&tls_conn.peer_certificates())? {
+                                exp @ Some(_) => maybe_expiration_time = exp,
+                                None => tracing::warn!(
+                                    "Cannot monitor expiration for TLS link {:?} => {:?} : client does not have certificates",
+                                    src_addr,
+                                    dst_addr,
+                                ),
+                            }
+                        }
+
                         tracing::debug!("Accepted TLS connection on {:?}: {:?}", src_addr, dst_addr);
                         // Create the new link object
-                        let link = Arc::new(LinkUnicastTls::new(
-                            tokio_rustls::TlsStream::Server(tls_stream),
-                            src_addr,
-                            dst_addr,
-                            auth_identifier.into(),
-                        ));
+                        let link = Arc::<LinkUnicastTls>::new_cyclic(|weak_link| {
+                            let mut expiration_manager = None;
+                            if let Some(certchain_expiration_time) = maybe_expiration_time {
+                                // setup expiration manager
+                                expiration_manager = Some(LinkCertExpirationManager::new(
+                                    weak_link.clone(),
+                                    src_addr,
+                                    dst_addr,
+                                    TLS_LOCATOR_PREFIX,
+                                    certchain_expiration_time,
+                                ));
+                            }
+                            LinkUnicastTls::new(
+                                tokio_rustls::TlsStream::Server(tls_stream),
+                                dst_addr,
+                                src_addr,
+                                auth_identifier.into(),
+                                expiration_manager,
+                            )
+                        });
 
                         // Communicate the new link to the initial transport manager
                         if let Err(e) = manager.send_async(LinkUnicast(link)).await {
@@ -515,6 +596,24 @@ fn get_server_cert_common_name(tls_conn: &rustls::ClientConnection) -> ZResult<T
         return Ok(auth_id);
     }
     Ok(auth_id)
+}
+
+/// Returns the minimum value of the `not_after` field in the given certificate chain.
+/// Returns `None` if the input certificate chain is empty or `None`
+fn get_cert_chain_expiration(
+    cert_chain: &Option<&[rustls_pki_types::CertificateDer]>,
+) -> ZResult<Option<OffsetDateTime>> {
+    let mut link_expiration: Option<OffsetDateTime> = None;
+    if let Some(remote_certs) = cert_chain {
+        for cert in *remote_certs {
+            let (_, cert) = X509Certificate::from_der(cert.as_ref())?;
+            let cert_expiration = cert.validity().not_after.to_datetime();
+            link_expiration = link_expiration
+                .map(|current_min| current_min.min(cert_expiration))
+                .or(Some(cert_expiration));
+        }
+    }
+    Ok(link_expiration)
 }
 
 struct TlsAuthId {
