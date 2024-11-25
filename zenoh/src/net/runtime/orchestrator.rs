@@ -901,7 +901,7 @@ impl Runtime {
                                         if let Ok(local_addr) = socket.local_addr() {
                                             if let Ok(iface) =
                                                 zenoh_util::net::get_interface_names_by_addr(
-                                                    local_addr.ip()
+                                                    local_addr.ip(),
                                                 )
                                             {
                                                 let endpoint = HelloEndPoint {
@@ -911,7 +911,7 @@ impl Runtime {
                                                     endpoints: hello
                                                         .locators
                                                         .iter()
-                                                        .map(|locator|
+                                                        .map(|locator| {
                                                             EndPoint::new(
                                                                 locator.protocol(),
                                                                 locator.address(),
@@ -919,7 +919,7 @@ impl Runtime {
                                                                 "iface=".to_string() + &iface[0],
                                                             )
                                                             .unwrap()
-                                                        )
+                                                        })
                                                         .collect()
                                                 };
                                                 if let Loop::Break = f(endpoint.clone()).await {
