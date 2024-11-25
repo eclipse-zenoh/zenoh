@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use core::marker::PhantomData;
+use std::{cmp::min, marker::PhantomData};
 
 use async_trait::async_trait;
 use zenoh_buffers::{
@@ -19,8 +19,8 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_protocol::transport::init;
-use zenoh_result::Error as ZError;
+use zenoh_protocol::transport::init::ext::PatchType;
+use zenoh_result::{bail, Error as ZError};
 
 use crate::unicast::establishment::{AcceptFsm, OpenFsm};
 
@@ -40,17 +40,17 @@ impl<'a> PatchFsm<'a> {
 /*************************************/
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct StateOpen {
-    patch: init::ext::PatchType,
+    patch: PatchType,
 }
 
 impl StateOpen {
     pub(crate) const fn new() -> Self {
         Self {
-            patch: init::ext::PatchType::NONE,
+            patch: PatchType::NONE,
         }
     }
 
-    pub(crate) const fn get(&self) -> init::ext::PatchType {
+    pub(crate) const fn get(&self) -> PatchType {
         self.patch
     }
 }
@@ -60,21 +60,28 @@ impl<'a> OpenFsm for &'a PatchFsm<'a> {
     type Error = ZError;
 
     type SendInitSynIn = &'a StateOpen;
-    type SendInitSynOut = init::ext::PatchType;
+    type SendInitSynOut = PatchType;
     async fn send_init_syn(
         self,
         _state: Self::SendInitSynIn,
     ) -> Result<Self::SendInitSynOut, Self::Error> {
-        Ok(init::ext::PatchType::CURRENT)
+        Ok(PatchType::CURRENT)
     }
 
-    type RecvInitAckIn = (&'a mut StateOpen, init::ext::PatchType);
+    type RecvInitAckIn = (&'a mut StateOpen, PatchType);
     type RecvInitAckOut = ();
     async fn recv_init_ack(
         self,
         input: Self::RecvInitAckIn,
     ) -> Result<Self::RecvInitAckOut, Self::Error> {
         let (state, other_ext) = input;
+        if other_ext > PatchType::CURRENT {
+            bail!(
+                "Acceptor patch should be lesser or equal to {current:?}, found {other:?}",
+                current = PatchType::CURRENT.raw(),
+                other = other_ext.raw(),
+            );
+        }
         state.patch = other_ext;
         Ok(())
     }
@@ -85,7 +92,7 @@ impl<'a> OpenFsm for &'a PatchFsm<'a> {
         self,
         _state: Self::SendOpenSynIn,
     ) -> Result<Self::SendOpenSynOut, Self::Error> {
-        unimplemented!()
+        unimplemented!("There is no patch extension in OPEN")
     }
 
     type RecvOpenAckIn = (&'a mut StateOpen, ());
@@ -94,7 +101,7 @@ impl<'a> OpenFsm for &'a PatchFsm<'a> {
         self,
         _state: Self::RecvOpenAckIn,
     ) -> Result<Self::RecvOpenAckOut, Self::Error> {
-        unimplemented!()
+        unimplemented!("There is no patch extension in OPEN")
     }
 }
 
@@ -103,24 +110,24 @@ impl<'a> OpenFsm for &'a PatchFsm<'a> {
 /*************************************/
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct StateAccept {
-    patch: init::ext::PatchType,
+    patch: PatchType,
 }
 
 impl StateAccept {
     pub(crate) const fn new() -> Self {
         Self {
-            patch: init::ext::PatchType::NONE,
+            patch: PatchType::NONE,
         }
     }
 
-    pub(crate) const fn get(&self) -> init::ext::PatchType {
+    pub(crate) const fn get(&self) -> PatchType {
         self.patch
     }
 
     #[cfg(test)]
     pub(crate) fn rand() -> Self {
         Self {
-            patch: init::ext::PatchType::rand(),
+            patch: PatchType::rand(),
         }
     }
 }
@@ -147,7 +154,7 @@ where
 
     fn read(self, reader: &mut R) -> Result<StateAccept, Self::Error> {
         let raw: u8 = self.read(&mut *reader)?;
-        let patch = init::ext::PatchType::new(raw);
+        let patch = PatchType::new(raw);
         Ok(StateAccept { patch })
     }
 }
@@ -156,7 +163,7 @@ where
 impl<'a> AcceptFsm for &'a PatchFsm<'a> {
     type Error = ZError;
 
-    type RecvInitSynIn = (&'a mut StateAccept, init::ext::PatchType);
+    type RecvInitSynIn = (&'a mut StateAccept, PatchType);
     type RecvInitSynOut = ();
     async fn recv_init_syn(
         self,
@@ -168,12 +175,12 @@ impl<'a> AcceptFsm for &'a PatchFsm<'a> {
     }
 
     type SendInitAckIn = &'a StateAccept;
-    type SendInitAckOut = init::ext::PatchType;
+    type SendInitAckOut = PatchType;
     async fn send_init_ack(
         self,
-        _state: Self::SendInitAckIn,
+        state: Self::SendInitAckIn,
     ) -> Result<Self::SendInitAckOut, Self::Error> {
-        Ok(init::ext::PatchType::CURRENT)
+        Ok(min(PatchType::CURRENT, state.patch))
     }
 
     type RecvOpenSynIn = (&'a mut StateAccept, ());
@@ -182,7 +189,7 @@ impl<'a> AcceptFsm for &'a PatchFsm<'a> {
         self,
         _state: Self::RecvOpenSynIn,
     ) -> Result<Self::RecvOpenSynOut, Self::Error> {
-        unimplemented!()
+        unimplemented!("There is no patch extension in OPEN")
     }
 
     type SendOpenAckIn = &'a StateAccept;
@@ -191,6 +198,6 @@ impl<'a> AcceptFsm for &'a PatchFsm<'a> {
         self,
         _state: Self::SendOpenAckIn,
     ) -> Result<Self::SendOpenAckOut, Self::Error> {
-        unimplemented!()
+        unimplemented!("There is no patch extension in OPEN")
     }
 }
