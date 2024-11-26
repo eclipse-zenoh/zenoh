@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
+    cmp::min,
     collections::HashMap,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -418,7 +419,7 @@ impl TransportMulticastInner {
             token,
             priority_rx,
             handler,
-            patch: join.ext_patch,
+            patch: min(PatchType::CURRENT, join.ext_patch),
         };
         zwrite!(self.peers).insert(locator.clone(), peer);
 
