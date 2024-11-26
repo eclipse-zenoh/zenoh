@@ -363,7 +363,7 @@ where
 }
 
 /// Deallocating policy.
-/// Forcely deallocate up to N buffers until allocation succeeds.
+/// Forcibly deallocate up to N buffers until allocation succeeds.
 #[zenoh_macros::unstable_doc]
 pub struct Deallocate<
     const N: usize,
