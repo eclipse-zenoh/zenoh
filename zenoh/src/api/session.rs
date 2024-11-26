@@ -850,7 +850,7 @@ impl Session {
             }
         }
 
-        return PublisherBuilder {
+        PublisherBuilder {
             session: self,
             key_expr: maybe_key_expr,
             encoding: builder_overwrites
@@ -875,7 +875,7 @@ impl Session {
                 .allowed_destination
                 .map(|d| d.into())
                 .unwrap_or(Locality::default()),
-        };
+        }
     }
 
     /// Obtain a [`Liveliness`] struct tied to this Zenoh [`Session`].
