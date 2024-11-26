@@ -31,8 +31,13 @@ use uhlc::Timestamp;
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
-use zenoh_config::{unwrap_or_default, wrappers::ZenohId};
+use zenoh_config::{
+    builders::{PublisherBuilderOptionsConf, PublisherBuildersConf},
+    unwrap_or_default,
+    wrappers::ZenohId,
+};
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Wait};
+use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeNode, KeBoxTree};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::network::{
     declare::{DeclareToken, SubscriberId, TokenId, UndeclareToken},
@@ -145,12 +150,14 @@ pub(crate) struct SessionState {
     pub(crate) liveliness_queries: HashMap<InterestId, LivelinessQueryState>,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
     pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
+    pub(crate) publisher_builders_tree: KeBoxTree<PublisherBuilderOptionsConf>,
 }
 
 impl SessionState {
     pub(crate) fn new(
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         aggregated_publishers: Vec<OwnedKeyExpr>,
+        publisher_builders_tree: KeBoxTree<PublisherBuilderOptionsConf>,
     ) -> SessionState {
         SessionState {
             primitives: None,
@@ -178,6 +185,7 @@ impl SessionState {
             liveliness_queries: HashMap::new(),
             aggregated_subscribers,
             aggregated_publishers,
+            publisher_builders_tree,
         }
     }
 }
@@ -540,6 +548,7 @@ impl Session {
         runtime: Runtime,
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         aggregated_publishers: Vec<OwnedKeyExpr>,
+        publisher_builders: PublisherBuildersConf,
         owns_runtime: bool,
     ) -> impl Resolve<Session> {
         ResolveClosure::new(move || {
@@ -547,6 +556,7 @@ impl Session {
             let state = RwLock::new(SessionState::new(
                 aggregated_subscribers,
                 aggregated_publishers,
+                publisher_builders.into(),
             ));
             let session = Session(Arc::new(SessionInner {
                 weak_counter: Mutex::new(0),
@@ -826,17 +836,46 @@ impl Session {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        PublisherBuilder {
-            session: self,
-            key_expr: key_expr.try_into().map_err(Into::into),
-            encoding: Encoding::default(),
-            congestion_control: CongestionControl::DEFAULT,
-            priority: Priority::DEFAULT,
-            is_express: false,
-            #[cfg(feature = "unstable")]
-            reliability: Reliability::DEFAULT,
-            destination: Locality::default(),
+        let maybe_key_expr = key_expr.try_into().map_err(Into::into);
+        let mut builder_overwrites = PublisherBuilderOptionsConf::default();
+        if let Ok(key_expr) = &maybe_key_expr {
+            // get overwritten builder
+            let state = zread!(self.0.state);
+            for node in state.publisher_builders_tree.nodes_including(key_expr) {
+                // Take the first one yielded by the iterator that has overwrites
+                if let Some(overwrites) = node.weight() {
+                    builder_overwrites = overwrites.clone();
+                    break;
+                }
+            }
         }
+
+        return PublisherBuilder {
+            session: self,
+            key_expr: maybe_key_expr,
+            encoding: builder_overwrites
+                .encoding
+                .map(|encoding| encoding.into())
+                .unwrap_or(Encoding::default()),
+            congestion_control: builder_overwrites
+                .congestion_control
+                .map(|cc| cc.into())
+                .unwrap_or(CongestionControl::DEFAULT),
+            priority: builder_overwrites
+                .priority
+                .map(|p| p.into())
+                .unwrap_or(Priority::DEFAULT),
+            is_express: builder_overwrites.express.unwrap_or(false),
+            #[cfg(feature = "unstable")]
+            reliability: builder_overwrites
+                .reliability
+                .map(|r| r.into())
+                .unwrap_or(Reliability::DEFAULT),
+            destination: builder_overwrites
+                .allowed_destination
+                .map(|d| d.into())
+                .unwrap_or(Locality::default()),
+        };
     }
 
     /// Obtain a [`Liveliness`] struct tied to this Zenoh [`Session`].
@@ -1053,6 +1092,7 @@ impl Session {
             tracing::debug!("Config: {:?}", &config);
             let aggregated_subscribers = config.0.aggregation().subscribers().clone();
             let aggregated_publishers = config.0.aggregation().publishers().clone();
+            let publisher_builders = config.0.builders.publishers().clone();
             #[allow(unused_mut)] // Required for shared-memory
             let mut runtime = RuntimeBuilder::new(config);
             #[cfg(feature = "shared-memory")]
@@ -1065,6 +1105,7 @@ impl Session {
                 runtime.clone(),
                 aggregated_subscribers,
                 aggregated_publishers,
+                publisher_builders,
                 true,
             )
             .await;

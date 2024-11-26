@@ -19,6 +19,7 @@
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 //!
 //! Configuration to pass to `zenoh::open()` and `zenoh::scout()` functions and associated constants.
+pub mod builders;
 pub mod defaults;
 mod include;
 pub mod wrappers;
@@ -29,6 +30,7 @@ use std::{
     any::Any, collections::HashSet, fmt, io::Read, net::SocketAddr, ops, path::Path, sync::Weak,
 };
 
+use builders::PublisherBuildersConf;
 use include::recursive_include;
 use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
 use serde::{Deserialize, Serialize};
@@ -360,6 +362,14 @@ validated_struct::validator! {
             /// A list of key-expressions for which all included publishers will be aggregated into.
             publishers: Vec<OwnedKeyExpr>,
         },
+
+        /// Overwrite default builders for specific key expressions
+        pub builders: #[derive(Default)]
+        BuildersConf {
+            /// A list of publisher builder configurations for specific key expressions.
+            publishers: PublisherBuildersConf,
+        },
+
         pub transport: #[derive(Default)]
         TransportConf {
             pub unicast: TransportUnicastConf {
