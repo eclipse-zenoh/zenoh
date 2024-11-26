@@ -36,7 +36,7 @@ pub struct CloseBuilder<TCloseable: Closeable> {
 // care about the `private_bounds` lint in this particular case.
 #[allow(private_bounds)]
 impl<TCloseable: Closeable> CloseBuilder<TCloseable> {
-    pub(crate) fn new(closeable: &TCloseable) -> Self {
+    pub(crate) fn new(closeable: &'_ TCloseable) -> Self {
         Self {
             closee: closeable.get_closee(),
             timeout: Duration::from_secs(3600),
@@ -52,6 +52,13 @@ impl<TCloseable: Closeable> CloseBuilder<TCloseable> {
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self
+    }
+
+    /// Run Close operation concurrently
+    pub fn concurrently(
+        self,
+    ) -> tokio::task::JoinHandle<<CloseBuilder<TCloseable> as Resolvable>::To> {
+        ZRuntime::Application.spawn(self.into_future())
     }
 }
 
