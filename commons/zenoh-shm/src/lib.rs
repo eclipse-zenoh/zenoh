@@ -151,7 +151,7 @@ impl ShmBufInner {
     /// # Safety
     /// You should understand what you are doing, as overestimation
     /// of the reference counter can lead to memory being stalled until
-    /// recovered by watchdog subsystem or forcely deallocated
+    /// recovered by watchdog subsystem or forcibly deallocated
     pub unsafe fn inc_ref_count(&self) {
         self.header.header().refcount.fetch_add(1, Ordering::SeqCst);
     }

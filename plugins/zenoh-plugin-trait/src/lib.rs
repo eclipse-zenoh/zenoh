@@ -18,7 +18,7 @@
 //!
 //! To build a plugin, implement [`Plugin`].
 //!
-//! If building a plugin for [`zenohd`](https://crates.io/crates/zenoh), you should use the types exported in [`zenoh::plugins`](https://docs.rs/zenoh/latest/zenoh/plugins) to fill [`Plugin`]'s associated types.  
+//! If building a plugin for [`zenohd`](https://crates.io/crates/zenoh), you should use the types exported in [`zenoh::plugins`](https://docs.rs/zenoh/latest/zenoh/plugins) to fill [`Plugin`]'s associated types.
 //! To check your plugin typing for `zenohd`, have your plugin implement [`zenoh::plugins::ZenohPlugin`](https://docs.rs/zenoh/latest/zenoh/plugins/struct.ZenohPlugin)
 //!
 //! Plugin is a struct which implements the [`Plugin`] trait. This trait has two associated types:
@@ -51,3 +51,8 @@ use zenoh_util::concat_enabled_features;
 
 pub const FEATURES: &str =
     concat_enabled_features!(prefix = "zenoh-plugin-trait", features = ["default"]);
+
+#[doc(hidden)]
+pub mod export {
+    pub use git_version;
+}
