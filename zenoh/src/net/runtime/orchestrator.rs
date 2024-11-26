@@ -920,7 +920,7 @@ impl Runtime {
                                                             )
                                                             .unwrap()
                                                         })
-                                                        .collect()
+                                                        .collect(),
                                                 };
                                                 if let Loop::Break = f(endpoint.clone()).await {
                                                     break;
