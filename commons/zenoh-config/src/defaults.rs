@@ -253,7 +253,7 @@ impl Default for CongestionControlDropConf {
     fn default() -> Self {
         Self {
             wait_before_drop: 1000,
-            ttl: 8,
+            max_wait_before_drop_fragments: 255000,
         }
     }
 }
@@ -262,7 +262,7 @@ impl Default for CongestionControlBlockConf {
     fn default() -> Self {
         Self {
             wait_before_close: 5000000,
-            ttl: 2,
+            max_wait_before_close_fragments: 15000000,
         }
     }
 }

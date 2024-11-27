@@ -109,8 +109,8 @@ pub struct TransportManagerConfig {
     pub resolution: Resolution,
     pub batch_size: BatchSize,
     pub batching: bool,
-    pub wait_before_drop: (Duration, usize),
-    pub wait_before_close: (Duration, usize),
+    pub wait_before_drop: (Duration, Duration),
+    pub wait_before_close: (Duration, Duration),
     pub queue_size: [usize; Priority::NUM],
     pub queue_backoff: Duration,
     pub defrag_buff_size: usize,
@@ -141,8 +141,8 @@ pub struct TransportManagerBuilder {
     batch_size: BatchSize,
     batching_enabled: bool,
     batching_time_limit: Duration,
-    wait_before_drop: (Duration, usize),
-    wait_before_close: (Duration, usize),
+    wait_before_drop: (Duration, Duration),
+    wait_before_close: (Duration, Duration),
     queue_size: QueueSizeConf,
     defrag_buff_size: usize,
     link_rx_buffer_size: usize,
@@ -192,12 +192,12 @@ impl TransportManagerBuilder {
         self
     }
 
-    pub fn wait_before_drop(mut self, wait_before_drop: (Duration, usize)) -> Self {
+    pub fn wait_before_drop(mut self, wait_before_drop: (Duration, Duration)) -> Self {
         self.wait_before_drop = wait_before_drop;
         self
     }
 
-    pub fn wait_before_close(mut self, wait_before_close: (Duration, usize)) -> Self {
+    pub fn wait_before_close(mut self, wait_before_close: (Duration, Duration)) -> Self {
         self.wait_before_close = wait_before_close;
         self
     }
@@ -263,11 +263,11 @@ impl TransportManagerBuilder {
         self = self.link_rx_buffer_size(*link.rx().buffer_size());
         self = self.wait_before_drop((
             duration_from_i64us(*cc_drop.wait_before_drop()),
-            *cc_drop.ttl(),
+            duration_from_i64us(*cc_drop.max_wait_before_drop_fragments()),
         ));
         self = self.wait_before_close((
             duration_from_i64us(*cc_block.wait_before_close()),
-            *cc_block.ttl(),
+            duration_from_i64us(*cc_block.max_wait_before_close_fragments()),
         ));
         self = self.queue_size(link.tx().queue().size().clone());
         self = self.tx_threads(*link.tx().threads());
@@ -377,11 +377,11 @@ impl Default for TransportManagerBuilder {
             batching_enabled: true,
             wait_before_drop: (
                 duration_from_i64us(*cc_drop.wait_before_drop()),
-                *cc_drop.ttl(),
+                duration_from_i64us(*cc_drop.max_wait_before_drop_fragments()),
             ),
             wait_before_close: (
                 duration_from_i64us(*cc_block.wait_before_close()),
-                *cc_block.ttl(),
+                duration_from_i64us(*cc_block.max_wait_before_close_fragments()),
             ),
             queue_size: queue.size,
             batching_time_limit: Duration::from_millis(backoff),

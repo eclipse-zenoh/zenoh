@@ -128,20 +128,24 @@ impl StageInMutex {
     }
 }
 
+#[derive(Debug)]
 struct WaitTime {
     wait_time: Duration,
-    ttl: usize,
+    max_wait_time: Duration,
 }
 
 impl WaitTime {
-    fn new(wait_time: Duration, ttl: usize) -> Self {
-        Self { wait_time, ttl }
+    fn new(wait_time: Duration, max_wait_time: Duration) -> Self {
+        Self {
+            wait_time,
+            max_wait_time,
+        }
     }
 
     fn advance(&mut self, instant: &mut Instant) {
-        if let Some(new_ttl) = self.ttl.checked_sub(1) {
+        if let Some(new_max_wait_time) = self.max_wait_time.checked_sub(self.wait_time) {
             *instant += self.wait_time;
-            self.ttl = new_ttl;
+            self.max_wait_time = new_max_wait_time;
             self.wait_time *= 2;
         }
     }
@@ -206,10 +210,10 @@ struct Deadline {
 }
 
 impl Deadline {
-    fn new(wait_time: Option<(Duration, usize)>) -> Self {
+    fn new(wait_time: Option<(Duration, Duration)>) -> Self {
         Self {
             lazy_deadline: LazyDeadline::new(
-                wait_time.map(|(wait_time, ttl)| WaitTime::new(wait_time, ttl)),
+                wait_time.map(|(wait_time, max_wait_time)| WaitTime::new(wait_time, max_wait_time)),
             ),
         }
     }
@@ -610,8 +614,8 @@ impl StageOut {
 pub(crate) struct TransmissionPipelineConf {
     pub(crate) batch: BatchConfig,
     pub(crate) queue_size: [usize; Priority::NUM],
-    pub(crate) wait_before_drop: (Duration, usize),
-    pub(crate) wait_before_close: (Duration, usize),
+    pub(crate) wait_before_drop: (Duration, Duration),
+    pub(crate) wait_before_close: (Duration, Duration),
     pub(crate) batching_enabled: bool,
     pub(crate) batching_time_limit: Duration,
 }
@@ -713,8 +717,8 @@ pub(crate) struct TransmissionPipelineProducer {
     // Each priority queue has its own Mutex
     stage_in: Arc<[Mutex<StageIn>]>,
     active: Arc<AtomicBool>,
-    wait_before_drop: (Duration, usize),
-    wait_before_close: (Duration, usize),
+    wait_before_drop: (Duration, Duration),
+    wait_before_close: (Duration, Duration),
 }
 
 impl TransmissionPipelineProducer {
@@ -889,8 +893,8 @@ mod tests {
         },
         queue_size: [1; Priority::NUM],
         batching_enabled: true,
-        wait_before_drop: (Duration::from_millis(1), 10),
-        wait_before_close: (Duration::from_secs(5), 10),
+        wait_before_drop: (Duration::from_millis(1), Duration::from_millis(1024)),
+        wait_before_close: (Duration::from_secs(5), Duration::from_millis(1024)),
         batching_time_limit: Duration::from_micros(1),
     };
 
@@ -903,8 +907,8 @@ mod tests {
         },
         queue_size: [1; Priority::NUM],
         batching_enabled: true,
-        wait_before_drop: (Duration::from_millis(1), 10),
-        wait_before_close: (Duration::from_secs(5), 10),
+        wait_before_drop: (Duration::from_millis(1), Duration::from_millis(1024)),
+        wait_before_close: (Duration::from_secs(5), Duration::from_millis(1024)),
         batching_time_limit: Duration::from_micros(1),
     };
 

@@ -413,12 +413,7 @@
               /// The maximum time in microseconds to wait for an available batch before dropping a droppable message if still no batch is available.
               wait_before_drop: 1000,
               /// The maximum deadline limit for multi-fragment messages.
-              /// When sending multi-fragment message, for each consecutive fragment the deadline from
-              /// the start point of message transmission is calculated as 
-              /// wait_before_drop * 2 ^ min(N, ttl) where N is a fragment number.
-              /// Thus, this parameter allows setting a limitation for maximum time for multi-fragment
-              /// message transmission as wait_before_drop * 2 ^ ttl
-              ttl: 8,
+              max_wait_before_drop_fragments: 255000,
             },
             /// Behavior pushing CongestionControl::Block messages to the queue.
             block: {
@@ -426,12 +421,7 @@
               /// if still no batch is available.
               wait_before_close: 5000000,
               /// The maximum deadline limit for multi-fragment messages.
-              /// When sending multi-fragment message, for each consecutive fragment the deadline from
-              /// the start point of message transmission is calculated as 
-              /// wait_before_close * 2 ^ min(N, ttl) where N is a fragment number.
-              /// Thus, this parameter allows setting a limitation for maximum time for multi-fragment
-              /// message transmission as wait_before_close * 2 ^ ttl
-              ttl: 2,
+              max_wait_before_close_fragments: 15000000,
             },
           },
           /// Perform batching of messages if they are smaller of the batch_size

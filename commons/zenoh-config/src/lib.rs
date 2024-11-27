@@ -446,12 +446,7 @@ validated_struct::validator! {
                                 /// if still no batch is available.
                                 wait_before_drop: i64,
                                 /// The maximum deadline limit for multi-fragment messages.
-                                /// When sending multi-fragment message, for each consecutive fragment the deadline from
-                                /// the start point of message transmission is calculated as
-                                /// wait_before_drop * 2 ^ min(N, ttl) where N is a fragment number.
-                                /// Thus, this parameter allows setting a limitation for maximum time for multi-fragment
-                                /// message transmission as wait_before_drop * 2 ^ ttl
-                                ttl: usize,
+                                max_wait_before_drop_fragments: i64,
                             },
                             /// Behavior pushing CongestionControl::Block messages to the queue.
                             pub block: CongestionControlBlockConf {
@@ -459,12 +454,7 @@ validated_struct::validator! {
                                 /// when sending a blocking message if still no batch is available.
                                 wait_before_close: i64,
                                 /// The maximum deadline limit for multi-fragment messages.
-                                /// When sending multi-fragment message, for each consecutive fragment the deadline from
-                                /// the start point of message transmission is calculated as
-                                /// wait_before_close * 2 ^ min(N, ttl) where N is a fragment number.
-                                /// Thus, this parameter allows setting a limitation for maximum time for multi-fragment
-                                /// message transmission as wait_before_close * 2 ^ ttl
-                                ttl: usize,
+                                max_wait_before_close_fragments: i64,
                             },
                         },
                         pub batching: BatchingConf {
