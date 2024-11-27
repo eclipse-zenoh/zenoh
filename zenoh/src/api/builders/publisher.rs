@@ -13,7 +13,9 @@
 //
 use std::future::{IntoFuture, Ready};
 
+use zenoh_config::builders::PublisherBuilderOptionsConf;
 use zenoh_core::{Resolvable, Result as ZResult, Wait};
+use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeNode};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Reliability;
 use zenoh_protocol::{core::CongestionControl, network::Mapping};
@@ -341,6 +343,54 @@ impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
 }
 
 impl<'a, 'b> PublisherBuilder<'a, 'b> {
+    pub fn new<'c, TryIntoKeyExpr>(session: &'a Session, key_expr: TryIntoKeyExpr) -> Self
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'c>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'c>>>::Error: Into<zenoh_result::Error>,
+        'c: 'b,
+    {
+        let maybe_key_expr = key_expr.try_into().map_err(Into::into);
+        let mut builder_overwrites = PublisherBuilderOptionsConf::default();
+        if let Ok(key_expr) = &maybe_key_expr {
+            // get overwritten builder
+            let state = zread!(session.0.state);
+            for node in state.publisher_builders_tree.nodes_including(key_expr) {
+                // Take the first one yielded by the iterator that has overwrites
+                if let Some(overwrites) = node.weight() {
+                    builder_overwrites = overwrites.clone();
+                    break;
+                }
+            }
+        }
+
+        Self {
+            session,
+            key_expr: maybe_key_expr,
+            encoding: builder_overwrites
+                .encoding
+                .map(|encoding| encoding.into())
+                .unwrap_or(Encoding::default()),
+            congestion_control: builder_overwrites
+                .congestion_control
+                .map(|cc| cc.into())
+                .unwrap_or(CongestionControl::DEFAULT),
+            priority: builder_overwrites
+                .priority
+                .map(|p| p.into())
+                .unwrap_or(Priority::DEFAULT),
+            is_express: builder_overwrites.express.unwrap_or(false),
+            #[cfg(feature = "unstable")]
+            reliability: builder_overwrites
+                .reliability
+                .map(|r| r.into())
+                .unwrap_or(Reliability::DEFAULT),
+            destination: builder_overwrites
+                .allowed_destination
+                .map(|d| d.into())
+                .unwrap_or(Locality::default()),
+        }
+    }
+
     /// Changes the [`crate::sample::Locality`] applied when routing the data.
     ///
     /// This restricts the matching subscribers that will receive the published data to the ones

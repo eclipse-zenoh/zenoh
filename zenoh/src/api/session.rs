@@ -37,7 +37,7 @@ use zenoh_config::{
     wrappers::ZenohId,
 };
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Wait};
-use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeNode, KeBoxTree};
+use zenoh_keyexpr::keyexpr_tree::KeBoxTree;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::network::{
     declare::{DeclareToken, SubscriberId, TokenId, UndeclareToken},
@@ -836,46 +836,7 @@ impl Session {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        let maybe_key_expr = key_expr.try_into().map_err(Into::into);
-        let mut builder_overwrites = PublisherBuilderOptionsConf::default();
-        if let Ok(key_expr) = &maybe_key_expr {
-            // get overwritten builder
-            let state = zread!(self.0.state);
-            for node in state.publisher_builders_tree.nodes_including(key_expr) {
-                // Take the first one yielded by the iterator that has overwrites
-                if let Some(overwrites) = node.weight() {
-                    builder_overwrites = overwrites.clone();
-                    break;
-                }
-            }
-        }
-
-        PublisherBuilder {
-            session: self,
-            key_expr: maybe_key_expr,
-            encoding: builder_overwrites
-                .encoding
-                .map(|encoding| encoding.into())
-                .unwrap_or(Encoding::default()),
-            congestion_control: builder_overwrites
-                .congestion_control
-                .map(|cc| cc.into())
-                .unwrap_or(CongestionControl::DEFAULT),
-            priority: builder_overwrites
-                .priority
-                .map(|p| p.into())
-                .unwrap_or(Priority::DEFAULT),
-            is_express: builder_overwrites.express.unwrap_or(false),
-            #[cfg(feature = "unstable")]
-            reliability: builder_overwrites
-                .reliability
-                .map(|r| r.into())
-                .unwrap_or(Reliability::DEFAULT),
-            destination: builder_overwrites
-                .allowed_destination
-                .map(|d| d.into())
-                .unwrap_or(Locality::default()),
-        }
+        PublisherBuilder::new(self, key_expr)
     }
 
     /// Obtain a [`Liveliness`] struct tied to this Zenoh [`Session`].
