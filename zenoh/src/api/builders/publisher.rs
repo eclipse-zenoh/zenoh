@@ -13,6 +13,7 @@
 //
 use std::future::{IntoFuture, Ready};
 
+use itertools::Itertools;
 use zenoh_config::builders::PublisherBuilderOptionsConf;
 use zenoh_core::{Resolvable, Result as ZResult, Wait};
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeNode};
@@ -354,10 +355,22 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
         if let Ok(key_expr) = &maybe_key_expr {
             // get overwritten builder
             let state = zread!(session.0.state);
-            for node in state.publisher_builders_tree.nodes_including(key_expr) {
+            let nodes_including = state
+                .publisher_builders_tree
+                .nodes_including(key_expr)
+                .collect_vec();
+            for node in &nodes_including {
                 // Take the first one yielded by the iterator that has overwrites
                 if let Some(overwrites) = node.weight() {
                     builder_overwrites = overwrites.clone();
+                    // log warning if multiple keyexprs include it
+                    if nodes_including.len() > 1 {
+                        tracing::warn!(
+                            "Publisher declared on `{}` which is included by multiple key_exprs in builders config. Using builder config for `{}`",
+                            key_expr,
+                            node.keyexpr(),
+                        );
+                    }
                     break;
                 }
             }
