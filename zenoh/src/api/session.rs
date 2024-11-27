@@ -2078,7 +2078,7 @@ impl SessionInner {
                                         if let Ok(status) = session.matching_status(
                                             &msub.key_expr,
                                             msub.destination,
-                                            match_type,
+                                            msub.match_type,
                                         ) {
                                             if status.matching() == status_value {
                                                 *current = status_value;
