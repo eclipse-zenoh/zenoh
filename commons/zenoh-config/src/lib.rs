@@ -364,10 +364,10 @@ validated_struct::validator! {
         },
 
         /// Overwrite default builders for specific key expressions
-        pub builders: #[derive(Default)]
-        BuildersConf {
-            /// A list of publisher builder configurations for specific key expressions.
-            publishers: PublisherBuildersConf,
+        pub publishers: #[derive(Default)]
+        PublishersConfig {
+            /// A list of publisher builder configurations for key expressions.
+            default_builders: PublisherBuildersConf,
         },
 
         pub transport: #[derive(Default)]

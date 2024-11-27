@@ -49,7 +49,7 @@ impl From<PublisherBuildersConf> for KeBoxTree<PublisherBuilderOptionsConf> {
         for conf in value.0 {
             for key_expr in conf.key_exprs {
                 // key_expr unicity is checked at deserialization
-                tree.insert(&key_expr, conf.builder_conf.clone());
+                tree.insert(&key_expr, conf.config.clone());
             }
         }
         tree
@@ -59,8 +59,7 @@ impl From<PublisherBuildersConf> for KeBoxTree<PublisherBuilderOptionsConf> {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub(crate) struct PublisherBuildersInnerConf {
     pub key_exprs: Vec<OwnedKeyExpr>,
-    #[serde(flatten)]
-    pub builder_conf: PublisherBuilderOptionsConf,
+    pub config: PublisherBuilderOptionsConf,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]

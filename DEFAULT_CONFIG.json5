@@ -184,21 +184,25 @@
     },
   },
 
-  //  /// Overwrite default builders for specific key expressions
-  //  builders: {
-  //    /// A list of publisher builder configurations for specific key expressions.
-  //    publishers: [
+  //  /// Configuration options for Zenoh publishers
+  //  publishers: {
+  //    /// Overwrite default builders for certain key expressions
+  //    default_builders: [
   //      {
-  //        /// key_expressions
+  //        /// Publisher key expressions that are included by these key expressions
+  //        /// will have their default publisher builder overwritten by the given config.
   //        key_exprs: ["demo/**", "example/key"],
-  //        /// builder configuration
-  //        congestion_control: "Block",
-  //        encoding: "zenoh/example",
-  //        priority: "data_high",
-  //        express: true,
-  //        reliability: "best_effort",
-  //        allowed_destination: "remote",
-  //      }
+  //        /// Configurations that will be applied on the publisher builder
+  //        /// Note: these can still be overwritten in the application code via the PublisherBuilder API
+  //        config: {
+  //          congestion_control: "Block",
+  //          encoding: "zenoh/example",
+  //          priority: "data_high",
+  //          express: true,
+  //          reliability: "best_effort",
+  //          allowed_destination: "remote",
+  //        },
+  //      },
   //    ],
   //  },
 
