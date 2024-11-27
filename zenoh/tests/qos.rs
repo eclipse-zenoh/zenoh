@@ -68,21 +68,25 @@ async fn qos_pubsub_overwrite_builder() {
     let builder_config_overwrite = zenoh::Config::from_json5(
         r#"
         {
-            builders: {
-                publishers: [
+            publishers: {
+                default_builders: [
                     {
                         key_exprs: ["test/qos/overwritten", "test/not_applicable/**"],
-                        priority: "real_time",
-                        encoding: "zenoh/string",
-                        congestion_control: "drop",
-                        express: false,
+                        config: {
+                            priority: "real_time",
+                            encoding: "zenoh/string",
+                            congestion_control: "drop",
+                            express: false,
+                        },
                     },
                     {
                         key_exprs: ["test/not_applicable"],
-                        priority: "data_high",
-                        encoding: "zenoh/bytes",
-                        congestion_control: "drop",
-                        express: false,
+                        config: {
+                            priority: "data_high",
+                            encoding: "zenoh/bytes",
+                            congestion_control: "drop",
+                            express: false,
+                        },
                     },
                 ]
             }
