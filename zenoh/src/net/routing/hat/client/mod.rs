@@ -275,8 +275,8 @@ impl HatBaseTrait for HatCode {
         _expr: &mut RoutingExpr,
     ) -> bool {
         src_face.id != out_face.id
-            && (out_face.mcast_group.is_none()
-                || (src_face.whatami == WhatAmI::Client && src_face.mcast_group.is_none()))
+            && out_face.mcast_group.is_none()
+            && src_face.mcast_group.is_none()
     }
 
     fn info(&self, _tables: &Tables, _kind: WhatAmI) -> String {
