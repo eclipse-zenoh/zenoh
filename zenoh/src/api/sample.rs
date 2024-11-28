@@ -16,7 +16,7 @@
 use std::{convert::TryFrom, fmt};
 
 use serde::{Deserialize, Serialize};
-use zenoh_config::{builders::PublisherLocalityConf, wrappers::EntityGlobalId};
+use zenoh_config::{publishers::PublisherLocalityConf, wrappers::EntityGlobalId};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Reliability;
 use zenoh_protocol::{

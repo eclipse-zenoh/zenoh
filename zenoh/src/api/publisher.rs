@@ -22,7 +22,7 @@ use std::{
 
 use futures::Sink;
 use tracing::error;
-use zenoh_config::builders::PublisherPriorityConf;
+use zenoh_config::publishers::PublisherPriorityConf;
 use zenoh_core::{Resolvable, Resolve, Wait};
 use zenoh_protocol::core::CongestionControl;
 use zenoh_result::{Error, ZResult};

@@ -19,9 +19,9 @@
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 //!
 //! Configuration to pass to `zenoh::open()` and `zenoh::scout()` functions and associated constants.
-pub mod builders;
 pub mod defaults;
 mod include;
+pub mod publishers;
 pub mod wrappers;
 
 #[allow(unused_imports)]
@@ -30,8 +30,8 @@ use std::{
     any::Any, collections::HashSet, fmt, io::Read, net::SocketAddr, ops, path::Path, sync::Weak,
 };
 
-use builders::PublisherBuildersConf;
 use include::recursive_include;
+use publishers::PublisherBuildersConf;
 use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};

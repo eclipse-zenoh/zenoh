@@ -32,7 +32,7 @@ use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::{
-    builders::{PublisherBuilderOptionsConf, PublisherBuildersConf},
+    publishers::{PublisherBuilderOptionsConf, PublisherBuildersConf},
     unwrap_or_default,
     wrappers::ZenohId,
 };
