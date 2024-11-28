@@ -17,7 +17,7 @@ use std::time::Duration;
 
 use zenoh::{
     handlers::FifoChannelHandler,
-    pubsub::{MatchingListener, MatchingStatus},
+    matching::{MatchingListener, MatchingStatus},
     sample::Locality,
     Result as ZResult, Session,
 };

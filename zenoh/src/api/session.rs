@@ -72,7 +72,7 @@ use crate::api::selector::ZenohParameters;
 #[cfg(feature = "unstable")]
 use crate::api::{
     liveliness::{Liveliness, LivelinessTokenState},
-    publisher::{MatchingListenerState, MatchingStatus, MatchingStatusType},
+    matching::{MatchingListenerState, MatchingStatus, MatchingStatusType},
     query::{LivelinessQueryState, ReplyKeyExpr},
     sample::SourceInfo,
 };

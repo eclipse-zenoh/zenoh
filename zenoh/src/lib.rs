@@ -249,11 +249,6 @@ pub mod bytes {
 /// declared by a [`Session::declare_subscriber`](crate::Session::declare_subscriber)
 ///
 pub mod pubsub {
-    #[zenoh_macros::unstable]
-    pub use crate::api::{
-        builders::matching_listener::MatchingListenerBuilder,
-        publisher::{MatchingListener, MatchingListenerUndeclaration, MatchingStatus},
-    };
     pub use crate::api::{
         builders::{
             publisher::{
@@ -294,6 +289,14 @@ pub mod query {
     };
     #[zenoh_macros::unstable]
     pub use crate::api::{query::ReplyKeyExpr, selector::ZenohParameters};
+}
+
+#[zenoh_macros::unstable]
+pub mod matching {
+    pub use crate::api::{
+        builders::matching_listener::MatchingListenerBuilder,
+        matching::{MatchingListener, MatchingListenerUndeclaration, MatchingStatus},
+    };
 }
 
 /// Callback handler trait.

@@ -22,7 +22,7 @@ use zenoh_result::ZResult;
 use {
     crate::api::{
         handlers::{Callback, DefaultHandler, IntoHandler},
-        publisher::{MatchingListener, MatchingListenerInner, MatchingStatus, MatchingStatusType},
+        matching::{MatchingListener, MatchingListenerInner, MatchingStatus, MatchingStatusType},
         Id,
     },
     crate::sample::Locality,

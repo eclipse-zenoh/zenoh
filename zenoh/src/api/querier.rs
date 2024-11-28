@@ -27,9 +27,9 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 #[cfg(feature = "unstable")]
 use {
-    crate::api::publisher::{MatchingStatus, MatchingStatusType},
+    crate::api::builders::matching_listener::MatchingListenerBuilder,
+    crate::api::matching::{MatchingStatus, MatchingStatusType},
     crate::api::sample::SourceInfo,
-    crate::pubsub::MatchingListenerBuilder,
     crate::query::ReplyKeyExpr,
     std::collections::HashSet,
     std::sync::{Arc, Mutex},
@@ -226,9 +226,9 @@ impl<'a> Querier<'a> {
         })
     }
 
-    /// Return a [`MatchingListener`](crate::api::publisher::MatchingListener) for this Querier.
+    /// Return a [`MatchingListener`](crate::api::matching::MatchingListener) for this Querier.
     ///
-    /// The [`MatchingListener`](crate::api::publisher::MatchingListener) that will send a notification each time the [`MatchingStatus`](crate::api::publisher::MatchingStatus) of
+    /// The [`MatchingListener`](crate::api::matching::MatchingListener) that will send a notification each time the [`MatchingStatus`](crate::api::matching::MatchingStatus) of
     /// the Querier changes.
     ///
     /// # Examples
