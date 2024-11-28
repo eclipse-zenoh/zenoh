@@ -149,14 +149,12 @@ pub(crate) struct SessionState {
     pub(crate) liveliness_queries: HashMap<InterestId, LivelinessQueryState>,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
     pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
-    pub(crate) aggregated_queriers: Vec<OwnedKeyExpr>,
 }
 
 impl SessionState {
     pub(crate) fn new(
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         aggregated_publishers: Vec<OwnedKeyExpr>,
-        aggregated_queriers: Vec<OwnedKeyExpr>,
     ) -> SessionState {
         SessionState {
             primitives: None,
@@ -187,7 +185,6 @@ impl SessionState {
             liveliness_queries: HashMap::new(),
             aggregated_subscribers,
             aggregated_publishers,
-            aggregated_queriers,
         }
     }
 }
@@ -324,37 +321,19 @@ impl SessionState {
             destination,
         };
 
-        let declared_querier = (destination != Locality::SessionLocal)
-            .then(|| {
-                match self
-                    .aggregated_queriers
-                    .iter()
-                    .find(|s| s.includes(key_expr))
-                {
-                    Some(join_querier) => {
-                        if let Some(joined_querier) = self.queriers.values().find(|q| {
-                            q.destination != Locality::SessionLocal
-                                && join_querier.includes(&q.key_expr)
-                        }) {
-                            querier_state.remote_id = joined_querier.remote_id;
-                            None
-                        } else {
-                            Some(join_querier.clone().into())
-                        }
+        let declared_querier =
+            (destination != Locality::SessionLocal)
+                .then(|| {
+                    if let Some(twin_querier) = self.queriers.values().find(|p| {
+                        p.destination != Locality::SessionLocal && &p.key_expr == key_expr
+                    }) {
+                        querier_state.remote_id = twin_querier.remote_id;
+                        None
+                    } else {
+                        Some(key_expr.clone())
                     }
-                    None => {
-                        if let Some(twin_querier) = self.queriers.values().find(|p| {
-                            p.destination != Locality::SessionLocal && &p.key_expr == key_expr
-                        }) {
-                            querier_state.remote_id = twin_querier.remote_id;
-                            None
-                        } else {
-                            Some(key_expr.clone())
-                        }
-                    }
-                }
-            })
-            .flatten();
+                })
+                .flatten();
         self.queriers.insert(id, querier_state);
         declared_querier
     }
@@ -680,7 +659,6 @@ impl Session {
         runtime: Runtime,
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         aggregated_publishers: Vec<OwnedKeyExpr>,
-        aggregated_queriers: Vec<OwnedKeyExpr>,
         owns_runtime: bool,
     ) -> impl Resolve<Session> {
         ResolveClosure::new(move || {
@@ -688,7 +666,6 @@ impl Session {
             let state = RwLock::new(SessionState::new(
                 aggregated_subscribers,
                 aggregated_publishers,
-                aggregated_queriers,
             ));
             let session = Session(Arc::new(SessionInner {
                 weak_counter: Mutex::new(0),
@@ -1239,7 +1216,6 @@ impl Session {
             tracing::debug!("Config: {:?}", &config);
             let aggregated_subscribers = config.0.aggregation().subscribers().clone();
             let aggregated_publishers = config.0.aggregation().publishers().clone();
-            let aggregated_queriers = config.0.aggregation().queriers().clone();
             #[allow(unused_mut)] // Required for shared-memory
             let mut runtime = RuntimeBuilder::new(config);
             #[cfg(feature = "shared-memory")]
@@ -1252,7 +1228,6 @@ impl Session {
                 runtime.clone(),
                 aggregated_subscribers,
                 aggregated_publishers,
-                aggregated_queriers,
                 true,
             )
             .await;
