@@ -24,6 +24,11 @@ pub trait PublisherBuilderExt<'a, 'b> {
     /// Retransmission can only be achieved if history is enabled.
     fn cache(self, config: CacheConfig) -> AdvancedPublisherBuilder<'a, 'b>;
 
+    /// Allow matching Subscribers to detect lost samples and optionally ask for retransimission.
+    ///
+    /// Retransmission can only be achieved if cache is enabled.
+    fn sample_miss_detection(self) -> AdvancedPublisherBuilder<'a, 'b>;
+
     /// Allow this publisher to be detected by subscribers.
     ///
     /// This allows Subscribers to retrieve the local history.
@@ -37,6 +42,13 @@ impl<'a, 'b> PublisherBuilderExt<'a, 'b> for PublisherBuilder<'a, 'b> {
     /// Retransmission can only be achieved if history is enabled.
     fn cache(self, config: CacheConfig) -> AdvancedPublisherBuilder<'a, 'b> {
         AdvancedPublisherBuilder::new(self.session, self.key_expr).cache(config)
+    }
+
+    /// Allow matching Subscribers to detect lost samples and optionally ask for retransimission.
+    ///
+    /// Retransmission can only be achieved if cache is enabled.
+    fn sample_miss_detection(self) -> AdvancedPublisherBuilder<'a, 'b> {
+        AdvancedPublisherBuilder::new(self.session, self.key_expr).sample_miss_detection()
     }
 
     /// Allow this publisher to be detected by subscribers.

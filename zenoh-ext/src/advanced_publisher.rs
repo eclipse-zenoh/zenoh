@@ -33,6 +33,7 @@ use crate::{
     SessionExt,
 };
 
+#[derive(PartialEq)]
 pub enum Sequencing {
     None,
     Timestamp,
@@ -69,7 +70,6 @@ impl<'a, 'b> AdvancedPublisherBuilder<'a, 'b> {
     ///
     /// Retransmission can only be achieved if history is enabled.
     pub fn sample_miss_detection(mut self) -> Self {
-        self.cache = true;
         self.sequencing = Sequencing::SequenceNumber;
         self
     }
@@ -77,7 +77,9 @@ impl<'a, 'b> AdvancedPublisherBuilder<'a, 'b> {
     /// Change the history size for each resource.
     pub fn cache(mut self, config: CacheConfig) -> Self {
         self.cache = true;
-        self.sequencing = Sequencing::Timestamp;
+        if self.sequencing == Sequencing::None {
+            self.sequencing = Sequencing::Timestamp;
+        }
         self.history = config;
         self
     }
