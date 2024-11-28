@@ -136,20 +136,12 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     where
         Handler: IntoHandler<MatchingStatus>,
     {
-        let MatchingListenerBuilder {
-            session,
-            key_expr,
-            destination,
-            matching_listeners,
-            matching_status_type,
-            handler: _,
-        } = self;
         MatchingListenerBuilder {
-            session,
-            key_expr,
-            destination,
-            matching_listeners,
-            matching_status_type,
+            session: self.session,
+            key_expr: self.key_expr,
+            destination: self.destination,
+            matching_listeners: self.matching_listeners,
+            matching_status_type: self.matching_status_type,
             handler,
         }
     }
