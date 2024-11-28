@@ -420,8 +420,6 @@
               /// The maximum time in microseconds to wait for an available batch before closing the transport session when sending a blocking message
               /// if still no batch is available.
               wait_before_close: 5000000,
-              /// The maximum deadline limit for multi-fragment messages.
-              max_wait_before_close_fragments: 15000000,
             },
           },
           /// Perform batching of messages if they are smaller of the batch_size

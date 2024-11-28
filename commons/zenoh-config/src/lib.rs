@@ -453,8 +453,6 @@ validated_struct::validator! {
                                 /// The maximum time in microseconds to wait for an available batch before closing the transport session
                                 /// when sending a blocking message if still no batch is available.
                                 wait_before_close: i64,
-                                /// The maximum deadline limit for multi-fragment messages.
-                                max_wait_before_close_fragments: i64,
                             },
                         },
                         pub batching: BatchingConf {

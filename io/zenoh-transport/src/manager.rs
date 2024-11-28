@@ -110,7 +110,7 @@ pub struct TransportManagerConfig {
     pub batch_size: BatchSize,
     pub batching: bool,
     pub wait_before_drop: (Duration, Duration),
-    pub wait_before_close: (Duration, Duration),
+    pub wait_before_close: Duration,
     pub queue_size: [usize; Priority::NUM],
     pub queue_backoff: Duration,
     pub defrag_buff_size: usize,
@@ -142,7 +142,7 @@ pub struct TransportManagerBuilder {
     batching_enabled: bool,
     batching_time_limit: Duration,
     wait_before_drop: (Duration, Duration),
-    wait_before_close: (Duration, Duration),
+    wait_before_close: Duration,
     queue_size: QueueSizeConf,
     defrag_buff_size: usize,
     link_rx_buffer_size: usize,
@@ -197,7 +197,7 @@ impl TransportManagerBuilder {
         self
     }
 
-    pub fn wait_before_close(mut self, wait_before_close: (Duration, Duration)) -> Self {
+    pub fn wait_before_close(mut self, wait_before_close: Duration) -> Self {
         self.wait_before_close = wait_before_close;
         self
     }
@@ -265,10 +265,7 @@ impl TransportManagerBuilder {
             duration_from_i64us(*cc_drop.wait_before_drop()),
             duration_from_i64us(*cc_drop.max_wait_before_drop_fragments()),
         ));
-        self = self.wait_before_close((
-            duration_from_i64us(*cc_block.wait_before_close()),
-            duration_from_i64us(*cc_block.max_wait_before_close_fragments()),
-        ));
+        self = self.wait_before_close(duration_from_i64us(*cc_block.wait_before_close()));
         self = self.queue_size(link.tx().queue().size().clone());
         self = self.tx_threads(*link.tx().threads());
         self = self.protocols(link.protocols().clone());
@@ -379,10 +376,7 @@ impl Default for TransportManagerBuilder {
                 duration_from_i64us(*cc_drop.wait_before_drop()),
                 duration_from_i64us(*cc_drop.max_wait_before_drop_fragments()),
             ),
-            wait_before_close: (
-                duration_from_i64us(*cc_block.wait_before_close()),
-                duration_from_i64us(*cc_block.max_wait_before_close_fragments()),
-            ),
+            wait_before_close: duration_from_i64us(*cc_block.wait_before_close()),
             queue_size: queue.size,
             batching_time_limit: Duration::from_millis(backoff),
             defrag_buff_size: *link_rx.max_message_size(),

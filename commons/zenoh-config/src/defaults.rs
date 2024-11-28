@@ -262,7 +262,6 @@ impl Default for CongestionControlBlockConf {
     fn default() -> Self {
         Self {
             wait_before_close: 5000000,
-            max_wait_before_close_fragments: 15000000,
         }
     }
 }
