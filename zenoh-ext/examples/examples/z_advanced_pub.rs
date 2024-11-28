@@ -16,7 +16,7 @@ use std::time::Duration;
 use clap::{arg, Parser};
 use zenoh::{config::Config, key_expr::KeyExpr};
 use zenoh_config::ModeDependentValue;
-use zenoh_ext::{HistoryConf, PublisherBuilderExt};
+use zenoh_ext::{CacheConfig, PublisherBuilderExt};
 use zenoh_ext_examples::CommonArgs;
 
 #[tokio::main]
@@ -32,9 +32,9 @@ async fn main() {
     println!("Declaring AdvancedPublisher on {}", &key_expr);
     let publisher = session
         .declare_publisher(&key_expr)
-        .history(HistoryConf::default().sample_depth(history))
-        .retransmission()
-        .late_joiner()
+        .cache(CacheConfig::default().max_samples(history))
+        .sample_miss_detection()
+        .late_joiner_detection()
         .await
         .unwrap();
 

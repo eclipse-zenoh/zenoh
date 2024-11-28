@@ -29,7 +29,7 @@ use zenoh::{
 };
 
 use crate::{
-    advanced_cache::{AdvancedCache, HistoryConf, KE_PREFIX, KE_UHLC},
+    advanced_cache::{AdvancedCache, CacheConfig, KE_PREFIX, KE_UHLC},
     SessionExt,
 };
 
@@ -47,7 +47,7 @@ pub struct AdvancedPublisherBuilder<'a, 'b> {
     sequencing: Sequencing,
     liveliness: bool,
     cache: bool,
-    history: HistoryConf,
+    history: CacheConfig,
 }
 
 impl<'a, 'b> AdvancedPublisherBuilder<'a, 'b> {
@@ -61,31 +61,31 @@ impl<'a, 'b> AdvancedPublisherBuilder<'a, 'b> {
             sequencing: Sequencing::None,
             liveliness: false,
             cache: false,
-            history: HistoryConf::default(),
+            history: CacheConfig::default(),
         }
     }
 
-    /// Allow matching Subscribers to detect lost samples and ask for retransimission.
+    /// Allow matching Subscribers to detect lost samples and optionally ask for retransimission.
     ///
     /// Retransmission can only be achieved if history is enabled.
-    pub fn retransmission(mut self) -> Self {
+    pub fn sample_miss_detection(mut self) -> Self {
         self.cache = true;
         self.sequencing = Sequencing::SequenceNumber;
         self
     }
 
     /// Change the history size for each resource.
-    pub fn history(mut self, history: HistoryConf) -> Self {
+    pub fn cache(mut self, config: CacheConfig) -> Self {
         self.cache = true;
         self.sequencing = Sequencing::Timestamp;
-        self.history = history;
+        self.history = config;
         self
     }
 
     /// Allow this publisher to be detected by subscribers.
     ///
     /// This allows Subscribers to retrieve the local history.
-    pub fn late_joiner(mut self) -> Self {
+    pub fn late_joiner_detection(mut self) -> Self {
         self.liveliness = true;
         self
     }

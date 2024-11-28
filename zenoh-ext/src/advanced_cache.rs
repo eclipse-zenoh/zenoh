@@ -46,13 +46,13 @@ kedefine!(
 );
 
 #[derive(Debug, Clone)]
-/// Configure the history size of an [`AdvancedCache`].
-pub struct HistoryConf {
+/// Configure an [`AdvancedCache`].
+pub struct CacheConfig {
     sample_depth: usize,
     resources_limit: Option<usize>,
 }
 
-impl Default for HistoryConf {
+impl Default for CacheConfig {
     fn default() -> Self {
         Self {
             sample_depth: 1,
@@ -61,17 +61,17 @@ impl Default for HistoryConf {
     }
 }
 
-impl HistoryConf {
+impl CacheConfig {
     /// Specify how many samples to keep for each resource.
-    pub fn sample_depth(mut self, depth: usize) -> Self {
+    pub fn max_samples(mut self, depth: usize) -> Self {
         self.sample_depth = depth;
         self
     }
 
-    // TODO pub fn time_depth(mut self, depth: Duration) -> Self
+    // TODO pub fn max_age(mut self, depth: Duration) -> Self
 
     /// Specify the maximum total number of samples to keep.
-    pub fn resources_limit(mut self, limit: usize) -> Self {
+    pub fn max_total_samples(mut self, limit: usize) -> Self {
         self.resources_limit = Some(limit);
         self
     }
@@ -84,7 +84,7 @@ pub struct AdvancedCacheBuilder<'a, 'b, 'c> {
     queryable_prefix: Option<ZResult<KeyExpr<'c>>>,
     subscriber_origin: Locality,
     queryable_origin: Locality,
-    history: HistoryConf,
+    history: CacheConfig,
     liveliness: bool,
 }
 
@@ -99,7 +99,7 @@ impl<'a, 'b, 'c> AdvancedCacheBuilder<'a, 'b, 'c> {
             queryable_prefix: Some(Ok((KE_PREFIX / KE_STAR / KE_STAR).into())),
             subscriber_origin: Locality::default(),
             queryable_origin: Locality::default(),
-            history: HistoryConf::default(),
+            history: CacheConfig::default(),
             liveliness: false,
         }
     }
@@ -131,7 +131,7 @@ impl<'a, 'b, 'c> AdvancedCacheBuilder<'a, 'b, 'c> {
     }
 
     /// Change the history size for each resource.
-    pub fn history(mut self, history: HistoryConf) -> Self {
+    pub fn history(mut self, history: CacheConfig) -> Self {
         self.history = history;
         self
     }

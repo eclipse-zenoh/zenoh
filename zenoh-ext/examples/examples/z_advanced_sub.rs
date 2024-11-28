@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use clap::{arg, Parser};
 use zenoh::config::Config;
-use zenoh_ext::{DataSubscriberBuilderExt, RetransmissionConf};
+use zenoh_ext::{DataSubscriberBuilderExt, HistoryConfig, RecoveryConfig};
 use zenoh_ext_examples::CommonArgs;
 
 #[tokio::main]
@@ -31,15 +31,11 @@ async fn main() {
     println!("Declaring AdvancedSubscriber on {}", key_expr,);
     let subscriber = session
         .declare_subscriber(key_expr)
-        .history()
-        .retransmission(
-            RetransmissionConf::default()
-                .periodic_queries(Some(Duration::from_secs(1)))
-                .sample_miss_callback(|s, m| {
-                    println!(">> [Subscriber] Missed {} samples from {:?} !!!", m, s);
-                }),
-        )
-        .late_joiner()
+        .history(HistoryConfig::default().late_joiner())
+        .recovery(RecoveryConfig::default().periodic_queries(Some(Duration::from_secs(1))))
+        .sample_miss_callback(|s, m| {
+            println!(">> [Subscriber] Missed {} samples from {:?} !!!", m, s);
+        })
         .await
         .unwrap();
 

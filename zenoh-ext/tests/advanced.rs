@@ -14,7 +14,9 @@
 
 use zenoh::sample::SampleKind;
 use zenoh_config::{EndPoint, ModeDependentValue, WhatAmI};
-use zenoh_ext::{DataSubscriberBuilderExt, HistoryConf, PublisherBuilderExt, RetransmissionConf};
+use zenoh_ext::{
+    CacheConfig, DataSubscriberBuilderExt, HistoryConfig, PublisherBuilderExt, RecoveryConfig,
+};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_advanced_history() {
@@ -48,7 +50,7 @@ async fn test_advanced_history() {
 
     let publ = ztimeout!(peer1
         .declare_publisher(ADVANCED_HISTORY_KEYEXPR)
-        .history(HistoryConf::default().sample_depth(3)))
+        .cache(CacheConfig::default().max_samples(3)))
     .unwrap();
     ztimeout!(publ.put("1")).unwrap();
     ztimeout!(publ.put("2")).unwrap();
@@ -70,7 +72,10 @@ async fn test_advanced_history() {
         s
     };
 
-    let sub = ztimeout!(peer2.declare_subscriber(ADVANCED_HISTORY_KEYEXPR).history()).unwrap();
+    let sub = ztimeout!(peer2
+        .declare_subscriber(ADVANCED_HISTORY_KEYEXPR)
+        .history(HistoryConfig::default()))
+    .unwrap();
     tokio::time::sleep(SLEEP).await;
 
     ztimeout!(publ.put("5")).unwrap();
@@ -157,14 +162,14 @@ async fn test_advanced_retransmission() {
 
     let sub = ztimeout!(client2
         .declare_subscriber(ADVANCED_RETRANSMISSION_KEYEXPR)
-        .retransmission(RetransmissionConf::default()))
+        .recovery(RecoveryConfig::default()))
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let publ = ztimeout!(client1
         .declare_publisher(ADVANCED_RETRANSMISSION_KEYEXPR)
-        .history(HistoryConf::default().sample_depth(10))
-        .retransmission())
+        .cache(CacheConfig::default().max_samples(10))
+        .sample_miss_detection())
     .unwrap();
     ztimeout!(publ.put("1")).unwrap();
 
@@ -286,16 +291,14 @@ async fn test_advanced_retransmission_periodic() {
 
     let sub = ztimeout!(client2
         .declare_subscriber(ADVANCED_RETRANSMISSION_PERIODIC_KEYEXPR)
-        .retransmission(
-            RetransmissionConf::default().periodic_queries(Some(Duration::from_secs(1)))
-        ))
+        .recovery(RecoveryConfig::default().periodic_queries(Some(Duration::from_secs(1)))))
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let publ = ztimeout!(client1
         .declare_publisher(ADVANCED_RETRANSMISSION_PERIODIC_KEYEXPR)
-        .history(HistoryConf::default().sample_depth(10))
-        .retransmission())
+        .cache(CacheConfig::default().max_samples(10))
+        .sample_miss_detection())
     .unwrap();
     ztimeout!(publ.put("1")).unwrap();
 
@@ -413,20 +416,17 @@ async fn test_advanced_retransmission_sample_miss() {
 
     let sub = ztimeout!(client2
         .declare_subscriber(ADVANCED_RETRANSMISSION_SAMPLE_MISS_KEYEXPR)
-        .retransmission(
-            RetransmissionConf::default()
-                .periodic_queries(Some(Duration::from_secs(1)))
-                .sample_miss_callback(move |s, m| {
-                    miss_sender.send((s, m)).unwrap();
-                })
-        ))
+        .recovery(RecoveryConfig::default().periodic_queries(Some(Duration::from_secs(1))))
+        .sample_miss_callback(move |s, m| {
+            miss_sender.send((s, m)).unwrap();
+        }))
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let publ = ztimeout!(client1
         .declare_publisher(ADVANCED_RETRANSMISSION_SAMPLE_MISS_KEYEXPR)
-        .history(HistoryConf::default().sample_depth(1))
-        .retransmission())
+        .cache(CacheConfig::default().max_samples(1))
+        .sample_miss_detection())
     .unwrap();
     ztimeout!(publ.put("1")).unwrap();
 
@@ -536,15 +536,14 @@ async fn test_advanced_late_joiner() {
 
     let sub = ztimeout!(peer2
         .declare_subscriber(ADVANCED_LATE_JOINER_KEYEXPR)
-        .history()
-        .late_joiner())
+        .history(HistoryConfig::default().late_joiner()))
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let publ = ztimeout!(peer1
         .declare_publisher(ADVANCED_LATE_JOINER_KEYEXPR)
-        .history(HistoryConf::default().sample_depth(10))
-        .late_joiner())
+        .cache(CacheConfig::default().max_samples(10))
+        .late_joiner_detection())
     .unwrap();
     ztimeout!(publ.put("1")).unwrap();
     ztimeout!(publ.put("2")).unwrap();

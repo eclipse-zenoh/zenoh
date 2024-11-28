@@ -13,34 +13,36 @@
 //
 use zenoh::pubsub::PublisherBuilder;
 
-use crate::{advanced_cache::HistoryConf, AdvancedPublisherBuilder};
+use crate::{advanced_cache::CacheConfig, AdvancedPublisherBuilder};
 
 /// Some extensions to the [`zenoh::publication::PublisherBuilder`](zenoh::publication::PublisherBuilder)
 #[zenoh_macros::unstable]
 pub trait PublisherBuilderExt<'a, 'b> {
-    /// Allow matching Subscribers to detect lost samples and ask for retransimission.
+    /// Allow matching Subscribers to detect lost samples and
+    /// optionally ask for retransimission.
     ///
     /// Retransmission can only be achieved if history is enabled.
-    fn history(self, history: HistoryConf) -> AdvancedPublisherBuilder<'a, 'b>;
+    fn cache(self, config: CacheConfig) -> AdvancedPublisherBuilder<'a, 'b>;
 
     /// Allow this publisher to be detected by subscribers.
     ///
     /// This allows Subscribers to retrieve the local history.
-    fn late_joiner(self) -> AdvancedPublisherBuilder<'a, 'b>;
+    fn late_joiner_detection(self) -> AdvancedPublisherBuilder<'a, 'b>;
 }
 
 impl<'a, 'b> PublisherBuilderExt<'a, 'b> for PublisherBuilder<'a, 'b> {
-    /// Allow matching Subscribers to detect lost samples and ask for retransimission.
+    /// Allow matching Subscribers to detect lost samples and
+    /// optionally ask for retransimission.
     ///
     /// Retransmission can only be achieved if history is enabled.
-    fn history(self, history: HistoryConf) -> AdvancedPublisherBuilder<'a, 'b> {
-        AdvancedPublisherBuilder::new(self.session, self.key_expr).history(history)
+    fn cache(self, config: CacheConfig) -> AdvancedPublisherBuilder<'a, 'b> {
+        AdvancedPublisherBuilder::new(self.session, self.key_expr).cache(config)
     }
 
     /// Allow this publisher to be detected by subscribers.
     ///
     /// This allows Subscribers to retrieve the local history.
-    fn late_joiner(self) -> AdvancedPublisherBuilder<'a, 'b> {
-        AdvancedPublisherBuilder::new(self.session, self.key_expr).late_joiner()
+    fn late_joiner_detection(self) -> AdvancedPublisherBuilder<'a, 'b> {
+        AdvancedPublisherBuilder::new(self.session, self.key_expr).late_joiner_detection()
     }
 }

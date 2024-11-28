@@ -43,14 +43,41 @@ use {
 
 use crate::advanced_cache::{ke_liveliness, KE_PREFIX, KE_STAR, KE_UHLC};
 
-#[derive(Default)]
-/// Configure retransmission.
-pub struct RetransmissionConf {
-    periodic_queries: Option<Duration>,
-    sample_miss_callback: Option<Arc<dyn Fn(EntityGlobalId, u32) + Send + Sync>>,
+#[derive(Debug, Default, Clone)]
+/// Configure the history size of an [`AdvancedCache`].
+pub struct HistoryConfig {
+    liveliness: bool,
+    // sample_depth: usize,
 }
 
-impl std::fmt::Debug for RetransmissionConf {
+impl HistoryConfig {
+    /// Enable detection of late joiner publishers and query for their historical data.
+    ///
+    /// Let joiner detection can only be achieved for Publishers that enable late_joiner_detection.
+    /// History can only be retransmitted by Publishers that enable caching.
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn late_joiner(mut self) -> Self {
+        self.liveliness = true;
+        self
+    }
+
+    // /// Specify how many samples to keep for each resource.
+    // pub fn max_samples(mut self, depth: usize) -> Self {
+    //     self.sample_depth = depth;
+    //     self
+    // }
+
+    // TODO pub fn max_age(mut self, depth: Duration) -> Self
+}
+
+#[derive(Default)]
+/// Configure retransmission.
+pub struct RecoveryConfig {
+    periodic_queries: Option<Duration>,
+}
+
+impl std::fmt::Debug for RecoveryConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut s = f.debug_struct("RetransmissionConf");
         s.field("periodic_queries", &self.periodic_queries);
@@ -58,7 +85,7 @@ impl std::fmt::Debug for RetransmissionConf {
     }
 }
 
-impl RetransmissionConf {
+impl RecoveryConfig {
     /// Enable periodic queries for not yet received Samples and specify their period.
     ///
     /// This allows to retrieve the last Sample(s) if the last Sample(s) is/are lost.
@@ -71,16 +98,6 @@ impl RetransmissionConf {
         self.periodic_queries = period;
         self
     }
-
-    #[zenoh_macros::unstable]
-    #[inline]
-    pub fn sample_miss_callback(
-        mut self,
-        callback: impl Fn(EntityGlobalId, u32) + Send + Sync + 'static,
-    ) -> Self {
-        self.sample_miss_callback = Some(Arc::new(callback));
-        self
-    }
 }
 
 /// The builder of AdvancedSubscriber, allowing to configure it.
@@ -89,11 +106,11 @@ pub struct AdvancedSubscriberBuilder<'a, 'b, Handler, const BACKGROUND: bool = f
     pub(crate) session: &'a Session,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) origin: Locality,
-    pub(crate) retransmission: Option<RetransmissionConf>,
+    pub(crate) sample_miss_callback: Option<Arc<dyn Fn(EntityGlobalId, u32) + Send + Sync>>,
+    pub(crate) retransmission: Option<RecoveryConfig>,
     pub(crate) query_target: QueryTarget,
     pub(crate) query_timeout: Duration,
-    pub(crate) history: bool,
-    pub(crate) liveliness: bool,
+    pub(crate) history: Option<HistoryConfig>,
     pub(crate) handler: Handler,
 }
 
@@ -110,11 +127,11 @@ impl<'a, 'b, Handler> AdvancedSubscriberBuilder<'a, 'b, Handler> {
             key_expr,
             origin,
             handler,
+            sample_miss_callback: None,
             retransmission: None,
             query_target: QueryTarget::All,
             query_timeout: Duration::from_secs(10),
-            history: false,
-            liveliness: false,
+            history: None,
         }
     }
 }
@@ -134,11 +151,11 @@ impl<'a, 'b> AdvancedSubscriberBuilder<'a, 'b, DefaultHandler> {
             session: self.session,
             key_expr: self.key_expr.map(|s| s.into_owned()),
             origin: self.origin,
+            sample_miss_callback: self.sample_miss_callback,
             retransmission: self.retransmission,
             query_target: self.query_target,
             query_timeout: self.query_timeout,
             history: self.history,
-            liveliness: self.liveliness,
             handler: callback,
         }
     }
@@ -168,11 +185,11 @@ impl<'a, 'b> AdvancedSubscriberBuilder<'a, 'b, DefaultHandler> {
             session: self.session,
             key_expr: self.key_expr.map(|s| s.into_owned()),
             origin: self.origin,
+            sample_miss_callback: self.sample_miss_callback,
             retransmission: self.retransmission,
             query_target: self.query_target,
             query_timeout: self.query_timeout,
             history: self.history,
-            liveliness: self.liveliness,
             handler,
         }
     }
@@ -189,12 +206,23 @@ impl<'a, 'b, Handler> AdvancedSubscriberBuilder<'a, 'b, Handler> {
         self
     }
 
-    /// Ask for retransmission of detected lost Samples.
-    ///
-    /// Retransmission can only be achieved by Publishers that also activate retransmission.
     #[zenoh_macros::unstable]
     #[inline]
-    pub fn retransmission(mut self, conf: RetransmissionConf) -> Self {
+    pub fn sample_miss_callback(
+        mut self,
+        callback: impl Fn(EntityGlobalId, u32) + Send + Sync + 'static,
+    ) -> Self {
+        self.sample_miss_callback = Some(Arc::new(callback));
+        self
+    }
+
+    /// Ask for retransmission of detected lost Samples.
+    ///
+    /// Retransmission can only be achieved by Publishers that enable
+    /// caching and sample_miss_detection.
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn recovery(mut self, conf: RecoveryConfig) -> Self {
         self.retransmission = Some(conf);
         self
     }
@@ -217,23 +245,11 @@ impl<'a, 'b, Handler> AdvancedSubscriberBuilder<'a, 'b, Handler> {
 
     /// Enable query for historical data.
     ///
-    /// History can only be retransmitted by Publishers that also activate history.
+    /// History can only be retransmitted by Publishers that enable caching.
     #[zenoh_macros::unstable]
     #[inline]
-    pub fn history(mut self) -> Self {
-        // TODO take HistoryConf as parameter
-        self.history = true;
-        self
-    }
-
-    /// Enable detection of late joiner publishers and query for their historical data.
-    ///
-    /// Let joiner detectiopn can only be achieved for Publishers that also activate late_joiner.
-    /// History can only be retransmitted by Publishers that also activate history.
-    #[zenoh_macros::unstable]
-    #[inline]
-    pub fn late_joiner(mut self) -> Self {
-        self.liveliness = true;
+    pub fn history(mut self, config: HistoryConfig) -> Self {
+        self.history = Some(config);
         self
     }
 
@@ -242,11 +258,11 @@ impl<'a, 'b, Handler> AdvancedSubscriberBuilder<'a, 'b, Handler> {
             session: self.session,
             key_expr: self.key_expr.map(|s| s.into_owned()),
             origin: self.origin,
+            sample_miss_callback: self.sample_miss_callback,
             retransmission: self.retransmission,
             query_target: self.query_target,
             query_timeout: self.query_timeout,
             history: self.history,
-            liveliness: self.liveliness,
             handler: self.handler,
         }
     }
@@ -473,7 +489,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
         let statesref = Arc::new(Mutex::new(State {
             sequenced_states: HashMap::new(),
             timestamped_states: HashMap::new(),
-            global_pending_queries: if conf.history { 1 } else { 0 },
+            global_pending_queries: if conf.history.is_some() { 1 } else { 0 },
             session,
             period: retransmission.as_ref().and_then(|r| {
                 r.periodic_queries.map(|p| Period {
@@ -485,9 +501,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
             query_target: conf.query_target,
             query_timeout: conf.query_timeout,
             callback: callback.clone(),
-            miss_callback: retransmission
-                .as_ref()
-                .and_then(|r| r.sample_miss_callback.clone()),
+            miss_callback: conf.sample_miss_callback,
         }));
 
         let sub_callback = {
@@ -554,7 +568,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
             .allowed_origin(conf.origin)
             .wait()?;
 
-        if conf.history {
+        if conf.history.is_some() {
             let handler = InitialRepliesHandler {
                 statesref: statesref.clone(),
             };
@@ -582,7 +596,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                 .wait();
         }
 
-        let liveliness_subscriber = if conf.history && conf.liveliness {
+        let liveliness_subscriber = if conf.history.is_some_and(|h| h.liveliness) {
             let live_callback = {
                 let session = conf.session.clone();
                 let statesref = statesref.clone();
