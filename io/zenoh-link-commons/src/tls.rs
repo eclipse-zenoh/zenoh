@@ -86,3 +86,124 @@ impl WebPkiVerifierAnyServerName {
         Self { roots }
     }
 }
+
+pub mod expiration {
+    use std::{
+        net::SocketAddr,
+        sync::{atomic::AtomicBool, Weak},
+    };
+
+    use async_trait::async_trait;
+    use time::OffsetDateTime;
+    use tokio::{sync::Mutex as AsyncMutex, task::JoinHandle};
+    use tokio_util::sync::CancellationToken;
+    use zenoh_result::ZResult;
+
+    #[async_trait]
+    pub trait LinkWithCertExpiration: Send + Sync {
+        async fn expire(&self) -> ZResult<()>;
+    }
+
+    #[derive(Debug)]
+    pub struct LinkCertExpirationManager {
+        token: CancellationToken,
+        handle: AsyncMutex<Option<JoinHandle<ZResult<()>>>>,
+        /// Closing the link is a critical section that requires exclusive access to expiration_task
+        /// or the transport. `link_closing` is used to synchronize the access to this operation.
+        link_closing: AtomicBool,
+    }
+
+    impl LinkCertExpirationManager {
+        pub fn new(
+            link: Weak<dyn LinkWithCertExpiration>,
+            src_addr: SocketAddr,
+            dst_addr: SocketAddr,
+            link_type: &'static str,
+            expiration_time: OffsetDateTime,
+        ) -> Self {
+            let token = CancellationToken::new();
+            let handle = zenoh_runtime::ZRuntime::Acceptor.spawn(expiration_task(
+                link,
+                src_addr,
+                dst_addr,
+                link_type,
+                expiration_time,
+                token.clone(),
+            ));
+            Self {
+                token,
+                handle: AsyncMutex::new(Some(handle)),
+                link_closing: AtomicBool::new(false),
+            }
+        }
+
+        /// Takes exclusive access to closing the link.
+        ///
+        /// Returns `true` if successful, `false` if another task is (or finished) closing the link.
+        pub fn set_closing(&self) -> bool {
+            !self
+                .link_closing
+                .swap(true, std::sync::atomic::Ordering::Relaxed)
+        }
+
+        /// Sends cancelation signal to expiration_task
+        pub fn cancel_expiration_task(&self) {
+            self.token.cancel()
+        }
+
+        /// Waits for expiration task to complete, returning its return value.
+        pub async fn wait_for_expiration_task(&self) -> ZResult<()> {
+            let mut lock = self.handle.lock().await;
+            let handle = lock.take().expect("handle should be set");
+            handle.await?
+        }
+    }
+
+    async fn expiration_task(
+        link: Weak<dyn LinkWithCertExpiration>,
+        src_addr: SocketAddr,
+        dst_addr: SocketAddr,
+        link_type: &'static str,
+        expiration_time: OffsetDateTime,
+        token: CancellationToken,
+    ) -> ZResult<()> {
+        tracing::trace!(
+            "Expiration task started for {} link {:?} => {:?}",
+            link_type.to_uppercase(),
+            src_addr,
+            dst_addr,
+        );
+        tokio::select! {
+            _ = token.cancelled() => {},
+            _ = sleep_until_date(expiration_time) => {
+                // expire the link
+                if let Some(link) = link.upgrade() {
+                    tracing::warn!(
+                        "Closing {} link {:?} => {:?} : remote certificate chain expired",
+                        link_type.to_uppercase(),
+                        src_addr,
+                        dst_addr,
+                    );
+                    return link.expire().await;
+                }
+            },
+        }
+        Ok(())
+    }
+
+    async fn sleep_until_date(wakeup_time: OffsetDateTime) {
+        const MAX_SLEEP_DURATION: tokio::time::Duration = tokio::time::Duration::from_secs(600);
+        loop {
+            let now = OffsetDateTime::now_utc();
+            if wakeup_time <= now {
+                break;
+            }
+            // next sleep duration is the minimum between MAX_SLEEP_DURATION and the duration till wakeup
+            // this mitigates the unsoundness of using `tokio::time::sleep` with long durations
+            let wakeup_duration = std::time::Duration::try_from(wakeup_time - now)
+                .expect("wakeup_time should be greater than now");
+            let sleep_duration = tokio::time::Duration::min(MAX_SLEEP_DURATION, wakeup_duration);
+            tokio::time::sleep(sleep_duration).await;
+        }
+    }
+}

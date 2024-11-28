@@ -35,7 +35,6 @@ use crate::{
         sample::{Locality, QoSBuilder},
         selector::Selector,
         session::Session,
-        value::Value,
     },
     bytes::OptionZBytes,
     query::{QueryConsolidation, Reply},
@@ -72,7 +71,7 @@ pub struct SessionGetBuilder<'a, 'b, Handler> {
     pub(crate) destination: Locality,
     pub(crate) timeout: Duration,
     pub(crate) handler: Handler,
-    pub(crate) value: Option<Value>,
+    pub(crate) value: Option<(ZBytes, Encoding)>,
     pub(crate) attachment: Option<ZBytes>,
     #[cfg(feature = "unstable")]
     pub(crate) source_info: SourceInfo,
@@ -119,7 +118,7 @@ impl QoSBuilderTrait for SessionGetBuilder<'_, '_, DefaultHandler> {
 impl<Handler> EncodingBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         let mut value = self.value.unwrap_or_default();
-        value.encoding = encoding.into();
+        value.1 = encoding.into();
         Self {
             value: Some(value),
             ..self
@@ -238,7 +237,7 @@ impl<'a, 'b, Handler> SessionGetBuilder<'a, 'b, Handler> {
         IntoZBytes: Into<ZBytes>,
     {
         let mut value = self.value.unwrap_or_default();
-        value.payload = payload.into();
+        value.0 = payload.into();
         self.value = Some(value);
         self
     }

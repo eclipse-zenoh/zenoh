@@ -225,6 +225,7 @@
   //       "messages": [
   //         "put", "delete", "declare_subscriber",
   //         "query", "reply", "declare_queryable",
+  //         "liveliness_token", "liveliness_query", "declare_liveliness_subscriber",
   //       ],
   //       "flows":["egress","ingress"],
   //       "permission": "allow",
@@ -411,6 +412,8 @@
             drop: {
               /// The maximum time in microseconds to wait for an available batch before dropping a droppable message if still no batch is available.
               wait_before_drop: 1000,
+              /// The maximum deadline limit for multi-fragment messages.
+              max_wait_before_drop_fragments: 50000,
             },
             /// Behavior pushing CongestionControl::Block messages to the queue.
             block: {
@@ -466,6 +469,10 @@
         // This could be dangerous because your CA can have signed a server cert for foo.com, that's later being used to host a server at baz.com. If you wan't your
         // ca to verify that the server at baz.com is actually baz.com, let this be true (default).
         verify_name_on_connect: true,
+        // Whether or not to close links when remote certificates expires.
+        // If set to true, links that require certificates (tls/quic) will automatically disconnect when the time of expiration of the remote certificate chain is reached
+        // note that mTLS (client authentication) is required for a listener to disconnect a client on expiration
+        close_link_on_expiration: false,
       },
     },
     /// Shared memory configuration.

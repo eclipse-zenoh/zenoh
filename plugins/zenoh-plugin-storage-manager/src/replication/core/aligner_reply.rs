@@ -17,13 +17,13 @@ use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLockWriteGuard;
 use zenoh::{
-    internal::Value,
+    bytes::{Encoding, ZBytes},
     key_expr::{format::keformat, keyexpr_tree::IKeyExprTreeMut, OwnedKeyExpr},
-    sample::{Sample, SampleKind},
+    sample::{Sample, SampleFields, SampleKind},
     session::ZenohId,
     Result as ZResult,
 };
-use zenoh_backend_traits::StorageInsertionResult;
+use zenoh_backend_traits::{StorageInsertionResult, StoredData};
 
 use crate::{
     replication::{
@@ -295,7 +295,8 @@ impl Replication {
                 self.apply_wildcard_update(
                     &mut replication_log_guard,
                     &replica_event,
-                    Value::empty(),
+                    ZBytes::default(),
+                    Encoding::default(),
                 )
                 .await;
             }
@@ -358,11 +359,15 @@ impl Replication {
                         wildcard_delete_ke.clone(),
                         SampleKind::Delete,
                         replica_event.timestamp,
-                        zenoh::internal::Value::empty(),
+                        ZBytes::default(),
+                        Encoding::default(),
                     )
                     .await;
             }
             Action::Put => {
+                let SampleFields {
+                    payload, encoding, ..
+                } = sample.into();
                 if matches!(
                     self.storage_service
                         .storage
@@ -370,7 +375,8 @@ impl Replication {
                         .await
                         .put(
                             replica_event.stripped_key.clone(),
-                            sample.into(),
+                            payload,
+                            encoding,
                             replica_event.timestamp,
                         )
                         .await,
@@ -385,10 +391,14 @@ impl Replication {
                 }
             }
             Action::WildcardPut(_) => {
+                let SampleFields {
+                    payload, encoding, ..
+                } = sample.into();
                 self.apply_wildcard_update(
                     &mut replication_log_guard,
                     &replica_event,
-                    sample.into(),
+                    payload,
+                    encoding,
                 )
                 .await;
             }
@@ -544,7 +554,8 @@ impl Replication {
         &self,
         replication_log_guard: &mut RwLockWriteGuard<'_, LogLatest>,
         replica_event: &EventMetadata,
-        value: Value,
+        payload: ZBytes,
+        encoding: Encoding,
     ) {
         let (wildcard_ke, wildcard_kind) = match &replica_event.action {
             Action::Put | Action::Delete => unreachable!(),
@@ -603,7 +614,8 @@ impl Replication {
                             .await
                             .put(
                                 overridden_event.key_expr().clone(),
-                                value.clone(),
+                                payload.clone(),
+                                encoding.clone(),
                                 replica_event.timestamp,
                             )
                             .await,
@@ -664,7 +676,8 @@ impl Replication {
                 wildcard_ke.clone(),
                 (&replica_event.action).into(),
                 replica_event.timestamp,
-                value,
+                payload,
+                encoding,
             )
             .await;
     }
@@ -724,7 +737,12 @@ impl Replication {
         wildcard_ke: OwnedKeyExpr,
         wildcard_update: Update,
     ) {
-        let wildcard_timestamp = *wildcard_update.timestamp();
+        let kind = wildcard_update.kind();
+        let StoredData {
+            payload,
+            encoding,
+            timestamp,
+        } = wildcard_update.into();
 
         // A Wildcard Update overrides another Wildcard Update, we have nothing to do.
         if matches!(
@@ -736,17 +754,17 @@ impl Replication {
 
         tracing::trace!(
             "Overriding < {replica_event:?} > with < {wildcard_ke} {} >",
-            wildcard_timestamp
+            timestamp
         );
 
         // Generate the action that will be used to override the metadata of the Event. We do it
         // now to avoid having to clone the `wildcard_update` because we move it below.
-        let wildcard_action = match wildcard_update.kind() {
+        let wildcard_action = match kind {
             SampleKind::Put => Action::WildcardPut(wildcard_ke),
             SampleKind::Delete => Action::WildcardDelete(wildcard_ke),
         };
 
-        if wildcard_update.kind() == SampleKind::Put
+        if kind == SampleKind::Put
             && matches!(
                 self.storage_service
                     .storage
@@ -754,8 +772,9 @@ impl Replication {
                     .await
                     .put(
                         replica_event.stripped_key.clone(),
-                        wildcard_update.into_value(),
-                        wildcard_timestamp
+                        payload,
+                        encoding,
+                        timestamp
                     )
                     .await,
                 Ok(StorageInsertionResult::Outdated) | Err(_)
@@ -772,7 +791,7 @@ impl Replication {
         // `timestamp_last_non_wildcard_update`.
         let mut event: Event = replica_event.into();
         // Then update the Event with the values of the Wildcard Update.
-        event.set_timestamp_and_action(wildcard_timestamp, wildcard_action);
+        event.set_timestamp_and_action(timestamp, wildcard_action);
 
         replication_log_guard.insert_event(event);
     }

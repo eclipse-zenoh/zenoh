@@ -61,7 +61,7 @@ impl From<&CommonArgs> for Config {
         }
         if !args.listen.is_empty() {
             config
-                .insert_json5("listen/endpoints", &json!(args.connect).to_string())
+                .insert_json5("listen/endpoints", &json!(args.listen).to_string())
                 .unwrap();
         }
         if args.no_multicast_scouting {

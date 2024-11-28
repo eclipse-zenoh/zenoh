@@ -97,11 +97,9 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
             _ => {}
         }
 
-        if let Some(client_auth) = c.enable_mtls() {
-            match client_auth {
-                true => ps.push((TLS_ENABLE_MTLS, "true")),
-                false => ps.push((TLS_ENABLE_MTLS, "false")),
-            };
+        match c.enable_mtls().unwrap_or(TLS_ENABLE_MTLS_DEFAULT) {
+            true => ps.push((TLS_ENABLE_MTLS, "true")),
+            false => ps.push((TLS_ENABLE_MTLS, "false")),
         }
 
         match (c.connect_private_key(), c.connect_private_key_base64()) {
@@ -144,6 +142,14 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
             false => ps.push((TLS_VERIFY_NAME_ON_CONNECT, "false")),
         };
 
+        match c
+            .close_link_on_expiration()
+            .unwrap_or(TLS_CLOSE_LINK_ON_EXPIRATION_DEFAULT)
+        {
+            true => ps.push((TLS_CLOSE_LINK_ON_EXPIRATION, "true")),
+            false => ps.push((TLS_CLOSE_LINK_ON_EXPIRATION, "false")),
+        }
+
         Ok(parameters::from_iter(ps.drain(..)))
     }
 }
@@ -151,6 +157,7 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
 pub(crate) struct TlsServerConfig {
     pub(crate) server_config: ServerConfig,
     pub(crate) tls_handshake_timeout: Duration,
+    pub(crate) tls_close_link_on_expiration: bool,
 }
 
 impl TlsServerConfig {
@@ -159,7 +166,13 @@ impl TlsServerConfig {
             Some(s) => s
                 .parse()
                 .map_err(|_| zerror!("Unknown enable mTLS argument: {}", s))?,
-            None => false,
+            None => TLS_ENABLE_MTLS_DEFAULT,
+        };
+        let tls_close_link_on_expiration: bool = match config.get(TLS_CLOSE_LINK_ON_EXPIRATION) {
+            Some(s) => s
+                .parse()
+                .map_err(|_| zerror!("Unknown close on expiration argument: {}", s))?,
+            None => TLS_CLOSE_LINK_ON_EXPIRATION_DEFAULT,
         };
         let tls_server_private_key = TlsServerConfig::load_tls_private_key(config).await?;
         let tls_server_certificate = TlsServerConfig::load_tls_certificate(config).await?;
@@ -231,6 +244,7 @@ impl TlsServerConfig {
         Ok(TlsServerConfig {
             server_config: sc,
             tls_handshake_timeout,
+            tls_close_link_on_expiration,
         })
     }
 
@@ -257,6 +271,7 @@ impl TlsServerConfig {
 
 pub(crate) struct TlsClientConfig {
     pub(crate) client_config: ClientConfig,
+    pub(crate) tls_close_link_on_expiration: bool,
 }
 
 impl TlsClientConfig {
@@ -265,20 +280,24 @@ impl TlsClientConfig {
             Some(s) => s
                 .parse()
                 .map_err(|_| zerror!("Unknown enable mTLS auth argument: {}", s))?,
-            None => false,
+            None => TLS_ENABLE_MTLS_DEFAULT,
         };
 
         let tls_server_name_verification: bool = match config.get(TLS_VERIFY_NAME_ON_CONNECT) {
-            Some(s) => {
-                let s: bool = s
-                    .parse()
-                    .map_err(|_| zerror!("Unknown server name verification argument: {}", s))?;
-                if s {
-                    tracing::warn!("Skipping name verification of servers");
-                }
-                s
-            }
-            None => false,
+            Some(s) => s
+                .parse()
+                .map_err(|_| zerror!("Unknown server name verification argument: {}", s))?,
+            None => TLS_VERIFY_NAME_ON_CONNECT_DEFAULT,
+        };
+        if !tls_server_name_verification {
+            tracing::warn!("Skipping name verification of TLS server");
+        }
+
+        let tls_close_link_on_expiration: bool = match config.get(TLS_CLOSE_LINK_ON_EXPIRATION) {
+            Some(s) => s
+                .parse()
+                .map_err(|_| zerror!("Unknown close on expiration argument: {}", s))?,
+            None => TLS_CLOSE_LINK_ON_EXPIRATION_DEFAULT,
         };
 
         // Allows mixed user-generated CA and webPKI CA
@@ -367,7 +386,10 @@ impl TlsClientConfig {
                     .with_no_client_auth()
             }
         };
-        Ok(TlsClientConfig { client_config: cc })
+        Ok(TlsClientConfig {
+            client_config: cc,
+            tls_close_link_on_expiration,
+        })
     }
 
     async fn load_tls_private_key(config: &Config<'_>) -> ZResult<Vec<u8>> {
