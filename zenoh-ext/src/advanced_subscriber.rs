@@ -311,6 +311,7 @@ struct State {
     timestamped_states: HashMap<ID, SourceState<Timestamp>>,
     session: Session,
     key_expr: KeyExpr<'static>,
+    retransmission: bool,
     period: Option<Period>,
     query_target: QueryTarget,
     query_timeout: Duration,
@@ -378,7 +379,20 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
             state.pending_samples.insert(source_sn, sample);
         } else if state.last_delivered.is_some() && source_sn != state.last_delivered.unwrap() + 1 {
             if source_sn > state.last_delivered.unwrap() {
-                state.pending_samples.insert(source_sn, sample);
+                if states.retransmission {
+                    state.pending_samples.insert(source_sn, sample);
+                } else {
+                    tracing::info!(
+                        "Sample missed: missed {} samples from {:?}.",
+                        source_sn - state.last_delivered.unwrap() - 1,
+                        source_id,
+                    );
+                    if let Some(miss_callback) = states.miss_callback.as_ref() {
+                        (miss_callback)(*source_id, source_sn - state.last_delivered.unwrap() - 1);
+                        states.callback.call(sample);
+                        state.last_delivered = Some(source_sn);
+                    }
+                }
             }
         } else {
             states.callback.call(sample);
@@ -498,6 +512,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                 })
             }),
             key_expr: key_expr.clone().into_owned(),
+            retransmission: retransmission.is_some(),
             query_target: conf.query_target,
             query_timeout: conf.query_timeout,
             callback: callback.clone(),
