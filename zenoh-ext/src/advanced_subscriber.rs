@@ -389,9 +389,9 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
                     );
                     if let Some(miss_callback) = states.miss_callback.as_ref() {
                         (miss_callback)(*source_id, source_sn - state.last_delivered.unwrap() - 1);
-                        states.callback.call(sample);
-                        state.last_delivered = Some(source_sn);
                     }
+                    states.callback.call(sample);
+                    state.last_delivered = Some(source_sn);
                 }
             }
         } else {
