@@ -28,29 +28,43 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Declaring AdvancedSubscriber on {}", key_expr,);
+    println!("Declaring AdvancedSubscriber on {}", key_expr);
     let subscriber = session
         .declare_subscriber(key_expr)
         .history(HistoryConfig::default().late_joiner())
         .recovery(RecoveryConfig::default().periodic_queries(Some(Duration::from_secs(1))))
-        .sample_miss_callback(|s, m| {
-            println!(">> [Subscriber] Missed {} samples from {:?} !!!", m, s);
-        })
         .await
         .unwrap();
 
+    let miss_listener = subscriber.sample_miss_listener().await.unwrap();
+
     println!("Press CTRL-C to quit...");
-    while let Ok(sample) = subscriber.recv_async().await {
-        let payload = sample
-            .payload()
-            .try_to_string()
-            .unwrap_or_else(|e| e.to_string().into());
-        println!(
-            ">> [Subscriber] Received {} ('{}': '{}')",
-            sample.kind(),
-            sample.key_expr().as_str(),
-            payload
-        );
+    loop {
+        tokio::select! {
+            sample = subscriber.recv_async() => {
+                if let Ok(sample) = sample {
+                    let payload = sample
+                        .payload()
+                        .try_to_string()
+                        .unwrap_or_else(|e| e.to_string().into());
+                    println!(
+                        ">> [Subscriber] Received {} ('{}': '{}')",
+                        sample.kind(),
+                        sample.key_expr().as_str(),
+                        payload
+                    );
+                }
+            },
+            miss = miss_listener.recv_async() => {
+                if let Ok(miss) = miss {
+                    println!(
+                        ">> [Subscriber] Missed {} samples from {:?} !!!",
+                        miss.nb(),
+                        miss.source()
+                    );
+                }
+            },
+        }
     }
 }
 

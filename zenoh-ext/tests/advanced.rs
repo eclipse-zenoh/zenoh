@@ -411,14 +411,11 @@ async fn test_advanced_sample_miss() {
         s
     };
 
-    let (miss_sender, miss_receiver) = flume::unbounded();
-
     let sub = ztimeout!(client2
         .declare_subscriber(ADVANCED_SAMPLE_MISS_KEYEXPR)
-        .sample_miss_callback(move |s, m| {
-            miss_sender.send((s, m)).unwrap();
-        }))
+        .advanced())
     .unwrap();
+    let miss_listener = ztimeout!(sub.sample_miss_listener()).unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let publ = ztimeout!(client1
@@ -460,11 +457,11 @@ async fn test_advanced_sample_miss() {
     ztimeout!(publ.put("3")).unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    let miss = ztimeout!(miss_receiver.recv_async()).unwrap();
-    assert_eq!(miss.0, publ.id());
-    assert_eq!(miss.1, 1);
+    let miss = ztimeout!(miss_listener.recv_async()).unwrap();
+    assert_eq!(miss.source(), publ.id());
+    assert_eq!(miss.nb(), 1);
 
-    assert!(miss_receiver.try_recv().is_err());
+    assert!(miss_listener.try_recv().is_err());
 
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert_eq!(sample.kind(), SampleKind::Put);
@@ -536,15 +533,11 @@ async fn test_advanced_retransmission_sample_miss() {
         s
     };
 
-    let (miss_sender, miss_receiver) = flume::unbounded();
-
     let sub = ztimeout!(client2
         .declare_subscriber(ADVANCED_RETRANSMISSION_SAMPLE_MISS_KEYEXPR)
-        .recovery(RecoveryConfig::default().periodic_queries(Some(Duration::from_secs(1))))
-        .sample_miss_callback(move |s, m| {
-            miss_sender.send((s, m)).unwrap();
-        }))
+        .recovery(RecoveryConfig::default().periodic_queries(Some(Duration::from_secs(1)))))
     .unwrap();
+    let miss_listener = ztimeout!(sub.sample_miss_listener()).unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let publ = ztimeout!(client1
@@ -589,11 +582,11 @@ async fn test_advanced_retransmission_sample_miss() {
     ztimeout!(publ.put("5")).unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    let miss = ztimeout!(miss_receiver.recv_async()).unwrap();
-    assert_eq!(miss.0, publ.id());
-    assert_eq!(miss.1, 2);
+    let miss = ztimeout!(miss_listener.recv_async()).unwrap();
+    assert_eq!(miss.source(), publ.id());
+    assert_eq!(miss.nb(), 2);
 
-    assert!(miss_receiver.try_recv().is_err());
+    assert!(miss_listener.try_recv().is_err());
 
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert_eq!(sample.kind(), SampleKind::Put);

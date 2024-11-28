@@ -106,7 +106,6 @@ pub struct AdvancedSubscriberBuilder<'a, 'b, Handler, const BACKGROUND: bool = f
     pub(crate) session: &'a Session,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) origin: Locality,
-    pub(crate) sample_miss_callback: Option<Arc<dyn Fn(EntityGlobalId, u32) + Send + Sync>>,
     pub(crate) retransmission: Option<RecoveryConfig>,
     pub(crate) query_target: QueryTarget,
     pub(crate) query_timeout: Duration,
@@ -127,7 +126,6 @@ impl<'a, 'b, Handler> AdvancedSubscriberBuilder<'a, 'b, Handler> {
             key_expr,
             origin,
             handler,
-            sample_miss_callback: None,
             retransmission: None,
             query_target: QueryTarget::All,
             query_timeout: Duration::from_secs(10),
@@ -151,7 +149,6 @@ impl<'a, 'b> AdvancedSubscriberBuilder<'a, 'b, DefaultHandler> {
             session: self.session,
             key_expr: self.key_expr.map(|s| s.into_owned()),
             origin: self.origin,
-            sample_miss_callback: self.sample_miss_callback,
             retransmission: self.retransmission,
             query_target: self.query_target,
             query_timeout: self.query_timeout,
@@ -185,7 +182,6 @@ impl<'a, 'b> AdvancedSubscriberBuilder<'a, 'b, DefaultHandler> {
             session: self.session,
             key_expr: self.key_expr.map(|s| s.into_owned()),
             origin: self.origin,
-            sample_miss_callback: self.sample_miss_callback,
             retransmission: self.retransmission,
             query_target: self.query_target,
             query_timeout: self.query_timeout,
@@ -203,16 +199,6 @@ impl<'a, 'b, Handler> AdvancedSubscriberBuilder<'a, 'b, Handler> {
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
         self.origin = origin;
-        self
-    }
-
-    #[zenoh_macros::unstable]
-    #[inline]
-    pub fn sample_miss_callback(
-        mut self,
-        callback: impl Fn(EntityGlobalId, u32) + Send + Sync + 'static,
-    ) -> Self {
-        self.sample_miss_callback = Some(Arc::new(callback));
         self
     }
 
@@ -258,7 +244,6 @@ impl<'a, 'b, Handler> AdvancedSubscriberBuilder<'a, 'b, Handler> {
             session: self.session,
             key_expr: self.key_expr.map(|s| s.into_owned()),
             origin: self.origin,
-            sample_miss_callback: self.sample_miss_callback,
             retransmission: self.retransmission,
             query_target: self.query_target,
             query_timeout: self.query_timeout,
@@ -306,6 +291,7 @@ struct Period {
 
 #[zenoh_macros::unstable]
 struct State {
+    next_id: usize,
     global_pending_queries: u64,
     sequenced_states: HashMap<EntityGlobalId, SourceState<u32>>,
     timestamped_states: HashMap<ID, SourceState<Timestamp>>,
@@ -316,7 +302,19 @@ struct State {
     query_target: QueryTarget,
     query_timeout: Duration,
     callback: Callback<Sample>,
-    miss_callback: Option<Arc<dyn Fn(EntityGlobalId, u32) + Send + Sync>>,
+    miss_handlers: HashMap<usize, Callback<Miss>>,
+}
+
+impl State {
+    fn register_miss_callback(&mut self, callback: Callback<Miss>) -> usize {
+        let id = self.next_id;
+        self.next_id += 1;
+        self.miss_handlers.insert(id, callback);
+        id
+    }
+    fn unregister_miss_callback(&mut self, id: &usize) {
+        self.miss_handlers.remove(id);
+    }
 }
 
 macro_rules! spawn_periodoic_queries {
@@ -342,6 +340,7 @@ struct SourceState<T> {
 
 #[zenoh_macros::unstable]
 pub struct AdvancedSubscriber<Receiver> {
+    statesref: Arc<Mutex<State>>,
     _subscriber: Subscriber<()>,
     receiver: Receiver,
     _liveliness_subscriber: Option<Subscriber<()>>,
@@ -387,8 +386,11 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
                         source_sn - state.last_delivered.unwrap() - 1,
                         source_id,
                     );
-                    if let Some(miss_callback) = states.miss_callback.as_ref() {
-                        (miss_callback)(*source_id, source_sn - state.last_delivered.unwrap() - 1);
+                    for miss_callback in states.miss_handlers.values() {
+                        miss_callback.call(Miss {
+                            source: *source_id,
+                            nb: source_sn - state.last_delivered.unwrap() - 1,
+                        });
                     }
                     states.callback.call(sample);
                     state.last_delivered = Some(source_sn);
@@ -501,6 +503,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
         let query_timeout = conf.query_timeout;
         let session = conf.session.clone();
         let statesref = Arc::new(Mutex::new(State {
+            next_id: 0,
             sequenced_states: HashMap::new(),
             timestamped_states: HashMap::new(),
             global_pending_queries: if conf.history.is_some() { 1 } else { 0 },
@@ -516,7 +519,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
             query_target: conf.query_target,
             query_timeout: conf.query_timeout,
             callback: callback.clone(),
-            miss_callback: conf.sample_miss_callback,
+            miss_handlers: HashMap::new(),
         }));
 
         let sub_callback = {
@@ -751,12 +754,21 @@ impl<Handler> AdvancedSubscriber<Handler> {
         };
 
         let reliable_subscriber = AdvancedSubscriber {
+            statesref,
             _subscriber: subscriber,
             receiver,
             _liveliness_subscriber: liveliness_subscriber,
         };
 
         Ok(reliable_subscriber)
+    }
+
+    #[zenoh_macros::unstable]
+    pub fn sample_miss_listener(&self) -> SampleMissListenerBuilder<'_, DefaultHandler> {
+        SampleMissListenerBuilder {
+            statesref: &self.statesref,
+            handler: DefaultHandler::default(),
+        }
     }
 
     /// Close this AdvancedSubscriber
@@ -772,7 +784,7 @@ fn flush_sequenced_source(
     state: &mut SourceState<u32>,
     callback: &Callback<Sample>,
     source_id: &EntityGlobalId,
-    miss_callback: Option<&Arc<dyn Fn(EntityGlobalId, u32) + Send + Sync>>,
+    miss_handlers: &HashMap<usize, Callback<Miss>>,
 ) {
     if state.pending_queries == 0 && !state.pending_samples.is_empty() {
         let mut pending_samples = state
@@ -796,8 +808,11 @@ fn flush_sequenced_source(
                         seq_num - last - 1,
                         source_id,
                     );
-                    if let Some(miss_callback) = miss_callback {
-                        (miss_callback)(*source_id, seq_num - last - 1)
+                    for miss_callback in miss_handlers.values() {
+                        miss_callback.call(Miss {
+                            source: *source_id,
+                            nb: seq_num - last - 1,
+                        })
                     }
                     state.last_delivered = Some(seq_num);
                     callback.call(sample);
@@ -846,12 +861,7 @@ impl Drop for InitialRepliesHandler {
 
         if states.global_pending_queries == 0 {
             for (source_id, state) in states.sequenced_states.iter_mut() {
-                flush_sequenced_source(
-                    state,
-                    &states.callback,
-                    source_id,
-                    states.miss_callback.as_ref(),
-                );
+                flush_sequenced_source(state, &states.callback, source_id, &states.miss_handlers);
                 spawn_periodoic_queries!(states, *source_id, self.statesref.clone());
             }
             for state in states.timestamped_states.values_mut() {
@@ -879,7 +889,7 @@ impl Drop for SequencedRepliesHandler {
                     state,
                     &states.callback,
                     &self.source_id,
-                    states.miss_callback.as_ref(),
+                    &states.miss_handlers,
                 )
             }
         }
@@ -904,5 +914,227 @@ impl Drop for TimestampedRepliesHandler {
                 flush_timestamped_source(state, &self.callback);
             }
         }
+    }
+}
+
+#[zenoh_macros::unstable]
+pub struct Miss {
+    source: EntityGlobalId,
+    nb: u32,
+}
+
+impl Miss {
+    pub fn source(&self) -> EntityGlobalId {
+        self.source
+    }
+    pub fn nb(&self) -> u32 {
+        self.nb
+    }
+}
+
+#[zenoh_macros::unstable]
+pub struct SampleMissListener<Handler> {
+    id: usize,
+    statesref: Arc<Mutex<State>>,
+    handler: Handler,
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> SampleMissListener<Handler> {
+    #[inline]
+    pub fn undeclare(self) -> SampleMissHandlerUndeclaration<Handler>
+    where
+        Handler: Send,
+    {
+        // self.undeclare_inner(())
+        SampleMissHandlerUndeclaration(self)
+    }
+
+    fn undeclare_impl(&mut self) -> ZResult<()> {
+        // set the flag first to avoid double panic if this function panic
+        zlock!(self.statesref).unregister_miss_callback(&self.id);
+        Ok(())
+    }
+}
+
+#[cfg(feature = "unstable")]
+impl<Handler> Drop for SampleMissListener<Handler> {
+    fn drop(&mut self) {
+        if let Err(error) = self.undeclare_impl() {
+            tracing::error!(error);
+        }
+    }
+}
+
+// #[zenoh_macros::unstable]
+// impl<Handler: Send> UndeclarableSealed<()> for SampleMissHandler<Handler> {
+//     type Undeclaration = SampleMissHandlerUndeclaration<Handler>;
+
+//     fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
+//         SampleMissHandlerUndeclaration(self)
+//     }
+// }
+
+#[zenoh_macros::unstable]
+impl<Handler> std::ops::Deref for SampleMissListener<Handler> {
+    type Target = Handler;
+
+    fn deref(&self) -> &Self::Target {
+        &self.handler
+    }
+}
+#[zenoh_macros::unstable]
+impl<Handler> std::ops::DerefMut for SampleMissListener<Handler> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.handler
+    }
+}
+
+#[zenoh_macros::unstable]
+pub struct SampleMissHandlerUndeclaration<Handler>(SampleMissListener<Handler>);
+
+#[zenoh_macros::unstable]
+impl<Handler> Resolvable for SampleMissHandlerUndeclaration<Handler> {
+    type To = ZResult<()>;
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> Wait for SampleMissHandlerUndeclaration<Handler> {
+    fn wait(mut self) -> <Self as Resolvable>::To {
+        self.0.undeclare_impl()
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> IntoFuture for SampleMissHandlerUndeclaration<Handler> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
+    }
+}
+
+/// A builder for initializing a [`SampleMissHandler`].
+#[zenoh_macros::unstable]
+pub struct SampleMissListenerBuilder<'a, Handler, const BACKGROUND: bool = false> {
+    statesref: &'a Arc<Mutex<State>>,
+    handler: Handler,
+}
+
+#[zenoh_macros::unstable]
+impl<'a> SampleMissListenerBuilder<'a, DefaultHandler> {
+    /// Receive the sample miss notification with a callback.
+    #[inline]
+    #[zenoh_macros::unstable]
+    pub fn callback<F>(self, callback: F) -> SampleMissListenerBuilder<'a, Callback<Miss>>
+    where
+        F: Fn(Miss) + Send + Sync + 'static,
+    {
+        self.with(Callback::new(Arc::new(callback)))
+    }
+
+    /// Receive the sample miss notification with a mutable callback.
+    #[inline]
+    #[zenoh_macros::unstable]
+    pub fn callback_mut<F>(self, callback: F) -> SampleMissListenerBuilder<'a, Callback<Miss>>
+    where
+        F: FnMut(Miss) + Send + Sync + 'static,
+    {
+        self.callback(zenoh::handlers::locked(callback))
+    }
+
+    /// Receive the sample miss notification with a [`Handler`](IntoHandler).
+    #[inline]
+    #[zenoh_macros::unstable]
+    pub fn with<Handler>(self, handler: Handler) -> SampleMissListenerBuilder<'a, Handler>
+    where
+        Handler: IntoHandler<Miss>,
+    {
+        SampleMissListenerBuilder {
+            statesref: self.statesref,
+            handler,
+        }
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<'a> SampleMissListenerBuilder<'a, Callback<Miss>> {
+    /// Register the sample miss notification callback to be run in background until the adanced subscriber is undeclared.
+    ///
+    /// Background builder doesn't return a `SampleMissHandler` object anymore.
+    pub fn background(self) -> SampleMissListenerBuilder<'a, Callback<Miss>, true> {
+        SampleMissListenerBuilder {
+            statesref: self.statesref,
+            handler: self.handler,
+        }
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> Resolvable for SampleMissListenerBuilder<'_, Handler>
+where
+    Handler: IntoHandler<Miss> + Send,
+    Handler::Handler: Send,
+{
+    type To = ZResult<SampleMissListener<Handler::Handler>>;
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> Wait for SampleMissListenerBuilder<'_, Handler>
+where
+    Handler: IntoHandler<Miss> + Send,
+    Handler::Handler: Send,
+{
+    #[zenoh_macros::unstable]
+    fn wait(self) -> <Self as Resolvable>::To {
+        let (callback, handler) = self.handler.into_handler();
+        let id = zlock!(self.statesref).register_miss_callback(callback);
+        Ok(SampleMissListener {
+            id,
+            statesref: self.statesref.clone(),
+            handler,
+        })
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> IntoFuture for SampleMissListenerBuilder<'_, Handler>
+where
+    Handler: IntoHandler<Miss> + Send,
+    Handler::Handler: Send,
+{
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
+
+    #[zenoh_macros::unstable]
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
+    }
+}
+
+#[zenoh_macros::unstable]
+impl Resolvable for SampleMissListenerBuilder<'_, Callback<Miss>, true> {
+    type To = ZResult<()>;
+}
+
+#[zenoh_macros::unstable]
+impl Wait for SampleMissListenerBuilder<'_, Callback<Miss>, true> {
+    #[zenoh_macros::unstable]
+    fn wait(self) -> <Self as Resolvable>::To {
+        let (callback, _) = self.handler.into_handler();
+        zlock!(self.statesref).register_miss_callback(callback);
+        Ok(())
+    }
+}
+
+#[zenoh_macros::unstable]
+impl IntoFuture for SampleMissListenerBuilder<'_, Callback<Miss>, true> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
+
+    #[zenoh_macros::unstable]
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
     }
 }

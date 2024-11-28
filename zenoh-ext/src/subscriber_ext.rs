@@ -20,7 +20,6 @@ use zenoh::{
     pubsub::{Subscriber, SubscriberBuilder},
     query::{QueryConsolidation, QueryTarget, ReplyKeyExpr},
     sample::{Locality, Sample},
-    session::EntityGlobalId,
     Result as ZResult,
 };
 
@@ -138,10 +137,8 @@ pub trait DataSubscriberBuilderExt<'a, 'b, Handler> {
     /// caching and sample_miss_detection.
     fn recovery(self, conf: RecoveryConfig) -> AdvancedSubscriberBuilder<'a, 'b, Handler>;
 
-    fn sample_miss_callback(
-        self,
-        callback: impl Fn(EntityGlobalId, u32) + Send + Sync + 'static,
-    ) -> AdvancedSubscriberBuilder<'a, 'b, Handler>;
+    /// Turn this `Subscriber`into an `AdvancedSubscriber`.
+    fn advanced(self) -> AdvancedSubscriberBuilder<'a, 'b, Handler>;
 }
 
 impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilder<'a, 'b, Handler> {
@@ -268,12 +265,9 @@ impl<'a, 'b, Handler> DataSubscriberBuilderExt<'a, 'b, Handler>
             .recovery(conf)
     }
 
-    fn sample_miss_callback(
-        self,
-        callback: impl Fn(EntityGlobalId, u32) + Send + Sync + 'static,
-    ) -> AdvancedSubscriberBuilder<'a, 'b, Handler> {
+    /// Turn this `Subscriber`into an `AdvancedSubscriber`.
+    fn advanced(self) -> AdvancedSubscriberBuilder<'a, 'b, Handler> {
         AdvancedSubscriberBuilder::new(self.session, self.key_expr, self.origin, self.handler)
-            .sample_miss_callback(callback)
     }
 }
 
