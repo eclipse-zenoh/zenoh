@@ -14,7 +14,10 @@
 use std::time::Duration;
 
 use clap::Parser;
-use zenoh::{key_expr::KeyExpr, query::QueryTarget, Config};
+use zenoh::{
+    query::{QueryTarget, Selector},
+    Config,
+};
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
@@ -22,16 +25,16 @@ async fn main() {
     // initiate logging
     zenoh::init_log_from_env_or("error");
     #[cfg(feature = "unstable")]
-    let (config, keyexpr, payload, target, timeout, add_matching_listener) = parse_args();
+    let (config, selector, payload, target, timeout, add_matching_listener) = parse_args();
     #[cfg(not(feature = "unstable"))]
-    let (config, keyexpr, payload, target, timeout, _) = parse_args();
+    let (config, selector, payload, target, timeout, _) = parse_args();
 
     println!("Opening session...");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Declaring Querier on '{keyexpr}'...");
+    println!("Declaring Querier on '{}'...", selector.key_expr());
     let querier = session
-        .declare_querier(keyexpr)
+        .declare_querier(selector.key_expr())
         .target(target)
         .timeout(timeout)
         .await
@@ -53,15 +56,13 @@ async fn main() {
             .unwrap();
     }
 
+    let params = selector.parameters().as_str();
+
     println!("Press CTRL-C to quit...");
     for idx in 0..u32::MAX {
         tokio::time::sleep(Duration::from_secs(1)).await;
         let buf = format!("[{idx:4}] {}", payload.clone().unwrap_or_default());
-        println!(
-            "Querying '{}' with payload: '{}')...",
-            &querier.key_expr(),
-            buf
-        );
+        println!("Querying '{}' with payload: '{}'...", &selector, buf);
         let replies = querier
             .get()
             // // By default get receives replies from a FIFO.
@@ -70,6 +71,7 @@ async fn main() {
             // .with(zenoh::handlers::RingChannel::default())
             // Refer to z_bytes.rs to see how to serialize different types of message
             .payload(buf)
+            .parameters(params)
             .await
             .unwrap();
         while let Ok(reply) = replies.recv_async().await {
@@ -110,7 +112,7 @@ enum Qt {
 struct Args {
     #[arg(short, long, default_value = "demo/example/**")]
     /// The selection of resources to query
-    key_expr: KeyExpr<'static>,
+    selector: Selector<'static>,
     #[arg(short, long)]
     /// An optional payload to put in the query.
     payload: Option<String>,
@@ -130,7 +132,7 @@ struct Args {
 
 fn parse_args() -> (
     Config,
-    KeyExpr<'static>,
+    Selector<'static>,
     Option<String>,
     QueryTarget,
     Duration,
@@ -139,7 +141,7 @@ fn parse_args() -> (
     let args = Args::parse();
     (
         args.common.into(),
-        args.key_expr,
+        args.selector,
         args.payload,
         match args.target {
             Qt::BestMatching => QueryTarget::BestMatching,
