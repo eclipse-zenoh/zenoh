@@ -20,6 +20,7 @@ use zenoh::{
     pubsub::{Subscriber, SubscriberBuilder},
     query::{QueryConsolidation, QueryTarget, ReplyKeyExpr},
     sample::{Locality, Sample},
+    session::EntityGlobalId,
     Result as ZResult,
 };
 
@@ -129,13 +130,18 @@ pub trait DataSubscriberBuilderExt<'a, 'b, Handler> {
     /// Enable query for historical data.
     ///
     /// History can only be retransmitted by Publishers that enable caching.
-    fn history(self, config: HistoryConfig) -> AdvancedSubscriberBuilder<'a, 'b, Handler>; // TODO take HistoryConf as parameter
+    fn history(self, config: HistoryConfig) -> AdvancedSubscriberBuilder<'a, 'b, Handler>;
 
     /// Ask for retransmission of detected lost Samples.
     ///
     /// Retransmission can only be achieved by Publishers that enable
     /// caching and sample_miss_detection.
     fn recovery(self, conf: RecoveryConfig) -> AdvancedSubscriberBuilder<'a, 'b, Handler>;
+
+    fn sample_miss_callback(
+        self,
+        callback: impl Fn(EntityGlobalId, u32) + Send + Sync + 'static,
+    ) -> AdvancedSubscriberBuilder<'a, 'b, Handler>;
 }
 
 impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilder<'a, 'b, Handler> {
@@ -260,6 +266,14 @@ impl<'a, 'b, Handler> DataSubscriberBuilderExt<'a, 'b, Handler>
     fn recovery(self, conf: RecoveryConfig) -> AdvancedSubscriberBuilder<'a, 'b, Handler> {
         AdvancedSubscriberBuilder::new(self.session, self.key_expr, self.origin, self.handler)
             .recovery(conf)
+    }
+
+    fn sample_miss_callback(
+        self,
+        callback: impl Fn(EntityGlobalId, u32) + Send + Sync + 'static,
+    ) -> AdvancedSubscriberBuilder<'a, 'b, Handler> {
+        AdvancedSubscriberBuilder::new(self.session, self.key_expr, self.origin, self.handler)
+            .sample_miss_callback(callback)
     }
 }
 
