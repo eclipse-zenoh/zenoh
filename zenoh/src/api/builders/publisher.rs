@@ -344,11 +344,10 @@ impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
 }
 
 impl<'a, 'b> PublisherBuilder<'a, 'b> {
-    pub fn new<'c, TryIntoKeyExpr>(session: &'a Session, key_expr: TryIntoKeyExpr) -> Self
+    pub fn new<TryIntoKeyExpr>(session: &'a Session, key_expr: TryIntoKeyExpr) -> Self
     where
-        TryIntoKeyExpr: TryInto<KeyExpr<'c>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'c>>>::Error: Into<zenoh_result::Error>,
-        'c: 'b,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let maybe_key_expr = key_expr.try_into().map_err(Into::into);
         let mut builder_overwrites = PublisherQoSConfig::default();
