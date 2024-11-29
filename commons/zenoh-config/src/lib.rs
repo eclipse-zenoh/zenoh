@@ -455,6 +455,8 @@ validated_struct::validator! {
                                 /// The maximum time in microseconds to wait for an available batch before dropping a droppable message
                                 /// if still no batch is available.
                                 wait_before_drop: i64,
+                                /// The maximum deadline limit for multi-fragment messages.
+                                max_wait_before_drop_fragments: i64,
                             },
                             /// Behavior pushing CongestionControl::Block messages to the queue.
                             pub block: CongestionControlBlockConf {

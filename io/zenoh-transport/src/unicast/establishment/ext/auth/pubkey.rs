@@ -337,17 +337,6 @@ where
     }
 }
 
-/*************************************/
-/*             OpenAck               */
-/*************************************/
-/// ```text
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// +---------------+
-///
-/// ZExtUnit
-/// ```
-
 pub(crate) struct AuthPubKeyFsm<'a> {
     inner: &'a RwLock<AuthPubKey>,
     prng: &'a Mutex<PseudoRng>,

@@ -433,6 +433,8 @@
             drop: {
               /// The maximum time in microseconds to wait for an available batch before dropping a droppable message if still no batch is available.
               wait_before_drop: 1000,
+              /// The maximum deadline limit for multi-fragment messages.
+              max_wait_before_drop_fragments: 50000,
             },
             /// Behavior pushing CongestionControl::Block messages to the queue.
             block: {

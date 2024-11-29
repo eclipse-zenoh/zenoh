@@ -28,7 +28,6 @@ readme = "README.md"
 [features]
 default = ["zenoh/default"]
 shared-memory = ["zenoh/shared-memory"]
-loki = ["tracing-loki", "url"]
 
 [dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread"] }
@@ -40,8 +39,6 @@ json5 = { workspace = true }
 lazy_static = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-tracing-loki = { workspace = true, optional = true }
-url = { workspace = true, optional = true }
 zenoh = { workspace = true, features = [
   "unstable",
   "internal",

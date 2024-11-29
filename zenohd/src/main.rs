@@ -15,20 +15,9 @@ use clap::Parser;
 use futures::future;
 use git_version::git_version;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
-#[cfg(feature = "loki")]
-use url::Url;
 use zenoh::{config::WhatAmI, Config, Result};
 use zenoh_config::{EndPoint, ModeDependentValue, PermissionsConf};
 use zenoh_util::LibSearchDirs;
-
-#[cfg(feature = "loki")]
-const LOKI_ENDPOINT_VAR: &str = "LOKI_ENDPOINT";
-
-#[cfg(feature = "loki")]
-const LOKI_API_KEY_VAR: &str = "LOKI_API_KEY";
-
-#[cfg(feature = "loki")]
-const LOKI_API_KEY_HEADER_VAR: &str = "LOKI_API_KEY_HEADER";
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
@@ -291,44 +280,8 @@ fn init_logging() -> Result<()> {
         .with(env_filter)
         .with(fmt_layer);
 
-    #[cfg(feature = "loki")]
-    match (
-        get_loki_endpoint(),
-        get_loki_apikey(),
-        get_loki_apikey_header(),
-    ) {
-        (Some(loki_url), Some(header), Some(apikey)) => {
-            let (loki_layer, task) = tracing_loki::builder()
-                .label("service", "zenoh")?
-                .http_header(header, apikey)?
-                .build_url(Url::parse(&loki_url)?)?;
-
-            tracing_sub.with(loki_layer).init();
-            tokio::spawn(task);
-            return Ok(());
-        }
-        _ => {
-            tracing::warn!("Missing one of the required header for Loki!")
-        }
-    };
-
     tracing_sub.init();
     Ok(())
-}
-
-#[cfg(feature = "loki")]
-pub fn get_loki_endpoint() -> Option<String> {
-    std::env::var(LOKI_ENDPOINT_VAR).ok()
-}
-
-#[cfg(feature = "loki")]
-pub fn get_loki_apikey() -> Option<String> {
-    std::env::var(LOKI_API_KEY_VAR).ok()
-}
-
-#[cfg(feature = "loki")]
-pub fn get_loki_apikey_header() -> Option<String> {
-    std::env::var(LOKI_API_KEY_HEADER_VAR).ok()
 }
 
 #[test]
