@@ -64,12 +64,12 @@ async fn qos_pubsub() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn qos_pubsub_overwrite_builder() {
+async fn qos_pubsub_overwrite_config() {
     let builder_config_overwrite = zenoh::Config::from_json5(
         r#"
         {
-            publishers: {
-                default_builders: [
+            qos: {
+                put: [
                     {
                         key_exprs: ["test/qos/overwritten", "test/not_applicable/**"],
                         config: {
