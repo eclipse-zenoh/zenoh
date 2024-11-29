@@ -103,7 +103,7 @@ impl QoSBuilderTrait for QuerierBuilder<'_, '_> {
     }
 }
 
-impl<'a, 'b> QuerierBuilder<'a, 'b> {
+impl QuerierBuilder<'_, '_> {
     /// Change the target of the querier queries.
     #[inline]
     pub fn target(self, target: QueryTarget) -> Self {
@@ -150,11 +150,11 @@ impl<'a, 'b> QuerierBuilder<'a, 'b> {
     }
 }
 
-impl<'a, 'b> Resolvable for QuerierBuilder<'a, 'b> {
+impl<'b> Resolvable for QuerierBuilder<'_, 'b> {
     type To = ZResult<Querier<'b>>;
 }
 
-impl<'a, 'b> Wait for QuerierBuilder<'a, 'b> {
+impl Wait for QuerierBuilder<'_, '_> {
     fn wait(self) -> <Self as Resolvable>::To {
         let mut key_expr = self.key_expr?;
         if !key_expr.is_fully_optimized(&self.session.0) {
@@ -182,7 +182,7 @@ impl<'a, 'b> Wait for QuerierBuilder<'a, 'b> {
     }
 }
 
-impl<'a, 'b> IntoFuture for QuerierBuilder<'a, 'b> {
+impl IntoFuture for QuerierBuilder<'_, '_> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
@@ -370,7 +370,7 @@ impl<'a, 'b> QuerierGetBuilder<'a, 'b, DefaultHandler> {
         }
     }
 }
-impl<'a, 'b, Handler> QuerierGetBuilder<'a, 'b, Handler> {
+impl<'b, Handler> QuerierGetBuilder<'_, 'b, Handler> {
     /// Set the query payload.
     #[inline]
     pub fn payload<IntoZBytes>(mut self, payload: IntoZBytes) -> Self
