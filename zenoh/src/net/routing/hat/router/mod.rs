@@ -789,10 +789,7 @@ impl HatBaseTrait for HatCode {
         expr: &mut RoutingExpr,
     ) -> bool {
         if src_face.id != out_face.id
-            && match (src_face.mcast_group.as_ref(), out_face.mcast_group.as_ref()) {
-                (Some(l), Some(r)) => l != r,
-                _ => true,
-            }
+            && (out_face.mcast_group.is_none() || src_face.mcast_group.is_none())
         {
             let dst_master = out_face.whatami != WhatAmI::Peer
                 || hat!(tables).linkstatepeers_net.is_none()

@@ -452,10 +452,7 @@ impl HatBaseTrait for HatCode {
         _expr: &mut RoutingExpr,
     ) -> bool {
         src_face.id != out_face.id
-            && match (src_face.mcast_group.as_ref(), out_face.mcast_group.as_ref()) {
-                (Some(l), Some(r)) => l != r,
-                _ => true,
-            }
+            && (out_face.mcast_group.is_none() || src_face.mcast_group.is_none())
     }
 
     fn info(&self, tables: &Tables, kind: WhatAmI) -> String {

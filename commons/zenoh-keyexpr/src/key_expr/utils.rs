@@ -16,7 +16,7 @@ pub struct Splitter<'a, S: ?Sized, D: ?Sized> {
     s: Option<&'a S>,
     d: &'a D,
 }
-impl<'a, S: ?Sized, D: ?Sized> Clone for Splitter<'a, S, D> {
+impl<S: ?Sized, D: ?Sized> Clone for Splitter<'_, S, D> {
     fn clone(&self) -> Self {
         Self {
             s: self.s,
@@ -84,7 +84,7 @@ impl<'a, S: Split<D> + ?Sized, D: ?Sized> Iterator for Splitter<'a, S, D> {
     }
 }
 
-impl<'a, S: Split<D> + ?Sized, D: ?Sized> DoubleEndedIterator for Splitter<'a, S, D> {
+impl<S: Split<D> + ?Sized, D: ?Sized> DoubleEndedIterator for Splitter<'_, S, D> {
     fn next_back(&mut self) -> Option<Self::Item> {
         match self.s {
             Some(s) => {

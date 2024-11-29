@@ -202,7 +202,7 @@ macro_rules! plugin_version {
 #[macro_export]
 macro_rules! plugin_long_version {
     () => {
-        git_version::git_version!(prefix = "v", cargo_prefix = "v")
+        $crate::export::git_version::git_version!(prefix = "v", cargo_prefix = "v")
     };
 }
 
