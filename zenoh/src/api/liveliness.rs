@@ -276,7 +276,6 @@ impl IntoFuture for LivelinessTokenBuilder<'_, '_> {
 #[derive(Debug)]
 pub(crate) struct LivelinessTokenState {
     pub(crate) id: Id,
-    pub(crate) key_expr: KeyExpr<'static>,
 }
 
 /// A token whose liveliness is tied to the Zenoh [`Session`](Session).

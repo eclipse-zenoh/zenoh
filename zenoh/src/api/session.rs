@@ -1555,10 +1555,7 @@ impl SessionInner {
         let mut state = zwrite!(self.state);
         tracing::trace!("declare_liveliness({:?})", key_expr);
         let id = self.runtime.next_id();
-        let tok_state = Arc::new(LivelinessTokenState {
-            id,
-            key_expr: key_expr.clone().into_owned(),
-        });
+        let tok_state = Arc::new(LivelinessTokenState { id });
 
         state.tokens.insert(tok_state.id, tok_state.clone());
         let primitives = state.primitives()?;
@@ -1685,22 +1682,17 @@ impl SessionInner {
         };
         if let Some(tok_state) = state.tokens.remove(&tid) {
             trace!("undeclare_liveliness({:?})", tok_state);
-            // Note: there might be several Tokens on the same KeyExpr.
-            let key_expr = &tok_state.key_expr;
-            let twin_tok = state.tokens.values().any(|s| s.key_expr == *key_expr);
-            if !twin_tok {
-                drop(state);
-                primitives.send_declare(Declare {
-                    interest_id: None,
-                    ext_qos: ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::UndeclareToken(UndeclareToken {
-                        id: tok_state.id,
-                        ext_wire_expr: WireExprType::null(),
-                    }),
-                });
-            }
+            drop(state);
+            primitives.send_declare(Declare {
+                interest_id: None,
+                ext_qos: ext::QoSType::DECLARE,
+                ext_tstamp: None,
+                ext_nodeid: ext::NodeIdType::DEFAULT,
+                body: DeclareBody::UndeclareToken(UndeclareToken {
+                    id: tok_state.id,
+                    ext_wire_expr: WireExprType::null(),
+                }),
+            });
             Ok(())
         } else {
             Err(zerror!("Unable to find liveliness token").into())
