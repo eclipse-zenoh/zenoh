@@ -17,7 +17,9 @@ use zenoh::{
     config::ZenohId,
     handlers::{Callback, IntoHandler},
     key_expr::KeyExpr,
-    query::{ConsolidationMode, Parameters, Selector},
+    query::{
+        ConsolidationMode, Parameters, Selector, TimeBound, TimeExpr, TimeRange, ZenohParameters,
+    },
     sample::{Locality, Sample, SampleKind},
     session::{EntityGlobalId, EntityId},
     Resolvable, Resolve, Session, Wait,
@@ -48,6 +50,7 @@ use crate::advanced_cache::{ke_liveliness, KE_PREFIX, KE_STAR, KE_UHLC};
 pub struct HistoryConfig {
     liveliness: bool,
     sample_depth: Option<usize>,
+    age: Option<f64>,
 }
 
 impl HistoryConfig {
@@ -68,7 +71,11 @@ impl HistoryConfig {
         self
     }
 
-    // TODO pub fn max_age(mut self, depth: Duration) -> Self
+    /// Specify the maximum age of samples to query.
+    pub fn max_age(mut self, seconds: f64) -> Self {
+        self.age = Some(seconds);
+        self
+    }
 }
 
 #[derive(Default)]
@@ -594,6 +601,12 @@ impl<Handler> AdvancedSubscriber<Handler> {
             if let Some(max) = historyconf.sample_depth {
                 params.insert("_max", max.to_string());
             }
+            if let Some(age) = historyconf.age {
+                params.set_time_range(TimeRange {
+                    start: TimeBound::Inclusive(TimeExpr::Now { offset_secs: -age }),
+                    end: TimeBound::Unbounded,
+                });
+            }
             let _ = conf
                 .session
                 .get(Selector::from((
@@ -649,6 +662,14 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                         if let Some(max) = historyconf.sample_depth {
                                             params.insert("_max", max.to_string());
                                         }
+                                        if let Some(age) = historyconf.age {
+                                            params.set_time_range(TimeRange {
+                                                start: TimeBound::Inclusive(TimeExpr::Now {
+                                                    offset_secs: -age,
+                                                }),
+                                                end: TimeBound::Unbounded,
+                                            });
+                                        }
                                         let _ = session
                                             .get(Selector::from((s.key_expr(), params)))
                                             .callback({
@@ -690,6 +711,14 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                         if let Some(max) = historyconf.sample_depth {
                                             params.insert("_max", max.to_string());
                                         }
+                                        if let Some(age) = historyconf.age {
+                                            params.set_time_range(TimeRange {
+                                                start: TimeBound::Inclusive(TimeExpr::Now {
+                                                    offset_secs: -age,
+                                                }),
+                                                end: TimeBound::Unbounded,
+                                            });
+                                        }
                                         let _ = session
                                             .get(Selector::from((s.key_expr(), params)))
                                             .callback({
@@ -728,6 +757,14 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                     let mut params = Parameters::empty();
                                     if let Some(max) = historyconf.sample_depth {
                                         params.insert("_max", max.to_string());
+                                    }
+                                    if let Some(age) = historyconf.age {
+                                        params.set_time_range(TimeRange {
+                                            start: TimeBound::Inclusive(TimeExpr::Now {
+                                                offset_secs: -age,
+                                            }),
+                                            end: TimeBound::Unbounded,
+                                        });
                                     }
                                     let _ = session
                                         .get(Selector::from((s.key_expr(), params)))
