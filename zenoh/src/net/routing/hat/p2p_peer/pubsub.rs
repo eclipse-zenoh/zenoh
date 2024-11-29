@@ -193,22 +193,26 @@ fn declare_simple_subscription(
     // This introduced a buffer overflow on windows
     // TODO: Let's deactivate this on windows until Fixed
     #[cfg(not(windows))]
-    for mcast_group in &tables.mcast_groups {
-        mcast_group
-            .primitives
-            .send_declare(RoutingContext::with_expr(
-                Declare {
-                    interest_id: None,
-                    ext_qos: ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                        id: 0, // @TODO use proper SubscriberId
-                        wire_expr: res.expr().into(),
-                    }),
-                },
-                res.expr(),
-            ))
+    if face.whatami == WhatAmI::Client {
+        for mcast_group in &tables.mcast_groups {
+            if mcast_group.mcast_group != face.mcast_group {
+                mcast_group
+                    .primitives
+                    .send_declare(RoutingContext::with_expr(
+                        Declare {
+                            interest_id: None,
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                id: 0, // @TODO use proper SubscriberId
+                                wire_expr: res.expr().into(),
+                            }),
+                        },
+                        res.expr(),
+                    ))
+            }
+        }
     }
 }
 
