@@ -254,9 +254,9 @@ impl Wait for LivelinessTokenBuilder<'_, '_> {
         session
             .0
             .declare_liveliness_inner(&key_expr)
-            .map(|tok_state| LivelinessToken {
+            .map(|id| LivelinessToken {
                 session: self.session.downgrade(),
-                state: tok_state,
+                id,
                 undeclare_on_drop: true,
             })
     }
@@ -270,12 +270,6 @@ impl IntoFuture for LivelinessTokenBuilder<'_, '_> {
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
     }
-}
-
-#[zenoh_macros::unstable]
-#[derive(Debug)]
-pub(crate) struct LivelinessTokenState {
-    pub(crate) id: Id,
 }
 
 /// A token whose liveliness is tied to the Zenoh [`Session`](Session).
@@ -307,7 +301,7 @@ pub(crate) struct LivelinessTokenState {
 #[derive(Debug)]
 pub struct LivelinessToken {
     session: WeakSession,
-    state: Arc<LivelinessTokenState>,
+    id: Id,
     undeclare_on_drop: bool,
 }
 
@@ -381,7 +375,7 @@ impl LivelinessToken {
     fn undeclare_impl(&mut self) -> ZResult<()> {
         // set the flag first to avoid double panic if this function panic
         self.undeclare_on_drop = false;
-        self.session.undeclare_liveliness(self.state.id)
+        self.session.undeclare_liveliness(self.id)
     }
 }
 
