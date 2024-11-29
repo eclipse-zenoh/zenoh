@@ -63,7 +63,7 @@ fn default_max_block_thread_num() -> usize {
 
 struct HttpPortVisitor;
 
-impl<'de> Visitor<'de> for HttpPortVisitor {
+impl Visitor<'_> for HttpPortVisitor {
     type Value = String;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {

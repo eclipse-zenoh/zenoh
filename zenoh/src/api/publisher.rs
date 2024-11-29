@@ -359,7 +359,7 @@ impl Drop for Publisher<'_> {
     }
 }
 
-impl<'a> Sink<Sample> for Publisher<'a> {
+impl Sink<Sample> for Publisher<'_> {
     type Error = Error;
 
     #[inline]

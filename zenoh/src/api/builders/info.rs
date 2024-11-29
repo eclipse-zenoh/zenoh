@@ -43,17 +43,17 @@ impl<'a> ZenohIdBuilder<'a> {
     }
 }
 
-impl<'a> Resolvable for ZenohIdBuilder<'a> {
+impl Resolvable for ZenohIdBuilder<'_> {
     type To = ZenohId;
 }
 
-impl<'a> Wait for ZenohIdBuilder<'a> {
+impl Wait for ZenohIdBuilder<'_> {
     fn wait(self) -> Self::To {
         self.runtime.zid()
     }
 }
 
-impl<'a> IntoFuture for ZenohIdBuilder<'a> {
+impl IntoFuture for ZenohIdBuilder<'_> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
@@ -87,11 +87,11 @@ impl<'a> RoutersZenohIdBuilder<'a> {
     }
 }
 
-impl<'a> Resolvable for RoutersZenohIdBuilder<'a> {
+impl Resolvable for RoutersZenohIdBuilder<'_> {
     type To = Box<dyn Iterator<Item = ZenohId> + Send + Sync>;
 }
 
-impl<'a> Wait for RoutersZenohIdBuilder<'a> {
+impl Wait for RoutersZenohIdBuilder<'_> {
     fn wait(self) -> Self::To {
         Box::new(
             zenoh_runtime::ZRuntime::Application
@@ -107,7 +107,7 @@ impl<'a> Wait for RoutersZenohIdBuilder<'a> {
     }
 }
 
-impl<'a> IntoFuture for RoutersZenohIdBuilder<'a> {
+impl IntoFuture for RoutersZenohIdBuilder<'_> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
@@ -141,11 +141,11 @@ impl<'a> PeersZenohIdBuilder<'a> {
     }
 }
 
-impl<'a> Resolvable for PeersZenohIdBuilder<'a> {
+impl Resolvable for PeersZenohIdBuilder<'_> {
     type To = Box<dyn Iterator<Item = ZenohId> + Send + Sync>;
 }
 
-impl<'a> Wait for PeersZenohIdBuilder<'a> {
+impl Wait for PeersZenohIdBuilder<'_> {
     fn wait(self) -> <Self as Resolvable>::To {
         Box::new(
             zenoh_runtime::ZRuntime::Application
@@ -161,7 +161,7 @@ impl<'a> Wait for PeersZenohIdBuilder<'a> {
     }
 }
 
-impl<'a> IntoFuture for PeersZenohIdBuilder<'a> {
+impl IntoFuture for PeersZenohIdBuilder<'_> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 

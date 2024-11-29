@@ -101,7 +101,6 @@ fn duration_from_i64us(us: i64) -> Duration {
 ///         .build(Arc::new(MySH::default()))
 ///         .unwrap();
 /// ```
-
 pub struct TransportManagerConfig {
     pub version: u8,
     pub zid: ZenohIdProto,

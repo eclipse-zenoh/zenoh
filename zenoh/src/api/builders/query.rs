@@ -230,7 +230,7 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
         }
     }
 }
-impl<'a, 'b, Handler> SessionGetBuilder<'a, 'b, Handler> {
+impl<Handler> SessionGetBuilder<'_, '_, Handler> {
     #[inline]
     pub fn payload<IntoZBytes>(mut self, payload: IntoZBytes) -> Self
     where

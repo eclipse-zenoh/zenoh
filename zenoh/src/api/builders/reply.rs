@@ -224,7 +224,7 @@ pub struct ReplyErrBuilder<'a> {
 }
 
 impl<'a> ReplyErrBuilder<'a> {
-    pub(crate) fn new<IntoZBytes>(query: &'a Query, payload: IntoZBytes) -> ReplyErrBuilder<'_>
+    pub(crate) fn new<IntoZBytes>(query: &'a Query, payload: IntoZBytes) -> ReplyErrBuilder<'a>
     where
         IntoZBytes: Into<ZBytes>,
     {
@@ -246,7 +246,7 @@ impl EncodingBuilderTrait for ReplyErrBuilder<'_> {
     }
 }
 
-impl<'a> Resolvable for ReplyErrBuilder<'a> {
+impl Resolvable for ReplyErrBuilder<'_> {
     type To = ZResult<()>;
 }
 
@@ -278,7 +278,7 @@ impl Wait for ReplyErrBuilder<'_> {
     }
 }
 
-impl<'a> IntoFuture for ReplyErrBuilder<'a> {
+impl IntoFuture for ReplyErrBuilder<'_> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 

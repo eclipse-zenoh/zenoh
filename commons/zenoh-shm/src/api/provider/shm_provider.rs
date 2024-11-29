@@ -127,7 +127,7 @@ where
 }
 
 #[zenoh_macros::unstable_doc]
-impl<'a, IDSource, Backend> Resolvable for AllocLayoutSizedBuilder<'a, IDSource, Backend>
+impl<IDSource, Backend> Resolvable for AllocLayoutSizedBuilder<'_, IDSource, Backend>
 where
     IDSource: ProtocolIDSource,
     Backend: ShmProviderBackend,
@@ -544,8 +544,7 @@ where
     }
 }
 
-impl<'a, IDSource, Backend, Policy> Resolvable
-    for ProviderAllocBuilder<'a, IDSource, Backend, Policy>
+impl<IDSource, Backend, Policy> Resolvable for ProviderAllocBuilder<'_, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
     Backend: ShmProviderBackend,
@@ -554,7 +553,7 @@ where
 }
 
 // Sync alloc policy
-impl<'a, IDSource, Backend, Policy> Wait for ProviderAllocBuilder<'a, IDSource, Backend, Policy>
+impl<IDSource, Backend, Policy> Wait for ProviderAllocBuilder<'_, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
     Backend: ShmProviderBackend,
@@ -627,7 +626,7 @@ where
     }
 }
 
-impl<'a, IDSource, Backend, Policy> Resolvable for LayoutAllocBuilder<'a, IDSource, Backend, Policy>
+impl<IDSource, Backend, Policy> Resolvable for LayoutAllocBuilder<'_, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
     Backend: ShmProviderBackend,
@@ -636,7 +635,7 @@ where
 }
 
 // Sync alloc policy
-impl<'a, IDSource, Backend, Policy> Wait for LayoutAllocBuilder<'a, IDSource, Backend, Policy>
+impl<IDSource, Backend, Policy> Wait for LayoutAllocBuilder<'_, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
     Backend: ShmProviderBackend,

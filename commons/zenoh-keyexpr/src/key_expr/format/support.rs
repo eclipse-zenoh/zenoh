@@ -50,7 +50,7 @@ impl<'a> TryFrom<&'a str> for Spec<'a> {
         }
     }
 }
-impl<'a> Spec<'a> {
+impl Spec<'_> {
     pub fn id(&self) -> &str {
         &self.spec[..self.id_end as usize]
     }

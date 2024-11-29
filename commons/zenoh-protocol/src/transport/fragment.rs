@@ -16,6 +16,12 @@ use zenoh_buffers::ZSlice;
 use crate::core::Reliability;
 pub use crate::transport::TransportSn;
 
+pub mod flag {
+    pub const R: u8 = 1 << 5; // 0x20 Reliable      if R==1 then the frame is reliable
+    pub const M: u8 = 1 << 6; // 0x40 More          if M==1 then another fragment will follow
+    pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
+}
+
 /// # Fragment message
 ///
 /// The [`Fragment`] message is used to transmit on the wire large [`crate::network::NetworkMessage`]
@@ -62,12 +68,6 @@ pub use crate::transport::TransportSn;
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the length of a message must not exceed 65535 bytes.
 ///
-pub mod flag {
-    pub const R: u8 = 1 << 5; // 0x20 Reliable      if R==1 then the frame is reliable
-    pub const M: u8 = 1 << 6; // 0x40 More          if M==1 then another fragment will follow
-    pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Fragment {
     pub reliability: Reliability,
