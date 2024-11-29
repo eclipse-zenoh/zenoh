@@ -152,7 +152,7 @@ impl Wait for AdvancedCacheBuilder<'_, '_, '_> {
     }
 }
 
-impl<'a> IntoFuture for AdvancedCacheBuilder<'a, '_, '_> {
+impl IntoFuture for AdvancedCacheBuilder<'_, '_, '_> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 

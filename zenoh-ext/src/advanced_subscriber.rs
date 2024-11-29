@@ -192,7 +192,7 @@ impl<'a, 'b> AdvancedSubscriberBuilder<'a, 'b, DefaultHandler> {
 }
 
 #[zenoh_macros::unstable]
-impl<'a, 'b, Handler> AdvancedSubscriberBuilder<'a, 'b, Handler> {
+impl<'a, Handler> AdvancedSubscriberBuilder<'a, '_, Handler> {
     /// Restrict the matching publications that will be receive by this [`Subscriber`]
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[zenoh_macros::unstable]

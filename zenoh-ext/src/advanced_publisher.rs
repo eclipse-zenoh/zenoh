@@ -103,7 +103,7 @@ impl Wait for AdvancedPublisherBuilder<'_, '_> {
     }
 }
 
-impl<'a> IntoFuture for AdvancedPublisherBuilder<'a, '_> {
+impl IntoFuture for AdvancedPublisherBuilder<'_, '_> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
