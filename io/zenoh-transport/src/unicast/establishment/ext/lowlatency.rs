@@ -29,7 +29,7 @@ pub(crate) struct LowLatencyFsm<'a> {
     _a: PhantomData<&'a ()>,
 }
 
-impl<'a> LowLatencyFsm<'a> {
+impl LowLatencyFsm<'_> {
     pub(crate) const fn new() -> Self {
         Self { _a: PhantomData }
     }

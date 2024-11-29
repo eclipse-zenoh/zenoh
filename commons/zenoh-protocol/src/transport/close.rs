@@ -12,6 +12,36 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+pub mod flag {
+    pub const S: u8 = 1 << 5; // 0x20 Session close if S==1 close the whole session, close only the link otherwise
+                              // pub const X: u8 = 1 << 6; // 0x40       Reserved
+    pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
+}
+
+// Reason for the Close message
+pub mod reason {
+    pub const GENERIC: u8 = 0x00;
+    pub const UNSUPPORTED: u8 = 0x01;
+    pub const INVALID: u8 = 0x02;
+    pub const MAX_SESSIONS: u8 = 0x03;
+    pub const MAX_LINKS: u8 = 0x04;
+    pub const EXPIRED: u8 = 0x05;
+    pub const UNRESPONSIVE: u8 = 0x06;
+}
+
+pub fn reason_to_str(reason: u8) -> &'static str {
+    match reason {
+        reason::GENERIC => "GENERIC",
+        reason::UNSUPPORTED => "UNSUPPORTED",
+        reason::INVALID => "INVALID",
+        reason::MAX_SESSIONS => "MAX_SESSIONS",
+        reason::MAX_LINKS => "MAX_LINKS",
+        reason::EXPIRED => "EXPIRED",
+        reason::UNRESPONSIVE => "UNRESPONSIVE",
+        _ => "UNKNOWN",
+    }
+}
+
 /// # Close message
 ///
 /// The [`Close`] message is sent in any of the following two cases:
@@ -50,37 +80,6 @@
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the length of a message must not exceed 65535 bytes.
 ///
-
-pub mod flag {
-    pub const S: u8 = 1 << 5; // 0x20 Session close if S==1 close the whole session, close only the link otherwise
-                              // pub const X: u8 = 1 << 6; // 0x40       Reserved
-    pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
-}
-
-// Reason for the Close message
-pub mod reason {
-    pub const GENERIC: u8 = 0x00;
-    pub const UNSUPPORTED: u8 = 0x01;
-    pub const INVALID: u8 = 0x02;
-    pub const MAX_SESSIONS: u8 = 0x03;
-    pub const MAX_LINKS: u8 = 0x04;
-    pub const EXPIRED: u8 = 0x05;
-    pub const UNRESPONSIVE: u8 = 0x06;
-}
-
-pub fn reason_to_str(reason: u8) -> &'static str {
-    match reason {
-        reason::GENERIC => "GENERIC",
-        reason::UNSUPPORTED => "UNSUPPORTED",
-        reason::INVALID => "INVALID",
-        reason::MAX_SESSIONS => "MAX_SESSIONS",
-        reason::MAX_LINKS => "MAX_LINKS",
-        reason::EXPIRED => "EXPIRED",
-        reason::UNRESPONSIVE => "UNRESPONSIVE",
-        _ => "UNKNOWN",
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Close {
     pub reason: u8,

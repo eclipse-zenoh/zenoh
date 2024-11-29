@@ -302,7 +302,7 @@ pub struct PublisherBuilder<'a, 'b> {
     pub(crate) destination: Locality,
 }
 
-impl<'a, 'b> Clone for PublisherBuilder<'a, 'b> {
+impl Clone for PublisherBuilder<'_, '_> {
     fn clone(&self) -> Self {
         Self {
             session: self.session,
@@ -348,7 +348,7 @@ impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
     }
 }
 
-impl<'a, 'b> PublisherBuilder<'a, 'b> {
+impl PublisherBuilder<'_, '_> {
     /// Changes the [`crate::sample::Locality`] applied when routing the data.
     ///
     /// This restricts the matching subscribers that will receive the published data to the ones
@@ -375,11 +375,11 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
     }
 }
 
-impl<'a, 'b> Resolvable for PublisherBuilder<'a, 'b> {
+impl<'b> Resolvable for PublisherBuilder<'_, 'b> {
     type To = ZResult<Publisher<'b>>;
 }
 
-impl<'a, 'b> Wait for PublisherBuilder<'a, 'b> {
+impl Wait for PublisherBuilder<'_, '_> {
     fn wait(self) -> <Self as Resolvable>::To {
         let mut key_expr = self.key_expr?;
         if !key_expr.is_fully_optimized(&self.session.0) {
@@ -434,7 +434,7 @@ impl<'a, 'b> Wait for PublisherBuilder<'a, 'b> {
     }
 }
 
-impl<'a, 'b> IntoFuture for PublisherBuilder<'a, 'b> {
+impl IntoFuture for PublisherBuilder<'_, '_> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 

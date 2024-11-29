@@ -197,7 +197,7 @@ impl<T> IntoIterator for FifoChannelHandler<T> {
 /// An iterator over the msgs received from a channel.
 pub struct Iter<'a, T>(flume::Iter<'a, T>);
 
-impl<'a, T> Iterator for Iter<'a, T> {
+impl<T> Iterator for Iter<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -208,7 +208,7 @@ impl<'a, T> Iterator for Iter<'a, T> {
 /// An non-blocking iterator over the msgs received from a channel.
 pub struct TryIter<'a, T>(flume::TryIter<'a, T>);
 
-impl<'a, T> Iterator for TryIter<'a, T> {
+impl<T> Iterator for TryIter<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -220,7 +220,7 @@ impl<'a, T> Iterator for TryIter<'a, T> {
 #[derive(Debug)]
 pub struct Drain<'a, T>(flume::Drain<'a, T>);
 
-impl<'a, T> Iterator for Drain<'a, T> {
+impl<T> Iterator for Drain<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -228,7 +228,7 @@ impl<'a, T> Iterator for Drain<'a, T> {
     }
 }
 
-impl<'a, T> ExactSizeIterator for Drain<'a, T> {
+impl<T> ExactSizeIterator for Drain<'_, T> {
     fn len(&self) -> usize {
         self.0.len()
     }
@@ -266,7 +266,7 @@ impl<T> FifoChannelHandler<T> {
 #[must_use = "futures/streams/sinks do nothing unless you `.await` or poll them"]
 pub struct RecvFut<'a, T>(flume::r#async::RecvFut<'a, T>);
 
-impl<'a, T> Future for RecvFut<'a, T> {
+impl<T> Future for RecvFut<'_, T> {
     type Output = ZResult<T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -274,7 +274,7 @@ impl<'a, T> Future for RecvFut<'a, T> {
     }
 }
 
-impl<'a, T> futures::future::FusedFuture for RecvFut<'a, T> {
+impl<T> futures::future::FusedFuture for RecvFut<'_, T> {
     fn is_terminated(&self) -> bool {
         futures::future::FusedFuture::is_terminated(&self.0)
     }
@@ -300,7 +300,7 @@ impl<T> FifoChannelHandler<T> {
 #[derive(Clone)]
 pub struct RecvStream<'a, T>(flume::r#async::RecvStream<'a, T>);
 
-impl<'a, T> RecvStream<'a, T> {
+impl<T> RecvStream<'_, T> {
     /// See [`FifoChannelHandler::is_disconnected`].
     pub fn is_disconnected(&self) -> bool {
         self.0.is_disconnected()
@@ -332,7 +332,7 @@ impl<'a, T> RecvStream<'a, T> {
     }
 }
 
-impl<'a, T> futures::stream::Stream for RecvStream<'a, T> {
+impl<T> futures::stream::Stream for RecvStream<'_, T> {
     type Item = T;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -340,7 +340,7 @@ impl<'a, T> futures::stream::Stream for RecvStream<'a, T> {
     }
 }
 
-impl<'a, T> futures::stream::FusedStream for RecvStream<'a, T> {
+impl<T> futures::stream::FusedStream for RecvStream<'_, T> {
     fn is_terminated(&self) -> bool {
         futures::stream::FusedStream::is_terminated(&self.0)
     }
