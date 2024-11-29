@@ -356,7 +356,7 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
             // get overwritten builder
             let state = zread!(session.0.state);
             let nodes_including = state
-                .publisher_builders_tree
+                .publisher_qos_tree
                 .nodes_including(key_expr)
                 .collect_vec();
             for node in &nodes_including {

@@ -16,8 +16,6 @@ use std::future::{IntoFuture, Ready};
 #[cfg(feature = "shared-memory")]
 use std::sync::Arc;
 
-#[cfg(feature = "internal")]
-use zenoh_config::qos::PublisherQoSConfList;
 use zenoh_core::{Resolvable, Wait};
 #[cfg(feature = "internal")]
 use zenoh_keyexpr::OwnedKeyExpr;
@@ -124,7 +122,6 @@ pub fn init(runtime: Runtime) -> InitBuilder {
         runtime,
         aggregated_subscribers: vec![],
         aggregated_publishers: vec![],
-        publisher_builders: PublisherQoSConfList::default(),
     }
 }
 
@@ -136,7 +133,6 @@ pub struct InitBuilder {
     runtime: Runtime,
     aggregated_subscribers: Vec<OwnedKeyExpr>,
     aggregated_publishers: Vec<OwnedKeyExpr>,
-    publisher_builders: PublisherQoSConfList,
 }
 
 #[zenoh_macros::internal]
@@ -150,11 +146,6 @@ impl InitBuilder {
     #[inline]
     pub fn aggregated_publishers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
         self.aggregated_publishers = exprs;
-        self
-    }
-
-    pub fn publisher_builders(mut self, builder_conf: PublisherQoSConfList) -> Self {
-        self.publisher_builders = builder_conf;
         self
     }
 }
@@ -171,7 +162,6 @@ impl Wait for InitBuilder {
             self.runtime,
             self.aggregated_subscribers,
             self.aggregated_publishers,
-            self.publisher_builders,
             false,
         )
         .wait())
