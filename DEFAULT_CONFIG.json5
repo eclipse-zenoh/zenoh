@@ -184,16 +184,15 @@
     },
   },
 
-  //  /// Configuration options for Zenoh publishers
-  //  publishers: {
-  //    /// Overwrite default builders for certain key expressions
-  //    default_builders: [
+  //  /// Overwrite QoS options for Zenoh messages by key expression (ignores Zenoh API QoS config)
+  //  qos: {
+  //    /// Overwrite QoS options for PUT messages
+  //    put: [
   //      {
-  //        /// Publisher key expressions that are included by these key expressions
-  //        /// will have their default publisher builder overwritten by the given config.
+  //        /// PUT messages on key expressions that are included by these key expressions
+  //        /// will have their QoS options overwritten by the given config.
   //        key_exprs: ["demo/**", "example/key"],
   //        /// Configurations that will be applied on the publisher builder
-  //        /// Note: these can still be overwritten in the application code via the PublisherBuilder API
   //        config: {
   //          congestion_control: "Block",
   //          encoding: "zenoh/example",

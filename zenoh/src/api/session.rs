@@ -32,7 +32,7 @@ use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::{
-    publishers::{PublisherBuilderOptionsConf, PublisherBuildersConf},
+    publishers::{PublisherQoSConfList, PublisherQoSConfig},
     unwrap_or_default,
     wrappers::ZenohId,
 };
@@ -150,14 +150,14 @@ pub(crate) struct SessionState {
     pub(crate) liveliness_queries: HashMap<InterestId, LivelinessQueryState>,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
     pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
-    pub(crate) publisher_builders_tree: KeBoxTree<PublisherBuilderOptionsConf>,
+    pub(crate) publisher_builders_tree: KeBoxTree<PublisherQoSConfig>,
 }
 
 impl SessionState {
     pub(crate) fn new(
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         aggregated_publishers: Vec<OwnedKeyExpr>,
-        publisher_builders_tree: KeBoxTree<PublisherBuilderOptionsConf>,
+        publisher_builders_tree: KeBoxTree<PublisherQoSConfig>,
     ) -> SessionState {
         SessionState {
             primitives: None,
@@ -548,7 +548,7 @@ impl Session {
         runtime: Runtime,
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         aggregated_publishers: Vec<OwnedKeyExpr>,
-        publisher_builders: PublisherBuildersConf,
+        publisher_builders: PublisherQoSConfList,
         owns_runtime: bool,
     ) -> impl Resolve<Session> {
         ResolveClosure::new(move || {
@@ -1053,7 +1053,7 @@ impl Session {
             tracing::debug!("Config: {:?}", &config);
             let aggregated_subscribers = config.0.aggregation().subscribers().clone();
             let aggregated_publishers = config.0.aggregation().publishers().clone();
-            let publisher_builders = config.0.publishers().default_builders().clone();
+            let publisher_builders = config.0.qos().put().clone();
             #[allow(unused_mut)] // Required for shared-memory
             let mut runtime = RuntimeBuilder::new(config);
             #[cfg(feature = "shared-memory")]

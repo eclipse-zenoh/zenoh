@@ -31,7 +31,7 @@ use std::{
 };
 
 use include::recursive_include;
-use publishers::PublisherBuildersConf;
+use publishers::PublisherQoSConfList;
 use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -363,11 +363,11 @@ validated_struct::validator! {
             publishers: Vec<OwnedKeyExpr>,
         },
 
-        /// Overwrite default builders for specific key expressions
-        pub publishers: #[derive(Default)]
-        PublishersConfig {
-            /// A list of publisher builder configurations for key expressions.
-            default_builders: PublisherBuildersConf,
+        /// Overwrite QoS options for Zenoh messages by key expression (ignores Zenoh API QoS config)
+        pub qos: #[derive(Default)]
+        QoSConfig {
+            /// A list of QoS configurations for PUT messages by key expressions
+            put: PublisherQoSConfList,
         },
 
         pub transport: #[derive(Default)]

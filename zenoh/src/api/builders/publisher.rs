@@ -14,7 +14,7 @@
 use std::future::{IntoFuture, Ready};
 
 use itertools::Itertools;
-use zenoh_config::publishers::PublisherBuilderOptionsConf;
+use zenoh_config::publishers::PublisherQoSConfig;
 use zenoh_core::{Resolvable, Result as ZResult, Wait};
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeNode};
 #[cfg(feature = "unstable")]
@@ -351,7 +351,7 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
         'c: 'b,
     {
         let maybe_key_expr = key_expr.try_into().map_err(Into::into);
-        let mut builder_overwrites = PublisherBuilderOptionsConf::default();
+        let mut builder_overwrites = PublisherQoSConfig::default();
         if let Ok(key_expr) = &maybe_key_expr {
             // get overwritten builder
             let state = zread!(session.0.state);
