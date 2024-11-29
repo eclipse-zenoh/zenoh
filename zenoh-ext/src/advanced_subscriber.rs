@@ -17,7 +17,7 @@ use zenoh::{
     config::ZenohId,
     handlers::{Callback, IntoHandler},
     key_expr::KeyExpr,
-    query::{ConsolidationMode, Selector},
+    query::{ConsolidationMode, Parameters, Selector},
     sample::{Locality, Sample, SampleKind},
     session::{EntityGlobalId, EntityId},
     Resolvable, Resolve, Session, Wait,
@@ -47,7 +47,7 @@ use crate::advanced_cache::{ke_liveliness, KE_PREFIX, KE_STAR, KE_UHLC};
 /// Configure query for historical data.
 pub struct HistoryConfig {
     liveliness: bool,
-    // sample_depth: usize,
+    sample_depth: Option<usize>,
 }
 
 impl HistoryConfig {
@@ -62,11 +62,11 @@ impl HistoryConfig {
         self
     }
 
-    // /// Specify how many samples to keep for each resource.
-    // pub fn max_samples(mut self, depth: usize) -> Self {
-    //     self.sample_depth = depth;
-    //     self
-    // }
+    /// Specify how many samples to query for each resource.
+    pub fn max_samples(mut self, depth: usize) -> Self {
+        self.sample_depth = Some(depth);
+        self
+    }
 
     // TODO pub fn max_age(mut self, depth: Duration) -> Self
 }
@@ -586,15 +586,19 @@ impl<Handler> AdvancedSubscriber<Handler> {
             .allowed_origin(conf.origin)
             .wait()?;
 
-        if conf.history.is_some() {
+        if let Some(historyconf) = conf.history.as_ref() {
             let handler = InitialRepliesHandler {
                 statesref: statesref.clone(),
             };
+            let mut params = Parameters::empty();
+            if let Some(max) = historyconf.sample_depth {
+                params.insert("_max", max.to_string());
+            }
             let _ = conf
                 .session
                 .get(Selector::from((
                     KE_PREFIX / KE_STAR / KE_STAR / &key_expr,
-                    "0..",
+                    params,
                 )))
                 .callback({
                     let key_expr = key_expr.clone().into_owned();
@@ -614,133 +618,149 @@ impl<Handler> AdvancedSubscriber<Handler> {
                 .wait();
         }
 
-        let liveliness_subscriber = if conf.history.is_some_and(|h| h.liveliness) {
-            let live_callback = {
-                let session = conf.session.clone();
-                let statesref = statesref.clone();
-                let key_expr = key_expr.clone().into_owned();
-                move |s: Sample| {
-                    if s.kind() == SampleKind::Put {
-                        if let Ok(parsed) = ke_liveliness::parse(s.key_expr().as_keyexpr()) {
-                            if let Ok(zid) = ZenohId::from_str(parsed.zid().as_str()) {
-                                // TODO : If we already have a state associated to this discovered source
-                                // we should query with the appropriate range to avoid unnecessary retransmissions
-                                if parsed.eid() == KE_UHLC {
-                                    let states = &mut *zlock!(statesref);
-                                    let entry = states.timestamped_states.entry(ID::from(zid));
-                                    let state = entry.or_insert(SourceState::<Timestamp> {
-                                        last_delivered: None,
-                                        pending_queries: 0,
-                                        pending_samples: HashMap::new(),
-                                    });
-                                    state.pending_queries += 1;
+        let liveliness_subscriber = if let Some(historyconf) = conf.history {
+            if historyconf.liveliness {
+                let live_callback = {
+                    let session = conf.session.clone();
+                    let statesref = statesref.clone();
+                    let key_expr = key_expr.clone().into_owned();
+                    move |s: Sample| {
+                        if s.kind() == SampleKind::Put {
+                            if let Ok(parsed) = ke_liveliness::parse(s.key_expr().as_keyexpr()) {
+                                if let Ok(zid) = ZenohId::from_str(parsed.zid().as_str()) {
+                                    // TODO : If we already have a state associated to this discovered source
+                                    // we should query with the appropriate range to avoid unnecessary retransmissions
+                                    if parsed.eid() == KE_UHLC {
+                                        let states = &mut *zlock!(statesref);
+                                        let entry = states.timestamped_states.entry(ID::from(zid));
+                                        let state = entry.or_insert(SourceState::<Timestamp> {
+                                            last_delivered: None,
+                                            pending_queries: 0,
+                                            pending_samples: HashMap::new(),
+                                        });
+                                        state.pending_queries += 1;
 
-                                    let handler = TimestampedRepliesHandler {
-                                        id: ID::from(zid),
-                                        statesref: statesref.clone(),
-                                        callback: callback.clone(),
-                                    };
-                                    let _ = session
-                                        .get(Selector::from((s.key_expr(), "0..")))
-                                        .callback({
-                                            let key_expr = key_expr.clone().into_owned();
-                                            move |r: Reply| {
-                                                if let Ok(s) = r.into_result() {
-                                                    if key_expr.intersects(s.key_expr()) {
-                                                        let states =
-                                                            &mut *zlock!(handler.statesref);
-                                                        handle_sample(states, s);
+                                        let handler = TimestampedRepliesHandler {
+                                            id: ID::from(zid),
+                                            statesref: statesref.clone(),
+                                            callback: callback.clone(),
+                                        };
+                                        let mut params = Parameters::empty();
+                                        if let Some(max) = historyconf.sample_depth {
+                                            params.insert("_max", max.to_string());
+                                        }
+                                        let _ = session
+                                            .get(Selector::from((s.key_expr(), params)))
+                                            .callback({
+                                                let key_expr = key_expr.clone().into_owned();
+                                                move |r: Reply| {
+                                                    if let Ok(s) = r.into_result() {
+                                                        if key_expr.intersects(s.key_expr()) {
+                                                            let states =
+                                                                &mut *zlock!(handler.statesref);
+                                                            handle_sample(states, s);
+                                                        }
                                                     }
                                                 }
-                                            }
-                                        })
-                                        .consolidation(ConsolidationMode::None)
-                                        .accept_replies(ReplyKeyExpr::Any)
-                                        .target(query_target)
-                                        .timeout(query_timeout)
-                                        .wait();
-                                } else if let Ok(eid) = EntityId::from_str(parsed.eid().as_str()) {
-                                    let source_id = EntityGlobalId::new(zid, eid);
-                                    let states = &mut *zlock!(statesref);
-                                    let entry = states.sequenced_states.entry(source_id);
-                                    let new = matches!(&entry, Entry::Vacant(_));
-                                    let state = entry.or_insert(SourceState::<u32> {
-                                        last_delivered: None,
-                                        pending_queries: 0,
-                                        pending_samples: HashMap::new(),
-                                    });
-                                    state.pending_queries += 1;
+                                            })
+                                            .consolidation(ConsolidationMode::None)
+                                            .accept_replies(ReplyKeyExpr::Any)
+                                            .target(query_target)
+                                            .timeout(query_timeout)
+                                            .wait();
+                                    } else if let Ok(eid) =
+                                        EntityId::from_str(parsed.eid().as_str())
+                                    {
+                                        let source_id = EntityGlobalId::new(zid, eid);
+                                        let states = &mut *zlock!(statesref);
+                                        let entry = states.sequenced_states.entry(source_id);
+                                        let new = matches!(&entry, Entry::Vacant(_));
+                                        let state = entry.or_insert(SourceState::<u32> {
+                                            last_delivered: None,
+                                            pending_queries: 0,
+                                            pending_samples: HashMap::new(),
+                                        });
+                                        state.pending_queries += 1;
 
-                                    let handler = SequencedRepliesHandler {
-                                        source_id,
-                                        statesref: statesref.clone(),
-                                    };
-                                    let _ = session
-                                        .get(Selector::from((s.key_expr(), "0..")))
-                                        .callback({
-                                            let key_expr = key_expr.clone().into_owned();
-                                            move |r: Reply| {
-                                                if let Ok(s) = r.into_result() {
-                                                    if key_expr.intersects(s.key_expr()) {
-                                                        let states =
-                                                            &mut *zlock!(handler.statesref);
-                                                        handle_sample(states, s);
-                                                    }
-                                                }
-                                            }
-                                        })
-                                        .consolidation(ConsolidationMode::None)
-                                        .accept_replies(ReplyKeyExpr::Any)
-                                        .target(query_target)
-                                        .timeout(query_timeout)
-                                        .wait();
-
-                                    if new {
-                                        spawn_periodoic_queries!(
-                                            states,
+                                        let handler = SequencedRepliesHandler {
                                             source_id,
-                                            statesref.clone()
-                                        );
+                                            statesref: statesref.clone(),
+                                        };
+                                        let mut params = Parameters::empty();
+                                        if let Some(max) = historyconf.sample_depth {
+                                            params.insert("_max", max.to_string());
+                                        }
+                                        let _ = session
+                                            .get(Selector::from((s.key_expr(), params)))
+                                            .callback({
+                                                let key_expr = key_expr.clone().into_owned();
+                                                move |r: Reply| {
+                                                    if let Ok(s) = r.into_result() {
+                                                        if key_expr.intersects(s.key_expr()) {
+                                                            let states =
+                                                                &mut *zlock!(handler.statesref);
+                                                            handle_sample(states, s);
+                                                        }
+                                                    }
+                                                }
+                                            })
+                                            .consolidation(ConsolidationMode::None)
+                                            .accept_replies(ReplyKeyExpr::Any)
+                                            .target(query_target)
+                                            .timeout(query_timeout)
+                                            .wait();
+
+                                        if new {
+                                            spawn_periodoic_queries!(
+                                                states,
+                                                source_id,
+                                                statesref.clone()
+                                            );
+                                        }
                                     }
+                                } else {
+                                    let states = &mut *zlock!(statesref);
+                                    states.global_pending_queries += 1;
+
+                                    let handler = InitialRepliesHandler {
+                                        statesref: statesref.clone(),
+                                    };
+                                    let mut params = Parameters::empty();
+                                    if let Some(max) = historyconf.sample_depth {
+                                        params.insert("_max", max.to_string());
+                                    }
+                                    let _ = session
+                                        .get(Selector::from((s.key_expr(), params)))
+                                        .callback({
+                                            let key_expr = key_expr.clone().into_owned();
+                                            move |r: Reply| {
+                                                if let Ok(s) = r.into_result() {
+                                                    if key_expr.intersects(s.key_expr()) {
+                                                        let states =
+                                                            &mut *zlock!(handler.statesref);
+                                                        handle_sample(states, s);
+                                                    }
+                                                }
+                                            }
+                                        })
+                                        .consolidation(ConsolidationMode::None)
+                                        .accept_replies(ReplyKeyExpr::Any)
+                                        .target(query_target)
+                                        .timeout(query_timeout)
+                                        .wait();
                                 }
                             } else {
-                                let states = &mut *zlock!(statesref);
-                                states.global_pending_queries += 1;
-
-                                let handler = InitialRepliesHandler {
-                                    statesref: statesref.clone(),
-                                };
-                                let _ = session
-                                    .get(Selector::from((s.key_expr(), "0..")))
-                                    .callback({
-                                        let key_expr = key_expr.clone().into_owned();
-                                        move |r: Reply| {
-                                            if let Ok(s) = r.into_result() {
-                                                if key_expr.intersects(s.key_expr()) {
-                                                    let states = &mut *zlock!(handler.statesref);
-                                                    handle_sample(states, s);
-                                                }
-                                            }
-                                        }
-                                    })
-                                    .consolidation(ConsolidationMode::None)
-                                    .accept_replies(ReplyKeyExpr::Any)
-                                    .target(query_target)
-                                    .timeout(query_timeout)
-                                    .wait();
+                                tracing::warn!(
+                                    "Received malformed liveliness token key expression: {}",
+                                    s.key_expr()
+                                );
                             }
-                        } else {
-                            tracing::warn!(
-                                "Received malformed liveliness token key expression: {}",
-                                s.key_expr()
-                            );
                         }
                     }
-                }
-            };
+                };
 
-            Some(
-                conf
+                Some(
+                    conf
                 .session
                 .liveliness()
                 .declare_subscriber(KE_PREFIX / KE_STAR / KE_STAR / &key_expr)
@@ -748,7 +768,10 @@ impl<Handler> AdvancedSubscriber<Handler> {
                 .history(true)
                 .callback(live_callback)
                 .wait()?,
-            )
+                )
+            } else {
+                None
+            }
         } else {
             None
         };

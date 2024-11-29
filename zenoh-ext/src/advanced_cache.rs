@@ -231,6 +231,51 @@ impl AdvancedCache {
 
         let (stoptx, stoprx) = bounded::<bool>(1);
         task::spawn(async move {
+            async fn process_queue(
+                queue: &VecDeque<Sample>,
+                query: &Query,
+                start: Option<u32>,
+                end: Option<u32>,
+                max: Option<u32>,
+            ) {
+                if let Some(max) = max {
+                    let mut samples = VecDeque::new();
+                    for sample in queue {
+                        if sample_in_range(sample, start, end) {
+                            if let (Some(Ok(time_range)), Some(timestamp)) =
+                                (query.parameters().time_range(), sample.timestamp())
+                            {
+                                if !time_range.contains(timestamp.get_time().to_system_time()) {
+                                    continue;
+                                }
+                            }
+                            samples.push_front(sample);
+                            samples.truncate(max as usize);
+                        }
+                    }
+                    for sample in samples.drain(..).rev() {
+                        if let Err(e) = query.reply_sample(sample.clone()).await {
+                            tracing::warn!("Error replying to query: {}", e);
+                        }
+                    }
+                } else {
+                    for sample in queue {
+                        if sample_in_range(sample, start, end) {
+                            if let (Some(Ok(time_range)), Some(timestamp)) =
+                                (query.parameters().time_range(), sample.timestamp())
+                            {
+                                if !time_range.contains(timestamp.get_time().to_system_time()) {
+                                    continue;
+                                }
+                            }
+                            if let Err(e) = query.reply_sample(sample.clone()).await {
+                                tracing::warn!("Error replying to query: {}", e);
+                            }
+                        }
+                    }
+                }
+            }
+
             let mut cache: HashMap<OwnedKeyExpr, VecDeque<Sample>> =
                 HashMap::with_capacity(history.resources_limit.unwrap_or(32));
             let limit = history.resources_limit.unwrap_or(usize::MAX);
@@ -266,36 +311,15 @@ impl AdvancedCache {
                     query = quer_recv.recv_async() => {
                         if let Ok(query) = query {
                             let (start, end) = query.parameters().get("_sn").map(decode_range).unwrap_or((None, None));
+                            let max = query.parameters().get("_max").and_then(|s| s.parse::<u32>().ok());
                             if !query.selector().key_expr().as_str().contains('*') {
                                 if let Some(queue) = cache.get(query.selector().key_expr().as_keyexpr()) {
-                                    for sample in queue {
-                                        if sample_in_range(sample, start, end) {
-                                            if let (Some(Ok(time_range)), Some(timestamp)) = (query.parameters().time_range(), sample.timestamp()) {
-                                                if !time_range.contains(timestamp.get_time().to_system_time()){
-                                                    continue;
-                                                }
-                                            }
-                                            if let Err(e) = query.reply_sample(sample.clone()).await {
-                                                tracing::warn!("Error replying to query: {}", e);
-                                            }
-                                        }
-                                    }
+                                   process_queue(queue, &query, start, end, max).await;
                                 }
                             } else {
                                 for (key_expr, queue) in cache.iter() {
                                     if query.selector().key_expr().intersects(key_expr.borrow()) {
-                                        for sample in queue {
-                                            if sample_in_range(sample, start, end) {
-                                                if let (Some(Ok(time_range)), Some(timestamp)) = (query.parameters().time_range(), sample.timestamp()) {
-                                                    if !time_range.contains(timestamp.get_time().to_system_time()){
-                                                        continue;
-                                                    }
-                                                }
-                                                if let Err(e) = query.reply_sample(sample.clone()).await {
-                                                    tracing::warn!("Error replying to query: {}", e);
-                                                }
-                                            }
-                                        }
+                                        process_queue(queue, &query, start, end, max).await;
                                     }
                                 }
                             }
