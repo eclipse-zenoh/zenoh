@@ -421,7 +421,6 @@ async fn test_liveliness_after_close() {
 /// -------------------------------------------------------
 /// DOUBLE CLIENT
 /// -------------------------------------------------------
-
 #[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_client_before() {
@@ -1026,7 +1025,6 @@ async fn test_liveliness_subscriber_double_client_history_after() {
 /// -------------------------------------------------------
 /// DOUBLE PEER
 /// -------------------------------------------------------
-
 #[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_peer_before() {
@@ -1613,7 +1611,6 @@ async fn test_liveliness_subscriber_double_peer_history_after() {
 /// -------------------------------------------------------
 /// DOUBLE ROUTER
 /// -------------------------------------------------------
-
 #[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_router_before() {
@@ -2248,7 +2245,6 @@ async fn test_liveliness_subscriber_double_router_history_after() {
 /// -------------------------------------------------------
 /// DOUBLE CLIENT VIA PEER
 /// -------------------------------------------------------
-
 #[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_clientviapeer_before() {
@@ -2970,7 +2966,6 @@ async fn test_liveliness_subscriber_double_clientviapeer_history_after() {
 /// -------------------------------------------------------
 /// SUBGET CLIENT
 /// -------------------------------------------------------
-
 #[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subget_client_before() {
@@ -3361,7 +3356,6 @@ async fn test_liveliness_subget_client_history_middle() {
 /// -------------------------------------------------------
 /// SUBGET PEER
 /// -------------------------------------------------------
-
 #[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subget_peer_before() {
@@ -3752,7 +3746,6 @@ async fn test_liveliness_subget_peer_history_middle() {
 /// -------------------------------------------------------
 /// SUBGET ROUTER
 /// -------------------------------------------------------
-
 #[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subget_router_before() {

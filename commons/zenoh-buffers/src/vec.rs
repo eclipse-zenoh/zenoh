@@ -62,7 +62,7 @@ impl SplitBuffer for Vec<u8> {
 }
 
 // Writer
-impl<'a> HasWriter for &'a mut Vec<u8> {
+impl HasWriter for &mut Vec<u8> {
     type Writer = Self;
 
     fn writer(self) -> Self::Writer {
