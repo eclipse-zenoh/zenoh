@@ -4718,3 +4718,79 @@ async fn test_liveliness_issue_1470() {
     client0.close().await.unwrap();
     client1.close().await.unwrap();
 }
+
+/// -------------------------------------------------------
+/// DOUBLE UNDECLARE CLIQUE
+/// -------------------------------------------------------
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_liveliness_double_undeclare_clique() {
+    use std::time::Duration;
+
+    use zenoh::{config::WhatAmI, sample::SampleKind};
+    use zenoh_config::EndPoint;
+    const TIMEOUT: Duration = Duration::from_secs(60);
+    const SLEEP: Duration = Duration::from_secs(1);
+    const PEER1_ENDPOINT: &str = "tcp/localhost:30515";
+    const LIVELINESS_KEYEXPR: &str = "test/liveliness/double/undeclare/clique";
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let peer1 = {
+        let mut c = zenoh::Config::default();
+        c.listen
+            .endpoints
+            .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (1) ZID: {}", s.zid());
+        s
+    };
+
+    let peer2 = {
+        let mut c = zenoh::Config::default();
+        c.connect
+            .endpoints
+            .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (2) ZID: {}", s.zid());
+        s
+    };
+
+    let sub = ztimeout!(peer1.liveliness().declare_subscriber(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let token = ztimeout!(peer2.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Put);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+
+    let token2 = ztimeout!(peer2.liveliness().declare_token(LIVELINESS_KEYEXPR)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    assert!(sub.try_recv().unwrap().is_none());
+
+    token.undeclare().await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    assert!(sub.try_recv().unwrap().is_none());
+
+    token2.undeclare().await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert!(sample.kind() == SampleKind::Delete);
+    assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
+
+    sub.undeclare().await.unwrap();
+
+    peer1.close().await.unwrap();
+    peer2.close().await.unwrap();
+}
