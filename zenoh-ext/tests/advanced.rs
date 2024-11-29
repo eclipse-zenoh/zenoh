@@ -461,7 +461,7 @@ async fn test_advanced_sample_miss() {
     assert_eq!(miss.source(), publ.id());
     assert_eq!(miss.nb(), 1);
 
-    assert!(miss_listener.try_recv().is_err());
+    assert!(miss_listener.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert_eq!(sample.kind(), SampleKind::Put);
@@ -586,7 +586,7 @@ async fn test_advanced_retransmission_sample_miss() {
     assert_eq!(miss.source(), publ.id());
     assert_eq!(miss.nb(), 2);
 
-    assert!(miss_listener.try_recv().is_err());
+    assert!(miss_listener.try_recv().unwrap().is_none());
 
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert_eq!(sample.kind(), SampleKind::Put);
