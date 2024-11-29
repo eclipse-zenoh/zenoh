@@ -17,7 +17,7 @@ use std::future::{IntoFuture, Ready};
 use std::sync::Arc;
 
 #[cfg(feature = "internal")]
-use zenoh_config::publishers::PublisherQoSConfList;
+use zenoh_config::qos::PublisherQoSConfList;
 use zenoh_core::{Resolvable, Wait};
 #[cfg(feature = "internal")]
 use zenoh_keyexpr::OwnedKeyExpr;

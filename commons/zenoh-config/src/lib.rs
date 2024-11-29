@@ -21,7 +21,7 @@
 //! Configuration to pass to `zenoh::open()` and `zenoh::scout()` functions and associated constants.
 pub mod defaults;
 mod include;
-pub mod publishers;
+pub mod qos;
 pub mod wrappers;
 
 #[allow(unused_imports)]
@@ -31,7 +31,7 @@ use std::{
 };
 
 use include::recursive_include;
-use publishers::PublisherQoSConfList;
+use qos::PublisherQoSConfList;
 use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};

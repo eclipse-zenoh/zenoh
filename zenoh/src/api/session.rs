@@ -32,7 +32,7 @@ use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::{
-    publishers::{PublisherQoSConfList, PublisherQoSConfig},
+    qos::{PublisherQoSConfList, PublisherQoSConfig},
     unwrap_or_default,
     wrappers::ZenohId,
 };

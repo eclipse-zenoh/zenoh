@@ -14,7 +14,7 @@
 use std::future::{IntoFuture, Ready};
 
 use itertools::Itertools;
-use zenoh_config::publishers::PublisherQoSConfig;
+use zenoh_config::qos::PublisherQoSConfig;
 use zenoh_core::{Resolvable, Result as ZResult, Wait};
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeNode};
 #[cfg(feature = "unstable")]
