@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{future::IntoFuture, str::FromStr};
+use std::{collections::BTreeMap, future::IntoFuture, str::FromStr};
 
 use zenoh::{
     config::ZenohId,
@@ -342,7 +342,7 @@ macro_rules! spawn_periodoic_queries {
 struct SourceState<T> {
     last_delivered: Option<T>,
     pending_queries: u64,
-    pending_samples: HashMap<T, Sample>,
+    pending_samples: BTreeMap<T, Sample>,
 }
 
 #[zenoh_macros::unstable]
@@ -379,7 +379,7 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
         let state = entry.or_insert(SourceState::<u32> {
             last_delivered: None,
             pending_queries: 0,
-            pending_samples: HashMap::new(),
+            pending_samples: BTreeMap::new(),
         });
         if states.global_pending_queries != 0 {
             state.pending_samples.insert(source_sn, sample);
@@ -419,7 +419,7 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
         let state = entry.or_insert(SourceState::<Timestamp> {
             last_delivered: None,
             pending_queries: 0,
-            pending_samples: HashMap::new(),
+            pending_samples: BTreeMap::new(),
         });
         if state.last_delivered.map(|t| t < *timestamp).unwrap_or(true) {
             if states.global_pending_queries == 0 && state.pending_queries == 0 {
@@ -649,7 +649,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                         let state = entry.or_insert(SourceState::<Timestamp> {
                                             last_delivered: None,
                                             pending_queries: 0,
-                                            pending_samples: HashMap::new(),
+                                            pending_samples: BTreeMap::new(),
                                         });
                                         state.pending_queries += 1;
 
@@ -699,7 +699,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                         let state = entry.or_insert(SourceState::<u32> {
                                             last_delivered: None,
                                             pending_queries: 0,
-                                            pending_samples: HashMap::new(),
+                                            pending_samples: BTreeMap::new(),
                                         });
                                         state.pending_queries += 1;
 
@@ -847,11 +847,8 @@ fn flush_sequenced_source(
     miss_handlers: &HashMap<usize, Callback<Miss>>,
 ) {
     if state.pending_queries == 0 && !state.pending_samples.is_empty() {
-        let mut pending_samples = state
-            .pending_samples
-            .drain()
-            .collect::<Vec<(u32, Sample)>>();
-        pending_samples.sort_by_key(|(k, _s)| *k);
+        let mut pending_samples = BTreeMap::new();
+        std::mem::swap(&mut state.pending_samples, &mut pending_samples);
         for (seq_num, sample) in pending_samples {
             match state.last_delivered {
                 None => {
@@ -889,11 +886,8 @@ fn flush_sequenced_source(
 #[inline]
 fn flush_timestamped_source(state: &mut SourceState<Timestamp>, callback: &Callback<Sample>) {
     if state.pending_queries == 0 && !state.pending_samples.is_empty() {
-        let mut pending_samples = state
-            .pending_samples
-            .drain()
-            .collect::<Vec<(Timestamp, Sample)>>();
-        pending_samples.sort_by_key(|(k, _s)| *k);
+        let mut pending_samples = BTreeMap::new();
+        std::mem::swap(&mut state.pending_samples, &mut pending_samples);
         for (timestamp, sample) in pending_samples {
             if state
                 .last_delivered
