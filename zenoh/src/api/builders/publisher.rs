@@ -276,6 +276,7 @@ pub(crate) struct PublicationOverwrittenQoS {
     pub(crate) express: bool,
     #[cfg(feature = "unstable")]
     pub(crate) reliability: bool,
+    #[cfg(feature = "unstable")]
     pub(crate) destination: bool,
 }
 
@@ -416,16 +417,20 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
                 .reliability
                 .map(|r| r.into())
                 .unwrap_or(Reliability::DEFAULT),
+            #[cfg(feature = "unstable")]
             destination: qos_overwrites
                 .allowed_destination
                 .map(|d| d.into())
                 .unwrap_or(Locality::default()),
+            #[cfg(not(feature = "unstable"))]
+            destination: Locality::default(),
             qos_overwrites: PublicationOverwrittenQoS {
                 congestion_control: qos_overwrites.congestion_control.is_some(),
                 priority: qos_overwrites.priority.is_some(),
                 express: qos_overwrites.express.is_some(),
                 #[cfg(feature = "unstable")]
                 reliability: qos_overwrites.reliability.is_some(),
+                #[cfg(feature = "unstable")]
                 destination: qos_overwrites.allowed_destination.is_some(),
             },
         }

@@ -65,6 +65,7 @@ pub struct PublisherQoSConfig {
     pub express: Option<bool>,
     #[cfg(feature = "unstable")]
     pub reliability: Option<PublisherReliabilityConf>,
+    #[cfg(feature = "unstable")]
     pub allowed_destination: Option<PublisherLocalityConf>,
 }
 
