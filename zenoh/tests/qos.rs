@@ -66,9 +66,9 @@ async fn qos_pubsub() {
 #[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn qos_pubsub_overwrite_config() {
-    use zenoh::qos::Reliability;
+    use zenoh::{qos::Reliability, sample::Locality};
 
-    let builder_config_overwrite = zenoh::Config::from_json5(
+    let qos_config_overwrite = zenoh::Config::from_json5(
         r#"
         {
             qos: {
@@ -94,19 +94,88 @@ async fn qos_pubsub_overwrite_config() {
                 ]
             }
         }
-    "#,
+        "#,
     )
     .unwrap();
-    let session1 = ztimeout!(zenoh::open(builder_config_overwrite)).unwrap();
+    let session1 = ztimeout!(zenoh::open(qos_config_overwrite)).unwrap();
     let session2 = ztimeout!(zenoh::open(zenoh::Config::default())).unwrap();
+
+    let subscriber = ztimeout!(session2.declare_subscriber("test/qos/**")).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    // Session API tests
+
+    // Session API - overwritten PUT
+    ztimeout!(session1
+        .put("test/qos/overwritten", "qos")
+        .congestion_control(CongestionControl::Block)
+        .priority(Priority::DataLow)
+        .express(true)
+        .reliability(Reliability::Reliable)
+        .allowed_destination(Locality::SessionLocal))
+    .unwrap();
+    let sample = ztimeout!(subscriber.recv_async()).unwrap();
+
+    assert_eq!(sample.congestion_control(), CongestionControl::Drop);
+    assert_eq!(sample.priority(), Priority::DataLow);
+    assert!(!sample.express());
+    assert_eq!(sample.reliability(), Reliability::BestEffort);
+
+    // Session API - overwritten DELETE
+    ztimeout!(session1
+        .delete("test/qos/overwritten")
+        .congestion_control(CongestionControl::Block)
+        .priority(Priority::DataLow)
+        .express(true)
+        .reliability(Reliability::Reliable)
+        .allowed_destination(Locality::SessionLocal))
+    .unwrap();
+    let sample = ztimeout!(subscriber.recv_async()).unwrap();
+
+    assert_eq!(sample.congestion_control(), CongestionControl::Drop);
+    assert_eq!(sample.priority(), Priority::DataLow);
+    assert!(!sample.express());
+    assert_eq!(sample.reliability(), Reliability::BestEffort);
+
+    // Session API - non-overwritten PUT
+    ztimeout!(session1
+        .put("test/qos/no_overwrite", "qos")
+        .congestion_control(CongestionControl::Block)
+        .priority(Priority::DataLow)
+        .express(true)
+        .reliability(Reliability::Reliable))
+    .unwrap();
+    let sample = ztimeout!(subscriber.recv_async()).unwrap();
+
+    assert_eq!(sample.congestion_control(), CongestionControl::Block);
+    assert_eq!(sample.priority(), Priority::DataLow);
+    assert!(sample.express());
+    assert_eq!(sample.reliability(), Reliability::Reliable);
+
+    // Session API - non-overwritten DELETE
+    ztimeout!(session1
+        .delete("test/qos/no_overwrite")
+        .congestion_control(CongestionControl::Block)
+        .priority(Priority::DataLow)
+        .express(true)
+        .reliability(Reliability::Reliable))
+    .unwrap();
+    let sample = ztimeout!(subscriber.recv_async()).unwrap();
+
+    assert_eq!(sample.congestion_control(), CongestionControl::Block);
+    assert_eq!(sample.priority(), Priority::DataLow);
+    assert!(sample.express());
+    assert_eq!(sample.reliability(), Reliability::Reliable);
+
+    // Publisher API tests
 
     let overwrite_config_publisher = ztimeout!(session1
         .declare_publisher("test/qos/overwritten")
         .congestion_control(CongestionControl::Block)
         .priority(Priority::DataLow)
         .express(true)
-        .reliability(zenoh::qos::Reliability::Reliable)
-        .allowed_destination(zenoh::sample::Locality::SessionLocal))
+        .reliability(Reliability::Reliable)
+        .allowed_destination(Locality::SessionLocal))
     .unwrap();
 
     let no_overwrite_config_publisher = ztimeout!(session1
@@ -114,12 +183,10 @@ async fn qos_pubsub_overwrite_config() {
         .congestion_control(CongestionControl::Block)
         .priority(Priority::DataLow)
         .express(true)
-        .reliability(zenoh::qos::Reliability::Reliable))
+        .reliability(Reliability::Reliable))
     .unwrap();
 
-    let subscriber = ztimeout!(session2.declare_subscriber("test/qos/**")).unwrap();
-    tokio::time::sleep(SLEEP).await;
-
+    // PublisherBuilder API - overwritten PUT
     ztimeout!(overwrite_config_publisher.put("qos")).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
@@ -128,6 +195,7 @@ async fn qos_pubsub_overwrite_config() {
     assert!(!sample.express());
     assert_eq!(sample.reliability(), Reliability::BestEffort);
 
+    // PublisherBuilder API - overwritten DELETE
     ztimeout!(overwrite_config_publisher.delete()).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
@@ -136,6 +204,7 @@ async fn qos_pubsub_overwrite_config() {
     assert!(!sample.express());
     assert_eq!(sample.reliability(), Reliability::BestEffort);
 
+    // PublisherBuilder API - non-overwritten PUT
     ztimeout!(no_overwrite_config_publisher.put("qos")).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
@@ -144,6 +213,7 @@ async fn qos_pubsub_overwrite_config() {
     assert!(sample.express());
     assert_eq!(sample.reliability(), Reliability::Reliable);
 
+    // PublisherBuilder API - non-overwritten DELETE
     ztimeout!(no_overwrite_config_publisher.delete()).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
