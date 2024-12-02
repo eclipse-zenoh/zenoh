@@ -78,8 +78,17 @@ pub enum PublisherCongestionControlConf {
 impl From<PublisherCongestionControlConf> for CongestionControl {
     fn from(value: PublisherCongestionControlConf) -> Self {
         match value {
-            PublisherCongestionControlConf::Drop => CongestionControl::Drop,
-            PublisherCongestionControlConf::Block => CongestionControl::Block,
+            PublisherCongestionControlConf::Drop => Self::Drop,
+            PublisherCongestionControlConf::Block => Self::Block,
+        }
+    }
+}
+
+impl From<CongestionControl> for PublisherCongestionControlConf {
+    fn from(value: CongestionControl) -> Self {
+        match value {
+            CongestionControl::Drop => Self::Drop,
+            CongestionControl::Block => Self::Block,
         }
     }
 }
@@ -104,10 +113,19 @@ pub enum PublisherReliabilityConf {
 }
 
 impl From<PublisherReliabilityConf> for Reliability {
-    fn from(value: PublisherReliabilityConf) -> Reliability {
+    fn from(value: PublisherReliabilityConf) -> Self {
         match value {
-            PublisherReliabilityConf::BestEffort => Reliability::BestEffort,
-            PublisherReliabilityConf::Reliable => Reliability::Reliable,
+            PublisherReliabilityConf::BestEffort => Self::BestEffort,
+            PublisherReliabilityConf::Reliable => Self::Reliable,
+        }
+    }
+}
+
+impl From<Reliability> for PublisherReliabilityConf {
+    fn from(value: Reliability) -> Self {
+        match value {
+            Reliability::BestEffort => Self::BestEffort,
+            Reliability::Reliable => Self::Reliable,
         }
     }
 }

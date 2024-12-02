@@ -53,9 +53,19 @@ pub(crate) enum Locality {
 impl From<PublisherLocalityConf> for Locality {
     fn from(value: PublisherLocalityConf) -> Self {
         match value {
-            PublisherLocalityConf::SessionLocal => Locality::SessionLocal,
-            PublisherLocalityConf::Remote => Locality::Remote,
-            PublisherLocalityConf::Any => Locality::Any,
+            PublisherLocalityConf::SessionLocal => Self::SessionLocal,
+            PublisherLocalityConf::Remote => Self::Remote,
+            PublisherLocalityConf::Any => Self::Any,
+        }
+    }
+}
+
+impl From<Locality> for PublisherLocalityConf {
+    fn from(value: Locality) -> Self {
+        match value {
+            Locality::SessionLocal => Self::SessionLocal,
+            Locality::Remote => Self::Remote,
+            Locality::Any => Self::Any,
         }
     }
 }

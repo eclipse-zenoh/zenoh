@@ -473,13 +473,27 @@ impl TryFrom<u8> for Priority {
 impl From<PublisherPriorityConf> for Priority {
     fn from(value: PublisherPriorityConf) -> Self {
         match value {
-            PublisherPriorityConf::RealTime => Priority::RealTime,
-            PublisherPriorityConf::InteractiveHigh => Priority::InteractiveHigh,
-            PublisherPriorityConf::InteractiveLow => Priority::InteractiveLow,
-            PublisherPriorityConf::DataHigh => Priority::DataHigh,
-            PublisherPriorityConf::Data => Priority::Data,
-            PublisherPriorityConf::DataLow => Priority::DataLow,
-            PublisherPriorityConf::Background => Priority::Background,
+            PublisherPriorityConf::RealTime => Self::RealTime,
+            PublisherPriorityConf::InteractiveHigh => Self::InteractiveHigh,
+            PublisherPriorityConf::InteractiveLow => Self::InteractiveLow,
+            PublisherPriorityConf::DataHigh => Self::DataHigh,
+            PublisherPriorityConf::Data => Self::Data,
+            PublisherPriorityConf::DataLow => Self::DataLow,
+            PublisherPriorityConf::Background => Self::Background,
+        }
+    }
+}
+
+impl From<Priority> for PublisherPriorityConf {
+    fn from(value: Priority) -> Self {
+        match value {
+            Priority::RealTime => Self::RealTime,
+            Priority::InteractiveHigh => Self::InteractiveHigh,
+            Priority::InteractiveLow => Self::InteractiveLow,
+            Priority::DataHigh => Self::DataHigh,
+            Priority::Data => Self::Data,
+            Priority::DataLow => Self::DataLow,
+            Priority::Background => Self::Background,
         }
     }
 }
