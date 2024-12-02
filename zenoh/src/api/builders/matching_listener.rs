@@ -22,21 +22,31 @@ use zenoh_result::ZResult;
 use {
     crate::api::{
         handlers::{Callback, DefaultHandler, IntoHandler},
-        publisher::{MatchingListener, MatchingListenerInner, MatchingStatus, Publisher},
+        matching::{MatchingListener, MatchingListenerInner, MatchingStatus, MatchingStatusType},
+        Id,
     },
+    crate::sample::Locality,
     std::sync::Arc,
+    std::{collections::HashSet, sync::Mutex},
 };
+
+#[cfg(feature = "unstable")]
+use crate::{api::session::WeakSession, key_expr::KeyExpr};
 
 /// A builder for initializing a [`MatchingListener`].
 #[zenoh_macros::unstable]
 #[derive(Debug)]
-pub struct MatchingListenerBuilder<'a, 'b, Handler, const BACKGROUND: bool = false> {
-    pub(crate) publisher: &'a Publisher<'b>,
+pub struct MatchingListenerBuilder<'a, Handler, const BACKGROUND: bool = false> {
+    pub(crate) session: &'a WeakSession,
+    pub(crate) key_expr: &'a KeyExpr<'a>,
+    pub(crate) destination: Locality,
+    pub(crate) matching_listeners: &'a Arc<Mutex<HashSet<Id>>>,
+    pub(crate) matching_status_type: MatchingStatusType,
     pub handler: Handler,
 }
 
 #[zenoh_macros::unstable]
-impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
+impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     /// Receive the MatchingStatuses for this listener with a callback.
     ///
     /// # Examples
@@ -49,7 +59,7 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
     /// let matching_listener = publisher
     ///     .matching_listener()
     ///     .callback(|matching_status| {
-    ///         if matching_status.matching_subscribers() {
+    ///         if matching_status.matching() {
     ///             println!("Publisher has matching subscribers.");
     ///         } else {
     ///             println!("Publisher has NO MORE matching subscribers.");
@@ -61,10 +71,7 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
-    pub fn callback<F>(
-        self,
-        callback: F,
-    ) -> MatchingListenerBuilder<'a, 'b, Callback<MatchingStatus>>
+    pub fn callback<F>(self, callback: F) -> MatchingListenerBuilder<'a, Callback<MatchingStatus>>
     where
         F: Fn(MatchingStatus) + Send + Sync + 'static,
     {
@@ -93,7 +100,7 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
     pub fn callback_mut<F>(
         self,
         callback: F,
-    ) -> MatchingListenerBuilder<'a, 'b, Callback<MatchingStatus>>
+    ) -> MatchingListenerBuilder<'a, Callback<MatchingStatus>>
     where
         F: FnMut(MatchingStatus) + Send + Sync + 'static,
     {
@@ -115,7 +122,7 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
     ///     .await
     ///     .unwrap();
     /// while let Ok(matching_status) = matching_listener.recv_async().await {
-    ///     if matching_status.matching_subscribers() {
+    ///     if matching_status.matching() {
     ///         println!("Publisher has matching subscribers.");
     ///     } else {
     ///         println!("Publisher has NO MORE matching subscribers.");
@@ -125,20 +132,23 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, DefaultHandler> {
     /// ```
     #[inline]
     #[zenoh_macros::unstable]
-    pub fn with<Handler>(self, handler: Handler) -> MatchingListenerBuilder<'a, 'b, Handler>
+    pub fn with<Handler>(self, handler: Handler) -> MatchingListenerBuilder<'a, Handler>
     where
         Handler: IntoHandler<MatchingStatus>,
     {
-        let MatchingListenerBuilder {
-            publisher,
-            handler: _,
-        } = self;
-        MatchingListenerBuilder { publisher, handler }
+        MatchingListenerBuilder {
+            session: self.session,
+            key_expr: self.key_expr,
+            destination: self.destination,
+            matching_listeners: self.matching_listeners,
+            matching_status_type: self.matching_status_type,
+            handler,
+        }
     }
 }
 
 #[zenoh_macros::unstable]
-impl<'a, 'b> MatchingListenerBuilder<'a, 'b, Callback<MatchingStatus>> {
+impl<'a> MatchingListenerBuilder<'a, Callback<MatchingStatus>> {
     /// Register the listener callback to be run in background until the publisher is undeclared.
     ///
     /// Background builder doesn't return a `MatchingListener` object anymore.
@@ -154,7 +164,7 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, Callback<MatchingStatus>> {
     /// publisher
     ///     .matching_listener()
     ///     .callback(|matching_status| {
-    ///         if matching_status.matching_subscribers() {
+    ///         if matching_status.matching() {
     ///             println!("Publisher has matching subscribers.");
     ///         } else {
     ///             println!("Publisher has NO MORE matching subscribers.");
@@ -165,16 +175,20 @@ impl<'a, 'b> MatchingListenerBuilder<'a, 'b, Callback<MatchingStatus>> {
     ///     .unwrap();
     /// # }
     /// ```
-    pub fn background(self) -> MatchingListenerBuilder<'a, 'b, Callback<MatchingStatus>, true> {
+    pub fn background(self) -> MatchingListenerBuilder<'a, Callback<MatchingStatus>, true> {
         MatchingListenerBuilder {
-            publisher: self.publisher,
+            session: self.session,
+            destination: self.destination,
+            matching_listeners: self.matching_listeners,
+            key_expr: self.key_expr,
+            matching_status_type: self.matching_status_type,
             handler: self.handler,
         }
     }
 }
 
 #[zenoh_macros::unstable]
-impl<Handler> Resolvable for MatchingListenerBuilder<'_, '_, Handler>
+impl<Handler> Resolvable for MatchingListenerBuilder<'_, Handler>
 where
     Handler: IntoHandler<MatchingStatus> + Send,
     Handler::Handler: Send,
@@ -183,7 +197,7 @@ where
 }
 
 #[zenoh_macros::unstable]
-impl<Handler> Wait for MatchingListenerBuilder<'_, '_, Handler>
+impl<Handler> Wait for MatchingListenerBuilder<'_, Handler>
 where
     Handler: IntoHandler<MatchingStatus> + Send,
     Handler::Handler: Send,
@@ -191,15 +205,17 @@ where
     #[zenoh_macros::unstable]
     fn wait(self) -> <Self as Resolvable>::To {
         let (callback, handler) = self.handler.into_handler();
-        let state = self
-            .publisher
-            .session
-            .declare_matches_listener_inner(self.publisher, callback)?;
-        zlock!(self.publisher.matching_listeners).insert(state.id);
+        let state = self.session.declare_matches_listener_inner(
+            self.key_expr,
+            self.destination,
+            self.matching_status_type,
+            callback,
+        )?;
+        zlock!(self.matching_listeners).insert(state.id);
         Ok(MatchingListener {
             inner: MatchingListenerInner {
-                session: self.publisher.session.clone(),
-                matching_listeners: self.publisher.matching_listeners.clone(),
+                session: self.session.clone(),
+                matching_listeners: self.matching_listeners.clone(),
                 id: state.id,
                 undeclare_on_drop: true,
             },
@@ -209,7 +225,7 @@ where
 }
 
 #[zenoh_macros::unstable]
-impl<Handler> IntoFuture for MatchingListenerBuilder<'_, '_, Handler>
+impl<Handler> IntoFuture for MatchingListenerBuilder<'_, Handler>
 where
     Handler: IntoHandler<MatchingStatus> + Send,
     Handler::Handler: Send,
@@ -224,25 +240,27 @@ where
 }
 
 #[zenoh_macros::unstable]
-impl Resolvable for MatchingListenerBuilder<'_, '_, Callback<MatchingStatus>, true> {
+impl Resolvable for MatchingListenerBuilder<'_, Callback<MatchingStatus>, true> {
     type To = ZResult<()>;
 }
 
 #[zenoh_macros::unstable]
-impl Wait for MatchingListenerBuilder<'_, '_, Callback<MatchingStatus>, true> {
+impl Wait for MatchingListenerBuilder<'_, Callback<MatchingStatus>, true> {
     #[zenoh_macros::unstable]
     fn wait(self) -> <Self as Resolvable>::To {
-        let state = self
-            .publisher
-            .session
-            .declare_matches_listener_inner(self.publisher, self.handler)?;
-        zlock!(self.publisher.matching_listeners).insert(state.id);
+        let state = self.session.declare_matches_listener_inner(
+            self.key_expr,
+            self.destination,
+            self.matching_status_type,
+            self.handler,
+        )?;
+        zlock!(self.matching_listeners).insert(state.id);
         Ok(())
     }
 }
 
 #[zenoh_macros::unstable]
-impl IntoFuture for MatchingListenerBuilder<'_, '_, Callback<MatchingStatus>, true> {
+impl IntoFuture for MatchingListenerBuilder<'_, Callback<MatchingStatus>, true> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 

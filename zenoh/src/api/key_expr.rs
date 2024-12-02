@@ -272,6 +272,56 @@ impl<'a> KeyExpr<'a> {
             Ok(r.into())
         }
     }
+
+    /// Will return false and log a error in case of TryInto failure.
+    #[inline]
+    pub(crate) fn keyexpr_intersect<'b, L, R>(left: L, right: R) -> bool
+    where
+        L: TryInto<KeyExpr<'a>>,
+        R: TryInto<KeyExpr<'b>>,
+        L::Error: std::fmt::Display,
+        R::Error: std::fmt::Display,
+    {
+        match left.try_into() {
+            Ok(l) => match right.try_into() {
+                Ok(r) => {
+                    return l.intersects(&r);
+                }
+                Err(e) => {
+                    tracing::error!("{e}");
+                }
+            },
+            Err(e) => {
+                tracing::error!("{e}");
+            }
+        }
+        false
+    }
+
+    /// Will return false and log a error in case of TryInto failure.
+    #[inline]
+    pub(crate) fn keyexpr_include<'b, L, R>(left: L, right: R) -> bool
+    where
+        L: TryInto<KeyExpr<'a>>,
+        R: TryInto<KeyExpr<'b>>,
+        L::Error: std::fmt::Display,
+        R::Error: std::fmt::Display,
+    {
+        match left.try_into() {
+            Ok(l) => match right.try_into() {
+                Ok(r) => {
+                    return l.includes(&r);
+                }
+                Err(e) => {
+                    tracing::error!("{e}");
+                }
+            },
+            Err(e) => {
+                tracing::error!("{e}");
+            }
+        }
+        false
+    }
 }
 
 impl FromStr for KeyExpr<'static> {
