@@ -195,7 +195,7 @@
   //        /// Configurations that will be applied on the publisher.
   //        /// Options that are supplied here will overwrite the configuration given in Zenoh API
   //        config: {
-  //          congestion_control: "Block",
+  //          congestion_control: "block",
   //          priority: "data_high",
   //          express: true,
   //          reliability: "best_effort",
