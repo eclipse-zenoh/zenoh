@@ -63,8 +63,11 @@ async fn qos_pubsub() {
     assert!(!sample.express());
 }
 
+#[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn qos_pubsub_overwrite_config() {
+    use zenoh::qos::Reliability;
+
     let builder_config_overwrite = zenoh::Config::from_json5(
         r#"
         {
@@ -73,19 +76,23 @@ async fn qos_pubsub_overwrite_config() {
                     {
                         key_exprs: ["test/qos/overwritten", "test/not_applicable/**"],
                         config: {
-                            priority: "real_time",
-                            encoding: "zenoh/string",
                             congestion_control: "drop",
+                            encoding: "zenoh/string",
+                            priority: "real_time",
                             express: false,
+                            reliability: "best_effort",
+                            allowed_destination: "any",
                         },
                     },
                     {
                         key_exprs: ["test/not_applicable"],
                         config: {
-                            priority: "data_high",
-                            encoding: "zenoh/bytes",
                             congestion_control: "drop",
+                            encoding: "zenoh/bytes",
+                            priority: "data_high",
                             express: false,
+                            reliability: "best_effort",
+                            allowed_destination: "any",
                         },
                     },
                 ]
@@ -100,15 +107,20 @@ async fn qos_pubsub_overwrite_config() {
     let overwrite_config_publisher = ztimeout!(session1
         .declare_publisher("test/qos/overwritten")
         .congestion_control(CongestionControl::Block)
-        .express(true))
+        .encoding(Encoding::TEXT_PLAIN)
+        .priority(Priority::DataLow)
+        .express(true)
+        .reliability(zenoh::qos::Reliability::Reliable)
+        .allowed_destination(zenoh::sample::Locality::SessionLocal))
     .unwrap();
 
     let no_overwrite_config_publisher = ztimeout!(session1
         .declare_publisher("test/qos/no_overwrite")
+        .congestion_control(CongestionControl::Block)
         .encoding(Encoding::TEXT_PLAIN)
         .priority(Priority::DataLow)
-        .congestion_control(CongestionControl::Drop)
-        .express(false))
+        .express(true)
+        .reliability(zenoh::qos::Reliability::Reliable))
     .unwrap();
 
     let subscriber = ztimeout!(session2.declare_subscriber("test/qos/**")).unwrap();
@@ -117,16 +129,38 @@ async fn qos_pubsub_overwrite_config() {
     ztimeout!(overwrite_config_publisher.put("qos")).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
-    assert_eq!(sample.priority(), Priority::RealTime);
+    assert_eq!(sample.congestion_control(), CongestionControl::Drop);
     assert_eq!(sample.encoding(), &Encoding::ZENOH_STRING);
-    assert_eq!(sample.congestion_control(), CongestionControl::Block);
-    assert!(sample.express());
+    assert_eq!(sample.priority(), Priority::RealTime);
+    assert!(!sample.express());
+    assert_eq!(sample.reliability(), Reliability::BestEffort);
+
+    ztimeout!(overwrite_config_publisher.delete()).unwrap();
+    let sample = ztimeout!(subscriber.recv_async()).unwrap();
+
+    assert_eq!(sample.congestion_control(), CongestionControl::Drop);
+    // Delete encoding is hardcoded to ZENOH_BYTES
+    assert_eq!(sample.encoding(), &Encoding::ZENOH_BYTES);
+    assert_eq!(sample.priority(), Priority::RealTime);
+    assert!(!sample.express());
+    assert_eq!(sample.reliability(), Reliability::BestEffort);
 
     ztimeout!(no_overwrite_config_publisher.put("qos")).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
+    assert_eq!(sample.congestion_control(), CongestionControl::Block);
     assert_eq!(sample.encoding(), &Encoding::TEXT_PLAIN);
     assert_eq!(sample.priority(), Priority::DataLow);
-    assert_eq!(sample.congestion_control(), CongestionControl::Drop);
-    assert!(!sample.express());
+    assert!(sample.express());
+    assert_eq!(sample.reliability(), Reliability::Reliable);
+
+    ztimeout!(no_overwrite_config_publisher.delete()).unwrap();
+    let sample = ztimeout!(subscriber.recv_async()).unwrap();
+
+    assert_eq!(sample.congestion_control(), CongestionControl::Block);
+    // Delete encoding is hardcoded to ZENOH_BYTES
+    assert_eq!(sample.encoding(), &Encoding::ZENOH_BYTES);
+    assert_eq!(sample.priority(), Priority::DataLow);
+    assert!(sample.express());
+    assert_eq!(sample.reliability(), Reliability::Reliable);
 }
