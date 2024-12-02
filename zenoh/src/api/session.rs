@@ -71,7 +71,7 @@ use zenoh_task::TaskController;
 use crate::api::selector::ZenohParameters;
 #[cfg(feature = "unstable")]
 use crate::api::{
-    liveliness::{Liveliness, LivelinessTokenState},
+    liveliness::Liveliness,
     matching::{MatchingListenerState, MatchingStatus, MatchingStatusType},
     query::{LivelinessQueryState, ReplyKeyExpr},
     sample::SourceInfo,
@@ -141,8 +141,6 @@ pub(crate) struct SessionState {
     #[cfg(feature = "unstable")]
     pub(crate) remote_queryables: HashMap<Id, (KeyExpr<'static>, bool)>,
     #[cfg(feature = "unstable")]
-    pub(crate) tokens: HashMap<Id, Arc<LivelinessTokenState>>,
-    #[cfg(feature = "unstable")]
     pub(crate) matching_listeners: HashMap<Id, Arc<MatchingListenerState>>,
     pub(crate) queries: HashMap<RequestId, QueryState>,
     #[cfg(feature = "unstable")]
@@ -176,8 +174,6 @@ impl SessionState {
             queryables: HashMap::new(),
             #[cfg(feature = "unstable")]
             remote_queryables: HashMap::new(),
-            #[cfg(feature = "unstable")]
-            tokens: HashMap::new(),
             #[cfg(feature = "unstable")]
             matching_listeners: HashMap::new(),
             queries: HashMap::new(),
@@ -1273,7 +1269,6 @@ impl SessionInner {
                 // anyway, it doesn't really matter, and this code will be cleaned up when the APIs
                 // will be stabilized.
                 let mut state = zwrite!(self.state);
-                let _tokens = std::mem::take(&mut state.tokens);
                 let _matching_listeners = std::mem::take(&mut state.matching_listeners);
                 drop(state);
             }
@@ -1740,21 +1735,10 @@ impl SessionInner {
     }
 
     #[zenoh_macros::unstable]
-    pub(crate) fn declare_liveliness_inner(
-        &self,
-        key_expr: &KeyExpr,
-    ) -> ZResult<Arc<LivelinessTokenState>> {
-        let mut state = zwrite!(self.state);
+    pub(crate) fn declare_liveliness_inner(&self, key_expr: &KeyExpr) -> ZResult<Id> {
         tracing::trace!("declare_liveliness({:?})", key_expr);
         let id = self.runtime.next_id();
-        let tok_state = Arc::new(LivelinessTokenState {
-            id,
-            key_expr: key_expr.clone().into_owned(),
-        });
-
-        state.tokens.insert(tok_state.id, tok_state.clone());
-        let primitives = state.primitives()?;
-        drop(state);
+        let primitives = zread!(self.state).primitives()?;
         primitives.send_declare(Declare {
             interest_id: None,
             ext_qos: declare::ext::QoSType::DECLARE,
@@ -1765,7 +1749,7 @@ impl SessionInner {
                 wire_expr: key_expr.to_wire(self).to_owned(),
             }),
         });
-        Ok(tok_state)
+        Ok(id)
     }
 
     #[cfg(feature = "unstable")]
@@ -1871,32 +1855,21 @@ impl SessionInner {
 
     #[zenoh_macros::unstable]
     pub(crate) fn undeclare_liveliness(&self, tid: Id) -> ZResult<()> {
-        let mut state = zwrite!(self.state);
-        let Ok(primitives) = state.primitives() else {
+        let Ok(primitives) = zread!(self.state).primitives() else {
             return Ok(());
         };
-        if let Some(tok_state) = state.tokens.remove(&tid) {
-            trace!("undeclare_liveliness({:?})", tok_state);
-            // Note: there might be several Tokens on the same KeyExpr.
-            let key_expr = &tok_state.key_expr;
-            let twin_tok = state.tokens.values().any(|s| s.key_expr == *key_expr);
-            if !twin_tok {
-                drop(state);
-                primitives.send_declare(Declare {
-                    interest_id: None,
-                    ext_qos: ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::UndeclareToken(UndeclareToken {
-                        id: tok_state.id,
-                        ext_wire_expr: WireExprType::null(),
-                    }),
-                });
-            }
-            Ok(())
-        } else {
-            Err(zerror!("Unable to find liveliness token").into())
-        }
+        trace!("undeclare_liveliness({:?})", tid);
+        primitives.send_declare(Declare {
+            interest_id: None,
+            ext_qos: ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::DEFAULT,
+            body: DeclareBody::UndeclareToken(UndeclareToken {
+                id: tid,
+                ext_wire_expr: WireExprType::null(),
+            }),
+        });
+        Ok(())
     }
 
     #[zenoh_macros::unstable]
