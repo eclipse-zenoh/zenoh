@@ -153,9 +153,12 @@ impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
 #[zenoh_macros::internal_trait]
 impl EncodingBuilderTrait for PublisherBuilder<'_, '_> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
-        Self {
-            encoding: encoding.into(),
-            ..self
+        match self.config_overwrite {
+            true => self,
+            false => Self {
+                encoding: encoding.into(),
+                ..self
+            },
         }
     }
 }
@@ -295,6 +298,7 @@ pub struct PublisherBuilder<'a, 'b> {
     #[cfg(feature = "unstable")]
     pub(crate) reliability: Reliability,
     pub(crate) destination: Locality,
+    pub(crate) config_overwrite: bool,
 }
 
 impl Clone for PublisherBuilder<'_, '_> {
@@ -312,6 +316,7 @@ impl Clone for PublisherBuilder<'_, '_> {
             #[cfg(feature = "unstable")]
             reliability: self.reliability,
             destination: self.destination,
+            config_overwrite: self.config_overwrite,
         }
     }
 }
@@ -321,16 +326,22 @@ impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
     /// Changes the [`crate::qos::CongestionControl`] to apply when routing the data.
     #[inline]
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
-        Self {
-            congestion_control,
-            ..self
+        match self.config_overwrite {
+            true => self,
+            false => Self {
+                congestion_control,
+                ..self
+            },
         }
     }
 
     /// Changes the [`crate::qos::Priority`] of the written data.
     #[inline]
     fn priority(self, priority: Priority) -> Self {
-        Self { priority, ..self }
+        match self.config_overwrite {
+            true => self,
+            false => Self { priority, ..self },
+        }
     }
 
     /// Changes the Express policy to apply when routing the data.
@@ -339,7 +350,10 @@ impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
     /// This usually has a positive impact on latency but negative impact on throughput.
     #[inline]
     fn express(self, is_express: bool) -> Self {
-        Self { is_express, ..self }
+        match self.config_overwrite {
+            true => self,
+            false => Self { is_express, ..self },
+        }
     }
 }
 
@@ -351,6 +365,7 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
     {
         let maybe_key_expr = key_expr.try_into().map_err(Into::into);
         let mut builder_overwrites = PublisherQoSConfig::default();
+        let mut config_overwrite = false;
         if let Ok(key_expr) = &maybe_key_expr {
             // get overwritten builder
             let state = zread!(session.0.state);
@@ -370,6 +385,7 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
                             node.keyexpr(),
                         );
                     }
+                    config_overwrite = true;
                     break;
                 }
             }
@@ -400,6 +416,7 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
                 .allowed_destination
                 .map(|d| d.into())
                 .unwrap_or(Locality::default()),
+            config_overwrite,
         }
     }
 
@@ -410,7 +427,9 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
-        self.destination = destination;
+        if !self.config_overwrite {
+            self.destination = destination;
+        }
         self
     }
 
@@ -422,9 +441,12 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
     #[zenoh_macros::unstable]
     #[inline]
     pub fn reliability(self, reliability: Reliability) -> Self {
-        Self {
-            reliability,
-            ..self
+        match self.config_overwrite {
+            true => self,
+            false => Self {
+                reliability,
+                ..self
+            },
         }
     }
 }
