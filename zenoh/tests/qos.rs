@@ -77,7 +77,6 @@ async fn qos_pubsub_overwrite_config() {
                         key_exprs: ["test/qos/overwritten", "test/not_applicable/**"],
                         config: {
                             congestion_control: "drop",
-                            priority: "real_time",
                             express: false,
                             reliability: "best_effort",
                             allowed_destination: "any",
@@ -87,7 +86,6 @@ async fn qos_pubsub_overwrite_config() {
                         key_exprs: ["test/not_applicable"],
                         config: {
                             congestion_control: "drop",
-                            priority: "data_high",
                             express: false,
                             reliability: "best_effort",
                             allowed_destination: "any",
@@ -126,7 +124,7 @@ async fn qos_pubsub_overwrite_config() {
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     assert_eq!(sample.congestion_control(), CongestionControl::Drop);
-    assert_eq!(sample.priority(), Priority::RealTime);
+    assert_eq!(sample.priority(), Priority::DataLow);
     assert!(!sample.express());
     assert_eq!(sample.reliability(), Reliability::BestEffort);
 
@@ -134,7 +132,7 @@ async fn qos_pubsub_overwrite_config() {
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     assert_eq!(sample.congestion_control(), CongestionControl::Drop);
-    assert_eq!(sample.priority(), Priority::RealTime);
+    assert_eq!(sample.priority(), Priority::DataLow);
     assert!(!sample.express());
     assert_eq!(sample.reliability(), Reliability::BestEffort);
 

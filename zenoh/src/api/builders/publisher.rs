@@ -153,12 +153,9 @@ impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
 #[zenoh_macros::internal_trait]
 impl EncodingBuilderTrait for PublisherBuilder<'_, '_> {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
-        match self.config_overwrite {
-            true => self,
-            false => Self {
-                encoding: encoding.into(),
-                ..self
-            },
+        Self {
+            encoding: encoding.into(),
+            ..self
         }
     }
 }
@@ -270,6 +267,18 @@ impl IntoFuture for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuil
     }
 }
 
+/// Marks which [`PublisherBuilder`] QoS configurations were overwritten by Zenoh config.
+/// Associated [`PublisherBuilder`] methods calls will not modify overwritten configurations
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct PublicationOverwrittenQoS {
+    pub(crate) congestion_control: bool,
+    pub(crate) priority: bool,
+    pub(crate) express: bool,
+    #[cfg(feature = "unstable")]
+    pub(crate) reliability: bool,
+    pub(crate) destination: bool,
+}
+
 /// A builder for initializing a [`Publisher`].
 ///
 /// # Examples
@@ -298,7 +307,7 @@ pub struct PublisherBuilder<'a, 'b> {
     #[cfg(feature = "unstable")]
     pub(crate) reliability: Reliability,
     pub(crate) destination: Locality,
-    pub(crate) config_overwrite: bool,
+    pub(crate) qos_overwrites: PublicationOverwrittenQoS,
 }
 
 impl Clone for PublisherBuilder<'_, '_> {
@@ -316,7 +325,7 @@ impl Clone for PublisherBuilder<'_, '_> {
             #[cfg(feature = "unstable")]
             reliability: self.reliability,
             destination: self.destination,
-            config_overwrite: self.config_overwrite,
+            qos_overwrites: self.qos_overwrites,
         }
     }
 }
@@ -326,7 +335,7 @@ impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
     /// Changes the [`crate::qos::CongestionControl`] to apply when routing the data.
     #[inline]
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
-        match self.config_overwrite {
+        match self.qos_overwrites.congestion_control {
             true => self,
             false => Self {
                 congestion_control,
@@ -338,7 +347,7 @@ impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
     /// Changes the [`crate::qos::Priority`] of the written data.
     #[inline]
     fn priority(self, priority: Priority) -> Self {
-        match self.config_overwrite {
+        match self.qos_overwrites.priority {
             true => self,
             false => Self { priority, ..self },
         }
@@ -350,7 +359,7 @@ impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
     /// This usually has a positive impact on latency but negative impact on throughput.
     #[inline]
     fn express(self, is_express: bool) -> Self {
-        match self.config_overwrite {
+        match self.qos_overwrites.express {
             true => self,
             false => Self { is_express, ..self },
         }
@@ -364,8 +373,7 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let maybe_key_expr = key_expr.try_into().map_err(Into::into);
-        let mut builder_overwrites = PublisherQoSConfig::default();
-        let mut config_overwrite = false;
+        let mut qos_overwrites = PublisherQoSConfig::default();
         if let Ok(key_expr) = &maybe_key_expr {
             // get overwritten builder
             let state = zread!(session.0.state);
@@ -376,16 +384,15 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
             for node in &nodes_including {
                 // Take the first one yielded by the iterator that has overwrites
                 if let Some(overwrites) = node.weight() {
-                    builder_overwrites = overwrites.clone();
+                    qos_overwrites = overwrites.clone();
                     // log warning if multiple keyexprs include it
                     if nodes_including.len() > 1 {
                         tracing::warn!(
-                            "Publisher declared on `{}` which is included by multiple key_exprs in builders config. Using builder config for `{}`",
+                            "Publisher declared on `{}` which is included by multiple key_exprs in qos config. Using qos config for `{}`",
                             key_expr,
                             node.keyexpr(),
                         );
                     }
-                    config_overwrite = true;
                     break;
                 }
             }
@@ -395,25 +402,32 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
             session,
             key_expr: maybe_key_expr,
             encoding: Encoding::default(),
-            congestion_control: builder_overwrites
+            congestion_control: qos_overwrites
                 .congestion_control
                 .map(|cc| cc.into())
                 .unwrap_or(CongestionControl::DEFAULT),
-            priority: builder_overwrites
+            priority: qos_overwrites
                 .priority
                 .map(|p| p.into())
                 .unwrap_or(Priority::DEFAULT),
-            is_express: builder_overwrites.express.unwrap_or(false),
+            is_express: qos_overwrites.express.unwrap_or(false),
             #[cfg(feature = "unstable")]
-            reliability: builder_overwrites
+            reliability: qos_overwrites
                 .reliability
                 .map(|r| r.into())
                 .unwrap_or(Reliability::DEFAULT),
-            destination: builder_overwrites
+            destination: qos_overwrites
                 .allowed_destination
                 .map(|d| d.into())
                 .unwrap_or(Locality::default()),
-            config_overwrite,
+            qos_overwrites: PublicationOverwrittenQoS {
+                congestion_control: qos_overwrites.congestion_control.is_some(),
+                priority: qos_overwrites.priority.is_some(),
+                express: qos_overwrites.express.is_some(),
+                #[cfg(feature = "unstable")]
+                reliability: qos_overwrites.reliability.is_some(),
+                destination: qos_overwrites.allowed_destination.is_some(),
+            },
         }
     }
 
@@ -424,7 +438,7 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
-        if !self.config_overwrite {
+        if !self.qos_overwrites.destination {
             self.destination = destination;
         }
         self
@@ -438,7 +452,7 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
     #[zenoh_macros::unstable]
     #[inline]
     pub fn reliability(self, reliability: Reliability) -> Self {
-        match self.config_overwrite {
+        match self.qos_overwrites.reliability {
             true => self,
             false => Self {
                 reliability,
