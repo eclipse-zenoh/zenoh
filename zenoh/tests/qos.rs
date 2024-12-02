@@ -72,7 +72,7 @@ async fn qos_pubsub_overwrite_config() {
         r#"
         {
             qos: {
-                put: [
+                publication: [
                     {
                         key_exprs: ["test/qos/overwritten", "test/not_applicable/**"],
                         config: {

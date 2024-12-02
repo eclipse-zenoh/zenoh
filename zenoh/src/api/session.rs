@@ -545,7 +545,7 @@ impl Session {
         ResolveClosure::new(move || {
             let router = runtime.router();
             let config = runtime.config().lock();
-            let publisher_qos = config.0.qos().put().clone();
+            let publisher_qos = config.0.qos().publication().clone();
             drop(config);
             let state = RwLock::new(SessionState::new(
                 aggregated_subscribers,

@@ -366,8 +366,8 @@ validated_struct::validator! {
         /// Overwrite QoS options for Zenoh messages by key expression (ignores Zenoh API QoS config)
         pub qos: #[derive(Default)]
         QoSConfig {
-            /// A list of QoS configurations for PUT messages by key expressions
-            put: PublisherQoSConfList,
+            /// A list of QoS configurations for PUT and DELETE messages by key expressions
+            publication: PublisherQoSConfList,
         },
 
         pub transport: #[derive(Default)]

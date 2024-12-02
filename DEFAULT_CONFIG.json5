@@ -184,15 +184,16 @@
     },
   },
 
-  //  /// Overwrite QoS options for Zenoh messages by key expression (ignores Zenoh API QoS config)
+  //  /// Overwrite QoS options for Zenoh messages by key expression (ignores Zenoh API QoS config for overwritten values)
   //  qos: {
-  //    /// Overwrite QoS options for PUT messages
-  //    put: [
+  //    /// Overwrite QoS options for PUT and DELETE messages
+  //    publication: [
   //      {
-  //        /// PUT messages on key expressions that are included by these key expressions
+  //        /// PUT and DELETE messages on key expressions that are included by these key expressions
   //        /// will have their QoS options overwritten by the given config.
   //        key_exprs: ["demo/**", "example/key"],
-  //        /// Configurations that will be applied on the publisher builder
+  //        /// Configurations that will be applied on the publisher.
+  //        /// Options that are supplied here will overwrite the configuration given in Zenoh API
   //        config: {
   //          congestion_control: "Block",
   //          priority: "data_high",
