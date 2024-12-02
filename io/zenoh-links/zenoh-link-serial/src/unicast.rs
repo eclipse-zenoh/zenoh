@@ -113,6 +113,13 @@ impl LinkUnicastSerial {
         }
         false
     }
+
+    fn clear_buffers(&self) -> ZResult<()> {
+        Ok(self
+            .get_port_mut()
+            .clear()
+            .map_err(|e| zerror!("Cannot clear serial buffers: {e:?}"))?)
+    }
 }
 
 #[async_trait]
@@ -120,11 +127,7 @@ impl LinkUnicastTrait for LinkUnicastSerial {
     async fn close(&self) -> ZResult<()> {
         tracing::trace!("Closing Serial link: {}", self);
         let _guard = zasynclock!(self.write_lock);
-        self.get_port_mut().clear().map_err(|e| {
-            let e = zerror!("Unable to close Serial link {}: {}", self, e);
-            tracing::error!("{}", e);
-            e
-        })?;
+        self.clear_buffers()?;
         self.is_connected.store(false, Ordering::Release);
         Ok(())
     }
@@ -402,6 +405,9 @@ async fn accept_read_task(
         src_path: String,
         is_connected: Arc<AtomicBool>,
     ) -> ZResult<Arc<LinkUnicastSerial>> {
+        // Cleaning RX buffer before listening
+        link.clear_buffers()?;
+
         while !is_connected.load(Ordering::Acquire) && !link.is_ready() {
             // Waiting to be ready, if not sleep some time.
             tokio::time::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
@@ -415,32 +421,37 @@ async fn accept_read_task(
     tracing::trace!("Ready to accept Serial connections on: {:?}", src_path);
 
     loop {
-        tokio::select! {
-            res = receive(
-                link.clone(),
-                src_path.clone(),
-                is_connected.clone(),
-            ) => {
-                match res {
-                    Ok(link) => {
-                        // Communicate the new link to the initial transport manager
-                        if let Err(e) = manager.send_async(LinkUnicast(link.clone())).await {
-                            tracing::error!("{}-{}: {}", file!(), line!(), e)
+        if !is_connected.load(Ordering::Acquire) {
+            tokio::select! {
+                res = receive(
+                    link.clone(),
+                    src_path.clone(),
+                    is_connected.clone(),
+                ) => {
+                    match res {
+                        Ok(link) => {
+                            // Communicate the new link to the initial transport manager
+                            if let Err(e) = manager.send_async(LinkUnicast(link.clone())).await {
+                                tracing::error!("{}-{}: {}", file!(), line!(), e)
+                            }
+
+                            // Ensure the creation of this link is only once
+                            continue;
                         }
+                        Err(e) =>  {
+                            tracing::warn!("{}. Hint: Is the serial cable connected?", e);
+                            tokio::time::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
+                            continue;
 
-                        // Ensure the creation of this link is only once
-                        break;
+                        }
                     }
-                    Err(e) =>  {
-                        tracing::warn!("{}. Hint: Is the serial cable connected?", e);
-                        tokio::time::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
-                        continue;
+                },
 
-                    }
-                }
-            },
-
-            _ = token.cancelled() => break,
+                _ = token.cancelled() => break,
+            }
+        } else {
+            // In this case its already connected, so we do nothing
+            tokio::time::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
         }
     }
     Ok(())
