@@ -61,7 +61,6 @@ pub(crate) struct PublisherQoSConf {
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
 pub struct PublisherQoSConfig {
     pub congestion_control: Option<PublisherCongestionControlConf>,
-    pub encoding: Option<String>, // Encoding has From<&str>
     pub priority: Option<PublisherPriorityConf>,
     pub express: Option<bool>,
     #[cfg(feature = "unstable")]

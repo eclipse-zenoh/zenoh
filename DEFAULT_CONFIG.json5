@@ -195,7 +195,6 @@
   //        /// Configurations that will be applied on the publisher builder
   //        config: {
   //          congestion_control: "Block",
-  //          encoding: "zenoh/example",
   //          priority: "data_high",
   //          express: true,
   //          reliability: "best_effort",

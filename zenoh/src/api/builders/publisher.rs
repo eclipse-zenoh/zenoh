@@ -394,10 +394,7 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
         Self {
             session,
             key_expr: maybe_key_expr,
-            encoding: builder_overwrites
-                .encoding
-                .map(|encoding| encoding.into())
-                .unwrap_or(Encoding::default()),
+            encoding: Encoding::default(),
             congestion_control: builder_overwrites
                 .congestion_control
                 .map(|cc| cc.into())
