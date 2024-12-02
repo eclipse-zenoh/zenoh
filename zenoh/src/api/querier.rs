@@ -68,6 +68,7 @@ pub(crate) struct QuerierState {
 /// let replies = querier.get().await.unwrap();
 /// # }
 /// ```
+#[zenoh_macros::unstable]
 #[derive(Debug)]
 pub struct Querier<'a> {
     pub(crate) session: WeakSession,
@@ -119,25 +120,28 @@ impl<'a> Querier<'a> {
     }
 
     #[inline]
+    #[zenoh_macros::unstable]
     pub fn key_expr(&self) -> &KeyExpr<'a> {
         &self.key_expr
     }
 
     /// Get the `congestion_control` applied when routing the data.
     #[inline]
+    #[zenoh_macros::unstable]
     pub fn congestion_control(&self) -> CongestionControl {
         self.qos.congestion_control()
     }
 
     /// Get the priority of the written data.
     #[inline]
+    #[zenoh_macros::unstable]
     pub fn priority(&self) -> Priority {
         self.qos.priority()
     }
 
     /// Get type of queryables that can reply to this querier
-    #[zenoh_macros::unstable]
     #[inline]
+    #[zenoh_macros::unstable]
     pub fn accept_replies(&self) -> ReplyKeyExpr {
         self.accept_replies
     }
@@ -155,6 +159,7 @@ impl<'a> Querier<'a> {
     /// # }
     /// ```
     #[inline]
+    #[zenoh_macros::unstable]
     pub fn get(&self) -> QuerierGetBuilder<'_, '_, DefaultHandler> {
         QuerierGetBuilder {
             querier: self,
@@ -179,6 +184,7 @@ impl<'a> Querier<'a> {
     /// querier.undeclare().await.unwrap();
     /// # }
     /// ```
+    #[zenoh_macros::unstable]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         UndeclarableSealed::undeclare_inner(self, ())
     }

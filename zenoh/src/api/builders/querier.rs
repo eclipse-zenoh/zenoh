@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
 use std::{
     future::{IntoFuture, Ready},
     sync::Arc,
@@ -71,6 +70,7 @@ use crate::{
 /// }
 /// # }
 /// ```
+#[zenoh_macros::unstable]
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[derive(Debug)]
 pub struct QuerierBuilder<'a, 'b> {
@@ -215,6 +215,7 @@ impl IntoFuture for QuerierBuilder<'_, '_> {
 /// }
 /// # }
 /// ```
+#[zenoh_macros::unstable]
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[derive(Debug)]
 pub struct QuerierGetBuilder<'a, 'b, Handler> {
@@ -280,6 +281,7 @@ impl<'a, 'b> QuerierGetBuilder<'a, 'b, DefaultHandler> {
     ///     .unwrap();
     /// # }
     /// ```
+    #[zenoh_macros::unstable]
     #[inline]
     pub fn callback<F>(self, callback: F) -> QuerierGetBuilder<'a, 'b, Callback<Reply>>
     where
@@ -313,6 +315,7 @@ impl<'a, 'b> QuerierGetBuilder<'a, 'b, DefaultHandler> {
     ///     .unwrap();
     /// # }
     /// ```
+    #[zenoh_macros::unstable]
     #[inline]
     pub fn callback_mut<F>(self, callback: F) -> QuerierGetBuilder<'a, 'b, Callback<Reply>>
     where
@@ -345,6 +348,7 @@ impl<'a, 'b> QuerierGetBuilder<'a, 'b, DefaultHandler> {
     /// }
     /// # }
     /// ```
+    #[zenoh_macros::unstable]
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> QuerierGetBuilder<'a, 'b, Handler>
     where
@@ -373,6 +377,7 @@ impl<'a, 'b> QuerierGetBuilder<'a, 'b, DefaultHandler> {
 impl<'b, Handler> QuerierGetBuilder<'_, 'b, Handler> {
     /// Set the query payload.
     #[inline]
+    #[zenoh_macros::unstable]
     pub fn payload<IntoZBytes>(mut self, payload: IntoZBytes) -> Self
     where
         IntoZBytes: Into<ZBytes>,
@@ -385,6 +390,7 @@ impl<'b, Handler> QuerierGetBuilder<'_, 'b, Handler> {
 
     /// Set the query selector parameters.
     #[inline]
+    #[zenoh_macros::unstable]
     pub fn parameters<P>(mut self, parameters: P) -> Self
     where
         P: Into<Parameters<'b>>,

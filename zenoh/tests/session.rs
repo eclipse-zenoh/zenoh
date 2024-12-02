@@ -26,9 +26,9 @@ use std::{
 use zenoh::internal::runtime::{Runtime, RuntimeBuilder};
 #[cfg(feature = "unstable")]
 use zenoh::qos::Reliability;
-use zenoh::{
-    key_expr::KeyExpr, qos::CongestionControl, query::Querier, sample::SampleKind, Session,
-};
+#[cfg(feature = "unstable")]
+use zenoh::query::Querier;
+use zenoh::{key_expr::KeyExpr, qos::CongestionControl, sample::SampleKind, Session};
 use zenoh_core::ztimeout;
 #[cfg(not(feature = "unstable"))]
 use zenoh_protocol::core::Reliability;
@@ -177,10 +177,12 @@ impl HasGet for SessionGetter<'_, '_> {
     }
 }
 
+#[cfg(feature = "unstable")]
 struct QuerierGetter<'a> {
     querier: Querier<'a>,
 }
 
+#[cfg(feature = "unstable")]
 impl HasGet for QuerierGetter<'_> {
     async fn get(&self, params: &str) -> zenoh::handlers::FifoChannelHandler<zenoh::query::Reply> {
         ztimeout!(self.querier.get().parameters(params)).unwrap()
@@ -312,6 +314,7 @@ async fn test_session_getrep(peer01: &Session, peer02: &Session, reliability: Re
     ))
 }
 
+#[cfg(feature = "unstable")]
 async fn test_session_qrrep(peer01: &Session, peer02: &Session, reliability: Reliability) {
     let key_expr = "test/session";
     println!("[QQ][00c] Declaring Querier on peer02 session");
@@ -333,6 +336,7 @@ async fn zenoh_session_unicast() {
     let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:17447"]).await;
     test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;
     test_session_getrep(&peer01, &peer02, Reliability::Reliable).await;
+    #[cfg(feature = "unstable")]
     test_session_qrrep(&peer01, &peer02, Reliability::Reliable).await;
     close_session(peer01, peer02).await;
 }

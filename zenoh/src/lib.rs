@@ -195,7 +195,6 @@ pub mod session {
         builders::{
             info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, ZenohIdBuilder},
             publisher::{SessionDeleteBuilder, SessionPutBuilder},
-            querier::QuerierBuilder,
             query::SessionGetBuilder,
             session::OpenBuilder,
         },
@@ -275,19 +274,22 @@ pub mod query {
 
     #[zenoh_macros::internal]
     pub use crate::api::queryable::ReplySample;
+    #[zenoh_macros::unstable]
+    pub use crate::api::{
+        builders::querier::{QuerierBuilder, QuerierGetBuilder},
+        querier::Querier,
+        query::ReplyKeyExpr,
+        selector::ZenohParameters,
+    };
     pub use crate::api::{
         builders::{
-            querier::QuerierGetBuilder,
             queryable::QueryableBuilder,
             reply::{ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
         },
-        querier::Querier,
         query::{ConsolidationMode, QueryConsolidation, QueryTarget, Reply, ReplyError},
         queryable::{Query, Queryable, QueryableUndeclaration},
         selector::Selector,
     };
-    #[zenoh_macros::unstable]
-    pub use crate::api::{query::ReplyKeyExpr, selector::ZenohParameters};
 }
 
 #[zenoh_macros::unstable]

@@ -94,6 +94,11 @@ name = "z_pull"
 path = "examples/z_pull.rs"
 
 [[example]]
+name = "z_querier"
+path = "examples/z_querier.rs"
+required-features = ["unstable"]
+
+[[example]]
 name = "z_queryable"
 path = "examples/z_queryable.rs"
 

@@ -130,9 +130,9 @@ pub(crate) struct MatchingListenerInner {
 }
 
 /// A listener that sends notifications when the [`MatchingStatus`] of a
-/// publisher changes.
+/// corresponding Zenoh entity changes.
 ///
-/// Callback matching listeners will run in background until the publisher is undeclared,
+/// Callback matching listeners will run in background until the corresponding Zenoh entity is undeclared,
 /// or until it is undeclared.
 /// On the other hand, matching listener with a handler are automatically undeclared when dropped.
 ///

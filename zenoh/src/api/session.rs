@@ -71,8 +71,10 @@ use zenoh_task::TaskController;
 use crate::api::selector::ZenohParameters;
 #[cfg(feature = "unstable")]
 use crate::api::{
+    builders::querier::QuerierBuilder,
     liveliness::Liveliness,
     matching::{MatchingListenerState, MatchingStatus, MatchingStatusType},
+    querier::QuerierState,
     query::{LivelinessQueryState, ReplyKeyExpr},
     sample::SourceInfo,
 };
@@ -84,7 +86,6 @@ use crate::{
                 PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
                 SessionDeleteBuilder, SessionPutBuilder,
             },
-            querier::QuerierBuilder,
             query::SessionGetBuilder,
             queryable::QueryableBuilder,
             session::OpenBuilder,
@@ -96,7 +97,6 @@ use crate::{
         info::SessionInfo,
         key_expr::{KeyExpr, KeyExprInner},
         publisher::{Priority, PublisherState},
-        querier::QuerierState,
         query::{ConsolidationMode, QueryConsolidation, QueryState, QueryTarget, Reply},
         queryable::{Query, QueryInner, QueryableState},
         sample::{DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind},
@@ -131,6 +131,7 @@ pub(crate) struct SessionState {
     #[cfg(feature = "unstable")]
     pub(crate) remote_subscribers: HashMap<SubscriberId, KeyExpr<'static>>,
     pub(crate) publishers: HashMap<Id, PublisherState>,
+    #[cfg(feature = "unstable")]
     pub(crate) queriers: HashMap<Id, QuerierState>,
     #[cfg(feature = "unstable")]
     pub(crate) remote_tokens: HashMap<TokenId, KeyExpr<'static>>,
@@ -165,6 +166,7 @@ impl SessionState {
             #[cfg(feature = "unstable")]
             remote_subscribers: HashMap::new(),
             publishers: HashMap::new(),
+            #[cfg(feature = "unstable")]
             queriers: HashMap::new(),
             #[cfg(feature = "unstable")]
             remote_tokens: HashMap::new(),
@@ -304,6 +306,7 @@ impl SessionState {
         }
     }
 
+    #[cfg(feature = "unstable")]
     fn register_querier<'a>(
         &mut self,
         id: EntityId,
@@ -972,6 +975,7 @@ impl Session {
     /// let replies = querier.get().await.unwrap();
     /// # }
     /// ```
+    #[zenoh_macros::unstable]
     pub fn declare_querier<'b, TryIntoKeyExpr>(
         &self,
         key_expr: TryIntoKeyExpr,
@@ -1426,6 +1430,7 @@ impl SessionInner {
         }
     }
 
+    #[cfg(feature = "unstable")]
     pub(crate) fn declare_querier_inner(
         &self,
         key_expr: KeyExpr,
@@ -1451,6 +1456,7 @@ impl SessionInner {
         Ok(id)
     }
 
+    #[cfg(feature = "unstable")]
     pub(crate) fn undeclare_querier_inner(&self, pid: Id) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         let Ok(primitives) = state.primitives() else {
