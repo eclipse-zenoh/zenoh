@@ -345,7 +345,7 @@ impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
     }
 }
 
-impl<'a, 'b> PublisherBuilder<'a, 'b> {
+impl PublisherBuilder<'_, '_> {
     /// Looks up if any configured QoS overwrites apply on the builder's key expression.
     /// Returns a new builder with the overwritten QoS parameters.
     pub(crate) fn apply_qos_overwrites(self) -> Self {
