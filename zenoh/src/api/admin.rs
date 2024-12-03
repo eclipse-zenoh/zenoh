@@ -48,9 +48,7 @@ lazy_static::lazy_static!(
 
 pub(crate) fn init(session: WeakSession) {
     if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
-        let admin_key = KeyExpr::from(*KE_PREFIX / own_zid / *KE_SESSION / *KE_STARSTAR)
-            .to_wire(&session)
-            .to_owned();
+        let admin_key = KeyExpr::from(*KE_PREFIX / own_zid / *KE_SESSION / *KE_STARSTAR);
 
         let _admin_qabl = session.declare_queryable_inner(
             &admin_key,
