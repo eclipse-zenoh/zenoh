@@ -3145,7 +3145,6 @@ impl Closee for Arc<SessionInner> {
             // anyway, it doesn't really matter, and this code will be cleaned up when the APIs
             // will be stabilized.
             let mut state = zwrite!(self.state);
-            let _tokens = std::mem::take(&mut state.tokens);
             let _matching_listeners = std::mem::take(&mut state.matching_listeners);
             drop(state);
         }
