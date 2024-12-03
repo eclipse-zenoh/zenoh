@@ -43,7 +43,7 @@ fn main() {
 
     let publisher = session
         .declare_publisher("test/thr")
-        .congestion_control(CongestionControl::Block)
+        .congestion_control(CongestionControl::Drop)
         .priority(prio)
         .express(args.express)
         .wait()

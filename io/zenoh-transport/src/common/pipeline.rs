@@ -14,7 +14,7 @@
 use std::{
     ops::Add,
     sync::{
-        atomic::{AtomicBool, AtomicU32, Ordering},
+        atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering},
         Arc, Mutex, MutexGuard,
     },
     time::{Duration, Instant},
@@ -688,7 +688,7 @@ impl TransmissionPipeline {
             });
         }
 
-        let active = Arc::new(AtomicBool::new(true));
+        let active = Arc::new((AtomicBool::new(true), AtomicU8::new(0)));
         let producer = TransmissionPipelineProducer {
             stage_in: stage_in.into_boxed_slice().into(),
             active: active.clone(),
@@ -709,7 +709,7 @@ impl TransmissionPipeline {
 pub(crate) struct TransmissionPipelineProducer {
     // Each priority queue has its own Mutex
     stage_in: Arc<[Mutex<StageIn>]>,
-    active: Arc<AtomicBool>,
+    active: Arc<(AtomicBool, AtomicU8)>,
     wait_before_drop: (Duration, Duration),
     wait_before_close: Duration,
 }
@@ -724,8 +724,14 @@ impl TransmissionPipelineProducer {
         } else {
             (0, Priority::DEFAULT)
         };
+        let prioflag = 1 << priority as u8;
+
         // If message is droppable, compute a deadline after which the sample could be dropped
         let (wait_time, max_wait_time) = if msg.is_droppable() {
+            // Checked if we are blocked on the priority queue and we drop directly the message
+            if self.active.1.load(Ordering::Acquire) & prioflag != 0 {
+                return false;
+            }
             (self.wait_before_drop.0, Some(self.wait_before_drop.1))
         } else {
             (self.wait_before_close, None)
@@ -733,7 +739,11 @@ impl TransmissionPipelineProducer {
         let mut deadline = Deadline::new(wait_time, max_wait_time);
         // Lock the channel. We are the only one that will be writing on it.
         let mut queue = zlock!(self.stage_in[idx]);
-        queue.push_network_message(&mut msg, priority, &mut deadline)
+        let sent = queue.push_network_message(&mut msg, priority, &mut deadline);
+        if !sent {
+            self.active.1.fetch_or(prioflag, Ordering::AcqRel);
+        }
+        sent
     }
 
     #[inline]
@@ -750,7 +760,7 @@ impl TransmissionPipelineProducer {
     }
 
     pub(crate) fn disable(&self) {
-        self.active.store(false, Ordering::Relaxed);
+        self.active.0.store(false, Ordering::Relaxed);
 
         // Acquire all the locks, in_guard first, out_guard later
         // Use the same locking order as in drain to avoid deadlocks
@@ -768,12 +778,12 @@ pub(crate) struct TransmissionPipelineConsumer {
     // A single Mutex for all the priority queues
     stage_out: Box<[StageOut]>,
     n_out_r: Waiter,
-    active: Arc<AtomicBool>,
+    active: Arc<(AtomicBool, AtomicU8)>,
 }
 
 impl TransmissionPipelineConsumer {
     pub(crate) async fn pull(&mut self) -> Option<(WBatch, usize)> {
-        while self.active.load(Ordering::Relaxed) {
+        while self.active.0.load(Ordering::Relaxed) {
             let mut backoff = MicroSeconds::MAX;
             // Calculate the backoff maximum
             for (prio, queue) in self.stage_out.iter_mut().enumerate() {
@@ -820,6 +830,8 @@ impl TransmissionPipelineConsumer {
 
     pub(crate) fn refill(&mut self, batch: WBatch, priority: usize) {
         self.stage_out[priority].refill(batch);
+        let prioflag = 1 << priority as u8;
+        self.active.1.fetch_and(!prioflag, Ordering::AcqRel);
     }
 
     pub(crate) fn drain(&mut self) -> Vec<(WBatch, usize)> {

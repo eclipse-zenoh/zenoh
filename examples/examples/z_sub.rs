@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -47,6 +49,7 @@ async fn main() {
             print!(" ({})", att);
         }
         println!();
+        tokio::time::sleep(Duration::from_millis(10)).await;
     }
 }
 
