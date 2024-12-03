@@ -35,7 +35,7 @@ pub(crate) struct QoSFsm<'a> {
     _a: PhantomData<&'a ()>,
 }
 
-impl<'a> QoSFsm<'a> {
+impl QoSFsm<'_> {
     pub(crate) const fn new() -> Self {
         Self { _a: PhantomData }
     }

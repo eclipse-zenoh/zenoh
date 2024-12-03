@@ -26,6 +26,8 @@ use std::{
 use zenoh::internal::runtime::{Runtime, RuntimeBuilder};
 #[cfg(feature = "unstable")]
 use zenoh::qos::Reliability;
+#[cfg(feature = "unstable")]
+use zenoh::query::Querier;
 use zenoh::{key_expr::KeyExpr, qos::CongestionControl, sample::SampleKind, Session};
 use zenoh_core::ztimeout;
 #[cfg(not(feature = "unstable"))]
@@ -159,30 +161,62 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Re
     }
 }
 
-async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Reliability) {
-    let key_expr = "test/session";
+trait HasGet {
+    async fn get(&self, params: &str) -> zenoh::handlers::FifoChannelHandler<zenoh::query::Reply>;
+}
+
+struct SessionGetter<'a, 'b> {
+    session: &'a Session,
+    key_expr: &'b str,
+}
+
+impl HasGet for SessionGetter<'_, '_> {
+    async fn get(&self, params: &str) -> zenoh::handlers::FifoChannelHandler<zenoh::query::Reply> {
+        let selector = format!("{}?{}", self.key_expr, params);
+        ztimeout!(self.session.get(selector)).unwrap()
+    }
+}
+
+#[cfg(feature = "unstable")]
+struct QuerierGetter<'a> {
+    querier: Querier<'a>,
+}
+
+#[cfg(feature = "unstable")]
+impl HasGet for QuerierGetter<'_> {
+    async fn get(&self, params: &str) -> zenoh::handlers::FifoChannelHandler<zenoh::query::Reply> {
+        ztimeout!(self.querier.get().parameters(params)).unwrap()
+    }
+}
+
+async fn test_session_query_reply_internal<Getter: HasGet>(
+    peer: &Session,
+    key_expr: &str,
+    reliability: Reliability,
+    log_id: &str,
+    getter: &Getter,
+) {
     let msg_count = match reliability {
         Reliability::Reliable => MSG_COUNT,
         Reliability::BestEffort => 1,
     };
-    let msgs = Arc::new(AtomicUsize::new(0));
 
+    let msgs = Arc::new(AtomicUsize::new(0));
     for size in MSG_SIZE {
         msgs.store(0, Ordering::Relaxed);
 
         // Queryable to data
-        println!("[QR][01c] Queryable on peer01 session");
+        println!("[{log_id}][01c] Queryable on peer01 session");
         let c_msgs = msgs.clone();
-        let qbl = ztimeout!(peer01.declare_queryable(key_expr).callback(move |query| {
+        let ke = key_expr.to_owned();
+        let qbl = ztimeout!(peer.declare_queryable(key_expr).callback(move |query| {
             c_msgs.fetch_add(1, Ordering::Relaxed);
             match query.parameters().as_str() {
                 "ok_put" => {
                     tokio::task::block_in_place(|| {
                         tokio::runtime::Handle::current().block_on(async {
-                            ztimeout!(query.reply(
-                                KeyExpr::try_from(key_expr).unwrap(),
-                                vec![0u8; size].to_vec()
-                            ))
+                            ztimeout!(query
+                                .reply(KeyExpr::try_from(&ke).unwrap(), vec![0u8; size].to_vec()))
                             .unwrap()
                         })
                     });
@@ -190,7 +224,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
                 "ok_del" => {
                     tokio::task::block_in_place(|| {
                         tokio::runtime::Handle::current()
-                            .block_on(async { ztimeout!(query.reply_del(key_expr)).unwrap() })
+                            .block_on(async { ztimeout!(query.reply_del(&ke)).unwrap() })
                     });
                 }
                 "err" => {
@@ -209,11 +243,10 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
         tokio::time::sleep(SLEEP).await;
 
         // Get data
-        println!("[QR][02c] Getting Ok(Put) on peer02 session. {msg_count} msgs.");
+        println!("[{log_id}][02c] Getting Ok(Put) on peer02 session. {msg_count} msgs.");
         let mut cnt = 0;
         for _ in 0..msg_count {
-            let selector = format!("{}?ok_put", key_expr);
-            let rs = ztimeout!(peer02.get(selector)).unwrap();
+            let rs = getter.get("ok_put").await;
             while let Ok(s) = ztimeout!(rs.recv_async()) {
                 let s = s.result().unwrap();
                 assert_eq!(s.kind(), SampleKind::Put);
@@ -221,17 +254,16 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
                 cnt += 1;
             }
         }
-        println!("[QR][02c] Got on peer02 session. {cnt}/{msg_count} msgs.");
+        println!("[{log_id}][02c] Got on peer02 session. {cnt}/{msg_count} msgs.");
         assert_eq!(msgs.load(Ordering::Relaxed), msg_count);
         assert_eq!(cnt, msg_count);
 
         msgs.store(0, Ordering::Relaxed);
 
-        println!("[QR][03c] Getting Ok(Delete) on peer02 session. {msg_count} msgs.");
+        println!("[{log_id}][03c] Getting Ok(Delete) on peer02 session. {msg_count} msgs.");
         let mut cnt = 0;
         for _ in 0..msg_count {
-            let selector = format!("{}?ok_del", key_expr);
-            let rs = ztimeout!(peer02.get(selector)).unwrap();
+            let rs = getter.get("ok_del").await;
             while let Ok(s) = ztimeout!(rs.recv_async()) {
                 let s = s.result().unwrap();
                 assert_eq!(s.kind(), SampleKind::Delete);
@@ -239,28 +271,27 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
                 cnt += 1;
             }
         }
-        println!("[QR][03c] Got on peer02 session. {cnt}/{msg_count} msgs.");
+        println!("[{log_id}][03c] Got on peer02 session. {cnt}/{msg_count} msgs.");
         assert_eq!(msgs.load(Ordering::Relaxed), msg_count);
         assert_eq!(cnt, msg_count);
 
         msgs.store(0, Ordering::Relaxed);
 
-        println!("[QR][04c] Getting Err() on peer02 session. {msg_count} msgs.");
+        println!("[{log_id}][04c] Getting Err() on peer02 session. {msg_count} msgs.");
         let mut cnt = 0;
         for _ in 0..msg_count {
-            let selector = format!("{}?err", key_expr);
-            let rs = ztimeout!(peer02.get(selector)).unwrap();
+            let rs = getter.get("err").await;
             while let Ok(s) = ztimeout!(rs.recv_async()) {
                 let e = s.result().unwrap_err();
                 assert_eq!(e.payload().len(), size);
                 cnt += 1;
             }
         }
-        println!("[QR][04c] Got on peer02 session. {cnt}/{msg_count} msgs.");
+        println!("[{log_id}][04c] Got on peer02 session. {cnt}/{msg_count} msgs.");
         assert_eq!(msgs.load(Ordering::Relaxed), msg_count);
         assert_eq!(cnt, msg_count);
 
-        println!("[PS][03c] Unqueryable on peer01 session");
+        println!("[{log_id}][03c] Unqueryable on peer01 session");
         ztimeout!(qbl.undeclare()).unwrap();
 
         // Wait for the declaration to propagate
@@ -268,12 +299,45 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
     }
 }
 
+async fn test_session_getrep(peer01: &Session, peer02: &Session, reliability: Reliability) {
+    let key_expr = "test/session";
+    let querier = SessionGetter {
+        session: peer02,
+        key_expr,
+    };
+    ztimeout!(test_session_query_reply_internal(
+        peer01,
+        key_expr,
+        reliability,
+        "QR",
+        &querier
+    ))
+}
+
+#[cfg(feature = "unstable")]
+async fn test_session_qrrep(peer01: &Session, peer02: &Session, reliability: Reliability) {
+    let key_expr = "test/session";
+    println!("[QQ][00c] Declaring Querier on peer02 session");
+    let querier = QuerierGetter {
+        querier: ztimeout!(peer02.declare_querier(key_expr)).unwrap(),
+    };
+    ztimeout!(test_session_query_reply_internal(
+        peer01,
+        key_expr,
+        reliability,
+        "QQ",
+        &querier
+    ))
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_session_unicast() {
     zenoh::init_log_from_env_or("error");
     let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:17447"]).await;
     test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;
-    test_session_qryrep(&peer01, &peer02, Reliability::Reliable).await;
+    test_session_getrep(&peer01, &peer02, Reliability::Reliable).await;
+    #[cfg(feature = "unstable")]
+    test_session_qrrep(&peer01, &peer02, Reliability::Reliable).await;
     close_session(peer01, peer02).await;
 }
 

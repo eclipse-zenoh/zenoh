@@ -43,7 +43,7 @@ impl<'a> From<&'a str> for CowStr<'a> {
         CowStr::borrowed(value)
     }
 }
-impl<'a> From<String> for CowStr<'a> {
+impl From<String> for CowStr<'_> {
     fn from(s: String) -> Self {
         if s.is_empty() {
             CowStr::borrowed("")
@@ -70,7 +70,7 @@ impl core::ops::Deref for CowStr<'_> {
         }
     }
 }
-impl<'a> Clone for CowStr<'a> {
+impl Clone for CowStr<'_> {
     fn clone(&self) -> Self {
         self.as_str().to_owned().into()
     }

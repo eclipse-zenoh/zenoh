@@ -36,15 +36,20 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 use super::{face_hat, face_hat_mut, get_routes_entries, HatCode, HatFace};
-use crate::net::routing::{
-    dispatcher::{
-        face::FaceState,
-        resource::{NodeId, Resource, SessionContext},
-        tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
+use crate::{
+    key_expr::KeyExpr,
+    net::routing::{
+        dispatcher::{
+            face::FaceState,
+            resource::{NodeId, Resource, SessionContext},
+            tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
+        },
+        hat::{
+            p2p_peer::initial_interest, CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources,
+        },
+        router::{update_query_routes_from, RoutesIndexes},
+        RoutingContext,
     },
-    hat::{p2p_peer::initial_interest, CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
-    router::{update_query_routes_from, RoutesIndexes},
-    RoutingContext,
 };
 
 #[inline]
@@ -589,13 +594,31 @@ impl HatQueriesTrait for HatCode {
         };
 
         if source_type == WhatAmI::Client {
-            // TODO: BNestMatching: What if there is a local compete ?
-            if let Some(face) = tables.faces.values().find(|f| f.whatami == WhatAmI::Router) {
-                let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-                route.push(QueryTargetQabl {
-                    direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
-                    info: None,
-                });
+            // TODO: BestMatching: What if there is a local compete ?
+            for face in tables
+                .faces
+                .values()
+                .filter(|f| f.whatami == WhatAmI::Router)
+            {
+                if !face.local_interests.values().any(|interest| {
+                    interest.finalized
+                        && interest.options.queryables()
+                        && interest
+                            .res
+                            .as_ref()
+                            .map(|res| KeyExpr::keyexpr_include(res.expr(), expr.full_expr()))
+                            .unwrap_or(true)
+                }) || face_hat!(face)
+                    .remote_qabls
+                    .values()
+                    .any(|sub| KeyExpr::keyexpr_intersect(sub.expr(), expr.full_expr()))
+                {
+                    let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+                    route.push(QueryTargetQabl {
+                        direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
+                        info: None,
+                    });
+                }
             }
 
             for face in tables.faces.values().filter(|f| {
@@ -645,5 +668,47 @@ impl HatQueriesTrait for HatCode {
 
     fn get_query_routes_entries(&self, _tables: &Tables) -> RoutesIndexes {
         get_routes_entries()
+    }
+
+    #[cfg(feature = "unstable")]
+    fn get_matching_queryables(
+        &self,
+        tables: &Tables,
+        key_expr: &KeyExpr<'_>,
+        complete: bool,
+    ) -> HashMap<usize, Arc<FaceState>> {
+        let mut matching_queryables = HashMap::new();
+        if key_expr.ends_with('/') {
+            return matching_queryables;
+        }
+        tracing::trace!(
+            "get_matching_queryables({}; complete: {})",
+            key_expr,
+            complete
+        );
+        let res = Resource::get_resource(&tables.root_res, key_expr);
+        let matches = res
+            .as_ref()
+            .and_then(|res| res.context.as_ref())
+            .map(|ctx| Cow::from(&ctx.matches))
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
+
+        for mres in matches.iter() {
+            let mres = mres.upgrade().unwrap();
+            if complete && !KeyExpr::keyexpr_include(mres.expr(), key_expr) {
+                continue;
+            }
+            for (sid, context) in &mres.session_ctxs {
+                if match complete {
+                    true => context.qabl.map_or(false, |q| q.complete),
+                    false => context.qabl.is_some(),
+                } {
+                    matching_queryables
+                        .entry(*sid)
+                        .or_insert_with(|| context.face.clone());
+                }
+            }
+        }
+        matching_queryables
     }
 }

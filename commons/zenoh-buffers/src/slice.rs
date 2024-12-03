@@ -123,7 +123,7 @@ impl<'s> BacktrackableWriter for &'s mut [u8] {
 }
 
 // Reader
-impl<'a> HasReader for &'a [u8] {
+impl HasReader for &[u8] {
     type Reader = Self;
 
     fn reader(self) -> Self::Reader {
@@ -196,7 +196,7 @@ impl<'a> BacktrackableReader for &'a [u8] {
     }
 }
 
-impl<'a> SiphonableReader for &'a [u8] {
+impl SiphonableReader for &[u8] {
     fn siphon<W>(&mut self, writer: &mut W) -> Result<NonZeroUsize, DidntSiphon>
     where
         W: Writer,
