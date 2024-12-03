@@ -152,6 +152,7 @@ rustls-pemfile = "2.1.3"
 rustls-webpki = "0.102.8"
 rustls-pki-types = "1.8.0"
 schemars = { version = "0.8.21", features = ["either"] }
+scopeguard = "1.2.0"
 secrecy = { version = "0.8.0", features = ["serde", "alloc"] }
 serde = { version = "1.0.210", default-features = false, features = [
   "derive",
