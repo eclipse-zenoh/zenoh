@@ -499,6 +499,10 @@ impl Runtime {
     }
 
     async fn bind_listeners(&self, listeners: &[EndPoint]) -> ZResult<()> {
+        if listeners.is_empty() {
+            tracing::warn!("Starting with no listener endpoints!");
+            return Ok(());
+        }
         let timeout = self.get_global_listener_timeout();
         if timeout.is_zero() {
             self.bind_listeners_impl(listeners).await
