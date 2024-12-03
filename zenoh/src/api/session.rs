@@ -25,6 +25,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use async_trait::async_trait;
 use tracing::{error, info, trace, warn};
 use uhlc::Timestamp;
 #[cfg(feature = "internal")]
@@ -67,6 +68,7 @@ use zenoh_result::ZResult;
 use zenoh_shm::api::client_storage::ShmClientStorage;
 use zenoh_task::TaskController;
 
+use super::builders::close::{CloseBuilder, Closeable, Closee};
 #[cfg(feature = "unstable")]
 use crate::api::selector::ZenohParameters;
 #[cfg(feature = "unstable")]
@@ -733,8 +735,8 @@ impl Session {
     /// subscriber_task.await.unwrap();
     /// # }
     /// ```
-    pub fn close(&self) -> impl Resolve<ZResult<()>> + '_ {
-        self.0.close()
+    pub fn close(&self) -> CloseBuilder<Self> {
+        CloseBuilder::new(self)
     }
 
     /// Check if the session has been closed.
@@ -1236,48 +1238,10 @@ impl Session {
         })
     }
 }
+
 impl SessionInner {
     pub fn zid(&self) -> ZenohId {
         self.runtime.zid()
-    }
-
-    fn close(&self) -> impl Resolve<ZResult<()>> + '_ {
-        ResolveFuture::new(async move {
-            let Some(primitives) = zwrite!(self.state).primitives.take() else {
-                return Ok(());
-            };
-            if self.owns_runtime {
-                info!(zid = %self.zid(), "close session");
-            }
-            self.task_controller.terminate_all(Duration::from_secs(10));
-            if self.owns_runtime {
-                self.runtime.close().await?;
-            } else {
-                primitives.send_close();
-            }
-            // defer the cleanup of internal data structures by taking them out of the locked state
-            // this is needed because callbacks may contain entities which need to acquire the
-            // lock to be dropped, so callback must be dropped without the lock held
-            let mut state = zwrite!(self.state);
-            let _queryables = std::mem::take(&mut state.queryables);
-            let _subscribers = std::mem::take(&mut state.subscribers);
-            let _liveliness_subscribers = std::mem::take(&mut state.liveliness_subscribers);
-            let _local_resources = std::mem::take(&mut state.local_resources);
-            let _remote_resources = std::mem::take(&mut state.remote_resources);
-            drop(state);
-            #[cfg(feature = "unstable")]
-            {
-                // the lock from the outer scope cannot be reused because the declared variables
-                // would be undeclared at the end of the block, with the lock held, and we want
-                // to avoid that; so we reacquire the lock in the block
-                // anyway, it doesn't really matter, and this code will be cleaned up when the APIs
-                // will be stabilized.
-                let mut state = zwrite!(self.state);
-                let _matching_listeners = std::mem::take(&mut state.matching_listeners);
-                drop(state);
-            }
-            Ok(())
-        })
     }
 
     pub(crate) fn declare_prefix<'a>(
@@ -3145,4 +3109,52 @@ where
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
     OpenBuilder::new(config)
+}
+
+#[async_trait]
+impl Closee for Arc<SessionInner> {
+    async fn close_inner(&self) {
+        let Some(primitives) = zwrite!(self.state).primitives.take() else {
+            return;
+        };
+
+        if self.owns_runtime {
+            info!(zid = %self.zid(), "close session");
+            self.task_controller.terminate_all_async().await;
+            self.runtime.get_closee().close_inner().await;
+        } else {
+            self.task_controller.terminate_all_async().await;
+            primitives.send_close();
+        }
+
+        // defer the cleanup of internal data structures by taking them out of the locked state
+        // this is needed because callbacks may contain entities which need to acquire the
+        // lock to be dropped, so callback must be dropped without the lock held
+        let mut state = zwrite!(self.state);
+        let _queryables = std::mem::take(&mut state.queryables);
+        let _subscribers = std::mem::take(&mut state.subscribers);
+        let _liveliness_subscribers = std::mem::take(&mut state.liveliness_subscribers);
+        let _local_resources = std::mem::take(&mut state.local_resources);
+        let _remote_resources = std::mem::take(&mut state.remote_resources);
+        drop(state);
+        #[cfg(feature = "unstable")]
+        {
+            // the lock from the outer scope cannot be reused because the declared variables
+            // would be undeclared at the end of the block, with the lock held, and we want
+            // to avoid that; so we reacquire the lock in the block
+            // anyway, it doesn't really matter, and this code will be cleaned up when the APIs
+            // will be stabilized.
+            let mut state = zwrite!(self.state);
+            let _matching_listeners = std::mem::take(&mut state.matching_listeners);
+            drop(state);
+        }
+    }
+}
+
+impl Closeable for Session {
+    type TClosee = Arc<SessionInner>;
+
+    fn get_closee(&self) -> Self::TClosee {
+        self.0.clone()
+    }
 }

@@ -110,21 +110,23 @@ impl TaskController {
     /// The call blocks until all tasks yield or timeout duration expires.
     /// Returns 0 in case of success, number of non terminated tasks otherwise.
     pub fn terminate_all(&self, timeout: Duration) -> usize {
-        ResolveFuture::new(async move { self.terminate_all_async(timeout).await }).wait()
+        ResolveFuture::new(async move {
+            if tokio::time::timeout(timeout, self.terminate_all_async())
+                .await
+                .is_err()
+            {
+                tracing::error!("Failed to terminate {} tasks", self.tracker.len());
+            }
+            self.tracker.len()
+        })
+        .wait()
     }
 
     /// Async version of [`TaskController::terminate_all()`].
-    pub async fn terminate_all_async(&self, timeout: Duration) -> usize {
+    pub async fn terminate_all_async(&self) {
         self.tracker.close();
         self.token.cancel();
-        if tokio::time::timeout(timeout, self.tracker.wait())
-            .await
-            .is_err()
-        {
-            tracing::error!("Failed to terminate {} tasks", self.tracker.len());
-            return self.tracker.len();
-        }
-        0
+        self.tracker.wait().await
     }
 }
 
@@ -181,18 +183,24 @@ impl TerminatableTask {
     /// Attempts to terminate the task.
     /// Returns true if task completed / aborted within timeout duration, false otherwise.
     pub fn terminate(&mut self, timeout: Duration) -> bool {
-        ResolveFuture::new(async move { self.terminate_async(timeout).await }).wait()
-    }
-
-    /// Async version of [`TerminatableTask::terminate()`].
-    pub async fn terminate_async(&mut self, timeout: Duration) -> bool {
-        self.token.cancel();
-        if let Some(handle) = self.handle.take() {
-            if tokio::time::timeout(timeout, handle).await.is_err() {
+        ResolveFuture::new(async move {
+            if tokio::time::timeout(timeout, self.terminate_async())
+                .await
+                .is_err()
+            {
                 tracing::error!("Failed to terminate the task");
                 return false;
             };
+            true
+        })
+        .wait()
+    }
+
+    /// Async version of [`TerminatableTask::terminate()`].
+    pub async fn terminate_async(&mut self) {
+        self.token.cancel();
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.await;
         }
-        true
     }
 }
