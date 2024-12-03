@@ -57,6 +57,7 @@ pub mod header;
 pub mod posix_shm;
 pub mod reader;
 pub mod watchdog;
+pub mod channel;
 
 /// Information about a [`ShmBufInner`].
 ///
