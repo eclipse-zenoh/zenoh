@@ -50,7 +50,7 @@ impl<TCloseable: Closeable> CloseBuilder<TCloseable> {
     ///
     /// * `timeout` - The timeout value for close operation (10s by default)
     ///
-    #[zenoh_macros::unstable_doc]
+    #[doc(hidden)]
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self
@@ -58,7 +58,7 @@ impl<TCloseable: Closeable> CloseBuilder<TCloseable> {
 
     #[cfg(all(feature = "unstable", feature = "internal"))]
     /// Run Close operation concurrently
-    #[zenoh_macros::unstable_doc]
+    #[doc(hidden)]
     pub fn in_background(
         self,
     ) -> BackgroundCloseBuilder<<CloseBuilder<TCloseable> as Resolvable>::To> {
@@ -100,13 +100,14 @@ impl<TCloseable: Closeable> IntoFuture for CloseBuilder<TCloseable> {
 /// A builder for close operations running in background
 // NOTE: `Closeable` is only pub(crate) because it is zenoh-internal trait, so we don't
 // care about the `private_bounds` lint in this particular case.
-#[zenoh_macros::unstable_doc]
+#[doc(hidden)]
 #[allow(private_bounds)]
 pub struct BackgroundCloseBuilder<TOutput: Send + 'static> {
     inner: Pin<Box<dyn Future<Output = TOutput> + Send>>,
 }
 
 #[cfg(all(feature = "unstable", feature = "internal"))]
+#[doc(hidden)]
 // NOTE: `Closeable` is only pub(crate) because it is zenoh-internal trait, so we don't
 // care about the `private_bounds` lint in this particular case.
 #[allow(private_bounds)]
