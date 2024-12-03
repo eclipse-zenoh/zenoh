@@ -830,7 +830,17 @@ impl Session {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        PublisherBuilder::new(self, key_expr)
+        PublisherBuilder {
+            session: self,
+            key_expr: key_expr.try_into().map_err(Into::into),
+            encoding: Encoding::default(),
+            congestion_control: CongestionControl::DEFAULT,
+            priority: Priority::DEFAULT,
+            is_express: false,
+            #[cfg(feature = "unstable")]
+            reliability: Reliability::DEFAULT,
+            destination: Locality::default(),
+        }
     }
 
     /// Obtain a [`Liveliness`] struct tied to this Zenoh [`Session`].
