@@ -125,20 +125,20 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
 }
 
 /// Some extensions to the [`zenoh::subscriber::SubscriberBuilder`](zenoh::pubsub::SubscriberBuilder)
-pub trait DataSubscriberBuilderExt<'a, 'b, Handler> {
+pub trait DataSubscriberBuilderExt<'a, 'b, 'c, Handler> {
     /// Enable query for historical data.
     ///
     /// History can only be retransmitted by Publishers that enable caching.
-    fn history(self, config: HistoryConfig) -> AdvancedSubscriberBuilder<'a, 'b, Handler>;
+    fn history(self, config: HistoryConfig) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>;
 
     /// Ask for retransmission of detected lost Samples.
     ///
     /// Retransmission can only be achieved by Publishers that enable
     /// caching and sample_miss_detection.
-    fn recovery(self, conf: RecoveryConfig) -> AdvancedSubscriberBuilder<'a, 'b, Handler>;
+    fn recovery(self, conf: RecoveryConfig) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>;
 
     /// Turn this `Subscriber`into an `AdvancedSubscriber`.
-    fn advanced(self) -> AdvancedSubscriberBuilder<'a, 'b, Handler>;
+    fn advanced(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>;
 }
 
 impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilder<'a, 'b, Handler> {
@@ -245,13 +245,13 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
     }
 }
 
-impl<'a, 'b, Handler> DataSubscriberBuilderExt<'a, 'b, Handler>
+impl<'a, 'b, 'c, Handler> DataSubscriberBuilderExt<'a, 'b, 'c, Handler>
     for SubscriberBuilder<'a, 'b, Handler>
 {
     /// Enable query for historical data.
     ///
     /// History can only be retransmitted by Publishers that enable caching.
-    fn history(self, config: HistoryConfig) -> AdvancedSubscriberBuilder<'a, 'b, Handler> {
+    fn history(self, config: HistoryConfig) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler> {
         AdvancedSubscriberBuilder::new(self.session, self.key_expr, self.origin, self.handler)
             .history(config)
     }
@@ -260,13 +260,13 @@ impl<'a, 'b, Handler> DataSubscriberBuilderExt<'a, 'b, Handler>
     ///
     /// Retransmission can only be achieved by Publishers that enable
     /// caching and sample_miss_detection.
-    fn recovery(self, conf: RecoveryConfig) -> AdvancedSubscriberBuilder<'a, 'b, Handler> {
+    fn recovery(self, conf: RecoveryConfig) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler> {
         AdvancedSubscriberBuilder::new(self.session, self.key_expr, self.origin, self.handler)
             .recovery(conf)
     }
 
     /// Turn this `Subscriber`into an `AdvancedSubscriber`.
-    fn advanced(self) -> AdvancedSubscriberBuilder<'a, 'b, Handler> {
+    fn advanced(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler> {
         AdvancedSubscriberBuilder::new(self.session, self.key_expr, self.origin, self.handler)
     }
 }

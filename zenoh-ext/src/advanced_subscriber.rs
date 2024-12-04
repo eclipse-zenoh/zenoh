@@ -17,6 +17,7 @@ use zenoh::{
     config::ZenohId,
     handlers::{Callback, IntoHandler},
     key_expr::KeyExpr,
+    liveliness::LivelinessToken,
     query::{
         ConsolidationMode, Parameters, Selector, TimeBound, TimeExpr, TimeRange, ZenohParameters,
     },
@@ -43,7 +44,9 @@ use {
     zenoh::Result as ZResult,
 };
 
-use crate::advanced_cache::{ke_liveliness, KE_PREFIX, KE_SEPARATOR, KE_STARSTAR, KE_UHLC};
+use crate::advanced_cache::{
+    ke_liveliness, KE_EMPTY, KE_PREFIX, KE_SEPARATOR, KE_STARSTAR, KE_UHLC,
+};
 
 #[derive(Debug, Default, Clone)]
 /// Configure query for historical data.
@@ -109,7 +112,7 @@ impl RecoveryConfig {
 
 /// The builder of AdvancedSubscriber, allowing to configure it.
 #[zenoh_macros::unstable]
-pub struct AdvancedSubscriberBuilder<'a, 'b, Handler, const BACKGROUND: bool = false> {
+pub struct AdvancedSubscriberBuilder<'a, 'b, 'c, Handler, const BACKGROUND: bool = false> {
     pub(crate) session: &'a Session,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) origin: Locality,
@@ -117,11 +120,13 @@ pub struct AdvancedSubscriberBuilder<'a, 'b, Handler, const BACKGROUND: bool = f
     pub(crate) query_target: QueryTarget,
     pub(crate) query_timeout: Duration,
     pub(crate) history: Option<HistoryConfig>,
+    pub(crate) liveliness: bool,
+    pub(crate) meta_key_expr: Option<ZResult<KeyExpr<'c>>>,
     pub(crate) handler: Handler,
 }
 
 #[zenoh_macros::unstable]
-impl<'a, 'b, Handler> AdvancedSubscriberBuilder<'a, 'b, Handler> {
+impl<'a, 'b, Handler> AdvancedSubscriberBuilder<'a, 'b, '_, Handler> {
     pub(crate) fn new(
         session: &'a Session,
         key_expr: ZResult<KeyExpr<'b>>,
@@ -137,18 +142,20 @@ impl<'a, 'b, Handler> AdvancedSubscriberBuilder<'a, 'b, Handler> {
             query_target: QueryTarget::All,
             query_timeout: Duration::from_secs(10),
             history: None,
+            liveliness: false,
+            meta_key_expr: None,
         }
     }
 }
 
 #[zenoh_macros::unstable]
-impl<'a, 'b> AdvancedSubscriberBuilder<'a, 'b, DefaultHandler> {
+impl<'a, 'b, 'c> AdvancedSubscriberBuilder<'a, 'b, 'c, DefaultHandler> {
     /// Add callback to AdvancedSubscriber.
     #[inline]
     pub fn callback<Callback>(
         self,
         callback: Callback,
-    ) -> AdvancedSubscriberBuilder<'a, 'b, Callback>
+    ) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Callback>
     where
         Callback: Fn(Sample) + Send + Sync + 'static,
     {
@@ -160,6 +167,8 @@ impl<'a, 'b> AdvancedSubscriberBuilder<'a, 'b, DefaultHandler> {
             query_target: self.query_target,
             query_timeout: self.query_timeout,
             history: self.history,
+            liveliness: self.liveliness,
+            meta_key_expr: self.meta_key_expr,
             handler: callback,
         }
     }
@@ -172,7 +181,7 @@ impl<'a, 'b> AdvancedSubscriberBuilder<'a, 'b, DefaultHandler> {
     pub fn callback_mut<CallbackMut>(
         self,
         callback: CallbackMut,
-    ) -> AdvancedSubscriberBuilder<'a, 'b, impl Fn(Sample) + Send + Sync + 'static>
+    ) -> AdvancedSubscriberBuilder<'a, 'b, 'c, impl Fn(Sample) + Send + Sync + 'static>
     where
         CallbackMut: FnMut(Sample) + Send + Sync + 'static,
     {
@@ -181,7 +190,7 @@ impl<'a, 'b> AdvancedSubscriberBuilder<'a, 'b, DefaultHandler> {
 
     /// Make the built AdvancedSubscriber an [`AdvancedSubscriber`](AdvancedSubscriber).
     #[inline]
-    pub fn with<Handler>(self, handler: Handler) -> AdvancedSubscriberBuilder<'a, 'b, Handler>
+    pub fn with<Handler>(self, handler: Handler) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>
     where
         Handler: IntoHandler<Sample>,
     {
@@ -193,13 +202,15 @@ impl<'a, 'b> AdvancedSubscriberBuilder<'a, 'b, DefaultHandler> {
             query_target: self.query_target,
             query_timeout: self.query_timeout,
             history: self.history,
+            liveliness: self.liveliness,
+            meta_key_expr: self.meta_key_expr,
             handler,
         }
     }
 }
 
 #[zenoh_macros::unstable]
-impl<'a, Handler> AdvancedSubscriberBuilder<'a, '_, Handler> {
+impl<'a, 'c, Handler> AdvancedSubscriberBuilder<'a, '_, 'c, Handler> {
     /// Restrict the matching publications that will be receive by this [`Subscriber`]
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[zenoh_macros::unstable]
@@ -246,7 +257,24 @@ impl<'a, Handler> AdvancedSubscriberBuilder<'a, '_, Handler> {
         self
     }
 
-    fn with_static_keys(self) -> AdvancedSubscriberBuilder<'a, 'static, Handler> {
+    /// Allow this subscriber to be detected through liveliness.
+    pub fn late_joiner_detection(mut self) -> Self {
+        self.liveliness = true;
+        self
+    }
+
+    /// A key expression added to the liveliness token key expression.
+    /// It can be used to convey meta data.
+    pub fn meta_keyexpr<TryIntoKeyExpr>(mut self, meta: TryIntoKeyExpr) -> Self
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'c>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'c>>>::Error: Into<zenoh::Error>,
+    {
+        self.meta_key_expr = Some(meta.try_into().map_err(Into::into));
+        self
+    }
+
+    fn with_static_keys(self) -> AdvancedSubscriberBuilder<'a, 'static, 'static, Handler> {
         AdvancedSubscriberBuilder {
             session: self.session,
             key_expr: self.key_expr.map(|s| s.into_owned()),
@@ -255,12 +283,14 @@ impl<'a, Handler> AdvancedSubscriberBuilder<'a, '_, Handler> {
             query_target: self.query_target,
             query_timeout: self.query_timeout,
             history: self.history,
+            liveliness: self.liveliness,
+            meta_key_expr: self.meta_key_expr.map(|s| s.map(|s| s.into_owned())),
             handler: self.handler,
         }
     }
 }
 
-impl<Handler> Resolvable for AdvancedSubscriberBuilder<'_, '_, Handler>
+impl<Handler> Resolvable for AdvancedSubscriberBuilder<'_, '_, '_, Handler>
 where
     Handler: IntoHandler<Sample>,
     Handler::Handler: Send,
@@ -268,7 +298,7 @@ where
     type To = ZResult<AdvancedSubscriber<Handler::Handler>>;
 }
 
-impl<Handler> Wait for AdvancedSubscriberBuilder<'_, '_, Handler>
+impl<Handler> Wait for AdvancedSubscriberBuilder<'_, '_, '_, Handler>
 where
     Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
@@ -278,7 +308,7 @@ where
     }
 }
 
-impl<Handler> IntoFuture for AdvancedSubscriberBuilder<'_, '_, Handler>
+impl<Handler> IntoFuture for AdvancedSubscriberBuilder<'_, '_, '_, Handler>
 where
     Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
@@ -351,6 +381,7 @@ pub struct AdvancedSubscriber<Receiver> {
     _subscriber: Subscriber<()>,
     receiver: Receiver,
     _liveliness_subscriber: Option<Subscriber<()>>,
+    _token: Option<LivelinessToken>,
 }
 
 #[zenoh_macros::unstable]
@@ -501,12 +532,16 @@ impl Timed for PeriodicQuery {
 
 #[zenoh_macros::unstable]
 impl<Handler> AdvancedSubscriber<Handler> {
-    fn new<H>(conf: AdvancedSubscriberBuilder<'_, '_, H>) -> ZResult<Self>
+    fn new<H>(conf: AdvancedSubscriberBuilder<'_, '_, '_, H>) -> ZResult<Self>
     where
         H: IntoHandler<Sample, Handler = Handler> + Send,
     {
         let (callback, receiver) = conf.handler.into_handler();
         let key_expr = conf.key_expr?;
+        let meta = match conf.meta_key_expr {
+            Some(meta) => Some(meta?),
+            None => None,
+        };
         let retransmission = conf.retransmission;
         let query_target = conf.query_target;
         let query_timeout = conf.query_timeout;
@@ -817,11 +852,31 @@ impl<Handler> AdvancedSubscriber<Handler> {
             None
         };
 
+        let token = if conf.liveliness {
+            let prefix = KE_PREFIX
+                / &subscriber.id().zid().into_keyexpr()
+                / &KeyExpr::try_from(subscriber.id().eid().to_string()).unwrap();
+            let prefix = match meta {
+                Some(meta) => prefix / &meta / KE_SEPARATOR,
+                // We need this empty chunk because af a routing matching bug
+                _ => prefix / KE_EMPTY / KE_SEPARATOR,
+            };
+            Some(
+                conf.session
+                    .liveliness()
+                    .declare_token(prefix / &key_expr)
+                    .wait()?,
+            )
+        } else {
+            None
+        };
+
         let reliable_subscriber = AdvancedSubscriber {
             statesref,
             _subscriber: subscriber,
             receiver,
             _liveliness_subscriber: liveliness_subscriber,
+            _token: token,
         };
 
         Ok(reliable_subscriber)
