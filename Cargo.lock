@@ -5043,7 +5043,7 @@ checksum = "6a5cbf750400958819fb6178eaa83bee5cd9c29a26a40cc241df8c70fdd46984"
 [[package]]
 name = "z-serial"
 version = "0.2.3"
-source = "git+https://github.com/ZettaScaleLabs/z-serial/?branch=feat/state-machine#2262076d24689965cd0422386c1cf491b4281605"
+source = "git+https://github.com/ZettaScaleLabs/z-serial/?branch=feat/state-machine#43b978efa780b5b8150eaac96949f8545166f918"
 dependencies = [
  "cobs",
  "futures",

@@ -45,7 +45,7 @@ use super::{
     get_baud_rate, get_unix_path_as_string, SERIAL_ACCEPT_THROTTLE_TIME, SERIAL_DEFAULT_MTU,
     SERIAL_LOCATOR_PREFIX,
 };
-use crate::get_exclusive;
+use crate::{get_exclusive, get_timeout};
 
 struct LinkUnicastSerial {
     // The underlying serial port as returned by ZSerial (tokio-serial)
@@ -266,7 +266,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         let path = get_unix_path_as_string(endpoint.address());
         let baud_rate = get_baud_rate(&endpoint);
         let exclusive = get_exclusive(&endpoint);
-        tracing::trace!("Opening Serial Link on device {path:?}, with baudrate {baud_rate} and exclusive set as {exclusive}");
+        let tout = get_timeout(&endpoint);
+        tracing::trace!("Opening Serial Link on device {path:?}, with baudrate {baud_rate}, exclusive set as {exclusive} and timeout (us) {tout}");
         let mut port = ZSerial::new(path.clone(), baud_rate, exclusive).map_err(|e| {
             let e = zerror!(
                 "Can not create a new Serial link bound to {:?}: {}",
@@ -279,7 +280,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
 
         // Clear buffers
         port.clear()?;
-        port.connect().await?;
+        port.connect(Some(Duration::from_micros(tout))).await?;
 
         // Create Serial link
         let link = Arc::new(LinkUnicastSerial::new(
