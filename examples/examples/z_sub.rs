@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -32,24 +30,23 @@ async fn main() {
 
     println!("Press CTRL-C to quit...");
     while let Ok(sample) = subscriber.recv_async().await {
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        // // Refer to z_bytes.rs to see how to deserialize different types of message
-        // let payload = sample
-        //     .payload()
-        //     .try_to_string()
-        //     .unwrap_or_else(|e| e.to_string().into());
+        // Refer to z_bytes.rs to see how to deserialize different types of message
+        let payload = sample
+            .payload()
+            .try_to_string()
+            .unwrap_or_else(|e| e.to_string().into());
 
-        // print!(
-        //     ">> [Subscriber] Received {} ('{}': '{}')",
-        //     sample.kind(),
-        //     sample.key_expr().as_str(),
-        //     payload
-        // );
-        // if let Some(att) = sample.attachment() {
-        //     let att = att.try_to_string().unwrap_or_else(|e| e.to_string().into());
-        //     print!(" ({})", att);
-        // }
-        // println!();
+        print!(
+            ">> [Subscriber] Received {} ('{}': '{}')",
+            sample.kind(),
+            sample.key_expr().as_str(),
+            payload
+        );
+        if let Some(att) = sample.attachment() {
+            let att = att.try_to_string().unwrap_or_else(|e| e.to_string().into());
+            print!(" ({})", att);
+        }
+        println!();
     }
 }
 
