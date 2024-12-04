@@ -30,7 +30,7 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 use z_serial::ZSerial;
-use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
+use zenoh_core::{bail, zasynclock, zasyncread, zasyncwrite};
 use zenoh_link_commons::{
     ConstructibleLinkManagerUnicast, LinkAuthId, LinkManagerUnicastTrait, LinkUnicast,
     LinkUnicastTrait, NewLinkChannelSender,
@@ -96,25 +96,8 @@ impl LinkUnicastSerial {
         unsafe { &mut *self.port.get() }
     }
 
-    fn is_ready(&self) -> bool {
-        let res = match self.get_port_mut().bytes_to_read() {
-            Ok(b) => b,
-            Err(e) => {
-                tracing::warn!(
-                    "Unable to check if there are bytes to read in serial {}: {}",
-                    self.src_locator,
-                    e
-                );
-                0
-            }
-        };
-        if res > 0 {
-            return true;
-        }
-        false
-    }
-
     fn clear_buffers(&self) -> ZResult<()> {
+        tracing::trace!("I'm cleaning the buffers");
         Ok(self
             .get_port_mut()
             .clear()
@@ -127,8 +110,8 @@ impl LinkUnicastTrait for LinkUnicastSerial {
     async fn close(&self) -> ZResult<()> {
         tracing::trace!("Closing Serial link: {}", self);
         let _guard = zasynclock!(self.write_lock);
-        self.clear_buffers()?;
         self.is_connected.store(false, Ordering::Release);
+        self.get_port_mut().close();
         Ok(())
     }
 
@@ -151,17 +134,14 @@ impl LinkUnicastTrait for LinkUnicastSerial {
     }
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
-        loop {
-            let _guard = zasynclock!(self.read_lock);
-            match self.get_port_mut().read_msg(buffer).await {
-                Ok(read) => return Ok(read),
-                Err(e) => {
-                    let e = zerror!("Read error on Serial link {}: {}", self, e);
-                    tracing::error!("{}", e);
-                    drop(_guard);
-                    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
-                    continue;
-                }
+        let _guard = zasynclock!(self.read_lock);
+        match self.get_port_mut().read_msg(buffer).await {
+            Ok(read) => return Ok(read),
+            Err(e) => {
+                let e = zerror!("Read error on Serial link {}: {}", self, e);
+                tracing::error!("{}", e);
+                drop(_guard);
+                bail!("Read error on Serial link {}: {}", self, e);
             }
         }
     }
@@ -287,7 +267,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         let baud_rate = get_baud_rate(&endpoint);
         let exclusive = get_exclusive(&endpoint);
         tracing::trace!("Opening Serial Link on device {path:?}, with baudrate {baud_rate} and exclusive set as {exclusive}");
-        let port = ZSerial::new(path.clone(), baud_rate, exclusive).map_err(|e| {
+        let mut port = ZSerial::new(path.clone(), baud_rate, exclusive).map_err(|e| {
             let e = zerror!(
                 "Can not create a new Serial link bound to {:?}: {}",
                 path,
@@ -296,6 +276,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
             tracing::warn!("{}", e);
             e
         })?;
+
+        // Clear buffers
+        port.clear()?;
+        port.connect().await?;
 
         // Create Serial link
         let link = Arc::new(LinkUnicastSerial::new(
@@ -405,11 +389,17 @@ async fn accept_read_task(
         src_path: String,
         is_connected: Arc<AtomicBool>,
     ) -> ZResult<Arc<LinkUnicastSerial>> {
-        // Cleaning RX buffer before listening
-        link.clear_buffers()?;
+        // while !is_connected.load(Ordering::Acquire) && !link.is_ready() {
+        //     // Waiting to be ready, if not sleep some time.
+        //     tokio::time::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
+        // }
+        // while !is_connected.load(Ordering::Acquire) {
+        //     // Waiting to be ready, if not sleep some time.
+        //     tokio::time::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
+        // }
 
-        while !is_connected.load(Ordering::Acquire) && !link.is_ready() {
-            // Waiting to be ready, if not sleep some time.
+        while link.get_port_mut().accept().await.is_err() {
+            //Waiting to be ready, if not sleep some time.
             tokio::time::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
         }
 
@@ -418,6 +408,8 @@ async fn accept_read_task(
         Ok(link.clone())
     }
 
+    // Cleaning RX buffer before listening
+    link.clear_buffers()?;
     tracing::trace!("Ready to accept Serial connections on: {:?}", src_path);
 
     loop {

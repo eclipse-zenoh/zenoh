@@ -223,6 +223,9 @@ zenoh = { version = "1.0.0-dev", path = "zenoh", default-features = false }
 zenoh-runtime = { version = "1.0.0-dev", path = "commons/zenoh-runtime" }
 zenoh-task = { version = "1.0.0-dev", path = "commons/zenoh-task" }
 
+[patch.crates-io]
+z-serial = { git = "https://github.com/ZettaScaleLabs/z-serial/", branch = "feat/state-machine" }
+
 [profile.dev]
 debug = true
 opt-level = 0
