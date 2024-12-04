@@ -431,10 +431,10 @@ async fn tx_task(
                         link.send_batch(&mut batch).await?;
                         // Keep track of next SNs
                         if let Some(sn) = batch.codec.latest_sn.reliable {
-                            last_sns[priority].reliable = sn;
+                            last_sns[priority as usize].reliable = sn;
                         }
                         if let Some(sn) = batch.codec.latest_sn.best_effort {
-                            last_sns[priority].best_effort = sn;
+                            last_sns[priority as usize].best_effort = sn;
                         }
                         #[cfg(feature = "stats")]
                         {
