@@ -26,6 +26,7 @@ use x509_parser::prelude::{FromDer, X509Certificate};
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
     get_ip_interface_names,
+    tcp::TcpSocketUtils,
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
     LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     ListenersUnicastIP, NewLinkChannelSender,
@@ -324,29 +325,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let connector = TlsConnector::from(config);
 
         // Initialize the TcpStream
-        let tcp_stream = TcpStream::connect(addr).await.map_err(|e| {
-            zerror!(
-                "Can not create a new TLS link bound to {:?}: {}",
-                server_name,
-                e
-            )
-        })?;
-
-        let src_addr = tcp_stream.local_addr().map_err(|e| {
-            zerror!(
-                "Can not create a new TLS link bound to {:?}: {}",
-                server_name,
-                e
-            )
-        })?;
-
-        let dst_addr = tcp_stream.peer_addr().map_err(|e| {
-            zerror!(
-                "Can not create a new TLS link bound to {:?}: {}",
-                server_name,
-                e
-            )
-        })?;
+        // TODO: Add interface binding
+        let (tcp_stream, src_addr, dst_addr) =
+            TcpSocketUtils::connect(&addr, None).await.map_err(|e| {
+                zerror!(
+                    "Can not create a new TLS link bound to {:?}: {}",
+                    server_name,
+                    e
+                )
+            })?;
 
         // Initialize the TlsStream
         let tls_stream = connector
@@ -404,13 +391,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             .map_err(|e| zerror!("Cannot create a new TLS listener on {addr}. {e}"))?;
 
         // Initialize the TcpListener
-        let socket = TcpListener::bind(addr)
-            .await
+        // TODO: Add interface bindings
+        let (socket, local_addr) = TcpSocketUtils::listen(&addr, None)
             .map_err(|e| zerror!("Can not create a new TLS listener on {}: {}", addr, e))?;
 
-        let local_addr = socket
-            .local_addr()
-            .map_err(|e| zerror!("Can not create a new TLS listener on {}: {}", addr, e))?;
         let local_port = local_addr.port();
 
         // Initialize the TlsAcceptor
