@@ -32,8 +32,9 @@ use uhlc::Timestamp;
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
-use zenoh_config::{unwrap_or_default, wrappers::ZenohId};
+use zenoh_config::{qos::PublisherQoSConfig, unwrap_or_default, wrappers::ZenohId};
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Wait};
+use zenoh_keyexpr::keyexpr_tree::KeBoxTree;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::network::{
     declare::{DeclareToken, SubscriberId, TokenId, UndeclareToken},
@@ -150,12 +151,14 @@ pub(crate) struct SessionState {
     pub(crate) liveliness_queries: HashMap<InterestId, LivelinessQueryState>,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
     pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
+    pub(crate) publisher_qos_tree: KeBoxTree<PublisherQoSConfig>,
 }
 
 impl SessionState {
     pub(crate) fn new(
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         aggregated_publishers: Vec<OwnedKeyExpr>,
+        publisher_qos_tree: KeBoxTree<PublisherQoSConfig>,
     ) -> SessionState {
         SessionState {
             primitives: None,
@@ -185,6 +188,7 @@ impl SessionState {
             liveliness_queries: HashMap::new(),
             aggregated_subscribers,
             aggregated_publishers,
+            publisher_qos_tree,
         }
     }
 }
@@ -664,9 +668,13 @@ impl Session {
     ) -> impl Resolve<Session> {
         ResolveClosure::new(move || {
             let router = runtime.router();
+            let config = runtime.config().lock();
+            let publisher_qos = config.0.qos().publication().clone();
+            drop(config);
             let state = RwLock::new(SessionState::new(
                 aggregated_subscribers,
                 aggregated_publishers,
+                publisher_qos.into(),
             ));
             let session = Session(Arc::new(SessionInner {
                 weak_counter: Mutex::new(0),

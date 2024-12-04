@@ -22,6 +22,7 @@ use std::{
 
 use futures::Sink;
 use tracing::error;
+use zenoh_config::qos::PublisherPriorityConf;
 use zenoh_core::{Resolvable, Resolve, Wait};
 use zenoh_protocol::core::CongestionControl;
 use zenoh_result::{Error, ZResult};
@@ -473,6 +474,34 @@ impl TryFrom<u8> for Priority {
                 Self::MAX_ as u8,
                 Self::MIN_ as u8
             ),
+        }
+    }
+}
+
+impl From<PublisherPriorityConf> for Priority {
+    fn from(value: PublisherPriorityConf) -> Self {
+        match value {
+            PublisherPriorityConf::RealTime => Self::RealTime,
+            PublisherPriorityConf::InteractiveHigh => Self::InteractiveHigh,
+            PublisherPriorityConf::InteractiveLow => Self::InteractiveLow,
+            PublisherPriorityConf::DataHigh => Self::DataHigh,
+            PublisherPriorityConf::Data => Self::Data,
+            PublisherPriorityConf::DataLow => Self::DataLow,
+            PublisherPriorityConf::Background => Self::Background,
+        }
+    }
+}
+
+impl From<Priority> for PublisherPriorityConf {
+    fn from(value: Priority) -> Self {
+        match value {
+            Priority::RealTime => Self::RealTime,
+            Priority::InteractiveHigh => Self::InteractiveHigh,
+            Priority::InteractiveLow => Self::InteractiveLow,
+            Priority::DataHigh => Self::DataHigh,
+            Priority::Data => Self::Data,
+            Priority::DataLow => Self::DataLow,
+            Priority::Background => Self::Background,
         }
     }
 }

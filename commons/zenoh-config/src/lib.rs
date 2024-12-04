@@ -21,6 +21,7 @@
 //! Configuration to pass to `zenoh::open()` and `zenoh::scout()` functions and associated constants.
 pub mod defaults;
 mod include;
+pub mod qos;
 pub mod wrappers;
 
 #[allow(unused_imports)]
@@ -30,6 +31,7 @@ use std::{
 };
 
 use include::recursive_include;
+use qos::PublisherQoSConfList;
 use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -360,6 +362,14 @@ validated_struct::validator! {
             /// A list of key-expressions for which all included publishers will be aggregated into.
             publishers: Vec<OwnedKeyExpr>,
         },
+
+        /// Overwrite QoS options for Zenoh messages by key expression (ignores Zenoh API QoS config)
+        pub qos: #[derive(Default)]
+        QoSConfig {
+            /// A list of QoS configurations for PUT and DELETE messages by key expressions
+            publication: PublisherQoSConfList,
+        },
+
         pub transport: #[derive(Default)]
         TransportConf {
             pub unicast: TransportUnicastConf {
