@@ -30,6 +30,7 @@ socket2 = { workspace = true }
 tokio = { workspace = true, features = ["net", "io-util", "rt", "time"] }
 tokio-util = { workspace = true, features = ["rt"] }
 tracing = {workspace = true}
+zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-link-commons = { workspace = true }
 zenoh-protocol = { workspace = true }

@@ -474,6 +474,12 @@
         // note that mTLS (client authentication) is required for a listener to disconnect a client on expiration
         close_link_on_expiration: false,
       },
+      /// Optional configration for TCP system buffers sizes. Applies to TCP and TLS links.
+      ///
+      /// Configure TCP read buffer size (bytes)
+      // tcp_rx_buffer: 123456,
+      /// Configure TCP write buffer size (bytes)
+      // tcp_tx_buffer: 123456,
     },
     /// Shared memory configuration.
     /// NOTE: shared memory can be used only if zenoh is compiled with "shared-memory" feature, otherwise

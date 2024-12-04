@@ -153,6 +153,19 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
             false => ps.push((TLS_CLOSE_LINK_ON_EXPIRATION, "false")),
         }
 
+        let link_c = config.transport().link();
+        let rx_buffer_size;
+        if let Some(size) = link_c.tcp_rx_buffer {
+            rx_buffer_size = size.to_string();
+            ps.push((TCP_RX_BUFFER_SIZE, &rx_buffer_size));
+        }
+
+        let tx_buffer_size;
+        if let Some(size) = link_c.tcp_tx_buffer {
+            tx_buffer_size = size.to_string();
+            ps.push((TCP_TX_BUFFER_SIZE, &tx_buffer_size));
+        }
+
         Ok(parameters::from_iter(ps.drain(..)))
     }
 }

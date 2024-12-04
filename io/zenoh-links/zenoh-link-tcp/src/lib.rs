@@ -31,6 +31,7 @@ use zenoh_result::{zerror, ZResult};
 mod unicast;
 mod utils;
 pub use unicast::*;
+pub use utils::TcpConfigurator;
 
 // Default MTU (TCP PDU) in bytes.
 // NOTE: Since TCP is a byte-stream oriented transport, theoretically it has

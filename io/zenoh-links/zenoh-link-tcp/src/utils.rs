@@ -11,11 +11,36 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use zenoh_config::Config as ZenohConfig;
 use zenoh_link_commons::{
-    tcp::TcpSocketConfig, BIND_INTERFACE, TCP_RX_BUFFER_SIZE, TCP_TX_BUFFER_SIZE,
+    tcp::TcpSocketConfig, ConfigurationInspector, BIND_INTERFACE, TCP_RX_BUFFER_SIZE,
+    TCP_TX_BUFFER_SIZE,
 };
-use zenoh_protocol::core::Config;
+use zenoh_protocol::core::{parameters, Config};
 use zenoh_result::{zerror, ZResult};
+
+#[derive(Default, Clone, Copy, Debug)]
+pub struct TcpConfigurator;
+
+impl ConfigurationInspector<ZenohConfig> for TcpConfigurator {
+    fn inspect_config(&self, config: &ZenohConfig) -> ZResult<String> {
+        let mut ps: Vec<(&str, &str)> = vec![];
+        let c = config.transport().link();
+
+        let rx_buffer_size;
+        if let Some(size) = c.tcp_rx_buffer {
+            rx_buffer_size = size.to_string();
+            ps.push((TCP_RX_BUFFER_SIZE, &rx_buffer_size));
+        }
+        let tx_buffer_size;
+        if let Some(size) = c.tcp_tx_buffer {
+            tx_buffer_size = size.to_string();
+            ps.push((TCP_TX_BUFFER_SIZE, &tx_buffer_size));
+        }
+
+        Ok(parameters::from_iter(ps.drain(..)))
+    }
+}
 
 pub(crate) struct TcpLinkConfig<'a> {
     pub(crate) rx_buffer_size: Option<u32>,
