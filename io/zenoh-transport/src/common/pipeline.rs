@@ -688,20 +688,54 @@ impl TransmissionPipeline {
             });
         }
 
-        let active = Arc::new((AtomicBool::new(true), AtomicU8::new(0)));
+        let active = Arc::new(TransmissionPipelineStatus {
+            disabled: AtomicBool::new(false),
+            congested: AtomicU8::new(0),
+        });
         let producer = TransmissionPipelineProducer {
             stage_in: stage_in.into_boxed_slice().into(),
-            active: active.clone(),
+            status: active.clone(),
             wait_before_drop: config.wait_before_drop,
             wait_before_close: config.wait_before_close,
         };
         let consumer = TransmissionPipelineConsumer {
             stage_out: stage_out.into_boxed_slice(),
             n_out_r,
-            active,
+            status: active,
         };
 
         (producer, consumer)
+    }
+}
+
+struct TransmissionPipelineStatus {
+    // The whole pipeline is enabled or disabled
+    disabled: AtomicBool,
+    // Bitflags to indicate the given priority queue is congested
+    congested: AtomicU8,
+}
+
+impl TransmissionPipelineStatus {
+    fn set_disabled(&self, status: bool) {
+        self.disabled.store(status, Ordering::Relaxed);
+    }
+
+    fn is_disabled(&self) -> bool {
+        self.disabled.load(Ordering::Relaxed)
+    }
+
+    fn set_congested(&self, priority: Priority, status: bool) {
+        let prioflag = 1 << priority as u8;
+        if status {
+            self.congested.fetch_or(prioflag, Ordering::Relaxed);
+        } else {
+            self.congested.fetch_and(!prioflag, Ordering::Relaxed);
+        }
+    }
+
+    fn is_congested(&self, priority: Priority) -> bool {
+        let prioflag = 1 << priority as u8;
+        self.congested.load(Ordering::Relaxed) & prioflag != 0
     }
 }
 
@@ -709,7 +743,7 @@ impl TransmissionPipeline {
 pub(crate) struct TransmissionPipelineProducer {
     // Each priority queue has its own Mutex
     stage_in: Arc<[Mutex<StageIn>]>,
-    active: Arc<(AtomicBool, AtomicU8)>,
+    status: Arc<TransmissionPipelineStatus>,
     wait_before_drop: (Duration, Duration),
     wait_before_close: Duration,
 }
@@ -724,12 +758,11 @@ impl TransmissionPipelineProducer {
         } else {
             (0, Priority::DEFAULT)
         };
-        let prioflag = 1 << priority as u8;
 
         // If message is droppable, compute a deadline after which the sample could be dropped
         let (wait_time, max_wait_time) = if msg.is_droppable() {
             // Checked if we are blocked on the priority queue and we drop directly the message
-            if self.active.1.load(Ordering::Acquire) & prioflag != 0 {
+            if self.status.is_congested(priority) {
                 return false;
             }
             (self.wait_before_drop.0, Some(self.wait_before_drop.1))
@@ -741,7 +774,7 @@ impl TransmissionPipelineProducer {
         let mut queue = zlock!(self.stage_in[idx]);
         let sent = queue.push_network_message(&mut msg, priority, &mut deadline);
         if !sent {
-            self.active.1.fetch_or(prioflag, Ordering::AcqRel);
+            self.status.set_congested(priority, true);
         }
         sent
     }
@@ -760,7 +793,7 @@ impl TransmissionPipelineProducer {
     }
 
     pub(crate) fn disable(&self) {
-        self.active.0.store(false, Ordering::Relaxed);
+        self.status.set_disabled(true);
 
         // Acquire all the locks, in_guard first, out_guard later
         // Use the same locking order as in drain to avoid deadlocks
@@ -778,12 +811,12 @@ pub(crate) struct TransmissionPipelineConsumer {
     // A single Mutex for all the priority queues
     stage_out: Box<[StageOut]>,
     n_out_r: Waiter,
-    active: Arc<(AtomicBool, AtomicU8)>,
+    status: Arc<TransmissionPipelineStatus>,
 }
 
 impl TransmissionPipelineConsumer {
     pub(crate) async fn pull(&mut self) -> Option<(WBatch, usize)> {
-        while self.active.0.load(Ordering::Relaxed) {
+        while !self.status.is_disabled() {
             let mut backoff = MicroSeconds::MAX;
             // Calculate the backoff maximum
             for (prio, queue) in self.stage_out.iter_mut().enumerate() {
@@ -830,8 +863,9 @@ impl TransmissionPipelineConsumer {
 
     pub(crate) fn refill(&mut self, batch: WBatch, priority: usize) {
         self.stage_out[priority].refill(batch);
+        // Reset the priority congested flag
         let prioflag = 1 << priority as u8;
-        self.active.1.fetch_and(!prioflag, Ordering::AcqRel);
+        self.status.congested.fetch_and(!prioflag, Ordering::AcqRel);
     }
 
     pub(crate) fn drain(&mut self) -> Vec<(WBatch, usize)> {
