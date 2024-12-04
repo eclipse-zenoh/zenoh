@@ -59,11 +59,11 @@ pub struct HistoryConfig {
 impl HistoryConfig {
     /// Enable detection of late joiner publishers and query for their historical data.
     ///
-    /// Let joiner detection can only be achieved for Publishers that enable late_joiner_detection.
+    /// Let joiner detection can only be achieved for Publishers that enable publisher_detection.
     /// History can only be retransmitted by Publishers that enable caching.
     #[zenoh_macros::unstable]
     #[inline]
-    pub fn late_joiner(mut self) -> Self {
+    pub fn detect_late_publishers(mut self) -> Self {
         self.liveliness = true;
         self
     }
@@ -258,14 +258,14 @@ impl<'a, 'c, Handler> AdvancedSubscriberBuilder<'a, '_, 'c, Handler> {
     }
 
     /// Allow this subscriber to be detected through liveliness.
-    pub fn late_joiner_detection(mut self) -> Self {
+    pub fn subscriber_detection(mut self) -> Self {
         self.liveliness = true;
         self
     }
 
     /// A key expression added to the liveliness token key expression.
     /// It can be used to convey meta data.
-    pub fn meta_keyexpr<TryIntoKeyExpr>(mut self, meta: TryIntoKeyExpr) -> Self
+    pub fn subscriber_detection_metadata<TryIntoKeyExpr>(mut self, meta: TryIntoKeyExpr) -> Self
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'c>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'c>>>::Error: Into<zenoh::Error>,

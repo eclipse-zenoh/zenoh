@@ -32,7 +32,7 @@ pub trait PublisherBuilderExt<'a, 'b, 'c> {
     /// Allow this publisher to be detected by subscribers.
     ///
     /// This allows Subscribers to retrieve the local history.
-    fn late_joiner_detection(self) -> AdvancedPublisherBuilder<'a, 'b, 'c>;
+    fn publisher_detection(self) -> AdvancedPublisherBuilder<'a, 'b, 'c>;
 }
 
 impl<'a, 'b, 'c> PublisherBuilderExt<'a, 'b, 'c> for PublisherBuilder<'a, 'b> {
@@ -54,7 +54,7 @@ impl<'a, 'b, 'c> PublisherBuilderExt<'a, 'b, 'c> for PublisherBuilder<'a, 'b> {
     /// Allow this publisher to be detected by subscribers.
     ///
     /// This allows Subscribers to retrieve the local history.
-    fn late_joiner_detection(self) -> AdvancedPublisherBuilder<'a, 'b, 'c> {
-        AdvancedPublisherBuilder::new(self.session, self.key_expr).late_joiner_detection()
+    fn publisher_detection(self) -> AdvancedPublisherBuilder<'a, 'b, 'c> {
+        AdvancedPublisherBuilder::new(self.session, self.key_expr).publisher_detection()
     }
 }

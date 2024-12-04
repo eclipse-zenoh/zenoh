@@ -137,6 +137,9 @@ pub trait DataSubscriberBuilderExt<'a, 'b, 'c, Handler> {
     /// caching and sample_miss_detection.
     fn recovery(self, conf: RecoveryConfig) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>;
 
+    /// Allow this subscriber to be detected through liveliness.
+    fn subscriber_detection(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>;
+
     /// Turn this `Subscriber`into an `AdvancedSubscriber`.
     fn advanced(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>;
 }
@@ -263,6 +266,12 @@ impl<'a, 'b, 'c, Handler> DataSubscriberBuilderExt<'a, 'b, 'c, Handler>
     fn recovery(self, conf: RecoveryConfig) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler> {
         AdvancedSubscriberBuilder::new(self.session, self.key_expr, self.origin, self.handler)
             .recovery(conf)
+    }
+
+    /// Allow this subscriber to be detected through liveliness.
+    fn subscriber_detection(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler> {
+        AdvancedSubscriberBuilder::new(self.session, self.key_expr, self.origin, self.handler)
+            .subscriber_detection()
     }
 
     /// Turn this `Subscriber`into an `AdvancedSubscriber`.

@@ -34,7 +34,7 @@ async fn main() {
         .declare_publisher(&key_expr)
         .cache(CacheConfig::default().max_samples(history))
         .sample_miss_detection()
-        .late_joiner_detection()
+        .publisher_detection()
         .await
         .unwrap();
 

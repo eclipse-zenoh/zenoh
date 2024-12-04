@@ -89,7 +89,7 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
     /// Allow this publisher to be detected by subscribers.
     ///
     /// This allows Subscribers to retrieve the local history.
-    pub fn late_joiner_detection(mut self) -> Self {
+    pub fn publisher_detection(mut self) -> Self {
         self.liveliness = true;
         self
     }
@@ -97,7 +97,7 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
     /// A key expression added to the liveliness token key expression
     /// and to the cache queryable key expression.
     /// It can be used to convey meta data.
-    pub fn meta_keyexpr<TryIntoKeyExpr>(mut self, meta: TryIntoKeyExpr) -> Self
+    pub fn publisher_detection_metadata<TryIntoKeyExpr>(mut self, meta: TryIntoKeyExpr) -> Self
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'c>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'c>>>::Error: Into<zenoh::Error>,

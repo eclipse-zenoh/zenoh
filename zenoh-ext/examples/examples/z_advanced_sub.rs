@@ -31,8 +31,9 @@ async fn main() {
     println!("Declaring AdvancedSubscriber on {}", key_expr);
     let subscriber = session
         .declare_subscriber(key_expr)
-        .history(HistoryConfig::default().late_joiner())
+        .history(HistoryConfig::default().detect_late_publishers())
         .recovery(RecoveryConfig::default().periodic_queries(Some(Duration::from_secs(1))))
+        .subscriber_detection()
         .await
         .unwrap();
 

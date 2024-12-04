@@ -653,14 +653,14 @@ async fn test_advanced_late_joiner() {
 
     let sub = ztimeout!(peer2
         .declare_subscriber(ADVANCED_LATE_JOINER_KEYEXPR)
-        .history(HistoryConfig::default().late_joiner()))
+        .history(HistoryConfig::default().detect_late_publishers()))
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let publ = ztimeout!(peer1
         .declare_publisher(ADVANCED_LATE_JOINER_KEYEXPR)
         .cache(CacheConfig::default().max_samples(10))
-        .late_joiner_detection())
+        .publisher_detection())
     .unwrap();
     ztimeout!(publ.put("1")).unwrap();
     ztimeout!(publ.put("2")).unwrap();
