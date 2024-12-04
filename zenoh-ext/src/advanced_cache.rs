@@ -34,15 +34,21 @@ use zenoh::{
     Resolvable, Resolve, Result as ZResult, Session, Wait,
 };
 
+// #[zenoh_macros::unstable]
+// pub(crate) static KE_STAR: &keyexpr = ke!("*");
 #[zenoh_macros::unstable]
-pub(crate) static KE_STAR: &keyexpr = ke!("*");
+pub(crate) static KE_STARSTAR: &keyexpr = ke!("**");
 #[zenoh_macros::unstable]
-pub(crate) static KE_PREFIX: &keyexpr = ke!("@cache");
+pub(crate) static KE_PREFIX: &keyexpr = ke!("@adv");
+#[zenoh_macros::unstable]
+pub(crate) static KE_SEPARATOR: &keyexpr = ke!("@");
 #[zenoh_macros::unstable]
 pub(crate) static KE_UHLC: &keyexpr = ke!("uhlc");
 #[zenoh_macros::unstable]
+pub(crate) static KE_EMPTY: &keyexpr = ke!("_");
+#[zenoh_macros::unstable]
 kedefine!(
-    pub(crate) ke_liveliness: "@cache/${zid:*}/${eid:*}/${remaining:**}",
+    pub(crate) ke_liveliness: "@adv/${zid:*}/${eid:*}/${meta:**}/@/${remaining:**}",
 );
 
 #[derive(Debug, Clone)]
@@ -96,7 +102,7 @@ impl<'a, 'b, 'c> AdvancedCacheBuilder<'a, 'b, 'c> {
         AdvancedCacheBuilder {
             session,
             pub_key_expr,
-            queryable_prefix: Some(Ok((KE_PREFIX / KE_STAR / KE_STAR).into())),
+            queryable_prefix: Some(Ok((KE_PREFIX / KE_STARSTAR / KE_SEPARATOR).into())),
             subscriber_origin: Locality::default(),
             queryable_origin: Locality::default(),
             history: CacheConfig::default(),

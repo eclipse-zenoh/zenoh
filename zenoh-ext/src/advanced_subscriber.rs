@@ -43,7 +43,7 @@ use {
     zenoh::Result as ZResult,
 };
 
-use crate::advanced_cache::{ke_liveliness, KE_PREFIX, KE_STAR, KE_UHLC};
+use crate::advanced_cache::{ke_liveliness, KE_PREFIX, KE_SEPARATOR, KE_STARSTAR, KE_UHLC};
 
 #[derive(Debug, Default, Clone)]
 /// Configure query for historical data.
@@ -464,6 +464,8 @@ impl Timed for PeriodicQuery {
             let query_expr = KE_PREFIX
                 / &self.source_id.zid().into_keyexpr()
                 / &KeyExpr::try_from(self.source_id.eid().to_string()).unwrap()
+                / KE_STARSTAR
+                / KE_SEPARATOR
                 / &states.key_expr;
             let seq_num_range = seq_num_range(Some(state.last_delivered.unwrap() + 1), None);
 
@@ -554,6 +556,8 @@ impl<Handler> AdvancedSubscriber<Handler> {
                             let query_expr = KE_PREFIX
                                 / &source_id.zid().into_keyexpr()
                                 / &KeyExpr::try_from(source_id.eid().to_string()).unwrap()
+                                / KE_STARSTAR
+                                / KE_SEPARATOR
                                 / &key_expr;
                             let seq_num_range =
                                 seq_num_range(Some(state.last_delivered.unwrap() + 1), None);
@@ -610,7 +614,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
             let _ = conf
                 .session
                 .get(Selector::from((
-                    KE_PREFIX / KE_STAR / KE_STAR / &key_expr,
+                    KE_PREFIX / KE_STARSTAR / KE_SEPARATOR / &key_expr,
                     params,
                 )))
                 .callback({
@@ -800,7 +804,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                     conf
                 .session
                 .liveliness()
-                .declare_subscriber(KE_PREFIX / KE_STAR / KE_STAR / &key_expr)
+                .declare_subscriber(KE_PREFIX / KE_STARSTAR / KE_SEPARATOR / &key_expr)
                 // .declare_subscriber(keformat!(ke_liveliness_all::formatter(), zid = 0, eid = 0, remaining = key_expr).unwrap())
                 .history(true)
                 .callback(live_callback)

@@ -17,44 +17,44 @@ use crate::{advanced_cache::CacheConfig, AdvancedPublisherBuilder};
 
 /// Some extensions to the [`zenoh::publication::PublisherBuilder`](zenoh::publication::PublisherBuilder)
 #[zenoh_macros::unstable]
-pub trait PublisherBuilderExt<'a, 'b> {
+pub trait PublisherBuilderExt<'a, 'b, 'c> {
     /// Allow matching Subscribers to detect lost samples and
     /// optionally ask for retransimission.
     ///
     /// Retransmission can only be achieved if history is enabled.
-    fn cache(self, config: CacheConfig) -> AdvancedPublisherBuilder<'a, 'b>;
+    fn cache(self, config: CacheConfig) -> AdvancedPublisherBuilder<'a, 'b, 'c>;
 
     /// Allow matching Subscribers to detect lost samples and optionally ask for retransimission.
     ///
     /// Retransmission can only be achieved if cache is enabled.
-    fn sample_miss_detection(self) -> AdvancedPublisherBuilder<'a, 'b>;
+    fn sample_miss_detection(self) -> AdvancedPublisherBuilder<'a, 'b, 'c>;
 
     /// Allow this publisher to be detected by subscribers.
     ///
     /// This allows Subscribers to retrieve the local history.
-    fn late_joiner_detection(self) -> AdvancedPublisherBuilder<'a, 'b>;
+    fn late_joiner_detection(self) -> AdvancedPublisherBuilder<'a, 'b, 'c>;
 }
 
-impl<'a, 'b> PublisherBuilderExt<'a, 'b> for PublisherBuilder<'a, 'b> {
+impl<'a, 'b, 'c> PublisherBuilderExt<'a, 'b, 'c> for PublisherBuilder<'a, 'b> {
     /// Allow matching Subscribers to detect lost samples and
     /// optionally ask for retransimission.
     ///
     /// Retransmission can only be achieved if history is enabled.
-    fn cache(self, config: CacheConfig) -> AdvancedPublisherBuilder<'a, 'b> {
+    fn cache(self, config: CacheConfig) -> AdvancedPublisherBuilder<'a, 'b, 'c> {
         AdvancedPublisherBuilder::new(self.session, self.key_expr).cache(config)
     }
 
     /// Allow matching Subscribers to detect lost samples and optionally ask for retransimission.
     ///
     /// Retransmission can only be achieved if cache is enabled.
-    fn sample_miss_detection(self) -> AdvancedPublisherBuilder<'a, 'b> {
+    fn sample_miss_detection(self) -> AdvancedPublisherBuilder<'a, 'b, 'c> {
         AdvancedPublisherBuilder::new(self.session, self.key_expr).sample_miss_detection()
     }
 
     /// Allow this publisher to be detected by subscribers.
     ///
     /// This allows Subscribers to retrieve the local history.
-    fn late_joiner_detection(self) -> AdvancedPublisherBuilder<'a, 'b> {
+    fn late_joiner_detection(self) -> AdvancedPublisherBuilder<'a, 'b, 'c> {
         AdvancedPublisherBuilder::new(self.session, self.key_expr).late_joiner_detection()
     }
 }

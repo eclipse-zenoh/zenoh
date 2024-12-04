@@ -29,7 +29,7 @@ use zenoh::{
 };
 
 use crate::{
-    advanced_cache::{AdvancedCache, CacheConfig, KE_PREFIX, KE_UHLC},
+    advanced_cache::{AdvancedCache, CacheConfig, KE_EMPTY, KE_PREFIX, KE_SEPARATOR, KE_UHLC},
     SessionExt,
 };
 
@@ -42,23 +42,25 @@ pub enum Sequencing {
 
 /// The builder of PublicationCache, allowing to configure it.
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-pub struct AdvancedPublisherBuilder<'a, 'b> {
+pub struct AdvancedPublisherBuilder<'a, 'b, 'c> {
     session: &'a Session,
     pub_key_expr: ZResult<KeyExpr<'b>>,
+    meta_key_expr: Option<ZResult<KeyExpr<'c>>>,
     sequencing: Sequencing,
     liveliness: bool,
     cache: bool,
     history: CacheConfig,
 }
 
-impl<'a, 'b> AdvancedPublisherBuilder<'a, 'b> {
+impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
     pub(crate) fn new(
         session: &'a Session,
         pub_key_expr: ZResult<KeyExpr<'b>>,
-    ) -> AdvancedPublisherBuilder<'a, 'b> {
+    ) -> AdvancedPublisherBuilder<'a, 'b, 'c> {
         AdvancedPublisherBuilder {
             session,
             pub_key_expr,
+            meta_key_expr: None,
             sequencing: Sequencing::None,
             liveliness: false,
             cache: false,
@@ -91,19 +93,31 @@ impl<'a, 'b> AdvancedPublisherBuilder<'a, 'b> {
         self.liveliness = true;
         self
     }
+
+    /// A key expression added to the liveliness token key expression
+    /// and to the cache queryable key expression.
+    /// It can be used to convey meta data.
+    pub fn meta_keyexpr<TryIntoKeyExpr>(mut self, meta: TryIntoKeyExpr) -> Self
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'c>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'c>>>::Error: Into<zenoh::Error>,
+    {
+        self.meta_key_expr = Some(meta.try_into().map_err(Into::into));
+        self
+    }
 }
 
-impl<'a> Resolvable for AdvancedPublisherBuilder<'a, '_> {
+impl<'a> Resolvable for AdvancedPublisherBuilder<'a, '_, '_> {
     type To = ZResult<AdvancedPublisher<'a>>;
 }
 
-impl Wait for AdvancedPublisherBuilder<'_, '_> {
+impl Wait for AdvancedPublisherBuilder<'_, '_, '_> {
     fn wait(self) -> <Self as Resolvable>::To {
         AdvancedPublisher::new(self)
     }
 }
 
-impl IntoFuture for AdvancedPublisherBuilder<'_, '_> {
+impl IntoFuture for AdvancedPublisherBuilder<'_, '_, '_> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
@@ -120,21 +134,29 @@ pub struct AdvancedPublisher<'a> {
 }
 
 impl<'a> AdvancedPublisher<'a> {
-    fn new(conf: AdvancedPublisherBuilder<'a, '_>) -> ZResult<Self> {
+    fn new(conf: AdvancedPublisherBuilder<'a, '_, '_>) -> ZResult<Self> {
         let key_expr = conf.pub_key_expr?;
+        let meta = match conf.meta_key_expr {
+            Some(meta) => Some(meta?),
+            None => None,
+        };
 
         let publisher = conf
             .session
             .declare_publisher(key_expr.clone().into_owned())
             .wait()?;
         let id = publisher.id();
+        let prefix = KE_PREFIX / &id.zid().into_keyexpr();
         let prefix = match conf.sequencing {
             Sequencing::SequenceNumber => {
-                KE_PREFIX
-                    / &id.zid().into_keyexpr()
-                    / &KeyExpr::try_from(id.eid().to_string()).unwrap()
+                prefix / &KeyExpr::try_from(id.eid().to_string()).unwrap()
             }
-            _ => KE_PREFIX / &id.zid().into_keyexpr() / KE_UHLC,
+            _ => prefix / KE_UHLC,
+        };
+        let prefix = match meta {
+            Some(meta) => prefix / &meta / KE_SEPARATOR,
+            // We need this empty chunk because af a routing matching bug
+            _ => prefix / KE_EMPTY / KE_SEPARATOR,
         };
 
         let seqnum = match conf.sequencing {
