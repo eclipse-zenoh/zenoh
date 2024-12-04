@@ -16,12 +16,12 @@ use std::{cell::UnsafeCell, convert::TryInto, fmt, net::SocketAddr, sync::Arc, t
 use async_trait::async_trait;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpSocket, TcpStream},
+    net::{TcpListener, TcpStream},
 };
 use tokio_util::sync::CancellationToken;
 use zenoh_link_commons::{
-    get_ip_interface_names, LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
-    ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
+    get_ip_interface_names, tcp::TcpSocketUtils, LinkAuthId, LinkManagerUnicastTrait, LinkUnicast,
+    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -241,70 +241,6 @@ impl LinkManagerUnicastTcp {
     }
 }
 
-impl LinkManagerUnicastTcp {
-    async fn new_link_inner(
-        &self,
-        dst_addr: &SocketAddr,
-        iface: Option<&str>,
-    ) -> ZResult<(TcpStream, SocketAddr, SocketAddr)> {
-        let socket = match dst_addr {
-            SocketAddr::V4(_) => TcpSocket::new_v4(),
-            SocketAddr::V6(_) => TcpSocket::new_v6(),
-        }?;
-
-        if let Some(iface) = iface {
-            zenoh_util::net::set_bind_to_device_tcp_socket(&socket, iface)?;
-        }
-
-        // Build a TcpStream from TcpSocket
-        // https://docs.rs/tokio/latest/tokio/net/struct.TcpSocket.html
-        let stream = socket
-            .connect(*dst_addr)
-            .await
-            .map_err(|e| zerror!("{}: {}", dst_addr, e))?;
-
-        let src_addr = stream
-            .local_addr()
-            .map_err(|e| zerror!("{}: {}", dst_addr, e))?;
-
-        let dst_addr = stream
-            .peer_addr()
-            .map_err(|e| zerror!("{}: {}", dst_addr, e))?;
-
-        Ok((stream, src_addr, dst_addr))
-    }
-
-    async fn new_listener_inner(
-        &self,
-        addr: &SocketAddr,
-        iface: Option<&str>,
-    ) -> ZResult<(TcpListener, SocketAddr)> {
-        let socket = match addr {
-            SocketAddr::V4(_) => TcpSocket::new_v4(),
-            SocketAddr::V6(_) => TcpSocket::new_v6(),
-        }?;
-
-        if let Some(iface) = iface {
-            zenoh_util::net::set_bind_to_device_tcp_socket(&socket, iface)?;
-        }
-
-        // Build a TcpListener from TcpSocket
-        // https://docs.rs/tokio/latest/tokio/net/struct.TcpSocket.html
-        socket.set_reuseaddr(true)?;
-        socket.bind(*addr).map_err(|e| zerror!("{}: {}", addr, e))?;
-        // backlog (the maximum number of pending connections are queued): 1024
-        let listener = socket
-            .listen(1024)
-            .map_err(|e| zerror!("{}: {}", addr, e))?;
-
-        let local_addr = listener
-            .local_addr()
-            .map_err(|e| zerror!("{}: {}", addr, e))?;
-
-        Ok((listener, local_addr))
-    }
-}
-
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
@@ -314,7 +250,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
 
         let mut errs: Vec<ZError> = vec![];
         for da in dst_addrs {
-            match self.new_link_inner(&da, iface).await {
+            match TcpSocketUtils::connect(&da, iface).await {
                 Ok((stream, src_addr, dst_addr)) => {
                     let link = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));
                     return Ok(LinkUnicast(link));
@@ -343,7 +279,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
 
         let mut errs: Vec<ZError> = vec![];
         for da in addrs {
-            match self.new_listener_inner(&da, iface).await {
+            match TcpSocketUtils::listen(&da, iface) {
                 Ok((socket, local_addr)) => {
                     // Update the endpoint locator address
                     endpoint = EndPoint::new(
