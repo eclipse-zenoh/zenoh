@@ -815,13 +815,14 @@ pub(crate) struct TransmissionPipelineConsumer {
 }
 
 impl TransmissionPipelineConsumer {
-    pub(crate) async fn pull(&mut self) -> Option<(WBatch, usize)> {
+    pub(crate) async fn pull(&mut self) -> Option<(WBatch, Priority)> {
         while !self.status.is_disabled() {
             let mut backoff = MicroSeconds::MAX;
             // Calculate the backoff maximum
             for (prio, queue) in self.stage_out.iter_mut().enumerate() {
                 match queue.try_pull() {
                     Pull::Some(batch) => {
+                        let prio = Priority::try_from(prio as u8).unwrap();
                         return Some((batch, prio));
                     }
                     Pull::Backoff(deadline) => {
@@ -861,8 +862,8 @@ impl TransmissionPipelineConsumer {
         None
     }
 
-    pub(crate) fn refill(&mut self, batch: WBatch, priority: usize) {
-        self.stage_out[priority].refill(batch);
+    pub(crate) fn refill(&mut self, batch: WBatch, priority: Priority) {
+        self.stage_out[priority as usize].refill(batch);
         self.status.set_congested(priority, false);
     }
 
