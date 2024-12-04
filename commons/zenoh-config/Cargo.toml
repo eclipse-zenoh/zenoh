@@ -25,6 +25,7 @@ description = "Internal crate for zenoh."
 
 [features]
 internal = []
+transport_tcp = []
 unstable = []
 
 [dependencies]

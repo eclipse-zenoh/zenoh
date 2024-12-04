@@ -140,8 +140,14 @@ impl Default for ListenConfig {
         Self {
             timeout_ms: None,
             endpoints: ModeDependentValue::Dependent(ModeValues {
+                #[cfg(feature = "transport_tcp")]
                 router: Some(vec!["tcp/[::]:7447".parse().unwrap()]),
+                #[cfg(not(feature = "transport_tcp"))]
+                router: Some(vec![]),
+                #[cfg(feature = "transport_tcp")]
                 peer: Some(vec!["tcp/[::]:0".parse().unwrap()]),
+                #[cfg(not(feature = "transport_tcp"))]
+                peer: Some(vec![]),
                 client: None,
             }),
             exit_on_failure: None,
