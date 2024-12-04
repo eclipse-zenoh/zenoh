@@ -863,9 +863,7 @@ impl TransmissionPipelineConsumer {
 
     pub(crate) fn refill(&mut self, batch: WBatch, priority: usize) {
         self.stage_out[priority].refill(batch);
-        // Reset the priority congested flag
-        let prioflag = 1 << priority as u8;
-        self.status.congested.fetch_and(!prioflag, Ordering::AcqRel);
+        self.status.set_congested(priority, false);
     }
 
     pub(crate) fn drain(&mut self) -> Vec<(WBatch, usize)> {
