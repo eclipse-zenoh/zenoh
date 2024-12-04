@@ -45,8 +45,8 @@ use zenoh_result::ZResult;
 /*************************************/
 
 pub const BIND_INTERFACE: &str = "iface";
-pub const TCP_TX_BUFFER_SIZE: &str = "tcp_buffer_tx";
-pub const TCP_RX_BUFFER_SIZE: &str = "tcp_buffer_rx";
+pub const TCP_TX_BUFFER_SIZE: &str = "tcp_tx_buffer";
+pub const TCP_RX_BUFFER_SIZE: &str = "tcp_rx_buffer";
 
 #[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
 pub struct Link {
