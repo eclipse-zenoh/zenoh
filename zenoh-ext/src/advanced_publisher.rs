@@ -297,9 +297,9 @@ impl<'a> AdvancedPublisher<'a> {
         delete
     }
 
-    /// Return the [`MatchingStatus`](zenoh::pubsub::MatchingStatus) of the publisher.
+    /// Return the [`MatchingStatus`](zenoh::matching::MatchingStatus) of the publisher.
     ///
-    /// [`MatchingStatus::matching_subscribers`](zenoh::pubsub::MatchingStatus::matching_subscribers)
+    /// [`MatchingStatus::matching`](zenoh::matching::MatchingStatus::matching)
     /// will return true if there exist Subscribers matching the Publisher's key expression and false otherwise.
     ///
     /// # Examples
@@ -313,7 +313,7 @@ impl<'a> AdvancedPublisher<'a> {
     ///     .matching_status()
     ///     .await
     ///     .unwrap()
-    ///     .matching_subscribers();
+    ///     .matching();
     /// # }
     /// ```
     #[zenoh_macros::unstable]
@@ -321,10 +321,10 @@ impl<'a> AdvancedPublisher<'a> {
         self.publisher.matching_status()
     }
 
-    /// Return a [`MatchingListener`](zenoh::pubsub::MatchingStatus) for this Publisher.
+    /// Return a [`MatchingListener`](zenoh::matching::MatchingStatus) for this Publisher.
     ///
-    /// The [`MatchingListener`](zenoh::pubsub::MatchingStatus) that will send a notification each time
-    /// the [`MatchingStatus`](zenoh::pubsub::MatchingStatus) of the Publisher changes.
+    /// The [`MatchingListener`](zenoh::matching::MatchingStatus) that will send a notification each time
+    /// the [`MatchingStatus`](zenoh::matching::MatchingStatus) of the Publisher changes.
     ///
     /// # Examples
     /// ```no_run
@@ -335,7 +335,7 @@ impl<'a> AdvancedPublisher<'a> {
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
     /// let matching_listener = publisher.matching_listener().await.unwrap();
     /// while let Ok(matching_status) = matching_listener.recv_async().await {
-    ///     if matching_status.matching_subscribers() {
+    ///     if matching_status.matching() {
     ///         println!("Publisher has matching subscribers.");
     ///     } else {
     ///         println!("Publisher has NO MORE matching subscribers.");
