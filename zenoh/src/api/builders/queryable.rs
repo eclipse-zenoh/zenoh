@@ -211,12 +211,7 @@ where
         let (callback, receiver) = self.handler.into_handler();
         session
             .0
-            .declare_queryable_inner(
-                &self.key_expr?.to_wire(&session.0),
-                self.complete,
-                self.origin,
-                callback,
-            )
+            .declare_queryable_inner(&self.key_expr?, self.complete, self.origin, callback)
             .map(|qable_state| Queryable {
                 inner: QueryableInner {
                     session: self.session.downgrade(),
@@ -248,7 +243,7 @@ impl Resolvable for QueryableBuilder<'_, '_, Callback<Query>, true> {
 impl Wait for QueryableBuilder<'_, '_, Callback<Query>, true> {
     fn wait(self) -> <Self as Resolvable>::To {
         self.session.0.declare_queryable_inner(
-            &self.key_expr?.to_wire(&self.session.0),
+            &self.key_expr?,
             self.complete,
             self.origin,
             self.handler,

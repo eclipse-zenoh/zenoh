@@ -317,7 +317,7 @@ impl<'a> AdvancedPublisher<'a> {
     /// # }
     /// ```
     #[zenoh_macros::unstable]
-    pub fn matching_status(&self) -> impl Resolve<ZResult<zenoh::pubsub::MatchingStatus>> + '_ {
+    pub fn matching_status(&self) -> impl Resolve<ZResult<zenoh::matching::MatchingStatus>> + '_ {
         self.publisher.matching_status()
     }
 
@@ -346,7 +346,7 @@ impl<'a> AdvancedPublisher<'a> {
     #[zenoh_macros::unstable]
     pub fn matching_listener(
         &self,
-    ) -> zenoh::pubsub::MatchingListenerBuilder<'_, '_, zenoh::handlers::DefaultHandler> {
+    ) -> zenoh::matching::MatchingListenerBuilder<'_, zenoh::handlers::DefaultHandler> {
         self.publisher.matching_listener()
     }
 

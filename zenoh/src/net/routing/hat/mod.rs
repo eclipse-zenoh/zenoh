@@ -232,6 +232,14 @@ pub(crate) trait HatQueriesTrait {
     ) -> Arc<QueryTargetQablSet>;
 
     fn get_query_routes_entries(&self, tables: &Tables) -> RoutesIndexes;
+
+    #[zenoh_macros::unstable]
+    fn get_matching_queryables(
+        &self,
+        tables: &Tables,
+        key_expr: &KeyExpr<'_>,
+        complete: bool,
+    ) -> HashMap<usize, Arc<FaceState>>;
 }
 
 pub(crate) fn new_hat(whatami: WhatAmI, config: &Config) -> Box<dyn HatTrait + Send + Sync> {
