@@ -20,7 +20,7 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 use zenoh_link_commons::{
-    get_ip_interface_names, tcp::TcpSocketUtils, LinkAuthId, LinkManagerUnicastTrait, LinkUnicast,
+    get_ip_interface_names, tcp::TcpSocketConfig, LinkAuthId, LinkManagerUnicastTrait, LinkUnicast,
     LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
 };
 use zenoh_protocol::{
@@ -246,11 +246,13 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
         let dst_addrs = get_tcp_addrs(endpoint.address()).await?;
         let config = endpoint.config();
+
         let iface = config.get(BIND_INTERFACE);
+        let socket_config = TcpSocketConfig::new(None, None, iface);
 
         let mut errs: Vec<ZError> = vec![];
         for da in dst_addrs {
-            match TcpSocketUtils::connect(&da, iface).await {
+            match socket_config.new_link(&da).await {
                 Ok((stream, src_addr, dst_addr)) => {
                     let link = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));
                     return Ok(LinkUnicast(link));
@@ -275,11 +277,13 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
         let addrs = get_tcp_addrs(endpoint.address()).await?;
         let config = endpoint.config();
+
         let iface = config.get(BIND_INTERFACE);
+        let socket_config = TcpSocketConfig::new(None, None, iface);
 
         let mut errs: Vec<ZError> = vec![];
         for da in addrs {
-            match TcpSocketUtils::listen(&da, iface) {
+            match socket_config.new_listener(&da) {
                 Ok((socket, local_addr)) => {
                     // Update the endpoint locator address
                     endpoint = EndPoint::new(

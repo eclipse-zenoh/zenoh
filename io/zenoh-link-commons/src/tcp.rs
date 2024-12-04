@@ -16,20 +16,28 @@ use std::net::SocketAddr;
 use tokio::net::{TcpListener, TcpSocket, TcpStream};
 use zenoh_result::{zerror, ZResult};
 
-pub struct TcpSocketUtils;
+pub struct TcpSocketConfig<'a> {
+    tx_buffer_size: Option<u32>,
+    rx_buffer_size: Option<u32>,
+    iface: Option<&'a str>,
+}
 
-impl TcpSocketUtils {
-    /// Build a new TCP listener bound to `addr` with the given configration parameters
-    pub fn listen(addr: &SocketAddr, iface: Option<&str>) -> ZResult<(TcpListener, SocketAddr)> {
-        let socket = match addr {
-            SocketAddr::V4(_) => TcpSocket::new_v4(),
-            SocketAddr::V6(_) => TcpSocket::new_v6(),
-        }?;
-
-        if let Some(iface) = iface {
-            zenoh_util::net::set_bind_to_device_tcp_socket(&socket, iface)?;
+impl<'a> TcpSocketConfig<'a> {
+    pub fn new(
+        tx_buffer_size: Option<u32>,
+        rx_buffer_size: Option<u32>,
+        iface: Option<&'a str>,
+    ) -> Self {
+        Self {
+            tx_buffer_size,
+            rx_buffer_size,
+            iface,
         }
+    }
 
+    /// Build a new TCPListener bound to `addr` with the given configration parameters
+    pub fn new_listener(&self, addr: &SocketAddr) -> ZResult<(TcpListener, SocketAddr)> {
+        let socket = self.socket_with_config(addr)?;
         // Build a TcpListener from TcpSocket
         // https://docs.rs/tokio/latest/tokio/net/struct.TcpSocket.html
         socket.set_reuseaddr(true)?;
@@ -47,19 +55,11 @@ impl TcpSocketUtils {
     }
 
     /// Connect to a TCP socket address at `dst_addr` with the given configuration parameters
-    pub async fn connect(
+    pub async fn new_link(
+        &self,
         dst_addr: &SocketAddr,
-        iface: Option<&str>,
     ) -> ZResult<(TcpStream, SocketAddr, SocketAddr)> {
-        let socket = match dst_addr {
-            SocketAddr::V4(_) => TcpSocket::new_v4(),
-            SocketAddr::V6(_) => TcpSocket::new_v6(),
-        }?;
-
-        if let Some(iface) = iface {
-            zenoh_util::net::set_bind_to_device_tcp_socket(&socket, iface)?;
-        }
-
+        let socket = self.socket_with_config(dst_addr)?;
         // Build a TcpStream from TcpSocket
         // https://docs.rs/tokio/latest/tokio/net/struct.TcpSocket.html
         let stream = socket
@@ -76,5 +76,25 @@ impl TcpSocketUtils {
             .map_err(|e| zerror!("{}: {}", dst_addr, e))?;
 
         Ok((stream, src_addr, dst_addr))
+    }
+
+    /// Creates a TcpSocket with the provided config
+    fn socket_with_config(&self, addr: &SocketAddr) -> ZResult<TcpSocket> {
+        let socket = match addr {
+            SocketAddr::V4(_) => TcpSocket::new_v4(),
+            SocketAddr::V6(_) => TcpSocket::new_v6(),
+        }?;
+
+        if let Some(iface) = self.iface {
+            zenoh_util::net::set_bind_to_device_tcp_socket(&socket, iface)?;
+        }
+        if let Some(size) = self.tx_buffer_size {
+            socket.set_send_buffer_size(size)?;
+        }
+        if let Some(size) = self.rx_buffer_size {
+            socket.set_recv_buffer_size(size)?;
+        }
+
+        Ok(socket)
     }
 }
