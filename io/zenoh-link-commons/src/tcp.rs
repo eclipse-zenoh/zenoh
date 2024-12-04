@@ -35,7 +35,7 @@ impl<'a> TcpSocketConfig<'a> {
         }
     }
 
-    /// Build a new TCPListener bound to `addr` with the given configration parameters
+    /// Build a new TCPListener bound to `addr` with the given configuration parameters
     pub fn new_listener(&self, addr: &SocketAddr) -> ZResult<(TcpListener, SocketAddr)> {
         let socket = self.socket_with_config(addr)?;
         // Build a TcpListener from TcpSocket
