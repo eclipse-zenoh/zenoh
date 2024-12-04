@@ -161,7 +161,7 @@ pub mod ext {
     /// # Patch extension
     /// Used to negotiate the patch version of the protocol
     /// if not present (or 0), then protocol as released with 1.0.0
-    /// if >= 1, then fragmentation start/stop marker
+    /// if >= 1, then fragmentation first/drop markers
     pub type Patch = zextz64!(0x7, false);
     pub type PatchType = crate::transport::ext::PatchType<{ Patch::ID }>;
 }

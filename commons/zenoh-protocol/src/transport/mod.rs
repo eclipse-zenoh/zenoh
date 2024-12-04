@@ -327,7 +327,7 @@ pub mod ext {
             self.0
         }
 
-        pub fn has_fragmentation_start_stop(&self) -> bool {
+        pub fn has_fragmentation_markers(&self) -> bool {
             self.0 >= 1
         }
 

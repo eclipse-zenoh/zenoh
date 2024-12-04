@@ -75,8 +75,8 @@ pub struct Fragment {
     pub sn: TransportSn,
     pub payload: ZSlice,
     pub ext_qos: ext::QoSType,
-    pub ext_start: Option<ext::Start>,
-    pub ext_stop: Option<ext::Stop>,
+    pub ext_first: Option<ext::First>,
+    pub ext_drop: Option<ext::Drop>,
 }
 
 // Extensions
@@ -91,10 +91,10 @@ pub mod ext {
 
     /// # Start extension
     /// Mark the first fragment of a fragmented message
-    pub type Start = zextunit!(0x2, false);
+    pub type First = zextunit!(0x2, false);
     /// # Stop extension
     /// Indicate that the remaining fragments has been dropped
-    pub type Stop = zextunit!(0x3, false);
+    pub type Drop = zextunit!(0x3, false);
 }
 
 impl Fragment {
@@ -109,8 +109,8 @@ impl Fragment {
         let sn: TransportSn = rng.gen();
         let payload = ZSlice::rand(rng.gen_range(8..128));
         let ext_qos = ext::QoSType::rand();
-        let ext_start = rng.gen_bool(0.5).then(ext::Start::rand);
-        let ext_stop = rng.gen_bool(0.5).then(ext::Stop::rand);
+        let ext_first = rng.gen_bool(0.5).then(ext::First::rand);
+        let ext_drop = rng.gen_bool(0.5).then(ext::Drop::rand);
 
         Fragment {
             reliability,
@@ -118,8 +118,8 @@ impl Fragment {
             more,
             payload,
             ext_qos,
-            ext_start,
-            ext_stop,
+            ext_first,
+            ext_drop,
         }
     }
 }
@@ -131,8 +131,8 @@ pub struct FragmentHeader {
     pub more: bool,
     pub sn: TransportSn,
     pub ext_qos: ext::QoSType,
-    pub ext_start: Option<ext::Start>,
-    pub ext_stop: Option<ext::Stop>,
+    pub ext_first: Option<ext::First>,
+    pub ext_drop: Option<ext::Drop>,
 }
 
 impl FragmentHeader {
@@ -146,16 +146,16 @@ impl FragmentHeader {
         let more = rng.gen_bool(0.5);
         let sn: TransportSn = rng.gen();
         let ext_qos = ext::QoSType::rand();
-        let ext_start = rng.gen_bool(0.5).then(ext::Start::rand);
-        let ext_stop = rng.gen_bool(0.5).then(ext::Stop::rand);
+        let ext_first = rng.gen_bool(0.5).then(ext::First::rand);
+        let ext_drop = rng.gen_bool(0.5).then(ext::Drop::rand);
 
         FragmentHeader {
             reliability,
             more,
             sn,
             ext_qos,
-            ext_start,
-            ext_stop,
+            ext_first,
+            ext_drop,
         }
     }
 }

@@ -321,21 +321,21 @@ impl StageIn {
             more: true,
             sn,
             ext_qos: frame.ext_qos,
-            ext_start: Some(fragment::ext::Start::new()),
-            ext_stop: None,
+            ext_first: Some(fragment::ext::First::new()),
+            ext_drop: None,
         };
         let mut reader = self.fragbuf.reader();
         while reader.can_read() {
             // Get the current serialization batch
             batch = zgetbatch_rets!({
                 // If no fragment has been sent, the sequence number is just reset
-                if fragment.ext_start.is_some() {
+                if fragment.ext_first.is_some() {
                     tch.sn.set(sn).unwrap()
                 // Otherwise, an ephemeral batch is created to send the stop fragment
                 } else {
                     let mut batch = WBatch::new_ephemeral(self.batch_config);
                     self.fragbuf.clear();
-                    fragment.ext_stop = Some(fragment::ext::Stop::new());
+                    fragment.ext_drop = Some(fragment::ext::Drop::new());
                     let _ = batch.encode((&mut self.fragbuf.reader(), &mut fragment));
                     self.s_out.move_batch(batch);
                 }
@@ -346,7 +346,7 @@ impl StageIn {
                 Ok(_) => {
                     // Update the SN
                     fragment.sn = tch.sn.get();
-                    fragment.ext_start = None;
+                    fragment.ext_first = None;
                     // Move the serialization batch into the OUT pipeline
                     self.s_out.move_batch(batch);
                 }

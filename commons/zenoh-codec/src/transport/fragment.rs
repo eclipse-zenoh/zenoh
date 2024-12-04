@@ -39,8 +39,8 @@ where
             more,
             sn,
             ext_qos,
-            ext_start,
-            ext_stop,
+            ext_first,
+            ext_drop,
         } = x;
 
         // Header
@@ -52,8 +52,8 @@ where
             header |= flag::M;
         }
         let mut n_exts = (ext_qos != &ext::QoSType::DEFAULT) as u8
-            + ext_start.is_some() as u8
-            + ext_stop.is_some() as u8;
+            + ext_first.is_some() as u8
+            + ext_drop.is_some() as u8;
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -67,13 +67,13 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (*ext_qos, n_exts != 0))?;
         }
-        if let Some(start) = ext_start {
+        if let Some(first) = ext_first {
             n_exts -= 1;
-            self.write(&mut *writer, (start, n_exts != 0))?
+            self.write(&mut *writer, (first, n_exts != 0))?
         }
-        if let Some(stop) = ext_stop {
+        if let Some(drop) = ext_drop {
             n_exts -= 1;
-            self.write(&mut *writer, (stop, n_exts != 0))?
+            self.write(&mut *writer, (drop, n_exts != 0))?
         }
 
         Ok(())
@@ -113,8 +113,8 @@ where
 
         // Extensions
         let mut ext_qos = ext::QoSType::DEFAULT;
-        let mut ext_start = None;
-        let mut ext_stop = None;
+        let mut ext_first = None;
+        let mut ext_drop = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -126,14 +126,14 @@ where
                     ext_qos = q;
                     has_ext = ext;
                 }
-                ext::Start::ID => {
-                    let (start, ext): (ext::Start, bool) = eodec.read(&mut *reader)?;
-                    ext_start = Some(start);
+                ext::First::ID => {
+                    let (first, ext): (ext::First, bool) = eodec.read(&mut *reader)?;
+                    ext_first = Some(first);
                     has_ext = ext;
                 }
-                ext::Stop::ID => {
-                    let (stop, ext): (ext::Stop, bool) = eodec.read(&mut *reader)?;
-                    ext_stop = Some(stop);
+                ext::Drop::ID => {
+                    let (drop, ext): (ext::Drop, bool) = eodec.read(&mut *reader)?;
+                    ext_drop = Some(drop);
                     has_ext = ext;
                 }
                 _ => {
@@ -147,8 +147,8 @@ where
             more,
             sn,
             ext_qos,
-            ext_start,
-            ext_stop,
+            ext_first,
+            ext_drop,
         })
     }
 }
@@ -167,8 +167,8 @@ where
             sn,
             payload,
             ext_qos,
-            ext_start,
-            ext_stop,
+            ext_first,
+            ext_drop,
         } = x;
 
         // Header
@@ -177,8 +177,8 @@ where
             more: *more,
             sn: *sn,
             ext_qos: *ext_qos,
-            ext_start: *ext_start,
-            ext_stop: *ext_stop,
+            ext_first: *ext_first,
+            ext_drop: *ext_drop,
         };
         self.write(&mut *writer, &header)?;
 
@@ -217,8 +217,8 @@ where
             more: header.more,
             sn: header.sn,
             ext_qos: header.ext_qos,
-            ext_start: header.ext_start,
-            ext_stop: header.ext_stop,
+            ext_first: header.ext_first,
+            ext_drop: header.ext_drop,
             payload,
         })
     }

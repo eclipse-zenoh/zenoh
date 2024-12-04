@@ -183,8 +183,8 @@ impl TransportMulticastInner {
             more,
             sn,
             ext_qos,
-            ext_start,
-            ext_stop,
+            ext_first,
+            ext_drop,
             payload,
         } = fragment;
 
@@ -211,8 +211,8 @@ impl TransportMulticastInner {
             // Drop invalid message and continue
             return Ok(());
         }
-        if peer.patch.has_fragmentation_start_stop() {
-            if ext_start.is_some() {
+        if peer.patch.has_fragmentation_markers() {
+            if ext_first.is_some() {
                 guard.defrag.clear();
             } else if guard.defrag.is_empty() {
                 tracing::trace!(
@@ -221,7 +221,7 @@ impl TransportMulticastInner {
                 );
                 return Ok(());
             }
-            if ext_stop.is_some() {
+            if ext_drop.is_some() {
                 guard.defrag.clear();
                 return Ok(());
             }
