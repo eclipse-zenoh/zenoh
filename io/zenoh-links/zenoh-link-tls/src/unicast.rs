@@ -26,7 +26,6 @@ use x509_parser::prelude::{FromDer, X509Certificate};
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
     get_ip_interface_names,
-    tcp::TcpSocketConfig,
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
     LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     ListenersUnicastIP, NewLinkChannelSender,
@@ -324,11 +323,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let config = Arc::new(client_config.client_config);
         let connector = TlsConnector::from(config);
 
-        // TODO: Add interface binding
-        let socket_config = TcpSocketConfig::new(None, None, None);
         // Initialize the TcpStream
-        let (tcp_stream, src_addr, dst_addr) =
-            socket_config.new_link(&addr).await.map_err(|e| {
+        let (tcp_stream, src_addr, dst_addr) = client_config
+            .tcp_socket_config
+            .new_link(&addr)
+            .await
+            .map_err(|e| {
                 zerror!(
                     "Can not create a new TLS link bound to {:?}: {}",
                     server_name,
@@ -391,10 +391,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             .await
             .map_err(|e| zerror!("Cannot create a new TLS listener on {addr}. {e}"))?;
 
-        // TODO: Add interface binding
-        let socket_config = TcpSocketConfig::new(None, None, None);
         // Initialize the TcpListener
-        let (socket, local_addr) = socket_config
+        let (socket, local_addr) = tls_server_config
+            .tcp_socket_config
             .new_listener(&addr)
             .map_err(|e| zerror!("Can not create a new TLS listener on {}: {}", addr, e))?;
 

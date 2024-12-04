@@ -21,7 +21,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use zenoh_link_commons::{
     get_ip_interface_names, tcp::TcpSocketConfig, LinkAuthId, LinkManagerUnicastTrait, LinkUnicast,
-    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
+    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -29,9 +29,9 @@ use zenoh_protocol::{
 };
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 
-use super::{
-    get_tcp_addrs, TCP_ACCEPT_THROTTLE_TIME, TCP_DEFAULT_MTU, TCP_LINGER_TIMEOUT,
-    TCP_LOCATOR_PREFIX,
+use crate::{
+    get_tcp_addrs, utils::TcpLinkConfig, TCP_ACCEPT_THROTTLE_TIME, TCP_DEFAULT_MTU,
+    TCP_LINGER_TIMEOUT, TCP_LOCATOR_PREFIX,
 };
 
 pub struct LinkUnicastTcp {
@@ -247,8 +247,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
         let dst_addrs = get_tcp_addrs(endpoint.address()).await?;
         let config = endpoint.config();
 
-        let iface = config.get(BIND_INTERFACE);
-        let socket_config = TcpSocketConfig::new(None, None, iface);
+        let link_config = TcpLinkConfig::new(&config)?;
+        let socket_config = TcpSocketConfig::new(
+            link_config.tx_buffer_size,
+            link_config.rx_buffer_size,
+            link_config.bind_iface,
+        );
 
         let mut errs: Vec<ZError> = vec![];
         for da in dst_addrs {
@@ -278,8 +282,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
         let addrs = get_tcp_addrs(endpoint.address()).await?;
         let config = endpoint.config();
 
-        let iface = config.get(BIND_INTERFACE);
-        let socket_config = TcpSocketConfig::new(None, None, iface);
+        let link_config = TcpLinkConfig::new(&config)?;
+        let socket_config: TcpSocketConfig<'_> = link_config.into();
 
         let mut errs: Vec<ZError> = vec![];
         for da in addrs {

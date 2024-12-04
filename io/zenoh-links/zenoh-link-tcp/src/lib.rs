@@ -29,6 +29,7 @@ use zenoh_protocol::{
 use zenoh_result::{zerror, ZResult};
 
 mod unicast;
+mod utils;
 pub use unicast::*;
 
 // Default MTU (TCP PDU) in bytes.
