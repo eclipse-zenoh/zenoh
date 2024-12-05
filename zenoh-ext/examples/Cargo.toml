@@ -42,14 +42,6 @@ zenoh-ext = { workspace = true, features = ["unstable"] }
 zenoh-config = { workspace = true }
 
 [[example]]
-name = "z_query_sub"
-path = "examples/z_query_sub.rs"
-
-[[example]]
-name = "z_pub_cache"
-path = "examples/z_pub_cache.rs"
-
-[[example]]
 name = "z_member"
 path = "examples/z_member.rs"
 

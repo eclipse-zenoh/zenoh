@@ -38,6 +38,7 @@ pub use crate::serialization::{
     ZReadIter, ZSerializer,
 };
 #[cfg(feature = "unstable")]
+#[allow(deprecated)]
 pub use crate::{
     advanced_cache::CacheConfig,
     advanced_publisher::{AdvancedPublisher, AdvancedPublisherBuilder, Sequencing},

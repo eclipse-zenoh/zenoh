@@ -23,6 +23,7 @@ use zenoh::{
     Result as ZResult,
 };
 
+#[allow(deprecated)]
 use crate::{
     advanced_subscriber::HistoryConfig, querying_subscriber::QueryingSubscriberBuilder,
     AdvancedSubscriberBuilder, ExtractSample, FetchingSubscriberBuilder, RecoveryConfig,
@@ -47,6 +48,8 @@ where
 
 /// Some extensions to the [`zenoh::subscriber::SubscriberBuilder`](zenoh::pubsub::SubscriberBuilder)
 #[zenoh_macros::unstable]
+#[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
+#[allow(deprecated)]
 pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     type KeySpace;
 
@@ -83,6 +86,7 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     /// }
     /// # }
     /// ```
+    #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     fn fetching<
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
         TryIntoSample,
@@ -121,6 +125,7 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     /// }
     /// # }
     /// ```
+    #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     fn querying(self) -> QueryingSubscriberBuilder<'a, 'b, Self::KeySpace, Handler>;
 }
 
@@ -144,6 +149,7 @@ pub trait AdvancedSubscriberBuilderExt<'a, 'b, 'c, Handler> {
     fn advanced(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>;
 }
 
+#[allow(deprecated)]
 impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilder<'a, 'b, Handler> {
     type KeySpace = crate::UserSpace;
 
@@ -280,6 +286,7 @@ impl<'a, 'b, 'c, Handler> AdvancedSubscriberBuilderExt<'a, 'b, 'c, Handler>
     }
 }
 
+#[allow(deprecated)]
 impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     for LivelinessSubscriberBuilder<'a, 'b, Handler>
 {

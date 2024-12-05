@@ -14,10 +14,12 @@
 
 use zenoh::{key_expr::KeyExpr, session::Session, Error};
 
+#[allow(deprecated)]
 use super::PublicationCacheBuilder;
 
 /// Some extensions to the [`zenoh::Session`](zenoh::Session)
 #[zenoh_macros::unstable]
+#[allow(deprecated)]
 pub trait SessionExt {
     // REVIEW(fuzzypixelz): this doc test is the only one to use the programmatic configuration API..
     /// Examples:
@@ -37,6 +39,7 @@ pub trait SessionExt {
     /// }).await;
     /// # }
     /// ```
+    #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     fn declare_publication_cache<'a, 'b, 'c, TryIntoKeyExpr>(
         &'a self,
         pub_key_expr: TryIntoKeyExpr,
@@ -46,6 +49,7 @@ pub trait SessionExt {
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<Error>;
 }
 
+#[allow(deprecated)]
 impl SessionExt for Session {
     fn declare_publication_cache<'a, 'b, 'c, TryIntoKeyExpr>(
         &'a self,
