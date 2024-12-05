@@ -461,12 +461,14 @@ compile_error!(
 
 #[zenoh_macros::internal]
 pub mod internal {
+    pub mod builders {
+        pub mod close {
+            pub use crate::api::builders::close::{BackgroundCloseBuilder, NolocalJoinHandle};
+        }
+    }
     pub mod traits {
-        pub use crate::api::builders::{
-            close::{BackgroundCloseBuilder, NolocalJoinHandle},
-            sample::{
-                EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
-            },
+        pub use crate::api::builders::sample::{
+            EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
         };
     }
     pub use zenoh_core::{
