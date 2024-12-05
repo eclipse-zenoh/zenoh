@@ -311,4 +311,42 @@ pub mod ext {
             ZExtZ64::new(ext.inner as u64)
         }
     }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+    pub struct PatchType<const ID: u8>(u8);
+
+    impl<const ID: u8> PatchType<ID> {
+        pub const NONE: Self = Self(0);
+        pub const CURRENT: Self = Self(1);
+
+        pub fn new(int: u8) -> Self {
+            Self(int)
+        }
+
+        pub fn raw(self) -> u8 {
+            self.0
+        }
+
+        pub fn has_fragmentation_markers(&self) -> bool {
+            self.0 >= 1
+        }
+
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            use rand::Rng;
+            Self(rand::thread_rng().gen())
+        }
+    }
+
+    impl<const ID: u8> From<ZExtZ64<ID>> for PatchType<ID> {
+        fn from(ext: ZExtZ64<ID>) -> Self {
+            Self(ext.value as u8)
+        }
+    }
+
+    impl<const ID: u8> From<PatchType<ID>> for ZExtZ64<ID> {
+        fn from(ext: PatchType<ID>) -> Self {
+            ZExtZ64::new(ext.0 as u64)
+        }
+    }
 }

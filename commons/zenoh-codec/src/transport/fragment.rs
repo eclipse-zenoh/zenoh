@@ -39,6 +39,8 @@ where
             more,
             sn,
             ext_qos,
+            ext_first,
+            ext_drop,
         } = x;
 
         // Header
@@ -49,7 +51,10 @@ where
         if *more {
             header |= flag::M;
         }
-        if ext_qos != &ext::QoSType::DEFAULT {
+        let mut n_exts = (ext_qos != &ext::QoSType::DEFAULT) as u8
+            + ext_first.is_some() as u8
+            + ext_drop.is_some() as u8;
+        if n_exts != 0 {
             header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
@@ -59,7 +64,16 @@ where
 
         // Extensions
         if ext_qos != &ext::QoSType::DEFAULT {
-            self.write(&mut *writer, (*ext_qos, false))?;
+            n_exts -= 1;
+            self.write(&mut *writer, (*ext_qos, n_exts != 0))?;
+        }
+        if let Some(first) = ext_first {
+            n_exts -= 1;
+            self.write(&mut *writer, (first, n_exts != 0))?
+        }
+        if let Some(drop) = ext_drop {
+            n_exts -= 1;
+            self.write(&mut *writer, (drop, n_exts != 0))?
         }
 
         Ok(())
@@ -99,6 +113,8 @@ where
 
         // Extensions
         let mut ext_qos = ext::QoSType::DEFAULT;
+        let mut ext_first = None;
+        let mut ext_drop = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -108,6 +124,16 @@ where
                 ext::QoS::ID => {
                     let (q, ext): (ext::QoSType, bool) = eodec.read(&mut *reader)?;
                     ext_qos = q;
+                    has_ext = ext;
+                }
+                ext::First::ID => {
+                    let (first, ext): (ext::First, bool) = eodec.read(&mut *reader)?;
+                    ext_first = Some(first);
+                    has_ext = ext;
+                }
+                ext::Drop::ID => {
+                    let (drop, ext): (ext::Drop, bool) = eodec.read(&mut *reader)?;
+                    ext_drop = Some(drop);
                     has_ext = ext;
                 }
                 _ => {
@@ -121,6 +147,8 @@ where
             more,
             sn,
             ext_qos,
+            ext_first,
+            ext_drop,
         })
     }
 }
@@ -139,6 +167,8 @@ where
             sn,
             payload,
             ext_qos,
+            ext_first,
+            ext_drop,
         } = x;
 
         // Header
@@ -147,6 +177,8 @@ where
             more: *more,
             sn: *sn,
             ext_qos: *ext_qos,
+            ext_first: *ext_first,
+            ext_drop: *ext_drop,
         };
         self.write(&mut *writer, &header)?;
 
@@ -185,6 +217,8 @@ where
             more: header.more,
             sn: header.sn,
             ext_qos: header.ext_qos,
+            ext_first: header.ext_first,
+            ext_drop: header.ext_drop,
             payload,
         })
     }

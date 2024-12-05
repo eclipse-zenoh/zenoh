@@ -34,7 +34,7 @@ use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Bits, WhatAmI, ZenohIdProto},
     network::NetworkMessage,
-    transport::{close, TransportSn},
+    transport::{close, init::ext::PatchType, TransportSn},
 };
 use zenoh_result::{zerror, ZResult};
 
@@ -63,6 +63,7 @@ pub(crate) struct TransportConfigUnicast {
     pub(crate) is_lowlatency: bool,
     #[cfg(feature = "auth_usrpwd")]
     pub(crate) auth_id: UsrPwdId,
+    pub(crate) patch: PatchType,
 }
 
 /// [`TransportUnicast`] is the transport handler returned

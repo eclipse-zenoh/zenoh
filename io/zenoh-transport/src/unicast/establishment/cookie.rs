@@ -44,6 +44,7 @@ pub(crate) struct Cookie {
     pub(crate) ext_lowlatency: ext::lowlatency::StateAccept,
     #[cfg(feature = "transport_compression")]
     pub(crate) ext_compression: ext::compression::StateAccept,
+    pub(crate) ext_patch: ext::patch::StateAccept,
 }
 
 impl<W> WCodec<&Cookie, &mut W> for Zenoh080
@@ -70,6 +71,7 @@ where
         self.write(&mut *writer, &x.ext_lowlatency)?;
         #[cfg(feature = "transport_compression")]
         self.write(&mut *writer, &x.ext_compression)?;
+        self.write(&mut *writer, &x.ext_patch)?;
 
         Ok(())
     }
@@ -100,6 +102,7 @@ where
         let ext_lowlatency: ext::lowlatency::StateAccept = self.read(&mut *reader)?;
         #[cfg(feature = "transport_compression")]
         let ext_compression: ext::compression::StateAccept = self.read(&mut *reader)?;
+        let ext_patch: ext::patch::StateAccept = self.read(&mut *reader)?;
 
         let cookie = Cookie {
             zid,
@@ -117,6 +120,7 @@ where
             ext_lowlatency,
             #[cfg(feature = "transport_compression")]
             ext_compression,
+            ext_patch,
         };
 
         Ok(cookie)
@@ -188,6 +192,7 @@ impl Cookie {
             ext_lowlatency: ext::lowlatency::StateAccept::rand(),
             #[cfg(feature = "transport_compression")]
             ext_compression: ext::compression::StateAccept::rand(),
+            ext_patch: ext::patch::StateAccept::rand(),
         }
     }
 }
