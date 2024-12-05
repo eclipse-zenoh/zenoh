@@ -40,37 +40,51 @@ use crate::{
     handlers::Callback,
 };
 
-static KE_STARSTAR: &keyexpr = ke!("**");
 static KE_PREFIX: &keyexpr = ke!("@");
+static KE_ADV_PREFIX: &keyexpr = ke!("@adv");
+static KE_EMPTY: &keyexpr = ke!("_");
+static KE_STARSTAR: &keyexpr = ke!("**");
 static KE_SESSION: &keyexpr = ke!("session");
 static KE_TRANSPORT_UNICAST: &keyexpr = ke!("transport/unicast");
 static KE_LINK: &keyexpr = ke!("link");
 
 pub(crate) fn init(session: WeakSession) {
     if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
-        let admin_key = KeyExpr::from(KE_PREFIX / own_zid / KE_SESSION / KE_STARSTAR);
-
         let _admin_qabl = session.declare_queryable_inner(
-            &admin_key,
+            &KeyExpr::from(KE_PREFIX / own_zid / KE_SESSION / KE_STARSTAR),
             true,
             Locality::SessionLocal,
             Callback::new(Arc::new({
                 let session = session.clone();
-                move |q| on_admin_query(&session, q)
+                move |q| on_admin_query(&session, KE_PREFIX, q)
+            })),
+        );
+
+        let adv_prefix = KE_ADV_PREFIX / own_zid / KE_EMPTY / KE_EMPTY / KE_PREFIX / KE_PREFIX;
+
+        let _admin_adv_qabl = session.declare_queryable_inner(
+            &KeyExpr::from(&adv_prefix / own_zid / KE_SESSION / KE_STARSTAR),
+            true,
+            Locality::SessionLocal,
+            Callback::new(Arc::new({
+                let session = session.clone();
+                move |q| on_admin_query(&session, &adv_prefix, q)
             })),
         );
     }
 }
 
-pub(crate) fn on_admin_query(session: &WeakSession, query: Query) {
-    fn reply_peer(own_zid: &keyexpr, query: &Query, peer: TransportPeer) {
+pub(crate) fn on_admin_query(session: &WeakSession, prefix: &keyexpr, query: Query) {
+    fn reply_peer(prefix: &keyexpr, own_zid: &keyexpr, query: &Query, peer: TransportPeer) {
         let zid = peer.zid.to_string();
         if let Ok(zid) = keyexpr::new(&zid) {
-            let key_expr = KE_PREFIX / own_zid / KE_SESSION / KE_TRANSPORT_UNICAST / zid;
+            let key_expr = prefix / own_zid / KE_SESSION / KE_TRANSPORT_UNICAST / zid;
             if query.key_expr().intersects(&key_expr) {
                 match serde_json::to_vec(&peer) {
                     Ok(bytes) => {
-                        let _ = query.reply(key_expr, bytes).wait();
+                        let reply_expr =
+                            KE_PREFIX / own_zid / KE_SESSION / KE_TRANSPORT_UNICAST / zid;
+                        let _ = query.reply(reply_expr, bytes).wait();
                     }
                     Err(e) => tracing::debug!("Admin query error: {}", e),
                 }
@@ -80,17 +94,19 @@ pub(crate) fn on_admin_query(session: &WeakSession, query: Query) {
                 let mut s = DefaultHasher::new();
                 link.hash(&mut s);
                 if let Ok(lid) = keyexpr::new(&s.finish().to_string()) {
-                    let key_expr = KE_PREFIX
-                        / own_zid
-                        / KE_SESSION
-                        / KE_TRANSPORT_UNICAST
-                        / zid
-                        / KE_LINK
-                        / lid;
+                    let key_expr =
+                        prefix / own_zid / KE_SESSION / KE_TRANSPORT_UNICAST / zid / KE_LINK / lid;
                     if query.key_expr().intersects(&key_expr) {
                         match serde_json::to_vec(&link) {
                             Ok(bytes) => {
-                                let _ = query.reply(key_expr, bytes).wait();
+                                let reply_expr = KE_PREFIX
+                                    / own_zid
+                                    / KE_SESSION
+                                    / KE_TRANSPORT_UNICAST
+                                    / zid
+                                    / KE_LINK
+                                    / lid;
+                                let _ = query.reply(reply_expr, bytes).wait();
                             }
                             Err(e) => tracing::debug!("Admin query error: {}", e),
                         }
@@ -100,19 +116,21 @@ pub(crate) fn on_admin_query(session: &WeakSession, query: Query) {
         }
     }
 
+    println!("on admin query");
+
     if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
         for transport in zenoh_runtime::ZRuntime::Net
             .block_in_place(session.runtime.manager().get_transports_unicast())
         {
             if let Ok(peer) = transport.get_peer() {
-                reply_peer(own_zid, &query, peer);
+                reply_peer(prefix, own_zid, &query, peer);
             }
         }
         for transport in zenoh_runtime::ZRuntime::Net
             .block_in_place(session.runtime.manager().get_transports_multicast())
         {
             for peer in transport.get_peers().unwrap_or_default() {
-                reply_peer(own_zid, &query, peer);
+                reply_peer(prefix, own_zid, &query, peer);
             }
         }
     }
