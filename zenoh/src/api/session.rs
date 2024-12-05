@@ -608,6 +608,11 @@ impl WeakSession {
         *weak += 1;
         Self(session.clone())
     }
+
+    #[zenoh_macros::internal]
+    pub(crate) fn session(&self) -> Session {
+        Session(self.0.clone())
+    }
 }
 
 impl Clone for WeakSession {

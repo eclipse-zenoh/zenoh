@@ -17,13 +17,16 @@ use std::{
 };
 
 use zenoh::{
-    bytes::{Encoding, ZBytes},
-    internal::bail,
+    bytes::{Encoding, OptionZBytes, ZBytes},
+    internal::{
+        bail,
+        traits::{EncodingBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait},
+    },
     key_expr::KeyExpr,
     liveliness::LivelinessToken,
-    pubsub::{Publisher, PublisherDeleteBuilder, PublisherPutBuilder},
+    pubsub::{PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, Publisher},
     qos::{CongestionControl, Priority},
-    sample::{Locality, SourceInfo},
+    sample::SourceInfo,
     session::EntityGlobalId,
     Resolvable, Resolve, Result as ZResult, Session, Wait, KE_ADV_PREFIX, KE_AT, KE_EMPTY,
 };
@@ -126,7 +129,7 @@ impl IntoFuture for AdvancedPublisherBuilder<'_, '_, '_> {
 pub struct AdvancedPublisher<'a> {
     publisher: Publisher<'a>,
     seqnum: Option<AtomicU32>,
-    _cache: Option<AdvancedCache>,
+    cache: Option<AdvancedCache>,
     _token: Option<LivelinessToken>,
 }
 
@@ -174,7 +177,6 @@ impl<'a> AdvancedPublisher<'a> {
         let cache = if conf.cache {
             Some(
                 AdvancedCacheBuilder::new(conf.session, Ok(key_expr.clone().into_owned()))
-                    .subscriber_allowed_origin(Locality::SessionLocal)
                     .history(conf.history)
                     .queryable_prefix(&prefix)
                     .wait()?,
@@ -197,7 +199,7 @@ impl<'a> AdvancedPublisher<'a> {
         Ok(AdvancedPublisher {
             publisher,
             seqnum,
-            _cache: cache,
+            cache,
             _token: token,
         })
     }
@@ -256,18 +258,24 @@ impl<'a> AdvancedPublisher<'a> {
     /// # }
     /// ```
     #[inline]
-    pub fn put<IntoZBytes>(&self, payload: IntoZBytes) -> PublisherPutBuilder<'_>
+    pub fn put<IntoZBytes>(&self, payload: IntoZBytes) -> AdvancedPublisherPutBuilder<'_>
     where
         IntoZBytes: Into<ZBytes>,
     {
-        let mut put = self.publisher.put(payload);
+        let mut builder = self.publisher.put(payload);
         if let Some(seqnum) = &self.seqnum {
-            put = put.source_info(SourceInfo::new(
+            builder = builder.source_info(SourceInfo::new(
                 Some(self.publisher.id()),
                 Some(seqnum.fetch_add(1, Ordering::Relaxed)),
             ));
         }
-        put
+        if let Some(hlc) = self.publisher.session().hlc() {
+            builder = builder.timestamp(hlc.new_timestamp());
+        }
+        AdvancedPublisherPutBuilder {
+            builder,
+            cache: self.cache.as_ref(),
+        }
     }
 
     /// Delete data.
@@ -282,15 +290,21 @@ impl<'a> AdvancedPublisher<'a> {
     /// publisher.delete().await.unwrap();
     /// # }
     /// ```
-    pub fn delete(&self) -> PublisherDeleteBuilder<'_> {
-        let mut delete = self.publisher.delete();
+    pub fn delete(&self) -> AdvancedPublisherDeleteBuilder<'_> {
+        let mut builder = self.publisher.delete();
         if let Some(seqnum) = &self.seqnum {
-            delete = delete.source_info(SourceInfo::new(
+            builder = builder.source_info(SourceInfo::new(
                 Some(self.publisher.id()),
                 Some(seqnum.fetch_add(1, Ordering::Relaxed)),
             ));
         }
-        delete
+        if let Some(hlc) = self.publisher.session().hlc() {
+            builder = builder.timestamp(hlc.new_timestamp());
+        }
+        AdvancedPublisherDeleteBuilder {
+            builder,
+            cache: self.cache.as_ref(),
+        }
     }
 
     /// Return the [`MatchingStatus`](zenoh::matching::MatchingStatus) of the publisher.
@@ -360,5 +374,96 @@ impl<'a> AdvancedPublisher<'a> {
     /// ```
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         self.publisher.undeclare()
+    }
+}
+
+pub type AdvancedPublisherPutBuilder<'a> = AdvancedPublicationBuilder<'a, PublicationBuilderPut>;
+pub type AdvancedPublisherDeleteBuilder<'a> =
+    AdvancedPublicationBuilder<'a, PublicationBuilderDelete>;
+
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
+#[derive(Clone)]
+pub struct AdvancedPublicationBuilder<'a, P> {
+    pub(crate) builder: PublicationBuilder<&'a Publisher<'a>, P>,
+    pub(crate) cache: Option<&'a AdvancedCache>,
+}
+
+#[zenoh_macros::internal_trait]
+impl EncodingBuilderTrait for AdvancedPublicationBuilder<'_, PublicationBuilderPut> {
+    fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
+        Self {
+            builder: self.builder.encoding(encoding),
+            ..self
+        }
+    }
+}
+
+#[zenoh_macros::internal_trait]
+impl<P> SampleBuilderTrait for AdvancedPublicationBuilder<'_, P> {
+    #[cfg(feature = "unstable")]
+    fn source_info(self, source_info: SourceInfo) -> Self {
+        Self {
+            builder: self.builder.source_info(source_info),
+            ..self
+        }
+    }
+    fn attachment<TA: Into<OptionZBytes>>(self, attachment: TA) -> Self {
+        let attachment: OptionZBytes = attachment.into();
+        Self {
+            builder: self.builder.attachment(attachment),
+            ..self
+        }
+    }
+}
+
+#[zenoh_macros::internal_trait]
+impl<P> TimestampBuilderTrait for AdvancedPublicationBuilder<'_, P> {
+    fn timestamp<TS: Into<Option<uhlc::Timestamp>>>(self, timestamp: TS) -> Self {
+        Self {
+            builder: self.builder.timestamp(timestamp),
+            ..self
+        }
+    }
+}
+
+impl<P> Resolvable for AdvancedPublicationBuilder<'_, P> {
+    type To = ZResult<()>;
+}
+
+impl Wait for AdvancedPublisherPutBuilder<'_> {
+    #[inline]
+    fn wait(self) -> <Self as Resolvable>::To {
+        if let Some(cache) = self.cache {
+            cache.cache_sample(zenoh::sample::Sample::from(&self.builder));
+        }
+        self.builder.wait()
+    }
+}
+
+impl Wait for AdvancedPublisherDeleteBuilder<'_> {
+    #[inline]
+    fn wait(self) -> <Self as Resolvable>::To {
+        if let Some(cache) = self.cache {
+            cache.cache_sample(zenoh::sample::Sample::from(&self.builder));
+        }
+        self.builder.wait()
+    }
+}
+
+impl IntoFuture for AdvancedPublisherPutBuilder<'_> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
+    }
+}
+
+impl IntoFuture for AdvancedPublisherDeleteBuilder<'_> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
     }
 }
