@@ -25,12 +25,10 @@ use zenoh::{
     qos::{CongestionControl, Priority},
     sample::{Locality, SourceInfo},
     session::EntityGlobalId,
-    Resolvable, Resolve, Result as ZResult, Session, Wait,
+    Resolvable, Resolve, Result as ZResult, Session, Wait, KE_ADV_PREFIX, KE_AT, KE_EMPTY,
 };
 
-use crate::advanced_cache::{
-    AdvancedCache, AdvancedCacheBuilder, CacheConfig, KE_EMPTY, KE_PREFIX, KE_SEPARATOR, KE_UHLC,
-};
+use crate::advanced_cache::{AdvancedCache, AdvancedCacheBuilder, CacheConfig, KE_UHLC};
 
 #[derive(PartialEq)]
 pub enum Sequencing {
@@ -145,7 +143,7 @@ impl<'a> AdvancedPublisher<'a> {
             .declare_publisher(key_expr.clone().into_owned())
             .wait()?;
         let id = publisher.id();
-        let prefix = KE_PREFIX / &id.zid().into_keyexpr();
+        let prefix = KE_ADV_PREFIX / &id.zid().into_keyexpr();
         let prefix = match conf.sequencing {
             Sequencing::SequenceNumber => {
                 prefix / &KeyExpr::try_from(id.eid().to_string()).unwrap()
@@ -153,9 +151,9 @@ impl<'a> AdvancedPublisher<'a> {
             _ => prefix / KE_UHLC,
         };
         let prefix = match meta {
-            Some(meta) => prefix / &meta / KE_SEPARATOR,
+            Some(meta) => prefix / &meta / KE_AT,
             // We need this empty chunk because af a routing matching bug
-            _ => prefix / KE_EMPTY / KE_SEPARATOR,
+            _ => prefix / KE_EMPTY / KE_AT,
         };
 
         let seqnum = match conf.sequencing {

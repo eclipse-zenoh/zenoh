@@ -23,7 +23,7 @@ use zenoh::{
     },
     sample::{Locality, Sample, SampleKind},
     session::{EntityGlobalId, EntityId},
-    Resolvable, Resolve, Session, Wait,
+    Resolvable, Resolve, Session, Wait, KE_ADV_PREFIX, KE_AT, KE_EMPTY, KE_STARSTAR,
 };
 use zenoh_util::{Timed, TimedEvent, Timer};
 #[zenoh_macros::unstable]
@@ -44,9 +44,7 @@ use {
     zenoh::Result as ZResult,
 };
 
-use crate::advanced_cache::{
-    ke_liveliness, KE_EMPTY, KE_PREFIX, KE_SEPARATOR, KE_STARSTAR, KE_UHLC,
-};
+use crate::advanced_cache::{ke_liveliness, KE_UHLC};
 
 #[derive(Debug, Default, Clone)]
 /// Configure query for historical data.
@@ -492,11 +490,11 @@ impl Timed for PeriodicQuery {
         let states = &mut *lock;
         if let Some(state) = states.sequenced_states.get_mut(&self.source_id) {
             state.pending_queries += 1;
-            let query_expr = KE_PREFIX
+            let query_expr = KE_ADV_PREFIX
                 / &self.source_id.zid().into_keyexpr()
                 / &KeyExpr::try_from(self.source_id.eid().to_string()).unwrap()
                 / KE_STARSTAR
-                / KE_SEPARATOR
+                / KE_AT
                 / &states.key_expr;
             let seq_num_range = seq_num_range(Some(state.last_delivered.unwrap() + 1), None);
 
@@ -588,11 +586,11 @@ impl<Handler> AdvancedSubscriber<Handler> {
                             && !state.pending_samples.is_empty()
                         {
                             state.pending_queries += 1;
-                            let query_expr = KE_PREFIX
+                            let query_expr = KE_ADV_PREFIX
                                 / &source_id.zid().into_keyexpr()
                                 / &KeyExpr::try_from(source_id.eid().to_string()).unwrap()
                                 / KE_STARSTAR
-                                / KE_SEPARATOR
+                                / KE_AT
                                 / &key_expr;
                             let seq_num_range =
                                 seq_num_range(Some(state.last_delivered.unwrap() + 1), None);
@@ -649,7 +647,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
             let _ = conf
                 .session
                 .get(Selector::from((
-                    KE_PREFIX / KE_STARSTAR / KE_SEPARATOR / &key_expr,
+                    KE_ADV_PREFIX / KE_STARSTAR / KE_AT / &key_expr,
                     params,
                 )))
                 .callback({
@@ -839,7 +837,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                     conf
                 .session
                 .liveliness()
-                .declare_subscriber(KE_PREFIX / KE_STARSTAR / KE_SEPARATOR / &key_expr)
+                .declare_subscriber(KE_ADV_PREFIX / KE_STARSTAR / KE_AT / &key_expr)
                 // .declare_subscriber(keformat!(ke_liveliness_all::formatter(), zid = 0, eid = 0, remaining = key_expr).unwrap())
                 .history(true)
                 .callback(live_callback)
@@ -853,13 +851,13 @@ impl<Handler> AdvancedSubscriber<Handler> {
         };
 
         let token = if conf.liveliness {
-            let prefix = KE_PREFIX
+            let prefix = KE_ADV_PREFIX
                 / &subscriber.id().zid().into_keyexpr()
                 / &KeyExpr::try_from(subscriber.id().eid().to_string()).unwrap();
             let prefix = match meta {
-                Some(meta) => prefix / &meta / KE_SEPARATOR,
+                Some(meta) => prefix / &meta / KE_AT,
                 // We need this empty chunk because af a routing matching bug
-                _ => prefix / KE_EMPTY / KE_SEPARATOR,
+                _ => prefix / KE_EMPTY / KE_AT,
             };
             Some(
                 conf.session

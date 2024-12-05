@@ -40,10 +40,23 @@ use crate::{
     handlers::Callback,
 };
 
-static KE_PREFIX: &keyexpr = ke!("@");
+#[cfg(feature = "internal")]
+pub static KE_AT: &keyexpr = ke!("@");
+#[cfg(not(feature = "internal"))]
+static KE_AT: &keyexpr = ke!("@");
+#[cfg(feature = "internal")]
+pub static KE_ADV_PREFIX: &keyexpr = ke!("@adv");
+#[cfg(not(feature = "internal"))]
 static KE_ADV_PREFIX: &keyexpr = ke!("@adv");
+#[cfg(feature = "internal")]
+pub static KE_EMPTY: &keyexpr = ke!("_");
+#[cfg(not(feature = "internal"))]
 static KE_EMPTY: &keyexpr = ke!("_");
+#[cfg(feature = "internal")]
+pub static KE_STARSTAR: &keyexpr = ke!("**");
+#[cfg(not(feature = "internal"))]
 static KE_STARSTAR: &keyexpr = ke!("**");
+
 static KE_SESSION: &keyexpr = ke!("session");
 static KE_TRANSPORT_UNICAST: &keyexpr = ke!("transport/unicast");
 static KE_LINK: &keyexpr = ke!("link");
@@ -51,16 +64,16 @@ static KE_LINK: &keyexpr = ke!("link");
 pub(crate) fn init(session: WeakSession) {
     if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
         let _admin_qabl = session.declare_queryable_inner(
-            &KeyExpr::from(KE_PREFIX / own_zid / KE_SESSION / KE_STARSTAR),
+            &KeyExpr::from(KE_AT / own_zid / KE_SESSION / KE_STARSTAR),
             true,
             Locality::SessionLocal,
             Callback::new(Arc::new({
                 let session = session.clone();
-                move |q| on_admin_query(&session, KE_PREFIX, q)
+                move |q| on_admin_query(&session, KE_AT, q)
             })),
         );
 
-        let adv_prefix = KE_ADV_PREFIX / own_zid / KE_EMPTY / KE_EMPTY / KE_PREFIX / KE_PREFIX;
+        let adv_prefix = KE_ADV_PREFIX / own_zid / KE_EMPTY / KE_EMPTY / KE_AT / KE_AT;
 
         let _admin_adv_qabl = session.declare_queryable_inner(
             &KeyExpr::from(&adv_prefix / own_zid / KE_SESSION / KE_STARSTAR),
@@ -82,8 +95,7 @@ pub(crate) fn on_admin_query(session: &WeakSession, prefix: &keyexpr, query: Que
             if query.key_expr().intersects(&key_expr) {
                 match serde_json::to_vec(&peer) {
                     Ok(bytes) => {
-                        let reply_expr =
-                            KE_PREFIX / own_zid / KE_SESSION / KE_TRANSPORT_UNICAST / zid;
+                        let reply_expr = KE_AT / own_zid / KE_SESSION / KE_TRANSPORT_UNICAST / zid;
                         let _ = query.reply(reply_expr, bytes).wait();
                     }
                     Err(e) => tracing::debug!("Admin query error: {}", e),
@@ -99,7 +111,7 @@ pub(crate) fn on_admin_query(session: &WeakSession, prefix: &keyexpr, query: Que
                     if query.key_expr().intersects(&key_expr) {
                         match serde_json::to_vec(&link) {
                             Ok(bytes) => {
-                                let reply_expr = KE_PREFIX
+                                let reply_expr = KE_AT
                                     / own_zid
                                     / KE_SESSION
                                     / KE_TRANSPORT_UNICAST
@@ -171,10 +183,9 @@ impl TransportMulticastEventHandler for Handler {
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         if let Ok(own_zid) = keyexpr::new(&self.session.zid().to_string()) {
             if let Ok(zid) = keyexpr::new(&peer.zid.to_string()) {
-                let expr = WireExpr::from(
-                    &(KE_PREFIX / own_zid / KE_SESSION / KE_TRANSPORT_UNICAST / zid),
-                )
-                .to_owned();
+                let expr =
+                    WireExpr::from(&(KE_AT / own_zid / KE_SESSION / KE_TRANSPORT_UNICAST / zid))
+                        .to_owned();
                 let info = DataInfo {
                     encoding: Some(Encoding::APPLICATION_JSON),
                     ..Default::default()

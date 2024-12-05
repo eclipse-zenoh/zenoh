@@ -81,6 +81,15 @@ extern crate zenoh_result;
 mod api;
 mod net;
 
+#[cfg(feature = "internal")]
+pub use api::admin::KE_ADV_PREFIX;
+#[cfg(feature = "internal")]
+pub use api::admin::KE_AT;
+#[cfg(feature = "internal")]
+pub use api::admin::KE_EMPTY;
+#[cfg(feature = "internal")]
+pub use api::admin::KE_STARSTAR;
+
 lazy_static::lazy_static!(
     static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
 );
