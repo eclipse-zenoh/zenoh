@@ -28,9 +28,8 @@ use zenoh::{
     Resolvable, Resolve, Result as ZResult, Session, Wait,
 };
 
-use crate::{
-    advanced_cache::{AdvancedCache, CacheConfig, KE_EMPTY, KE_PREFIX, KE_SEPARATOR, KE_UHLC},
-    SessionExt,
+use crate::advanced_cache::{
+    AdvancedCache, AdvancedCacheBuilder, CacheConfig, KE_EMPTY, KE_PREFIX, KE_SEPARATOR, KE_UHLC,
 };
 
 #[derive(PartialEq)]
@@ -176,8 +175,7 @@ impl<'a> AdvancedPublisher<'a> {
 
         let cache = if conf.cache {
             Some(
-                conf.session
-                    .declare_advanced_cache(key_expr.clone().into_owned())
+                AdvancedCacheBuilder::new(conf.session, Ok(key_expr.clone().into_owned()))
                     .subscriber_allowed_origin(Locality::SessionLocal)
                     .history(conf.history)
                     .queryable_prefix(&prefix)

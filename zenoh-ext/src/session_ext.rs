@@ -15,7 +15,6 @@
 use zenoh::{key_expr::KeyExpr, session::Session, Error};
 
 use super::PublicationCacheBuilder;
-use crate::advanced_cache::AdvancedCacheBuilder;
 
 /// Some extensions to the [`zenoh::Session`](zenoh::Session)
 #[zenoh_macros::unstable]
@@ -45,14 +44,6 @@ pub trait SessionExt {
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<Error>;
-
-    fn declare_advanced_cache<'a, 'b, 'c, TryIntoKeyExpr>(
-        &'a self,
-        pub_key_expr: TryIntoKeyExpr,
-    ) -> AdvancedCacheBuilder<'a, 'b, 'c>
-    where
-        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<Error>;
 }
 
 impl SessionExt for Session {
@@ -65,16 +56,5 @@ impl SessionExt for Session {
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<Error>,
     {
         PublicationCacheBuilder::new(self, pub_key_expr.try_into().map_err(Into::into))
-    }
-
-    fn declare_advanced_cache<'a, 'b, 'c, TryIntoKeyExpr>(
-        &'a self,
-        pub_key_expr: TryIntoKeyExpr,
-    ) -> AdvancedCacheBuilder<'a, 'b, 'c>
-    where
-        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<Error>,
-    {
-        AdvancedCacheBuilder::new(self, pub_key_expr.try_into().map_err(Into::into))
     }
 }

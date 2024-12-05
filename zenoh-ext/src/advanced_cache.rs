@@ -22,7 +22,7 @@ use futures::{select, FutureExt};
 use tokio::task;
 use zenoh::{
     handlers::FifoChannelHandler,
-    internal::{bail, ResolveFuture},
+    internal::bail,
     key_expr::{
         format::{ke, kedefine},
         keyexpr, KeyExpr, OwnedKeyExpr,
@@ -31,7 +31,7 @@ use zenoh::{
     pubsub::Subscriber,
     query::{Query, Queryable, ZenohParameters},
     sample::{Locality, Sample},
-    Resolvable, Resolve, Result as ZResult, Session, Wait,
+    Resolvable, Result as ZResult, Session, Wait,
 };
 
 // #[zenoh_macros::unstable]
@@ -128,22 +128,9 @@ impl<'a, 'b, 'c> AdvancedCacheBuilder<'a, 'b, 'c> {
         self
     }
 
-    /// Restrict the matching queries that will be receive by this [`AdvancedCache`]'s queryable
-    /// to the ones that have the given [`Locality`](zenoh::sample::Locality).
-    #[inline]
-    pub fn queryable_allowed_origin(mut self, origin: Locality) -> Self {
-        self.queryable_origin = origin;
-        self
-    }
-
     /// Change the history size for each resource.
     pub fn history(mut self, history: CacheConfig) -> Self {
         self.history = history;
-        self
-    }
-
-    pub fn liveliness(mut self, enabled: bool) -> Self {
-        self.liveliness = enabled;
         self
     }
 }
@@ -356,26 +343,6 @@ impl AdvancedCache {
             _queryable: queryable,
             _token: token,
             _stoptx: stoptx,
-        })
-    }
-
-    /// Close this AdvancedCache
-    #[inline]
-    pub fn close(self) -> impl Resolve<ZResult<()>> {
-        ResolveFuture::new(async move {
-            let AdvancedCache {
-                _queryable,
-                _sub,
-                _token,
-                _stoptx,
-            } = self;
-            _sub.undeclare().await?;
-            if let Some(token) = _token {
-                token.undeclare().await?;
-            }
-            _queryable.undeclare().await?;
-            drop(_stoptx);
-            Ok(())
         })
     }
 }
