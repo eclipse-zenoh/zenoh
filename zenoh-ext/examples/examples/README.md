@@ -42,31 +42,6 @@
       z_advanced_sub
    ```
 
-### z_pub_cache
-
-   Declares a publisher and an associated publication cache with a given key expression.  
-   All the publications are locally cached (with a configurable history size - i.e. max number of cached data per resource). The cache can be queried by a QueryingSubscriber at startup (see next example).
-
-   Typical usage:
-   ```bash
-      z_pub_cache
-   ```
-   or
-   ```bash
-      z_pub_cache --history 10
-   ```
-
-### z_query_sub
-
-   Declares a querying subscriber with a selector.  
-   At startup, the subscriber issuez a query (by default on the same selector than the subscription) and merge/sort/de-duplicate the query results with the publications received in parallel.
-
-   Typical usage:
-   ```bash
-      z_query_sub
-   ```
-
-
 ### z_member
 
    Group Management example: join a group and display the received group events (Join, Leave, LeaseExpired), as well as an updated group view.
