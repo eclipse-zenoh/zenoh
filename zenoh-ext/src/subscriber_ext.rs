@@ -125,7 +125,7 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
 }
 
 /// Some extensions to the [`zenoh::subscriber::SubscriberBuilder`](zenoh::pubsub::SubscriberBuilder)
-pub trait DataSubscriberBuilderExt<'a, 'b, 'c, Handler> {
+pub trait AdvancedSubscriberBuilderExt<'a, 'b, 'c, Handler> {
     /// Enable query for historical data.
     ///
     /// History can only be retransmitted by Publishers that enable caching.
@@ -248,7 +248,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
     }
 }
 
-impl<'a, 'b, 'c, Handler> DataSubscriberBuilderExt<'a, 'b, 'c, Handler>
+impl<'a, 'b, 'c, Handler> AdvancedSubscriberBuilderExt<'a, 'b, 'c, Handler>
     for SubscriberBuilder<'a, 'b, Handler>
 {
     /// Enable query for historical data.

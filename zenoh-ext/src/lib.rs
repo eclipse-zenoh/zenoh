@@ -45,11 +45,11 @@ pub use crate::{
         AdvancedSubscriber, AdvancedSubscriberBuilder, HistoryConfig, RecoveryConfig,
     },
     publication_cache::{PublicationCache, PublicationCacheBuilder},
-    publisher_ext::PublisherBuilderExt,
+    publisher_ext::AdvancedPublisherBuilderExt,
     querying_subscriber::{
         ExtractSample, FetchingSubscriber, FetchingSubscriberBuilder, KeySpace, LivelinessSpace,
         QueryingSubscriberBuilder, UserSpace,
     },
     session_ext::SessionExt,
-    subscriber_ext::{DataSubscriberBuilderExt, SubscriberBuilderExt, SubscriberForward},
+    subscriber_ext::{AdvancedSubscriberBuilderExt, SubscriberBuilderExt, SubscriberForward},
 };

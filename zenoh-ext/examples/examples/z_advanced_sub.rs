@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use clap::{arg, Parser};
 use zenoh::config::Config;
-use zenoh_ext::{DataSubscriberBuilderExt, HistoryConfig, RecoveryConfig};
+use zenoh_ext::{AdvancedSubscriberBuilderExt, HistoryConfig, RecoveryConfig};
 use zenoh_ext_examples::CommonArgs;
 
 #[tokio::main]

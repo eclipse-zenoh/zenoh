@@ -15,7 +15,8 @@
 use zenoh::sample::SampleKind;
 use zenoh_config::{EndPoint, ModeDependentValue, WhatAmI};
 use zenoh_ext::{
-    CacheConfig, DataSubscriberBuilderExt, HistoryConfig, PublisherBuilderExt, RecoveryConfig,
+    AdvancedPublisherBuilderExt, AdvancedSubscriberBuilderExt, CacheConfig, HistoryConfig,
+    RecoveryConfig,
 };
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

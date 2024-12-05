@@ -16,7 +16,7 @@ use std::time::Duration;
 use clap::{arg, Parser};
 use zenoh::{config::Config, key_expr::KeyExpr};
 use zenoh_config::ModeDependentValue;
-use zenoh_ext::{CacheConfig, PublisherBuilderExt};
+use zenoh_ext::{AdvancedPublisherBuilderExt, CacheConfig};
 use zenoh_ext_examples::CommonArgs;
 
 #[tokio::main]

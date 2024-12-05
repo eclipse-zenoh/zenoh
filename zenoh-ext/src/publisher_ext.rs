@@ -17,7 +17,7 @@ use crate::{advanced_cache::CacheConfig, AdvancedPublisherBuilder};
 
 /// Some extensions to the [`zenoh::publication::PublisherBuilder`](zenoh::publication::PublisherBuilder)
 #[zenoh_macros::unstable]
-pub trait PublisherBuilderExt<'a, 'b, 'c> {
+pub trait AdvancedPublisherBuilderExt<'a, 'b, 'c> {
     /// Allow matching Subscribers to detect lost samples and
     /// optionally ask for retransimission.
     ///
@@ -35,7 +35,7 @@ pub trait PublisherBuilderExt<'a, 'b, 'c> {
     fn publisher_detection(self) -> AdvancedPublisherBuilder<'a, 'b, 'c>;
 }
 
-impl<'a, 'b, 'c> PublisherBuilderExt<'a, 'b, 'c> for PublisherBuilder<'a, 'b> {
+impl<'a, 'b, 'c> AdvancedPublisherBuilderExt<'a, 'b, 'c> for PublisherBuilder<'a, 'b> {
     /// Allow matching Subscribers to detect lost samples and
     /// optionally ask for retransimission.
     ///
