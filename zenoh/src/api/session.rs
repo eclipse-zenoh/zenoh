@@ -2153,8 +2153,8 @@ impl SessionInner {
         #[cfg(feature = "unstable")] source_info: SourceInfo,
         attachment: Option<ZBytes>,
     ) -> ZResult<()> {
-        const NO_REMOTE_FLAG: u64 = 0b01;
-        const NO_LOCAL_FLAG: u64 = 0b10;
+        const REMOTE_TAG: u64 = 0b01;
+        const LOCAL_TAG: u64 = 0b10;
         const VERSION_SHIFT: u64 = 2;
         trace!("write({:?}, [...])", key_expr);
         let state = zread!(self.state);
@@ -2163,26 +2163,21 @@ impl SessionInner {
             .as_ref()
             .cloned()
             .ok_or(SessionClosedError)?;
-        let mut cached = 0;
-        let mut update_cache = None;
+        let mut cached = REMOTE_TAG | LOCAL_TAG;
+        let mut to_cache = REMOTE_TAG | LOCAL_TAG;
         if let Some(cache) = cache {
-            let c = cache.load(Ordering::Relaxed);
-            let version = c >> VERSION_SHIFT;
+            cached = cache.load(Ordering::Relaxed);
+            let version = cached >> VERSION_SHIFT;
             if version == state.subscription_version {
-                cached = c;
+                to_cache = cached;
             } else {
-                cached = (state.subscription_version << VERSION_SHIFT);
+                to_cache = (state.subscription_version << VERSION_SHIFT) | REMOTE_TAG | LOCAL_TAG;
             }
-            update_cache = Some(scopeguard::guard((), |_| {
-                if cached != c {
-                    let _ = cache.compare_exchange(c, cached, Ordering::Relaxed, Ordering::Relaxed);
-                }
-            }));
         }
         drop(state);
         let timestamp = timestamp.or_else(|| self.runtime.new_timestamp());
         let wire_expr = key_expr.to_wire(self);
-        if (cached & NO_REMOTE_FLAG) == 0 && destination != Locality::SessionLocal {
+        if (to_cache & REMOTE_TAG) != 0 && destination != Locality::SessionLocal {
             let remote = primitives.route_data(
                 Push {
                     wire_expr: wire_expr.to_owned(),
@@ -2224,10 +2219,10 @@ impl SessionInner {
                 Reliability::DEFAULT,
             );
             if !remote {
-                cached |= NO_REMOTE_FLAG
+                to_cache &= !REMOTE_TAG;
             }
         }
-        if (cached & NO_LOCAL_FLAG) == 0 && destination != Locality::Remote {
+        if (to_cache & LOCAL_TAG) != 0 && destination != Locality::Remote {
             let data_info = DataInfo {
                 kind,
                 encoding: Some(encoding),
@@ -2258,8 +2253,11 @@ impl SessionInner {
                 attachment,
             );
             if !local {
-                cached |= NO_LOCAL_FLAG;
+                to_cache &= !LOCAL_TAG;
             }
+        }
+        if let Some(cache) = cache.filter(|_| to_cache != cached) {
+            let _ = cache.compare_exchange(cached, to_cache, Ordering::Relaxed, Ordering::Relaxed);
         }
         Ok(())
     }
@@ -2567,10 +2565,10 @@ impl Primitives for WeakSession {
             }
             zenoh_protocol::network::DeclareBody::DeclareSubscriber(m) => {
                 trace!("recv DeclareSubscriber {} {:?}", m.id, m.wire_expr);
-                let mut state = zwrite!(self.state);
-                state.subscription_version += 1;
                 #[cfg(feature = "unstable")]
                 {
+                    let mut state = zwrite!(self.state);
+                    state.subscription_version += 1;
                     if state.primitives.is_none() {
                         return; // Session closing or closed
                     }

@@ -473,7 +473,8 @@ impl Wait for PublisherBuilder<'_, '_> {
             .declare_publisher_inner(key_expr.clone(), self.destination)?;
         Ok(Publisher {
             session: self.session.downgrade(),
-            cache: AtomicU64::new(0),
+            // TODO use constants here
+            cache: AtomicU64::new(0b11),
             id,
             key_expr,
             encoding: self.encoding,
