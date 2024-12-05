@@ -40,7 +40,7 @@ pub use crate::serialization::{
 #[cfg(feature = "unstable")]
 #[allow(deprecated)]
 pub use crate::{
-    advanced_cache::CacheConfig,
+    advanced_cache::{CacheConfig, QoS},
     advanced_publisher::{AdvancedPublisher, AdvancedPublisherBuilder, Sequencing},
     advanced_subscriber::{
         AdvancedSubscriber, AdvancedSubscriberBuilder, HistoryConfig, RecoveryConfig,
