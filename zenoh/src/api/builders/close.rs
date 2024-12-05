@@ -131,10 +131,10 @@ impl<TOutput: Send + 'static> IntoFuture for BackgroundCloseBuilder<TOutput> {
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(
             async move {
-                let (tx, rx) = flume::bounded::<TOutput>(1);
+                let (tx, rx) = async_channel::bounded::<TOutput>(1);
 
                 ZRuntime::Application.spawn(async move {
-                    tx.send_async(self.inner.await)
+                    tx.send(self.inner.await)
                         .await
                         .expect("BackgroundCloseBuilder: critical error sending the result")
                 });
@@ -148,12 +148,12 @@ impl<TOutput: Send + 'static> IntoFuture for BackgroundCloseBuilder<TOutput> {
 #[cfg(all(feature = "unstable", feature = "internal"))]
 #[doc(hidden)]
 pub struct NolocalJoinHandle<TOutput: Send + 'static> {
-    rx: flume::Receiver<TOutput>,
+    rx: async_channel::Receiver<TOutput>,
 }
 
 #[cfg(all(feature = "unstable", feature = "internal"))]
 impl<TOutput: Send + 'static> NolocalJoinHandle<TOutput> {
-    fn new(rx: flume::Receiver<TOutput>) -> Self {
+    fn new(rx: async_channel::Receiver<TOutput>) -> Self {
         Self { rx }
     }
 }
@@ -167,7 +167,7 @@ impl<TOutput: Send + 'static> Resolvable for NolocalJoinHandle<TOutput> {
 impl<TOutput: Send + 'static> Wait for NolocalJoinHandle<TOutput> {
     fn wait(self) -> Self::To {
         self.rx
-            .recv()
+            .recv_blocking()
             .expect("NolocalJoinHandle: critical error receiving the result")
     }
 }
@@ -181,7 +181,7 @@ impl<TOutput: Send + 'static> IntoFuture for NolocalJoinHandle<TOutput> {
         Box::pin(
             async move {
                 self.rx
-                    .recv_async()
+                    .recv()
                     .await
                     .expect("NolocalJoinHandle: critical error receiving the result")
             }
