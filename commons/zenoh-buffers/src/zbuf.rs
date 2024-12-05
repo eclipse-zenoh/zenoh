@@ -195,7 +195,7 @@ impl<'a> HasReader for &'a ZBuf {
     }
 }
 
-impl<'a> Reader for ZBufReader<'a> {
+impl Reader for ZBufReader<'_> {
     fn read(&mut self, mut into: &mut [u8]) -> Result<NonZeroUsize, DidntRead> {
         let mut read = 0;
         while let Some(slice) = self.inner.slices.get(self.cursor.slice) {
@@ -299,7 +299,7 @@ impl<'a> Reader for ZBufReader<'a> {
     }
 }
 
-impl<'a> BacktrackableReader for ZBufReader<'a> {
+impl BacktrackableReader for ZBufReader<'_> {
     type Mark = ZBufPos;
 
     fn mark(&mut self) -> Self::Mark {
@@ -312,7 +312,7 @@ impl<'a> BacktrackableReader for ZBufReader<'a> {
     }
 }
 
-impl<'a> SiphonableReader for ZBufReader<'a> {
+impl SiphonableReader for ZBufReader<'_> {
     fn siphon<W>(&mut self, writer: &mut W) -> Result<NonZeroUsize, DidntSiphon>
     where
         W: Writer,
@@ -345,7 +345,7 @@ impl<'a> SiphonableReader for ZBufReader<'a> {
 }
 
 #[cfg(feature = "std")]
-impl<'a> io::Read for ZBufReader<'a> {
+impl io::Read for ZBufReader<'_> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match <Self as Reader>::read(self, buf) {
             Ok(n) => Ok(n.get()),
@@ -354,7 +354,7 @@ impl<'a> io::Read for ZBufReader<'a> {
     }
 }
 
-impl<'a> AdvanceableReader for ZBufReader<'a> {
+impl AdvanceableReader for ZBufReader<'_> {
     fn skip(&mut self, offset: usize) -> Result<(), DidntRead> {
         let mut remaining_offset = offset;
         while remaining_offset > 0 {
@@ -399,7 +399,7 @@ impl<'a> AdvanceableReader for ZBufReader<'a> {
 }
 
 #[cfg(feature = "std")]
-impl<'a> io::Seek for ZBufReader<'a> {
+impl io::Seek for ZBufReader<'_> {
     fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
         let current_pos = self
             .inner
@@ -570,7 +570,7 @@ impl BacktrackableWriter for ZBufWriter<'_> {
 }
 
 #[cfg(feature = "std")]
-impl<'a> io::Write for ZBufWriter<'a> {
+impl io::Write for ZBufWriter<'_> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if buf.is_empty() {
             return Ok(0);

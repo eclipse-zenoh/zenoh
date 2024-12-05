@@ -226,6 +226,7 @@ impl<'a, 'b, KeySpace, Handler, const BACKGROUND: bool>
         self
     }
 
+    #[allow(clippy::type_complexity)]
     fn into_fetching_subscriber_builder(
         self,
     ) -> ZResult<
@@ -427,13 +428,12 @@ pub struct FetchingSubscriberBuilder<
 
 impl<
         'a,
-        'b,
         KeySpace,
         Handler,
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
         TryIntoSample,
         const BACKGROUND: bool,
-    > FetchingSubscriberBuilder<'a, 'b, KeySpace, Handler, Fetch, TryIntoSample, BACKGROUND>
+    > FetchingSubscriberBuilder<'a, '_, KeySpace, Handler, Fetch, TryIntoSample, BACKGROUND>
 where
     TryIntoSample: ExtractSample,
 {

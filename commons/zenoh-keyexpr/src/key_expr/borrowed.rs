@@ -545,7 +545,7 @@ impl<'a> Iterator for Chunks<'a> {
         Some(unsafe { keyexpr::from_str_unchecked(next) })
     }
 }
-impl<'a> DoubleEndedIterator for Chunks<'a> {
+impl DoubleEndedIterator for Chunks<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.inner.is_empty() {
             return None;

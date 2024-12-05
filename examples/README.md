@@ -123,6 +123,24 @@
    z_get -s 'demo/**'
    ```
 
+### z_querier
+
+   Continuously sends query messages for a selector.
+   The queryables with a matching path or selector (for instance [z_queryable](#z_queryable) and [z_storage](#z_storage))
+   will receive these queries and reply with paths/values that will be received by the querier.
+
+   Typical usage:
+
+   ```bash
+   z_querier
+   ```
+
+   or
+
+   ```bash
+   z_querier -s 'demo/**'
+   ```
+
 ### z_queryable
 
    Declares a queryable function with a path.

@@ -29,7 +29,7 @@ pub(crate) struct CompressionFsm<'a> {
     _a: PhantomData<&'a ()>,
 }
 
-impl<'a> CompressionFsm<'a> {
+impl CompressionFsm<'_> {
     pub(crate) const fn new() -> Self {
         Self { _a: PhantomData }
     }

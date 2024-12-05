@@ -14,7 +14,7 @@
 use std::{
     ops::Add,
     sync::{
-        atomic::{AtomicBool, AtomicU32, Ordering},
+        atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering},
         Arc, Mutex, MutexGuard,
     },
     time::{Duration, Instant},
@@ -129,19 +129,53 @@ impl StageInMutex {
     }
 }
 
+#[derive(Debug)]
+struct WaitTime {
+    wait_time: Duration,
+    max_wait_time: Option<Duration>,
+}
+
+impl WaitTime {
+    fn new(wait_time: Duration, max_wait_time: Option<Duration>) -> Self {
+        Self {
+            wait_time,
+            max_wait_time,
+        }
+    }
+
+    fn advance(&mut self, instant: &mut Instant) {
+        match &mut self.max_wait_time {
+            Some(max_wait_time) => {
+                if let Some(new_max_wait_time) = max_wait_time.checked_sub(self.wait_time) {
+                    *instant += self.wait_time;
+                    *max_wait_time = new_max_wait_time;
+                    self.wait_time *= 2;
+                }
+            }
+            None => {
+                *instant += self.wait_time;
+            }
+        }
+    }
+
+    fn wait_time(&self) -> Duration {
+        self.wait_time
+    }
+}
+
+#[derive(Clone)]
 enum DeadlineSetting {
     Immediate,
-    Infinite,
     Finite(Instant),
 }
 
 struct LazyDeadline {
     deadline: Option<DeadlineSetting>,
-    wait_time: Option<Duration>,
+    wait_time: WaitTime,
 }
 
 impl LazyDeadline {
-    fn new(wait_time: Option<Duration>) -> Self {
+    fn new(wait_time: WaitTime) -> Self {
         Self {
             deadline: None,
             wait_time,
@@ -149,25 +183,22 @@ impl LazyDeadline {
     }
 
     fn advance(&mut self) {
-        let wait_time = self.wait_time;
-        match &mut self.deadline() {
+        match self.deadline().to_owned() {
             DeadlineSetting::Immediate => {}
-            DeadlineSetting::Infinite => {}
-            DeadlineSetting::Finite(instant) => {
-                *instant = instant.add(unsafe { wait_time.unwrap_unchecked() });
+            DeadlineSetting::Finite(mut instant) => {
+                self.wait_time.advance(&mut instant);
+                self.deadline = Some(DeadlineSetting::Finite(instant));
             }
         }
     }
 
     #[inline]
     fn deadline(&mut self) -> &mut DeadlineSetting {
-        self.deadline.get_or_insert_with(|| match self.wait_time {
-            Some(wait_time) => match wait_time.is_zero() {
-                true => DeadlineSetting::Immediate,
-                false => DeadlineSetting::Finite(Instant::now().add(wait_time)),
-            },
-            None => DeadlineSetting::Infinite,
-        })
+        self.deadline
+            .get_or_insert_with(|| match self.wait_time.wait_time() {
+                Duration::ZERO => DeadlineSetting::Immediate,
+                nonzero_wait_time => DeadlineSetting::Finite(Instant::now().add(nonzero_wait_time)),
+            })
     }
 }
 
@@ -176,9 +207,9 @@ struct Deadline {
 }
 
 impl Deadline {
-    fn new(wait_time: Option<Duration>) -> Self {
+    fn new(wait_time: Duration, max_wait_time: Option<Duration>) -> Self {
         Self {
-            lazy_deadline: LazyDeadline::new(wait_time),
+            lazy_deadline: LazyDeadline::new(WaitTime::new(wait_time, max_wait_time)),
         }
     }
 
@@ -186,7 +217,6 @@ impl Deadline {
     fn wait(&mut self, s_ref: &StageInRefill) -> bool {
         match self.lazy_deadline.deadline() {
             DeadlineSetting::Immediate => false,
-            DeadlineSetting::Infinite => s_ref.wait(),
             DeadlineSetting::Finite(instant) => s_ref.wait_deadline(*instant),
         }
     }
@@ -238,6 +268,10 @@ impl StageIn {
                                     // Still no available batch.
                                     // Restore the sequence number and drop the message
                                     $($restore_sn)?
+                                    tracing::trace!(
+                                        "Zenoh message dropped because it's over the deadline {:?}: {:?}",
+                                        deadline.lazy_deadline.wait_time, msg
+                                    );
                                     return false;
                                 }
                                 c_guard = self.mutex.current();
@@ -589,7 +623,7 @@ impl StageOut {
 pub(crate) struct TransmissionPipelineConf {
     pub(crate) batch: BatchConfig,
     pub(crate) queue_size: [usize; Priority::NUM],
-    pub(crate) wait_before_drop: Duration,
+    pub(crate) wait_before_drop: (Duration, Duration),
     pub(crate) wait_before_close: Duration,
     pub(crate) batching_enabled: bool,
     pub(crate) batching_time_limit: Duration,
@@ -671,20 +705,54 @@ impl TransmissionPipeline {
             });
         }
 
-        let active = Arc::new(AtomicBool::new(true));
+        let active = Arc::new(TransmissionPipelineStatus {
+            disabled: AtomicBool::new(false),
+            congested: AtomicU8::new(0),
+        });
         let producer = TransmissionPipelineProducer {
             stage_in: stage_in.into_boxed_slice().into(),
-            active: active.clone(),
+            status: active.clone(),
             wait_before_drop: config.wait_before_drop,
             wait_before_close: config.wait_before_close,
         };
         let consumer = TransmissionPipelineConsumer {
             stage_out: stage_out.into_boxed_slice(),
             n_out_r,
-            active,
+            status: active,
         };
 
         (producer, consumer)
+    }
+}
+
+struct TransmissionPipelineStatus {
+    // The whole pipeline is enabled or disabled
+    disabled: AtomicBool,
+    // Bitflags to indicate the given priority queue is congested
+    congested: AtomicU8,
+}
+
+impl TransmissionPipelineStatus {
+    fn set_disabled(&self, status: bool) {
+        self.disabled.store(status, Ordering::Relaxed);
+    }
+
+    fn is_disabled(&self) -> bool {
+        self.disabled.load(Ordering::Relaxed)
+    }
+
+    fn set_congested(&self, priority: Priority, status: bool) {
+        let prioflag = 1 << priority as u8;
+        if status {
+            self.congested.fetch_or(prioflag, Ordering::Relaxed);
+        } else {
+            self.congested.fetch_and(!prioflag, Ordering::Relaxed);
+        }
+    }
+
+    fn is_congested(&self, priority: Priority) -> bool {
+        let prioflag = 1 << priority as u8;
+        self.congested.load(Ordering::Relaxed) & prioflag != 0
     }
 }
 
@@ -692,8 +760,8 @@ impl TransmissionPipeline {
 pub(crate) struct TransmissionPipelineProducer {
     // Each priority queue has its own Mutex
     stage_in: Arc<[Mutex<StageIn>]>,
-    active: Arc<AtomicBool>,
-    wait_before_drop: Duration,
+    status: Arc<TransmissionPipelineStatus>,
+    wait_before_drop: (Duration, Duration),
     wait_before_close: Duration,
 }
 
@@ -707,16 +775,25 @@ impl TransmissionPipelineProducer {
         } else {
             (0, Priority::DEFAULT)
         };
+
         // If message is droppable, compute a deadline after which the sample could be dropped
-        let wait_time = if msg.is_droppable() {
-            self.wait_before_drop
+        let (wait_time, max_wait_time) = if msg.is_droppable() {
+            // Checked if we are blocked on the priority queue and we drop directly the message
+            if self.status.is_congested(priority) {
+                return false;
+            }
+            (self.wait_before_drop.0, Some(self.wait_before_drop.1))
         } else {
-            self.wait_before_close
+            (self.wait_before_close, None)
         };
-        let mut deadline = Deadline::new(Some(wait_time));
+        let mut deadline = Deadline::new(wait_time, max_wait_time);
         // Lock the channel. We are the only one that will be writing on it.
         let mut queue = zlock!(self.stage_in[idx]);
-        queue.push_network_message(&mut msg, priority, &mut deadline)
+        let sent = queue.push_network_message(&mut msg, priority, &mut deadline);
+        if !sent {
+            self.status.set_congested(priority, true);
+        }
+        sent
     }
 
     #[inline]
@@ -733,7 +810,7 @@ impl TransmissionPipelineProducer {
     }
 
     pub(crate) fn disable(&self) {
-        self.active.store(false, Ordering::Relaxed);
+        self.status.set_disabled(true);
 
         // Acquire all the locks, in_guard first, out_guard later
         // Use the same locking order as in drain to avoid deadlocks
@@ -751,17 +828,18 @@ pub(crate) struct TransmissionPipelineConsumer {
     // A single Mutex for all the priority queues
     stage_out: Box<[StageOut]>,
     n_out_r: Waiter,
-    active: Arc<AtomicBool>,
+    status: Arc<TransmissionPipelineStatus>,
 }
 
 impl TransmissionPipelineConsumer {
-    pub(crate) async fn pull(&mut self) -> Option<(WBatch, usize)> {
-        while self.active.load(Ordering::Relaxed) {
+    pub(crate) async fn pull(&mut self) -> Option<(WBatch, Priority)> {
+        while !self.status.is_disabled() {
             let mut backoff = MicroSeconds::MAX;
             // Calculate the backoff maximum
             for (prio, queue) in self.stage_out.iter_mut().enumerate() {
                 match queue.try_pull() {
                     Pull::Some(batch) => {
+                        let prio = Priority::try_from(prio as u8).unwrap();
                         return Some((batch, prio));
                     }
                     Pull::Backoff(deadline) => {
@@ -801,10 +879,11 @@ impl TransmissionPipelineConsumer {
         None
     }
 
-    pub(crate) fn refill(&mut self, batch: WBatch, priority: usize) {
+    pub(crate) fn refill(&mut self, batch: WBatch, priority: Priority) {
         if !batch.is_ephemeral() {
-            self.stage_out[priority].refill(batch);
+            self.stage_out[priority as usize].refill(batch);
         }
+        self.status.set_congested(priority, false);
     }
 
     pub(crate) fn drain(&mut self) -> Vec<(WBatch, usize)> {
@@ -871,7 +950,7 @@ mod tests {
         },
         queue_size: [1; Priority::NUM],
         batching_enabled: true,
-        wait_before_drop: Duration::from_millis(1),
+        wait_before_drop: (Duration::from_millis(1), Duration::from_millis(1024)),
         wait_before_close: Duration::from_secs(5),
         batching_time_limit: Duration::from_micros(1),
     };
@@ -885,7 +964,7 @@ mod tests {
         },
         queue_size: [1; Priority::NUM],
         batching_enabled: true,
-        wait_before_drop: Duration::from_millis(1),
+        wait_before_drop: (Duration::from_millis(1), Duration::from_millis(1024)),
         wait_before_close: Duration::from_secs(5),
         batching_time_limit: Duration::from_micros(1),
     };

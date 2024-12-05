@@ -272,6 +272,56 @@ impl<'a> KeyExpr<'a> {
             Ok(r.into())
         }
     }
+
+    /// Will return false and log a error in case of TryInto failure.
+    #[inline]
+    pub(crate) fn keyexpr_intersect<'b, L, R>(left: L, right: R) -> bool
+    where
+        L: TryInto<KeyExpr<'a>>,
+        R: TryInto<KeyExpr<'b>>,
+        L::Error: std::fmt::Display,
+        R::Error: std::fmt::Display,
+    {
+        match left.try_into() {
+            Ok(l) => match right.try_into() {
+                Ok(r) => {
+                    return l.intersects(&r);
+                }
+                Err(e) => {
+                    tracing::error!("{e}");
+                }
+            },
+            Err(e) => {
+                tracing::error!("{e}");
+            }
+        }
+        false
+    }
+
+    /// Will return false and log a error in case of TryInto failure.
+    #[inline]
+    pub(crate) fn keyexpr_include<'b, L, R>(left: L, right: R) -> bool
+    where
+        L: TryInto<KeyExpr<'a>>,
+        R: TryInto<KeyExpr<'b>>,
+        L::Error: std::fmt::Display,
+        R::Error: std::fmt::Display,
+    {
+        match left.try_into() {
+            Ok(l) => match right.try_into() {
+                Ok(r) => {
+                    return l.includes(&r);
+                }
+                Err(e) => {
+                    tracing::error!("{e}");
+                }
+            },
+            Err(e) => {
+                tracing::error!("{e}");
+            }
+        }
+        false
+    }
 }
 
 impl FromStr for KeyExpr<'static> {
@@ -305,7 +355,7 @@ impl<'a> From<&'a keyexpr> for KeyExpr<'a> {
         Self(KeyExprInner::Borrowed(ke))
     }
 }
-impl<'a> From<OwnedKeyExpr> for KeyExpr<'a> {
+impl From<OwnedKeyExpr> for KeyExpr<'_> {
     fn from(v: OwnedKeyExpr) -> Self {
         Self(KeyExprInner::Owned(v))
     }
@@ -349,7 +399,7 @@ impl<'a> From<&'a KeyExpr<'a>> for KeyExpr<'a> {
         }
     }
 }
-impl<'a> From<KeyExpr<'a>> for String {
+impl From<KeyExpr<'_>> for String {
     fn from(ke: KeyExpr) -> Self {
         match ke.0 {
             KeyExprInner::Borrowed(key_expr) | KeyExprInner::BorrowedWire { key_expr, .. } => {
@@ -360,7 +410,7 @@ impl<'a> From<KeyExpr<'a>> for String {
     }
 }
 
-impl<'a> TryFrom<String> for KeyExpr<'a> {
+impl TryFrom<String> for KeyExpr<'_> {
     type Error = zenoh_result::Error;
     fn try_from(value: String) -> Result<Self, Self::Error> {
         Ok(Self(KeyExprInner::Owned(value.try_into()?)))

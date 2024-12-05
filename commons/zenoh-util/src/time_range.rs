@@ -375,7 +375,7 @@ impl Add<f64> for TimeExpr {
     }
 }
 
-impl<'a> Add<f64> for &'a TimeExpr {
+impl Add<f64> for &TimeExpr {
     type Output = TimeExpr;
     fn add(self, duration: f64) -> TimeExpr {
         match self {

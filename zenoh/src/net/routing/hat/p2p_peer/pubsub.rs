@@ -193,22 +193,26 @@ fn declare_simple_subscription(
     // This introduced a buffer overflow on windows
     // TODO: Let's deactivate this on windows until Fixed
     #[cfg(not(windows))]
-    for mcast_group in &tables.mcast_groups {
-        mcast_group
-            .primitives
-            .send_declare(RoutingContext::with_expr(
-                Declare {
-                    interest_id: None,
-                    ext_qos: ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                        id: 0, // @TODO use proper SubscriberId
-                        wire_expr: res.expr().into(),
-                    }),
-                },
-                res.expr(),
-            ))
+    if face.whatami == WhatAmI::Client {
+        for mcast_group in &tables.mcast_groups {
+            if mcast_group.mcast_group != face.mcast_group {
+                mcast_group
+                    .primitives
+                    .send_declare(RoutingContext::with_expr(
+                        Declare {
+                            interest_id: None,
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                id: 0, // @TODO use proper SubscriberId
+                                wire_expr: res.expr().into(),
+                            }),
+                        },
+                        res.expr(),
+                    ))
+            }
+        }
     }
 }
 
@@ -603,37 +607,19 @@ impl HatPubSubTrait for HatCode {
                 .values()
                 .filter(|f| f.whatami == WhatAmI::Router)
             {
-                if face.local_interests.values().any(|interest| {
+                if !face.local_interests.values().any(|interest| {
                     interest.finalized
                         && interest.options.subscribers()
                         && interest
                             .res
                             .as_ref()
-                            .map(|res| {
-                                KeyExpr::try_from(res.expr())
-                                    .and_then(|intres| {
-                                        KeyExpr::try_from(expr.full_expr())
-                                            .map(|putres| intres.includes(&putres))
-                                    })
-                                    .unwrap_or(false)
-                            })
+                            .map(|res| KeyExpr::keyexpr_include(res.expr(), expr.full_expr()))
                             .unwrap_or(true)
-                }) {
-                    if face_hat!(face).remote_subs.values().any(|sub| {
-                        KeyExpr::try_from(sub.expr())
-                            .and_then(|subres| {
-                                KeyExpr::try_from(expr.full_expr())
-                                    .map(|putres| subres.intersects(&putres))
-                            })
-                            .unwrap_or(false)
-                    }) {
-                        let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-                        route.insert(
-                            face.id,
-                            (face.clone(), key_expr.to_owned(), NodeId::default()),
-                        );
-                    }
-                } else {
+                }) || face_hat!(face)
+                    .remote_subs
+                    .values()
+                    .any(|sub| KeyExpr::keyexpr_intersect(sub.expr(), expr.full_expr()))
+                {
                     let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
                     route.insert(
                         face.id,

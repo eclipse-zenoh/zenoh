@@ -156,6 +156,7 @@ pub(crate) fn undeclare_token(
     {
         tracing::debug!("{} Undeclare token {} ({})", face, id, res.expr());
     } else {
-        tracing::error!("{} Undeclare unknown token {}", face, id);
+        // NOTE: This is expected behavior if liveliness tokens are denied with ingress ACL interceptor.
+        tracing::debug!("{} Undeclare unknown token {}", face, id);
     }
 }

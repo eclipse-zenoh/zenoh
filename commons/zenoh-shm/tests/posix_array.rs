@@ -126,7 +126,6 @@ fn arr_u32_index_memory_test() {
 }
 
 /// ELEM COUNT CHECKS ///
-
 fn test_invalid_elem_index<ElemIndex>()
 where
     ElemIndex: Unsigned + PrimInt + 'static + AsPrimitive<usize> + Debug,

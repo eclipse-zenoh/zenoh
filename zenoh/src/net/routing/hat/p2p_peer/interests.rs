@@ -238,7 +238,9 @@ impl HatInterestTrait for HatCode {
                                 Interest {
                                     id,
                                     mode: InterestMode::Final,
-                                    options: InterestOptions::empty(),
+                                    // Note: InterestMode::Final options are undefined in the current protocol specification,
+                                    //       they are initialized here for internal use by local egress interceptors.
+                                    options: interest.options,
                                     wire_expr: None,
                                     ext_qos: ext::QoSType::DECLARE,
                                     ext_tstamp: None,
