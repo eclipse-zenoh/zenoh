@@ -29,7 +29,7 @@ pub(crate) struct PatchFsm<'a> {
     _a: PhantomData<&'a ()>,
 }
 
-impl<'a> PatchFsm<'a> {
+impl PatchFsm<'_> {
     pub(crate) const fn new() -> Self {
         Self { _a: PhantomData }
     }
