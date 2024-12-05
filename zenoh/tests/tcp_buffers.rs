@@ -62,8 +62,6 @@ fn buffer_size_override() {
     buffer_size_config_override();
 }
 
-#[test]
-#[should_panic(expected = "Can not create a new TCP listener")]
 fn buffer_size_config_override() {
     let mut config = Config::default();
     config
