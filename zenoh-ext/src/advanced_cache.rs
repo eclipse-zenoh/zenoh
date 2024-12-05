@@ -41,7 +41,7 @@ kedefine!(
 );
 
 #[derive(Debug, Clone)]
-/// Configure an [`AdvancedCache`].
+/// Configure an [`AdvancedPublisher`](crate::AdvancedPublisher) cache.
 pub struct CacheConfig {
     sample_depth: usize,
     resources_limit: Option<usize>,
