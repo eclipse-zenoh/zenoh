@@ -42,6 +42,14 @@ zenoh-ext = { workspace = true, features = ["unstable"] }
 zenoh-config = { workspace = true }
 
 [[example]]
+name = "z_advanced_pub"
+path = "examples/z_advanced_pub.rs"
+
+[[example]]
+name = "z_advanced_sub"
+path = "examples/z_advanced_sub.rs"
+
+[[example]]
 name = "z_member"
 path = "examples/z_member.rs"
 
