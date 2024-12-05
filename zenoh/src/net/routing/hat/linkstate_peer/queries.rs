@@ -40,6 +40,8 @@ use super::{
     face_hat, face_hat_mut, get_peer, get_routes_entries, hat, hat_mut, network::Network, res_hat,
     res_hat_mut, HatCode, HatContext, HatFace, HatTables,
 };
+#[cfg(feature = "unstable")]
+use crate::key_expr::KeyExpr;
 use crate::net::routing::{
     dispatcher::{
         face::FaceState,
@@ -1010,5 +1012,90 @@ impl HatQueriesTrait for HatCode {
 
     fn get_query_routes_entries(&self, tables: &Tables) -> RoutesIndexes {
         get_routes_entries(tables)
+    }
+
+    #[cfg(feature = "unstable")]
+    fn get_matching_queryables(
+        &self,
+        tables: &Tables,
+        key_expr: &KeyExpr<'_>,
+        complete: bool,
+    ) -> HashMap<usize, Arc<FaceState>> {
+        let mut matching_queryables = HashMap::new();
+        if key_expr.ends_with('/') {
+            return matching_queryables;
+        }
+        tracing::trace!(
+            "get_matching_queryables({}; complete: {})",
+            key_expr,
+            complete
+        );
+
+        let res = Resource::get_resource(&tables.root_res, key_expr);
+        let matches = res
+            .as_ref()
+            .and_then(|res| res.context.as_ref())
+            .map(|ctx| Cow::from(&ctx.matches))
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
+
+        for mres in matches.iter() {
+            let mres = mres.upgrade().unwrap();
+            if complete && !KeyExpr::keyexpr_include(mres.expr(), key_expr) {
+                continue;
+            }
+
+            let net = hat!(tables).linkstatepeers_net.as_ref().unwrap();
+            insert_faces_for_qbls(
+                &mut matching_queryables,
+                tables,
+                net,
+                &res_hat!(mres).linkstatepeer_qabls,
+                complete,
+            );
+
+            for (sid, context) in &mres.session_ctxs {
+                if match complete {
+                    true => context.qabl.map_or(false, |q| q.complete),
+                    false => context.qabl.is_some(),
+                } {
+                    matching_queryables
+                        .entry(*sid)
+                        .or_insert_with(|| context.face.clone());
+                }
+            }
+        }
+        matching_queryables
+    }
+}
+
+#[cfg(feature = "unstable")]
+#[inline]
+fn insert_faces_for_qbls(
+    route: &mut HashMap<usize, Arc<FaceState>>,
+    tables: &Tables,
+    net: &Network,
+    qbls: &HashMap<ZenohIdProto, QueryableInfoType>,
+    complete: bool,
+) {
+    let source = net.idx.index();
+    if net.trees.len() > source {
+        for qbl in qbls {
+            if complete && !qbl.1.complete {
+                continue;
+            }
+            if let Some(qbl_idx) = net.get_idx(qbl.0) {
+                if net.trees[source].directions.len() > qbl_idx.index() {
+                    if let Some(direction) = net.trees[source].directions[qbl_idx.index()] {
+                        if net.graph.contains_node(direction) {
+                            if let Some(face) = tables.get_face(&net.graph[direction].zid) {
+                                route.entry(face.id).or_insert_with(|| face.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        tracing::trace!("Tree for node sid:{} not yet ready", source);
     }
 }

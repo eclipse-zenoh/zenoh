@@ -24,7 +24,9 @@ use zenoh_core::{zcondfeat, zlock};
 use zenoh_link::{LinkMulticast, Locator};
 use zenoh_protocol::{
     core::{Bits, Priority, Resolution, WhatAmI, ZenohIdProto},
-    transport::{BatchSize, Close, Join, PrioritySn, TransportMessage, TransportSn},
+    transport::{
+        join::ext::PatchType, BatchSize, Close, Join, PrioritySn, TransportMessage, TransportSn,
+    },
 };
 use zenoh_result::{zerror, ZResult};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool, Signal};
@@ -431,10 +433,10 @@ async fn tx_task(
                         link.send_batch(&mut batch).await?;
                         // Keep track of next SNs
                         if let Some(sn) = batch.codec.latest_sn.reliable {
-                            last_sns[priority].reliable = sn;
+                            last_sns[priority as usize].reliable = sn;
                         }
                         if let Some(sn) = batch.codec.latest_sn.best_effort {
-                            last_sns[priority].best_effort = sn;
+                            last_sns[priority as usize].best_effort = sn;
                         }
                         #[cfg(feature = "stats")]
                         {
@@ -495,6 +497,7 @@ async fn tx_task(
                     next_sn,
                     ext_qos,
                     ext_shm: None,
+                    ext_patch: PatchType::CURRENT
                 }
                 .into();
 

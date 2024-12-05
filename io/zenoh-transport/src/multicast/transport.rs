@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
+    cmp::min,
     collections::HashMap,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -25,7 +26,7 @@ use zenoh_core::{zcondfeat, zread, zwrite};
 use zenoh_link::{Link, Locator};
 use zenoh_protocol::{
     core::{Bits, Field, Priority, Resolution, WhatAmI, ZenohIdProto},
-    transport::{batch_size, close, Close, Join, TransportMessage},
+    transport::{batch_size, close, join::ext::PatchType, Close, Join, TransportMessage},
 };
 use zenoh_result::{bail, ZResult};
 use zenoh_task::TaskController;
@@ -61,6 +62,7 @@ pub(super) struct TransportMulticastPeer {
     token: CancellationToken,
     pub(super) priority_rx: Box<[TransportPriorityRx]>,
     pub(super) handler: Arc<dyn TransportPeerEventHandler>,
+    pub(super) patch: PatchType,
 }
 
 impl TransportMulticastPeer {
@@ -194,9 +196,7 @@ impl TransportMulticastInner {
             cb.closed();
         }
 
-        self.task_controller
-            .terminate_all_async(Duration::from_secs(10))
-            .await;
+        self.task_controller.terminate_all_async().await;
 
         Ok(())
     }
@@ -417,6 +417,7 @@ impl TransportMulticastInner {
             token,
             priority_rx,
             handler,
+            patch: min(PatchType::CURRENT, join.ext_patch),
         };
         zwrite!(self.peers).insert(locator.clone(), peer);
 

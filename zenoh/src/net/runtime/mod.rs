@@ -29,10 +29,10 @@ use std::{
         atomic::{AtomicU32, Ordering},
         Arc, Weak,
     },
-    time::Duration,
 };
 
 pub use adminspace::AdminSpace;
+use async_trait::async_trait;
 use futures::{stream::StreamExt, Future};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -62,8 +62,13 @@ use super::{primitives::DeMux, routing, routing::router::Router};
 use crate::api::loader::{load_plugins, start_plugins};
 #[cfg(feature = "plugins")]
 use crate::api::plugins::PluginsManager;
+#[cfg(feature = "internal")]
+use crate::session::CloseBuilder;
 use crate::{
-    api::config::{Config, Notifier},
+    api::{
+        builders::close::{Closeable, Closee},
+        config::{Config, Notifier},
+    },
     GIT_VERSION, LONG_VERSION,
 };
 
@@ -267,26 +272,9 @@ impl Runtime {
         self.state.next_id.fetch_add(1, Ordering::SeqCst)
     }
 
-    pub async fn close(&self) -> ZResult<()> {
-        tracing::trace!("Runtime::close())");
-        // TODO: Plugins should be stopped
-        // TODO: Check this whether is able to terminate all spawned task by Runtime::spawn
-        self.state
-            .task_controller
-            .terminate_all(Duration::from_secs(10));
-        self.manager().close().await;
-        // clean up to break cyclic reference of self.state to itself
-        self.state.transport_handlers.write().unwrap().clear();
-        // TODO: the call below is needed to prevent intermittent leak
-        // due to not freed resource Arc, that apparently happens because
-        // the task responsible for resource clean up was aborted earlier than expected.
-        // This should be resolved by identfying correspodning task, and placing
-        // cancellation token manually inside it.
-        let router = self.router();
-        let mut tables = router.tables.tables.write().unwrap();
-        tables.root_res.close();
-        tables.faces.clear();
-        Ok(())
+    #[cfg(feature = "internal")]
+    pub fn close(&self) -> CloseBuilder<Self> {
+        CloseBuilder::new(self)
     }
 
     pub fn is_closed(&self) -> bool {
@@ -537,5 +525,34 @@ impl TransportPeerEventHandler for RuntimeMulticastSession {
 
     fn as_any(&self) -> &dyn Any {
         self
+    }
+}
+
+#[async_trait]
+impl Closee for Arc<RuntimeState> {
+    async fn close_inner(&self) {
+        tracing::trace!("Runtime::close())");
+        // TODO: Plugins should be stopped
+        // TODO: Check this whether is able to terminate all spawned task by Runtime::spawn
+        self.task_controller.terminate_all_async().await;
+        self.manager.close().await;
+        // clean up to break cyclic reference of self.state to itself
+        self.transport_handlers.write().unwrap().clear();
+        // TODO: the call below is needed to prevent intermittent leak
+        // due to not freed resource Arc, that apparently happens because
+        // the task responsible for resource clean up was aborted earlier than expected.
+        // This should be resolved by identfying correspodning task, and placing
+        // cancellation token manually inside it.
+        let mut tables = self.router.tables.tables.write().unwrap();
+        tables.root_res.close();
+        tables.faces.clear();
+    }
+}
+
+impl Closeable for Runtime {
+    type TClosee = Arc<RuntimeState>;
+
+    fn get_closee(&self) -> Self::TClosee {
+        self.state.clone()
     }
 }

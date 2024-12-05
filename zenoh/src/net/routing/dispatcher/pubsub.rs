@@ -450,7 +450,7 @@ pub fn route_data(
                                 reliability,
                             )
                         }
-                    } else if tables.whatami == WhatAmI::Router {
+                    } else {
                         let route = route
                             .values()
                             .filter(|(outface, _key_expr, _context)| {
@@ -480,34 +480,6 @@ pub fn route_data(
                                 },
                                 reliability,
                             )
-                        }
-                    } else {
-                        drop(tables);
-                        for (outface, key_expr, context) in route.values() {
-                            if face.id != outface.id
-                                && match (face.mcast_group.as_ref(), outface.mcast_group.as_ref()) {
-                                    (Some(l), Some(r)) => l != r,
-                                    _ => true,
-                                }
-                            {
-                                #[cfg(feature = "stats")]
-                                if !admin {
-                                    inc_stats!(face, tx, user, msg.payload)
-                                } else {
-                                    inc_stats!(face, tx, admin, msg.payload)
-                                }
-
-                                outface.primitives.send_push(
-                                    Push {
-                                        wire_expr: key_expr.into(),
-                                        ext_qos: msg.ext_qos,
-                                        ext_tstamp: None,
-                                        ext_nodeid: ext::NodeIdType { node_id: *context },
-                                        payload: msg.payload.clone(),
-                                    },
-                                    reliability,
-                                )
-                            }
                         }
                     }
                 }

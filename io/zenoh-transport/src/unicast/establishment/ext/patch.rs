@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use core::marker::PhantomData;
+use std::{cmp::min, marker::PhantomData};
 
 use async_trait::async_trait;
 use zenoh_buffers::{
@@ -19,17 +19,17 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_protocol::transport::{init, open};
-use zenoh_result::Error as ZError;
+use zenoh_protocol::transport::init::ext::PatchType;
+use zenoh_result::{bail, Error as ZError};
 
 use crate::unicast::establishment::{AcceptFsm, OpenFsm};
 
 // Extension Fsm
-pub(crate) struct LowLatencyFsm<'a> {
+pub(crate) struct PatchFsm<'a> {
     _a: PhantomData<&'a ()>,
 }
 
-impl LowLatencyFsm<'_> {
+impl PatchFsm<'_> {
     pub(crate) const fn new() -> Self {
         Self { _a: PhantomData }
     }
@@ -40,60 +40,68 @@ impl LowLatencyFsm<'_> {
 /*************************************/
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct StateOpen {
-    is_lowlatency: bool,
+    patch: PatchType,
 }
 
 impl StateOpen {
-    pub(crate) const fn new(is_lowlatency: bool) -> Self {
-        Self { is_lowlatency }
+    pub(crate) const fn new() -> Self {
+        Self {
+            patch: PatchType::NONE,
+        }
     }
 
-    pub(crate) const fn is_lowlatency(&self) -> bool {
-        self.is_lowlatency
+    pub(crate) const fn get(&self) -> PatchType {
+        self.patch
     }
 }
 
 #[async_trait]
-impl<'a> OpenFsm for &'a LowLatencyFsm<'a> {
+impl<'a> OpenFsm for &'a PatchFsm<'a> {
     type Error = ZError;
 
     type SendInitSynIn = &'a StateOpen;
-    type SendInitSynOut = Option<init::ext::LowLatency>;
+    type SendInitSynOut = PatchType;
     async fn send_init_syn(
         self,
-        state: Self::SendInitSynIn,
+        _state: Self::SendInitSynIn,
     ) -> Result<Self::SendInitSynOut, Self::Error> {
-        let output = state.is_lowlatency.then_some(init::ext::LowLatency::new());
-        Ok(output)
+        Ok(PatchType::CURRENT)
     }
 
-    type RecvInitAckIn = (&'a mut StateOpen, Option<init::ext::LowLatency>);
+    type RecvInitAckIn = (&'a mut StateOpen, PatchType);
     type RecvInitAckOut = ();
     async fn recv_init_ack(
         self,
         input: Self::RecvInitAckIn,
     ) -> Result<Self::RecvInitAckOut, Self::Error> {
         let (state, other_ext) = input;
-        state.is_lowlatency &= other_ext.is_some();
+        if other_ext > PatchType::CURRENT {
+            bail!(
+                "Acceptor patch should be lesser or equal to {current:?}, found {other:?}",
+                current = PatchType::CURRENT.raw(),
+                other = other_ext.raw(),
+            );
+        }
+        state.patch = other_ext;
         Ok(())
     }
 
     type SendOpenSynIn = &'a StateOpen;
-    type SendOpenSynOut = Option<open::ext::LowLatency>;
+    type SendOpenSynOut = ();
     async fn send_open_syn(
         self,
         _state: Self::SendOpenSynIn,
     ) -> Result<Self::SendOpenSynOut, Self::Error> {
-        Ok(None)
+        unimplemented!("There is no patch extension in OPEN")
     }
 
-    type RecvOpenAckIn = (&'a mut StateOpen, Option<open::ext::LowLatency>);
+    type RecvOpenAckIn = (&'a mut StateOpen, ());
     type RecvOpenAckOut = ();
     async fn recv_open_ack(
         self,
         _state: Self::RecvOpenAckIn,
     ) -> Result<Self::RecvOpenAckOut, Self::Error> {
-        Ok(())
+        unimplemented!("There is no patch extension in OPEN")
     }
 }
 
@@ -102,23 +110,25 @@ impl<'a> OpenFsm for &'a LowLatencyFsm<'a> {
 /*************************************/
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct StateAccept {
-    is_lowlatency: bool,
+    patch: PatchType,
 }
 
 impl StateAccept {
-    pub(crate) const fn new(is_lowlatency: bool) -> Self {
-        Self { is_lowlatency }
+    pub(crate) const fn new() -> Self {
+        Self {
+            patch: PatchType::NONE,
+        }
     }
 
-    pub(crate) const fn is_lowlatency(&self) -> bool {
-        self.is_lowlatency
+    pub(crate) const fn get(&self) -> PatchType {
+        self.patch
     }
 
     #[cfg(test)]
     pub(crate) fn rand() -> Self {
-        use rand::Rng;
-        let mut rng = rand::thread_rng();
-        Self::new(rng.gen_bool(0.5))
+        Self {
+            patch: PatchType::rand(),
+        }
     }
 }
 
@@ -130,8 +140,8 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &StateAccept) -> Self::Output {
-        let is_lowlatency = u8::from(x.is_lowlatency);
-        self.write(&mut *writer, is_lowlatency)?;
+        let raw = x.patch.raw();
+        self.write(&mut *writer, raw)?;
         Ok(())
     }
 }
@@ -143,52 +153,51 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<StateAccept, Self::Error> {
-        let is_lowlatency: u8 = self.read(&mut *reader)?;
-        let is_lowlatency = is_lowlatency == 1;
-        Ok(StateAccept { is_lowlatency })
+        let raw: u8 = self.read(&mut *reader)?;
+        let patch = PatchType::new(raw);
+        Ok(StateAccept { patch })
     }
 }
 
 #[async_trait]
-impl<'a> AcceptFsm for &'a LowLatencyFsm<'a> {
+impl<'a> AcceptFsm for &'a PatchFsm<'a> {
     type Error = ZError;
 
-    type RecvInitSynIn = (&'a mut StateAccept, Option<init::ext::LowLatency>);
+    type RecvInitSynIn = (&'a mut StateAccept, PatchType);
     type RecvInitSynOut = ();
     async fn recv_init_syn(
         self,
         input: Self::RecvInitSynIn,
     ) -> Result<Self::RecvInitSynOut, Self::Error> {
         let (state, other_ext) = input;
-        state.is_lowlatency &= other_ext.is_some();
+        state.patch = other_ext;
         Ok(())
     }
 
     type SendInitAckIn = &'a StateAccept;
-    type SendInitAckOut = Option<init::ext::LowLatency>;
+    type SendInitAckOut = PatchType;
     async fn send_init_ack(
         self,
         state: Self::SendInitAckIn,
     ) -> Result<Self::SendInitAckOut, Self::Error> {
-        let output = state.is_lowlatency.then_some(init::ext::LowLatency::new());
-        Ok(output)
+        Ok(min(PatchType::CURRENT, state.patch))
     }
 
-    type RecvOpenSynIn = (&'a mut StateAccept, Option<open::ext::LowLatency>);
+    type RecvOpenSynIn = (&'a mut StateAccept, ());
     type RecvOpenSynOut = ();
     async fn recv_open_syn(
         self,
         _state: Self::RecvOpenSynIn,
     ) -> Result<Self::RecvOpenSynOut, Self::Error> {
-        Ok(())
+        unimplemented!("There is no patch extension in OPEN")
     }
 
     type SendOpenAckIn = &'a StateAccept;
-    type SendOpenAckOut = Option<open::ext::LowLatency>;
+    type SendOpenAckOut = ();
     async fn send_open_ack(
         self,
         _state: Self::SendOpenAckIn,
     ) -> Result<Self::SendOpenAckOut, Self::Error> {
-        Ok(None)
+        unimplemented!("There is no patch extension in OPEN")
     }
 }

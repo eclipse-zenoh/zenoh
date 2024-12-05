@@ -12,9 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+pub(crate) mod close;
 pub(crate) mod info;
 pub(crate) mod matching_listener;
 pub(crate) mod publisher;
+#[cfg(feature = "unstable")]
+pub(crate) mod querier;
 pub(crate) mod query;
 pub(crate) mod queryable;
 pub(crate) mod reply;

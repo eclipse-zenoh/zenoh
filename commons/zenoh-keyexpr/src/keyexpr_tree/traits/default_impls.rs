@@ -18,12 +18,12 @@ use token_cell::prelude::{TokenCell, TokenCellTrait, TokenTrait};
 
 use super::*;
 
-impl<'a, T: HasChunk> HasChunk for &'a T {
+impl<T: HasChunk> HasChunk for &T {
     fn chunk(&self) -> &keyexpr {
         T::chunk(self)
     }
 }
-impl<'a, T: HasChunk> HasChunk for &'a mut T {
+impl<T: HasChunk> HasChunk for &mut T {
     fn chunk(&self) -> &keyexpr {
         T::chunk(self)
     }

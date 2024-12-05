@@ -25,6 +25,8 @@ description = "Internal crate for zenoh."
 
 [features]
 internal = []
+transport_tcp = []
+unstable = []
 
 [dependencies]
 tracing = { workspace = true }
@@ -35,6 +37,7 @@ serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 validated_struct = { workspace = true, features = ["json5", "json_get"] }
 zenoh-core = { workspace = true }
+zenoh-keyexpr = { workspace = true }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-util = { workspace = true }

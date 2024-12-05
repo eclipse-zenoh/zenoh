@@ -166,7 +166,7 @@ impl TransportMulticastInner {
             Reliability::BestEffort => zlock!(c.best_effort),
         };
 
-        if !self.verify_sn(sn, &mut guard)? {
+        if !self.verify_sn("Frame", sn, &mut guard)? {
             // Drop invalid message and continue
             return Ok(());
         }
@@ -183,6 +183,8 @@ impl TransportMulticastInner {
             more,
             sn,
             ext_qos,
+            ext_first,
+            ext_drop,
             payload,
         } = fragment;
 
@@ -205,9 +207,24 @@ impl TransportMulticastInner {
             Reliability::BestEffort => zlock!(c.best_effort),
         };
 
-        if !self.verify_sn(sn, &mut guard)? {
+        if !self.verify_sn("Fragment", sn, &mut guard)? {
             // Drop invalid message and continue
             return Ok(());
+        }
+        if peer.patch.has_fragmentation_markers() {
+            if ext_first.is_some() {
+                guard.defrag.clear();
+            } else if guard.defrag.is_empty() {
+                tracing::trace!(
+                    "Transport: {}. First fragment received without start marker.",
+                    self.manager.config.zid,
+                );
+                return Ok(());
+            }
+            if ext_drop.is_some() {
+                guard.defrag.clear();
+                return Ok(());
+            }
         }
         if guard.defrag.is_empty() {
             let _ = guard.defrag.sync(sn);
@@ -236,14 +253,16 @@ impl TransportMulticastInner {
 
     fn verify_sn(
         &self,
+        message_type: &str,
         sn: TransportSn,
         guard: &mut MutexGuard<'_, TransportChannelRx>,
     ) -> ZResult<bool> {
         let precedes = guard.sn.precedes(sn)?;
         if !precedes {
             tracing::debug!(
-                "Transport: {}. Frame with invalid SN dropped: {}. Expected: {}.",
+                "Transport: {}. {} with invalid SN dropped: {}. Expected: {}.",
                 self.manager.config.zid,
+                message_type,
                 sn,
                 guard.sn.next()
             );

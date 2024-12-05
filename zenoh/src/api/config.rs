@@ -211,7 +211,7 @@ pub struct LookupGuard<'a, T> {
     subref: *const dyn Any,
 }
 
-impl<'a, T> Deref for LookupGuard<'a, T> {
+impl<T> Deref for LookupGuard<'_, T> {
     type Target = dyn Any;
 
     fn deref(&self) -> &Self::Target {
@@ -220,7 +220,7 @@ impl<'a, T> Deref for LookupGuard<'a, T> {
     }
 }
 
-impl<'a, T> AsRef<dyn Any> for LookupGuard<'a, T> {
+impl<T> AsRef<dyn Any> for LookupGuard<'_, T> {
     fn as_ref(&self) -> &dyn Any {
         self.deref()
     }

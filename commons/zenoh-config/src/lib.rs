@@ -21,6 +21,7 @@
 //! Configuration to pass to `zenoh::open()` and `zenoh::scout()` functions and associated constants.
 pub mod defaults;
 mod include;
+pub mod qos;
 pub mod wrappers;
 
 #[allow(unused_imports)]
@@ -30,6 +31,7 @@ use std::{
 };
 
 use include::recursive_include;
+use qos::PublisherQoSConfList;
 use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -170,6 +172,9 @@ pub enum AclMessage {
     Query,
     DeclareQueryable,
     Reply,
+    LivelinessToken,
+    DeclareLivelinessSubscriber,
+    LivelinessQuery,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
@@ -357,6 +362,14 @@ validated_struct::validator! {
             /// A list of key-expressions for which all included publishers will be aggregated into.
             publishers: Vec<OwnedKeyExpr>,
         },
+
+        /// Overwrite QoS options for Zenoh messages by key expression (ignores Zenoh API QoS config)
+        pub qos: #[derive(Default)]
+        QoSConfig {
+            /// A list of QoS configurations for PUT and DELETE messages by key expressions
+            publication: PublisherQoSConfList,
+        },
+
         pub transport: #[derive(Default)]
         TransportConf {
             pub unicast: TransportUnicastConf {
@@ -442,6 +455,8 @@ validated_struct::validator! {
                                 /// The maximum time in microseconds to wait for an available batch before dropping a droppable message
                                 /// if still no batch is available.
                                 wait_before_drop: i64,
+                                /// The maximum deadline limit for multi-fragment messages.
+                                max_wait_before_drop_fragments: i64,
                             },
                             /// Behavior pushing CongestionControl::Block messages to the queue.
                             pub block: CongestionControlBlockConf {
@@ -483,6 +498,7 @@ validated_struct::validator! {
                     connect_private_key: Option<String>,
                     connect_certificate: Option<String>,
                     verify_name_on_connect: Option<bool>,
+                    close_link_on_expiration: Option<bool>,
                     // Skip serializing field because they contain secrets
                     #[serde(skip_serializing)]
                     root_ca_certificate_base64: Option<SecretValue>,
