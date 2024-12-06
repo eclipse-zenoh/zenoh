@@ -36,6 +36,7 @@ kedefine!(
     pub(crate) ke_liveliness: "@adv/${zid:*}/${eid:*}/${meta:**}/@/${remaining:**}",
 );
 
+/// Configure replies QoS.
 #[derive(Clone, Debug)]
 pub struct QoS {
     priority: Priority,
@@ -104,7 +105,7 @@ impl CacheConfig {
     }
 }
 
-/// The builder of AdvancedCache, allowing to configure it.
+/// The builder of an [`AdvancedCache`], allowing to configure it.
 pub struct AdvancedCacheBuilder<'a, 'b, 'c> {
     session: &'a Session,
     pub_key_expr: ZResult<KeyExpr<'b>>,
@@ -187,6 +188,7 @@ fn sample_in_range(sample: &Sample, start: Option<u32>, end: Option<u32>) -> boo
     }
 }
 
+/// [`AdvancedCache`].
 pub struct AdvancedCache {
     cache: Arc<RwLock<VecDeque<Sample>>>,
     max_samples: usize,

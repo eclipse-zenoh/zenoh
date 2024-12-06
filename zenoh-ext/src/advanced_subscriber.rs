@@ -108,7 +108,7 @@ impl RecoveryConfig {
     }
 }
 
-/// The builder of AdvancedSubscriber, allowing to configure it.
+/// The builder of an [`AdvancedSubscriber`], allowing to configure it.
 #[zenoh_macros::unstable]
 pub struct AdvancedSubscriberBuilder<'a, 'b, 'c, Handler, const BACKGROUND: bool = false> {
     pub(crate) session: &'a Session,
@@ -373,6 +373,7 @@ struct SourceState<T> {
     pending_samples: BTreeMap<T, Sample>,
 }
 
+/// [`AdvancedSubscriber`].
 #[zenoh_macros::unstable]
 pub struct AdvancedSubscriber<Receiver> {
     statesref: Arc<Mutex<State>>,

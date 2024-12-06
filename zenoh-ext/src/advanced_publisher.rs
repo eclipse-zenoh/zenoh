@@ -34,7 +34,7 @@ use zenoh::{
 use crate::advanced_cache::{AdvancedCache, AdvancedCacheBuilder, CacheConfig, KE_UHLC};
 
 #[derive(PartialEq)]
-pub enum Sequencing {
+pub(crate) enum Sequencing {
     None,
     Timestamp,
     SequenceNumber,
@@ -126,6 +126,7 @@ impl IntoFuture for AdvancedPublisherBuilder<'_, '_, '_> {
     }
 }
 
+/// [`AdvancedPublisher`].
 pub struct AdvancedPublisher<'a> {
     publisher: Publisher<'a>,
     seqnum: Option<AtomicU32>,

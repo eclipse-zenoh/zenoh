@@ -159,6 +159,7 @@ impl IntoFuture for PublicationCacheBuilder<'_, '_, '_, true> {
     }
 }
 
+/// [`PublicationCache`].
 #[zenoh_macros::unstable]
 #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
 pub struct PublicationCache {

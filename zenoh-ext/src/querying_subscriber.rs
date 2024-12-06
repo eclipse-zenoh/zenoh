@@ -1072,6 +1072,7 @@ where
     }))
 }
 
+/// [`ExtractSample`].
 #[zenoh_macros::unstable]
 #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
 #[allow(deprecated)]
