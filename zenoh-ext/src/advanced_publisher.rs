@@ -42,6 +42,7 @@ pub(crate) enum Sequencing {
 
 /// The builder of PublicationCache, allowing to configure it.
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[zenoh_macros::unstable]
 pub struct AdvancedPublisherBuilder<'a, 'b, 'c> {
     session: &'a Session,
     pub_key_expr: ZResult<KeyExpr<'b>>,
@@ -127,6 +128,7 @@ impl IntoFuture for AdvancedPublisherBuilder<'_, '_, '_> {
 }
 
 /// [`AdvancedPublisher`].
+#[zenoh_macros::unstable]
 pub struct AdvancedPublisher<'a> {
     publisher: Publisher<'a>,
     seqnum: Option<AtomicU32>,

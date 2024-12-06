@@ -48,6 +48,7 @@ use crate::advanced_cache::{ke_liveliness, KE_UHLC};
 
 #[derive(Debug, Default, Clone)]
 /// Configure query for historical data.
+#[zenoh_macros::unstable]
 pub struct HistoryConfig {
     liveliness: bool,
     sample_depth: Option<usize>,
@@ -59,7 +60,6 @@ impl HistoryConfig {
     ///
     /// Let joiner detection can only be achieved for Publishers that enable publisher_detection.
     /// History can only be retransmitted by Publishers that enable caching.
-    #[zenoh_macros::unstable]
     #[inline]
     pub fn detect_late_publishers(mut self) -> Self {
         self.liveliness = true;
@@ -81,6 +81,7 @@ impl HistoryConfig {
 
 #[derive(Default)]
 /// Configure retransmission.
+#[zenoh_macros::unstable]
 pub struct RecoveryConfig {
     periodic_queries: Option<Duration>,
 }
