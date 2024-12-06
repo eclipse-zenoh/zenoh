@@ -21,6 +21,7 @@ extern crate alloc;
 
 mod listener;
 mod multicast;
+pub mod tcp;
 #[cfg(feature = "tls")]
 pub mod tls;
 mod unicast;
@@ -44,6 +45,8 @@ use zenoh_result::ZResult;
 /*************************************/
 
 pub const BIND_INTERFACE: &str = "iface";
+pub const TCP_TX_BUFFER_SIZE: &str = "tcp_tx_buffer";
+pub const TCP_RX_BUFFER_SIZE: &str = "tcp_rx_buffer";
 
 #[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
 pub struct Link {

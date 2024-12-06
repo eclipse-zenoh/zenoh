@@ -324,29 +324,17 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let connector = TlsConnector::from(config);
 
         // Initialize the TcpStream
-        let tcp_stream = TcpStream::connect(addr).await.map_err(|e| {
-            zerror!(
-                "Can not create a new TLS link bound to {:?}: {}",
-                server_name,
-                e
-            )
-        })?;
-
-        let src_addr = tcp_stream.local_addr().map_err(|e| {
-            zerror!(
-                "Can not create a new TLS link bound to {:?}: {}",
-                server_name,
-                e
-            )
-        })?;
-
-        let dst_addr = tcp_stream.peer_addr().map_err(|e| {
-            zerror!(
-                "Can not create a new TLS link bound to {:?}: {}",
-                server_name,
-                e
-            )
-        })?;
+        let (tcp_stream, src_addr, dst_addr) = client_config
+            .tcp_socket_config
+            .new_link(&addr)
+            .await
+            .map_err(|e| {
+                zerror!(
+                    "Can not create a new TLS link bound to {:?}: {}",
+                    server_name,
+                    e
+                )
+            })?;
 
         // Initialize the TlsStream
         let tls_stream = connector
@@ -404,13 +392,11 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             .map_err(|e| zerror!("Cannot create a new TLS listener on {addr}. {e}"))?;
 
         // Initialize the TcpListener
-        let socket = TcpListener::bind(addr)
-            .await
+        let (socket, local_addr) = tls_server_config
+            .tcp_socket_config
+            .new_listener(&addr)
             .map_err(|e| zerror!("Can not create a new TLS listener on {}: {}", addr, e))?;
 
-        let local_addr = socket
-            .local_addr()
-            .map_err(|e| zerror!("Can not create a new TLS listener on {}: {}", addr, e))?;
         let local_port = local_addr.port();
 
         // Initialize the TlsAcceptor

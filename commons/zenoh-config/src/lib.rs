@@ -515,6 +515,10 @@ validated_struct::validator! {
                 UnixPipeConf {
                     file_access_mask: Option<u32>
                 },
+                /// Configure TCP read buffer size
+                pub tcp_rx_buffer: Option<u32>,
+                /// Configure TCP write buffer size
+                pub tcp_tx_buffer: Option<u32>,
             },
             pub shared_memory:
             ShmConf {
