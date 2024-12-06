@@ -130,6 +130,7 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
 }
 
 /// Some extensions to the [`zenoh::subscriber::SubscriberBuilder`](zenoh::pubsub::SubscriberBuilder)
+#[zenoh_macros::unstable]
 pub trait AdvancedSubscriberBuilderExt<'a, 'b, 'c, Handler> {
     /// Enable query for historical data.
     ///
