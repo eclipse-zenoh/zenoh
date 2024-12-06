@@ -43,6 +43,7 @@ pub struct PublicationCacheBuilder<'a, 'b, 'c, const BACKGROUND: bool = false> {
 }
 
 #[allow(deprecated)]
+#[zenoh_macros::unstable]
 impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
     pub(crate) fn new(
         session: &'a Session,
@@ -60,6 +61,7 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
     }
 
     /// Change the prefix used for queryable.
+    #[zenoh_macros::unstable]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn queryable_prefix<TryIntoKeyExpr>(mut self, queryable_prefix: TryIntoKeyExpr) -> Self
     where
@@ -81,6 +83,7 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
     }
 
     /// Set completeness option for the queryable.
+    #[zenoh_macros::unstable]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn queryable_complete(mut self, complete: bool) -> Self {
         self.complete = Some(complete);
@@ -88,6 +91,7 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
     }
 
     /// Change the history size for each resource.
+    #[zenoh_macros::unstable]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn history(mut self, history: usize) -> Self {
         self.history = history;
@@ -95,12 +99,14 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
     }
 
     /// Change the limit number of cached resources.
+    #[zenoh_macros::unstable]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn resources_limit(mut self, limit: usize) -> Self {
         self.resources_limit = Some(limit);
         self
     }
 
+    #[zenoh_macros::unstable]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn background(self) -> PublicationCacheBuilder<'a, 'b, 'c, true> {
         PublicationCacheBuilder {
@@ -115,45 +121,55 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
     }
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl Resolvable for PublicationCacheBuilder<'_, '_, '_> {
     type To = ZResult<PublicationCache>;
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl Wait for PublicationCacheBuilder<'_, '_, '_> {
+    #[zenoh_macros::unstable]
     fn wait(self) -> <Self as Resolvable>::To {
         PublicationCache::new(self)
     }
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl IntoFuture for PublicationCacheBuilder<'_, '_, '_> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
+    #[zenoh_macros::unstable]
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
     }
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl Resolvable for PublicationCacheBuilder<'_, '_, '_, true> {
     type To = ZResult<()>;
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl Wait for PublicationCacheBuilder<'_, '_, '_, true> {
+    #[zenoh_macros::unstable]
     fn wait(self) -> <Self as Resolvable>::To {
         PublicationCache::new(self).map(|_| ())
     }
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl IntoFuture for PublicationCacheBuilder<'_, '_, '_, true> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
+    #[zenoh_macros::unstable]
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
     }
@@ -168,8 +184,10 @@ pub struct PublicationCache {
     task: TerminatableTask,
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl PublicationCache {
+    #[zenoh_macros::unstable]
     fn new<const BACKGROUND: bool>(
         conf: PublicationCacheBuilder<'_, '_, '_, BACKGROUND>,
     ) -> ZResult<PublicationCache> {
@@ -314,6 +332,7 @@ impl PublicationCache {
     }
 
     /// Undeclare this [`PublicationCache`]`.
+    #[zenoh_macros::unstable]
     #[inline]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> {
@@ -331,12 +350,14 @@ impl PublicationCache {
     }
 
     #[zenoh_macros::internal]
+    #[zenoh_macros::unstable]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn set_background(&mut self, background: bool) {
         self.local_sub.set_background(background);
         self._queryable.set_background(background);
     }
 
+    #[zenoh_macros::unstable]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn key_expr(&self) -> &KeyExpr<'static> {
         self.local_sub.key_expr()

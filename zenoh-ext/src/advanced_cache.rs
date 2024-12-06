@@ -45,6 +45,7 @@ pub struct QoS {
     is_express: bool,
 }
 
+#[zenoh_macros::unstable]
 impl Default for QoS {
     fn default() -> Self {
         Self {
@@ -56,20 +57,24 @@ impl Default for QoS {
 }
 
 #[zenoh_macros::internal_trait]
+#[zenoh_macros::unstable]
 impl QoSBuilderTrait for QoS {
     #[allow(unused_mut)]
+    #[zenoh_macros::unstable]
     fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
         self.congestion_control = congestion_control;
         self
     }
 
     #[allow(unused_mut)]
+    #[zenoh_macros::unstable]
     fn priority(mut self, priority: Priority) -> Self {
         self.priority = priority;
         self
     }
 
     #[allow(unused_mut)]
+    #[zenoh_macros::unstable]
     fn express(mut self, is_express: bool) -> Self {
         self.is_express = is_express;
         self
@@ -84,6 +89,7 @@ pub struct CacheConfig {
     replies_qos: QoS,
 }
 
+#[zenoh_macros::unstable]
 impl Default for CacheConfig {
     fn default() -> Self {
         Self {
@@ -93,14 +99,17 @@ impl Default for CacheConfig {
     }
 }
 
+#[zenoh_macros::unstable]
 impl CacheConfig {
     /// Specify how many samples to keep for each resource.
+    #[zenoh_macros::unstable]
     pub fn max_samples(mut self, depth: usize) -> Self {
         self.max_samples = depth;
         self
     }
 
     /// The QoS to apply to replies.
+    #[zenoh_macros::unstable]
     pub fn replies_qos(mut self, qos: QoS) -> Self {
         self.replies_qos = qos;
         self
@@ -118,7 +127,9 @@ pub struct AdvancedCacheBuilder<'a, 'b, 'c> {
     liveliness: bool,
 }
 
+#[zenoh_macros::unstable]
 impl<'a, 'b, 'c> AdvancedCacheBuilder<'a, 'b, 'c> {
+    #[zenoh_macros::unstable]
     pub(crate) fn new(
         session: &'a Session,
         pub_key_expr: ZResult<KeyExpr<'b>>,
@@ -134,6 +145,7 @@ impl<'a, 'b, 'c> AdvancedCacheBuilder<'a, 'b, 'c> {
     }
 
     /// Change the prefix used for queryable.
+    #[zenoh_macros::unstable]
     pub fn queryable_prefix<TryIntoKeyExpr>(mut self, queryable_prefix: TryIntoKeyExpr) -> Self
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'c>>,
@@ -144,31 +156,37 @@ impl<'a, 'b, 'c> AdvancedCacheBuilder<'a, 'b, 'c> {
     }
 
     /// Change the history size for each resource.
+    #[zenoh_macros::unstable]
     pub fn history(mut self, history: CacheConfig) -> Self {
         self.history = history;
         self
     }
 }
 
+#[zenoh_macros::unstable]
 impl Resolvable for AdvancedCacheBuilder<'_, '_, '_> {
     type To = ZResult<AdvancedCache>;
 }
 
+#[zenoh_macros::unstable]
 impl Wait for AdvancedCacheBuilder<'_, '_, '_> {
     fn wait(self) -> <Self as Resolvable>::To {
         AdvancedCache::new(self)
     }
 }
 
+#[zenoh_macros::unstable]
 impl IntoFuture for AdvancedCacheBuilder<'_, '_, '_> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
+    #[zenoh_macros::unstable]
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
     }
 }
 
+#[zenoh_macros::unstable]
 fn decode_range(range: &str) -> (Option<u32>, Option<u32>) {
     let mut split = range.split("..");
     let start = split.next().and_then(|s| s.parse::<u32>().ok());
@@ -176,6 +194,7 @@ fn decode_range(range: &str) -> (Option<u32>, Option<u32>) {
     (start, end)
 }
 
+#[zenoh_macros::unstable]
 fn sample_in_range(sample: &Sample, start: Option<u32>, end: Option<u32>) -> bool {
     if start.is_none() && end.is_none() {
         true
@@ -200,7 +219,9 @@ pub struct AdvancedCache {
     _token: Option<LivelinessToken>,
 }
 
+#[zenoh_macros::unstable]
 impl AdvancedCache {
+    #[zenoh_macros::unstable]
     fn new(conf: AdvancedCacheBuilder<'_, '_, '_>) -> ZResult<AdvancedCache> {
         let key_expr = conf.pub_key_expr?.into_owned();
         // the queryable_prefix (optional), and the key_expr for AdvancedCache's queryable ("[<queryable_prefix>]/<pub_key_expr>")
@@ -322,7 +343,8 @@ impl AdvancedCache {
         })
     }
 
-    pub fn cache_sample(&self, sample: Sample) {
+    #[zenoh_macros::unstable]
+    pub(crate) fn cache_sample(&self, sample: Sample) {
         if let Ok(mut queue) = self.cache.write() {
             if queue.len() >= self.max_samples {
                 queue.pop_front();

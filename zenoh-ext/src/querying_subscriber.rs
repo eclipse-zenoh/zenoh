@@ -60,8 +60,10 @@ impl From<UserSpace> for KeySpace {
 #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
 pub struct LivelinessSpace;
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl From<LivelinessSpace> for KeySpace {
+    #[zenoh_macros::unstable]
     fn from(_: LivelinessSpace) -> Self {
         KeySpace::Liveliness
     }
@@ -84,9 +86,11 @@ pub struct QueryingSubscriberBuilder<'a, 'b, KeySpace, Handler, const BACKGROUND
     pub(crate) handler: Handler,
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandler> {
     /// Add callback to [`FetchingSubscriber`].
+    #[zenoh_macros::unstable]
     #[inline]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn callback<F>(
@@ -107,6 +111,7 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
     ///
     /// Subscriber will not be undeclared when dropped, with the callback running
     /// in background until the session is closed.
+    #[zenoh_macros::unstable]
     #[inline]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn callback_mut<F>(
@@ -120,6 +125,7 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
     }
 
     /// Use the given handler to receive Samples.
+    #[zenoh_macros::unstable]
     #[inline]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn with<Handler>(
@@ -156,12 +162,14 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
     }
 }
 
+#[zenoh_macros::unstable]
 #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
 #[allow(deprecated)]
 impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, Callback<Sample>> {
     /// Register the subscriber callback to be run in background until the session is closed.
     ///
     /// Background builder doesn't return a `FetchingSubscriber` object anymore.
+    #[zenoh_macros::unstable]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn background(self) -> QueryingSubscriberBuilder<'a, 'b, KeySpace, Callback<Sample>, true> {
         QueryingSubscriberBuilder {
@@ -179,6 +187,7 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, Callback<Samp
     }
 }
 
+#[zenoh_macros::unstable]
 #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
 #[allow(deprecated)]
 impl<'b, Handler, const BACKGROUND: bool>
@@ -197,6 +206,7 @@ impl<'b, Handler, const BACKGROUND: bool>
     }
 
     /// Change the selector to be used for queries.
+    #[zenoh_macros::unstable]
     #[inline]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn query_selector<IntoSelector>(mut self, query_selector: IntoSelector) -> Self
@@ -209,6 +219,7 @@ impl<'b, Handler, const BACKGROUND: bool>
     }
 
     /// Change the target to be used for queries.
+    #[zenoh_macros::unstable]
     #[inline]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn query_target(mut self, query_target: QueryTarget) -> Self {
@@ -217,6 +228,7 @@ impl<'b, Handler, const BACKGROUND: bool>
     }
 
     /// Change the consolidation mode to be used for queries.
+    #[zenoh_macros::unstable]
     #[inline]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn query_consolidation<QC: Into<QueryConsolidation>>(
@@ -228,6 +240,7 @@ impl<'b, Handler, const BACKGROUND: bool>
     }
 
     /// Change the accepted replies for queries.
+    #[zenoh_macros::unstable]
     #[inline]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn query_accept_replies(mut self, accept_replies: ReplyKeyExpr) -> Self {
@@ -236,12 +249,14 @@ impl<'b, Handler, const BACKGROUND: bool>
     }
 }
 
+#[zenoh_macros::unstable]
 #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
 #[allow(deprecated)]
 impl<'a, 'b, KeySpace, Handler, const BACKGROUND: bool>
     QueryingSubscriberBuilder<'a, 'b, KeySpace, Handler, BACKGROUND>
 {
     /// Change the timeout to be used for queries.
+    #[zenoh_macros::unstable]
     #[inline]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn query_timeout(mut self, query_timeout: Duration) -> Self {
@@ -249,6 +264,7 @@ impl<'a, 'b, KeySpace, Handler, const BACKGROUND: bool>
         self
     }
 
+    #[zenoh_macros::unstable]
     #[allow(clippy::type_complexity)]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     fn into_fetching_subscriber_builder(
@@ -309,6 +325,7 @@ impl<'a, 'b, KeySpace, Handler, const BACKGROUND: bool>
     }
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl<KeySpace, Handler> Resolvable for QueryingSubscriberBuilder<'_, '_, KeySpace, Handler>
 where
@@ -318,6 +335,7 @@ where
     type To = ZResult<FetchingSubscriber<Handler::Handler>>;
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl<KeySpace, Handler> Wait for QueryingSubscriberBuilder<'_, '_, KeySpace, Handler>
 where
@@ -325,11 +343,13 @@ where
     Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
 {
+    #[zenoh_macros::unstable]
     fn wait(self) -> <Self as Resolvable>::To {
         self.into_fetching_subscriber_builder()?.wait()
     }
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl<KeySpace, Handler> IntoFuture for QueryingSubscriberBuilder<'_, '_, KeySpace, Handler>
 where
@@ -340,26 +360,31 @@ where
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
+    #[zenoh_macros::unstable]
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
     }
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl<KeySpace> Resolvable for QueryingSubscriberBuilder<'_, '_, KeySpace, Callback<Sample>, true> {
     type To = ZResult<()>;
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl<KeySpace> Wait for QueryingSubscriberBuilder<'_, '_, KeySpace, Callback<Sample>, true>
 where
     KeySpace: Into<self::KeySpace> + Clone,
 {
+    #[zenoh_macros::unstable]
     fn wait(self) -> <Self as Resolvable>::To {
         self.into_fetching_subscriber_builder()?.wait()
     }
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl<KeySpace> IntoFuture for QueryingSubscriberBuilder<'_, '_, KeySpace, Callback<Sample>, true>
 where
@@ -368,6 +393,7 @@ where
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
+    #[zenoh_macros::unstable]
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
     }
@@ -458,6 +484,7 @@ pub struct FetchingSubscriberBuilder<
     pub(crate) phantom: std::marker::PhantomData<TryIntoSample>,
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl<
         'a,
@@ -470,6 +497,7 @@ impl<
 where
     TryIntoSample: ExtractSample,
 {
+    #[zenoh_macros::unstable]
     fn with_static_keys(
         self,
     ) -> FetchingSubscriberBuilder<'a, 'static, KeySpace, Handler, Fetch, TryIntoSample> {
@@ -485,6 +513,7 @@ where
     }
 }
 
+#[zenoh_macros::unstable]
 #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
 #[allow(deprecated)]
 impl<
@@ -498,6 +527,7 @@ where
     TryIntoSample: ExtractSample,
 {
     /// Add callback to [`FetchingSubscriber`].
+    #[zenoh_macros::unstable]
     #[inline]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn callback<F>(
@@ -518,6 +548,7 @@ where
     ///
     /// Subscriber will not be undeclared when dropped, with the callback running
     /// in background until the session is closed.
+    #[zenoh_macros::unstable]
     #[inline]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn callback_mut<F>(
@@ -531,6 +562,7 @@ where
     }
 
     /// Use the given handler to receive Samples.
+    #[zenoh_macros::unstable]
     #[inline]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn with<Handler>(
@@ -561,6 +593,7 @@ where
     }
 }
 
+#[zenoh_macros::unstable]
 #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
 #[allow(deprecated)]
 impl<
@@ -576,6 +609,7 @@ where
     /// Register the subscriber callback to be run in background until the session is closed.
     ///
     /// Background builder doesn't return a `FetchingSubscriber` object anymore.
+    #[zenoh_macros::unstable]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn background(
         self,
@@ -593,6 +627,7 @@ where
     }
 }
 
+#[zenoh_macros::unstable]
 #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
 #[allow(deprecated)]
 impl<
@@ -615,6 +650,7 @@ where
     }
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl<
         KeySpace,
@@ -630,6 +666,7 @@ where
     type To = ZResult<FetchingSubscriber<Handler::Handler>>;
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl<
         KeySpace,
@@ -643,11 +680,13 @@ where
     Handler::Handler: Send,
     TryIntoSample: ExtractSample + Send + Sync,
 {
+    #[zenoh_macros::unstable]
     fn wait(self) -> <Self as Resolvable>::To {
         FetchingSubscriber::new(self.with_static_keys())
     }
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl<
         KeySpace,
@@ -664,11 +703,13 @@ where
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
+    #[zenoh_macros::unstable]
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
     }
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl<
         KeySpace,
@@ -682,6 +723,7 @@ where
     type To = ZResult<()>;
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl<
         KeySpace,
@@ -693,6 +735,7 @@ where
     KeySpace: Into<self::KeySpace>,
     TryIntoSample: ExtractSample + Send + Sync,
 {
+    #[zenoh_macros::unstable]
     fn wait(self) -> <Self as Resolvable>::To {
         FetchingSubscriber::new(self.with_static_keys())?
             .subscriber
@@ -701,6 +744,7 @@ where
     }
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl<
         KeySpace,
@@ -715,6 +759,7 @@ where
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
+    #[zenoh_macros::unstable]
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
     }
@@ -760,21 +805,26 @@ pub struct FetchingSubscriber<Handler> {
     handler: Handler,
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl<Handler> std::ops::Deref for FetchingSubscriber<Handler> {
     type Target = Handler;
+    #[zenoh_macros::unstable]
     fn deref(&self) -> &Self::Target {
         &self.handler
     }
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl<Handler> std::ops::DerefMut for FetchingSubscriber<Handler> {
+    #[zenoh_macros::unstable]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.handler
     }
 }
 
+#[zenoh_macros::unstable]
 #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
 #[allow(deprecated)]
 impl<Handler> FetchingSubscriber<Handler> {
@@ -860,12 +910,14 @@ impl<Handler> FetchingSubscriber<Handler> {
     }
 
     /// Undeclare this [`FetchingSubscriber`]`.
+    #[zenoh_macros::unstable]
     #[inline]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> {
         self.subscriber.undeclare()
     }
 
+    #[zenoh_macros::unstable]
     #[zenoh_macros::internal]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn set_background(&mut self, background: bool) {
@@ -873,6 +925,7 @@ impl<Handler> FetchingSubscriber<Handler> {
     }
 
     /// Return the key expression of this FetchingSubscriber
+    #[zenoh_macros::unstable]
     #[inline]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn key_expr(&self) -> &KeyExpr<'static> {
@@ -915,6 +968,7 @@ impl<Handler> FetchingSubscriber<Handler> {
     ///     .unwrap();
     /// # }
     /// ```
+    #[zenoh_macros::unstable]
     #[inline]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     pub fn fetch<
@@ -1009,6 +1063,7 @@ pub struct FetchBuilder<
     callback: Callback<Sample>,
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl<Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>, TryIntoSample>
     Resolvable for FetchBuilder<Fetch, TryIntoSample>
@@ -1018,18 +1073,21 @@ where
     type To = ZResult<()>;
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl<Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>, TryIntoSample> Wait
     for FetchBuilder<Fetch, TryIntoSample>
 where
     TryIntoSample: ExtractSample,
 {
+    #[zenoh_macros::unstable]
     fn wait(self) -> <Self as Resolvable>::To {
         let handler = register_handler(self.state, self.callback);
         run_fetch(self.fetch, handler)
     }
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl<Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>, TryIntoSample>
     IntoFuture for FetchBuilder<Fetch, TryIntoSample>
@@ -1039,6 +1097,7 @@ where
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
+    #[zenoh_macros::unstable]
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
     }
@@ -1050,6 +1109,7 @@ fn register_handler(state: Arc<Mutex<InnerState>>, callback: Callback<Sample>) -
     RepliesHandler { state, callback }
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 fn run_fetch<
     Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,

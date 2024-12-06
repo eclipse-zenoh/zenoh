@@ -34,6 +34,7 @@ use zenoh::{
 use crate::advanced_cache::{AdvancedCache, AdvancedCacheBuilder, CacheConfig, KE_UHLC};
 
 #[derive(PartialEq)]
+#[zenoh_macros::unstable]
 pub(crate) enum Sequencing {
     None,
     Timestamp,
@@ -53,7 +54,9 @@ pub struct AdvancedPublisherBuilder<'a, 'b, 'c> {
     history: CacheConfig,
 }
 
+#[zenoh_macros::unstable]
 impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
+    #[zenoh_macros::unstable]
     pub(crate) fn new(
         session: &'a Session,
         pub_key_expr: ZResult<KeyExpr<'b>>,
@@ -72,12 +75,14 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
     /// Allow matching Subscribers to detect lost samples and optionally ask for retransimission.
     ///
     /// Retransmission can only be achieved if history is enabled.
+    #[zenoh_macros::unstable]
     pub fn sample_miss_detection(mut self) -> Self {
         self.sequencing = Sequencing::SequenceNumber;
         self
     }
 
     /// Change the history size for each resource.
+    #[zenoh_macros::unstable]
     pub fn cache(mut self, config: CacheConfig) -> Self {
         self.cache = true;
         if self.sequencing == Sequencing::None {
@@ -90,6 +95,7 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
     /// Allow this publisher to be detected by subscribers.
     ///
     /// This allows Subscribers to retrieve the local history.
+    #[zenoh_macros::unstable]
     pub fn publisher_detection(mut self) -> Self {
         self.liveliness = true;
         self
@@ -98,6 +104,7 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
     /// A key expression added to the liveliness token key expression
     /// and to the cache queryable key expression.
     /// It can be used to convey meta data.
+    #[zenoh_macros::unstable]
     pub fn publisher_detection_metadata<TryIntoKeyExpr>(mut self, meta: TryIntoKeyExpr) -> Self
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'c>>,
@@ -108,20 +115,25 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
     }
 }
 
+#[zenoh_macros::unstable]
 impl<'a> Resolvable for AdvancedPublisherBuilder<'a, '_, '_> {
     type To = ZResult<AdvancedPublisher<'a>>;
 }
 
+#[zenoh_macros::unstable]
 impl Wait for AdvancedPublisherBuilder<'_, '_, '_> {
+    #[zenoh_macros::unstable]
     fn wait(self) -> <Self as Resolvable>::To {
         AdvancedPublisher::new(self)
     }
 }
 
+#[zenoh_macros::unstable]
 impl IntoFuture for AdvancedPublisherBuilder<'_, '_, '_> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
+    #[zenoh_macros::unstable]
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
     }
@@ -136,7 +148,9 @@ pub struct AdvancedPublisher<'a> {
     _token: Option<LivelinessToken>,
 }
 
+#[zenoh_macros::unstable]
 impl<'a> AdvancedPublisher<'a> {
+    #[zenoh_macros::unstable]
     fn new(conf: AdvancedPublisherBuilder<'a, '_, '_>) -> ZResult<Self> {
         let key_expr = conf.pub_key_expr?;
         let meta = match conf.meta_key_expr {
@@ -221,29 +235,34 @@ impl<'a> AdvancedPublisher<'a> {
     /// let publisher_id = publisher.id();
     /// # }
     /// ```
+    #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
         self.publisher.id()
     }
 
     #[inline]
+    #[zenoh_macros::unstable]
     pub fn key_expr(&self) -> &KeyExpr<'a> {
         self.publisher.key_expr()
     }
 
     /// Get the [`Encoding`] used when publishing data.
     #[inline]
+    #[zenoh_macros::unstable]
     pub fn encoding(&self) -> &Encoding {
         self.publisher.encoding()
     }
 
     /// Get the `congestion_control` applied when routing the data.
     #[inline]
+    #[zenoh_macros::unstable]
     pub fn congestion_control(&self) -> CongestionControl {
         self.publisher.congestion_control()
     }
 
     /// Get the priority of the written data.
     #[inline]
+    #[zenoh_macros::unstable]
     pub fn priority(&self) -> Priority {
         self.publisher.priority()
     }
@@ -261,6 +280,7 @@ impl<'a> AdvancedPublisher<'a> {
     /// # }
     /// ```
     #[inline]
+    #[zenoh_macros::unstable]
     pub fn put<IntoZBytes>(&self, payload: IntoZBytes) -> AdvancedPublisherPutBuilder<'_>
     where
         IntoZBytes: Into<ZBytes>,
@@ -293,6 +313,7 @@ impl<'a> AdvancedPublisher<'a> {
     /// publisher.delete().await.unwrap();
     /// # }
     /// ```
+    #[zenoh_macros::unstable]
     pub fn delete(&self) -> AdvancedPublisherDeleteBuilder<'_> {
         let mut builder = self.publisher.delete();
         if let Some(seqnum) = &self.seqnum {
@@ -375,24 +396,30 @@ impl<'a> AdvancedPublisher<'a> {
     /// publisher.undeclare().await.unwrap();
     /// # }
     /// ```
+    #[zenoh_macros::unstable]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         self.publisher.undeclare()
     }
 }
 
+#[zenoh_macros::unstable]
 pub type AdvancedPublisherPutBuilder<'a> = AdvancedPublicationBuilder<'a, PublicationBuilderPut>;
+#[zenoh_macros::unstable]
 pub type AdvancedPublisherDeleteBuilder<'a> =
     AdvancedPublicationBuilder<'a, PublicationBuilderDelete>;
 
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[derive(Clone)]
+#[zenoh_macros::unstable]
 pub struct AdvancedPublicationBuilder<'a, P> {
     pub(crate) builder: PublicationBuilder<&'a Publisher<'a>, P>,
     pub(crate) cache: Option<&'a AdvancedCache>,
 }
 
 #[zenoh_macros::internal_trait]
+#[zenoh_macros::unstable]
 impl EncodingBuilderTrait for AdvancedPublicationBuilder<'_, PublicationBuilderPut> {
+    #[zenoh_macros::unstable]
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
             builder: self.builder.encoding(encoding),
@@ -402,14 +429,16 @@ impl EncodingBuilderTrait for AdvancedPublicationBuilder<'_, PublicationBuilderP
 }
 
 #[zenoh_macros::internal_trait]
+#[zenoh_macros::unstable]
 impl<P> SampleBuilderTrait for AdvancedPublicationBuilder<'_, P> {
-    #[cfg(feature = "unstable")]
+    #[zenoh_macros::unstable]
     fn source_info(self, source_info: SourceInfo) -> Self {
         Self {
             builder: self.builder.source_info(source_info),
             ..self
         }
     }
+    #[zenoh_macros::unstable]
     fn attachment<TA: Into<OptionZBytes>>(self, attachment: TA) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
@@ -420,7 +449,9 @@ impl<P> SampleBuilderTrait for AdvancedPublicationBuilder<'_, P> {
 }
 
 #[zenoh_macros::internal_trait]
+#[zenoh_macros::unstable]
 impl<P> TimestampBuilderTrait for AdvancedPublicationBuilder<'_, P> {
+    #[zenoh_macros::unstable]
     fn timestamp<TS: Into<Option<uhlc::Timestamp>>>(self, timestamp: TS) -> Self {
         Self {
             builder: self.builder.timestamp(timestamp),
@@ -429,12 +460,15 @@ impl<P> TimestampBuilderTrait for AdvancedPublicationBuilder<'_, P> {
     }
 }
 
+#[zenoh_macros::unstable]
 impl<P> Resolvable for AdvancedPublicationBuilder<'_, P> {
     type To = ZResult<()>;
 }
 
+#[zenoh_macros::unstable]
 impl Wait for AdvancedPublisherPutBuilder<'_> {
     #[inline]
+    #[zenoh_macros::unstable]
     fn wait(self) -> <Self as Resolvable>::To {
         if let Some(cache) = self.cache {
             cache.cache_sample(zenoh::sample::Sample::from(&self.builder));
@@ -443,8 +477,10 @@ impl Wait for AdvancedPublisherPutBuilder<'_> {
     }
 }
 
+#[zenoh_macros::unstable]
 impl Wait for AdvancedPublisherDeleteBuilder<'_> {
     #[inline]
+    #[zenoh_macros::unstable]
     fn wait(self) -> <Self as Resolvable>::To {
         if let Some(cache) = self.cache {
             cache.cache_sample(zenoh::sample::Sample::from(&self.builder));
@@ -453,19 +489,23 @@ impl Wait for AdvancedPublisherDeleteBuilder<'_> {
     }
 }
 
+#[zenoh_macros::unstable]
 impl IntoFuture for AdvancedPublisherPutBuilder<'_> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
+    #[zenoh_macros::unstable]
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
     }
 }
 
+#[zenoh_macros::unstable]
 impl IntoFuture for AdvancedPublisherDeleteBuilder<'_> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
+    #[zenoh_macros::unstable]
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
     }

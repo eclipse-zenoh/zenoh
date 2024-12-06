@@ -22,24 +22,29 @@ pub trait AdvancedPublisherBuilderExt<'a, 'b, 'c> {
     /// optionally ask for retransimission.
     ///
     /// Retransmission can only be achieved if history is enabled.
+    #[zenoh_macros::unstable]
     fn cache(self, config: CacheConfig) -> AdvancedPublisherBuilder<'a, 'b, 'c>;
 
     /// Allow matching Subscribers to detect lost samples and optionally ask for retransimission.
     ///
     /// Retransmission can only be achieved if cache is enabled.
+    #[zenoh_macros::unstable]
     fn sample_miss_detection(self) -> AdvancedPublisherBuilder<'a, 'b, 'c>;
 
     /// Allow this publisher to be detected by subscribers.
     ///
     /// This allows Subscribers to retrieve the local history.
+    #[zenoh_macros::unstable]
     fn publisher_detection(self) -> AdvancedPublisherBuilder<'a, 'b, 'c>;
 }
 
+#[zenoh_macros::unstable]
 impl<'a, 'b, 'c> AdvancedPublisherBuilderExt<'a, 'b, 'c> for PublisherBuilder<'a, 'b> {
     /// Allow matching Subscribers to detect lost samples and
     /// optionally ask for retransimission.
     ///
     /// Retransmission can only be achieved if history is enabled.
+    #[zenoh_macros::unstable]
     fn cache(self, config: CacheConfig) -> AdvancedPublisherBuilder<'a, 'b, 'c> {
         AdvancedPublisherBuilder::new(self.session, self.key_expr).cache(config)
     }
@@ -47,6 +52,7 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilderExt<'a, 'b, 'c> for PublisherBuilder<'a
     /// Allow matching Subscribers to detect lost samples and optionally ask for retransimission.
     ///
     /// Retransmission can only be achieved if cache is enabled.
+    #[zenoh_macros::unstable]
     fn sample_miss_detection(self) -> AdvancedPublisherBuilder<'a, 'b, 'c> {
         AdvancedPublisherBuilder::new(self.session, self.key_expr).sample_miss_detection()
     }
@@ -54,6 +60,7 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilderExt<'a, 'b, 'c> for PublisherBuilder<'a
     /// Allow this publisher to be detected by subscribers.
     ///
     /// This allows Subscribers to retrieve the local history.
+    #[zenoh_macros::unstable]
     fn publisher_detection(self) -> AdvancedPublisherBuilder<'a, 'b, 'c> {
         AdvancedPublisherBuilder::new(self.session, self.key_expr).publisher_detection()
     }

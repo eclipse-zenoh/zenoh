@@ -39,6 +39,7 @@ impl<'a, S> SubscriberForward<'a, S> for Subscriber<FifoChannelHandler<Sample>>
 where
     S: futures::sink::Sink<Sample>,
 {
+    #[zenoh_macros::unstable]
     type Output =
         Forward<Map<fifo::RecvStream<'a, Sample>, fn(Sample) -> Result<Sample, S::Error>>, S>;
     fn forward(&'a mut self, sink: S) -> Self::Output {
@@ -86,6 +87,7 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     /// }
     /// # }
     /// ```
+    #[zenoh_macros::unstable]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     fn fetching<
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
@@ -125,6 +127,7 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     /// }
     /// # }
     /// ```
+    #[zenoh_macros::unstable]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
     fn querying(self) -> QueryingSubscriberBuilder<'a, 'b, Self::KeySpace, Handler>;
 }
@@ -135,21 +138,26 @@ pub trait AdvancedSubscriberBuilderExt<'a, 'b, 'c, Handler> {
     /// Enable query for historical data.
     ///
     /// History can only be retransmitted by Publishers that enable caching.
+    #[zenoh_macros::unstable]
     fn history(self, config: HistoryConfig) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>;
 
     /// Ask for retransmission of detected lost Samples.
     ///
     /// Retransmission can only be achieved by Publishers that enable
     /// caching and sample_miss_detection.
+    #[zenoh_macros::unstable]
     fn recovery(self, conf: RecoveryConfig) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>;
 
     /// Allow this subscriber to be detected through liveliness.
+    #[zenoh_macros::unstable]
     fn subscriber_detection(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>;
 
     /// Turn this `Subscriber`into an `AdvancedSubscriber`.
+    #[zenoh_macros::unstable]
     fn advanced(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>;
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilder<'a, 'b, Handler> {
     type KeySpace = crate::UserSpace;
@@ -187,6 +195,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
     /// }
     /// # }
     /// ```
+    #[zenoh_macros::unstable]
     fn fetching<
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
         TryIntoSample,
@@ -236,6 +245,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
     /// }
     /// # }
     /// ```
+    #[zenoh_macros::unstable]
     fn querying(self) -> QueryingSubscriberBuilder<'a, 'b, Self::KeySpace, Handler> {
         QueryingSubscriberBuilder {
             session: self.session,
@@ -255,12 +265,14 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
     }
 }
 
+#[zenoh_macros::unstable]
 impl<'a, 'b, 'c, Handler> AdvancedSubscriberBuilderExt<'a, 'b, 'c, Handler>
     for SubscriberBuilder<'a, 'b, Handler>
 {
     /// Enable query for historical data.
     ///
     /// History can only be retransmitted by Publishers that enable caching.
+    #[zenoh_macros::unstable]
     fn history(self, config: HistoryConfig) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler> {
         AdvancedSubscriberBuilder::new(self.session, self.key_expr, self.origin, self.handler)
             .history(config)
@@ -270,23 +282,27 @@ impl<'a, 'b, 'c, Handler> AdvancedSubscriberBuilderExt<'a, 'b, 'c, Handler>
     ///
     /// Retransmission can only be achieved by Publishers that enable
     /// caching and sample_miss_detection.
+    #[zenoh_macros::unstable]
     fn recovery(self, conf: RecoveryConfig) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler> {
         AdvancedSubscriberBuilder::new(self.session, self.key_expr, self.origin, self.handler)
             .recovery(conf)
     }
 
     /// Allow this subscriber to be detected through liveliness.
+    #[zenoh_macros::unstable]
     fn subscriber_detection(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler> {
         AdvancedSubscriberBuilder::new(self.session, self.key_expr, self.origin, self.handler)
             .subscriber_detection()
     }
 
     /// Turn this `Subscriber`into an `AdvancedSubscriber`.
+    #[zenoh_macros::unstable]
     fn advanced(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler> {
         AdvancedSubscriberBuilder::new(self.session, self.key_expr, self.origin, self.handler)
     }
 }
 
+#[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     for LivelinessSubscriberBuilder<'a, 'b, Handler>
@@ -329,6 +345,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     /// }
     /// # }
     /// ```
+    #[zenoh_macros::unstable]
     fn fetching<
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
         TryIntoSample,
@@ -380,6 +397,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     /// }
     /// # }
     /// ```
+    #[zenoh_macros::unstable]
     fn querying(self) -> QueryingSubscriberBuilder<'a, 'b, Self::KeySpace, Handler> {
         QueryingSubscriberBuilder {
             session: self.session,

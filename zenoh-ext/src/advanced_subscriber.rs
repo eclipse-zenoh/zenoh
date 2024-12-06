@@ -55,24 +55,28 @@ pub struct HistoryConfig {
     age: Option<f64>,
 }
 
+#[zenoh_macros::unstable]
 impl HistoryConfig {
     /// Enable detection of late joiner publishers and query for their historical data.
     ///
     /// Let joiner detection can only be achieved for Publishers that enable publisher_detection.
     /// History can only be retransmitted by Publishers that enable caching.
     #[inline]
+    #[zenoh_macros::unstable]
     pub fn detect_late_publishers(mut self) -> Self {
         self.liveliness = true;
         self
     }
 
     /// Specify how many samples to query for each resource.
+    #[zenoh_macros::unstable]
     pub fn max_samples(mut self, depth: usize) -> Self {
         self.sample_depth = Some(depth);
         self
     }
 
     /// Specify the maximum age of samples to query.
+    #[zenoh_macros::unstable]
     pub fn max_age(mut self, seconds: f64) -> Self {
         self.age = Some(seconds);
         self
@@ -94,6 +98,7 @@ impl std::fmt::Debug for RecoveryConfig {
     }
 }
 
+#[zenoh_macros::unstable]
 impl RecoveryConfig {
     /// Enable periodic queries for not yet received Samples and specify their period.
     ///
@@ -126,6 +131,7 @@ pub struct AdvancedSubscriberBuilder<'a, 'b, 'c, Handler, const BACKGROUND: bool
 
 #[zenoh_macros::unstable]
 impl<'a, 'b, Handler> AdvancedSubscriberBuilder<'a, 'b, '_, Handler> {
+    #[zenoh_macros::unstable]
     pub(crate) fn new(
         session: &'a Session,
         key_expr: ZResult<KeyExpr<'b>>,
@@ -151,6 +157,7 @@ impl<'a, 'b, Handler> AdvancedSubscriberBuilder<'a, 'b, '_, Handler> {
 impl<'a, 'b, 'c> AdvancedSubscriberBuilder<'a, 'b, 'c, DefaultHandler> {
     /// Add callback to AdvancedSubscriber.
     #[inline]
+    #[zenoh_macros::unstable]
     pub fn callback<Callback>(
         self,
         callback: Callback,
@@ -177,6 +184,7 @@ impl<'a, 'b, 'c> AdvancedSubscriberBuilder<'a, 'b, 'c, DefaultHandler> {
     /// Using this guarantees that your callback will never be called concurrently.
     /// If your callback is also accepted by the [`callback`](AdvancedSubscriberBuilder::callback) method, we suggest you use it instead of `callback_mut`
     #[inline]
+    #[zenoh_macros::unstable]
     pub fn callback_mut<CallbackMut>(
         self,
         callback: CallbackMut,
@@ -189,6 +197,7 @@ impl<'a, 'b, 'c> AdvancedSubscriberBuilder<'a, 'b, 'c, DefaultHandler> {
 
     /// Make the built AdvancedSubscriber an [`AdvancedSubscriber`](AdvancedSubscriber).
     #[inline]
+    #[zenoh_macros::unstable]
     pub fn with<Handler>(self, handler: Handler) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>
     where
         Handler: IntoHandler<Sample>,
@@ -257,6 +266,7 @@ impl<'a, 'c, Handler> AdvancedSubscriberBuilder<'a, '_, 'c, Handler> {
     }
 
     /// Allow this subscriber to be detected through liveliness.
+    #[zenoh_macros::unstable]
     pub fn subscriber_detection(mut self) -> Self {
         self.liveliness = true;
         self
@@ -264,6 +274,7 @@ impl<'a, 'c, Handler> AdvancedSubscriberBuilder<'a, '_, 'c, Handler> {
 
     /// A key expression added to the liveliness token key expression.
     /// It can be used to convey meta data.
+    #[zenoh_macros::unstable]
     pub fn subscriber_detection_metadata<TryIntoKeyExpr>(mut self, meta: TryIntoKeyExpr) -> Self
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'c>>,
@@ -273,6 +284,7 @@ impl<'a, 'c, Handler> AdvancedSubscriberBuilder<'a, '_, 'c, Handler> {
         self
     }
 
+    #[zenoh_macros::unstable]
     fn with_static_keys(self) -> AdvancedSubscriberBuilder<'a, 'static, 'static, Handler> {
         AdvancedSubscriberBuilder {
             session: self.session,
@@ -289,6 +301,7 @@ impl<'a, 'c, Handler> AdvancedSubscriberBuilder<'a, '_, 'c, Handler> {
     }
 }
 
+#[zenoh_macros::unstable]
 impl<Handler> Resolvable for AdvancedSubscriberBuilder<'_, '_, '_, Handler>
 where
     Handler: IntoHandler<Sample>,
@@ -297,16 +310,19 @@ where
     type To = ZResult<AdvancedSubscriber<Handler::Handler>>;
 }
 
+#[zenoh_macros::unstable]
 impl<Handler> Wait for AdvancedSubscriberBuilder<'_, '_, '_, Handler>
 where
     Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
 {
+    #[zenoh_macros::unstable]
     fn wait(self) -> <Self as Resolvable>::To {
         AdvancedSubscriber::new(self.with_static_keys())
     }
 }
 
+#[zenoh_macros::unstable]
 impl<Handler> IntoFuture for AdvancedSubscriberBuilder<'_, '_, '_, Handler>
 where
     Handler: IntoHandler<Sample> + Send,
@@ -315,11 +331,13 @@ where
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
+    #[zenoh_macros::unstable]
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
     }
 }
 
+#[zenoh_macros::unstable]
 struct Period {
     timer: Timer,
     period: Duration,
@@ -341,13 +359,16 @@ struct State {
     miss_handlers: HashMap<usize, Callback<Miss>>,
 }
 
+#[zenoh_macros::unstable]
 impl State {
+    #[zenoh_macros::unstable]
     fn register_miss_callback(&mut self, callback: Callback<Miss>) -> usize {
         let id = self.next_id;
         self.next_id += 1;
         self.miss_handlers.insert(id, callback);
         id
     }
+    #[zenoh_macros::unstable]
     fn unregister_miss_callback(&mut self, id: &usize) {
         self.miss_handlers.remove(id);
     }
@@ -892,6 +913,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
 
     /// Close this AdvancedSubscriber
     #[inline]
+    #[zenoh_macros::unstable]
     pub fn close(self) -> impl Resolve<ZResult<()>> {
         self._subscriber.undeclare()
     }
@@ -1176,6 +1198,7 @@ impl<'a> SampleMissListenerBuilder<'a, Callback<Miss>> {
     /// Register the sample miss notification callback to be run in background until the adanced subscriber is undeclared.
     ///
     /// Background builder doesn't return a `SampleMissHandler` object anymore.
+    #[zenoh_macros::unstable]
     pub fn background(self) -> SampleMissListenerBuilder<'a, Callback<Miss>, true> {
         SampleMissListenerBuilder {
             statesref: self.statesref,

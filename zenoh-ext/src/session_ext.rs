@@ -22,6 +22,8 @@ use super::PublicationCacheBuilder;
 #[allow(deprecated)]
 pub trait SessionExt {
     // REVIEW(fuzzypixelz): this doc test is the only one to use the programmatic configuration API..
+    /// Declare a [`PublicationCache`](crate::PublicationCache).
+    ///
     /// Examples:
     /// ```
     /// # #[tokio::main]
@@ -40,6 +42,7 @@ pub trait SessionExt {
     /// # }
     /// ```
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
+    #[zenoh_macros::unstable]
     fn declare_publication_cache<'a, 'b, 'c, TryIntoKeyExpr>(
         &'a self,
         pub_key_expr: TryIntoKeyExpr,
@@ -51,6 +54,7 @@ pub trait SessionExt {
 
 #[allow(deprecated)]
 impl SessionExt for Session {
+    #[zenoh_macros::unstable]
     fn declare_publication_cache<'a, 'b, 'c, TryIntoKeyExpr>(
         &'a self,
         pub_key_expr: TryIntoKeyExpr,
