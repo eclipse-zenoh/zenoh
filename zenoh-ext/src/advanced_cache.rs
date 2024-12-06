@@ -36,6 +36,7 @@ kedefine!(
     pub(crate) ke_liveliness: "@adv/${zid:*}/${eid:*}/${meta:**}/@/${remaining:**}",
 );
 
+#[zenoh_macros::unstable]
 /// Configure replies QoS.
 #[derive(Clone, Debug)]
 pub struct QoS {
@@ -77,6 +78,7 @@ impl QoSBuilderTrait for QoS {
 
 #[derive(Debug, Clone)]
 /// Configure an [`AdvancedPublisher`](crate::AdvancedPublisher) cache.
+#[zenoh_macros::unstable]
 pub struct CacheConfig {
     max_samples: usize,
     replies_qos: QoS,
@@ -106,6 +108,7 @@ impl CacheConfig {
 }
 
 /// The builder of an [`AdvancedCache`], allowing to configure it.
+#[zenoh_macros::unstable]
 pub struct AdvancedCacheBuilder<'a, 'b, 'c> {
     session: &'a Session,
     pub_key_expr: ZResult<KeyExpr<'b>>,
@@ -189,6 +192,7 @@ fn sample_in_range(sample: &Sample, start: Option<u32>, end: Option<u32>) -> boo
 }
 
 /// [`AdvancedCache`].
+#[zenoh_macros::unstable]
 pub struct AdvancedCache {
     cache: Arc<RwLock<VecDeque<Sample>>>,
     max_samples: usize,
