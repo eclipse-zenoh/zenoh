@@ -612,6 +612,11 @@ impl WeakSession {
         *weak += 1;
         Self(session.clone())
     }
+
+    #[zenoh_macros::internal]
+    pub(crate) fn session(&self) -> Session {
+        Session(self.0.clone())
+    }
 }
 
 impl Clone for WeakSession {
@@ -2154,7 +2159,7 @@ impl SessionInner {
                             timestamp,
                             encoding: encoding.clone().into(),
                             #[cfg(feature = "unstable")]
-                            ext_sinfo: source_info.into(),
+                            ext_sinfo: source_info.clone().into(),
                             #[cfg(not(feature = "unstable"))]
                             ext_sinfo: None,
                             #[cfg(feature = "shared-memory")]
@@ -2166,7 +2171,7 @@ impl SessionInner {
                         SampleKind::Delete => PushBody::Del(Del {
                             timestamp,
                             #[cfg(feature = "unstable")]
-                            ext_sinfo: source_info.into(),
+                            ext_sinfo: source_info.clone().into(),
                             #[cfg(not(feature = "unstable"))]
                             ext_sinfo: None,
                             ext_attachment: attachment.clone().map(|a| a.into()),
@@ -2185,7 +2190,13 @@ impl SessionInner {
                 kind,
                 encoding: Some(encoding),
                 timestamp,
+                #[cfg(feature = "unstable")]
+                source_id: source_info.source_id,
+                #[cfg(not(feature = "unstable"))]
                 source_id: None,
+                #[cfg(feature = "unstable")]
+                source_sn: source_info.source_sn,
+                #[cfg(not(feature = "unstable"))]
                 source_sn: None,
                 qos: QoS::from(push::ext::QoSType::new(
                     priority.into(),

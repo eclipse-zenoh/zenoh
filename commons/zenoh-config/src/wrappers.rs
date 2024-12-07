@@ -152,6 +152,16 @@ pub struct EntityGlobalId(EntityGlobalIdProto);
 pub type EntityId = u32;
 
 impl EntityGlobalId {
+    /// Creates a new EntityGlobalId.
+    #[zenoh_macros::internal]
+    pub fn new(zid: ZenohId, eid: EntityId) -> Self {
+        EntityGlobalIdProto {
+            zid: zid.into(),
+            eid,
+        }
+        .into()
+    }
+
     /// Returns the [`ZenohId`], i.e. the Zenoh session, this ID is associated to.
     pub fn zid(&self) -> ZenohId {
         self.0.zid.into()
