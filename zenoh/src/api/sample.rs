@@ -34,7 +34,7 @@ pub type SourceSn = u32;
 
 /// The locality of samples to be received by subscribers or targeted by publishers.
 #[zenoh_macros::unstable]
-#[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, clap::ValueEnum, Hash, Debug, Default, Serialize, PartialEq, Eq)]
 pub enum Locality {
     SessionLocal,
     Remote,
@@ -42,7 +42,7 @@ pub enum Locality {
     Any,
 }
 #[cfg(not(feature = "unstable"))]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, clap::ValueEnum, Hash, Default, PartialEq, Eq)]
 pub(crate) enum Locality {
     SessionLocal,
     Remote,

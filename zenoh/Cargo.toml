@@ -73,6 +73,7 @@ tokio-util = { workspace = true }
 ahash = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
 flume = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }

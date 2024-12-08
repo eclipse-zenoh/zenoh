@@ -17,8 +17,7 @@ use zenoh_core::zread;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, Reliability, WhatAmI, WireExpr},
     network::{
-        declare::{ext, SubscriberId},
-        Push,
+        declare::{ext, SubscriberId}, push, Push
     },
     zenoh::PushBody,
 };
@@ -490,6 +489,144 @@ pub fn route_data(
                 "{} Route data with unknown scope {}!",
                 face,
                 msg.wire_expr.scope
+            );
+        }
+    }
+}
+
+
+pub fn opt_route_data<F: FnOnce()->(push::ext::QoSType, PushBody)>(
+    tables_ref: &Arc<TablesLock>,
+    face: &FaceState,
+    wire_expr: &WireExpr<'_>,
+    fn_msg: F,
+    reliability: Reliability,
+) {
+    let tables = zread!(tables_ref.tables);
+    match tables
+        .get_mapping(face, &wire_expr.scope, wire_expr.mapping)
+        .cloned()
+    {
+        Some(prefix) => {
+            tracing::trace!(
+                "{} Route data for res {}{}",
+                face,
+                prefix.expr(),
+                wire_expr.suffix.as_ref()
+            );
+            let mut expr = RoutingExpr::new(&prefix, wire_expr.suffix.as_ref());
+
+            #[cfg(feature = "stats")]
+            let admin = expr.full_expr().starts_with("@/");
+            #[cfg(feature = "stats")]
+            if !admin {
+                inc_stats!(face, rx, user, msg.payload)
+            } else {
+                inc_stats!(face, rx, admin, msg.payload)
+            }
+
+            if tables.hat_code.ingress_filter(&tables, face, &mut expr) {
+                let res = Resource::get_resource(&prefix, expr.suffix);
+
+                let route = get_data_route(&tables, face, &res, &mut expr, push::ext::NodeIdType::DEFAULT.node_id);
+
+                if !route.is_empty() {
+                    let (ext_qos, mut payload) = fn_msg();
+                    treat_timestamp!(&tables.hlc, payload, tables.drop_future_timestamp);
+
+                    if route.len() == 1 {
+                        let (outface, key_expr, context) = route.values().next().unwrap();
+                        if tables
+                            .hat_code
+                            .egress_filter(&tables, face, outface, &mut expr)
+                        {
+                            drop(tables);
+                            #[cfg(feature = "stats")]
+                            if !admin {
+                                inc_stats!(face, tx, user, msg.payload)
+                            } else {
+                                inc_stats!(face, tx, admin, msg.payload)
+                            }
+
+                            outface.primitives.send_push(
+                                Push {
+                                    wire_expr: key_expr.into(),
+                                    ext_qos,
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType { node_id: *context },
+                                    payload,
+                                },
+                                reliability,
+                            )
+                        }
+                    } else if tables.whatami == WhatAmI::Router {
+                        let route = route
+                            .values()
+                            .filter(|(outface, _key_expr, _context)| {
+                                tables
+                                    .hat_code
+                                    .egress_filter(&tables, face, outface, &mut expr)
+                            })
+                            .cloned()
+                            .collect::<Vec<Direction>>();
+
+                        drop(tables);
+                        for (outface, key_expr, context) in route {
+                            #[cfg(feature = "stats")]
+                            if !admin {
+                                inc_stats!(face, tx, user, msg.payload)
+                            } else {
+                                inc_stats!(face, tx, admin, msg.payload)
+                            }
+
+                            outface.primitives.send_push(
+                                Push {
+                                    wire_expr: key_expr,
+                                    ext_qos,
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType { node_id: context },
+                                    payload: payload.clone(),
+                                },
+                                reliability,
+                            )
+                        }
+                    } else {
+                        drop(tables);
+                        for (outface, key_expr, context) in route.values() {
+                            if face.id != outface.id
+                                && match (face.mcast_group.as_ref(), outface.mcast_group.as_ref()) {
+                                    (Some(l), Some(r)) => l != r,
+                                    _ => true,
+                                }
+                            {
+                                #[cfg(feature = "stats")]
+                                if !admin {
+                                    inc_stats!(face, tx, user, msg.payload)
+                                } else {
+                                    inc_stats!(face, tx, admin, msg.payload)
+                                }
+
+                                outface.primitives.send_push(
+                                    Push {
+                                        wire_expr: key_expr.into(),
+                                        ext_qos,
+                                        ext_tstamp: None,
+                                        ext_nodeid: ext::NodeIdType { node_id: *context },
+                                        payload: payload.clone(),
+                                    },
+                                    reliability,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None => {
+            tracing::error!(
+                "{} Route data with unknown scope {}!",
+                face,
+                wire_expr.scope
             );
         }
     }

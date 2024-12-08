@@ -5060,6 +5060,7 @@ dependencies = [
  "ahash",
  "async-trait",
  "bytes",
+ "clap",
  "flume",
  "futures",
  "git-version",
