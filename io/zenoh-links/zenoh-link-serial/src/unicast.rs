@@ -15,6 +15,7 @@
 use std::{
     cell::UnsafeCell,
     collections::HashMap,
+    f32::consts::E,
     fmt,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -45,7 +46,7 @@ use super::{
     get_baud_rate, get_unix_path_as_string, SERIAL_ACCEPT_THROTTLE_TIME, SERIAL_DEFAULT_MTU,
     SERIAL_LOCATOR_PREFIX,
 };
-use crate::{get_exclusive, get_timeout};
+use crate::{get_exclusive, get_release_on_close, get_timeout};
 
 struct LinkUnicastSerial {
     // The underlying serial port as returned by ZSerial (tokio-serial)
@@ -56,13 +57,15 @@ struct LinkUnicastSerial {
     //       already ensures that no concurrent reads or writes can happen on
     //       the same stream: there is only one task at the time that writes on
     //       the stream and only one task at the time that reads from the stream.
-    port: UnsafeCell<ZSerial>,
+    port: UnsafeCell<Option<ZSerial>>,
     // The serial port path
     src_locator: Locator,
     // The serial destination path (random UUIDv4)
     dst_locator: Locator,
     // A flag that tells if the link is connected or not
     is_connected: Arc<AtomicBool>,
+    // A flag that tells if we must release the file on close.
+    release_on_close: bool,
     // Locks for reading and writing ends of the serial.
     write_lock: AsyncMutex<()>,
     read_lock: AsyncMutex<()>,
@@ -73,16 +76,18 @@ unsafe impl Sync for LinkUnicastSerial {}
 
 impl LinkUnicastSerial {
     fn new(
-        port: UnsafeCell<ZSerial>,
+        port: UnsafeCell<Option<ZSerial>>,
         src_path: &str,
         dst_path: &str,
         is_connected: Arc<AtomicBool>,
+        release_on_close: bool,
     ) -> Self {
         Self {
             port,
             src_locator: Locator::new(SERIAL_LOCATOR_PREFIX, src_path, "").unwrap(),
             dst_locator: Locator::new(SERIAL_LOCATOR_PREFIX, dst_path, "").unwrap(),
             is_connected,
+            release_on_close,
             write_lock: AsyncMutex::new(()),
             read_lock: AsyncMutex::new(()),
         }
@@ -92,16 +97,31 @@ impl LinkUnicastSerial {
     //       or concurrent writes will ever happen. The write_lock and read_lock
     //       are respectively acquired in any read and write operation.
     #[allow(clippy::mut_from_ref)]
-    fn get_port_mut(&self) -> &mut ZSerial {
-        unsafe { &mut *self.port.get() }
+    fn get_port_mut(&self) -> ZResult<&mut ZSerial> {
+        unsafe {
+            let opt = &mut *self.port.get();
+
+            if let Some(port) = opt {
+                return Ok(port);
+            }
+            bail!("Serial is not opened")
+        }
     }
 
     fn clear_buffers(&self) -> ZResult<()> {
         tracing::trace!("I'm cleaning the buffers");
         Ok(self
-            .get_port_mut()
+            .get_port_mut()?
             .clear()
             .map_err(|e| zerror!("Cannot clear serial buffers: {e:?}"))?)
+    }
+
+    fn set_port(&self, port: ZSerial) {
+        unsafe { *self.port.get() = Some(port) }
+    }
+
+    fn unset_port(&self) {
+        unsafe { *self.port.get() = None }
     }
 }
 
@@ -111,13 +131,17 @@ impl LinkUnicastTrait for LinkUnicastSerial {
         tracing::trace!("Closing Serial link: {}", self);
         let _guard = zasynclock!(self.write_lock);
         self.is_connected.store(false, Ordering::Release);
-        self.get_port_mut().close();
+        self.get_port_mut()?.close();
+        if self.release_on_close {
+            self.unset_port();
+        }
+
         Ok(())
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         let _guard = zasynclock!(self.write_lock);
-        self.get_port_mut().write(buffer).await.map_err(|e| {
+        self.get_port_mut()?.write(buffer).await.map_err(|e| {
             let e = zerror!("Unable to write on Serial link {}: {}", self, e);
             tracing::error!("{}", e);
             e
@@ -135,7 +159,7 @@ impl LinkUnicastTrait for LinkUnicastSerial {
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         let _guard = zasynclock!(self.read_lock);
-        match self.get_port_mut().read_msg(buffer).await {
+        match self.get_port_mut()?.read_msg(buffer).await {
             Ok(read) => return Ok(read),
             Err(e) => {
                 let e = zerror!("Read error on Serial link {}: {}", self, e);
@@ -267,6 +291,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         let baud_rate = get_baud_rate(&endpoint);
         let exclusive = get_exclusive(&endpoint);
         let tout = get_timeout(&endpoint);
+        let release_on_close = get_release_on_close(&endpoint);
         tracing::trace!("Opening Serial Link on device {path:?}, with baudrate {baud_rate}, exclusive set as {exclusive} and timeout (us) {tout}");
         let mut port = ZSerial::new(path.clone(), baud_rate, exclusive).map_err(|e| {
             let e = zerror!(
@@ -284,10 +309,11 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
 
         // Create Serial link
         let link = Arc::new(LinkUnicastSerial::new(
-            UnsafeCell::new(port),
+            UnsafeCell::new(Some(port)),
             &path,
             &path,
             Arc::new(AtomicBool::new(true)),
+            release_on_close,
         ));
 
         Ok(LinkUnicast(link))
@@ -297,7 +323,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         let path = get_unix_path_as_string(endpoint.address());
         let baud_rate = get_baud_rate(&endpoint);
         let exclusive = get_exclusive(&endpoint);
+        let release_on_close = get_release_on_close(&endpoint);
         tracing::trace!("Creating Serial listener on device {path:?}, with baudrate {baud_rate} and exclusive set as {exclusive}");
+
+        // Opening to check if the port exists.
         let port = ZSerial::new(path.clone(), baud_rate, exclusive).map_err(|e| {
             let e = zerror!(
                 "Can not create a new Serial link bound to {:?}: {}",
@@ -307,15 +336,18 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
             tracing::warn!("{}", e);
             e
         })?;
+        // closing it.
+        drop(port);
 
         // Creating the link
         let is_connected = Arc::new(AtomicBool::new(false));
         let dst_path = format!("{}", uuid::Uuid::new_v4());
         let link = Arc::new(LinkUnicastSerial::new(
-            UnsafeCell::new(port),
+            UnsafeCell::new(None),
             &path,
             &dst_path,
             is_connected.clone(),
+            release_on_close,
         ));
 
         // Spawn the accept loop for the listener
@@ -330,7 +362,17 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
 
             async move {
                 // Wait for the accept loop to terminate
-                let res = accept_read_task(link, token, manager, path.clone(), is_connected).await;
+                let res = accept_read_task(
+                    link,
+                    token,
+                    manager,
+                    path.clone(),
+                    is_connected,
+                    baud_rate,
+                    exclusive,
+                    release_on_close,
+                )
+                .await;
                 zasyncwrite!(listeners).remove(&path);
                 res
             }
@@ -384,22 +426,39 @@ async fn accept_read_task(
     manager: NewLinkChannelSender,
     src_path: String,
     is_connected: Arc<AtomicBool>,
+    baud_rate: u32,
+    exclusive: bool,
+    release_on_close: bool,
 ) -> ZResult<()> {
     async fn receive(
         link: Arc<LinkUnicastSerial>,
         src_path: String,
         is_connected: Arc<AtomicBool>,
+        baud_rate: u32,
+        exclusive: bool,
+        release_on_close: bool,
     ) -> ZResult<Arc<LinkUnicastSerial>> {
-        // while !is_connected.load(Ordering::Acquire) && !link.is_ready() {
-        //     // Waiting to be ready, if not sleep some time.
-        //     tokio::time::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
-        // }
-        // while !is_connected.load(Ordering::Acquire) {
-        //     // Waiting to be ready, if not sleep some time.
-        //     tokio::time::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
-        // }
+        while !is_connected.load(Ordering::Acquire) {
+            // The serial is already connected to nothing.
+            tokio::time::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
+        }
 
-        while link.get_port_mut().accept().await.is_err() {
+        tracing::trace!("Creating Serial listener on device {src_path:?}, with baudrate {baud_rate} and exclusive set as {exclusive}");
+        if release_on_close {
+            let port = ZSerial::new(src_path.clone(), baud_rate, exclusive).map_err(|e| {
+                let e = zerror!(
+                    "Can not create a new Serial link bound to {:?}: {}",
+                    src_path,
+                    e
+                );
+                tracing::warn!("{}", e);
+                e
+            })?;
+
+            link.set_port(port);
+        }
+
+        while link.get_port_mut()?.accept().await.is_err() {
             //Waiting to be ready, if not sleep some time.
             tokio::time::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
         }
@@ -420,6 +479,9 @@ async fn accept_read_task(
                     link.clone(),
                     src_path.clone(),
                     is_connected.clone(),
+                    baud_rate,
+                    exclusive,
+                    release_on_close,
                 ) => {
                     match res {
                         Ok(link) => {
