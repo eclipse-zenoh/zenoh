@@ -314,6 +314,11 @@ impl<'a> Publisher<'a> {
         }
         self.session.undeclare_publisher_inner(self.id)
     }
+
+    #[zenoh_macros::internal]
+    pub fn session(&self) -> &crate::Session {
+        self.session.session()
+    }
 }
 
 impl<'a> UndeclarableSealed<()> for Publisher<'a> {
