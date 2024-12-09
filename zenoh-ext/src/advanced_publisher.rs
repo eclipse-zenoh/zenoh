@@ -157,6 +157,7 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
 #[zenoh_macros::internal_trait]
 #[zenoh_macros::unstable]
 impl EncodingBuilderTrait for AdvancedPublisherBuilder<'_, '_, '_> {
+    #[zenoh_macros::unstable]
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
             encoding: encoding.into(),
