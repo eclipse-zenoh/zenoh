@@ -909,6 +909,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
+    /// use zenoh_ext::AdvancedSubscriberBuilderExt;
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let subscriber = session.declare_subscriber("key/expression")
