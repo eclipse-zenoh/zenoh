@@ -128,8 +128,8 @@
       /// The time-to-live on multicast scouting packets
       ttl: 1,
       /// Which type of Zenoh instances to automatically establish sessions with upon discovery on UDP multicast.
-      /// Accepts a single value (e.g. autoconnect: ["router", "peer"])
-      /// or different values for router, peer and client (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
+      /// Accepts a single value (e.g. autoconnect: ["router", "peer"]) which applies whatever the configured "mode" is,
+      /// or different values for router, peer or client mode (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
       /// Each value is a list of: "peer", "router" and/or "client".
       autoconnect: { router: [], peer: ["router", "peer"], client: ["router", "peer"] },
       /// Whether or not to listen for scout messages on UDP multicast and reply to them.
@@ -146,8 +146,8 @@
       /// direct connectivity with each other.
       multihop: false,
       /// Which type of Zenoh instances to automatically establish sessions with upon discovery on gossip.
-      /// Accepts a single value (e.g. autoconnect: ["router", "peer"])
-      /// or different values for router, peer and client (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
+      /// Accepts a single value (e.g. autoconnect: ["router", "peer"]) which applies whatever the configured "mode" is,
+      /// or different values for router, peer or client mode (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
       /// Each value is a list of: "peer", "router" and/or "client".
       autoconnect: { router: [], peer: ["router", "peer"], client: ["router", "peer"] },
     },
