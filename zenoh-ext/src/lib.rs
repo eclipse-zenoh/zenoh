@@ -44,6 +44,7 @@ pub use crate::{
     advanced_publisher::{AdvancedPublisher, AdvancedPublisherBuilder},
     advanced_subscriber::{
         AdvancedSubscriber, AdvancedSubscriberBuilder, HistoryConfig, RecoveryConfig,
+        SampleMissHandlerUndeclaration, SampleMissListener, SampleMissListenerBuilder,
     },
     publication_cache::{PublicationCache, PublicationCacheBuilder},
     publisher_ext::AdvancedPublisherBuilderExt,
