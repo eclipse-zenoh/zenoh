@@ -921,6 +921,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
     }
 
     /// Returns the [`KeyExpr`] this subscriber subscribes to.
+    #[zenoh_macros::unstable]
     pub fn key_expr(&self) -> &KeyExpr<'static> {
         self._subscriber.key_expr()
     }
@@ -928,6 +929,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
     /// Returns a reference to this subscriber's handler.
     /// An handler is anything that implements [`zenoh::handlers::IntoHandler`].
     /// The default handler is [`zenoh::handlers::DefaultHandler`].
+    #[zenoh_macros::unstable]
     pub fn handler(&self) -> &Handler {
         &self.receiver
     }
@@ -935,6 +937,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
     /// Returns a mutable reference to this subscriber's handler.
     /// An handler is anything that implements [`zenoh::handlers::IntoHandler`].
     /// The default handler is [`zenoh::handlers::DefaultHandler`].
+    #[zenoh_macros::unstable]
     pub fn handler_mut(&mut self) -> &mut Handler {
         &mut self.receiver
     }
