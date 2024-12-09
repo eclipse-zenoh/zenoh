@@ -36,6 +36,10 @@ pub trait AdvancedPublisherBuilderExt<'a, 'b, 'c> {
     /// This allows Subscribers to retrieve the local history.
     #[zenoh_macros::unstable]
     fn publisher_detection(self) -> AdvancedPublisherBuilder<'a, 'b, 'c>;
+
+    /// Turn this `Publisher` into an `AdvancedPublisher`.
+    #[zenoh_macros::unstable]
+    fn advanced(self) -> AdvancedPublisherBuilder<'a, 'b, 'c>;
 }
 
 #[zenoh_macros::unstable]
@@ -63,5 +67,11 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilderExt<'a, 'b, 'c> for PublisherBuilder<'a
     #[zenoh_macros::unstable]
     fn publisher_detection(self) -> AdvancedPublisherBuilder<'a, 'b, 'c> {
         AdvancedPublisherBuilder::new(self.session, self.key_expr).publisher_detection()
+    }
+
+    /// Turn this `Publisher` into an `AdvancedPublisher`.
+    #[zenoh_macros::unstable]
+    fn advanced(self) -> AdvancedPublisherBuilder<'a, 'b, 'c> {
+        AdvancedPublisherBuilder::new(self.session, self.key_expr)
     }
 }
