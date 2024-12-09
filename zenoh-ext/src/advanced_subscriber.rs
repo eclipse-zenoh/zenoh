@@ -17,7 +17,7 @@ use zenoh::{
     config::ZenohId,
     handlers::{Callback, IntoHandler},
     key_expr::KeyExpr,
-    liveliness::LivelinessToken,
+    liveliness::{LivelinessSubscriberBuilder, LivelinessToken},
     pubsub::SubscriberBuilder,
     query::{
         ConsolidationMode, Parameters, Selector, TimeBound, TimeExpr, TimeRange, ZenohParameters,
@@ -395,7 +395,7 @@ struct SourceState<T> {
 #[zenoh_macros::unstable]
 pub struct AdvancedSubscriber<Receiver> {
     statesref: Arc<Mutex<State>>,
-    _subscriber: Subscriber<()>,
+    subscriber: Subscriber<()>,
     receiver: Receiver,
     _liveliness_subscriber: Option<Subscriber<()>>,
     _token: Option<LivelinessToken>,
@@ -890,7 +890,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
 
         let reliable_subscriber = AdvancedSubscriber {
             statesref,
-            _subscriber: subscriber,
+            subscriber,
             receiver,
             _liveliness_subscriber: liveliness_subscriber,
             _token: token,
@@ -917,13 +917,13 @@ impl<Handler> AdvancedSubscriber<Handler> {
     /// ```
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
-        self._subscriber.id()
+        self.subscriber.id()
     }
 
     /// Returns the [`KeyExpr`] this subscriber subscribes to.
     #[zenoh_macros::unstable]
     pub fn key_expr(&self) -> &KeyExpr<'static> {
-        self._subscriber.key_expr()
+        self.subscriber.key_expr()
     }
 
     /// Returns a reference to this subscriber's handler.
@@ -950,11 +950,19 @@ impl<Handler> AdvancedSubscriber<Handler> {
         }
     }
 
+    #[zenoh_macros::unstable]
+    pub fn detect_publishers(&self) -> LivelinessSubscriberBuilder<'_, '_, DefaultHandler> {
+        self.subscriber
+            .session()
+            .liveliness()
+            .declare_subscriber(KE_ADV_PREFIX / KE_STARSTAR / KE_AT / self.subscriber.key_expr())
+    }
+
     /// Undeclares this AdvancedSubscriber
     #[inline]
     #[zenoh_macros::unstable]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> {
-        self._subscriber.undeclare()
+        self.subscriber.undeclare()
     }
 }
 
