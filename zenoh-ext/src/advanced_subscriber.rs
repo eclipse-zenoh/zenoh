@@ -947,10 +947,10 @@ impl<Handler> AdvancedSubscriber<Handler> {
         }
     }
 
-    /// Close this AdvancedSubscriber
+    /// Undeclares this AdvancedSubscriber
     #[inline]
     #[zenoh_macros::unstable]
-    pub fn close(self) -> impl Resolve<ZResult<()>> {
+    pub fn undeclare(self) -> impl Resolve<ZResult<()>> {
         self._subscriber.undeclare()
     }
 }
