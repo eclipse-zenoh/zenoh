@@ -37,16 +37,16 @@ kedefine!(
 );
 
 #[zenoh_macros::unstable]
-/// Configure replies QoS.
+/// Configure replies.
 #[derive(Clone, Debug)]
-pub struct QoS {
+pub struct RepliesConfig {
     priority: Priority,
     congestion_control: CongestionControl,
     is_express: bool,
 }
 
 #[zenoh_macros::unstable]
-impl Default for QoS {
+impl Default for RepliesConfig {
     fn default() -> Self {
         Self {
             priority: Priority::Data,
@@ -58,7 +58,7 @@ impl Default for QoS {
 
 #[zenoh_macros::internal_trait]
 #[zenoh_macros::unstable]
-impl QoSBuilderTrait for QoS {
+impl QoSBuilderTrait for RepliesConfig {
     #[allow(unused_mut)]
     #[zenoh_macros::unstable]
     fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
@@ -86,7 +86,7 @@ impl QoSBuilderTrait for QoS {
 #[zenoh_macros::unstable]
 pub struct CacheConfig {
     max_samples: usize,
-    replies_qos: QoS,
+    replies_config: RepliesConfig,
 }
 
 #[zenoh_macros::unstable]
@@ -94,7 +94,7 @@ impl Default for CacheConfig {
     fn default() -> Self {
         Self {
             max_samples: 1,
-            replies_qos: QoS::default(),
+            replies_config: RepliesConfig::default(),
         }
     }
 }
@@ -110,8 +110,8 @@ impl CacheConfig {
 
     /// The QoS to apply to replies.
     #[zenoh_macros::unstable]
-    pub fn replies_qos(mut self, qos: QoS) -> Self {
-        self.replies_qos = qos;
+    pub fn replies_config(mut self, qos: RepliesConfig) -> Self {
+        self.replies_config = qos;
         self
     }
 }
@@ -277,10 +277,10 @@ impl AdvancedCache {
                                     .reply_sample(
                                         SampleBuilder::from(sample.clone())
                                             .congestion_control(
-                                                conf.history.replies_qos.congestion_control,
+                                                conf.history.replies_config.congestion_control,
                                             )
-                                            .priority(conf.history.replies_qos.priority)
-                                            .express(conf.history.replies_qos.is_express)
+                                            .priority(conf.history.replies_config.priority)
+                                            .express(conf.history.replies_config.is_express)
                                             .into(),
                                     )
                                     .wait()
@@ -304,10 +304,10 @@ impl AdvancedCache {
                                         .reply_sample(
                                             SampleBuilder::from(sample.clone())
                                                 .congestion_control(
-                                                    conf.history.replies_qos.congestion_control,
+                                                    conf.history.replies_config.congestion_control,
                                                 )
-                                                .priority(conf.history.replies_qos.priority)
-                                                .express(conf.history.replies_qos.is_express)
+                                                .priority(conf.history.replies_config.priority)
+                                                .express(conf.history.replies_config.is_express)
                                                 .into(),
                                         )
                                         .wait()
