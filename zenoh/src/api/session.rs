@@ -26,6 +26,9 @@ use std::{
 };
 
 use async_trait::async_trait;
+#[zenoh_macros::internal]
+use ref_cast::ref_cast_custom;
+use ref_cast::RefCastCustom;
 use tracing::{error, info, trace, warn};
 use uhlc::Timestamp;
 #[cfg(feature = "internal")]
@@ -553,12 +556,18 @@ impl fmt::Debug for SessionInner {
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// session.put("key/expression", "value").await.unwrap();
 /// # }
+#[derive(RefCastCustom)]
+#[repr(transparent)]
 pub struct Session(pub(crate) Arc<SessionInner>);
 
 impl Session {
     pub(crate) fn downgrade(&self) -> WeakSession {
         WeakSession::new(&self.0)
     }
+
+    #[cfg(feature = "internal")]
+    #[ref_cast_custom]
+    pub(crate) const fn ref_cast(from: &Arc<SessionInner>) -> &Self;
 }
 
 impl fmt::Debug for Session {
@@ -610,8 +619,8 @@ impl WeakSession {
     }
 
     #[zenoh_macros::internal]
-    pub(crate) fn session(&self) -> Session {
-        Session(self.0.clone())
+    pub(crate) fn session(&self) -> &Session {
+        Session::ref_cast(&self.0)
     }
 }
 

@@ -315,7 +315,7 @@ impl<'a> Publisher<'a> {
     }
 
     #[zenoh_macros::internal]
-    pub fn session(&self) -> crate::Session {
+    pub fn session(&self) -> &crate::Session {
         self.session.session()
     }
 }
