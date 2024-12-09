@@ -20,7 +20,9 @@ use zenoh::{
     bytes::{Encoding, OptionZBytes, ZBytes},
     internal::{
         bail,
-        traits::{EncodingBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait},
+        traits::{
+            EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
+        },
     },
     key_expr::KeyExpr,
     liveliness::LivelinessToken,
@@ -50,6 +52,9 @@ pub struct AdvancedPublisherBuilder<'a, 'b, 'c> {
     encoding: Encoding,
     destination: Locality,
     reliability: Reliability,
+    congestion_control: CongestionControl,
+    priority: Priority,
+    is_express: bool,
     meta_key_expr: Option<ZResult<KeyExpr<'c>>>,
     sequencing: Sequencing,
     liveliness: bool,
@@ -70,6 +75,9 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
             encoding: Encoding::default(),
             destination: Locality::default(),
             reliability: Reliability::default(),
+            congestion_control: CongestionControl::default(),
+            priority: Priority::default(),
+            is_express: false,
             meta_key_expr: None,
             sequencing: Sequencing::None,
             liveliness: false,
@@ -157,6 +165,37 @@ impl EncodingBuilderTrait for AdvancedPublisherBuilder<'_, '_, '_> {
     }
 }
 
+#[zenoh_macros::internal_trait]
+#[zenoh_macros::unstable]
+impl QoSBuilderTrait for AdvancedPublisherBuilder<'_, '_, '_> {
+    /// Changes the [`zenoh::qos::CongestionControl`] to apply when routing the data.
+    #[inline]
+    #[zenoh_macros::unstable]
+    fn congestion_control(self, congestion_control: CongestionControl) -> Self {
+        Self {
+            congestion_control,
+            ..self
+        }
+    }
+
+    /// Changes the [`zenoh::qos::Priority`] of the written data.
+    #[inline]
+    #[zenoh_macros::unstable]
+    fn priority(self, priority: Priority) -> Self {
+        Self { priority, ..self }
+    }
+
+    /// Changes the Express policy to apply when routing the data.
+    ///
+    /// When express is set to `true`, then the message will not be batched.
+    /// This usually has a positive impact on latency but negative impact on throughput.
+    #[inline]
+    #[zenoh_macros::unstable]
+    fn express(self, is_express: bool) -> Self {
+        Self { is_express, ..self }
+    }
+}
+
 #[zenoh_macros::unstable]
 impl<'a> Resolvable for AdvancedPublisherBuilder<'a, '_, '_> {
     type To = ZResult<AdvancedPublisher<'a>>;
@@ -206,6 +245,9 @@ impl<'a> AdvancedPublisher<'a> {
             .encoding(conf.encoding)
             .allowed_destination(conf.destination)
             .reliability(conf.reliability)
+            .congestion_control(conf.congestion_control)
+            .priority(conf.priority)
+            .express(conf.is_express)
             .wait()?;
         let id = publisher.id();
         let prefix = KE_ADV_PREFIX / &id.zid().into_keyexpr();
