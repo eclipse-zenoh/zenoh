@@ -14,6 +14,7 @@
 use std::{
     collections::VecDeque,
     future::{IntoFuture, Ready},
+    ops::{Bound, RangeBounds},
     sync::{Arc, RwLock},
 };
 
@@ -187,27 +188,22 @@ impl IntoFuture for AdvancedCacheBuilder<'_, '_, '_> {
 }
 
 #[zenoh_macros::unstable]
-fn decode_range(range: &str) -> (Option<u32>, Option<u32>) {
+fn decode_range(range: &str) -> (Bound<u32>, Bound<u32>) {
     let mut split = range.split("..");
-    let start = split.next().and_then(|s| s.parse::<u32>().ok());
-    let end = split.next().map(|s| s.parse::<u32>().ok()).unwrap_or(start);
+    let start = split
+        .next()
+        .and_then(|s| s.parse::<u32>().ok().map(Bound::Included))
+        .unwrap_or(Bound::Unbounded);
+    let end = split
+        .next()
+        .map(|s| {
+            s.parse::<u32>()
+                .ok()
+                .map(Bound::Included)
+                .unwrap_or(Bound::Unbounded)
+        })
+        .unwrap_or(start);
     (start, end)
-}
-
-#[zenoh_macros::unstable]
-fn sample_in_range(sample: &Sample, start: Option<u32>, end: Option<u32>) -> bool {
-    if start.is_none() && end.is_none() {
-        true
-    } else if let Some(source_sn) = sample.source_info().source_sn() {
-        match (start, end) {
-            (Some(start), Some(end)) => source_sn >= start && source_sn <= end,
-            (Some(start), None) => source_sn >= start,
-            (None, Some(end)) => source_sn <= end,
-            (None, None) => true,
-        }
-    } else {
-        false
-    }
 }
 
 /// [`AdvancedCache`].
@@ -235,7 +231,7 @@ impl AdvancedCache {
             &key_expr,
             conf.history,
         );
-        let cache = Arc::new(RwLock::new(VecDeque::new()));
+        let cache = Arc::new(RwLock::new(VecDeque::<Sample>::new()));
 
         // declare the queryable that will answer to queries on cache
         let queryable = conf
@@ -245,11 +241,11 @@ impl AdvancedCache {
             .callback({
                 let cache = cache.clone();
                 move |query| {
-                    let (start, end) = query
+                    let range = query
                         .parameters()
                         .get("_sn")
                         .map(decode_range)
-                        .unwrap_or((None, None));
+                        .unwrap_or((Bound::Unbounded, Bound::Unbounded));
                     let max = query
                         .parameters()
                         .get("_max")
@@ -258,7 +254,12 @@ impl AdvancedCache {
                         if let Some(max) = max {
                             let mut samples = VecDeque::new();
                             for sample in queue.iter() {
-                                if sample_in_range(sample, start, end) {
+                                if range == (Bound::Unbounded, Bound::Unbounded)
+                                    || sample
+                                        .source_info()
+                                        .source_sn()
+                                        .is_some_and(|sn| range.contains(&sn))
+                                {
                                     if let (Some(Ok(time_range)), Some(timestamp)) =
                                         (query.parameters().time_range(), sample.timestamp())
                                     {
@@ -290,7 +291,12 @@ impl AdvancedCache {
                             }
                         } else {
                             for sample in queue.iter() {
-                                if sample_in_range(sample, start, end) {
+                                if range == (Bound::Unbounded, Bound::Unbounded)
+                                    || sample
+                                        .source_info()
+                                        .source_sn()
+                                        .is_some_and(|sn| range.contains(&sn))
+                                {
                                     if let (Some(Ok(time_range)), Some(timestamp)) =
                                         (query.parameters().time_range(), sample.timestamp())
                                     {
