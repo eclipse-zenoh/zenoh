@@ -43,7 +43,7 @@ pub use crate::{
     advanced_cache::{CacheConfig, QoS},
     advanced_publisher::{AdvancedPublisher, AdvancedPublisherBuilder},
     advanced_subscriber::{
-        AdvancedSubscriber, AdvancedSubscriberBuilder, HistoryConfig, RecoveryConfig,
+        AdvancedSubscriber, AdvancedSubscriberBuilder, HistoryConfig, Miss, RecoveryConfig,
         SampleMissHandlerUndeclaration, SampleMissListener, SampleMissListenerBuilder,
     },
     publication_cache::{PublicationCache, PublicationCacheBuilder},
