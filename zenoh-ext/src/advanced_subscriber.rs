@@ -18,6 +18,7 @@ use zenoh::{
     handlers::{Callback, IntoHandler},
     key_expr::KeyExpr,
     liveliness::LivelinessToken,
+    pubsub::SubscriberBuilder,
     query::{
         ConsolidationMode, Parameters, Selector, TimeBound, TimeExpr, TimeRange, ZenohParameters,
     },
@@ -132,17 +133,12 @@ pub struct AdvancedSubscriberBuilder<'a, 'b, 'c, Handler, const BACKGROUND: bool
 #[zenoh_macros::unstable]
 impl<'a, 'b, Handler> AdvancedSubscriberBuilder<'a, 'b, '_, Handler> {
     #[zenoh_macros::unstable]
-    pub(crate) fn new(
-        session: &'a Session,
-        key_expr: ZResult<KeyExpr<'b>>,
-        origin: Locality,
-        handler: Handler,
-    ) -> Self {
+    pub(crate) fn new(builder: SubscriberBuilder<'a, 'b, Handler>) -> Self {
         AdvancedSubscriberBuilder {
-            session,
-            key_expr,
-            origin,
-            handler,
+            session: builder.session,
+            key_expr: builder.key_expr,
+            origin: builder.origin,
+            handler: builder.handler,
             retransmission: None,
             query_target: QueryTarget::All,
             query_timeout: Duration::from_secs(10),

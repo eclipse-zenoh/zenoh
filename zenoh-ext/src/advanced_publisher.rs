@@ -26,7 +26,10 @@ use zenoh::{
     },
     key_expr::KeyExpr,
     liveliness::LivelinessToken,
-    pubsub::{PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, Publisher},
+    pubsub::{
+        PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, Publisher,
+        PublisherBuilder,
+    },
     qos::{CongestionControl, Priority, Reliability},
     sample::{Locality, SourceInfo},
     session::EntityGlobalId,
@@ -65,19 +68,16 @@ pub struct AdvancedPublisherBuilder<'a, 'b, 'c> {
 #[zenoh_macros::unstable]
 impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
     #[zenoh_macros::unstable]
-    pub(crate) fn new(
-        session: &'a Session,
-        pub_key_expr: ZResult<KeyExpr<'b>>,
-    ) -> AdvancedPublisherBuilder<'a, 'b, 'c> {
+    pub(crate) fn new(builder: PublisherBuilder<'a, 'b>) -> AdvancedPublisherBuilder<'a, 'b, 'c> {
         AdvancedPublisherBuilder {
-            session,
-            pub_key_expr,
-            encoding: Encoding::default(),
-            destination: Locality::default(),
-            reliability: Reliability::default(),
-            congestion_control: CongestionControl::default(),
-            priority: Priority::default(),
-            is_express: false,
+            session: builder.session,
+            pub_key_expr: builder.key_expr,
+            encoding: builder.encoding,
+            destination: builder.destination,
+            reliability: builder.reliability,
+            congestion_control: builder.congestion_control,
+            priority: builder.priority,
+            is_express: builder.is_express,
             meta_key_expr: None,
             sequencing: Sequencing::None,
             liveliness: false,

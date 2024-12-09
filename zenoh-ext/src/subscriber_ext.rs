@@ -274,8 +274,7 @@ impl<'a, 'b, 'c, Handler> AdvancedSubscriberBuilderExt<'a, 'b, 'c, Handler>
     /// History can only be retransmitted by Publishers that enable caching.
     #[zenoh_macros::unstable]
     fn history(self, config: HistoryConfig) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler> {
-        AdvancedSubscriberBuilder::new(self.session, self.key_expr, self.origin, self.handler)
-            .history(config)
+        AdvancedSubscriberBuilder::new(self).history(config)
     }
 
     /// Ask for retransmission of detected lost Samples.
@@ -284,21 +283,19 @@ impl<'a, 'b, 'c, Handler> AdvancedSubscriberBuilderExt<'a, 'b, 'c, Handler>
     /// caching and sample_miss_detection.
     #[zenoh_macros::unstable]
     fn recovery(self, conf: RecoveryConfig) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler> {
-        AdvancedSubscriberBuilder::new(self.session, self.key_expr, self.origin, self.handler)
-            .recovery(conf)
+        AdvancedSubscriberBuilder::new(self).recovery(conf)
     }
 
     /// Allow this subscriber to be detected through liveliness.
     #[zenoh_macros::unstable]
     fn subscriber_detection(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler> {
-        AdvancedSubscriberBuilder::new(self.session, self.key_expr, self.origin, self.handler)
-            .subscriber_detection()
+        AdvancedSubscriberBuilder::new(self).subscriber_detection()
     }
 
     /// Turn this `Subscriber`into an `AdvancedSubscriber`.
     #[zenoh_macros::unstable]
     fn advanced(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler> {
-        AdvancedSubscriberBuilder::new(self.session, self.key_expr, self.origin, self.handler)
+        AdvancedSubscriberBuilder::new(self)
     }
 }
 

@@ -50,7 +50,7 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilderExt<'a, 'b, 'c> for PublisherBuilder<'a
     /// Retransmission can only be achieved if history is enabled.
     #[zenoh_macros::unstable]
     fn cache(self, config: CacheConfig) -> AdvancedPublisherBuilder<'a, 'b, 'c> {
-        AdvancedPublisherBuilder::new(self.session, self.key_expr).cache(config)
+        AdvancedPublisherBuilder::new(self).cache(config)
     }
 
     /// Allow matching Subscribers to detect lost samples and optionally ask for retransimission.
@@ -58,7 +58,7 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilderExt<'a, 'b, 'c> for PublisherBuilder<'a
     /// Retransmission can only be achieved if cache is enabled.
     #[zenoh_macros::unstable]
     fn sample_miss_detection(self) -> AdvancedPublisherBuilder<'a, 'b, 'c> {
-        AdvancedPublisherBuilder::new(self.session, self.key_expr).sample_miss_detection()
+        AdvancedPublisherBuilder::new(self).sample_miss_detection()
     }
 
     /// Allow this publisher to be detected by subscribers.
@@ -66,12 +66,12 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilderExt<'a, 'b, 'c> for PublisherBuilder<'a
     /// This allows Subscribers to retrieve the local history.
     #[zenoh_macros::unstable]
     fn publisher_detection(self) -> AdvancedPublisherBuilder<'a, 'b, 'c> {
-        AdvancedPublisherBuilder::new(self.session, self.key_expr).publisher_detection()
+        AdvancedPublisherBuilder::new(self).publisher_detection()
     }
 
     /// Turn this `Publisher` into an `AdvancedPublisher`.
     #[zenoh_macros::unstable]
     fn advanced(self) -> AdvancedPublisherBuilder<'a, 'b, 'c> {
-        AdvancedPublisherBuilder::new(self.session, self.key_expr)
+        AdvancedPublisherBuilder::new(self)
     }
 }
