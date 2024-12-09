@@ -131,7 +131,7 @@
       /// Accepts a single value (e.g. autoconnect: ["router", "peer"])
       /// or different values for router, peer and client (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
       /// Each value is a list of: "peer", "router" and/or "client".
-      autoconnect: { router: [], peer: ["router", "peer"] },
+      autoconnect: { router: [], peer: ["router", "peer"], client: ["router", "peer"] },
       /// Whether or not to listen for scout messages on UDP multicast and reply to them.
       listen: true,
     },
@@ -149,7 +149,7 @@
       /// Accepts a single value (e.g. autoconnect: ["router", "peer"])
       /// or different values for router, peer and client (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
       /// Each value is a list of: "peer", "router" and/or "client".
-      autoconnect: { router: [], peer: ["router", "peer"] },
+      autoconnect: { router: [], peer: ["router", "peer"], client: ["router", "peer"] },
     },
   },
 
