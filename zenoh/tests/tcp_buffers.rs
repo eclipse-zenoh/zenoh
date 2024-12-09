@@ -49,20 +49,8 @@ fn buffer_size_endpoint() {
     zenoh::open(config).wait().unwrap();
 }
 
-#[cfg(target_os = "macos")]
 #[test]
-#[should_panic(expected = "Can not create a new TCP listener")]
-fn buffer_size_override() {
-    buffer_size_config_override();
-}
-
-#[cfg(not(target_os = "macos"))]
-#[test]
-fn buffer_size_override() {
-    buffer_size_config_override();
-}
-
-fn buffer_size_config_override() {
+fn buffer_size_endpoint_overwrite() {
     let mut config = Config::default();
     config
         .insert_json5(
