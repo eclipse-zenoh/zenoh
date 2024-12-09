@@ -13,7 +13,7 @@
 //
 use alloc::vec::Vec;
 
-use crate::core::{Locator, WhatAmI, ZenohIdProto};
+use crate::core::{EndPoint, Locator, WhatAmI, ZenohIdProto};
 
 /// # Hello message
 ///
@@ -128,4 +128,12 @@ impl HelloProto {
             locators,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HelloEndPoint {
+    pub version: u8,
+    pub whatami: WhatAmI,
+    pub zid: ZenohIdProto,
+    pub endpoints: Vec<EndPoint>,
 }
