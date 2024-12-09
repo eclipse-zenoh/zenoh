@@ -25,8 +25,8 @@ use zenoh::{
     key_expr::KeyExpr,
     liveliness::LivelinessToken,
     pubsub::{PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, Publisher},
-    qos::{CongestionControl, Priority},
-    sample::SourceInfo,
+    qos::{CongestionControl, Priority, Reliability},
+    sample::{Locality, SourceInfo},
     session::EntityGlobalId,
     Resolvable, Resolve, Result as ZResult, Session, Wait, KE_ADV_PREFIX, KE_AT, KE_EMPTY,
 };
@@ -47,6 +47,9 @@ pub(crate) enum Sequencing {
 pub struct AdvancedPublisherBuilder<'a, 'b, 'c> {
     session: &'a Session,
     pub_key_expr: ZResult<KeyExpr<'b>>,
+    encoding: Encoding,
+    destination: Locality,
+    reliability: Reliability,
     meta_key_expr: Option<ZResult<KeyExpr<'c>>>,
     sequencing: Sequencing,
     liveliness: bool,
@@ -64,11 +67,39 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
         AdvancedPublisherBuilder {
             session,
             pub_key_expr,
+            encoding: Encoding::default(),
+            destination: Locality::default(),
+            reliability: Reliability::default(),
             meta_key_expr: None,
             sequencing: Sequencing::None,
             liveliness: false,
             cache: false,
             history: CacheConfig::default(),
+        }
+    }
+
+    /// Changes the [`zenoh::sample::Locality`] applied when routing the data.
+    ///
+    /// This restricts the matching subscribers that will receive the published data to the ones
+    /// that have the given [`zenoh::sample::Locality`].
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn allowed_destination(mut self, destination: Locality) -> Self {
+        self.destination = destination;
+        self
+    }
+
+    /// Changes the [`zenoh::qos::Reliability`] to apply when routing the data.
+    ///
+    /// **NOTE**: Currently `reliability` does not trigger any data retransmission on the wire. It
+    ///   is rather used as a marker on the wire and it may be used to select the best link
+    ///   available (e.g. TCP for reliable data and UDP for best effort data).
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn reliability(self, reliability: Reliability) -> Self {
+        Self {
+            reliability,
+            ..self
         }
     }
 
@@ -112,6 +143,17 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
     {
         self.meta_key_expr = Some(meta.try_into().map_err(Into::into));
         self
+    }
+}
+
+#[zenoh_macros::internal_trait]
+#[zenoh_macros::unstable]
+impl EncodingBuilderTrait for AdvancedPublisherBuilder<'_, '_, '_> {
+    fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
+        Self {
+            encoding: encoding.into(),
+            ..self
+        }
     }
 }
 
@@ -161,6 +203,9 @@ impl<'a> AdvancedPublisher<'a> {
         let publisher = conf
             .session
             .declare_publisher(key_expr.clone().into_owned())
+            .encoding(conf.encoding)
+            .allowed_destination(conf.destination)
+            .reliability(conf.reliability)
             .wait()?;
         let id = publisher.id();
         let prefix = KE_ADV_PREFIX / &id.zid().into_keyexpr();
