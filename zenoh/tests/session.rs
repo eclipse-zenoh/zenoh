@@ -425,8 +425,8 @@ async fn zenoh_session_close_in_background() {
     let close_task_2 = peer02.close().in_background().await;
 
     let close_all = async move {
-        close_task_1.await.unwrap().unwrap();
-        close_task_2.await.unwrap().unwrap();
+        close_task_1.await.unwrap();
+        close_task_2.await.unwrap();
     };
     ztimeout!(close_all);
 }
