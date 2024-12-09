@@ -385,9 +385,8 @@ impl ConfigMut<'_> {
             self.0.address(),
             self.0.metadata(),
             parameters::from_iter(parameters::sort(parameters::join(
-                // Endpoint config overwrites incoming config
-                iter.map(|(k, v)| (k.borrow(), v.borrow())),
                 self.0.config().iter(),
+                iter.map(|(k, v)| (k.borrow(), v.borrow())),
             ))),
         )?;
 
