@@ -903,6 +903,45 @@ impl<Handler> AdvancedSubscriber<Handler> {
         Ok(reliable_subscriber)
     }
 
+    /// Returns the [`EntityGlobalId`] of this AdvancedSubscriber.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let subscriber = session.declare_subscriber("key/expression")
+    ///     .advanced()
+    ///     .await
+    ///     .unwrap();
+    /// let subscriber_id = subscriber.id();
+    /// # }
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn id(&self) -> EntityGlobalId {
+        self._subscriber.id()
+    }
+
+    /// Returns the [`KeyExpr`] this subscriber subscribes to.
+    pub fn key_expr(&self) -> &KeyExpr<'static> {
+        self._subscriber.key_expr()
+    }
+
+    /// Returns a reference to this subscriber's handler.
+    /// An handler is anything that implements [`zenoh::handlers::IntoHandler`].
+    /// The default handler is [`zenoh::handlers::DefaultHandler`].
+    pub fn handler(&self) -> &Handler {
+        &self.receiver
+    }
+
+    /// Returns a mutable reference to this subscriber's handler.
+    /// An handler is anything that implements [`zenoh::handlers::IntoHandler`].
+    /// The default handler is [`zenoh::handlers::DefaultHandler`].
+    pub fn handler_mut(&mut self) -> &mut Handler {
+        &mut self.receiver
+    }
+
     #[zenoh_macros::unstable]
     pub fn sample_miss_listener(&self) -> SampleMissListenerBuilder<'_, DefaultHandler> {
         SampleMissListenerBuilder {
