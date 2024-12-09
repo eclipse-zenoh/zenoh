@@ -128,8 +128,6 @@ pub(crate) fn on_admin_query(session: &WeakSession, prefix: &keyexpr, query: Que
         }
     }
 
-    println!("on admin query");
-
     if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
         for transport in zenoh_runtime::ZRuntime::Net
             .block_in_place(session.runtime.manager().get_transports_unicast())
