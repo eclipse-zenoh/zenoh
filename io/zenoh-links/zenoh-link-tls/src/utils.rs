@@ -32,8 +32,8 @@ use secrecy::ExposeSecret;
 use webpki::anchor_from_trusted_cert;
 use zenoh_config::Config as ZenohConfig;
 use zenoh_link_commons::{
-    tcp::TcpSocketConfig, tls::WebPkiVerifierAnyServerName, ConfigurationInspector, TCP_SO_RCV_BUF,
-    TCP_SO_SND_BUF,
+    tcp::TcpSocketConfig, tls::WebPkiVerifierAnyServerName, ConfigurationInspector, BIND_INTERFACE,
+    TCP_SO_RCV_BUF, TCP_SO_SND_BUF,
 };
 use zenoh_protocol::core::{
     endpoint::{Address, Config},
@@ -177,7 +177,7 @@ pub(crate) struct TlsServerConfig<'a> {
 }
 
 impl<'a> TlsServerConfig<'a> {
-    pub async fn new(config: &Config<'a>) -> ZResult<Self> {
+    pub async fn new(config: &'a Config<'_>) -> ZResult<Self> {
         let tls_server_client_auth: bool = match config.get(TLS_ENABLE_MTLS) {
             Some(s) => s
                 .parse()
@@ -276,8 +276,11 @@ impl<'a> TlsServerConfig<'a> {
             server_config: sc,
             tls_handshake_timeout,
             tls_close_link_on_expiration,
-            // TODO: add interface binding
-            tcp_socket_config: TcpSocketConfig::new(tcp_tx_buffer_size, tcp_rx_buffer_size, None),
+            tcp_socket_config: TcpSocketConfig::new(
+                tcp_tx_buffer_size,
+                tcp_rx_buffer_size,
+                config.get(BIND_INTERFACE),
+            ),
         })
     }
 
@@ -309,7 +312,7 @@ pub(crate) struct TlsClientConfig<'a> {
 }
 
 impl<'a> TlsClientConfig<'a> {
-    pub async fn new(config: &Config<'a>) -> ZResult<Self> {
+    pub async fn new(config: &'a Config<'_>) -> ZResult<Self> {
         let tls_client_server_auth: bool = match config.get(TLS_ENABLE_MTLS) {
             Some(s) => s
                 .parse()
@@ -439,8 +442,11 @@ impl<'a> TlsClientConfig<'a> {
         Ok(TlsClientConfig {
             client_config: cc,
             tls_close_link_on_expiration,
-            // TODO: add interface binding
-            tcp_socket_config: TcpSocketConfig::new(tcp_tx_buffer_size, tcp_rx_buffer_size, None),
+            tcp_socket_config: TcpSocketConfig::new(
+                tcp_tx_buffer_size,
+                tcp_rx_buffer_size,
+                config.get(BIND_INTERFACE),
+            ),
         })
     }
 
