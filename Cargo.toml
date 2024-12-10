@@ -187,7 +187,7 @@ vec_map = "0.8.2"
 webpki-roots = "0.26.5"
 winapi = { version = "0.3.9", features = ["iphlpapi", "winerror"] }
 x509-parser = "0.16.0"
-z-serial = "0.2.3"
+z-serial = "0.3.0"
 either = "1.13.0"
 prost = "0.13.2"
 tls-listener = { version = "0.10.2", features = ["rustls-ring"] }
@@ -222,9 +222,6 @@ zenoh-link-commons = { version = "1.0.0-dev", path = "io/zenoh-link-commons" }
 zenoh = { version = "1.0.0-dev", path = "zenoh", default-features = false }
 zenoh-runtime = { version = "1.0.0-dev", path = "commons/zenoh-runtime" }
 zenoh-task = { version = "1.0.0-dev", path = "commons/zenoh-task" }
-
-[patch.crates-io]
-z-serial = { git = "https://github.com/ZettaScaleLabs/z-serial/", branch = "feat/state-machine" }
 
 [profile.dev]
 debug = true
