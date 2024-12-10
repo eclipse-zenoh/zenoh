@@ -11,9 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::collections::hash_map::Entry;
 use std::{
-    collections::HashMap,
+    collections::{hash_map::Entry, HashMap},
     convert::TryInto,
     fmt,
     ops::Deref,
