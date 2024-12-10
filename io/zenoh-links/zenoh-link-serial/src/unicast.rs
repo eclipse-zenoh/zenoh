@@ -479,7 +479,7 @@ async fn accept_read_task(
                             continue;
                         }
                         Err(e) =>  {
-                            tracing::warn!("{}. Hint: Is the serial cable connected?", e);
+                            tracing::debug!("{}. Hint: Is the serial cable connected?", e);
                             tokio::time::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
                             continue;
 
