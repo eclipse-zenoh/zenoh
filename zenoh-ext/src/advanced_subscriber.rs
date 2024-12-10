@@ -515,7 +515,7 @@ impl Timed for PeriodicQuery {
                 / KE_STARSTAR
                 / KE_AT
                 / &states.key_expr;
-            let seq_num_range = seq_num_range(Some(state.last_delivered.unwrap() + 1), None);
+            let seq_num_range = seq_num_range(state.last_delivered.map(|s| s + 1), None);
 
             let session = states.session.clone();
             let key_expr = states.key_expr.clone().into_owned();
@@ -613,7 +613,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                 / KE_AT
                                 / &key_expr;
                             let seq_num_range =
-                                seq_num_range(Some(state.last_delivered.unwrap() + 1), None);
+                                seq_num_range(state.last_delivered.map(|s| s + 1), None);
                             drop(lock);
                             let handler = SequencedRepliesHandler {
                                 source_id,
