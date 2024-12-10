@@ -11,8 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "internal_config")]
 use zenoh_core::ztimeout;
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_clique() {
     use std::time::Duration;
@@ -75,6 +77,7 @@ async fn test_liveliness_subscriber_clique() {
     peer2.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_query_clique() {
     use std::time::Duration;
@@ -131,6 +134,7 @@ async fn test_liveliness_query_clique() {
     peer2.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_brokered() {
     use std::time::Duration;
@@ -209,6 +213,7 @@ async fn test_liveliness_subscriber_brokered() {
     client2.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_query_brokered() {
     use std::time::Duration;
@@ -279,6 +284,7 @@ async fn test_liveliness_query_brokered() {
     client2.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_local() {
     use std::time::Duration;
@@ -321,6 +327,7 @@ async fn test_liveliness_subscriber_local() {
     peer.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_query_local() {
     use std::time::Duration;
@@ -355,6 +362,7 @@ async fn test_liveliness_query_local() {
     peer.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_after_close() {
     use std::time::Duration;
@@ -413,6 +421,7 @@ async fn test_liveliness_after_close() {
 /// -------------------------------------------------------
 /// DOUBLE CLIENT
 /// -------------------------------------------------------
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_client_before() {
     use std::time::Duration;
@@ -507,6 +516,7 @@ async fn test_liveliness_subscriber_double_client_before() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_client_middle() {
     use std::time::Duration;
@@ -604,6 +614,7 @@ async fn test_liveliness_subscriber_double_client_middle() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_client_after() {
     use std::time::Duration;
@@ -703,6 +714,7 @@ async fn test_liveliness_subscriber_double_client_after() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_client_history_before() {
     use std::time::Duration;
@@ -805,6 +817,7 @@ async fn test_liveliness_subscriber_double_client_history_before() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_client_history_middle() {
     use std::time::Duration;
@@ -907,6 +920,7 @@ async fn test_liveliness_subscriber_double_client_history_middle() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_client_history_after() {
     use std::time::Duration;
@@ -1011,6 +1025,7 @@ async fn test_liveliness_subscriber_double_client_history_after() {
 /// -------------------------------------------------------
 /// DOUBLE PEER
 /// -------------------------------------------------------
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_peer_before() {
     use std::time::Duration;
@@ -1099,6 +1114,7 @@ async fn test_liveliness_subscriber_double_peer_before() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_peer_middle() {
     use std::time::Duration;
@@ -1190,6 +1206,7 @@ async fn test_liveliness_subscriber_double_peer_middle() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_peer_after() {
     use std::time::Duration;
@@ -1283,6 +1300,7 @@ async fn test_liveliness_subscriber_double_peer_after() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_peer_history_before() {
     use std::time::Duration;
@@ -1385,6 +1403,7 @@ async fn test_liveliness_subscriber_double_peer_history_before() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_peer_history_middle() {
     use std::time::Duration;
@@ -1487,6 +1506,7 @@ async fn test_liveliness_subscriber_double_peer_history_middle() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_peer_history_after() {
     use std::time::Duration;
@@ -1591,6 +1611,7 @@ async fn test_liveliness_subscriber_double_peer_history_after() {
 /// -------------------------------------------------------
 /// DOUBLE ROUTER
 /// -------------------------------------------------------
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_router_before() {
     use std::time::Duration;
@@ -1690,6 +1711,7 @@ async fn test_liveliness_subscriber_double_router_before() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_router_middle() {
     use std::time::Duration;
@@ -1792,6 +1814,7 @@ async fn test_liveliness_subscriber_double_router_middle() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_router_after() {
     use std::time::Duration;
@@ -1896,6 +1919,7 @@ async fn test_liveliness_subscriber_double_router_after() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_router_history_before() {
     use std::time::Duration;
@@ -2003,6 +2027,7 @@ async fn test_liveliness_subscriber_double_router_history_before() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_router_history_middle() {
     use std::time::Duration;
@@ -2110,6 +2135,7 @@ async fn test_liveliness_subscriber_double_router_history_middle() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_router_history_after() {
     use std::time::Duration;
@@ -2219,6 +2245,7 @@ async fn test_liveliness_subscriber_double_router_history_after() {
 /// -------------------------------------------------------
 /// DOUBLE CLIENT VIA PEER
 /// -------------------------------------------------------
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_clientviapeer_before() {
     use std::time::Duration;
@@ -2332,6 +2359,7 @@ async fn test_liveliness_subscriber_double_clientviapeer_before() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_clientviapeer_middle() {
     use std::time::Duration;
@@ -2448,6 +2476,7 @@ async fn test_liveliness_subscriber_double_clientviapeer_middle() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_clientviapeer_after() {
     use std::time::Duration;
@@ -2566,6 +2595,7 @@ async fn test_liveliness_subscriber_double_clientviapeer_after() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_clientviapeer_history_before() {
     use std::time::Duration;
@@ -2688,6 +2718,7 @@ async fn test_liveliness_subscriber_double_clientviapeer_history_before() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_clientviapeer_history_middle() {
     use std::time::Duration;
@@ -2810,6 +2841,7 @@ async fn test_liveliness_subscriber_double_clientviapeer_history_middle() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_double_clientviapeer_history_after() {
     use std::time::Duration;
@@ -2934,6 +2966,7 @@ async fn test_liveliness_subscriber_double_clientviapeer_history_after() {
 /// -------------------------------------------------------
 /// SUBGET CLIENT
 /// -------------------------------------------------------
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subget_client_before() {
     use std::time::Duration;
@@ -3026,6 +3059,7 @@ async fn test_liveliness_subget_client_before() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subget_client_middle() {
     use std::time::Duration;
@@ -3123,6 +3157,7 @@ async fn test_liveliness_subget_client_middle() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subget_client_history_before() {
     use std::time::Duration;
@@ -3219,6 +3254,7 @@ async fn test_liveliness_subget_client_history_before() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subget_client_history_middle() {
     use std::time::Duration;
@@ -3320,6 +3356,7 @@ async fn test_liveliness_subget_client_history_middle() {
 /// -------------------------------------------------------
 /// SUBGET PEER
 /// -------------------------------------------------------
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subget_peer_before() {
     use std::time::Duration;
@@ -3412,6 +3449,7 @@ async fn test_liveliness_subget_peer_before() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subget_peer_middle() {
     use std::time::Duration;
@@ -3509,6 +3547,7 @@ async fn test_liveliness_subget_peer_middle() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subget_peer_history_before() {
     use std::time::Duration;
@@ -3605,6 +3644,7 @@ async fn test_liveliness_subget_peer_history_before() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subget_peer_history_middle() {
     use std::time::Duration;
@@ -3706,6 +3746,7 @@ async fn test_liveliness_subget_peer_history_middle() {
 /// -------------------------------------------------------
 /// SUBGET ROUTER
 /// -------------------------------------------------------
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subget_router_before() {
     use std::time::Duration;
@@ -3803,6 +3844,7 @@ async fn test_liveliness_subget_router_before() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subget_router_middle() {
     use std::time::Duration;
@@ -3905,6 +3947,7 @@ async fn test_liveliness_subget_router_middle() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subget_router_history_before() {
     use std::time::Duration;
@@ -4006,6 +4049,7 @@ async fn test_liveliness_subget_router_history_before() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subget_router_history_middle() {
     use std::time::Duration;
@@ -4109,6 +4153,7 @@ async fn test_liveliness_subget_router_history_middle() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_regression_1() {
     use std::time::Duration;
@@ -4192,6 +4237,7 @@ async fn test_liveliness_regression_1() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_regression_2() {
     use std::time::Duration;
@@ -4285,6 +4331,7 @@ async fn test_liveliness_regression_2() {
     peer_sub.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_regression_2_history() {
     use std::time::Duration;
@@ -4385,6 +4432,7 @@ async fn test_liveliness_regression_2_history() {
     peer_sub.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_regression_3() {
     use std::time::Duration;
@@ -4490,6 +4538,7 @@ async fn test_liveliness_regression_3() {
     router.close().await.unwrap();
 }
 
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_issue_1470() {
     // https://github.com/eclipse-zenoh/zenoh/issues/1470
@@ -4673,6 +4722,7 @@ async fn test_liveliness_issue_1470() {
 /// -------------------------------------------------------
 /// DOUBLE UNDECLARE CLIQUE
 /// -------------------------------------------------------
+#[cfg(feature = "internal_config")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_double_undeclare_clique() {
     use std::time::Duration;
