@@ -419,7 +419,6 @@ pub mod scouting {
 /// }
 /// # }
 /// ```
-#[zenoh_macros::unstable]
 pub mod liveliness {
     pub use crate::api::liveliness::{
         Liveliness, LivelinessGetBuilder, LivelinessSubscriberBuilder, LivelinessToken,
