@@ -1574,6 +1574,8 @@ impl SessionInner {
                                     },
                                 }),
                             });
+                        } else {
+                            drop(state);
                         }
                     } else {
                         drop(state);
