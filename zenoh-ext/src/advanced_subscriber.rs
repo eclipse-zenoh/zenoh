@@ -157,25 +157,11 @@ impl<'a, 'b, 'c> AdvancedSubscriberBuilder<'a, 'b, 'c, DefaultHandler> {
     /// Add callback to AdvancedSubscriber.
     #[inline]
     #[zenoh_macros::unstable]
-    pub fn callback<Callback>(
-        self,
-        callback: Callback,
-    ) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Callback>
+    pub fn callback<F>(self, callback: F) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Callback<Sample>>
     where
-        Callback: Fn(Sample) + Send + Sync + 'static,
+        F: Fn(Sample) + Send + Sync + 'static,
     {
-        AdvancedSubscriberBuilder {
-            session: self.session,
-            key_expr: self.key_expr.map(|s| s.into_owned()),
-            origin: self.origin,
-            retransmission: self.retransmission,
-            query_target: self.query_target,
-            query_timeout: self.query_timeout,
-            history: self.history,
-            liveliness: self.liveliness,
-            meta_key_expr: self.meta_key_expr,
-            handler: callback,
-        }
+        self.with(Callback::new(Arc::new(callback)))
     }
 
     /// Add callback to `AdvancedSubscriber`.
@@ -184,12 +170,12 @@ impl<'a, 'b, 'c> AdvancedSubscriberBuilder<'a, 'b, 'c, DefaultHandler> {
     /// If your callback is also accepted by the [`callback`](AdvancedSubscriberBuilder::callback) method, we suggest you use it instead of `callback_mut`
     #[inline]
     #[zenoh_macros::unstable]
-    pub fn callback_mut<CallbackMut>(
+    pub fn callback_mut<F>(
         self,
-        callback: CallbackMut,
-    ) -> AdvancedSubscriberBuilder<'a, 'b, 'c, impl Fn(Sample) + Send + Sync + 'static>
+        callback: F,
+    ) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Callback<Sample>>
     where
-        CallbackMut: FnMut(Sample) + Send + Sync + 'static,
+        F: FnMut(Sample) + Send + Sync + 'static,
     {
         self.callback(locked(callback))
     }
