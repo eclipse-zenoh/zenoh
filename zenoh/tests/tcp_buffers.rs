@@ -19,11 +19,11 @@ fn buffer_size_config() {
     let mut config = Config::default();
     config
         .insert_json5(
-            "transport/link",
+            "transport/link/tcp",
             r#"
             {
-                tcp_tx_buffer: 65000,
-                tcp_rx_buffer: 65000,
+                so_sndbuf: 65000,
+                so_rcvbuf: 65000,
             }
             "#,
         )
@@ -42,7 +42,7 @@ fn buffer_size_endpoint() {
     config
         .insert_json5(
             "listen/endpoints",
-            r#"["tcp/[::]:0#tcp_tx_buffer=65000;tcp_rx_buffer=65000"]"#,
+            r#"["tcp/[::]:0#so_sndbuf=65000;so_rcvbuf=65000"]"#,
         )
         .unwrap();
 
@@ -54,11 +54,11 @@ fn buffer_size_endpoint_overwrite() {
     let mut config = Config::default();
     config
         .insert_json5(
-            "transport/link",
+            "transport/link/tcp",
             r#"
             {
-                tcp_tx_buffer: 0,
-                tcp_rx_buffer: 0,
+                so_sndbuf: 0,
+                so_rcvbuf: 0,
             }
             "#,
         )
@@ -67,7 +67,7 @@ fn buffer_size_endpoint_overwrite() {
     config
         .insert_json5(
             "listen/endpoints",
-            r#"["tcp/[::]:0#tcp_tx_buffer=65000;tcp_rx_buffer=65000"]"#,
+            r#"["tcp/[::]:0#so_sndbuf=65000;so_rcvbuf=65000"]"#,
         )
         .unwrap();
 
@@ -92,7 +92,7 @@ fn listen_zero_buffers() {
     config
         .insert_json5(
             "listen/endpoints",
-            r#"["tcp/[::]:0#tcp_tx_buffer=0;tcp_rx_buffer=0"]"#,
+            r#"["tcp/[::]:0#so_sndbuf=0;so_rcvbuf=0"]"#,
         )
         .unwrap();
     zenoh::open(config).wait().unwrap();
