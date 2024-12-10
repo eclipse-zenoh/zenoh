@@ -2340,8 +2340,6 @@ impl SessionInner {
         self.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
                 let session = WeakSession::new(self);
-                #[cfg(feature = "unstable")]
-                let zid = self.zid();
                 async move {
                     tokio::select! {
                         _ = tokio::time::sleep(timeout) => {
@@ -2352,7 +2350,7 @@ impl SessionInner {
                                 query.callback.call(Reply {
                                     result: Err(ReplyError::new("Timeout", Encoding::ZENOH_STRING)),
                                     #[cfg(feature = "unstable")]
-                                    replier_id: Some(zid.into()),
+                                    replier_id: Some(session.zid().into()),
                                 });
                             }
                         }
