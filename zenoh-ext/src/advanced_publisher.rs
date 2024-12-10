@@ -354,7 +354,7 @@ impl<'a> AdvancedPublisher<'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh_ext::AdvancedSubscriberBuilderExt;
+    /// use zenoh_ext::AdvancedPublisherBuilderExt;
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").advanced().await.unwrap();
@@ -389,7 +389,7 @@ impl<'a> AdvancedPublisher<'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh_ext::AdvancedSubscriberBuilderExt;
+    /// use zenoh_ext::AdvancedPublisherBuilderExt;
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").advanced().await.unwrap();
@@ -423,7 +423,7 @@ impl<'a> AdvancedPublisher<'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh_ext::AdvancedSubscriberBuilderExt;
+    /// use zenoh_ext::AdvancedPublisherBuilderExt;
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").advanced().await.unwrap();
@@ -448,7 +448,7 @@ impl<'a> AdvancedPublisher<'a> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh_ext::AdvancedSubscriberBuilderExt;
+    /// use zenoh_ext::AdvancedPublisherBuilderExt;
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").advanced().await.unwrap();
@@ -475,7 +475,7 @@ impl<'a> AdvancedPublisher<'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh_ext::AdvancedSubscriberBuilderExt;
+    /// use zenoh_ext::AdvancedPublisherBuilderExt;
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").advanced().await.unwrap();
