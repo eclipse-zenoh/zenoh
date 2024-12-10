@@ -900,21 +900,6 @@ impl<Handler> AdvancedSubscriber<Handler> {
     }
 
     /// Returns the [`EntityGlobalId`] of this AdvancedSubscriber.
-    ///
-    /// # Examples
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh_ext::AdvancedSubscriberBuilderExt;
-    ///
-    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let subscriber = session.declare_subscriber("key/expression")
-    ///     .advanced()
-    ///     .await
-    ///     .unwrap();
-    /// let subscriber_id = subscriber.id();
-    /// # }
-    /// ```
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
         self.subscriber.id()
