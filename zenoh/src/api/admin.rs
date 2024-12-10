@@ -49,9 +49,17 @@ pub static KE_ADV_PREFIX: &keyexpr = ke!("@adv");
 #[cfg(not(feature = "internal"))]
 static KE_ADV_PREFIX: &keyexpr = ke!("@adv");
 #[cfg(feature = "internal")]
+pub static KE_PUB: &keyexpr = ke!("pub");
+#[cfg(not(feature = "internal"))]
+static KE_PUB: &keyexpr = ke!("pub");
+#[cfg(feature = "internal")]
+pub static KE_SUB: &keyexpr = ke!("sub");
+#[cfg(feature = "internal")]
 pub static KE_EMPTY: &keyexpr = ke!("_");
 #[cfg(not(feature = "internal"))]
 static KE_EMPTY: &keyexpr = ke!("_");
+#[cfg(feature = "internal")]
+pub static KE_STAR: &keyexpr = ke!("*");
 #[cfg(feature = "internal")]
 pub static KE_STARSTAR: &keyexpr = ke!("**");
 #[cfg(not(feature = "internal"))]
@@ -73,7 +81,7 @@ pub(crate) fn init(session: WeakSession) {
             })),
         );
 
-        let adv_prefix = KE_ADV_PREFIX / own_zid / KE_EMPTY / KE_EMPTY / KE_AT / KE_AT;
+        let adv_prefix = KE_ADV_PREFIX / KE_PUB / own_zid / KE_EMPTY / KE_EMPTY / KE_AT / KE_AT;
 
         let _admin_adv_qabl = session.declare_queryable_inner(
             &KeyExpr::from(&adv_prefix / own_zid / KE_SESSION / KE_STARSTAR),

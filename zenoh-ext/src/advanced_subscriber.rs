@@ -24,7 +24,8 @@ use zenoh::{
     },
     sample::{Locality, Sample, SampleKind},
     session::{EntityGlobalId, EntityId},
-    Resolvable, Resolve, Session, Wait, KE_ADV_PREFIX, KE_AT, KE_EMPTY, KE_STARSTAR,
+    Resolvable, Resolve, Session, Wait, KE_ADV_PREFIX, KE_AT, KE_EMPTY, KE_PUB, KE_STAR,
+    KE_STARSTAR, KE_SUB,
 };
 use zenoh_util::{Timed, TimedEvent, Timer};
 #[zenoh_macros::unstable]
@@ -510,6 +511,7 @@ impl Timed for PeriodicQuery {
         if let Some(state) = states.sequenced_states.get_mut(&self.source_id) {
             state.pending_queries += 1;
             let query_expr = KE_ADV_PREFIX
+                / KE_STAR
                 / &self.source_id.zid().into_keyexpr()
                 / &KeyExpr::try_from(self.source_id.eid().to_string()).unwrap()
                 / KE_STARSTAR
@@ -607,6 +609,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                         {
                             state.pending_queries += 1;
                             let query_expr = KE_ADV_PREFIX
+                                / KE_STAR
                                 / &source_id.zid().into_keyexpr()
                                 / &KeyExpr::try_from(source_id.eid().to_string()).unwrap()
                                 / KE_STARSTAR
@@ -863,7 +866,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                     conf
                 .session
                 .liveliness()
-                .declare_subscriber(KE_ADV_PREFIX / KE_STARSTAR / KE_AT / &key_expr)
+                .declare_subscriber(KE_ADV_PREFIX / KE_PUB / KE_STARSTAR / KE_AT / &key_expr)
                 // .declare_subscriber(keformat!(ke_liveliness_all::formatter(), zid = 0, eid = 0, remaining = key_expr).unwrap())
                 .history(true)
                 .callback(live_callback)
@@ -878,6 +881,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
 
         let token = if conf.liveliness {
             let prefix = KE_ADV_PREFIX
+                / KE_SUB
                 / &subscriber.id().zid().into_keyexpr()
                 / &KeyExpr::try_from(subscriber.id().eid().to_string()).unwrap();
             let prefix = match meta {
@@ -959,10 +963,9 @@ impl<Handler> AdvancedSubscriber<Handler> {
 
     #[zenoh_macros::unstable]
     pub fn detect_publishers(&self) -> LivelinessSubscriberBuilder<'_, '_, DefaultHandler> {
-        self.subscriber
-            .session()
-            .liveliness()
-            .declare_subscriber(KE_ADV_PREFIX / KE_STARSTAR / KE_AT / self.subscriber.key_expr())
+        self.subscriber.session().liveliness().declare_subscriber(
+            KE_ADV_PREFIX / KE_PUB / KE_STARSTAR / KE_AT / self.subscriber.key_expr(),
+        )
     }
 
     /// Undeclares this AdvancedSubscriber

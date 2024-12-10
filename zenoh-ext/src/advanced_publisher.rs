@@ -24,7 +24,7 @@ use zenoh::{
             EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
         },
     },
-    key_expr::KeyExpr,
+    key_expr::{keyexpr, KeyExpr},
     liveliness::LivelinessToken,
     pubsub::{
         PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, Publisher,
@@ -35,8 +35,11 @@ use zenoh::{
     session::EntityGlobalId,
     Resolvable, Resolve, Result as ZResult, Session, Wait, KE_ADV_PREFIX, KE_AT, KE_EMPTY,
 };
+use zenoh_macros::ke;
 
 use crate::advanced_cache::{AdvancedCache, AdvancedCacheBuilder, CacheConfig, KE_UHLC};
+
+pub(crate) static KE_PUB: &keyexpr = ke!("pub");
 
 #[derive(PartialEq)]
 #[zenoh_macros::unstable]
@@ -251,7 +254,7 @@ impl<'a> AdvancedPublisher<'a> {
             .express(conf.is_express)
             .wait()?;
         let id = publisher.id();
-        let prefix = KE_ADV_PREFIX / &id.zid().into_keyexpr();
+        let prefix = KE_ADV_PREFIX / KE_PUB / &id.zid().into_keyexpr();
         let prefix = match conf.sequencing {
             Sequencing::SequenceNumber => {
                 prefix / &KeyExpr::try_from(id.eid().to_string()).unwrap()
