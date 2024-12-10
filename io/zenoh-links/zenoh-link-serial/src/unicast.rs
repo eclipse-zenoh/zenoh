@@ -437,7 +437,7 @@ async fn accept_read_task(
                     "Can not create a new Serial link bound to {:?}: {}",
                     src_path,
                     e
-                );
+                )
             })?;
 
             link.set_port(port);
