@@ -112,11 +112,11 @@ impl TransportUnicastUniversal {
         // block for fairly long time
         drop(transport_links);
         let droppable = msg.is_droppable();
-        let push = pipeline.push_network_message(msg);
+        let push = pipeline.push_network_message(msg.clone());
         if !push && !droppable {
             tracing::error!(
-                "Unable to push non droppable network message to {}. Closing transport!",
-                self.config.zid
+                "Unable to push non droppable network message to {}. Closing transport! Message: {:?}",
+                self.config.zid, msg
             );
             zenoh_runtime::ZRuntime::RX.spawn({
                 let transport = self.clone();
