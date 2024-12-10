@@ -243,8 +243,8 @@ impl AdminSpace {
                         }
 
                         let requested_plugins = {
-                            let cfg_guard = &admin.context.runtime.state.config.lock().0;
-                            cfg_guard.plugins().load_requests().collect::<Vec<_>>()
+                            let cfg_guard = admin.context.runtime.state.config.lock();
+                            cfg_guard.0.plugins().load_requests().collect::<Vec<_>>()
                         };
                         let mut diffs = Vec::new();
                         for plugin in active_plugins.keys() {
