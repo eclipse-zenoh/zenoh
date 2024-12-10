@@ -93,7 +93,6 @@ use crate::{
 /// }
 /// # }
 /// ```
-
 pub struct Liveliness<'a> {
     pub(crate) session: &'a Session,
 }
