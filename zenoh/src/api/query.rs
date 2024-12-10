@@ -167,7 +167,7 @@ impl QueryState {
 }
 /// The kind of accepted query replies.
 #[zenoh_macros::unstable]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Deserialize)]
 pub enum ReplyKeyExpr {
     /// Accept replies whose key expressions may not match the query key expression.
     Any,
