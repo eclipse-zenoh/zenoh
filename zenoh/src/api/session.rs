@@ -1574,19 +1574,29 @@ impl SessionInner {
                                     },
                                 }),
                             });
+                            #[cfg(feature = "unstable")]
+                            {
+                                let state = zread!(self.state);
+                                self.update_matching_status(
+                                    &state,
+                                    &sub_state.key_expr,
+                                    MatchingStatusType::Subscribers,
+                                    false,
+                                )
+                            }
                         }
                     } else {
                         drop(state);
-                    }
-                    #[cfg(feature = "unstable")]
-                    {
-                        let state = zread!(self.state);
-                        self.update_matching_status(
-                            &state,
-                            &sub_state.key_expr,
-                            MatchingStatusType::Subscribers,
-                            false,
-                        )
+                        #[cfg(feature = "unstable")]
+                        {
+                            let state = zread!(self.state);
+                            self.update_matching_status(
+                                &state,
+                                &sub_state.key_expr,
+                                MatchingStatusType::Subscribers,
+                                false,
+                            )
+                        }
                     }
                 }
                 SubscriberKind::LivelinessSubscriber => {
