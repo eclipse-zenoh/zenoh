@@ -357,7 +357,7 @@ impl Wait for AdvancedSubscriberBuilder<'_, '_, '_, Callback<Sample>, true> {
     fn wait(self) -> <Self as Resolvable>::To {
         let mut sub = AdvancedSubscriber::new(self.with_static_keys())?;
         sub.subscriber.set_background(true);
-        if let Some(liveliness_sub) = sub.liveliness_subscriber.take() {
+        if let Some(mut liveliness_sub) = sub.liveliness_subscriber.take() {
             liveliness_sub.set_background(true);
         }
         Ok(())
