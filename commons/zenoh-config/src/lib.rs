@@ -499,6 +499,10 @@ validated_struct::validator! {
                     connect_certificate: Option<String>,
                     verify_name_on_connect: Option<bool>,
                     close_link_on_expiration: Option<bool>,
+                    /// Configure TCP write buffer size
+                    pub so_sndbuf: Option<u32>,
+                    /// Configure TCP read buffer size
+                    pub so_rcvbuf: Option<u32>,
                     // Skip serializing field because they contain secrets
                     #[serde(skip_serializing)]
                     root_ca_certificate_base64: Option<SecretValue>,
@@ -511,14 +515,17 @@ validated_struct::validator! {
                     #[serde(skip_serializing)]
                     connect_certificate_base64 :  Option<SecretValue>,
                 },
+                pub tcp: #[derive(Default)]
+                TcpConf {
+                    /// Configure TCP write buffer size
+                    pub so_sndbuf: Option<u32>,
+                    /// Configure TCP read buffer size
+                    pub so_rcvbuf: Option<u32>,
+                },
                 pub unixpipe: #[derive(Default)]
                 UnixPipeConf {
                     file_access_mask: Option<u32>
                 },
-                /// Configure TCP read buffer size
-                pub tcp_rx_buffer: Option<u32>,
-                /// Configure TCP write buffer size
-                pub tcp_tx_buffer: Option<u32>,
             },
             pub shared_memory:
             ShmConf {

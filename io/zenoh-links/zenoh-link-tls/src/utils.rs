@@ -32,8 +32,8 @@ use secrecy::ExposeSecret;
 use webpki::anchor_from_trusted_cert;
 use zenoh_config::Config as ZenohConfig;
 use zenoh_link_commons::{
-    tcp::TcpSocketConfig, tls::WebPkiVerifierAnyServerName, ConfigurationInspector,
-    TCP_RX_BUFFER_SIZE, TCP_TX_BUFFER_SIZE,
+    tcp::TcpSocketConfig, tls::WebPkiVerifierAnyServerName, ConfigurationInspector, TCP_SO_RCV_BUF,
+    TCP_SO_SND_BUF,
 };
 use zenoh_protocol::core::{
     endpoint::{Address, Config},
@@ -153,17 +153,16 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
             false => ps.push((TLS_CLOSE_LINK_ON_EXPIRATION, "false")),
         }
 
-        let link_c = config.transport().link();
         let rx_buffer_size;
-        if let Some(size) = link_c.tcp_rx_buffer {
+        if let Some(size) = c.so_rcvbuf() {
             rx_buffer_size = size.to_string();
-            ps.push((TCP_RX_BUFFER_SIZE, &rx_buffer_size));
+            ps.push((TCP_SO_RCV_BUF, &rx_buffer_size));
         }
 
         let tx_buffer_size;
-        if let Some(size) = link_c.tcp_tx_buffer {
+        if let Some(size) = c.so_sndbuf() {
             tx_buffer_size = size.to_string();
-            ps.push((TCP_TX_BUFFER_SIZE, &tx_buffer_size));
+            ps.push((TCP_SO_SND_BUF, &tx_buffer_size));
         }
 
         Ok(parameters::from_iter(ps.drain(..)))
@@ -259,14 +258,14 @@ impl<'a> TlsServerConfig<'a> {
         );
 
         let mut tcp_rx_buffer_size = None;
-        if let Some(size) = config.get(TCP_RX_BUFFER_SIZE) {
+        if let Some(size) = config.get(TCP_SO_RCV_BUF) {
             tcp_rx_buffer_size = Some(
                 size.parse()
                     .map_err(|_| zerror!("Unknown TCP read buffer size argument: {}", size))?,
             );
         };
         let mut tcp_tx_buffer_size = None;
-        if let Some(size) = config.get(TCP_TX_BUFFER_SIZE) {
+        if let Some(size) = config.get(TCP_SO_SND_BUF) {
             tcp_tx_buffer_size = Some(
                 size.parse()
                     .map_err(|_| zerror!("Unknown TCP write buffer size argument: {}", size))?,
@@ -423,14 +422,14 @@ impl<'a> TlsClientConfig<'a> {
         };
 
         let mut tcp_rx_buffer_size = None;
-        if let Some(size) = config.get(TCP_RX_BUFFER_SIZE) {
+        if let Some(size) = config.get(TCP_SO_RCV_BUF) {
             tcp_rx_buffer_size = Some(
                 size.parse()
                     .map_err(|_| zerror!("Unknown TCP read buffer size argument: {}", size))?,
             );
         };
         let mut tcp_tx_buffer_size = None;
-        if let Some(size) = config.get(TCP_TX_BUFFER_SIZE) {
+        if let Some(size) = config.get(TCP_SO_SND_BUF) {
             tcp_tx_buffer_size = Some(
                 size.parse()
                     .map_err(|_| zerror!("Unknown TCP write buffer size argument: {}", size))?,

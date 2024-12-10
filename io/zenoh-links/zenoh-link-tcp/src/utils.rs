@@ -13,8 +13,7 @@
 //
 use zenoh_config::Config as ZenohConfig;
 use zenoh_link_commons::{
-    tcp::TcpSocketConfig, ConfigurationInspector, BIND_INTERFACE, TCP_RX_BUFFER_SIZE,
-    TCP_TX_BUFFER_SIZE,
+    tcp::TcpSocketConfig, ConfigurationInspector, BIND_INTERFACE, TCP_SO_RCV_BUF, TCP_SO_SND_BUF,
 };
 use zenoh_protocol::core::{parameters, Config};
 use zenoh_result::{zerror, ZResult};
@@ -25,17 +24,17 @@ pub struct TcpConfigurator;
 impl ConfigurationInspector<ZenohConfig> for TcpConfigurator {
     fn inspect_config(&self, config: &ZenohConfig) -> ZResult<String> {
         let mut ps: Vec<(&str, &str)> = vec![];
-        let c = config.transport().link();
+        let c = config.transport().link().tcp();
 
         let rx_buffer_size;
-        if let Some(size) = c.tcp_rx_buffer {
+        if let Some(size) = c.so_rcvbuf() {
             rx_buffer_size = size.to_string();
-            ps.push((TCP_RX_BUFFER_SIZE, &rx_buffer_size));
+            ps.push((TCP_SO_RCV_BUF, &rx_buffer_size));
         }
         let tx_buffer_size;
-        if let Some(size) = c.tcp_tx_buffer {
+        if let Some(size) = c.so_sndbuf() {
             tx_buffer_size = size.to_string();
-            ps.push((TCP_TX_BUFFER_SIZE, &tx_buffer_size));
+            ps.push((TCP_SO_SND_BUF, &tx_buffer_size));
         }
 
         Ok(parameters::from_iter(ps.drain(..)))
@@ -56,13 +55,13 @@ impl<'a> TcpLinkConfig<'a> {
             bind_iface: config.get(BIND_INTERFACE),
         };
 
-        if let Some(size) = config.get(TCP_RX_BUFFER_SIZE) {
+        if let Some(size) = config.get(TCP_SO_RCV_BUF) {
             tcp_config.rx_buffer_size = Some(
                 size.parse()
                     .map_err(|_| zerror!("Unknown TCP read buffer size argument: {}", size))?,
             );
         };
-        if let Some(size) = config.get(TCP_TX_BUFFER_SIZE) {
+        if let Some(size) = config.get(TCP_SO_SND_BUF) {
             tcp_config.tx_buffer_size = Some(
                 size.parse()
                     .map_err(|_| zerror!("Unknown TCP write buffer size argument: {}", size))?,
