@@ -20,7 +20,10 @@ use std::{
 };
 
 use async_trait::async_trait;
-use quinn::crypto::rustls::{QuicClientConfig, QuicServerConfig};
+use quinn::{
+    crypto::rustls::{QuicClientConfig, QuicServerConfig},
+    EndpointConfig,
+};
 use time::OffsetDateTime;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio_util::sync::CancellationToken;
@@ -324,7 +327,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         Ok(LinkUnicast(link))
     }
 
-    async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
+    async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
         let epaddr = endpoint.address();
         let epconf = endpoint.config();
 
@@ -367,15 +370,35 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .max_concurrent_bidi_streams(1_u8.into());
 
         // Initialize the Endpoint
-        let quic_endpoint = quinn::Endpoint::server(server_config, addr)
-            .map_err(|e| zerror!("Can not create a new QUIC listener on {}: {}", addr, e))?;
+        let quic_endpoint = if let Some(iface) = server_crypto.bind_iface {
+            async {
+                // Bind the UDP socket
+                let socket = tokio::net::UdpSocket::bind(addr).await?;
+                zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
+
+                // create the Endpoint with this socket
+                let runtime = quinn::default_runtime().ok_or_else(|| {
+                    std::io::Error::new(std::io::ErrorKind::Other, "no async runtime found")
+                })?;
+                ZResult::Ok(quinn::Endpoint::new_with_abstract_socket(
+                    EndpointConfig::default(),
+                    Some(server_config),
+                    runtime.wrap_udp_socket(socket.into_std()?)?,
+                    runtime,
+                )?)
+            }
+            .await
+        } else {
+            quinn::Endpoint::server(server_config, addr).map_err(Into::into)
+        }
+        .map_err(|e| zerror!("Can not create a new QUIC listener on {}: {}", addr, e))?;
 
         let local_addr = quic_endpoint
             .local_addr()
             .map_err(|e| zerror!("Can not create a new QUIC listener on {}: {}", addr, e))?;
 
         // Update the endpoint locator address
-        endpoint = EndPoint::new(
+        let endpoint = EndPoint::new(
             endpoint.protocol(),
             local_addr.to_string(),
             endpoint.metadata(),

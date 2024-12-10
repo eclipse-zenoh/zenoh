@@ -51,6 +51,7 @@ zenoh-core = { workspace = true }
 zenoh-link-commons = { workspace = true, features = ["tls"] }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
+zenoh-util = { workspace = true }
 
 [package.metadata.cargo-machete]
 ignored = ["rustls-webpki"]
