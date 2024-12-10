@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "unstable")]
 use std::collections::hash_map::Entry;
 use std::{
     collections::HashMap,
@@ -2645,7 +2644,6 @@ impl Primitives for WeakSession {
                                 SubscriberKind::LivelinessSubscriber,
                                 #[cfg(feature = "unstable")]
                                 Reliability::Reliable,
-                                #[cfg(feature = "unstable")]
                                 None,
                             );
                         }
