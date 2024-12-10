@@ -405,6 +405,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn accept_read_task(
     link: Arc<LinkUnicastSerial>,
     token: CancellationToken,
@@ -415,6 +416,7 @@ async fn accept_read_task(
     exclusive: bool,
     release_on_close: bool,
 ) -> ZResult<()> {
+    #[allow(clippy::too_many_arguments)]
     async fn receive(
         link: Arc<LinkUnicastSerial>,
         src_path: String,
