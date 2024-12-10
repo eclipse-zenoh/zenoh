@@ -433,13 +433,11 @@ async fn accept_read_task(
         tracing::trace!("Creating Serial listener on device {src_path:?}, with baudrate {baud_rate} and exclusive set as {exclusive}");
         if release_on_close {
             let port = ZSerial::new(src_path.clone(), baud_rate, exclusive).map_err(|e| {
-                let e = zerror!(
+                zerror!(
                     "Can not create a new Serial link bound to {:?}: {}",
                     src_path,
                     e
                 );
-                tracing::warn!("{}", e);
-                e
             })?;
 
             link.set_port(port);
@@ -474,7 +472,7 @@ async fn accept_read_task(
                         Ok(link) => {
                             // Communicate the new link to the initial transport manager
                             if let Err(e) = manager.send_async(LinkUnicast(link.clone())).await {
-                                tracing::error!("{}-{}: {}", file!(), line!(), e)
+                                tracing::debug!("{}-{}: {}", file!(), line!(), e)
                             }
 
                             // Ensure the creation of this link is only once
