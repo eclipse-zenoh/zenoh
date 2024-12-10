@@ -273,8 +273,30 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         } else {
             Ipv6Addr::UNSPECIFIED.into()
         };
-        let mut quic_endpoint = quinn::Endpoint::client(SocketAddr::new(ip_addr, 0))
-            .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
+
+        // Initialize the Endpoint
+        let mut quic_endpoint = if let Some(iface) = client_crypto.bind_iface {
+            async {
+                // Bind the UDP socket
+                let socket = tokio::net::UdpSocket::bind(SocketAddr::new(ip_addr, 0)).await?;
+                zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
+
+                // create the Endpoint with this socket
+                let runtime = quinn::default_runtime().ok_or_else(|| {
+                    std::io::Error::new(std::io::ErrorKind::Other, "no async runtime found")
+                })?;
+                ZResult::Ok(quinn::Endpoint::new_with_abstract_socket(
+                    EndpointConfig::default(),
+                    None,
+                    runtime.wrap_udp_socket(socket.into_std()?)?,
+                    runtime,
+                )?)
+            }
+            .await
+        } else {
+            quinn::Endpoint::client(SocketAddr::new(ip_addr, 0)).map_err(Into::into)
+        }
+        .map_err(|e| zerror!("Can not create a new QUIC link bound to {host}: {e}"))?;
 
         let quic_config: QuicClientConfig = client_crypto
             .client_config
