@@ -38,7 +38,7 @@ use {
     std::time::Duration,
     uhlc::ID,
     zenoh::handlers::{locked, DefaultHandler},
-    zenoh::internal::zlock,
+    zenoh::internal::{runtime::ZRuntime, zlock},
     zenoh::pubsub::Subscriber,
     zenoh::query::{QueryTarget, Reply, ReplyKeyExpr},
     zenoh::time::Timestamp,
@@ -570,6 +570,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
             global_pending_queries: if conf.history.is_some() { 1 } else { 0 },
             session,
             period: retransmission.as_ref().and_then(|r| {
+                let _rt = ZRuntime::Application.enter();
                 r.periodic_queries.map(|p| Period {
                     timer: Timer::new(false),
                     period: p,
