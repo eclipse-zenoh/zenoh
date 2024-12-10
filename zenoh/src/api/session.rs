@@ -1583,7 +1583,6 @@ impl SessionInner {
                     }
                 }
                 SubscriberKind::LivelinessSubscriber => {
-                    #[cfg(feature = "unstable")]
                     if kind == SubscriberKind::LivelinessSubscriber {
                         let primitives = state.primitives()?;
                         drop(state);
@@ -2235,8 +2234,6 @@ impl SessionInner {
         self.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
                 let session = WeakSession::new(self);
-                #[cfg(feature = "unstable")]
-                let zid = self.zid();
                 async move {
                     tokio::select! {
                         _ = tokio::time::sleep(timeout) => {
@@ -2252,7 +2249,7 @@ impl SessionInner {
                                 query.callback.call(Reply {
                                     result: Err(ReplyError::new("Timeout", Encoding::ZENOH_STRING)),
                                     #[cfg(feature = "unstable")]
-                                    replier_id: Some(zid.into()),
+                                    replier_id: Some(session.zid().into()),
                                 });
                             }
                         }
@@ -2602,9 +2599,6 @@ impl Primitives for WeakSession {
                     }
                 }
             }
-            #[cfg(not(feature = "unstable"))]
-            zenoh_protocol::network::DeclareBody::DeclareToken(_) => {}
-            #[cfg(feature = "unstable")]
             zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
                 let mut state = zwrite!(self.state);
                 if state.primitives.is_none() {
@@ -2629,7 +2623,6 @@ impl Primitives for WeakSession {
                                         reliability: Reliability::Reliable,
                                         #[cfg(feature = "unstable")]
                                         source_info: SourceInfo::empty(),
-                                        #[cfg(feature = "unstable")]
                                         attachment: None,
                                     }),
                                     #[cfg(feature = "unstable")]
@@ -2664,7 +2657,6 @@ impl Primitives for WeakSession {
             }
             zenoh_protocol::network::DeclareBody::UndeclareToken(m) => {
                 trace!("recv UndeclareToken {:?}", m.id);
-                #[cfg(feature = "unstable")]
                 {
                     let mut state = zwrite!(self.state);
                     if state.primitives.is_none() {
@@ -2686,7 +2678,6 @@ impl Primitives for WeakSession {
                             SubscriberKind::LivelinessSubscriber,
                             #[cfg(feature = "unstable")]
                             Reliability::Reliable,
-                            #[cfg(feature = "unstable")]
                             None,
                         );
                     } else if m.ext_wire_expr.wire_expr != WireExpr::empty() {
@@ -2710,7 +2701,6 @@ impl Primitives for WeakSession {
                                     SubscriberKind::LivelinessSubscriber,
                                     #[cfg(feature = "unstable")]
                                     Reliability::Reliable,
-                                    #[cfg(feature = "unstable")]
                                     None,
                                 );
                             }
@@ -2726,8 +2716,6 @@ impl Primitives for WeakSession {
             }
             DeclareBody::DeclareFinal(DeclareFinal) => {
                 trace!("recv DeclareFinal {:?}", msg.interest_id);
-
-                #[cfg(feature = "unstable")]
                 if let Some(interest_id) = msg.interest_id {
                     let mut state = zwrite!(self.state);
                     let _ = state.liveliness_queries.remove(&interest_id);
