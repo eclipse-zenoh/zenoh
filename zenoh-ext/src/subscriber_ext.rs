@@ -137,14 +137,15 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
 pub trait AdvancedSubscriberBuilderExt<'a, 'b, 'c, Handler> {
     /// Enable query for historical data.
     ///
-    /// History can only be retransmitted by Publishers that enable caching.
+    /// History can only be retransmitted by [`AdvancedPublishers`](crate::AdvancedPublisher) that enable [`cache`](crate::AdvancedPublisherBuilder::cache).
     #[zenoh_macros::unstable]
     fn history(self, config: HistoryConfig) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>;
 
     /// Ask for retransmission of detected lost Samples.
     ///
-    /// Retransmission can only be achieved by Publishers that enable
-    /// caching and sample_miss_detection.
+    /// Retransmission can only be achieved by [`AdvancedPublishers`](crate::AdvancedPublisher)
+    /// that enable [`cache`](crate::AdvancedPublisherBuilder::cache) and
+    /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
     #[zenoh_macros::unstable]
     fn recovery(self, conf: RecoveryConfig) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>;
 
@@ -271,7 +272,7 @@ impl<'a, 'b, 'c, Handler> AdvancedSubscriberBuilderExt<'a, 'b, 'c, Handler>
 {
     /// Enable query for historical data.
     ///
-    /// History can only be retransmitted by Publishers that enable caching.
+    /// History can only be retransmitted by [`AdvancedPublishers`](crate::AdvancedPublisher) that enable [`cache`](crate::AdvancedPublisherBuilder::cache).
     #[zenoh_macros::unstable]
     fn history(self, config: HistoryConfig) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler> {
         AdvancedSubscriberBuilder::new(self).history(config)
@@ -279,8 +280,9 @@ impl<'a, 'b, 'c, Handler> AdvancedSubscriberBuilderExt<'a, 'b, 'c, Handler>
 
     /// Ask for retransmission of detected lost Samples.
     ///
-    /// Retransmission can only be achieved by Publishers that enable
-    /// caching and sample_miss_detection.
+    /// Retransmission can only be achieved by [`AdvancedPublishers`](crate::AdvancedPublisher)
+    /// that enable [`cache`](crate::AdvancedPublisherBuilder::cache) and
+    /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
     #[zenoh_macros::unstable]
     fn recovery(self, conf: RecoveryConfig) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler> {
         AdvancedSubscriberBuilder::new(self).recovery(conf)

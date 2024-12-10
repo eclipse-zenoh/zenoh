@@ -61,8 +61,8 @@ pub struct HistoryConfig {
 impl HistoryConfig {
     /// Enable detection of late joiner publishers and query for their historical data.
     ///
-    /// Let joiner detection can only be achieved for Publishers that enable publisher_detection.
-    /// History can only be retransmitted by Publishers that enable caching.
+    /// Let joiner detection can only be achieved for [`AdvancedPublishers`](crate::AdvancedPublisher) that enable publisher_detection.
+    /// History can only be retransmitted by [`AdvancedPublishers`](crate::AdvancedPublisher) that enable [`cache`](crate::AdvancedPublisherBuilder::cache).
     #[inline]
     #[zenoh_macros::unstable]
     pub fn detect_late_publishers(mut self) -> Self {
@@ -107,7 +107,9 @@ impl RecoveryConfig {
     /// This allows to retrieve the last Sample(s) if the last Sample(s) is/are lost.
     /// So it is useful for sporadic publications but useless for periodic publications
     /// with a period smaller or equal to this period.
-    /// Retransmission can only be achieved by Publishers that also activate retransmission.
+    /// Retransmission can only be achieved by [`AdvancedPublishers`](crate::AdvancedPublisher)
+    /// that enable [`cache`](crate::AdvancedPublisherBuilder::cache) and
+    /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
     #[zenoh_macros::unstable]
     #[inline]
     pub fn periodic_queries(mut self, period: Option<Duration>) -> Self {
@@ -227,8 +229,9 @@ impl<'a, 'c, Handler> AdvancedSubscriberBuilder<'a, '_, 'c, Handler> {
 
     /// Ask for retransmission of detected lost Samples.
     ///
-    /// Retransmission can only be achieved by Publishers that enable
-    /// caching and sample_miss_detection.
+    /// Retransmission can only be achieved by [`AdvancedPublishers`](crate::AdvancedPublisher)
+    /// that enable [`cache`](crate::AdvancedPublisherBuilder::cache) and
+    /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
     #[zenoh_macros::unstable]
     #[inline]
     pub fn recovery(mut self, conf: RecoveryConfig) -> Self {
@@ -254,7 +257,7 @@ impl<'a, 'c, Handler> AdvancedSubscriberBuilder<'a, '_, 'c, Handler> {
 
     /// Enable query for historical data.
     ///
-    /// History can only be retransmitted by Publishers that enable caching.
+    /// History can only be retransmitted by [`AdvancedPublishers`](crate::AdvancedPublisher) that enable [`cache`](crate::AdvancedPublisherBuilder::cache).
     #[zenoh_macros::unstable]
     #[inline]
     pub fn history(mut self, config: HistoryConfig) -> Self {
@@ -953,6 +956,10 @@ impl<Handler> AdvancedSubscriber<Handler> {
         &mut self.receiver
     }
 
+    /// Declares a listener to detect missed samples.
+    ///
+    /// Missed samples can only be detected from [`AdvancedPublisher`](crate::AdvancedPublisher) that
+    /// enable [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
     #[zenoh_macros::unstable]
     pub fn sample_miss_listener(&self) -> SampleMissListenerBuilder<'_, DefaultHandler> {
         SampleMissListenerBuilder {
@@ -961,6 +968,10 @@ impl<Handler> AdvancedSubscriber<Handler> {
         }
     }
 
+    /// Declares a listener to detect matching publishers.
+    ///
+    /// Only [`AdvancedPublisher`](crate::AdvancedPublisher) that enable
+    /// [`publisher_detection`](crate::AdvancedPublisherBuilder::publisher_detection) can be detected.
     #[zenoh_macros::unstable]
     pub fn detect_publishers(&self) -> LivelinessSubscriberBuilder<'_, '_, DefaultHandler> {
         self.subscriber.session().liveliness().declare_subscriber(
@@ -1109,6 +1120,7 @@ impl Drop for TimestampedRepliesHandler {
     }
 }
 
+/// A struct that represent missed samples.
 #[zenoh_macros::unstable]
 pub struct Miss {
     source: EntityGlobalId,
@@ -1116,14 +1128,21 @@ pub struct Miss {
 }
 
 impl Miss {
+    /// The source of missed samples.
     pub fn source(&self) -> EntityGlobalId {
         self.source
     }
+
+    /// The number of missed samples.
     pub fn nb(&self) -> u32 {
         self.nb
     }
 }
 
+/// A listener to detect missed samples.
+///
+/// Missed samples can only be detected from [`AdvancedPublisher`](crate::AdvancedPublisher) that
+/// enable [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
 #[zenoh_macros::unstable]
 pub struct SampleMissListener<Handler> {
     id: usize,
@@ -1182,6 +1201,7 @@ impl<Handler> std::ops::DerefMut for SampleMissListener<Handler> {
     }
 }
 
+/// A [`Resolvable`] returned when undeclaring a [`SampleMissListener`].
 #[zenoh_macros::unstable]
 pub struct SampleMissHandlerUndeclaration<Handler>(SampleMissListener<Handler>);
 
@@ -1207,7 +1227,7 @@ impl<Handler> IntoFuture for SampleMissHandlerUndeclaration<Handler> {
     }
 }
 
-/// A builder for initializing a [`SampleMissHandler`].
+/// A builder for initializing a [`SampleMissListener`].
 #[zenoh_macros::unstable]
 pub struct SampleMissListenerBuilder<'a, Handler, const BACKGROUND: bool = false> {
     statesref: &'a Arc<Mutex<State>>,

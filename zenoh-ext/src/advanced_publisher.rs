@@ -114,16 +114,18 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
         }
     }
 
-    /// Allow matching Subscribers to detect lost samples and optionally ask for retransimission.
+    /// Allow matching [`AdvancedSubscribers`](crate::AdvancedSubscriber) to detect lost samples and optionally ask for retransimission.
     ///
-    /// Retransmission can only be achieved if history is enabled.
+    /// Retransmission can only be achieved if [`cache`](crate::AdvancedPublisherBuilder::cache) is enabled.
     #[zenoh_macros::unstable]
     pub fn sample_miss_detection(mut self) -> Self {
         self.sequencing = Sequencing::SequenceNumber;
         self
     }
 
-    /// Change the history size for each resource.
+    /// Attach a cache to this [`AdvancedPublisher`].
+    ///
+    /// The cache can be used for history and/or recovery.
     #[zenoh_macros::unstable]
     pub fn cache(mut self, config: CacheConfig) -> Self {
         self.cache = true;
@@ -134,9 +136,9 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
         self
     }
 
-    /// Allow this publisher to be detected by subscribers.
+    /// Allow this [`AdvancedPublisher`] to be detected by [`AdvancedSubscribers`](crate::AdvancedSubscriber).
     ///
-    /// This allows Subscribers to retrieve the local history.
+    /// This allows [`AdvancedSubscribers`](crate::AdvancedSubscriber) to retrieve the local history.
     #[zenoh_macros::unstable]
     pub fn publisher_detection(mut self) -> Self {
         self.liveliness = true;
