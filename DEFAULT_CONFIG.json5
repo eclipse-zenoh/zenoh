@@ -507,15 +507,15 @@
         /// Configure TCP write buffer size (bytes)
         // so_sndbuf: 123456,
       },
-      // Configure TCP link specific parameters
-      tcp: {
-        /// Optional configuration for TCP system buffers sizes for TCP links
-        ///
-        /// Configure TCP read buffer size (bytes)
-        // so_rcvbuf: 123456,
-        /// Configure TCP write buffer size (bytes)
-        // so_sndbuf: 123456,
-      }
+    // // Configure optional TCP link specific parameters
+    // tcp: {
+    //   /// Optional configuration for TCP system buffers sizes for TCP links
+    //   ///
+    //   /// Configure TCP read buffer size (bytes)
+    //   // so_rcvbuf: 123456,
+    //   /// Configure TCP write buffer size (bytes)
+    //   // so_sndbuf: 123456,
+    // }
     },
     /// Shared memory configuration.
     /// NOTE: shared memory can be used only if zenoh is compiled with "shared-memory" feature, otherwise
