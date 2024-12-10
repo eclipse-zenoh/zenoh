@@ -701,7 +701,8 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                     // TODO : If we already have a state associated to this discovered source
                                     // we should query with the appropriate range to avoid unnecessary retransmissions
                                     if parsed.eid() == KE_UHLC {
-                                        let states = &mut *zlock!(statesref);
+                                        let mut lock = zlock!(statesref);
+                                        let states = &mut *lock;
                                         let entry = states.timestamped_states.entry(ID::from(zid));
                                         let state = entry.or_insert(SourceState::<Timestamp> {
                                             last_delivered: None,
@@ -709,6 +710,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                             pending_samples: BTreeMap::new(),
                                         });
                                         state.pending_queries += 1;
+                                        drop(lock);
 
                                         let handler = TimestampedRepliesHandler {
                                             id: ID::from(zid),
@@ -750,7 +752,8 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                         EntityId::from_str(parsed.eid().as_str())
                                     {
                                         let source_id = EntityGlobalId::new(zid, eid);
-                                        let states = &mut *zlock!(statesref);
+                                        let mut lock = zlock!(statesref);
+                                        let states = &mut *lock;
                                         let entry = states.sequenced_states.entry(source_id);
                                         let new = matches!(&entry, Entry::Vacant(_));
                                         let state = entry.or_insert(SourceState::<u32> {
@@ -759,6 +762,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                             pending_samples: BTreeMap::new(),
                                         });
                                         state.pending_queries += 1;
+                                        drop(lock);
 
                                         let handler = SequencedRepliesHandler {
                                             source_id,
@@ -798,15 +802,17 @@ impl<Handler> AdvancedSubscriber<Handler> {
 
                                         if new {
                                             spawn_periodoic_queries!(
-                                                states,
+                                                zlock!(statesref),
                                                 source_id,
                                                 statesref.clone()
                                             );
                                         }
                                     }
                                 } else {
-                                    let states = &mut *zlock!(statesref);
+                                    let mut lock = zlock!(statesref);
+                                    let states = &mut *lock;
                                     states.global_pending_queries += 1;
+                                    drop(lock);
 
                                     let handler = InitialRepliesHandler {
                                         statesref: statesref.clone(),
