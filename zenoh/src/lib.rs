@@ -371,7 +371,7 @@ pub mod scouting {
 /// Liveliness primitives
 ///
 /// A [`LivelinessToken`](liveliness::LivelinessToken) is a token which liveliness is tied
-/// to the Zenoh [`Session`](Session) and can be monitored by remote applications.
+/// to the Zenoh [`Session`] and can be monitored by remote applications.
 ///
 /// # Examples
 /// ### Declaring a token
