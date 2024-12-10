@@ -430,3 +430,15 @@ async fn zenoh_session_close_in_background() {
     };
     ztimeout!(close_all);
 }
+
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_undeclare_subscribers_same_keyexpr() {
+    let key_expr = "test/undeclare/subscribers";
+    let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    let sub1 = session.declare_subscriber(key_expr).await.unwrap();
+    let sub2 = session.declare_subscriber(key_expr).await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+    ztimeout!(sub1.undeclare()).unwrap();
+    ztimeout!(sub2.undeclare()).unwrap();
+}
