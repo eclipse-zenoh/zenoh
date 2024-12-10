@@ -34,7 +34,7 @@ default = []
 [dependencies]
 tokio = { workspace = true, features = ["rt", "sync", "time", "macros", "io-std"] }
 futures = { workspace = true }
-zenoh = { workspace = true, features = ["unstable"], default-features = false }
+zenoh = { workspace = true, features = ["unstable", "internal_config"], default-features = false }
 clap = { workspace = true, features = ["derive"] }
 zenoh-ext = { workspace = true, features = ["unstable"] }
 
