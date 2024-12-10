@@ -15,7 +15,6 @@
 use std::{
     cell::UnsafeCell,
     collections::HashMap,
-    f32::consts::E,
     fmt,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -324,20 +323,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         let baud_rate = get_baud_rate(&endpoint);
         let exclusive = get_exclusive(&endpoint);
         let release_on_close = get_release_on_close(&endpoint);
-        tracing::trace!("Creating Serial listener on device {path:?}, with baudrate {baud_rate} and exclusive set as {exclusive}");
-
-        // Opening to check if the port exists.
-        let port = ZSerial::new(path.clone(), baud_rate, exclusive).map_err(|e| {
-            let e = zerror!(
-                "Can not create a new Serial link bound to {:?}: {}",
-                path,
-                e
-            );
-            tracing::warn!("{}", e);
-            e
-        })?;
-        // closing it.
-        drop(port);
 
         // Creating the link
         let is_connected = Arc::new(AtomicBool::new(false));
@@ -438,7 +423,7 @@ async fn accept_read_task(
         exclusive: bool,
         release_on_close: bool,
     ) -> ZResult<Arc<LinkUnicastSerial>> {
-        while !is_connected.load(Ordering::Acquire) {
+        while is_connected.load(Ordering::Acquire) {
             // The serial is already connected to nothing.
             tokio::time::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
         }
@@ -456,6 +441,8 @@ async fn accept_read_task(
             })?;
 
             link.set_port(port);
+            // Cleaning RX buffer before listening
+            link.clear_buffers()?;
         }
 
         while link.get_port_mut()?.accept().await.is_err() {
@@ -468,8 +455,6 @@ async fn accept_read_task(
         Ok(link.clone())
     }
 
-    // Cleaning RX buffer before listening
-    link.clear_buffers()?;
     tracing::trace!("Ready to accept Serial connections on: {:?}", src_path);
 
     loop {
