@@ -423,6 +423,8 @@ async fn accept_read_task(
         exclusive: bool,
         release_on_close: bool,
     ) -> ZResult<Arc<LinkUnicastSerial>> {
+        tokio::time::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
+
         while is_connected.load(Ordering::Acquire) {
             // The serial is already connected to nothing.
             tokio::time::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;

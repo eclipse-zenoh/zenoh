@@ -4381,7 +4381,7 @@ version = "1.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
  "static_assertions",
 ]
 
@@ -5043,7 +5043,7 @@ checksum = "6a5cbf750400958819fb6178eaa83bee5cd9c29a26a40cc241df8c70fdd46984"
 [[package]]
 name = "z-serial"
 version = "0.2.3"
-source = "git+https://github.com/ZettaScaleLabs/z-serial/?branch=feat/state-machine#bb00ed07424987d3fa983732741e0a1aaba24411"
+source = "git+https://github.com/ZettaScaleLabs/z-serial/?branch=feat/state-machine#d7496e671215ee04316bcb1f4b31b437d1ee87af"
 dependencies = [
  "cobs",
  "futures",
