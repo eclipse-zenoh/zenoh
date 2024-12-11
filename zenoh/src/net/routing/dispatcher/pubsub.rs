@@ -456,38 +456,38 @@ pub fn route_data(
                         reliability,
                     );
                     routed = true;
-                } else {
-                    let route = route
-                        .values()
-                        .filter(|(outface, _key_expr, _context)| {
-                            tables
-                                .hat_code
-                                .egress_filter(&tables, face, outface, &mut expr)
-                        })
-                        .cloned()
-                        .collect::<Vec<Direction>>();
+                }
+            } else {
+                let route = route
+                    .values()
+                    .filter(|(outface, _key_expr, _context)| {
+                        tables
+                            .hat_code
+                            .egress_filter(&tables, face, outface, &mut expr)
+                    })
+                    .cloned()
+                    .collect::<Vec<Direction>>();
 
-                    drop(tables);
-                    for (outface, key_expr, context) in route {
-                        #[cfg(feature = "stats")]
-                        if !admin {
-                            inc_stats!(face, tx, user, msg.payload)
-                        } else {
-                            inc_stats!(face, tx, admin, msg.payload)
-                        }
-
-                        outface.primitives.send_push(
-                            Push {
-                                wire_expr: key_expr,
-                                ext_qos: msg.ext_qos,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType { node_id: context },
-                                payload: msg.payload.clone(),
-                            },
-                            reliability,
-                        );
-                        routed = true;
+                drop(tables);
+                for (outface, key_expr, context) in route {
+                    #[cfg(feature = "stats")]
+                    if !admin {
+                        inc_stats!(face, tx, user, msg.payload)
+                    } else {
+                        inc_stats!(face, tx, admin, msg.payload)
                     }
+
+                    outface.primitives.send_push(
+                        Push {
+                            wire_expr: key_expr,
+                            ext_qos: msg.ext_qos,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType { node_id: context },
+                            payload: msg.payload.clone(),
+                        },
+                        reliability,
+                    );
+                    routed = true;
                 }
             }
         }
