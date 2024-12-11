@@ -1292,14 +1292,14 @@ mod tests {
         // Pipeline
         let tct = TransportPriorityTx::make(Bits::from(TransportSn::MAX))?;
         let priorities = vec![tct];
-        let (producer, mut consumer) =
+        let (producer, consumer) =
             TransmissionPipeline::make(CONFIG_NOT_STREAMED, priorities.as_slice());
         // Drop consumer to close the pipeline
         drop(consumer);
-        // Push a message and verify that it's rejected with an error
+
         let message: NetworkMessage = Push {
             wire_expr: "test".into(),
-            ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, false),
+            ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, true),
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::DEFAULT,
             payload: PushBody::Put(Put {
@@ -1314,6 +1314,9 @@ mod tests {
             }),
         }
         .into();
+        // First message should not be rejected as the is one batch available in the queue
+        assert!(producer.push_network_message(message.clone()).is_ok());
+        // Second message should be rejected
         assert!(producer.push_network_message(message.clone()).is_err());
 
         Ok(())
