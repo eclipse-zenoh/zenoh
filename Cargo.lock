@@ -5331,6 +5331,7 @@ dependencies = [
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
+ "zenoh-util",
 ]
 
 [[package]]
