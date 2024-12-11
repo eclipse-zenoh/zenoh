@@ -61,7 +61,7 @@ pub struct HistoryConfig {
 impl HistoryConfig {
     /// Enable detection of late joiner publishers and query for their historical data.
     ///
-    /// Let joiner detection can only be achieved for [`AdvancedPublishers`](crate::AdvancedPublisher) that enable publisher_detection.
+    /// Late joiner detection can only be achieved for [`AdvancedPublishers`](crate::AdvancedPublisher) that enable publisher_detection.
     /// History can only be retransmitted by [`AdvancedPublishers`](crate::AdvancedPublisher) that enable [`cache`](crate::AdvancedPublisherBuilder::cache).
     #[inline]
     #[zenoh_macros::unstable]
