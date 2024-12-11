@@ -398,10 +398,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     /*                TX                 */
     /*************************************/
     fn schedule(&self, msg: NetworkMessage) -> ZResult<()> {
-        match self.internal_schedule(msg) {
-            Ok(_) => Ok(()),
-            Err(err) => Err(err.into()),
-        }
+        self.internal_schedule(msg).map(|_| ())
     }
 
     fn add_debug_fields<'a, 'b: 'a, 'c>(
