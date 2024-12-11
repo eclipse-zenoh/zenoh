@@ -109,7 +109,7 @@ use crate::{
         Id,
     },
     net::{
-        primitives::Primitives,
+        primitives::{OptPrimitives, Primitives},
         routing::dispatcher::face::Face,
         runtime::{Runtime, RuntimeBuilder},
     },
@@ -2109,22 +2109,24 @@ impl SessionInner {
             }
         };
         drop(state);
-        let mut sample = info.clone().into_sample(
-            // SAFETY: the keyexpr is valid
-            unsafe { KeyExpr::from_str_unchecked("dummy") },
-            payload,
-            #[cfg(feature = "unstable")]
-            reliability,
-            attachment,
-        );
-        let zenoh_collections::single_or_vec::IntoIter { drain, last } = callbacks.into_iter();
-        for (cb, key_expr) in drain {
-            sample.key_expr = key_expr;
-            cb.call(sample.clone());
-        }
-        if let Some((cb, key_expr)) = last {
-            sample.key_expr = key_expr;
-            cb.call(sample);
+        if !callbacks.is_empty() {
+            let mut sample = info.clone().into_sample(
+                // SAFETY: the keyexpr is valid
+                unsafe { KeyExpr::from_str_unchecked("dummy") },
+                payload,
+                #[cfg(feature = "unstable")]
+                reliability,
+                attachment,
+            );
+            let zenoh_collections::single_or_vec::IntoIter { drain, last } = callbacks.into_iter();
+            for (cb, key_expr) in drain {
+                sample.key_expr = key_expr;
+                cb.call(sample.clone());
+            }
+            if let Some((cb, key_expr)) = last {
+                sample.key_expr = key_expr;
+                cb.call(sample);
+            }
         }
     }
 
@@ -2145,12 +2147,44 @@ impl SessionInner {
         attachment: Option<ZBytes>,
     ) -> ZResult<()> {
         trace!("write({:?}, [...])", key_expr);
-        let primitives = zread!(self.state).primitives()?;
         let timestamp = timestamp.or_else(|| self.runtime.new_timestamp());
         let wire_expr = key_expr.to_wire(self);
         if destination != Locality::SessionLocal {
-            primitives.send_push(
-                Push {
+            let primitives = zread!(self.state).primitives()?;
+            primitives.opt_send_push(
+                &wire_expr,
+                || { (
+                    push::ext::QoSType::new(
+                        priority.into(),
+                        congestion_control,
+                        is_express,
+                    ),
+                    match kind {
+                        SampleKind::Put => PushBody::Put(Put {
+                            timestamp,
+                            encoding: encoding.clone().into(),
+                            #[cfg(feature = "unstable")]
+                            ext_sinfo: source_info.into(),
+                            #[cfg(not(feature = "unstable"))]
+                            ext_sinfo: None,
+                            #[cfg(feature = "shared-memory")]
+                            ext_shm: None,
+                            ext_attachment: attachment.clone().map(|a| a.into()),
+                            ext_unknown: vec![],
+                            payload: payload.clone().into(),
+                        }),
+                        SampleKind::Delete => PushBody::Del(Del {
+                            timestamp,
+                            #[cfg(feature = "unstable")]
+                            ext_sinfo: source_info.into(),
+                            #[cfg(not(feature = "unstable"))]
+                            ext_sinfo: None,
+                            ext_attachment: attachment.clone().map(|a| a.into()),
+                            ext_unknown: vec![],
+                        }),
+                    },
+                    )
+                    /*Push {
                     wire_expr: wire_expr.to_owned(),
                     ext_qos: push::ext::QoSType::new(
                         priority.into(),
@@ -2183,7 +2217,8 @@ impl SessionInner {
                             ext_unknown: vec![],
                         }),
                     },
-                },
+                }*/
+            },
                 #[cfg(feature = "unstable")]
                 reliability,
                 #[cfg(not(feature = "unstable"))]
