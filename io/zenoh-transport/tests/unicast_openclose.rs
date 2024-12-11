@@ -816,7 +816,7 @@ async fn openclose_tls_only_listen_with_interface_restriction() {
         )
         .unwrap();
 
-    let connect_endpoint: EndPoint = format!("tls/{}:{}", addrs[0], 13006).parse().unwrap();
+    let connect_endpoint: EndPoint = format!("tls/{}:{}", addrs[0], 13008).parse().unwrap();
 
     // should not connect to local interface and external address
     openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
