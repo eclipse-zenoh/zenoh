@@ -288,14 +288,41 @@ impl IntoFuture for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuil
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[derive(Debug)]
 pub struct PublisherBuilder<'a, 'b> {
+    #[cfg(feature = "internal")]
+    pub session: &'a Session,
+    #[cfg(not(feature = "internal"))]
     pub(crate) session: &'a Session,
+
+    #[cfg(feature = "internal")]
+    pub key_expr: ZResult<KeyExpr<'b>>,
+    #[cfg(not(feature = "internal"))]
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
+
+    #[cfg(feature = "internal")]
+    pub encoding: Encoding,
+    #[cfg(not(feature = "internal"))]
     pub(crate) encoding: Encoding,
+    #[cfg(feature = "internal")]
+    pub congestion_control: CongestionControl,
+    #[cfg(not(feature = "internal"))]
     pub(crate) congestion_control: CongestionControl,
+    #[cfg(feature = "internal")]
+    pub priority: Priority,
+    #[cfg(not(feature = "internal"))]
     pub(crate) priority: Priority,
+    #[cfg(feature = "internal")]
+    pub is_express: bool,
+    #[cfg(not(feature = "internal"))]
     pub(crate) is_express: bool,
+    #[cfg(feature = "internal")]
+    #[cfg(feature = "unstable")]
+    pub reliability: Reliability,
+    #[cfg(not(feature = "internal"))]
     #[cfg(feature = "unstable")]
     pub(crate) reliability: Reliability,
+    #[cfg(feature = "internal")]
+    pub destination: Locality,
+    #[cfg(not(feature = "internal"))]
     pub(crate) destination: Locality,
 }
 

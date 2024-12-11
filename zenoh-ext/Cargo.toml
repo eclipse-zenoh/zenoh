@@ -38,6 +38,7 @@ tokio = { workspace = true, features = [
   "macros",
   "io-std",
 ] }
+async-trait = { workspace = true }
 bincode = { workspace = true }
 zenoh-util = { workspace = true }
 flume = { workspace = true }
@@ -45,7 +46,8 @@ futures = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 leb128 = { workspace = true }
-zenoh = { workspace = true, default-features = false }
+uhlc = { workspace = true }
+zenoh = { workspace = true, features = ["default"] }
 zenoh-macros = { workspace = true }
 
 [dev-dependencies]

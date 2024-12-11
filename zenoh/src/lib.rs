@@ -81,6 +81,21 @@ extern crate zenoh_result;
 mod api;
 mod net;
 
+#[cfg(feature = "internal")]
+pub use api::admin::KE_ADV_PREFIX;
+#[cfg(feature = "internal")]
+pub use api::admin::KE_AT;
+#[cfg(feature = "internal")]
+pub use api::admin::KE_EMPTY;
+#[cfg(feature = "internal")]
+pub use api::admin::KE_PUB;
+#[cfg(feature = "internal")]
+pub use api::admin::KE_STAR;
+#[cfg(feature = "internal")]
+pub use api::admin::KE_STARSTAR;
+#[cfg(feature = "internal")]
+pub use api::admin::KE_SUB;
+
 lazy_static::lazy_static!(
     static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
 );
@@ -172,7 +187,7 @@ pub mod key_expr {
     #[zenoh_macros::unstable]
     pub mod format {
         pub use zenoh_keyexpr::format::*;
-        pub use zenoh_macros::{kedefine, keformat, kewrite};
+        pub use zenoh_macros::{ke, kedefine, keformat, kewrite};
         pub mod macro_support {
             pub use zenoh_keyexpr::format::macro_support::*;
         }

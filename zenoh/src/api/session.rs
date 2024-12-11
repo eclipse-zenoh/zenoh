@@ -26,6 +26,9 @@ use std::{
 };
 
 use async_trait::async_trait;
+#[zenoh_macros::internal]
+use ref_cast::ref_cast_custom;
+use ref_cast::RefCastCustom;
 use tracing::{error, info, trace, warn};
 use uhlc::Timestamp;
 #[cfg(feature = "internal")]
@@ -557,12 +560,18 @@ impl fmt::Debug for SessionInner {
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// session.put("key/expression", "value").await.unwrap();
 /// # }
+#[derive(RefCastCustom)]
+#[repr(transparent)]
 pub struct Session(pub(crate) Arc<SessionInner>);
 
 impl Session {
     pub(crate) fn downgrade(&self) -> WeakSession {
         WeakSession::new(&self.0)
     }
+
+    #[cfg(feature = "internal")]
+    #[ref_cast_custom]
+    pub(crate) const fn ref_cast(from: &Arc<SessionInner>) -> &Self;
 }
 
 impl fmt::Debug for Session {
@@ -611,6 +620,11 @@ impl WeakSession {
         let mut weak = session.weak_counter.lock().unwrap();
         *weak += 1;
         Self(session.clone())
+    }
+
+    #[zenoh_macros::internal]
+    pub(crate) fn session(&self) -> &Session {
+        Session::ref_cast(&self.0)
     }
 }
 
@@ -2164,7 +2178,7 @@ impl SessionInner {
                             timestamp,
                             encoding: encoding.clone().into(),
                             #[cfg(feature = "unstable")]
-                            ext_sinfo: source_info.into(),
+                            ext_sinfo: source_info.clone().into(),
                             #[cfg(not(feature = "unstable"))]
                             ext_sinfo: None,
                             #[cfg(feature = "shared-memory")]
@@ -2176,7 +2190,7 @@ impl SessionInner {
                         SampleKind::Delete => PushBody::Del(Del {
                             timestamp,
                             #[cfg(feature = "unstable")]
-                            ext_sinfo: source_info.into(),
+                            ext_sinfo: source_info.clone().into(),
                             #[cfg(not(feature = "unstable"))]
                             ext_sinfo: None,
                             ext_attachment: attachment.clone().map(|a| a.into()),
@@ -2195,7 +2209,13 @@ impl SessionInner {
                 kind,
                 encoding: Some(encoding),
                 timestamp,
+                #[cfg(feature = "unstable")]
+                source_id: source_info.source_id,
+                #[cfg(not(feature = "unstable"))]
                 source_id: None,
+                #[cfg(feature = "unstable")]
+                source_sn: source_info.source_sn,
+                #[cfg(not(feature = "unstable"))]
                 source_sn: None,
                 qos: QoS::from(push::ext::QoSType::new(
                     priority.into(),
