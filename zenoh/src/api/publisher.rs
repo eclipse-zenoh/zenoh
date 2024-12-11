@@ -77,6 +77,7 @@ impl fmt::Debug for PublisherState {
 pub(crate) struct PublisherCache(AtomicU64);
 
 impl PublisherCache {
+    #[inline(always)]
     pub(crate) fn with_cache<R>(&self, f: impl FnOnce(&mut PublisherCacheValue) -> R) -> R {
         let cached = self.0.load(Ordering::Relaxed);
         let mut to_cache = PublisherCacheValue(cached);
@@ -108,24 +109,29 @@ impl PublisherCacheValue {
     const NO_REMOTE: u64 = 0b01;
     const NO_LOCAL: u64 = 0b10;
 
+    #[inline(always)]
     pub(crate) fn match_subscription_version(&mut self, version: u64) {
         if self.0 >> Self::VERSION_SHIFT != version {
             self.0 = version << Self::VERSION_SHIFT;
         }
     }
 
+    #[inline(always)]
     pub(crate) fn has_remote_sub(&self) -> bool {
         self.0 & Self::NO_REMOTE == 0
     }
 
+    #[inline(always)]
     pub(crate) fn set_no_remote_sub(&mut self) {
         self.0 |= Self::NO_REMOTE;
     }
 
+    #[inline(always)]
     pub(crate) fn has_local_sub(&self) -> bool {
         self.0 & Self::NO_LOCAL == 0
     }
 
+    #[inline(always)]
     pub(crate) fn set_no_local_sub(&mut self) {
         self.0 |= Self::NO_LOCAL;
     }
