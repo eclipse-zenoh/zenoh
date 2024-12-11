@@ -2176,7 +2176,7 @@ impl SessionInner {
                     ),
                     ext_tstamp: None,
                     ext_nodeid: push::ext::NodeIdType::DEFAULT,
-                    payload: match put.clone() {
+                    payload: match put {
                         Some(put) => PushBody::Put(Put {
                             timestamp,
                             encoding: put.encoding.into(),
