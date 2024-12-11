@@ -399,8 +399,8 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     /*************************************/
     fn schedule(&self, msg: NetworkMessage) -> ZResult<()> {
         match self.internal_schedule(msg) {
-            true => Ok(()),
-            false => bail!("error scheduling message!"),
+            Ok(_) => Ok(()),
+            Err(err) => Err(err.into()),
         }
     }
 

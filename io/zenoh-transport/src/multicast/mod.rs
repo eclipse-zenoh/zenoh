@@ -113,7 +113,7 @@ impl TransportMulticast {
     #[inline(always)]
     pub fn schedule(&self, message: NetworkMessage) -> ZResult<()> {
         let transport = self.get_transport()?;
-        transport.schedule(message);
+        transport.schedule(message)?;
         Ok(())
     }
 

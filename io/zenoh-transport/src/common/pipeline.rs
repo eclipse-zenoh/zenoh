@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
+    fmt,
     ops::Add,
     sync::{
         atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering},
@@ -40,7 +41,7 @@ use zenoh_protocol::{
         AtomicBatchSize, BatchSize, TransportMessage,
     },
 };
-use zenoh_sync::{event, Notifier, Waiter};
+use zenoh_sync::{event, Notifier, WaitDeadlineError, Waiter};
 
 use super::{
     batch::{Encode, WBatch},
@@ -56,6 +57,15 @@ struct StageInRefill {
     s_ref_r: RingBufferReader<WBatch, RBLEN>,
 }
 
+#[derive(Debug)]
+pub(crate) struct TransportClosed;
+impl fmt::Display for TransportClosed {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "transport closed")
+    }
+}
+impl std::error::Error for TransportClosed {}
+
 impl StageInRefill {
     fn pull(&mut self) -> Option<WBatch> {
         self.s_ref_r.pull()
@@ -65,8 +75,12 @@ impl StageInRefill {
         self.n_ref_r.wait().is_ok()
     }
 
-    fn wait_deadline(&self, instant: Instant) -> bool {
-        self.n_ref_r.wait_deadline(instant).is_ok()
+    fn wait_deadline(&self, instant: Instant) -> Result<bool, TransportClosed> {
+        match self.n_ref_r.wait_deadline(instant) {
+            Ok(()) => Ok(true),
+            Err(WaitDeadlineError::Deadline) => Ok(false),
+            Err(WaitDeadlineError::WaitError) => Err(TransportClosed),
+        }
     }
 }
 
@@ -214,9 +228,9 @@ impl Deadline {
     }
 
     #[inline]
-    fn wait(&mut self, s_ref: &StageInRefill) -> bool {
+    fn wait(&mut self, s_ref: &StageInRefill) -> Result<bool, TransportClosed> {
         match self.lazy_deadline.deadline() {
-            DeadlineSetting::Immediate => false,
+            DeadlineSetting::Immediate => Ok(false),
             DeadlineSetting::Finite(instant) => s_ref.wait_deadline(*instant),
         }
     }
@@ -243,7 +257,7 @@ impl StageIn {
         msg: &mut NetworkMessage,
         priority: Priority,
         deadline: &mut Deadline,
-    ) -> bool {
+    ) -> Result<bool, TransportClosed> {
         // Lock the current serialization batch.
         let mut c_guard = self.mutex.current();
 
@@ -264,7 +278,7 @@ impl StageIn {
                             None => {
                                 drop(c_guard);
                                 // Wait for an available batch until deadline
-                                if !deadline.wait(&self.s_ref) {
+                                if !deadline.wait(&self.s_ref)? {
                                     // Still no available batch.
                                     // Restore the sequence number and drop the message
                                     $($restore_sn)?
@@ -272,7 +286,7 @@ impl StageIn {
                                         "Zenoh message dropped because it's over the deadline {:?}: {:?}",
                                         deadline.lazy_deadline.wait_time, msg
                                     );
-                                    return false;
+                                    return Ok(false);
                                 }
                                 c_guard = self.mutex.current();
                             }
@@ -287,13 +301,13 @@ impl StageIn {
                 if !self.batching || $msg.is_express() {
                     // Move out existing batch
                     self.s_out.move_batch($batch);
-                    return true;
+                    return Ok(true);
                 } else {
                     let bytes = $batch.len();
                     *c_guard = Some($batch);
                     drop(c_guard);
                     self.s_out.notify(bytes);
-                    return true;
+                    return Ok(true);
                 }
             }};
         }
@@ -404,7 +418,7 @@ impl StageIn {
         // Clean the fragbuf
         self.fragbuf.clear();
 
-        true
+        Ok(true)
     }
 
     #[inline]
@@ -767,7 +781,10 @@ pub(crate) struct TransmissionPipelineProducer {
 
 impl TransmissionPipelineProducer {
     #[inline]
-    pub(crate) fn push_network_message(&self, mut msg: NetworkMessage) -> bool {
+    pub(crate) fn push_network_message(
+        &self,
+        mut msg: NetworkMessage,
+    ) -> Result<bool, TransportClosed> {
         // If the queue is not QoS, it means that we only have one priority with index 0.
         let (idx, priority) = if self.stage_in.len() > 1 {
             let priority = msg.priority();
@@ -1002,7 +1019,7 @@ mod tests {
                     "Pipeline Flow [>>>]: Pushed {} msgs ({payload_size} bytes)",
                     i + 1
                 );
-                queue.push_network_message(message.clone());
+                queue.push_network_message(message.clone()).unwrap();
             }
         }
 
@@ -1129,7 +1146,7 @@ mod tests {
                 println!(
                     "Pipeline Blocking [>>>]: ({id}) Scheduling message #{i} with payload size of {payload_size} bytes"
                 );
-                queue.push_network_message(message.clone());
+                queue.push_network_message(message.clone()).unwrap();
                 let c = counter.fetch_add(1, Ordering::AcqRel);
                 println!(
                     "Pipeline Blocking [>>>]: ({}) Scheduled message #{} (tot {}) with payload size of {} bytes",
@@ -1242,7 +1259,7 @@ mod tests {
                     let duration = Duration::from_millis(5_500);
                     let start = Instant::now();
                     while start.elapsed() < duration {
-                        producer.push_network_message(message.clone());
+                        producer.push_network_message(message.clone()).unwrap();
                     }
                 }
             }
