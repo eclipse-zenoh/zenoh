@@ -16,6 +16,7 @@ use zenoh_protocol::{
     network::NetworkMessage,
     transport::close,
 };
+use zenoh_result::ZResult;
 
 use super::transport::TransportUnicastUniversal;
 #[cfg(feature = "shared-memory")]
@@ -68,7 +69,7 @@ impl TransportUnicastUniversal {
         match_.full.or(match_.partial).or(match_.any)
     }
 
-    fn schedule_on_link(&self, msg: NetworkMessage) -> bool {
+    fn schedule_on_link(&self, msg: NetworkMessage) -> ZResult<bool> {
         let transport_links = self
             .links
             .read()
@@ -93,7 +94,7 @@ impl TransportUnicastUniversal {
             );
 
             // No Link found
-            return false;
+            return Ok(false);
         };
 
         let transport_link = transport_links
@@ -112,7 +113,7 @@ impl TransportUnicastUniversal {
         // block for fairly long time
         drop(transport_links);
         let droppable = msg.is_droppable();
-        let push = pipeline.push_network_message(msg);
+        let push = pipeline.push_network_message(msg)?;
         if !push && !droppable {
             tracing::error!(
                 "Unable to push non droppable network message to {}. Closing transport!",
@@ -131,22 +132,22 @@ impl TransportUnicastUniversal {
                 }
             });
         }
-        push
+        Ok(push)
     }
 
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled
     #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
     #[inline(always)]
-    pub(crate) fn internal_schedule(&self, mut msg: NetworkMessage) -> bool {
+    pub(crate) fn internal_schedule(&self, mut msg: NetworkMessage) -> ZResult<bool> {
         #[cfg(feature = "shared-memory")]
         {
             if let Err(e) = map_zmsg_to_partner(&mut msg, &self.config.shm) {
                 tracing::trace!("Failed SHM conversion: {}", e);
-                return false;
+                return Ok(false);
             }
         }
 
-        let res = self.schedule_on_link(msg);
+        let res = self.schedule_on_link(msg)?;
 
         #[cfg(feature = "stats")]
         if res {
@@ -155,7 +156,7 @@ impl TransportUnicastUniversal {
             self.stats.inc_tx_n_dropped(1);
         }
 
-        res
+        Ok(res)
     }
 }
 
