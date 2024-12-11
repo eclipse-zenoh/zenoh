@@ -315,24 +315,12 @@ impl<'a> AdvancedPublisher<'a> {
     }
 
     /// Returns the [`EntityGlobalId`] of this Publisher.
-    ///
-    /// # Examples
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    ///
-    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let publisher = session.declare_publisher("key/expression")
-    ///     .await
-    ///     .unwrap();
-    /// let publisher_id = publisher.id();
-    /// # }
-    /// ```
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
         self.publisher.id()
     }
 
+    /// Returns the [`KeyExpr`] of this Publisher.
     #[inline]
     #[zenoh_macros::unstable]
     pub fn key_expr(&self) -> &KeyExpr<'a> {
@@ -366,9 +354,10 @@ impl<'a> AdvancedPublisher<'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
+    /// use zenoh_ext::AdvancedPublisherBuilderExt;
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let publisher = session.declare_publisher("key/expression").await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression").advanced().await.unwrap();
     /// publisher.put("value").await.unwrap();
     /// # }
     /// ```
@@ -400,9 +389,10 @@ impl<'a> AdvancedPublisher<'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
+    /// use zenoh_ext::AdvancedPublisherBuilderExt;
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let publisher = session.declare_publisher("key/expression").await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression").advanced().await.unwrap();
     /// publisher.delete().await.unwrap();
     /// # }
     /// ```
@@ -433,9 +423,10 @@ impl<'a> AdvancedPublisher<'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
+    /// use zenoh_ext::AdvancedPublisherBuilderExt;
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let publisher = session.declare_publisher("key/expression").await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression").advanced().await.unwrap();
     /// let matching_subscribers: bool = publisher
     ///     .matching_status()
     ///     .await
@@ -457,9 +448,10 @@ impl<'a> AdvancedPublisher<'a> {
     /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
+    /// use zenoh_ext::AdvancedPublisherBuilderExt;
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let publisher = session.declare_publisher("key/expression").await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression").advanced().await.unwrap();
     /// let matching_listener = publisher.matching_listener().await.unwrap();
     /// while let Ok(matching_status) = matching_listener.recv_async().await {
     ///     if matching_status.matching() {
@@ -483,9 +475,10 @@ impl<'a> AdvancedPublisher<'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
+    /// use zenoh_ext::AdvancedPublisherBuilderExt;
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let publisher = session.declare_publisher("key/expression").await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression").advanced().await.unwrap();
     /// publisher.undeclare().await.unwrap();
     /// # }
     /// ```

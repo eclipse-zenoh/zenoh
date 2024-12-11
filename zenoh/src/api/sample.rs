@@ -16,7 +16,7 @@
 use std::{convert::TryFrom, fmt};
 
 use serde::{Deserialize, Serialize};
-use zenoh_config::wrappers::EntityGlobalId;
+use zenoh_config::{qos::PublisherLocalityConf, wrappers::EntityGlobalId};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Reliability;
 use zenoh_protocol::{
@@ -48,6 +48,26 @@ pub(crate) enum Locality {
     Remote,
     #[default]
     Any,
+}
+
+impl From<PublisherLocalityConf> for Locality {
+    fn from(value: PublisherLocalityConf) -> Self {
+        match value {
+            PublisherLocalityConf::SessionLocal => Self::SessionLocal,
+            PublisherLocalityConf::Remote => Self::Remote,
+            PublisherLocalityConf::Any => Self::Any,
+        }
+    }
+}
+
+impl From<Locality> for PublisherLocalityConf {
+    fn from(value: Locality) -> Self {
+        match value {
+            Locality::SessionLocal => Self::SessionLocal,
+            Locality::Remote => Self::Remote,
+            Locality::Any => Self::Any,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

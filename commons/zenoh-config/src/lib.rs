@@ -21,6 +21,7 @@
 //! Configuration to pass to `zenoh::open()` and `zenoh::scout()` functions and associated constants.
 pub mod defaults;
 mod include;
+pub mod qos;
 pub mod wrappers;
 
 #[allow(unused_imports)]
@@ -30,6 +31,7 @@ use std::{
 };
 
 use include::recursive_include;
+use qos::PublisherQoSConfList;
 use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -360,6 +362,14 @@ validated_struct::validator! {
             /// A list of key-expressions for which all included publishers will be aggregated into.
             publishers: Vec<OwnedKeyExpr>,
         },
+
+        /// Overwrite QoS options for Zenoh messages by key expression (ignores Zenoh API QoS config)
+        pub qos: #[derive(Default)]
+        QoSConfig {
+            /// A list of QoS configurations for PUT and DELETE messages by key expressions
+            publication: PublisherQoSConfList,
+        },
+
         pub transport: #[derive(Default)]
         TransportConf {
             pub unicast: TransportUnicastConf {
@@ -489,6 +499,10 @@ validated_struct::validator! {
                     connect_certificate: Option<String>,
                     verify_name_on_connect: Option<bool>,
                     close_link_on_expiration: Option<bool>,
+                    /// Configure TCP write buffer size
+                    pub so_sndbuf: Option<u32>,
+                    /// Configure TCP read buffer size
+                    pub so_rcvbuf: Option<u32>,
                     // Skip serializing field because they contain secrets
                     #[serde(skip_serializing)]
                     root_ca_certificate_base64: Option<SecretValue>,
@@ -500,6 +514,13 @@ validated_struct::validator! {
                     connect_private_key_base64 :  Option<SecretValue>,
                     #[serde(skip_serializing)]
                     connect_certificate_base64 :  Option<SecretValue>,
+                },
+                pub tcp: #[derive(Default)]
+                TcpConf {
+                    /// Configure TCP write buffer size
+                    pub so_sndbuf: Option<u32>,
+                    /// Configure TCP read buffer size
+                    pub so_rcvbuf: Option<u32>,
                 },
                 pub unixpipe: #[derive(Default)]
                 UnixPipeConf {

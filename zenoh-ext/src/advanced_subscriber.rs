@@ -61,7 +61,7 @@ pub struct HistoryConfig {
 impl HistoryConfig {
     /// Enable detection of late joiner publishers and query for their historical data.
     ///
-    /// Let joiner detection can only be achieved for [`AdvancedPublishers`](crate::AdvancedPublisher) that enable publisher_detection.
+    /// Late joiner detection can only be achieved for [`AdvancedPublishers`](crate::AdvancedPublisher) that enable publisher_detection.
     /// History can only be retransmitted by [`AdvancedPublishers`](crate::AdvancedPublisher) that enable [`cache`](crate::AdvancedPublisherBuilder::cache).
     #[inline]
     #[zenoh_macros::unstable]
@@ -950,21 +950,6 @@ impl<Handler> AdvancedSubscriber<Handler> {
     }
 
     /// Returns the [`EntityGlobalId`] of this AdvancedSubscriber.
-    ///
-    /// # Examples
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    /// use zenoh_ext::AdvancedSubscriberBuilderExt;
-    ///
-    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let subscriber = session.declare_subscriber("key/expression")
-    ///     .advanced()
-    ///     .await
-    ///     .unwrap();
-    /// let subscriber_id = subscriber.id();
-    /// # }
-    /// ```
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
         self.subscriber.id()

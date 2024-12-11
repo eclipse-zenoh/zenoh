@@ -34,7 +34,7 @@ use zenoh::{
 pub(crate) static KE_UHLC: &keyexpr = ke!("uhlc");
 #[zenoh_macros::unstable]
 kedefine!(
-    pub(crate) ke_liveliness: "@adv/${zid:*}/${eid:*}/${meta:**}/@/${remaining:**}",
+    pub(crate) ke_liveliness: "@adv/${entity:*}/${zid:*}/${eid:*}/${meta:**}/@/${remaining:**}",
 );
 
 #[zenoh_macros::unstable]

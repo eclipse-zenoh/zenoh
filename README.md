@@ -151,7 +151,7 @@ Zenoh's router is built as `target/release/zenohd`. All the examples are built i
   * run the Zenoh router with permission to perform config changes via the admin space, and with a memory storage:
 
     ```sh
-    ./target/release/zenohd --adminspace-permissions=rw --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'
+    ./target/release/zenohd --rest-http-port=8000 --adminspace-permissions=rw --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'
     ```
 
   * in another shell, get info of the zenoh router via the zenoh admin space (you may use `jq` for pretty json formatting):
@@ -246,10 +246,10 @@ By default the Zenoh router is delivered or built with 2 plugins. These may be c
 > [!WARNING]
 > Since `v0.6`, `zenohd` no longer loads every available plugin at startup. Instead, only configured plugins are loaded (after processing `--cfg` and `--plugin` options). Once `zenohd` is running, plugins can be hot-loaded and, if they support it, reconfigured at runtime by editing their configuration through the adminspace.
 
-Note that the REST plugin is added to the configuration by the default value of the `--rest-http-port` CLI argument.
-
 **[REST plugin](https://zenoh.io/docs/manual/plugin-http/)** (exposing a REST API):
 This plugin converts GET and PUT REST requests into Zenoh gets and puts respectively.
+
+Note that to activate the REST plugin on `zenohd` the CLI argument should be passed: `--rest-http-port=8000` (or any other port of your choice).
 
 **[Storages plugin](https://zenoh.io/docs/manual/plugin-storage-manager/)** (managing [backends and storages](https://zenoh.io/docs/manual/plugin-storage-manager/#backends-and-volumes))
 This plugin allows you to easily define storages. These will store key-value pairs they subscribed to, and send the most recent ones when queried. Check out [DEFAULT_CONFIG.json5](DEFAULT_CONFIG.json5) for info on how to configure them.
