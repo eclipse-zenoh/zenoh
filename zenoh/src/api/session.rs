@@ -11,10 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "unstable")]
-use std::collections::hash_map::Entry;
 use std::{
-    collections::HashMap,
+    collections::{hash_map::Entry, HashMap},
     convert::TryInto,
     fmt,
     ops::Deref,
@@ -39,11 +37,7 @@ use zenoh_config::{qos::PublisherQoSConfig, unwrap_or_default, wrappers::ZenohId
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Wait};
 use zenoh_keyexpr::keyexpr_tree::KeBoxTree;
 #[cfg(feature = "unstable")]
-use zenoh_protocol::network::{
-    declare::{DeclareToken, SubscriberId, TokenId, UndeclareToken},
-    ext,
-    interest::InterestId,
-};
+use zenoh_protocol::network::declare::SubscriberId;
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
@@ -54,10 +48,11 @@ use zenoh_protocol::{
         self,
         declare::{
             self, common::ext::WireExprType, queryable::ext::QueryableInfoType, Declare,
-            DeclareBody, DeclareKeyExpr, DeclareQueryable, DeclareSubscriber, UndeclareQueryable,
-            UndeclareSubscriber,
+            DeclareBody, DeclareKeyExpr, DeclareQueryable, DeclareSubscriber, DeclareToken,
+            TokenId, UndeclareQueryable, UndeclareSubscriber, UndeclareToken,
         },
-        interest::{InterestMode, InterestOptions},
+        ext,
+        interest::{InterestId, InterestMode, InterestOptions},
         push, request, AtomicRequestId, DeclareFinal, Interest, Mapping, Push, Request, RequestId,
         Response, ResponseFinal,
     },
@@ -78,10 +73,9 @@ use crate::api::selector::ZenohParameters;
 #[cfg(feature = "unstable")]
 use crate::api::{
     builders::querier::QuerierBuilder,
-    liveliness::Liveliness,
     matching::{MatchingListenerState, MatchingStatus, MatchingStatusType},
     querier::QuerierState,
-    query::{LivelinessQueryState, ReplyKeyExpr},
+    query::ReplyKeyExpr,
     sample::SourceInfo,
 };
 use crate::{
@@ -102,8 +96,12 @@ use crate::{
         handlers::{Callback, DefaultHandler},
         info::SessionInfo,
         key_expr::{KeyExpr, KeyExprInner},
+        liveliness::Liveliness,
         publisher::{Priority, PublisherState},
-        query::{ConsolidationMode, QueryConsolidation, QueryState, QueryTarget, Reply},
+        query::{
+            ConsolidationMode, LivelinessQueryState, QueryConsolidation, QueryState, QueryTarget,
+            Reply,
+        },
         queryable::{Query, QueryInner, QueryableState},
         sample::{DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind},
         selector::Selector,
@@ -130,7 +128,6 @@ pub(crate) struct SessionState {
     pub(crate) primitives: Option<Arc<Face>>, // @TODO replace with MaybeUninit ??
     pub(crate) expr_id_counter: AtomicExprId, // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicRequestId,
-    #[cfg(feature = "unstable")]
     pub(crate) liveliness_qid_counter: AtomicRequestId,
     pub(crate) local_resources: HashMap<ExprId, Resource>,
     pub(crate) remote_resources: HashMap<ExprId, Resource>,
@@ -139,7 +136,6 @@ pub(crate) struct SessionState {
     pub(crate) publishers: HashMap<Id, PublisherState>,
     #[cfg(feature = "unstable")]
     pub(crate) queriers: HashMap<Id, QuerierState>,
-    #[cfg(feature = "unstable")]
     pub(crate) remote_tokens: HashMap<TokenId, KeyExpr<'static>>,
     //pub(crate) publications: Vec<OwnedKeyExpr>,
     pub(crate) subscribers: HashMap<Id, Arc<SubscriberState>>,
@@ -150,7 +146,6 @@ pub(crate) struct SessionState {
     #[cfg(feature = "unstable")]
     pub(crate) matching_listeners: HashMap<Id, Arc<MatchingListenerState>>,
     pub(crate) queries: HashMap<RequestId, QueryState>,
-    #[cfg(feature = "unstable")]
     pub(crate) liveliness_queries: HashMap<InterestId, LivelinessQueryState>,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
     pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
@@ -167,7 +162,6 @@ impl SessionState {
             primitives: None,
             expr_id_counter: AtomicExprId::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
             qid_counter: AtomicRequestId::new(0),
-            #[cfg(feature = "unstable")]
             liveliness_qid_counter: AtomicRequestId::new(0),
             local_resources: HashMap::new(),
             remote_resources: HashMap::new(),
@@ -176,7 +170,6 @@ impl SessionState {
             publishers: HashMap::new(),
             #[cfg(feature = "unstable")]
             queriers: HashMap::new(),
-            #[cfg(feature = "unstable")]
             remote_tokens: HashMap::new(),
             //publications: Vec::new(),
             subscribers: HashMap::new(),
@@ -187,7 +180,6 @@ impl SessionState {
             #[cfg(feature = "unstable")]
             matching_listeners: HashMap::new(),
             queries: HashMap::new(),
-            #[cfg(feature = "unstable")]
             liveliness_queries: HashMap::new(),
             aggregated_subscribers,
             aggregated_publishers,
@@ -1041,7 +1033,6 @@ impl Session {
     ///     .unwrap();
     /// # }
     /// ```
-    #[zenoh_macros::unstable]
     pub fn liveliness(&self) -> Liveliness<'_> {
         Liveliness { session: self }
     }
@@ -1614,7 +1605,6 @@ impl SessionInner {
                     }
                 }
                 SubscriberKind::LivelinessSubscriber => {
-                    #[cfg(feature = "unstable")]
                     if kind == SubscriberKind::LivelinessSubscriber {
                         let primitives = state.primitives()?;
                         drop(state);
@@ -1736,7 +1726,6 @@ impl SessionInner {
         }
     }
 
-    #[zenoh_macros::unstable]
     pub(crate) fn declare_liveliness_inner(&self, key_expr: &KeyExpr) -> ZResult<Id> {
         tracing::trace!("declare_liveliness({:?})", key_expr);
         let id = self.runtime.next_id();
@@ -1754,7 +1743,6 @@ impl SessionInner {
         Ok(id)
     }
 
-    #[cfg(feature = "unstable")]
     pub(crate) fn declare_liveliness_subscriber_inner(
         &self,
         key_expr: &KeyExpr,
@@ -1831,7 +1819,6 @@ impl SessionInner {
                             reliability: Reliability::Reliable,
                             #[cfg(feature = "unstable")]
                             source_info: SourceInfo::empty(),
-                            #[cfg(feature = "unstable")]
                             attachment: None,
                         });
                     }
@@ -1855,7 +1842,6 @@ impl SessionInner {
         Ok(sub_state)
     }
 
-    #[zenoh_macros::unstable]
     pub(crate) fn undeclare_liveliness(&self, tid: Id) -> ZResult<()> {
         let Ok(primitives) = zread!(self.state).primitives() else {
             return Ok(());
@@ -2276,8 +2262,6 @@ impl SessionInner {
         self.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
                 let session = WeakSession::new(self);
-                #[cfg(feature = "unstable")]
-                let zid = self.zid();
                 async move {
                     tokio::select! {
                         _ = tokio::time::sleep(timeout) => {
@@ -2293,7 +2277,7 @@ impl SessionInner {
                                 query.callback.call(Reply {
                                     result: Err(ReplyError::new("Timeout", Encoding::ZENOH_STRING)),
                                     #[cfg(feature = "unstable")]
-                                    replier_id: Some(zid.into()),
+                                    replier_id: Some(session.zid().into()),
                                 });
                             }
                         }
@@ -2368,7 +2352,6 @@ impl SessionInner {
         Ok(())
     }
 
-    #[cfg(feature = "unstable")]
     pub(crate) fn liveliness_query(
         self: &Arc<Self>,
         key_expr: &KeyExpr<'_>,
@@ -2382,7 +2365,6 @@ impl SessionInner {
         self.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
                 let session = WeakSession::new(self);
-                let zid = self.zid();
                 async move {
                     tokio::select! {
                         _ = tokio::time::sleep(timeout) => {
@@ -2393,7 +2375,7 @@ impl SessionInner {
                                 query.callback.call(Reply {
                                     result: Err(ReplyError::new("Timeout", Encoding::ZENOH_STRING)),
                                     #[cfg(feature = "unstable")]
-                                    replier_id: Some(zid.into()),
+                                    replier_id: Some(session.zid().into()),
                                 });
                             }
                         }
@@ -2645,9 +2627,6 @@ impl Primitives for WeakSession {
                     }
                 }
             }
-            #[cfg(not(feature = "unstable"))]
-            zenoh_protocol::network::DeclareBody::DeclareToken(_) => {}
-            #[cfg(feature = "unstable")]
             zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
                 let mut state = zwrite!(self.state);
                 if state.primitives.is_none() {
@@ -2672,7 +2651,6 @@ impl Primitives for WeakSession {
                                         reliability: Reliability::Reliable,
                                         #[cfg(feature = "unstable")]
                                         source_info: SourceInfo::empty(),
-                                        #[cfg(feature = "unstable")]
                                         attachment: None,
                                     }),
                                     #[cfg(feature = "unstable")]
@@ -2695,7 +2673,6 @@ impl Primitives for WeakSession {
                                 SubscriberKind::LivelinessSubscriber,
                                 #[cfg(feature = "unstable")]
                                 Reliability::Reliable,
-                                #[cfg(feature = "unstable")]
                                 None,
                             );
                         }
@@ -2707,7 +2684,6 @@ impl Primitives for WeakSession {
             }
             zenoh_protocol::network::DeclareBody::UndeclareToken(m) => {
                 trace!("recv UndeclareToken {:?}", m.id);
-                #[cfg(feature = "unstable")]
                 {
                     let mut state = zwrite!(self.state);
                     if state.primitives.is_none() {
@@ -2729,7 +2705,6 @@ impl Primitives for WeakSession {
                             SubscriberKind::LivelinessSubscriber,
                             #[cfg(feature = "unstable")]
                             Reliability::Reliable,
-                            #[cfg(feature = "unstable")]
                             None,
                         );
                     } else if m.ext_wire_expr.wire_expr != WireExpr::empty() {
@@ -2753,7 +2728,6 @@ impl Primitives for WeakSession {
                                     SubscriberKind::LivelinessSubscriber,
                                     #[cfg(feature = "unstable")]
                                     Reliability::Reliable,
-                                    #[cfg(feature = "unstable")]
                                     None,
                                 );
                             }
@@ -2769,8 +2743,6 @@ impl Primitives for WeakSession {
             }
             DeclareBody::DeclareFinal(DeclareFinal) => {
                 trace!("recv DeclareFinal {:?}", msg.interest_id);
-
-                #[cfg(feature = "unstable")]
                 if let Some(interest_id) = msg.interest_id {
                     let mut state = zwrite!(self.state);
                     let _ = state.liveliness_queries.remove(&interest_id);

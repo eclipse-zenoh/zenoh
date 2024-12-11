@@ -127,17 +127,14 @@ path = "examples/z_forward.rs"
 [[example]]
 name = "z_liveliness"
 path = "examples/z_liveliness.rs"
-required-features = ["unstable"]
 
 [[example]]
 name = "z_sub_liveliness"
 path = "examples/z_sub_liveliness.rs"
-required-features = ["unstable"]
 
 [[example]]
 name = "z_get_liveliness"
 path = "examples/z_get_liveliness.rs"
-required-features = ["unstable"]
 
 [[example]]
 name = "z_pub_thr"
