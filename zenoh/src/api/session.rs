@@ -17,7 +17,7 @@ use std::{
     fmt,
     ops::Deref,
     sync::{
-        atomic::{AtomicU16, AtomicU64, Ordering},
+        atomic::{AtomicU16, Ordering},
         Arc, Mutex, RwLock,
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -97,7 +97,7 @@ use crate::{
         info::SessionInfo,
         key_expr::{KeyExpr, KeyExprInner},
         liveliness::Liveliness,
-        publisher::{Priority, PublisherState},
+        publisher::{Priority, PublisherCacheValue, PublisherState},
         query::{
             ConsolidationMode, LivelinessQueryState, QueryConsolidation, QueryState, QueryTarget,
             Reply,
@@ -2137,13 +2137,11 @@ impl SessionInner {
 
     #[allow(clippy::too_many_arguments)] // TODO fixme
     #[inline(always)]
-    pub(crate) fn resolve_put(
+    pub(crate) fn resolve_push(
         &self,
-        cache: Option<&AtomicU64>,
+        cache: &mut PublisherCacheValue,
         key_expr: &KeyExpr,
-        payload: ZBytes,
-        kind: SampleKind,
-        encoding: Encoding,
+        mut put: Option<PublicationBuilderPut>,
         congestion_control: CongestionControl,
         priority: Priority,
         is_express: bool,
@@ -2153,9 +2151,6 @@ impl SessionInner {
         #[cfg(feature = "unstable")] source_info: SourceInfo,
         attachment: Option<ZBytes>,
     ) -> ZResult<()> {
-        const NO_REMOTE_FLAG: u64 = 0b01;
-        const NO_LOCAL_FLAG: u64 = 0b10;
-        const VERSION_SHIFT: u64 = 2;
         trace!("write({:?}, [...])", key_expr);
         let state = zread!(self.state);
         let primitives = state
@@ -2163,26 +2158,14 @@ impl SessionInner {
             .as_ref()
             .cloned()
             .ok_or(SessionClosedError)?;
-        let version = state.subscription_version;
+        cache.match_subscription_version(state.subscription_version);
         drop(state);
-        let mut cached = 0;
-        let mut update_cache = None;
-        if let Some(cache) = cache {
-            let c = cache.load(Ordering::Relaxed);
-            if (c >> VERSION_SHIFT) == version {
-                cached = c;
-            } else {
-                cached = version << VERSION_SHIFT;
-            }
-            update_cache = Some(move |cached| {
-                if cached != c {
-                    let _ = cache.compare_exchange(c, cached, Ordering::Relaxed, Ordering::Relaxed);
-                }
-            });
-        }
         let timestamp = timestamp.or_else(|| self.runtime.new_timestamp());
         let wire_expr = key_expr.to_wire(self);
-        if (cached & NO_REMOTE_FLAG) == 0 && destination != Locality::SessionLocal {
+        let push_remote = cache.has_remote_sub() && destination != Locality::SessionLocal;
+        let push_local = cache.has_local_sub() && destination != Locality::Remote;
+        if push_remote {
+            let put = if push_local { put.clone() } else { put.take() };
             let remote = primitives.route_data(
                 Push {
                     wire_expr: wire_expr.to_owned(),
@@ -2193,10 +2176,10 @@ impl SessionInner {
                     ),
                     ext_tstamp: None,
                     ext_nodeid: push::ext::NodeIdType::DEFAULT,
-                    payload: match kind {
-                        SampleKind::Put => PushBody::Put(Put {
+                    payload: match put.clone() {
+                        Some(put) => PushBody::Put(Put {
                             timestamp,
-                            encoding: encoding.clone().into(),
+                            encoding: put.encoding.into(),
                             #[cfg(feature = "unstable")]
                             ext_sinfo: source_info.clone().into(),
                             #[cfg(not(feature = "unstable"))]
@@ -2205,9 +2188,9 @@ impl SessionInner {
                             ext_shm: None,
                             ext_attachment: attachment.clone().map(|a| a.into()),
                             ext_unknown: vec![],
-                            payload: payload.clone().into(),
+                            payload: put.payload.into(),
                         }),
-                        SampleKind::Delete => PushBody::Del(Del {
+                        None => PushBody::Del(Del {
                             timestamp,
                             #[cfg(feature = "unstable")]
                             ext_sinfo: source_info.clone().into(),
@@ -2224,10 +2207,14 @@ impl SessionInner {
                 Reliability::DEFAULT,
             );
             if !remote {
-                cached |= NO_REMOTE_FLAG
+                cache.set_no_remote_sub();
             }
         }
-        if (cached & NO_LOCAL_FLAG) == 0 && destination != Locality::Remote {
+        if push_local {
+            let (kind, payload, encoding) = match put {
+                Some(put) => (SampleKind::Put, put.payload, put.encoding),
+                None => (SampleKind::Delete, ZBytes::default(), Encoding::default()),
+            };
             let data_info = DataInfo {
                 kind,
                 encoding: Some(encoding),
@@ -2258,11 +2245,8 @@ impl SessionInner {
                 attachment,
             );
             if !local {
-                cached |= NO_LOCAL_FLAG;
+                cache.set_no_local_sub();
             }
-        }
-        if let Some(update) = update_cache {
-            update(cached);
         }
         Ok(())
     }
