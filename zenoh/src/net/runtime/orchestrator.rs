@@ -45,6 +45,7 @@ const RCV_BUF_SIZE: usize = u16::MAX as usize;
 const SCOUT_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
 const SCOUT_MAX_PERIOD: Duration = Duration::from_millis(8_000);
 const SCOUT_PERIOD_INCREASE_FACTOR: u32 = 2;
+const CONNECTION_TIMEOUT: Duration = Duration::from_millis(10_000);
 
 pub enum Loop {
     Continue,
@@ -350,7 +351,7 @@ impl Runtime {
             if retry_config.timeout().is_zero() || self.get_global_connect_timeout().is_zero() {
                 // try to connect and exit immediately without retry
                 if self
-                    .peer_connector(endpoint, retry_config.timeout())
+                    .peer_connector(endpoint, CONNECTION_TIMEOUT)
                     .await
                     .is_ok()
                 {
@@ -379,7 +380,7 @@ impl Runtime {
             );
             if retry_config.timeout().is_zero() || self.get_global_connect_timeout().is_zero() {
                 // try to connect and exit immediately without retry
-                if let Err(e) = self.peer_connector(endpoint, retry_config.timeout()).await {
+                if let Err(e) = self.peer_connector(endpoint, CONNECTION_TIMEOUT).await {
                     if retry_config.exit_on_failure {
                         return Err(e);
                     }
@@ -795,7 +796,7 @@ impl Runtime {
             tracing::trace!("Trying to connect to configured peer {}", peer);
             let endpoint = peer.clone();
             tokio::select! {
-                res = tokio::time::timeout(retry_config.timeout(), self.manager().open_transport_unicast(endpoint)) => {
+                res = tokio::time::timeout(CONNECTION_TIMEOUT, self.manager().open_transport_unicast(endpoint)) => {
                     match res {
                         Ok(Ok(transport)) => {
                             tracing::debug!("Successfully connected to configured peer {}", peer);
@@ -977,7 +978,6 @@ impl Runtime {
             };
 
             let endpoint = locator.to_owned().into();
-            let retry_config = self.get_connect_retry_config(&endpoint);
             let priorities = locator
                 .metadata()
                 .get(Metadata::PRIORITIES)
@@ -998,7 +998,7 @@ impl Runtime {
             {
                 if is_multicast {
                     match tokio::time::timeout(
-                        retry_config.timeout(),
+                        CONNECTION_TIMEOUT,
                         manager.open_transport_multicast(endpoint),
                     )
                     .await
@@ -1014,7 +1014,7 @@ impl Runtime {
                     }
                 } else {
                     match tokio::time::timeout(
-                        retry_config.timeout(),
+                        CONNECTION_TIMEOUT,
                         manager.open_transport_unicast(endpoint),
                     )
                     .await
