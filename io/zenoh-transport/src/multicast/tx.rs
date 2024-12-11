@@ -59,7 +59,7 @@ impl TransportMulticastInner {
         {
             if let Err(e) = map_zmsg_to_partner(&mut msg, &self.shm) {
                 tracing::trace!("Failed SHM conversion: {}", e);
-                return false;
+                return Ok(false);
             }
         }
 
