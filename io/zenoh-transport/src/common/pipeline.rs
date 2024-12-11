@@ -1191,7 +1191,7 @@ mod tests {
         timeout(TIMEOUT, check).await?;
 
         // Drain the queue (but don't drop it to avoid dropping the messages)
-        let consumer = timeout(
+        let _consumer = timeout(
             TIMEOUT,
             task::spawn_blocking(move || {
                 println!("Pipeline Blocking [---]: draining the queue");
