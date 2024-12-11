@@ -102,6 +102,7 @@ pub struct Join {
     pub next_sn: PrioritySn,
     pub ext_qos: Option<ext::QoSType>,
     pub ext_shm: Option<ext::Shm>,
+    pub ext_patch: ext::PatchType,
 }
 
 pub mod flag {
@@ -115,7 +116,10 @@ pub mod ext {
     use alloc::boxed::Box;
 
     use super::{Priority, PrioritySn};
-    use crate::{common::ZExtZBuf, zextzbuf};
+    use crate::{
+        common::{ZExtZ64, ZExtZBuf},
+        zextz64, zextzbuf,
+    };
 
     /// # QoS extension
     /// Used to announce next sn when QoS is enabled
@@ -125,6 +129,13 @@ pub mod ext {
     /// # Shm extension
     /// Used to advertise shared memory capabilities
     pub type Shm = zextzbuf!(0x2, true);
+
+    /// # Patch extension
+    /// Used to negotiate the patch version of the protocol
+    /// if not present (or 0), then protocol as released with 1.0.0
+    /// if >= 1, then fragmentation first/drop markers
+    pub type Patch = zextz64!(0x7, false); // use the same id as Init
+    pub type PatchType = crate::transport::ext::PatchType<{ Patch::ID }>;
 }
 
 impl Join {
@@ -151,6 +162,7 @@ impl Join {
             .gen_bool(0.5)
             .then_some(Box::new([PrioritySn::rand(); Priority::NUM]));
         let ext_shm = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
+        let ext_patch = ext::PatchType::rand();
 
         Self {
             version,
@@ -162,6 +174,7 @@ impl Join {
             next_sn,
             ext_qos,
             ext_shm,
+            ext_patch,
         }
     }
 }

@@ -5173,6 +5173,7 @@ dependencies = [
  "uhlc",
  "validated_struct",
  "zenoh-core",
+ "zenoh-keyexpr",
  "zenoh-macros",
  "zenoh-protocol",
  "zenoh-result",
@@ -5358,11 +5359,11 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "zenoh-config",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
- "zenoh-util",
 ]
 
 [[package]]

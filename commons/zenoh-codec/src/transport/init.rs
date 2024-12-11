@@ -52,6 +52,7 @@ where
             ext_mlink,
             ext_lowlatency,
             ext_compression,
+            ext_patch,
         } = x;
 
         // Header
@@ -64,7 +65,8 @@ where
             + (ext_auth.is_some() as u8)
             + (ext_mlink.is_some() as u8)
             + (ext_lowlatency.is_some() as u8)
-            + (ext_compression.is_some() as u8);
+            + (ext_compression.is_some() as u8)
+            + (*ext_patch != ext::PatchType::NONE) as u8;
 
         #[cfg(feature = "shared-memory")]
         {
@@ -124,6 +126,10 @@ where
         if let Some(compression) = ext_compression.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (compression, n_exts != 0))?;
+        }
+        if *ext_patch != ext::PatchType::NONE {
+            n_exts -= 1;
+            self.write(&mut *writer, (*ext_patch, n_exts != 0))?;
         }
 
         Ok(())
@@ -186,6 +192,7 @@ where
         let mut ext_mlink = None;
         let mut ext_lowlatency = None;
         let mut ext_compression = None;
+        let mut ext_patch = ext::PatchType::NONE;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -228,6 +235,11 @@ where
                     ext_compression = Some(q);
                     has_ext = ext;
                 }
+                ext::Patch::ID => {
+                    let (p, ext): (ext::PatchType, bool) = eodec.read(&mut *reader)?;
+                    ext_patch = p;
+                    has_ext = ext;
+                }
                 _ => {
                     has_ext = extension::skip(reader, "InitSyn", ext)?;
                 }
@@ -248,6 +260,7 @@ where
             ext_mlink,
             ext_lowlatency,
             ext_compression,
+            ext_patch,
         })
     }
 }
@@ -275,6 +288,7 @@ where
             ext_mlink,
             ext_lowlatency,
             ext_compression,
+            ext_patch,
         } = x;
 
         // Header
@@ -287,7 +301,8 @@ where
             + (ext_auth.is_some() as u8)
             + (ext_mlink.is_some() as u8)
             + (ext_lowlatency.is_some() as u8)
-            + (ext_compression.is_some() as u8);
+            + (ext_compression.is_some() as u8)
+            + (*ext_patch != ext::PatchType::NONE) as u8;
 
         #[cfg(feature = "shared-memory")]
         {
@@ -350,6 +365,10 @@ where
         if let Some(compression) = ext_compression.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (compression, n_exts != 0))?;
+        }
+        if *ext_patch != ext::PatchType::NONE {
+            n_exts -= 1;
+            self.write(&mut *writer, (*ext_patch, n_exts != 0))?;
         }
 
         Ok(())
@@ -415,6 +434,7 @@ where
         let mut ext_mlink = None;
         let mut ext_lowlatency = None;
         let mut ext_compression = None;
+        let mut ext_patch = ext::PatchType::NONE;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -457,6 +477,11 @@ where
                     ext_compression = Some(q);
                     has_ext = ext;
                 }
+                ext::Patch::ID => {
+                    let (p, ext): (ext::PatchType, bool) = eodec.read(&mut *reader)?;
+                    ext_patch = p;
+                    has_ext = ext;
+                }
                 _ => {
                     has_ext = extension::skip(reader, "InitAck", ext)?;
                 }
@@ -478,6 +503,7 @@ where
             ext_mlink,
             ext_lowlatency,
             ext_compression,
+            ext_patch,
         })
     }
 }
