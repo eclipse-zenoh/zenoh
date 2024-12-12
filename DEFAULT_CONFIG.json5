@@ -336,7 +336,9 @@
   /// Configure internal transport parameters
   transport: {
     unicast: {
-      /// Timeout in milliseconds when opening a link
+      /// Timeout in milliseconds when accepting a link
+      open_timeout: 10000,
+      /// Timeout in milliseconds when accepting a link
       accept_timeout: 10000,
       /// Maximum number of zenoh session in pending state while accepting
       accept_pending: 100,

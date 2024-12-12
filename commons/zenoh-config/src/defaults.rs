@@ -171,6 +171,7 @@ impl Default for ConnectConfig {
 impl Default for TransportUnicastConf {
     fn default() -> Self {
         Self {
+            open_timeout: 10_000,
             accept_timeout: 10_000,
             accept_pending: 100,
             max_sessions: 1_000,
