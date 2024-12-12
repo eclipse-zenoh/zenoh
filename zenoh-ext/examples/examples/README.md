@@ -3,6 +3,7 @@
 ## Start instructions
 
    When zenoh is built in release mode:
+
    ```bash
    ./target/release/example/<example_name>
    ```
@@ -22,12 +23,15 @@
    or retransmission.
 
    Typical usage:
+
    ```bash
-      z_advanced_pub
+   z_advanced_pub
    ```
+
    or
+
    ```bash
-      z_advanced_pub --history 10
+   z_advanced_pub --history 10
    ```
 
 ### z_advanced_sub
@@ -38,8 +42,9 @@
    sample loss and ask for retransmission.
 
    Typical usage:
+
    ```bash
-      z_advanced_sub
+   z_advanced_sub
    ```
 
 ### z_member
@@ -47,9 +52,11 @@
    Group Management example: join a group and display the received group events (Join, Leave, LeaseExpired), as well as an updated group view.
 
    Typical usage:
+
    ```bash
-      z_member
+   z_member
    ```
+
    (start/stop several in parallel)
 
 ### z_view_size
@@ -57,8 +64,9 @@
    Group Management example: join a group and wait for the group view to reach a configurable size (default: 3 members).
 
    Typical usage:
-   ```bash
-      z_view_size
-   ```
-   (start/stop several in parallel)
 
+   ```bash
+   z_view_size
+   ```
+
+   (start/stop several in parallel)
