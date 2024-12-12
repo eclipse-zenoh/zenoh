@@ -374,6 +374,8 @@ validated_struct::validator! {
         TransportConf {
             pub unicast: TransportUnicastConf {
                 /// Timeout in milliseconds when opening a link (default: 10000).
+                open_timeout: u64,
+                /// Timeout in milliseconds when accepting a link (default: 10000).
                 accept_timeout: u64,
                 /// Number of links that may stay pending during accept phase (default: 100).
                 accept_pending: usize,
