@@ -17,6 +17,7 @@ use std::{
     fmt,
     future::{IntoFuture, Ready},
     pin::Pin,
+    sync::atomic::{AtomicU64, Ordering},
     task::{Context, Poll},
 };
 
@@ -40,17 +41,20 @@ use {
     zenoh_protocol::core::Reliability,
 };
 
-use crate::api::{
-    builders::publisher::{
-        PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut,
-        PublisherDeleteBuilder, PublisherPutBuilder,
+use crate::{
+    api::{
+        builders::publisher::{
+            PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut,
+            PublisherDeleteBuilder, PublisherPutBuilder,
+        },
+        bytes::ZBytes,
+        encoding::Encoding,
+        key_expr::KeyExpr,
+        sample::{Locality, Sample, SampleFields},
+        session::{UndeclarableSealed, WeakSession},
+        Id,
     },
-    bytes::ZBytes,
-    encoding::Encoding,
-    key_expr::KeyExpr,
-    sample::{Locality, Sample, SampleFields},
-    session::{UndeclarableSealed, WeakSession},
-    Id,
+    sample::SampleKind,
 };
 
 pub(crate) struct PublisherState {
@@ -65,6 +69,80 @@ impl fmt::Debug for PublisherState {
         f.debug_struct("Publisher")
             .field("id", &self.id)
             .field("key_expr", &self.key_expr)
+            .finish()
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct PublisherCache(AtomicU64);
+
+impl PublisherCache {
+    #[inline(always)]
+    pub(crate) fn with_cache<R>(&self, f: impl FnOnce(&mut PublisherCacheValue) -> R) -> R {
+        let cached = self.0.load(Ordering::Relaxed);
+        let mut to_cache = PublisherCacheValue(cached);
+        let res = f(&mut to_cache);
+        if to_cache.0 != cached {
+            let _ = self.0.compare_exchange_weak(
+                cached,
+                to_cache.0,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            );
+        }
+        res
+    }
+}
+
+impl fmt::Debug for PublisherCache {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("PublisherCache")
+            .field(&PublisherCacheValue(self.0.load(Ordering::Relaxed)))
+            .finish()
+    }
+}
+#[derive(Default, PartialEq, Eq)]
+pub(crate) struct PublisherCacheValue(u64);
+
+impl PublisherCacheValue {
+    const VERSION_SHIFT: usize = 2;
+    const NO_REMOTE: u64 = 0b01;
+    const NO_LOCAL: u64 = 0b10;
+
+    #[inline(always)]
+    pub(crate) fn match_subscription_version(&mut self, version: u64) {
+        if self.0 >> Self::VERSION_SHIFT != version {
+            self.0 = version << Self::VERSION_SHIFT;
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn has_remote_sub(&self) -> bool {
+        self.0 & Self::NO_REMOTE == 0
+    }
+
+    #[inline(always)]
+    pub(crate) fn set_no_remote_sub(&mut self) {
+        self.0 |= Self::NO_REMOTE;
+    }
+
+    #[inline(always)]
+    pub(crate) fn has_local_sub(&self) -> bool {
+        self.0 & Self::NO_LOCAL == 0
+    }
+
+    #[inline(always)]
+    pub(crate) fn set_no_local_sub(&mut self) {
+        self.0 |= Self::NO_LOCAL;
+    }
+}
+
+impl fmt::Debug for PublisherCacheValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PublisherCacheValue")
+            .field("subscription_version", &(self.0 >> Self::VERSION_SHIFT))
+            .field("has_remote_sub", &self.has_remote_sub())
+            .field("has_local_sub", &self.has_local_sub())
             .finish()
     }
 }
@@ -101,6 +179,7 @@ impl fmt::Debug for PublisherState {
 #[derive(Debug)]
 pub struct Publisher<'a> {
     pub(crate) session: WeakSession,
+    pub(crate) cache: PublisherCache,
     pub(crate) id: Id,
     pub(crate) key_expr: KeyExpr<'a>,
     pub(crate) encoding: Encoding,
@@ -390,22 +469,14 @@ impl Sink<Sample> for Publisher<'_> {
             attachment,
             ..
         } = item.into();
-        self.session.resolve_put(
-            &self.key_expr,
-            payload,
-            kind,
-            encoding,
-            self.congestion_control,
-            self.priority,
-            self.is_express,
-            self.destination,
-            #[cfg(feature = "unstable")]
-            self.reliability,
-            None,
-            #[cfg(feature = "unstable")]
-            SourceInfo::empty(),
-            attachment,
-        )
+        match kind {
+            SampleKind::Put => self
+                .put(payload)
+                .encoding(encoding)
+                .attachment(attachment)
+                .wait(),
+            SampleKind::Delete => self.delete().attachment(attachment).wait(),
+        }
     }
 
     #[inline]
