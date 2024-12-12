@@ -31,8 +31,8 @@ use crate::{
         bytes::{OptionZBytes, ZBytes},
         encoding::Encoding,
         key_expr::KeyExpr,
-        publisher::{Priority, Publisher},
-        sample::{Locality, SampleKind},
+        publisher::{Priority, Publisher, PublisherCache, PublisherCacheValue},
+        sample::Locality,
     },
     Session,
 };
@@ -209,11 +209,10 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut
     #[inline]
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.publisher = self.publisher.apply_qos_overwrites();
-        self.publisher.session.0.resolve_put(
+        self.publisher.session.0.resolve_push(
+            &mut PublisherCacheValue::default(),
             &self.publisher.key_expr?,
-            self.kind.payload,
-            SampleKind::Put,
-            self.kind.encoding,
+            Some(self.kind),
             self.publisher.congestion_control,
             self.publisher.priority,
             self.publisher.is_express,
@@ -232,11 +231,10 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDel
     #[inline]
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.publisher = self.publisher.apply_qos_overwrites();
-        self.publisher.session.0.resolve_put(
+        self.publisher.session.0.resolve_push(
+            &mut PublisherCacheValue::default(),
             &self.publisher.key_expr?,
-            ZBytes::new(),
-            SampleKind::Delete,
-            Encoding::ZENOH_BYTES,
+            None,
             self.publisher.congestion_control,
             self.publisher.priority,
             self.publisher.is_express,
@@ -468,6 +466,7 @@ impl Wait for PublisherBuilder<'_, '_> {
             .declare_publisher_inner(key_expr.clone(), self.destination)?;
         Ok(Publisher {
             session: self.session.downgrade(),
+            cache: PublisherCache::default(),
             id,
             key_expr,
             encoding: self.encoding,
@@ -495,43 +494,45 @@ impl IntoFuture for PublisherBuilder<'_, '_> {
 
 impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
     fn wait(self) -> <Self as Resolvable>::To {
-        self.publisher.session.resolve_put(
-            &self.publisher.key_expr,
-            self.kind.payload,
-            SampleKind::Put,
-            self.kind.encoding,
-            self.publisher.congestion_control,
-            self.publisher.priority,
-            self.publisher.is_express,
-            self.publisher.destination,
-            #[cfg(feature = "unstable")]
-            self.publisher.reliability,
-            self.timestamp,
-            #[cfg(feature = "unstable")]
-            self.source_info,
-            self.attachment,
-        )
+        self.publisher.cache.with_cache(|cached| {
+            self.publisher.session.resolve_push(
+                cached,
+                &self.publisher.key_expr,
+                Some(self.kind),
+                self.publisher.congestion_control,
+                self.publisher.priority,
+                self.publisher.is_express,
+                self.publisher.destination,
+                #[cfg(feature = "unstable")]
+                self.publisher.reliability,
+                self.timestamp,
+                #[cfg(feature = "unstable")]
+                self.source_info,
+                self.attachment,
+            )
+        })
     }
 }
 
 impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
     fn wait(self) -> <Self as Resolvable>::To {
-        self.publisher.session.resolve_put(
-            &self.publisher.key_expr,
-            ZBytes::new(),
-            SampleKind::Delete,
-            Encoding::ZENOH_BYTES,
-            self.publisher.congestion_control,
-            self.publisher.priority,
-            self.publisher.is_express,
-            self.publisher.destination,
-            #[cfg(feature = "unstable")]
-            self.publisher.reliability,
-            self.timestamp,
-            #[cfg(feature = "unstable")]
-            self.source_info,
-            self.attachment,
-        )
+        self.publisher.cache.with_cache(|cached| {
+            self.publisher.session.resolve_push(
+                cached,
+                &self.publisher.key_expr,
+                None,
+                self.publisher.congestion_control,
+                self.publisher.priority,
+                self.publisher.is_express,
+                self.publisher.destination,
+                #[cfg(feature = "unstable")]
+                self.publisher.reliability,
+                self.timestamp,
+                #[cfg(feature = "unstable")]
+                self.source_info,
+                self.attachment,
+            )
+        })
     }
 }
 

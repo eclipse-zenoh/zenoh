@@ -97,7 +97,7 @@ use crate::{
         info::SessionInfo,
         key_expr::{KeyExpr, KeyExprInner},
         liveliness::Liveliness,
-        publisher::{Priority, PublisherState},
+        publisher::{Priority, PublisherCacheValue, PublisherState},
         query::{
             ConsolidationMode, LivelinessQueryState, QueryConsolidation, QueryState, QueryTarget,
             Reply,
@@ -125,6 +125,7 @@ zconfigurable! {
 }
 
 pub(crate) struct SessionState {
+    pub(crate) subscription_version: u64,
     pub(crate) primitives: Option<Arc<Face>>, // @TODO replace with MaybeUninit ??
     pub(crate) expr_id_counter: AtomicExprId, // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicRequestId,
@@ -159,6 +160,7 @@ impl SessionState {
         publisher_qos_tree: KeBoxTree<PublisherQoSConfig>,
     ) -> SessionState {
         SessionState {
+            subscription_version: 0,
             primitives: None,
             expr_id_counter: AtomicExprId::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
             qid_counter: AtomicRequestId::new(0),
@@ -1473,6 +1475,7 @@ impl SessionInner {
         callback: Callback<Sample>,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
+        state.subscription_version += 1;
         tracing::trace!("declare_subscriber({:?})", key_expr);
         let id = self.runtime.next_id();
         let (sub_state, declared_sub) = state.register_subscriber(id, key_expr, origin, callback);
@@ -2061,11 +2064,11 @@ impl SessionInner {
         kind: SubscriberKind,
         #[cfg(feature = "unstable")] reliability: Reliability,
         attachment: Option<ZBytes>,
-    ) {
+    ) -> bool {
         let mut callbacks = SingleOrVec::default();
         let state = zread!(self.state);
         if state.primitives.is_none() {
-            return; // Session closing or closed
+            return false; // Session closing or closed
         }
         if key_expr.suffix.is_empty() {
             match state.get_res(&key_expr.scope, key_expr.mapping, local) {
@@ -2083,11 +2086,11 @@ impl SessionInner {
                         "Received Data for `{}`, which isn't a key expression",
                         prefix
                     );
-                    return;
+                    return false;
                 }
                 None => {
                     tracing::error!("Received Data for unknown expr_id: {}", key_expr.scope);
-                    return;
+                    return false;
                 }
             }
         } else {
@@ -2104,11 +2107,14 @@ impl SessionInner {
                 }
                 Err(err) => {
                     tracing::error!("Received Data for unknown key_expr: {}", err);
-                    return;
+                    return false;
                 }
             }
         };
         drop(state);
+        if callbacks.is_empty() {
+            return false;
+        }
         let mut sample = info.clone().into_sample(
             // SAFETY: the keyexpr is valid
             unsafe { KeyExpr::from_str_unchecked("dummy") },
@@ -2126,15 +2132,16 @@ impl SessionInner {
             sample.key_expr = key_expr;
             cb.call(sample);
         }
+        true
     }
 
     #[allow(clippy::too_many_arguments)] // TODO fixme
-    pub(crate) fn resolve_put(
+    #[inline(always)]
+    pub(crate) fn resolve_push(
         &self,
+        cache: &mut PublisherCacheValue,
         key_expr: &KeyExpr,
-        payload: ZBytes,
-        kind: SampleKind,
-        encoding: Encoding,
+        mut put: Option<PublicationBuilderPut>,
         congestion_control: CongestionControl,
         priority: Priority,
         is_express: bool,
@@ -2145,11 +2152,21 @@ impl SessionInner {
         attachment: Option<ZBytes>,
     ) -> ZResult<()> {
         trace!("write({:?}, [...])", key_expr);
-        let primitives = zread!(self.state).primitives()?;
+        let state = zread!(self.state);
+        let primitives = state
+            .primitives
+            .as_ref()
+            .cloned()
+            .ok_or(SessionClosedError)?;
+        cache.match_subscription_version(state.subscription_version);
+        drop(state);
         let timestamp = timestamp.or_else(|| self.runtime.new_timestamp());
         let wire_expr = key_expr.to_wire(self);
-        if destination != Locality::SessionLocal {
-            primitives.send_push(
+        let push_remote = cache.has_remote_sub() && destination != Locality::SessionLocal;
+        let push_local = cache.has_local_sub() && destination != Locality::Remote;
+        if push_remote {
+            let put = if push_local { put.clone() } else { put.take() };
+            let remote = primitives.route_data(
                 Push {
                     wire_expr: wire_expr.to_owned(),
                     ext_qos: push::ext::QoSType::new(
@@ -2159,10 +2176,10 @@ impl SessionInner {
                     ),
                     ext_tstamp: None,
                     ext_nodeid: push::ext::NodeIdType::DEFAULT,
-                    payload: match kind {
-                        SampleKind::Put => PushBody::Put(Put {
+                    payload: match put {
+                        Some(put) => PushBody::Put(Put {
                             timestamp,
-                            encoding: encoding.clone().into(),
+                            encoding: put.encoding.into(),
                             #[cfg(feature = "unstable")]
                             ext_sinfo: source_info.clone().into(),
                             #[cfg(not(feature = "unstable"))]
@@ -2171,9 +2188,9 @@ impl SessionInner {
                             ext_shm: None,
                             ext_attachment: attachment.clone().map(|a| a.into()),
                             ext_unknown: vec![],
-                            payload: payload.clone().into(),
+                            payload: put.payload.into(),
                         }),
-                        SampleKind::Delete => PushBody::Del(Del {
+                        None => PushBody::Del(Del {
                             timestamp,
                             #[cfg(feature = "unstable")]
                             ext_sinfo: source_info.clone().into(),
@@ -2189,8 +2206,15 @@ impl SessionInner {
                 #[cfg(not(feature = "unstable"))]
                 Reliability::DEFAULT,
             );
+            if !remote {
+                cache.set_no_remote_sub();
+            }
         }
-        if destination != Locality::Remote {
+        if push_local {
+            let (kind, payload, encoding) = match put {
+                Some(put) => (SampleKind::Put, put.payload, put.encoding),
+                None => (SampleKind::Delete, ZBytes::default(), Encoding::default()),
+            };
             let data_info = DataInfo {
                 kind,
                 encoding: Some(encoding),
@@ -2210,7 +2234,7 @@ impl SessionInner {
                 )),
             };
 
-            self.execute_subscriber_callbacks(
+            let local = self.execute_subscriber_callbacks(
                 true,
                 &wire_expr,
                 Some(data_info),
@@ -2220,6 +2244,9 @@ impl SessionInner {
                 reliability,
                 attachment,
             );
+            if !local {
+                cache.set_no_local_sub();
+            }
         }
         Ok(())
     }
@@ -2527,9 +2554,10 @@ impl Primitives for WeakSession {
             }
             zenoh_protocol::network::DeclareBody::DeclareSubscriber(m) => {
                 trace!("recv DeclareSubscriber {} {:?}", m.id, m.wire_expr);
+                let mut state = zwrite!(self.state);
+                state.subscription_version += 1;
                 #[cfg(feature = "unstable")]
                 {
-                    let mut state = zwrite!(self.state);
                     if state.primitives.is_none() {
                         return; // Session closing or closed
                     }
@@ -2772,7 +2800,7 @@ impl Primitives for WeakSession {
                     #[cfg(feature = "unstable")]
                     _reliability,
                     m.ext_attachment.map(Into::into),
-                )
+                );
             }
             PushBody::Del(m) => {
                 let info = DataInfo {
@@ -2792,7 +2820,7 @@ impl Primitives for WeakSession {
                     #[cfg(feature = "unstable")]
                     _reliability,
                     m.ext_attachment.map(Into::into),
-                )
+                );
             }
         }
     }
