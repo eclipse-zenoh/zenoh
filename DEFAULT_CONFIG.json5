@@ -336,7 +336,7 @@
   /// Configure internal transport parameters
   transport: {
     unicast: {
-      /// Timeout in milliseconds when accepting a link
+      /// Timeout in milliseconds when opening a link
       open_timeout: 10000,
       /// Timeout in milliseconds when accepting a link
       accept_timeout: 10000,
