@@ -33,22 +33,21 @@ ________________________________________________________________________
 | header |-opt-padding-|       elem        |       elem        | ..... |
 
 */
-
 struct InnerLayout<T: IStable<ContainsIndirections = stabby::abi::B0>> {
     _phantom: PhantomData<T>,
 }
 
 impl<T: IStable<ContainsIndirections = stabby::abi::B0>> InnerLayout<T> {
-    const fn header_with_padding() -> usize {
-        size_of::<MessageHeader>() + Self::header_padding()
+    const fn header_with_padding<THeader>() -> usize {
+        size_of::<THeader>() + Self::header_padding::<THeader>()
     }
 
-    const fn header_padding() -> usize {
-        if size_of::<MessageHeader>() > align_of::<T>() {
-            return (align_of::<T>() - (size_of::<MessageHeader>() % align_of::<T>()))
+    const fn header_padding<THeader>() -> usize {
+        if size_of::<THeader>() > align_of::<T>() {
+            return (align_of::<T>() - (size_of::<THeader>() % align_of::<T>()))
                 % align_of::<T>();
-        } else if size_of::<MessageHeader>() < align_of::<T>() {
-            return align_of::<T>() - size_of::<MessageHeader>();
+        } else if size_of::<THeader>() < align_of::<T>() {
+            return align_of::<T>() - size_of::<THeader>();
         }
         0
     }
@@ -64,25 +63,31 @@ impl<T: IStable<ContainsIndirections = stabby::abi::B0>> InnerLayout<T> {
     }
 }
 
+
+#[repr(C)]
+struct ChannelHeader {
+    // free data in storage units
+    pub free: AtomicUsize,
+}
+
 pub struct ChannelData<'a, T: IStable<ContainsIndirections = stabby::abi::B0> + 'a> {
     // free data in storage units
-    pub free: &'a mut AtomicUsize,
+    pub header:
 
     pub pop_pos: usize,
     pub push_pos: usize,
 
     /*
     Shared data structure:
-    ___________________________________________________
-    | 1. self.data | 2. rollover | 3. --- | self.free |
+    ______________________________________________________
+    | 1. self.data | 2. rollover | 3. --- | 4. self.free |
 
     1:
         - aligned for T
         - size is a multiply of alignment
     2: same layout as 1
     3: padding to align self.free
-    4: properly aligned
-
+    4: properly aligned self.free
     */
     pub data: &'a mut [u8],
 
@@ -202,5 +207,31 @@ pub struct Rx<'a, T: IStable<ContainsIndirections = stabby::abi::B0>> {
 impl<'a, T: IStable<ContainsIndirections = stabby::abi::B0>> Rx<'a, T> {
     pub fn receive(&mut self) -> Option<Vec<T>> {
         self.data.pop()
+    }
+}
+
+impl<'a, T: IStable<ContainsIndirections = stabby::abi::B0> + 'a> TryInto<ChannelData<'a, T>> for &'a mut [T] {
+    type Error = ();
+
+    fn try_into(self) -> Result<ChannelData<'a, T>, Self::Error> {
+        // todo: validate alignment for T
+
+        let total_bytes = InnerLayout::byte_len(self);
+        
+        let header_with_padding = InnerLayout::header_with_padding::<AtomicUsize>()
+
+        let data_bytes = total_bytes / 2 - size_of::<AtomicUsize>();
+        
+
+
+        let data = self
+        
+
+        let data_len = data_bytes / size_of::<T>();
+
+        let data = &mut self[0..data_len];
+        let rollover = &mut self[data_len..data_len*2];
+        let free = (&mut self[data_len*2]) as *mut T
+
     }
 }
