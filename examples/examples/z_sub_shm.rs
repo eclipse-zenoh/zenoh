@@ -14,11 +14,10 @@
 use std::borrow::Cow;
 
 use clap::Parser;
-use zenoh::{bytes::ZBytes, config::Config, key_expr::KeyExpr};
-use zenoh_examples::CommonArgs;
-
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
 use zenoh::shm::{zshm, zshmmut};
+use zenoh::{bytes::ZBytes, config::Config, key_expr::KeyExpr};
+use zenoh_examples::CommonArgs;
 
 #[tokio::main]
 async fn main() {
