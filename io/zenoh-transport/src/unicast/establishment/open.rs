@@ -603,35 +603,38 @@ pub(crate) async fn open_link(
         .min(link.config.batch.mtu)
         .min(batch_size::UNICAST);
 
-    let mut state = State {
-        transport: StateTransport {
-            batch_size,
-            resolution: manager.config.resolution,
-            ext_qos: ext::qos::StateOpen::new(manager.config.unicast.is_qos, &endpoint)?,
-            #[cfg(feature = "transport_multilink")]
-            ext_mlink: manager
-                .state
-                .unicast
-                .multilink
-                .open(manager.config.unicast.max_links > 1),
-            #[cfg(feature = "shared-memory")]
-            ext_shm: ext::shm::StateOpen::new(),
-            ext_lowlatency: ext::lowlatency::StateOpen::new(manager.config.unicast.is_lowlatency),
-            ext_patch: ext::patch::StateOpen::new(),
-        },
-        #[cfg(any(feature = "transport_auth", feature = "transport_compression"))]
-        link: StateLink {
-            #[cfg(feature = "transport_auth")]
-            ext_auth: manager
-                .state
-                .unicast
-                .authenticator
-                .open(&mut *zasynclock!(manager.prng)),
-            #[cfg(feature = "transport_compression")]
-            ext_compression: ext::compression::StateOpen::new(
-                manager.config.unicast.is_compression,
-            ),
-        },
+    let mut state = {
+        #[cfg(feature = "transport_auth")]
+        let mut prng = zasynclock!(manager.prng);
+
+        State {
+            transport: StateTransport {
+                batch_size,
+                resolution: manager.config.resolution,
+                ext_qos: ext::qos::StateOpen::new(manager.config.unicast.is_qos, &endpoint)?,
+                #[cfg(feature = "transport_multilink")]
+                ext_mlink: manager
+                    .state
+                    .unicast
+                    .multilink
+                    .open(manager.config.unicast.max_links > 1),
+                #[cfg(feature = "shared-memory")]
+                ext_shm: ext::shm::StateOpen::new(),
+                ext_lowlatency: ext::lowlatency::StateOpen::new(
+                    manager.config.unicast.is_lowlatency,
+                ),
+                ext_patch: ext::patch::StateOpen::new(),
+            },
+            #[cfg(any(feature = "transport_auth", feature = "transport_compression"))]
+            link: StateLink {
+                #[cfg(feature = "transport_auth")]
+                ext_auth: manager.state.unicast.authenticator.open(&mut *prng),
+                #[cfg(feature = "transport_compression")]
+                ext_compression: ext::compression::StateOpen::new(
+                    manager.config.unicast.is_compression,
+                ),
+            },
+        }
     };
 
     // Init handshake
