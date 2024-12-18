@@ -67,6 +67,8 @@ pub struct Request {
 pub mod ext {
     use core::{num::NonZeroU32, time::Duration};
 
+    use serde::Deserialize;
+
     use crate::{
         common::{ZExtZ64, ZExtZBuf},
         zextz64, zextzbuf,
@@ -91,7 +93,7 @@ pub mod ext {
     // ```
     // The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
     #[repr(u8)]
-    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize)]
     pub enum QueryTarget {
         /// Let Zenoh find the BestMatching queryable capabale of serving the query.
         #[default]
