@@ -121,7 +121,7 @@ fn propagate_simple_queryable(
                             ext_info: info,
                         }),
                     },
-                    res.expr(),
+                    res.expr_to_string(),
                 ),
             );
         }
@@ -194,7 +194,7 @@ fn propagate_forget_simple_queryable(
                             ext_wire_expr: WireExprType::null(),
                         }),
                     },
-                    res.expr(),
+                    res.expr_to_string(),
                 ),
             );
         }
@@ -238,7 +238,7 @@ pub(super) fn undeclare_simple_queryable(
                                 ext_wire_expr: WireExprType::null(),
                             }),
                         },
-                        res.expr(),
+                        res.expr_to_string(),
                     ),
                 );
             }
