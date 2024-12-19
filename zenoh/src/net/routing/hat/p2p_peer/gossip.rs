@@ -96,7 +96,7 @@ pub(super) struct Network {
     pub(super) router_peers_failover_brokering: bool,
     pub(super) gossip: bool,
     pub(super) gossip_multihop: bool,
-    pub(super) target: WhatAmIMatcher,
+    pub(super) gossip_target: WhatAmIMatcher,
     pub(super) autoconnect: WhatAmIMatcher,
     pub(super) wait_declares: bool,
     pub(super) idx: NodeIndex,
@@ -114,7 +114,7 @@ impl Network {
         router_peers_failover_brokering: bool,
         gossip: bool,
         gossip_multihop: bool,
-        target: WhatAmIMatcher,
+        gossip_target: WhatAmIMatcher,
         autoconnect: WhatAmIMatcher,
         wait_declares: bool,
     ) -> Self {
@@ -132,7 +132,7 @@ impl Network {
             router_peers_failover_brokering,
             gossip,
             gossip_multihop,
-            target,
+            gossip_target,
             autoconnect,
             wait_declares,
             idx,
@@ -236,7 +236,7 @@ impl Network {
     fn send_on_link(&self, idxs: Vec<(NodeIndex, Details)>, transport: &TransportUnicast) {
         if transport
             .get_whatami()
-            .is_ok_and(|w| self.target.matches(w))
+            .is_ok_and(|w| self.gossip_target.matches(w))
         {
             if let Ok(msg) = self.make_msg(idxs) {
                 tracing::trace!("{} Send to {:?} {:?}", self.name, transport.get_zid(), msg);
@@ -258,7 +258,7 @@ impl Network {
                 if link
                     .transport
                     .get_whatami()
-                    .is_ok_and(|w| self.target.matches(w))
+                    .is_ok_and(|w| self.gossip_target.matches(w))
                     && parameters(link)
                 {
                     tracing::trace!("{} Send to {} {:?}", self.name, link.zid, msg);
