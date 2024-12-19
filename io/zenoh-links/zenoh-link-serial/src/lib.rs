@@ -38,6 +38,10 @@ const DEFAULT_BAUDRATE: u32 = 9_600;
 
 const DEFAULT_EXCLUSIVE: bool = true;
 
+const DEFAULT_TIMEOUT: u64 = 50_000;
+
+const DEFAULT_RELEASE_ON_CLOSE: bool = true;
+
 pub const SERIAL_LOCATOR_PREFIX: &str = "serial";
 
 const SERIAL_MTU_LIMIT: BatchSize = SERIAL_MAX_MTU;
@@ -94,6 +98,22 @@ pub fn get_exclusive(endpoint: &EndPoint) -> bool {
     }
 }
 
+pub fn get_timeout(endpoint: &EndPoint) -> u64 {
+    if let Some(tout) = endpoint.config().get(config::TIMEOUT_RAW) {
+        u64::from_str(tout).unwrap_or(DEFAULT_TIMEOUT)
+    } else {
+        DEFAULT_TIMEOUT
+    }
+}
+
+pub fn get_release_on_close(endpoint: &EndPoint) -> bool {
+    if let Some(release_on_close) = endpoint.config().get(config::RELEASE_ON_CLOSE) {
+        bool::from_str(release_on_close).unwrap_or(DEFAULT_RELEASE_ON_CLOSE)
+    } else {
+        DEFAULT_RELEASE_ON_CLOSE
+    }
+}
+
 pub fn get_unix_path_as_string(address: Address<'_>) -> String {
     address.as_str().to_owned()
 }
@@ -101,4 +121,6 @@ pub fn get_unix_path_as_string(address: Address<'_>) -> String {
 pub mod config {
     pub const PORT_BAUD_RATE_RAW: &str = "baudrate";
     pub const PORT_EXCLUSIVE_RAW: &str = "exclusive";
+    pub const TIMEOUT_RAW: &str = "tout";
+    pub const RELEASE_ON_CLOSE: &str = "release_on_close";
 }

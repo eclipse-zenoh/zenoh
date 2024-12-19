@@ -31,7 +31,10 @@ use rustls_pki_types::ServerName;
 use secrecy::ExposeSecret;
 use webpki::anchor_from_trusted_cert;
 use zenoh_config::Config as ZenohConfig;
-use zenoh_link_commons::{tls::WebPkiVerifierAnyServerName, ConfigurationInspector};
+use zenoh_link_commons::{
+    tcp::TcpSocketConfig, tls::WebPkiVerifierAnyServerName, ConfigurationInspector, BIND_INTERFACE,
+    TCP_SO_RCV_BUF, TCP_SO_SND_BUF,
+};
 use zenoh_protocol::core::{
     endpoint::{Address, Config},
     parameters,
@@ -150,18 +153,31 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
             false => ps.push((TLS_CLOSE_LINK_ON_EXPIRATION, "false")),
         }
 
+        let rx_buffer_size;
+        if let Some(size) = c.so_rcvbuf() {
+            rx_buffer_size = size.to_string();
+            ps.push((TCP_SO_RCV_BUF, &rx_buffer_size));
+        }
+
+        let tx_buffer_size;
+        if let Some(size) = c.so_sndbuf() {
+            tx_buffer_size = size.to_string();
+            ps.push((TCP_SO_SND_BUF, &tx_buffer_size));
+        }
+
         Ok(parameters::from_iter(ps.drain(..)))
     }
 }
 
-pub(crate) struct TlsServerConfig {
+pub(crate) struct TlsServerConfig<'a> {
     pub(crate) server_config: ServerConfig,
     pub(crate) tls_handshake_timeout: Duration,
     pub(crate) tls_close_link_on_expiration: bool,
+    pub(crate) tcp_socket_config: TcpSocketConfig<'a>,
 }
 
-impl TlsServerConfig {
-    pub async fn new(config: &Config<'_>) -> ZResult<TlsServerConfig> {
+impl<'a> TlsServerConfig<'a> {
+    pub async fn new(config: &'a Config<'_>) -> ZResult<Self> {
         let tls_server_client_auth: bool = match config.get(TLS_ENABLE_MTLS) {
             Some(s) => s
                 .parse()
@@ -241,10 +257,30 @@ impl TlsServerConfig {
                 .unwrap_or(config::TLS_HANDSHAKE_TIMEOUT_MS_DEFAULT),
         );
 
+        let mut tcp_rx_buffer_size = None;
+        if let Some(size) = config.get(TCP_SO_RCV_BUF) {
+            tcp_rx_buffer_size = Some(
+                size.parse()
+                    .map_err(|_| zerror!("Unknown TCP read buffer size argument: {}", size))?,
+            );
+        };
+        let mut tcp_tx_buffer_size = None;
+        if let Some(size) = config.get(TCP_SO_SND_BUF) {
+            tcp_tx_buffer_size = Some(
+                size.parse()
+                    .map_err(|_| zerror!("Unknown TCP write buffer size argument: {}", size))?,
+            );
+        };
+
         Ok(TlsServerConfig {
             server_config: sc,
             tls_handshake_timeout,
             tls_close_link_on_expiration,
+            tcp_socket_config: TcpSocketConfig::new(
+                tcp_tx_buffer_size,
+                tcp_rx_buffer_size,
+                config.get(BIND_INTERFACE),
+            ),
         })
     }
 
@@ -269,13 +305,14 @@ impl TlsServerConfig {
     }
 }
 
-pub(crate) struct TlsClientConfig {
+pub(crate) struct TlsClientConfig<'a> {
     pub(crate) client_config: ClientConfig,
     pub(crate) tls_close_link_on_expiration: bool,
+    pub(crate) tcp_socket_config: TcpSocketConfig<'a>,
 }
 
-impl TlsClientConfig {
-    pub async fn new(config: &Config<'_>) -> ZResult<TlsClientConfig> {
+impl<'a> TlsClientConfig<'a> {
+    pub async fn new(config: &'a Config<'_>) -> ZResult<Self> {
         let tls_client_server_auth: bool = match config.get(TLS_ENABLE_MTLS) {
             Some(s) => s
                 .parse()
@@ -386,9 +423,30 @@ impl TlsClientConfig {
                     .with_no_client_auth()
             }
         };
+
+        let mut tcp_rx_buffer_size = None;
+        if let Some(size) = config.get(TCP_SO_RCV_BUF) {
+            tcp_rx_buffer_size = Some(
+                size.parse()
+                    .map_err(|_| zerror!("Unknown TCP read buffer size argument: {}", size))?,
+            );
+        };
+        let mut tcp_tx_buffer_size = None;
+        if let Some(size) = config.get(TCP_SO_SND_BUF) {
+            tcp_tx_buffer_size = Some(
+                size.parse()
+                    .map_err(|_| zerror!("Unknown TCP write buffer size argument: {}", size))?,
+            );
+        };
+
         Ok(TlsClientConfig {
             client_config: cc,
             tls_close_link_on_expiration,
+            tcp_socket_config: TcpSocketConfig::new(
+                tcp_tx_buffer_size,
+                tcp_rx_buffer_size,
+                config.get(BIND_INTERFACE),
+            ),
         })
     }
 

@@ -221,6 +221,11 @@ impl<Handler> Subscriber<Handler> {
     pub fn set_background(&mut self, background: bool) {
         self.inner.undeclare_on_drop = !background;
     }
+
+    #[zenoh_macros::internal]
+    pub fn session(&self) -> &crate::Session {
+        self.inner.session.session()
+    }
 }
 
 impl<Handler> Drop for Subscriber<Handler> {

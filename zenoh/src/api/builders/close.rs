@@ -27,6 +27,7 @@ use zenoh_runtime::ZRuntime;
 // NOTE: `Closeable` is only pub(crate) because it is zenoh-internal trait, so we don't
 // care about the `private_bounds` lint in this particular case.
 #[allow(private_bounds)]
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct CloseBuilder<TCloseable: Closeable> {
     closee: TCloseable::TClosee,
     timeout: Duration,

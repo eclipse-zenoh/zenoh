@@ -26,9 +26,12 @@ use crate::api::{
     publisher::Priority,
     sample::{QoS, QoSBuilder, Sample, SampleKind},
 };
+#[zenoh_macros::internal]
+use crate::pubsub::{
+    PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, Publisher,
+};
 #[cfg(feature = "unstable")]
 use crate::sample::SourceInfo;
-
 pub trait QoSBuilderTrait {
     /// Change the `congestion_control` to apply when routing the data.
     fn congestion_control(self, congestion_control: CongestionControl) -> Self;
@@ -283,5 +286,51 @@ impl TryFrom<Sample> for SampleBuilder<SampleBuilderDelete> {
 impl<T> From<SampleBuilder<T>> for Sample {
     fn from(sample_builder: SampleBuilder<T>) -> Self {
         sample_builder.sample
+    }
+}
+
+#[zenoh_macros::internal]
+impl From<&PublicationBuilder<&Publisher<'_>, PublicationBuilderPut>> for Sample {
+    fn from(builder: &PublicationBuilder<&Publisher<'_>, PublicationBuilderPut>) -> Self {
+        Sample {
+            key_expr: builder.publisher.key_expr.clone().into_owned(),
+            payload: builder.kind.payload.clone(),
+            kind: SampleKind::Put,
+            encoding: builder.kind.encoding.clone(),
+            timestamp: builder.timestamp,
+            qos: QoSBuilder::from(QoS::default())
+                .congestion_control(builder.publisher.congestion_control)
+                .priority(builder.publisher.priority)
+                .express(builder.publisher.is_express)
+                .into(),
+            #[cfg(feature = "unstable")]
+            reliability: builder.publisher.reliability,
+            #[cfg(feature = "unstable")]
+            source_info: builder.source_info.clone(),
+            attachment: builder.attachment.clone(),
+        }
+    }
+}
+
+#[zenoh_macros::internal]
+impl From<&PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete>> for Sample {
+    fn from(builder: &PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete>) -> Self {
+        Sample {
+            key_expr: builder.publisher.key_expr.clone().into_owned(),
+            payload: ZBytes::new(),
+            kind: SampleKind::Put,
+            encoding: Encoding::ZENOH_BYTES,
+            timestamp: builder.timestamp,
+            qos: QoSBuilder::from(QoS::default())
+                .congestion_control(builder.publisher.congestion_control)
+                .priority(builder.publisher.priority)
+                .express(builder.publisher.is_express)
+                .into(),
+            #[cfg(feature = "unstable")]
+            reliability: builder.publisher.reliability,
+            #[cfg(feature = "unstable")]
+            source_info: builder.source_info.clone(),
+            attachment: builder.attachment.clone(),
+        }
     }
 }

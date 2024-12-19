@@ -28,7 +28,9 @@ use rustls::{
 use secrecy::ExposeSecret;
 use webpki::anchor_from_trusted_cert;
 use zenoh_config::Config as ZenohConfig;
-use zenoh_link_commons::{tls::WebPkiVerifierAnyServerName, ConfigurationInspector};
+use zenoh_link_commons::{
+    tls::WebPkiVerifierAnyServerName, ConfigurationInspector, BIND_INTERFACE,
+};
 use zenoh_protocol::core::{
     endpoint::{Address, Config},
     parameters,
@@ -151,13 +153,14 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
     }
 }
 
-pub(crate) struct TlsServerConfig {
+pub(crate) struct TlsServerConfig<'a> {
     pub(crate) server_config: ServerConfig,
     pub(crate) tls_close_link_on_expiration: bool,
+    pub(crate) bind_iface: Option<&'a str>,
 }
 
-impl TlsServerConfig {
-    pub async fn new(config: &Config<'_>) -> ZResult<TlsServerConfig> {
+impl<'a> TlsServerConfig<'a> {
+    pub async fn new(config: &'a Config<'_>) -> ZResult<Self> {
         let tls_server_client_auth: bool = match config.get(TLS_ENABLE_MTLS) {
             Some(s) => s
                 .parse()
@@ -231,6 +234,7 @@ impl TlsServerConfig {
         Ok(TlsServerConfig {
             server_config: sc,
             tls_close_link_on_expiration,
+            bind_iface: config.get(BIND_INTERFACE),
         })
     }
 
@@ -255,13 +259,14 @@ impl TlsServerConfig {
     }
 }
 
-pub(crate) struct TlsClientConfig {
+pub(crate) struct TlsClientConfig<'a> {
     pub(crate) client_config: ClientConfig,
     pub(crate) tls_close_link_on_expiration: bool,
+    pub(crate) bind_iface: Option<&'a str>,
 }
 
-impl TlsClientConfig {
-    pub async fn new(config: &Config<'_>) -> ZResult<TlsClientConfig> {
+impl<'a> TlsClientConfig<'a> {
+    pub async fn new(config: &'a Config<'_>) -> ZResult<Self> {
         let tls_client_server_auth: bool = match config.get(TLS_ENABLE_MTLS) {
             Some(s) => s
                 .parse()
@@ -375,6 +380,7 @@ impl TlsClientConfig {
         Ok(TlsClientConfig {
             client_config: cc,
             tls_close_link_on_expiration,
+            bind_iface: config.get(BIND_INTERFACE),
         })
     }
 

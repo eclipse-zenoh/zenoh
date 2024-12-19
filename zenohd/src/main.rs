@@ -116,9 +116,8 @@ fn config_from_args(args: &Args) -> Config {
     if let Some(id) = &args.id {
         config.set_id(id.parse().unwrap()).unwrap();
     }
-    // apply '--rest-http-port' to config only if explicitly set (overwriting config),
-    // or if no config file is set (to apply its default value)
-    if args.rest_http_port.is_some() || args.config.is_none() {
+    // apply '--rest-http-port' to config only if explicitly set (overwriting config)
+    if args.rest_http_port.is_some() {
         let value = args.rest_http_port.as_deref().unwrap_or("8000");
         if !value.eq_ignore_ascii_case("none") {
             config

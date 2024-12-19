@@ -143,15 +143,15 @@ jobs:
         uses: taiki-e/install-action@nextest
 
       - name: Run tests
-        run: cargo nextest run -F test --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+        run: cargo nextest run -F test -F internal_config --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Run tests with SHM
         if: ${{ matrix.os == 'macOS-latest' || matrix.os == 'windows-latest' }}
-        run: cargo nextest run -F test -F shared-memory -F unstable -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+        run: cargo nextest run -F test -F shared-memory -F unstable -F internal_config -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Run tests with SHM + unixpipe
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: cargo nextest run -F test -F shared-memory -F unstable -F transport_unixpipe -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+        run: cargo nextest run -F test -F shared-memory -F unstable -F internal_config -F transport_unixpipe -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Check for feature leaks
         if: ${{ matrix.os == 'ubuntu-latest' }}
@@ -186,6 +186,15 @@ jobs:
 
       - name: Check spelling
         uses: crate-ci/typos@master
+  
+  markdown_lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DavidAnson/markdownlint-cli2-action@v18
+        with:
+          config: '.markdownlint.yaml'
+          globs: '**/README.md'
 
   # NOTE: In GitHub repository settings, the "Require status checks to pass
   # before merging" branch protection rule ensures that commits are only merged
@@ -195,7 +204,7 @@ jobs:
   ci:
     name: CI status checks
     runs-on: ubuntu-latest
-    needs: [check, test, valgrind, typos]
+    needs: [check, test, valgrind, typos, markdown_lint]
     if: always()
     steps:
       - name: Check whether all jobs pass

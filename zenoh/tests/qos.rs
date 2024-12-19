@@ -74,7 +74,7 @@ async fn qos_pubsub_overwrite_config() {
             qos: {
                 publication: [
                     {
-                        key_exprs: ["test/qos/overwritten", "test/not_applicable/**"],
+                        key_exprs: ["test/qos_overwrite/overwritten", "test/not_applicable/**"],
                         config: {
                             congestion_control: "drop",
                             express: false,
@@ -100,14 +100,14 @@ async fn qos_pubsub_overwrite_config() {
     let session1 = ztimeout!(zenoh::open(qos_config_overwrite)).unwrap();
     let session2 = ztimeout!(zenoh::open(zenoh::Config::default())).unwrap();
 
-    let subscriber = ztimeout!(session2.declare_subscriber("test/qos/**")).unwrap();
+    let subscriber = ztimeout!(session2.declare_subscriber("test/qos_overwrite/**")).unwrap();
     tokio::time::sleep(SLEEP).await;
 
     // Session API tests
 
     // Session API - overwritten PUT
     ztimeout!(session1
-        .put("test/qos/overwritten", "qos")
+        .put("test/qos_overwrite/overwritten", "qos")
         .congestion_control(CongestionControl::Block)
         .priority(Priority::DataLow)
         .express(true)
@@ -123,7 +123,7 @@ async fn qos_pubsub_overwrite_config() {
 
     // Session API - overwritten DELETE
     ztimeout!(session1
-        .delete("test/qos/overwritten")
+        .delete("test/qos_overwrite/overwritten")
         .congestion_control(CongestionControl::Block)
         .priority(Priority::DataLow)
         .express(true)
@@ -139,7 +139,7 @@ async fn qos_pubsub_overwrite_config() {
 
     // Session API - non-overwritten PUT
     ztimeout!(session1
-        .put("test/qos/no_overwrite", "qos")
+        .put("test/qos_overwrite/no_overwrite", "qos")
         .congestion_control(CongestionControl::Block)
         .priority(Priority::DataLow)
         .express(true)
@@ -154,7 +154,7 @@ async fn qos_pubsub_overwrite_config() {
 
     // Session API - non-overwritten DELETE
     ztimeout!(session1
-        .delete("test/qos/no_overwrite")
+        .delete("test/qos_overwrite/no_overwrite")
         .congestion_control(CongestionControl::Block)
         .priority(Priority::DataLow)
         .express(true)
@@ -170,7 +170,7 @@ async fn qos_pubsub_overwrite_config() {
     // Publisher API tests
 
     let overwrite_config_publisher = ztimeout!(session1
-        .declare_publisher("test/qos/overwritten")
+        .declare_publisher("test/qos_overwrite/overwritten")
         .congestion_control(CongestionControl::Block)
         .priority(Priority::DataLow)
         .express(true)
@@ -179,7 +179,7 @@ async fn qos_pubsub_overwrite_config() {
     .unwrap();
 
     let no_overwrite_config_publisher = ztimeout!(session1
-        .declare_publisher("test/qos/no_overwrite")
+        .declare_publisher("test/qos_overwrite/no_overwrite")
         .congestion_control(CongestionControl::Block)
         .priority(Priority::DataLow)
         .express(true)

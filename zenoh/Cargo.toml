@@ -41,7 +41,7 @@ default = [
   "transport_tls",
   "transport_udp",
   "transport_unixsock-stream",
-  "transport_ws",
+  "transport_ws"
 ]
 internal = ["zenoh-keyexpr/internal", "zenoh-config/internal"]
 plugins = []
@@ -85,6 +85,7 @@ paste = { workspace = true }
 petgraph = { workspace = true }
 phf = { workspace = true }
 rand = { workspace = true, features = ["default"] }
+ref-cast = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 socket2 = { workspace = true }
