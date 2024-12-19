@@ -96,6 +96,7 @@ pub(super) struct Network {
     pub(super) router_peers_failover_brokering: bool,
     pub(super) gossip: bool,
     pub(super) gossip_multihop: bool,
+    pub(super) gossip_target: WhatAmIMatcher,
     pub(super) autoconnect: WhatAmIMatcher,
     pub(super) wait_declares: bool,
     pub(super) idx: NodeIndex,
@@ -113,6 +114,7 @@ impl Network {
         router_peers_failover_brokering: bool,
         gossip: bool,
         gossip_multihop: bool,
+        gossip_target: WhatAmIMatcher,
         autoconnect: WhatAmIMatcher,
         wait_declares: bool,
     ) -> Self {
@@ -130,6 +132,7 @@ impl Network {
             router_peers_failover_brokering,
             gossip,
             gossip_multihop,
+            gossip_target,
             autoconnect,
             wait_declares,
             idx,
@@ -231,13 +234,18 @@ impl Network {
     }
 
     fn send_on_link(&self, idxs: Vec<(NodeIndex, Details)>, transport: &TransportUnicast) {
-        if let Ok(msg) = self.make_msg(idxs) {
-            tracing::trace!("{} Send to {:?} {:?}", self.name, transport.get_zid(), msg);
-            if let Err(e) = transport.schedule(msg) {
-                tracing::debug!("{} Error sending LinkStateList: {}", self.name, e);
+        if transport
+            .get_whatami()
+            .is_ok_and(|w| self.gossip_target.matches(w))
+        {
+            if let Ok(msg) = self.make_msg(idxs) {
+                tracing::trace!("{} Send to {:?} {:?}", self.name, transport.get_zid(), msg);
+                if let Err(e) = transport.schedule(msg) {
+                    tracing::debug!("{} Error sending LinkStateList: {}", self.name, e);
+                }
+            } else {
+                tracing::error!("Failed to encode Linkstate message");
             }
-        } else {
-            tracing::error!("Failed to encode Linkstate message");
         }
     }
 
@@ -247,7 +255,12 @@ impl Network {
     {
         if let Ok(msg) = self.make_msg(idxs) {
             for link in self.links.values() {
-                if parameters(link) {
+                if link
+                    .transport
+                    .get_whatami()
+                    .is_ok_and(|w| self.gossip_target.matches(w))
+                    && parameters(link)
+                {
                     tracing::trace!("{} Send to {} {:?}", self.name, link.zid, msg);
                     if let Err(e) = link.transport.schedule(msg.clone()) {
                         tracing::debug!("{} Error sending LinkStateList: {}", self.name, e);

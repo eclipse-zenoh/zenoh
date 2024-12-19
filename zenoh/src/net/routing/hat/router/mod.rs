@@ -312,6 +312,7 @@ impl HatBaseTrait for HatCode {
         let whatami = tables.whatami;
         let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
         let gossip_multihop = unwrap_or_default!(config.scouting().gossip().multihop());
+        let gossip_target = *unwrap_or_default!(config.scouting().gossip().target().get(whatami));
         let autoconnect = if gossip {
             *unwrap_or_default!(config.scouting().gossip().autoconnect().get(whatami))
         } else {
@@ -334,6 +335,7 @@ impl HatBaseTrait for HatCode {
                 router_peers_failover_brokering,
                 gossip,
                 gossip_multihop,
+                gossip_target,
                 autoconnect,
             ));
         }
@@ -346,6 +348,7 @@ impl HatBaseTrait for HatCode {
                 router_peers_failover_brokering,
                 gossip,
                 gossip_multihop,
+                gossip_target,
                 autoconnect,
             ));
         }
