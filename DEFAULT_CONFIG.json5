@@ -151,6 +151,11 @@
       /// It mostly makes sense when using "linkstate" routing mode where all nodes in the subsystem don't have
       /// direct connectivity with each other.
       multihop: false,
+      /// Which type of Zenoh instances to send gossip messages to.
+      /// Accepts a single value (e.g. target: ["router", "peer"]) which applies whatever the configured "mode" is,
+      /// or different values for router, peer or client mode (e.g. target: { router: ["router", "peer"], peer: ["router"] }).
+      /// Each value is a list of: "peer", "router" and/or "client".
+      target: { router: ["router", "peer"], peer: ["router", "peer"]},
       /// Which type of Zenoh instances to automatically establish sessions with upon discovery on gossip.
       /// Accepts a single value (e.g. autoconnect: ["router", "peer"]) which applies whatever the configured "mode" is,
       /// or different values for router, peer or client mode (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).

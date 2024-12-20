@@ -95,6 +95,15 @@ pub mod scouting {
     pub mod gossip {
         pub const enabled: bool = true;
         pub const multihop: bool = false;
+        pub mod target {
+            pub const router: &crate::WhatAmIMatcher = // "router|peer"
+                &crate::WhatAmIMatcher::empty().router().peer();
+            pub const peer: &crate::WhatAmIMatcher = // "router|peer"
+                &crate::WhatAmIMatcher::empty().router().peer();
+            pub const client: &crate::WhatAmIMatcher = // ""
+                &crate::WhatAmIMatcher::empty();
+            mode_accessor!(crate::WhatAmIMatcher);
+        }
         pub mod autoconnect {
             pub const router: &crate::WhatAmIMatcher = // ""
                 &crate::WhatAmIMatcher::empty();

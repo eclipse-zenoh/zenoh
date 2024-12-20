@@ -39,7 +39,7 @@ use crate::net::{
     runtime::{Runtime, WeakRuntime},
 };
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 struct Details {
     zid: bool,
     locators: bool,
@@ -119,6 +119,7 @@ pub(super) struct Network {
     pub(super) router_peers_failover_brokering: bool,
     pub(super) gossip: bool,
     pub(super) gossip_multihop: bool,
+    pub(super) gossip_target: WhatAmIMatcher,
     pub(super) autoconnect: WhatAmIMatcher,
     pub(super) idx: NodeIndex,
     pub(super) links: VecMap<Link>,
@@ -138,6 +139,7 @@ impl Network {
         router_peers_failover_brokering: bool,
         gossip: bool,
         gossip_multihop: bool,
+        gossip_target: WhatAmIMatcher,
         autoconnect: WhatAmIMatcher,
     ) -> Self {
         let mut graph = petgraph::stable_graph::StableGraph::default();
@@ -155,6 +157,7 @@ impl Network {
             router_peers_failover_brokering,
             gossip,
             gossip_multihop,
+            gossip_target,
             autoconnect,
             idx,
             links: VecMap::new(),
@@ -225,7 +228,7 @@ impl Network {
         idx
     }
 
-    fn make_link_state(&self, idx: NodeIndex, details: Details) -> LinkState {
+    fn make_link_state(&self, idx: NodeIndex, details: &Details) -> LinkState {
         let links = if details.links {
             self.graph[idx]
                 .links
@@ -268,10 +271,10 @@ impl Network {
         }
     }
 
-    fn make_msg(&self, idxs: Vec<(NodeIndex, Details)>) -> Result<NetworkMessage, DidntWrite> {
+    fn make_msg(&self, idxs: &Vec<(NodeIndex, Details)>) -> Result<NetworkMessage, DidntWrite> {
         let mut link_states = vec![];
         for (idx, details) in idxs {
-            link_states.push(self.make_link_state(idx, details));
+            link_states.push(self.make_link_state(*idx, details));
         }
         let codec = Zenoh080Routing::new();
         let mut buf = ZBuf::empty();
@@ -285,8 +288,11 @@ impl Network {
         .into())
     }
 
-    fn send_on_link(&self, idxs: Vec<(NodeIndex, Details)>, transport: &TransportUnicast) {
-        if let Ok(msg) = self.make_msg(idxs) {
+    fn send_on_link(&self, mut idxs: Vec<(NodeIndex, Details)>, transport: &TransportUnicast) {
+        for idx in &mut idxs {
+            idx.1.locators = self.propagate_locators(idx.0, transport);
+        }
+        if let Ok(msg) = self.make_msg(&idxs) {
             tracing::trace!("{} Send to {:?} {:?}", self.name, transport.get_zid(), msg);
             if let Err(e) = transport.schedule(msg) {
                 tracing::debug!("{} Error sending LinkStateList: {}", self.name, e);
@@ -296,21 +302,24 @@ impl Network {
         }
     }
 
-    fn send_on_links<P>(&self, idxs: Vec<(NodeIndex, Details)>, mut parameters: P)
+    fn send_on_links<P>(&self, mut idxs: Vec<(NodeIndex, Details)>, mut parameters: P)
     where
         P: FnMut(&Link) -> bool,
     {
-        if let Ok(msg) = self.make_msg(idxs) {
-            for link in self.links.values() {
+        for link in self.links.values() {
+            for idx in &mut idxs {
+                idx.1.locators = self.propagate_locators(idx.0, &link.transport);
+            }
+            if let Ok(msg) = self.make_msg(&idxs) {
                 if parameters(link) {
                     tracing::trace!("{} Send to {} {:?}", self.name, link.zid, msg);
                     if let Err(e) = link.transport.schedule(msg.clone()) {
                         tracing::debug!("{} Error sending LinkStateList: {}", self.name, e);
                     }
                 }
+            } else {
+                tracing::error!("Failed to encode Linkstate message");
             }
-        } else {
-            tracing::error!("Failed to encode Linkstate message");
         }
     }
 
@@ -318,8 +327,10 @@ impl Network {
     // from the given node.
     // Returns true if gossip is enabled and if multihop gossip is enabled or
     // the node is one of self neighbours.
-    fn propagate_locators(&self, idx: NodeIndex) -> bool {
+    fn propagate_locators(&self, idx: NodeIndex, target: &TransportUnicast) -> bool {
+        let target_whatami = target.get_whatami().unwrap_or_default();
         self.gossip
+            && self.gossip_target.matches(target_whatami)
             && (self.gossip_multihop
                 || idx == self.idx
                 || self.links.values().any(|link| {
@@ -491,8 +502,8 @@ impl Network {
                                     idx,
                                     Details {
                                         zid: true,
-                                        locators: true,
                                         links: false,
+                                        ..Default::default()
                                     },
                                 )],
                                 |link| link.zid != zid,
@@ -657,20 +668,20 @@ impl Network {
                 Vec<(Vec<ZenohIdProto>, NodeIndex, bool)>,
                 Vec<(Vec<ZenohIdProto>, NodeIndex, bool)>,
             ) = link_states.into_iter().partition(|(_, _, new)| *new);
-            let new_idxs = new_idxs
-                .into_iter()
-                .map(|(_, idx1, _new_node)| {
-                    (
-                        idx1,
-                        Details {
-                            zid: true,
-                            locators: self.propagate_locators(idx1),
-                            links: true,
-                        },
-                    )
-                })
-                .collect::<Vec<(NodeIndex, Details)>>();
             for link in self.links.values() {
+                let new_idxs = new_idxs
+                    .iter()
+                    .map(|(_, idx1, _new_node)| {
+                        (
+                            *idx1,
+                            Details {
+                                zid: true,
+                                links: true,
+                                ..Default::default()
+                            },
+                        )
+                    })
+                    .collect::<Vec<(NodeIndex, Details)>>();
                 if link.zid != src {
                     let updated_idxs: Vec<(NodeIndex, Details)> = updated_idxs
                         .clone()
@@ -681,8 +692,8 @@ impl Network {
                                     idx1,
                                     Details {
                                         zid: false,
-                                        locators: self.propagate_locators(idx1),
                                         links: true,
+                                        ..Default::default()
                                     },
                                 ))
                             } else {
@@ -761,16 +772,16 @@ impl Network {
                                     idx,
                                     Details {
                                         zid: true,
-                                        locators: false,
                                         links: false,
+                                        ..Default::default()
                                     },
                                 ),
                                 (
                                     self.idx,
                                     Details {
                                         zid: false,
-                                        locators: self.propagate_locators(idx),
                                         links: true,
+                                        ..Default::default()
                                     },
                                 ),
                             ]
@@ -779,8 +790,8 @@ impl Network {
                                 self.idx,
                                 Details {
                                     zid: false,
-                                    locators: self.propagate_locators(idx),
                                     links: true,
+                                    ..Default::default()
                                 },
                             )]
                         },
@@ -806,11 +817,11 @@ impl Network {
                     idx,
                     Details {
                         zid: true,
-                        locators: self.propagate_locators(idx),
                         links: self.full_linkstate
                             || (self.router_peers_failover_brokering
                                 && idx == self.idx
                                 && whatami == WhatAmI::Router),
+                        ..Default::default()
                     },
                 )
             })
@@ -840,8 +851,8 @@ impl Network {
                     self.idx,
                     Details {
                         zid: false,
-                        locators: self.gossip,
                         links: true,
+                        ..Default::default()
                     },
                 )],
                 |_| true,
@@ -858,8 +869,8 @@ impl Network {
                         self.idx,
                         Details {
                             zid: false,
-                            locators: self.gossip,
                             links: true,
+                            ..Default::default()
                         },
                     )],
                     |link| {
