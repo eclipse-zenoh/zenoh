@@ -13,11 +13,13 @@
 //
 use alloc::{string::String, vec::Vec};
 
+use serde::Deserialize;
+
 use crate::common::ZExtUnknown;
 
 /// The kind of consolidation to apply to a query.
 #[repr(u8)]
-#[derive(Debug, Default, Clone, PartialEq, Eq, Copy)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize)]
 pub enum ConsolidationMode {
     /// Apply automatic consolidation based on queryable's preferences
     #[default]
