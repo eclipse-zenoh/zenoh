@@ -5248,6 +5248,7 @@ dependencies = [
  "tokio",
  "zenoh",
  "zenoh-config",
+ "zenoh-examples",
  "zenoh-ext",
 ]
 

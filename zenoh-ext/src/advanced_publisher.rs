@@ -203,8 +203,8 @@ impl QoSBuilderTrait for AdvancedPublisherBuilder<'_, '_, '_> {
 }
 
 #[zenoh_macros::unstable]
-impl<'a> Resolvable for AdvancedPublisherBuilder<'a, '_, '_> {
-    type To = ZResult<AdvancedPublisher<'a>>;
+impl<'b> Resolvable for AdvancedPublisherBuilder<'_, 'b, '_> {
+    type To = ZResult<AdvancedPublisher<'b>>;
 }
 
 #[zenoh_macros::unstable]
@@ -238,7 +238,7 @@ pub struct AdvancedPublisher<'a> {
 #[zenoh_macros::unstable]
 impl<'a> AdvancedPublisher<'a> {
     #[zenoh_macros::unstable]
-    fn new(conf: AdvancedPublisherBuilder<'a, '_, '_>) -> ZResult<Self> {
+    fn new(conf: AdvancedPublisherBuilder<'_, 'a, '_>) -> ZResult<Self> {
         let key_expr = conf.pub_key_expr?;
         let meta = match conf.meta_key_expr {
             Some(meta) => Some(meta?),
@@ -247,7 +247,7 @@ impl<'a> AdvancedPublisher<'a> {
 
         let publisher = conf
             .session
-            .declare_publisher(key_expr.clone().into_owned())
+            .declare_publisher(key_expr.clone())
             .encoding(conf.encoding)
             .allowed_destination(conf.destination)
             .reliability(conf.reliability)
@@ -286,7 +286,7 @@ impl<'a> AdvancedPublisher<'a> {
 
         let cache = if conf.cache {
             Some(
-                AdvancedCacheBuilder::new(conf.session, Ok(key_expr.clone().into_owned()))
+                AdvancedCacheBuilder::new(conf.session, Ok(key_expr.clone()))
                     .history(conf.history)
                     .queryable_prefix(&prefix)
                     .wait()?,

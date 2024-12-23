@@ -37,6 +37,7 @@ futures = { workspace = true }
 zenoh = { workspace = true, features = ["unstable", "internal_config"], default-features = false }
 clap = { workspace = true, features = ["derive"] }
 zenoh-ext = { workspace = true, features = ["unstable"] }
+zenoh-examples = { workspace = true }
 
 [dev-dependencies]
 zenoh-config = { workspace = true }
