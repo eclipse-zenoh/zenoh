@@ -349,11 +349,7 @@ impl Runtime {
             );
             if retry_config.timeout().is_zero() || self.get_global_connect_timeout().is_zero() {
                 // try to connect and exit immediately without retry
-                if self
-                    .peer_connector(endpoint, retry_config.timeout())
-                    .await
-                    .is_ok()
-                {
+                if self.peer_connector(endpoint).await.is_ok() {
                     return Ok(());
                 }
             } else {
@@ -379,7 +375,7 @@ impl Runtime {
             );
             if retry_config.timeout().is_zero() || self.get_global_connect_timeout().is_zero() {
                 // try to connect and exit immediately without retry
-                if let Err(e) = self.peer_connector(endpoint, retry_config.timeout()).await {
+                if let Err(e) = self.peer_connector(endpoint).await {
                     if retry_config.exit_on_failure {
                         return Err(e);
                     }
@@ -398,18 +394,12 @@ impl Runtime {
         Ok(())
     }
 
-    async fn peer_connector(&self, peer: EndPoint, timeout: std::time::Duration) -> ZResult<()> {
-        match tokio::time::timeout(timeout, self.manager().open_transport_unicast(peer.clone()))
-            .await
-        {
-            Ok(Ok(_)) => Ok(()),
-            Ok(Err(e)) => {
-                tracing::warn!("Unable to connect to {}! {}", peer, e);
-                Err(e)
-            }
+    async fn peer_connector(&self, peer: EndPoint) -> ZResult<()> {
+        match self.manager().open_transport_unicast(peer.clone()).await {
+            Ok(_) => Ok(()),
             Err(e) => {
                 tracing::warn!("Unable to connect to {}! {}", peer, e);
-                Err(e.into())
+                Err(e)
             }
         }
     }
@@ -795,9 +785,9 @@ impl Runtime {
             tracing::trace!("Trying to connect to configured peer {}", peer);
             let endpoint = peer.clone();
             tokio::select! {
-                res = tokio::time::timeout(retry_config.timeout(), self.manager().open_transport_unicast(endpoint)) => {
+                res = self.manager().open_transport_unicast(endpoint) => {
                     match res {
-                        Ok(Ok(transport)) => {
+                        Ok(transport) => {
                             tracing::debug!("Successfully connected to configured peer {}", peer);
                             if let Ok(Some(orch_transport)) = transport.get_callback() {
                                 if let Some(orch_transport) = orch_transport
@@ -808,14 +798,6 @@ impl Runtime {
                                 }
                             }
                             return transport.get_zid();
-                        }
-                        Ok(Err(e)) => {
-                            tracing::debug!(
-                                "Unable to connect to configured peer {}! {}. Retry in {:?}.",
-                                peer,
-                                e,
-                                period.duration()
-                            );
                         }
                         Err(e) => {
                             tracing::debug!(
@@ -977,7 +959,6 @@ impl Runtime {
             };
 
             let endpoint = locator.to_owned().into();
-            let retry_config = self.get_connect_retry_config(&endpoint);
             let priorities = locator
                 .metadata()
                 .get(Metadata::PRIORITIES)
@@ -997,35 +978,23 @@ impl Runtime {
                 })
             {
                 if is_multicast {
-                    match tokio::time::timeout(
-                        retry_config.timeout(),
-                        manager.open_transport_multicast(endpoint),
-                    )
-                    .await
-                    {
-                        Ok(Ok(transport)) => {
+                    match manager.open_transport_multicast(endpoint).await {
+                        Ok(transport) => {
                             tracing::debug!(
                                 "Successfully connected to newly scouted peer: {:?}",
                                 transport
                             );
                         }
-                        Ok(Err(e)) => tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e),
                         Err(e) => tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e),
                     }
                 } else {
-                    match tokio::time::timeout(
-                        retry_config.timeout(),
-                        manager.open_transport_unicast(endpoint),
-                    )
-                    .await
-                    {
-                        Ok(Ok(transport)) => {
+                    match manager.open_transport_unicast(endpoint).await {
+                        Ok(transport) => {
                             tracing::debug!(
                                 "Successfully connected to newly scouted peer: {:?}",
                                 transport
                             );
                         }
-                        Ok(Err(e)) => tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e),
                         Err(e) => tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e),
                     }
                 }

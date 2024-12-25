@@ -33,3 +33,6 @@ changelog:
     - title: Other changes
       labels:
         - "*"
+      exclude:
+        labels:
+          - internal

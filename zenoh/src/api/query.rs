@@ -86,6 +86,12 @@ impl ReplyError {
         &self.payload
     }
 
+    /// Gets the mutable payload of this ReplyError.
+    #[inline]
+    pub fn payload_mut(&mut self) -> &mut ZBytes {
+        &mut self.payload
+    }
+
     /// Gets the encoding of this ReplyError.
     #[inline]
     pub fn encoding(&self) -> &Encoding {
@@ -146,7 +152,6 @@ impl From<Reply> for Result<Sample, ReplyError> {
     }
 }
 
-#[cfg(feature = "unstable")]
 pub(crate) struct LivelinessQueryState {
     pub(crate) callback: Callback<Reply>,
 }

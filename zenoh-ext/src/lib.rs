@@ -12,9 +12,17 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #[cfg(feature = "unstable")]
+mod advanced_cache;
+#[cfg(feature = "unstable")]
+mod advanced_publisher;
+#[cfg(feature = "unstable")]
+mod advanced_subscriber;
+#[cfg(feature = "unstable")]
 pub mod group;
 #[cfg(feature = "unstable")]
 mod publication_cache;
+#[cfg(feature = "unstable")]
+mod publisher_ext;
 #[cfg(feature = "unstable")]
 mod querying_subscriber;
 mod serialization;
@@ -30,12 +38,20 @@ pub use crate::serialization::{
     ZReadIter, ZSerializer,
 };
 #[cfg(feature = "unstable")]
+#[allow(deprecated)]
 pub use crate::{
+    advanced_cache::{CacheConfig, RepliesConfig},
+    advanced_publisher::{AdvancedPublisher, AdvancedPublisherBuilder},
+    advanced_subscriber::{
+        AdvancedSubscriber, AdvancedSubscriberBuilder, HistoryConfig, Miss, RecoveryConfig,
+        SampleMissHandlerUndeclaration, SampleMissListener, SampleMissListenerBuilder,
+    },
     publication_cache::{PublicationCache, PublicationCacheBuilder},
+    publisher_ext::AdvancedPublisherBuilderExt,
     querying_subscriber::{
         ExtractSample, FetchingSubscriber, FetchingSubscriberBuilder, KeySpace, LivelinessSpace,
         QueryingSubscriberBuilder, UserSpace,
     },
     session_ext::SessionExt,
-    subscriber_ext::{SubscriberBuilderExt, SubscriberForward},
+    subscriber_ext::{AdvancedSubscriberBuilderExt, SubscriberBuilderExt, SubscriberForward},
 };

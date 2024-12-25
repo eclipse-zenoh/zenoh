@@ -93,13 +93,10 @@ use crate::{
 /// }
 /// # }
 /// ```
-
-#[zenoh_macros::unstable]
 pub struct Liveliness<'a> {
     pub(crate) session: &'a Session,
 }
 
-#[zenoh_macros::unstable]
 impl<'a> Liveliness<'a> {
     /// Create a [`LivelinessToken`](LivelinessToken) for the given key expression.
     ///
@@ -120,7 +117,6 @@ impl<'a> Liveliness<'a> {
     ///     .unwrap();
     /// # }
     /// ```
-    #[zenoh_macros::unstable]
     pub fn declare_token<'b, TryIntoKeyExpr>(
         &self,
         key_expr: TryIntoKeyExpr,
@@ -157,7 +153,6 @@ impl<'a> Liveliness<'a> {
     /// }
     /// # }
     /// ```
-    #[zenoh_macros::unstable]
     pub fn declare_subscriber<'b, TryIntoKeyExpr>(
         &self,
         key_expr: TryIntoKeyExpr,
@@ -194,7 +189,6 @@ impl<'a> Liveliness<'a> {
     /// }
     /// # }
     /// ```
-    #[zenoh_macros::unstable]
     pub fn get<'b, TryIntoKeyExpr>(
         &self,
         key_expr: TryIntoKeyExpr,
@@ -205,7 +199,7 @@ impl<'a> Liveliness<'a> {
     {
         let key_expr = key_expr.try_into().map_err(Into::into);
         let timeout = {
-            let conf = self.session.0.runtime.config().lock();
+            let conf = &self.session.0.runtime.config().lock().0;
             Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout()))
         };
         LivelinessGetBuilder {
@@ -233,19 +227,16 @@ impl<'a> Liveliness<'a> {
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
-#[zenoh_macros::unstable]
 #[derive(Debug)]
 pub struct LivelinessTokenBuilder<'a, 'b> {
     pub(crate) session: &'a Session,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
 }
 
-#[zenoh_macros::unstable]
 impl Resolvable for LivelinessTokenBuilder<'_, '_> {
     type To = ZResult<LivelinessToken>;
 }
 
-#[zenoh_macros::unstable]
 impl Wait for LivelinessTokenBuilder<'_, '_> {
     #[inline]
     fn wait(self) -> <Self as Resolvable>::To {
@@ -262,7 +253,6 @@ impl Wait for LivelinessTokenBuilder<'_, '_> {
     }
 }
 
-#[zenoh_macros::unstable]
 impl IntoFuture for LivelinessTokenBuilder<'_, '_> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
@@ -296,7 +286,6 @@ impl IntoFuture for LivelinessTokenBuilder<'_, '_> {
 ///     .unwrap();
 /// # }
 /// ```
-#[zenoh_macros::unstable]
 #[must_use = "Liveliness tokens will be immediately dropped and undeclared if not bound to a variable"]
 #[derive(Debug)]
 pub struct LivelinessToken {
@@ -323,22 +312,18 @@ pub struct LivelinessToken {
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
-#[zenoh_macros::unstable]
 pub struct LivelinessTokenUndeclaration(LivelinessToken);
 
-#[zenoh_macros::unstable]
 impl Resolvable for LivelinessTokenUndeclaration {
     type To = ZResult<()>;
 }
 
-#[zenoh_macros::unstable]
 impl Wait for LivelinessTokenUndeclaration {
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.0.undeclare_impl()
     }
 }
 
-#[zenoh_macros::unstable]
 impl IntoFuture for LivelinessTokenUndeclaration {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
@@ -348,7 +333,6 @@ impl IntoFuture for LivelinessTokenUndeclaration {
     }
 }
 
-#[zenoh_macros::unstable]
 impl LivelinessToken {
     /// Undeclare the [`LivelinessToken`].
     ///
@@ -379,7 +363,6 @@ impl LivelinessToken {
     }
 }
 
-#[zenoh_macros::unstable]
 impl UndeclarableSealed<()> for LivelinessToken {
     type Undeclaration = LivelinessTokenUndeclaration;
 
@@ -388,7 +371,6 @@ impl UndeclarableSealed<()> for LivelinessToken {
     }
 }
 
-#[zenoh_macros::unstable]
 impl Drop for LivelinessToken {
     fn drop(&mut self) {
         if self.undeclare_on_drop {
@@ -415,7 +397,6 @@ impl Drop for LivelinessToken {
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
-#[zenoh_macros::unstable]
 #[derive(Debug)]
 pub struct LivelinessSubscriberBuilder<'a, 'b, Handler, const BACKGROUND: bool = false> {
     pub session: &'a Session,
@@ -424,7 +405,6 @@ pub struct LivelinessSubscriberBuilder<'a, 'b, Handler, const BACKGROUND: bool =
     pub history: bool,
 }
 
-#[zenoh_macros::unstable]
 impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// Receive the samples for this liveliness subscription with a callback.
     ///
@@ -443,7 +423,6 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    #[zenoh_macros::unstable]
     pub fn callback<F>(self, callback: F) -> LivelinessSubscriberBuilder<'a, 'b, Callback<Sample>>
     where
         F: Fn(Sample) + Send + Sync + 'static,
@@ -472,7 +451,6 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    #[zenoh_macros::unstable]
     pub fn callback_mut<F>(
         self,
         callback: F,
@@ -503,7 +481,6 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    #[zenoh_macros::unstable]
     pub fn with<Handler>(self, handler: Handler) -> LivelinessSubscriberBuilder<'a, 'b, Handler>
     where
         Handler: IntoHandler<Sample>,
@@ -556,14 +533,12 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, Callback<Sample>> {
 
 impl<Handler, const BACKGROUND: bool> LivelinessSubscriberBuilder<'_, '_, Handler, BACKGROUND> {
     #[inline]
-    #[zenoh_macros::unstable]
     pub fn history(mut self, history: bool) -> Self {
         self.history = history;
         self
     }
 }
 
-#[zenoh_macros::unstable]
 impl<Handler> Resolvable for LivelinessSubscriberBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<Sample> + Send,
@@ -572,13 +547,11 @@ where
     type To = ZResult<Subscriber<Handler::Handler>>;
 }
 
-#[zenoh_macros::unstable]
 impl<Handler> Wait for LivelinessSubscriberBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<Sample> + Send,
     Handler::Handler: Send,
 {
-    #[zenoh_macros::unstable]
     fn wait(self) -> <Self as Resolvable>::To {
         use super::subscriber::SubscriberKind;
 
@@ -606,7 +579,6 @@ where
     }
 }
 
-#[zenoh_macros::unstable]
 impl<Handler> IntoFuture for LivelinessSubscriberBuilder<'_, '_, Handler>
 where
     Handler: IntoHandler<Sample> + Send,
@@ -615,20 +587,16 @@ where
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
-    #[zenoh_macros::unstable]
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
     }
 }
 
-#[zenoh_macros::unstable]
 impl Resolvable for LivelinessSubscriberBuilder<'_, '_, Callback<Sample>, true> {
     type To = ZResult<()>;
 }
 
-#[zenoh_macros::unstable]
 impl Wait for LivelinessSubscriberBuilder<'_, '_, Callback<Sample>, true> {
-    #[zenoh_macros::unstable]
     fn wait(self) -> <Self as Resolvable>::To {
         self.session.0.declare_liveliness_subscriber_inner(
             &self.key_expr?,
@@ -640,12 +608,10 @@ impl Wait for LivelinessSubscriberBuilder<'_, '_, Callback<Sample>, true> {
     }
 }
 
-#[zenoh_macros::unstable]
 impl IntoFuture for LivelinessSubscriberBuilder<'_, '_, Callback<Sample>, true> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
-    #[zenoh_macros::unstable]
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
     }

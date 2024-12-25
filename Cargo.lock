@@ -3066,6 +3066,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "ref-cast"
+version = "1.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ccf0a6f84d5f1d581da8b41b47ec8600871962f2a528115b542b362d4b744931"
+dependencies = [
+ "ref-cast-impl",
+]
+
+[[package]]
+name = "ref-cast-impl"
+version = "1.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bcc303e793d3734489387d205e9b186fac9c6cfacedd98cbb2e8a5943595f3e6"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.77",
+]
+
+[[package]]
 name = "regex"
 version = "1.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5042,9 +5062,9 @@ checksum = "6a5cbf750400958819fb6178eaa83bee5cd9c29a26a40cc241df8c70fdd46984"
 
 [[package]]
 name = "z-serial"
-version = "0.2.3"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f113597c6b880587004169f14bc010e4b440981ab2ad669779d3654f9b1c4af1"
+checksum = "1660dfc9f90480610f94c285a9a967b49cd2f57b3b1267d9bd7fd5d4f57c36c8"
 dependencies = [
  "cobs",
  "futures",
@@ -5071,6 +5091,7 @@ dependencies = [
  "petgraph",
  "phf",
  "rand 0.8.5",
+ "ref-cast",
  "rustc_version 0.4.1",
  "serde",
  "serde_json",
@@ -5201,6 +5222,7 @@ dependencies = [
 name = "zenoh-ext"
 version = "1.0.0-dev"
 dependencies = [
+ "async-trait",
  "bincode",
  "flume",
  "futures",
@@ -5209,6 +5231,7 @@ dependencies = [
  "serde",
  "tokio",
  "tracing",
+ "uhlc",
  "zenoh",
  "zenoh-config",
  "zenoh-macros",
@@ -5224,6 +5247,7 @@ dependencies = [
  "tokio",
  "zenoh",
  "zenoh-config",
+ "zenoh-examples",
  "zenoh-ext",
 ]
 
@@ -5308,6 +5332,7 @@ dependencies = [
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
+ "zenoh-util",
 ]
 
 [[package]]
@@ -5336,11 +5361,11 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "zenoh-config",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
- "zenoh-util",
 ]
 
 [[package]]

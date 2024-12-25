@@ -374,6 +374,8 @@ validated_struct::validator! {
         TransportConf {
             pub unicast: TransportUnicastConf {
                 /// Timeout in milliseconds when opening a link (default: 10000).
+                open_timeout: u64,
+                /// Timeout in milliseconds when accepting a link (default: 10000).
                 accept_timeout: u64,
                 /// Number of links that may stay pending during accept phase (default: 100).
                 accept_pending: usize,
@@ -499,6 +501,10 @@ validated_struct::validator! {
                     connect_certificate: Option<String>,
                     verify_name_on_connect: Option<bool>,
                     close_link_on_expiration: Option<bool>,
+                    /// Configure TCP write buffer size
+                    pub so_sndbuf: Option<u32>,
+                    /// Configure TCP read buffer size
+                    pub so_rcvbuf: Option<u32>,
                     // Skip serializing field because they contain secrets
                     #[serde(skip_serializing)]
                     root_ca_certificate_base64: Option<SecretValue>,
@@ -510,6 +516,13 @@ validated_struct::validator! {
                     connect_private_key_base64 :  Option<SecretValue>,
                     #[serde(skip_serializing)]
                     connect_certificate_base64 :  Option<SecretValue>,
+                },
+                pub tcp: #[derive(Default)]
+                TcpConf {
+                    /// Configure TCP write buffer size
+                    pub so_sndbuf: Option<u32>,
+                    /// Configure TCP read buffer size
+                    pub so_rcvbuf: Option<u32>,
                 },
                 pub unixpipe: #[derive(Default)]
                 UnixPipeConf {

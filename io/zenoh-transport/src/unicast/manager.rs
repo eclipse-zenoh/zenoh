@@ -60,6 +60,7 @@ use crate::{
 pub struct TransportManagerConfigUnicast {
     pub lease: Duration,
     pub keep_alive: usize,
+    pub open_timeout: Duration,
     pub accept_timeout: Duration,
     pub accept_pending: usize,
     pub max_sessions: usize,
@@ -105,6 +106,7 @@ pub struct TransportManagerBuilderUnicast {
     //       target interval.
     pub(super) lease: Duration,
     pub(super) keep_alive: usize,
+    pub(super) open_timeout: Duration,
     pub(super) accept_timeout: Duration,
     pub(super) accept_pending: usize,
     pub(super) max_sessions: usize,
@@ -128,6 +130,11 @@ impl TransportManagerBuilderUnicast {
 
     pub fn keep_alive(mut self, keep_alive: usize) -> Self {
         self.keep_alive = keep_alive;
+        self
+    }
+
+    pub fn open_timeout(mut self, open_timeout: Duration) -> Self {
+        self.open_timeout = open_timeout;
         self
     }
 
@@ -225,6 +232,7 @@ impl TransportManagerBuilderUnicast {
         let config = TransportManagerConfigUnicast {
             lease: self.lease,
             keep_alive: self.keep_alive,
+            open_timeout: self.open_timeout,
             accept_timeout: self.accept_timeout,
             accept_pending: self.accept_pending,
             max_sessions: self.max_sessions,
@@ -274,6 +282,7 @@ impl Default for TransportManagerBuilderUnicast {
         Self {
             lease: Duration::from_millis(*link_tx.lease()),
             keep_alive: *link_tx.keep_alive(),
+            open_timeout: Duration::from_millis(*transport.open_timeout()),
             accept_timeout: Duration::from_millis(*transport.accept_timeout()),
             accept_pending: *transport.accept_pending(),
             max_sessions: *transport.max_sessions(),
@@ -385,9 +394,15 @@ impl TransportManager {
             .await?;
         // Fill and merge the endpoint configuration
         if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
-            endpoint
-                .config_mut()
-                .extend_from_iter(parameters::iter(config))?;
+            let mut config = parameters::Parameters::from(config.as_str());
+            // Overwrite config with current endpoint parameters
+            config.extend_from_iter(endpoint.config().iter());
+            endpoint = EndPoint::new(
+                endpoint.protocol(),
+                endpoint.address(),
+                endpoint.metadata(),
+                config.as_str(),
+            )?;
         };
         manager.new_listener(endpoint).await
     }
@@ -705,15 +720,26 @@ impl TransportManager {
             .await?;
         // Fill and merge the endpoint configuration
         if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
-            endpoint
-                .config_mut()
-                .extend_from_iter(parameters::iter(config))?;
+            let mut config = parameters::Parameters::from(config.as_str());
+            // Overwrite config with current endpoint parameters
+            config.extend_from_iter(endpoint.config().iter());
+            endpoint = EndPoint::new(
+                endpoint.protocol(),
+                endpoint.address(),
+                endpoint.metadata(),
+                config.as_str(),
+            )?;
         };
 
         // Create a new link associated by calling the Link Manager
         let link = manager.new_link(endpoint.clone()).await?;
         // Open the link
-        super::establishment::open::open_link(endpoint, link, self).await
+        tokio::time::timeout(
+            self.config.unicast.open_timeout,
+            super::establishment::open::open_link(endpoint, link, self),
+        )
+        .await
+        .map_err(|e| zerror!("{e}"))?
     }
 
     pub async fn get_transport_unicast(&self, peer: &ZenohIdProto) -> Option<TransportUnicast> {

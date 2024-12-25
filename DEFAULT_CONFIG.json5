@@ -25,6 +25,9 @@
   ///
   /// It is also possible to specify a priority range and/or a reliability setting to be used on the link.
   /// For example `tcp/localhost?prio=6-7;rel=0` assigns priorities "data_low" and "background" to the established link.
+  ///
+  /// For TCP and TLS links, it is possible to specify the TCP buffer sizes:
+  /// E.g. tcp/192.168.0.1:7447#so_sndbuf=65000;so_rcvbuf=65000
   connect: {
     /// timeout waiting for all endpoints connected (0: no retry, -1: infinite timeout)
     /// Accepts a single value (e.g. timeout_ms: 0)
@@ -68,6 +71,9 @@
   ///
   /// It is also possible to specify a priority range and/or a reliability setting to be used on the link.
   /// For example `tcp/localhost?prio=6-7;rel=0` assigns priorities "data_low" and "background" to the established link.
+  ///
+  /// For TCP and TLS links, it is possible to specify the TCP buffer sizes:
+  /// E.g. tcp/192.168.0.1:7447#so_sndbuf=65000;so_rcvbuf=65000
   listen: {
     /// timeout waiting for all listen endpoints (0: no retry, -1: infinite timeout)
     /// Accepts a single value (e.g. timeout_ms: 0)
@@ -128,10 +134,10 @@
       /// The time-to-live on multicast scouting packets
       ttl: 1,
       /// Which type of Zenoh instances to automatically establish sessions with upon discovery on UDP multicast.
-      /// Accepts a single value (e.g. autoconnect: ["router", "peer"])
-      /// or different values for router, peer and client (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
+      /// Accepts a single value (e.g. autoconnect: ["router", "peer"]) which applies whatever the configured "mode" is,
+      /// or different values for router, peer or client mode (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
       /// Each value is a list of: "peer", "router" and/or "client".
-      autoconnect: { router: [], peer: ["router", "peer"] },
+      autoconnect: { router: [], peer: ["router", "peer"], client: ["router", "peer"] },
       /// Whether or not to listen for scout messages on UDP multicast and reply to them.
       listen: true,
     },
@@ -146,10 +152,10 @@
       /// direct connectivity with each other.
       multihop: false,
       /// Which type of Zenoh instances to automatically establish sessions with upon discovery on gossip.
-      /// Accepts a single value (e.g. autoconnect: ["router", "peer"])
-      /// or different values for router, peer and client (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
+      /// Accepts a single value (e.g. autoconnect: ["router", "peer"]) which applies whatever the configured "mode" is,
+      /// or different values for router, peer or client mode (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
       /// Each value is a list of: "peer", "router" and/or "client".
-      autoconnect: { router: [], peer: ["router", "peer"] },
+      autoconnect: { router: [], peer: ["router", "peer"], client: ["router", "peer"] },
     },
   },
 
@@ -331,6 +337,8 @@
   transport: {
     unicast: {
       /// Timeout in milliseconds when opening a link
+      open_timeout: 10000,
+      /// Timeout in milliseconds when accepting a link
       accept_timeout: 10000,
       /// Maximum number of zenoh session in pending state while accepting
       accept_pending: 100,
@@ -494,7 +502,22 @@
         // If set to true, links that require certificates (tls/quic) will automatically disconnect when the time of expiration of the remote certificate chain is reached
         // note that mTLS (client authentication) is required for a listener to disconnect a client on expiration
         close_link_on_expiration: false,
+        /// Optional configuration for TCP system buffers sizes for TLS links
+        ///
+        /// Configure TCP read buffer size (bytes)
+        // so_rcvbuf: 123456,
+        /// Configure TCP write buffer size (bytes)
+        // so_sndbuf: 123456,
       },
+    // // Configure optional TCP link specific parameters
+    // tcp: {
+    //   /// Optional configuration for TCP system buffers sizes for TCP links
+    //   ///
+    //   /// Configure TCP read buffer size (bytes)
+    //   // so_rcvbuf: 123456,
+    //   /// Configure TCP write buffer size (bytes)
+    //   // so_sndbuf: 123456,
+    // }
     },
     /// Shared memory configuration.
     /// NOTE: shared memory can be used only if zenoh is compiled with "shared-memory" feature, otherwise
