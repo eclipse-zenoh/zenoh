@@ -105,7 +105,7 @@ git-version = "0.3.9"
 hashbrown = "0.14"
 hex = { version = "0.4.3", default-features = false } # Default features are disabled due to usage in no_std crates
 hmac = { version = "0.12.1", features = ["std"] }
-home = "0.5.9"
+home = "=0.5.9"
 http-types = "2.12.0"
 humantime = "2.1.0"
 itertools = "0.13.0"
@@ -136,6 +136,7 @@ quote = "1.0.37"
 rand = { version = "0.8.5", default-features = false } # Default features are disabled due to usage in no_std crates
 rand_chacha = "0.3.1"
 rcgen = "0.13.1"
+ref-cast = "1.0.23"
 regex = "1.10.6"
 ron = "0.8.1"
 ringbuffer-spsc = "0.1.9"
@@ -187,7 +188,7 @@ vec_map = "0.8.2"
 webpki-roots = "0.26.5"
 winapi = { version = "0.3.9", features = ["iphlpapi", "winerror"] }
 x509-parser = "0.16.0"
-z-serial = "0.2.3"
+z-serial = "0.3.1"
 either = "1.13.0"
 prost = "0.13.2"
 tls-listener = { version = "0.10.2", features = ["rustls-ring"] }
@@ -222,6 +223,7 @@ zenoh-link-commons = { version = "1.0.0-dev", path = "io/zenoh-link-commons" }
 zenoh = { version = "1.0.0-dev", path = "zenoh", default-features = false }
 zenoh-runtime = { version = "1.0.0-dev", path = "commons/zenoh-runtime" }
 zenoh-task = { version = "1.0.0-dev", path = "commons/zenoh-task" }
+zenoh-examples = { version = "1.0.0-dev", path = "examples" }
 
 [profile.dev]
 debug = true

@@ -31,7 +31,6 @@ use zenoh_result::bail;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 const MSG_COUNT: usize = 50;
-#[cfg(feature = "unstable")]
 const LIVELINESSGET_DELAY: Duration = Duration::from_millis(10);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,13 +39,9 @@ enum Task {
     Sub(String, usize),
     Queryable(String, usize),
     Get(String, usize),
-    #[cfg(feature = "unstable")]
     Liveliness(String),
-    #[cfg(feature = "unstable")]
     LivelinessGet(String),
-    #[cfg(feature = "unstable")]
     LivelinessLoop(String),
-    #[cfg(feature = "unstable")]
     LivelinessSub(String),
     Sleep(Duration),
     Wait,
@@ -155,7 +150,6 @@ impl Task {
                 println!("Get got sufficient amount of messages. Done.");
             }
 
-            #[cfg(feature = "unstable")]
             // The Liveliness task.
             Self::Liveliness(ke) => {
                 let _liveliness = ztimeout!(session.liveliness().declare_token(ke))?;
@@ -164,7 +158,6 @@ impl Task {
                 println!("Liveliness task done.");
             }
 
-            #[cfg(feature = "unstable")]
             // The LivelinessGet task.
             Self::LivelinessGet(ke) => {
                 let mut counter = 0;
@@ -192,7 +185,6 @@ impl Task {
             }
 
             // The LivelinessLoop task.
-            #[cfg(feature = "unstable")]
             Self::LivelinessLoop(ke) => {
                 let mut liveliness: Option<zenoh::liveliness::LivelinessToken> = None;
 
@@ -221,7 +213,6 @@ impl Task {
                 println!("LivelinessLoop task done.");
             }
 
-            #[cfg(feature = "unstable")]
             // The LivelinessSub task.
             Self::LivelinessSub(ke) => {
                 let sub = ztimeout!(session.liveliness().declare_subscriber(ke))?;

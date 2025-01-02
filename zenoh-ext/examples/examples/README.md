@@ -3,6 +3,7 @@
 ## Start instructions
 
    When zenoh is built in release mode:
+
    ```bash
    ./target/release/example/<example_name>
    ```
@@ -15,39 +16,47 @@
 
 ## Examples description
 
-### z_pub_cache
+### z_advanced_pub
 
-   Declares a publisher and an associated publication cache with a given key expression.  
-   All the publications are locally cached (with a configurable history size - i.e. max number of cached data per resource). The cache can be queried by a QueryingSubscriber at startup (see next example).
+   Declares an AdvancedPublisher with a given key expression.  
+   All the publications are locally cached (with a configurable history size - i.e. max number of cached data per resource, default 1). The cache can be queried by an AdvancedSubscriber for hsitory
+   or retransmission.
 
    Typical usage:
+
    ```bash
-      z_pub_cache
+   z_advanced_pub
    ```
+
    or
+
    ```bash
-      z_pub_cache --history 10
+   z_advanced_pub --history 10
    ```
 
-### z_query_sub
+### z_advanced_sub
 
-   Declares a querying subscriber with a selector.  
-   At startup, the subscriber issuez a query (by default on the same selector than the subscription) and merge/sort/de-duplicate the query results with the publications received in parallel.
+   Declares an AdvancedSubscriber with a given key expression.  
+   The AdvancedSubscriber can query for AdvancedPublisher history at startup
+   and on late joiner publisher detection. The AdvancedSubscriber can detect
+   sample loss and ask for retransmission.
 
    Typical usage:
-   ```bash
-      z_query_sub
-   ```
 
+   ```bash
+   z_advanced_sub
+   ```
 
 ### z_member
 
    Group Management example: join a group and display the received group events (Join, Leave, LeaseExpired), as well as an updated group view.
 
    Typical usage:
+
    ```bash
-      z_member
+   z_member
    ```
+
    (start/stop several in parallel)
 
 ### z_view_size
@@ -55,8 +64,9 @@
    Group Management example: join a group and wait for the group view to reach a configurable size (default: 3 members).
 
    Typical usage:
-   ```bash
-      z_view_size
-   ```
-   (start/stop several in parallel)
 
+   ```bash
+   z_view_size
+   ```
+
+   (start/stop several in parallel)

@@ -22,7 +22,6 @@ pub(crate) mod encoding;
 pub(crate) mod handlers;
 pub(crate) mod info;
 pub(crate) mod key_expr;
-#[cfg(feature = "unstable")]
 pub(crate) mod liveliness;
 #[cfg(feature = "plugins")]
 pub(crate) mod loader;

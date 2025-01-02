@@ -34,20 +34,21 @@ default = []
 [dependencies]
 tokio = { workspace = true, features = ["rt", "sync", "time", "macros", "io-std"] }
 futures = { workspace = true }
-zenoh = { workspace = true, features = ["unstable"], default-features = false }
+zenoh = { workspace = true, features = ["unstable", "internal_config"], default-features = false }
 clap = { workspace = true, features = ["derive"] }
 zenoh-ext = { workspace = true, features = ["unstable"] }
+zenoh-examples = { workspace = true }
 
 [dev-dependencies]
 zenoh-config = { workspace = true }
 
 [[example]]
-name = "z_query_sub"
-path = "examples/z_query_sub.rs"
+name = "z_advanced_pub"
+path = "examples/z_advanced_pub.rs"
 
 [[example]]
-name = "z_pub_cache"
-path = "examples/z_pub_cache.rs"
+name = "z_advanced_sub"
+path = "examples/z_advanced_sub.rs"
 
 [[example]]
 name = "z_member"

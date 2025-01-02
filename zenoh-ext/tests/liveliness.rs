@@ -19,6 +19,7 @@ use zenoh::{
 };
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[allow(deprecated)]
 async fn test_liveliness_querying_subscriber_clique() {
     use std::time::Duration;
 
@@ -97,6 +98,7 @@ async fn test_liveliness_querying_subscriber_clique() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[allow(deprecated)]
 async fn test_liveliness_querying_subscriber_brokered() {
     use std::time::Duration;
 
@@ -203,6 +205,7 @@ async fn test_liveliness_querying_subscriber_brokered() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[allow(deprecated)]
 async fn test_liveliness_fetching_subscriber_clique() {
     use std::time::Duration;
 
@@ -285,6 +288,7 @@ async fn test_liveliness_fetching_subscriber_clique() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[allow(deprecated)]
 async fn test_liveliness_fetching_subscriber_brokered() {
     use std::time::Duration;
 
