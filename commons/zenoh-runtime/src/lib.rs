@@ -34,6 +34,7 @@ use std::{
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use tokio::runtime::{Handle, Runtime, RuntimeFlavor};
+use tokio::task::JoinHandle;
 use zenoh_macros::{GenericRuntimeParam, RegisterParam};
 use zenoh_result::ZResult as Result;
 
@@ -125,6 +126,20 @@ pub enum ZRuntime {
 }
 
 impl ZRuntime {
+    pub fn handle(&self) -> &Handle {
+        ZRUNTIME_POOL.get(&self)
+    }
+
+    pub fn spawn<F>(&self, future: F) -> JoinHandle<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send + 'static,
+    {
+        let future = tracing::Instrument::instrument(future, tracing::Span::current());
+
+        self.handle().spawn(future)
+    }
+
     pub fn block_in_place<F, R>(&self, f: F) -> R
     where
         F: Future<Output = R>,
@@ -141,6 +156,9 @@ impl ZRuntime {
                 }
             }
         }
+
+        let f = tracing::Instrument::instrument(f, tracing::Span::current());
+
         tokio::task::block_in_place(move || self.block_on(f))
     }
 }
