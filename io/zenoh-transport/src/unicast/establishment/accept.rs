@@ -727,36 +727,38 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
     let batch_size = manager.config.batch_size.min(batch_size::UNICAST).min(mtu);
 
     let iack_out = {
-        #[cfg(feature = "transport_auth")]
-        let mut prng = zasynclock!(manager.prng);
+        let mut state = {
+            #[cfg(feature = "transport_auth")]
+            let mut prng = zasynclock!(manager.prng);
 
-        let mut state = State {
-            transport: StateTransport {
-                batch_size,
-                resolution: manager.config.resolution,
-                ext_qos: ext::qos::StateAccept::new(manager.config.unicast.is_qos, &endpoint)?,
-                #[cfg(feature = "transport_multilink")]
-                ext_mlink: manager
-                    .state
-                    .unicast
-                    .multilink
-                    .accept(manager.config.unicast.max_links > 1),
-                #[cfg(feature = "shared-memory")]
-                ext_shm: ext::shm::StateAccept::new(),
-                ext_lowlatency: ext::lowlatency::StateAccept::new(
-                    manager.config.unicast.is_lowlatency,
-                ),
-                ext_patch: ext::patch::StateAccept::new(),
-            },
-            #[cfg(any(feature = "transport_auth", feature = "transport_compression"))]
-            link: StateLink {
-                #[cfg(feature = "transport_auth")]
-                ext_auth: manager.state.unicast.authenticator.accept(&mut *prng),
-                #[cfg(feature = "transport_compression")]
-                ext_compression: ext::compression::StateAccept::new(
-                    manager.config.unicast.is_compression,
-                ),
-            },
+            State {
+                transport: StateTransport {
+                    batch_size,
+                    resolution: manager.config.resolution,
+                    ext_qos: ext::qos::StateAccept::new(manager.config.unicast.is_qos, &endpoint)?,
+                    #[cfg(feature = "transport_multilink")]
+                    ext_mlink: manager
+                        .state
+                        .unicast
+                        .multilink
+                        .accept(manager.config.unicast.max_links > 1),
+                    #[cfg(feature = "shared-memory")]
+                    ext_shm: ext::shm::StateAccept::new(),
+                    ext_lowlatency: ext::lowlatency::StateAccept::new(
+                        manager.config.unicast.is_lowlatency,
+                    ),
+                    ext_patch: ext::patch::StateAccept::new(),
+                },
+                #[cfg(any(feature = "transport_auth", feature = "transport_compression"))]
+                link: StateLink {
+                    #[cfg(feature = "transport_auth")]
+                    ext_auth: manager.state.unicast.authenticator.accept(&mut *prng),
+                    #[cfg(feature = "transport_compression")]
+                    ext_compression: ext::compression::StateAccept::new(
+                        manager.config.unicast.is_compression,
+                    ),
+                },
+            }
         };
 
         // Let's scope the Init phase in such a way memory is freed by Rust
