@@ -192,6 +192,9 @@ impl TransportManagerBuilderUnicast {
             *config.transport().link().tx().lease(),
         ));
         self = self.keep_alive(*config.transport().link().tx().keep_alive());
+        self = self.open_timeout(Duration::from_millis(
+            *config.transport().unicast().open_timeout(),
+        ));
         self = self.accept_timeout(Duration::from_millis(
             *config.transport().unicast().accept_timeout(),
         ));
