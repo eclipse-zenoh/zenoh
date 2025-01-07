@@ -193,7 +193,7 @@ impl RuntimeBuilder {
             }),
         };
         *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);
-        get_mut_unchecked(&mut runtime.state.router.clone()).init_link_state(runtime.clone());
+        get_mut_unchecked(&mut runtime.state.router.clone()).init_link_state(runtime.clone())?;
 
         // Admin space
         if start_admin_space {

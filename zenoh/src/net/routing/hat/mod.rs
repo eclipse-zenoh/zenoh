@@ -78,7 +78,7 @@ pub(crate) trait HatTrait:
 }
 
 pub(crate) trait HatBaseTrait {
-    fn init(&self, tables: &mut Tables, runtime: Runtime);
+    fn init(&self, tables: &mut Tables, runtime: Runtime) -> ZResult<()>;
 
     fn new_tables(&self, router_peers_failover_brokering: bool) -> Box<dyn Any + Send + Sync>;
 
