@@ -109,12 +109,16 @@ impl HatTables {
 pub(crate) struct HatCode {}
 
 impl HatBaseTrait for HatCode {
-    fn init(&self, tables: &mut Tables, runtime: Runtime) {
+    fn init(&self, tables: &mut Tables, runtime: Runtime) -> ZResult<()> {
         let config_guard = runtime.config().lock();
         let config = &config_guard.0;
         let whatami = tables.whatami;
         let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
         let gossip_multihop = unwrap_or_default!(config.scouting().gossip().multihop());
+        let gossip_target = *unwrap_or_default!(config.scouting().gossip().target().get(whatami));
+        if gossip_target.matches(WhatAmI::Client) {
+            bail!("\"client\" is not allowed as gossip target")
+        }
         let autoconnect = if gossip {
             *unwrap_or_default!(config.scouting().gossip().autoconnect().get(whatami))
         } else {
@@ -133,10 +137,12 @@ impl HatBaseTrait for HatCode {
                 router_peers_failover_brokering,
                 gossip,
                 gossip_multihop,
+                gossip_target,
                 autoconnect,
                 wait_declares,
             ));
         }
+        Ok(())
     }
 
     fn new_tables(&self, _router_peers_failover_brokering: bool) -> Box<dyn Any + Send + Sync> {

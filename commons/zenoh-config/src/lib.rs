@@ -315,6 +315,8 @@ validated_struct::validator! {
                 /// It mostly makes sense when using "linkstate" routing mode where all nodes in the subsystem don't have
                 /// direct connectivity with each other.
                 multihop: Option<bool>,
+                /// Which type of Zenoh instances to send gossip messages to.
+                target: Option<ModeDependentValue<WhatAmIMatcher>>,
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through gossip.
                 autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
             },
