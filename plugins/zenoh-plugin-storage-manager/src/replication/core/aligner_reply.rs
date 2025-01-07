@@ -505,18 +505,22 @@ impl Replication {
                     return false;
                 }
             }
-            // The timestamp of the Wildcard Update is greater than that of the Event, we apply the
-            // Wildcard Update.
-            (Some((wildcard_ke, wildcard_update)), Some(log_event))
+            // The timestamp of the Wildcard Update is greater than that of the Event: either the
+            // Event is a deletion or we have a bug with a Wildcard Update that did not override
+            // all the events it should have had.
+            //
+            // The rationale is the following: a Wildcard Update (be it `Action::WildcardPut` or
+            // `Action::WildcardDelete`) should override all `Action::Put`. When so doing, it will
+            // also update the timestamp of the overridden event, putting its own. We would thus
+            // have `wildcard_update.timestamp() == log_event.timestamp()`.
+            //
+            // Only an event with an `Action::Delete` will not be overridden. It is thus the only
+            // possibility to have both a newer event and a newer Wildcard Update. In that scenario,
+            // there is nothing to do: the remote Replica is the one that is not up to date.
+            (Some((_, wildcard_update)), Some(log_event))
                 if wildcard_update.timestamp() > log_event.timestamp() =>
             {
-                self.store_event_overridden_by_wildcard_update(
-                    replication_log_guard,
-                    replica_event.clone(),
-                    wildcard_ke,
-                    wildcard_update,
-                )
-                .await;
+                debug_assert!(matches!(log_event.action, Action::Delete));
                 return false;
             }
             // The timestamp of the Event in the Replication Log is greater or equal to the Wildcard
