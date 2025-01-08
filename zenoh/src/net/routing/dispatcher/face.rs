@@ -144,7 +144,7 @@ impl FaceState {
     }
 
     pub(crate) fn update_interceptors_caches(&self, res: &mut Arc<Resource>) {
-        if let Ok(expr) = KeyExpr::try_from(res.expr_to_string()) {
+        if let Ok(expr) = KeyExpr::try_from(res.expr().to_string()) {
             if let Some(interceptor) = self.in_interceptors.as_ref() {
                 let cache = interceptor.compute_keyexpr_cache(&expr);
                 get_mut_unchecked(

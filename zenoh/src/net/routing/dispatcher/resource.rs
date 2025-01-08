@@ -221,10 +221,6 @@ impl Resource {
         }
     }
 
-    pub fn expr_to_string(&self) -> String {
-        self.expr.clone()
-    }
-
     pub fn expr(&self) -> &str {
         &self.expr
     }
@@ -515,10 +511,10 @@ impl Resource {
                             ext_nodeid: ext::NodeIdType::DEFAULT,
                             body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
                                 id: expr_id,
-                                wire_expr: nonwild_prefix.expr_to_string().into(),
+                                wire_expr: nonwild_prefix.expr().to_string().into(),
                             }),
                         },
-                        nonwild_prefix.expr_to_string(),
+                        nonwild_prefix.expr().to_string(),
                     ));
                     face.update_interceptors_caches(&mut nonwild_prefix);
                     WireExpr {
@@ -527,7 +523,7 @@ impl Resource {
                         mapping: Mapping::Sender,
                     }
                 } else {
-                    res.expr_to_string().into()
+                    res.expr().to_string().into()
                 }
             }
             None => wildsuffix.into(),
@@ -705,7 +701,7 @@ pub(crate) fn register_expr(
     {
         Some(mut prefix) => match face.remote_mappings.get(&expr_id) {
             Some(res) => {
-                let mut fullexpr = prefix.expr_to_string();
+                let mut fullexpr = prefix.expr().to_string();
                 fullexpr.push_str(expr.suffix.as_ref());
                 if res.expr() != fullexpr {
                     tracing::error!(
@@ -726,7 +722,7 @@ pub(crate) fn register_expr(
                     let wtables = zwrite!(tables.tables);
                     (res.unwrap(), wtables)
                 } else {
-                    let mut fullexpr = prefix.expr_to_string();
+                    let mut fullexpr = prefix.expr().to_string();
                     fullexpr.push_str(expr.suffix.as_ref());
                     let mut matches = keyexpr::new(fullexpr.as_str())
                         .map(|ke| Resource::get_matches(&rtables, ke))
@@ -790,7 +786,7 @@ pub(crate) fn register_expr_interest(
                     let wtables = zwrite!(tables.tables);
                     (res.unwrap(), wtables)
                 } else {
-                    let mut fullexpr = prefix.expr_to_string();
+                    let mut fullexpr = prefix.expr().to_string();
                     fullexpr.push_str(expr.suffix.as_ref());
                     let mut matches = keyexpr::new(fullexpr.as_str())
                         .map(|ke| Resource::get_matches(&rtables, ke))
