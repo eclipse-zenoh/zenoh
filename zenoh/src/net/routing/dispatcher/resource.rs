@@ -172,6 +172,7 @@ impl ResourceContext {
 
 pub struct Resource {
     pub(crate) parent: Option<Arc<Resource>>,
+    pub(crate) expr: String,
     pub(crate) suffix: String,
     pub(crate) nonwild_prefix: Option<(Arc<Resource>, String)>,
     pub(crate) children: HashMap<String, Arc<Resource>>,
@@ -211,6 +212,7 @@ impl Resource {
 
         Resource {
             parent: Some(parent.clone()),
+            expr: parent.expr.clone() + suffix,
             suffix: String::from(suffix),
             nonwild_prefix,
             children: HashMap::new(),
@@ -219,11 +221,8 @@ impl Resource {
         }
     }
 
-    pub fn expr(&self) -> String {
-        match &self.parent {
-            Some(parent) => parent.expr() + &self.suffix,
-            None => String::from(""),
-        }
+    pub fn expr(&self) -> &str {
+        &self.expr
     }
 
     #[inline(always)]
@@ -253,7 +252,7 @@ impl Resource {
                 if !nonwild_prefix.expr().is_empty() {
                     (Some(nonwild_prefix.clone()), wildsuffix.clone())
                 } else {
-                    (None, res.expr())
+                    (None, res.expr().to_string())
                 }
             }
         }
@@ -295,6 +294,7 @@ impl Resource {
     pub fn root() -> Arc<Resource> {
         Arc::new(Resource {
             parent: None,
+            expr: String::from(""),
             suffix: String::from(""),
             nonwild_prefix: None,
             children: HashMap::new(),
@@ -345,7 +345,7 @@ impl Resource {
 
     #[cfg(test)]
     pub fn print_tree(from: &Arc<Resource>) -> String {
-        let mut result = from.expr();
+        let mut result = from.expr().to_string();
         result.push('\n');
         for child in from.children.values() {
             result.push_str(&Resource::print_tree(child));
@@ -511,10 +511,10 @@ impl Resource {
                             ext_nodeid: ext::NodeIdType::DEFAULT,
                             body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
                                 id: expr_id,
-                                wire_expr: nonwild_prefix.expr().into(),
+                                wire_expr: nonwild_prefix.expr().to_string().into(),
                             }),
                         },
-                        nonwild_prefix.expr(),
+                        nonwild_prefix.expr().to_string(),
                     ));
                     face.update_interceptors_caches(&mut nonwild_prefix);
                     WireExpr {
@@ -523,7 +523,7 @@ impl Resource {
                         mapping: Mapping::Sender,
                     }
                 } else {
-                    res.expr().into()
+                    res.expr().to_string().into()
                 }
             }
             None => wildsuffix.into(),
@@ -701,7 +701,7 @@ pub(crate) fn register_expr(
     {
         Some(mut prefix) => match face.remote_mappings.get(&expr_id) {
             Some(res) => {
-                let mut fullexpr = prefix.expr();
+                let mut fullexpr = prefix.expr().to_string();
                 fullexpr.push_str(expr.suffix.as_ref());
                 if res.expr() != fullexpr {
                     tracing::error!(
@@ -722,7 +722,7 @@ pub(crate) fn register_expr(
                     let wtables = zwrite!(tables.tables);
                     (res.unwrap(), wtables)
                 } else {
-                    let mut fullexpr = prefix.expr();
+                    let mut fullexpr = prefix.expr().to_string();
                     fullexpr.push_str(expr.suffix.as_ref());
                     let mut matches = keyexpr::new(fullexpr.as_str())
                         .map(|ke| Resource::get_matches(&rtables, ke))
@@ -786,7 +786,7 @@ pub(crate) fn register_expr_interest(
                     let wtables = zwrite!(tables.tables);
                     (res.unwrap(), wtables)
                 } else {
-                    let mut fullexpr = prefix.expr();
+                    let mut fullexpr = prefix.expr().to_string();
                     fullexpr.push_str(expr.suffix.as_ref());
                     let mut matches = keyexpr::new(fullexpr.as_str())
                         .map(|ke| Resource::get_matches(&rtables, ke))

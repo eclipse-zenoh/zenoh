@@ -163,7 +163,7 @@ impl RoutingContext<NetworkMessage> {
         if let Some(prefix) = self.prefix() {
             let _ = self
                 .full_expr
-                .set(prefix.expr() + self.wire_expr().unwrap().suffix.as_ref());
+                .set(prefix.expr().to_string() + self.wire_expr().unwrap().suffix.as_ref());
             return Some(self.full_expr.get().as_ref().unwrap());
         }
         None

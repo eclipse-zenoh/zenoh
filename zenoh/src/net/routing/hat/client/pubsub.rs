@@ -71,7 +71,7 @@ fn propagate_simple_subscription_to(
                         wire_expr: key_expr,
                     }),
                 },
-                res.expr(),
+                res.expr().to_string(),
             ),
         );
     }
@@ -176,7 +176,7 @@ fn propagate_forget_simple_subscription(
                             ext_wire_expr: WireExprType::null(),
                         }),
                     },
-                    res.expr(),
+                    res.expr().to_string(),
                 ),
             );
         }
@@ -214,7 +214,7 @@ pub(super) fn undeclare_simple_subscription(
                                 ext_wire_expr: WireExprType::null(),
                             }),
                         },
-                        res.expr(),
+                        res.expr().to_string(),
                     ),
                 );
             }
