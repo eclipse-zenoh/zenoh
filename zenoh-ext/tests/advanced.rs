@@ -16,7 +16,7 @@ use zenoh::sample::SampleKind;
 use zenoh_config::{EndPoint, ModeDependentValue, WhatAmI};
 use zenoh_ext::{
     AdvancedPublisherBuilderExt, AdvancedSubscriberBuilderExt, CacheConfig, HistoryConfig,
-    RecoveryConfig,
+    MissDetectionConfig, RecoveryConfig,
 };
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -170,7 +170,7 @@ async fn test_advanced_retransmission() {
     let publ = ztimeout!(client1
         .declare_publisher(ADVANCED_RETRANSMISSION_KEYEXPR)
         .cache(CacheConfig::default().max_samples(10))
-        .sample_miss_detection())
+        .sample_miss_detection(MissDetectionConfig::default()))
     .unwrap();
     ztimeout!(publ.put("1")).unwrap();
 
@@ -299,7 +299,7 @@ async fn test_advanced_retransmission_periodic() {
     let publ = ztimeout!(client1
         .declare_publisher(ADVANCED_RETRANSMISSION_PERIODIC_KEYEXPR)
         .cache(CacheConfig::default().max_samples(10))
-        .sample_miss_detection())
+        .sample_miss_detection(MissDetectionConfig::default()))
     .unwrap();
     ztimeout!(publ.put("1")).unwrap();
 
@@ -421,7 +421,7 @@ async fn test_advanced_sample_miss() {
 
     let publ = ztimeout!(client1
         .declare_publisher(ADVANCED_SAMPLE_MISS_KEYEXPR)
-        .sample_miss_detection())
+        .sample_miss_detection(MissDetectionConfig::default()))
     .unwrap();
     ztimeout!(publ.put("1")).unwrap();
 
@@ -544,7 +544,7 @@ async fn test_advanced_retransmission_sample_miss() {
     let publ = ztimeout!(client1
         .declare_publisher(ADVANCED_RETRANSMISSION_SAMPLE_MISS_KEYEXPR)
         .cache(CacheConfig::default().max_samples(1))
-        .sample_miss_detection())
+        .sample_miss_detection(MissDetectionConfig::default()))
     .unwrap();
     ztimeout!(publ.put("1")).unwrap();
 

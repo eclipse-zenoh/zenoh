@@ -16,7 +16,7 @@ use std::time::Duration;
 use clap::{arg, Parser};
 use zenoh::{config::Config, key_expr::KeyExpr};
 use zenoh_config::ModeDependentValue;
-use zenoh_ext::{AdvancedPublisherBuilderExt, CacheConfig};
+use zenoh_ext::{AdvancedPublisherBuilderExt, CacheConfig, MissDetectionConfig};
 use zenoh_ext_examples::CommonArgs;
 
 #[tokio::main]
@@ -33,7 +33,9 @@ async fn main() {
     let publisher = session
         .declare_publisher(&key_expr)
         .cache(CacheConfig::default().max_samples(history))
-        .sample_miss_detection()
+        .sample_miss_detection(
+            MissDetectionConfig::default().last_sample_miss_detection(Duration::from_secs(5)),
+        )
         .publisher_detection()
         .await
         .unwrap();

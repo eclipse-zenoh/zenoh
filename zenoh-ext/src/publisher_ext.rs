@@ -13,7 +13,7 @@
 //
 use zenoh::pubsub::PublisherBuilder;
 
-use crate::{advanced_cache::CacheConfig, AdvancedPublisherBuilder};
+use crate::{advanced_cache::CacheConfig, AdvancedPublisherBuilder, MissDetectionConfig};
 
 /// Some extensions to the [`zenoh::publication::PublisherBuilder`](zenoh::publication::PublisherBuilder)
 #[zenoh_macros::unstable]
@@ -27,7 +27,10 @@ pub trait AdvancedPublisherBuilderExt<'a, 'b, 'c> {
     ///
     /// Retransmission can only be achieved if [`cache`](crate::AdvancedPublisherBuilder::cache) is also enabled.
     #[zenoh_macros::unstable]
-    fn sample_miss_detection(self) -> AdvancedPublisherBuilder<'a, 'b, 'c>;
+    fn sample_miss_detection(
+        self,
+        config: MissDetectionConfig,
+    ) -> AdvancedPublisherBuilder<'a, 'b, 'c>;
 
     /// Allow this publisher to be detected by [`AdvancedSubscribers`](crate::AdvancedSubscriber).
     ///
@@ -53,8 +56,11 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilderExt<'a, 'b, 'c> for PublisherBuilder<'a
     ///
     /// Retransmission can only be achieved if [`cache`](crate::AdvancedPublisherBuilder::cache) is also enabled.
     #[zenoh_macros::unstable]
-    fn sample_miss_detection(self) -> AdvancedPublisherBuilder<'a, 'b, 'c> {
-        AdvancedPublisherBuilder::new(self).sample_miss_detection()
+    fn sample_miss_detection(
+        self,
+        config: MissDetectionConfig,
+    ) -> AdvancedPublisherBuilder<'a, 'b, 'c> {
+        AdvancedPublisherBuilder::new(self).sample_miss_detection(config)
     }
 
     /// Allow this publisher to be detected by [`AdvancedSubscribers`](crate::AdvancedSubscriber).
