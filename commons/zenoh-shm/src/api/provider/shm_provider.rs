@@ -320,11 +320,9 @@ where
         provider: &ShmProvider<IDSource, Backend>,
     ) -> ChunkAllocResult {
         let result = InnerPolicy::alloc(layout, provider);
-        if let Err(ZAllocError::OutOfMemory) = result {
-            // try to alloc again only if GC managed to reclaim big enough chunk
-            if provider.garbage_collect() >= layout.size().get() {
-                return AltPolicy::alloc(layout, provider);
-            }
+        // try to alloc again only if GC managed to reclaim big enough chunk
+        if provider.garbage_collect() >= layout.size().get() {
+            return AltPolicy::alloc(layout, provider);
         }
         result
     }
