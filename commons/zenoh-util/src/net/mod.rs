@@ -13,7 +13,9 @@
 //
 use std::net::{IpAddr, Ipv6Addr};
 
+#[cfg(unix)]
 use lazy_static::lazy_static;
+#[cfg(unix)]
 use pnet_datalink::NetworkInterface;
 use tokio::net::{TcpSocket, UdpSocket};
 use zenoh_core::zconfigurable;
@@ -26,6 +28,7 @@ zconfigurable! {
     static ref WINDOWS_GET_ADAPTERS_ADDRESSES_MAX_RETRIES: u32 = 3;
 }
 
+#[cfg(unix)]
 lazy_static! {
     static ref IFACES: Vec<NetworkInterface> = pnet_datalink::interfaces();
 }
