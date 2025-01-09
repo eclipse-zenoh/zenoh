@@ -32,7 +32,11 @@ async fn main() {
     let subscriber = session
         .declare_subscriber(key_expr)
         .history(HistoryConfig::default().detect_late_publishers())
-        .recovery(RecoveryConfig::default().periodic_queries(Some(Duration::from_secs(1))))
+        .recovery(
+            RecoveryConfig::default()
+                .periodic_queries(Some(Duration::from_secs(1)))
+                .heartbeat_listener(true),
+        )
         .subscriber_detection()
         .await
         .unwrap();
