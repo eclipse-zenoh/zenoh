@@ -490,7 +490,7 @@ impl EndPoint {
         let m: &str = metadata.as_ref();
         let c: &str = config.as_ref();
 
-        let len = p.as_bytes().len() + a.as_bytes().len() + m.as_bytes().len();
+        let len = p.len() + a.len() + m.len();
         if len > u8::MAX as usize {
             bail!("Endpoint too big: {} bytes. Max: {} bytes. ", len, u8::MAX);
         }

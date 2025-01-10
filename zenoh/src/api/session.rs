@@ -1916,13 +1916,13 @@ impl SessionInner {
             MatchingStatusType::Queryables(false) => state.queryables.values().any(|q| {
                 state
                     .local_wireexpr_to_expr(&q.key_expr)
-                    .map_or(false, |ke| ke.intersects(key_expr))
+                    .is_ok_and(|ke| ke.intersects(key_expr))
             }),
             MatchingStatusType::Queryables(true) => state.queryables.values().any(|q| {
                 q.complete
                     && state
                         .local_wireexpr_to_expr(&q.key_expr)
-                        .map_or(false, |ke| ke.includes(key_expr))
+                        .is_ok_and(|ke| ke.includes(key_expr))
             }),
         };
         MatchingStatus { matching }

@@ -468,7 +468,7 @@ impl HatQueriesTrait for HatCode {
                         qbl.session_ctxs
                             .get(&face.id)
                             .and_then(|sc| sc.qabl)
-                            .map_or(false, |q| q.complete)
+                            .is_some_and(|q| q.complete)
                             && KeyExpr::keyexpr_include(qbl.expr(), key_expr)
                     }
                     false => KeyExpr::keyexpr_intersect(qbl.expr(), key_expr),
@@ -493,7 +493,7 @@ impl HatQueriesTrait for HatCode {
             for (sid, context) in &mres.session_ctxs {
                 if context.face.whatami == WhatAmI::Client
                     && match complete {
-                        true => context.qabl.map_or(false, |q| q.complete),
+                        true => context.qabl.is_some_and(|q| q.complete),
                         false => context.qabl.is_some(),
                     }
                 {
