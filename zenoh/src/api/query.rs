@@ -14,6 +14,7 @@
 
 use std::{collections::HashMap, error::Error, fmt::Display};
 
+use serde::Deserialize;
 #[cfg(feature = "unstable")]
 use zenoh_config::ZenohId;
 use zenoh_keyexpr::OwnedKeyExpr;

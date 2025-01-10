@@ -21,6 +21,7 @@ use std::{
 };
 
 use futures::Sink;
+use serde::Deserialize;
 use tracing::error;
 use zenoh_config::qos::PublisherPriorityConf;
 use zenoh_core::{Resolvable, Resolve, Wait};
