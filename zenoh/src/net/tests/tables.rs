@@ -162,8 +162,7 @@ fn match_test() {
         for key_expr2 in key_exprs.iter() {
             if res_matches
                 .iter()
-                .map(|m| m.upgrade().unwrap().expr())
-                .any(|x| x.as_str() == key_expr2.as_str())
+                .any(|m| m.upgrade().unwrap().expr() == key_expr2.as_str())
             {
                 assert!(dbg!(dbg!(key_expr1).intersects(dbg!(key_expr2))));
             } else {

@@ -195,7 +195,8 @@ impl TransportUnicastUniversal {
         };
 
         // Notify the callback
-        if let Some(callback) = zread!(self.callback).as_ref() {
+        let cb = zread!(self.callback).clone();
+        if let Some(callback) = cb {
             callback.del_link(link);
         }
 

@@ -1589,6 +1589,8 @@ impl SessionInner {
                                     false,
                                 )
                             }
+                        } else {
+                            drop(state);
                         }
                     } else {
                         drop(state);

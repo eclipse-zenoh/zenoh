@@ -63,7 +63,7 @@ pub(crate) fn declare_token(
                     let wtables = zwrite!(tables.tables);
                     (res.unwrap(), wtables)
                 } else {
-                    let mut fullexpr = prefix.expr();
+                    let mut fullexpr = prefix.expr().to_string();
                     fullexpr.push_str(expr.suffix.as_ref());
                     let mut matches = keyexpr::new(fullexpr.as_str())
                         .map(|ke| Resource::get_matches(&rtables, ke))
@@ -123,7 +123,7 @@ pub(crate) fn undeclare_token(
                     None => {
                         // Here we create a Resource that will immediately be removed after treatment
                         // TODO this could be improved
-                        let mut fullexpr = prefix.expr();
+                        let mut fullexpr = prefix.expr().to_string();
                         fullexpr.push_str(expr.wire_expr.suffix.as_ref());
                         let mut matches = keyexpr::new(fullexpr.as_str())
                             .map(|ke| Resource::get_matches(&rtables, ke))

@@ -66,7 +66,9 @@ pub(super) fn interests_new_face(tables: &mut Tables, face: &mut Arc<FaceState>)
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::DEFAULT,
                     },
-                    res.as_ref().map(|res| res.expr()).unwrap_or_default(),
+                    res.as_ref()
+                        .map(|res| res.expr().to_string())
+                        .unwrap_or_default(),
                 ));
             }
         }
@@ -146,7 +148,9 @@ impl HatInterestTrait for HatCode {
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
                 },
-                res.as_ref().map(|res| res.expr()).unwrap_or_default(),
+                res.as_ref()
+                    .map(|res| res.expr().to_string())
+                    .unwrap_or_default(),
             ));
         }
 
@@ -223,7 +227,7 @@ impl HatInterestTrait for HatCode {
                                 local_interest
                                     .res
                                     .as_ref()
-                                    .map(|res| res.expr())
+                                    .map(|res| res.expr().to_string())
                                     .unwrap_or_default(),
                             ));
                             get_mut_unchecked(dst_face).local_interests.remove(&id);

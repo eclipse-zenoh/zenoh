@@ -56,7 +56,7 @@ impl<'a> RoutingExpr<'a> {
     #[inline]
     pub(crate) fn full_expr(&mut self) -> &str {
         if self.full.is_none() {
-            self.full = Some(self.prefix.expr() + self.suffix);
+            self.full = Some(self.prefix.expr().to_string() + self.suffix);
         }
         self.full.as_ref().unwrap()
     }

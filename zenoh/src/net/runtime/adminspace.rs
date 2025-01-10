@@ -185,10 +185,22 @@ impl AdminSpace {
             Arc::new(subscribers_data),
         );
         handlers.insert(
+            format!("@/{zid_str}/{whatami_str}/publisher/**")
+                .try_into()
+                .unwrap(),
+            Arc::new(publishers_data),
+        );
+        handlers.insert(
             format!("@/{zid_str}/{whatami_str}/queryable/**")
                 .try_into()
                 .unwrap(),
             Arc::new(queryables_data),
+        );
+        handlers.insert(
+            format!("@/{zid_str}/{whatami_str}/queriers/**")
+                .try_into()
+                .unwrap(),
+            Arc::new(queriers_data),
         );
 
         #[cfg(feature = "plugins")]
@@ -730,6 +742,30 @@ fn subscribers_data(context: &AdminContext, query: Query) {
     }
 }
 
+fn publishers_data(context: &AdminContext, query: Query) {
+    let tables = zread!(context.runtime.state.router.tables.tables);
+    for sub in tables.hat_code.get_publications(&tables) {
+        let key = KeyExpr::try_from(format!(
+            "@/{}/{}/publisher/{}",
+            context.runtime.state.zid,
+            context.runtime.state.whatami,
+            sub.0.expr()
+        ))
+        .unwrap();
+        if query.key_expr().intersects(&key) {
+            let payload =
+                ZBytes::from(serde_json::to_string(&sub.1).unwrap_or_else(|_| "{}".to_string()));
+            if let Err(e) = query
+                .reply(key, payload)
+                .encoding(Encoding::APPLICATION_JSON)
+                .wait()
+            {
+                tracing::error!("Error sending AdminSpace reply: {:?}", e);
+            }
+        }
+    }
+}
+
 fn queryables_data(context: &AdminContext, query: Query) {
     let tables = zread!(context.runtime.state.router.tables.tables);
     for qabl in tables.hat_code.get_queryables(&tables) {
@@ -743,6 +779,30 @@ fn queryables_data(context: &AdminContext, query: Query) {
         if query.key_expr().intersects(&key) {
             let payload =
                 ZBytes::from(serde_json::to_string(&qabl.1).unwrap_or_else(|_| "{}".to_string()));
+            if let Err(e) = query
+                .reply(key, payload)
+                .encoding(Encoding::APPLICATION_JSON)
+                .wait()
+            {
+                tracing::error!("Error sending AdminSpace reply: {:?}", e);
+            }
+        }
+    }
+}
+
+fn queriers_data(context: &AdminContext, query: Query) {
+    let tables = zread!(context.runtime.state.router.tables.tables);
+    for sub in tables.hat_code.get_queriers(&tables) {
+        let key = KeyExpr::try_from(format!(
+            "@/{}/{}/querier/{}",
+            context.runtime.state.zid,
+            context.runtime.state.whatami,
+            sub.0.expr()
+        ))
+        .unwrap();
+        if query.key_expr().intersects(&key) {
+            let payload =
+                ZBytes::from(serde_json::to_string(&sub.1).unwrap_or_else(|_| "{}".to_string()));
             if let Err(e) = query
                 .reply(key, payload)
                 .encoding(Encoding::APPLICATION_JSON)

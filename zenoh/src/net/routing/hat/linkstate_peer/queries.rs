@@ -156,7 +156,7 @@ fn send_sourced_queryable_to_net_children(
                                     ext_info: *qabl_info,
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ));
                     }
                 }
@@ -209,7 +209,7 @@ fn propagate_simple_queryable(
                             ext_info: info,
                         }),
                     },
-                    res.expr(),
+                    res.expr().to_string(),
                 ),
             );
         }
@@ -388,7 +388,7 @@ fn send_forget_sourced_queryable_to_net_children(
                                     ext_wire_expr: WireExprType { wire_expr },
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ));
                     }
                 }
@@ -418,7 +418,7 @@ fn propagate_forget_simple_queryable(
                             ext_wire_expr: WireExprType::null(),
                         }),
                     },
-                    res.expr(),
+                    res.expr().to_string(),
                 ),
             );
         }
@@ -449,7 +449,7 @@ fn propagate_forget_simple_queryable(
                                     ext_wire_expr: WireExprType::null(),
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ),
                     );
                 }
@@ -581,7 +581,7 @@ pub(super) fn undeclare_simple_queryable(
                                 ext_wire_expr: WireExprType::null(),
                             }),
                         },
-                        res.expr(),
+                        res.expr().to_string(),
                     ),
                 );
             }
@@ -612,7 +612,7 @@ pub(super) fn undeclare_simple_queryable(
                                         ext_wire_expr: WireExprType::null(),
                                     }),
                                 },
-                                res.expr(),
+                                res.expr().to_string(),
                             ),
                         );
                     }
@@ -798,7 +798,7 @@ pub(super) fn declare_qabl_interest(
                                     ext_info: info,
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ),
                     );
                 }
@@ -827,7 +827,7 @@ pub(super) fn declare_qabl_interest(
                                         ext_info: info,
                                     }),
                                 },
-                                qabl.expr(),
+                                qabl.expr().to_string(),
                             ),
                         );
                     }
@@ -855,7 +855,7 @@ pub(super) fn declare_qabl_interest(
                                     ext_info: info,
                                 }),
                             },
-                            qabl.expr(),
+                            qabl.expr().to_string(),
                         ),
                     );
                 }
@@ -934,6 +934,25 @@ impl HatQueriesTrait for HatCode {
                 )
             })
             .collect()
+    }
+
+    fn get_queriers(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+        let mut result = HashMap::new();
+        for face in tables.faces.values() {
+            for interest in face_hat!(face).remote_interests.values() {
+                if interest.options.queryables() {
+                    if let Some(res) = interest.res.as_ref() {
+                        let sources = result.entry(res.clone()).or_insert_with(Sources::default);
+                        match face.whatami {
+                            WhatAmI::Router => sources.routers.push(face.zid),
+                            WhatAmI::Peer => sources.peers.push(face.zid),
+                            WhatAmI::Client => sources.clients.push(face.zid),
+                        }
+                    }
+                }
+            }
+        }
+        result.into_iter().collect()
     }
 
     fn compute_query_route(

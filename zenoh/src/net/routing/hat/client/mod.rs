@@ -84,7 +84,9 @@ impl HatTables {
 pub(crate) struct HatCode {}
 
 impl HatBaseTrait for HatCode {
-    fn init(&self, _tables: &mut Tables, _runtime: Runtime) {}
+    fn init(&self, _tables: &mut Tables, _runtime: Runtime) -> ZResult<()> {
+        Ok(())
+    }
 
     fn new_tables(&self, _router_peers_failover_brokering: bool) -> Box<dyn Any + Send + Sync> {
         Box::new(HatTables::new())

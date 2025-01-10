@@ -61,7 +61,7 @@ impl Router {
         })
     }
 
-    pub fn init_link_state(&mut self, runtime: Runtime) {
+    pub fn init_link_state(&mut self, runtime: Runtime) -> ZResult<()> {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut tables = zwrite!(self.tables.tables);
         tables.runtime = Some(Runtime::downgrade(&runtime));

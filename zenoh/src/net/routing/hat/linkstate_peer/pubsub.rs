@@ -83,7 +83,7 @@ fn send_sourced_subscription_to_net_children(
                                     wire_expr: key_expr,
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ));
                     }
                 }
@@ -123,7 +123,7 @@ fn propagate_simple_subscription_to(
                             wire_expr: key_expr,
                         }),
                     },
-                    res.expr(),
+                    res.expr().to_string(),
                 ),
             );
         } else {
@@ -163,7 +163,7 @@ fn propagate_simple_subscription_to(
                                     wire_expr: key_expr,
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ),
                     );
                 }
@@ -371,7 +371,7 @@ fn send_forget_sourced_subscription_to_net_children(
                                     ext_wire_expr: WireExprType { wire_expr },
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ));
                     }
                 }
@@ -401,7 +401,7 @@ fn propagate_forget_simple_subscription(
                             ext_wire_expr: WireExprType::null(),
                         }),
                     },
-                    res.expr(),
+                    res.expr().to_string(),
                 ),
             );
         }
@@ -431,7 +431,7 @@ fn propagate_forget_simple_subscription(
                                     ext_wire_expr: WireExprType::null(),
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ),
                     );
                 }
@@ -557,7 +557,7 @@ pub(super) fn undeclare_simple_subscription(
                                     ext_wire_expr: WireExprType::null(),
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ),
                     );
                 }
@@ -590,7 +590,7 @@ pub(super) fn undeclare_simple_subscription(
                                             },
                                         ),
                                     },
-                                    res.expr(),
+                                    res.expr().to_string(),
                                 ),
                             );
                         }
@@ -724,7 +724,7 @@ pub(super) fn declare_sub_interest(
                                     wire_expr,
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ),
                     );
                 }
@@ -750,7 +750,7 @@ pub(super) fn declare_sub_interest(
                                         wire_expr,
                                     }),
                                 },
-                                sub.expr(),
+                                sub.expr().to_string(),
                             ),
                         );
                     }
@@ -776,7 +776,7 @@ pub(super) fn declare_sub_interest(
                                     wire_expr,
                                 }),
                             },
-                            sub.expr(),
+                            sub.expr().to_string(),
                         ),
                     );
                 }
@@ -855,6 +855,25 @@ impl HatPubSubTrait for HatCode {
                 )
             })
             .collect()
+    }
+
+    fn get_publications(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+        let mut result = HashMap::new();
+        for face in tables.faces.values() {
+            for interest in face_hat!(face).remote_interests.values() {
+                if interest.options.subscribers() {
+                    if let Some(res) = interest.res.as_ref() {
+                        let sources = result.entry(res.clone()).or_insert_with(Sources::default);
+                        match face.whatami {
+                            WhatAmI::Router => sources.routers.push(face.zid),
+                            WhatAmI::Peer => sources.peers.push(face.zid),
+                            WhatAmI::Client => sources.clients.push(face.zid),
+                        }
+                    }
+                }
+            }
+        }
+        result.into_iter().collect()
     }
 
     fn compute_data_route(
