@@ -221,7 +221,7 @@ fn do_parse<'a>(
                 }
             }
             pattern.is_double_wild()
-                && prefix.map_or(false, |prefix| prefix.intersects(target))
+                && prefix.is_some_and(|prefix| prefix.intersects(target))
                 && do_parse(None, segments, results)
         }
         _ => unreachable!(),

@@ -1575,7 +1575,7 @@ impl HatQueriesTrait for HatCode {
             if master {
                 for (sid, context) in &mres.session_ctxs {
                     if match complete {
-                        true => context.qabl.map_or(false, |q| q.complete),
+                        true => context.qabl.is_some_and(|q| q.complete),
                         false => context.qabl.is_some(),
                     } && context.face.whatami != WhatAmI::Router
                     {
