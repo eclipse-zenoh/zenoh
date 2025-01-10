@@ -16,7 +16,6 @@ use std::{collections::BTreeMap, future::IntoFuture, str::FromStr};
 use zenoh::{
     config::ZenohId,
     handlers::{Callback, IntoHandler},
-    internal::TerminatableTask,
     key_expr::KeyExpr,
     liveliness::{LivelinessSubscriberBuilder, LivelinessToken},
     pubsub::SubscriberBuilder,
@@ -459,7 +458,7 @@ pub struct AdvancedSubscriber<Receiver> {
     subscriber: Subscriber<()>,
     receiver: Receiver,
     liveliness_subscriber: Option<Subscriber<()>>,
-    _heartbeat_subscriber_task: Option<TerminatableTask>,
+    _heartbeat_subscriber: Option<Subscriber<()>>,
 }
 
 #[zenoh_macros::unstable]
@@ -941,103 +940,98 @@ impl<Handler> AdvancedSubscriber<Handler> {
             None
         };
 
-        let heartbeat_subscriber_task = if retransmission.is_some_and(|r| r.heartbeat_listener) {
+        let heartbeat_subscriber = if retransmission.is_some_and(|r| r.heartbeat_listener) {
             let ke_heartbeat_sub = KE_ADV_PREFIX / KE_PUB / KE_STARSTAR / KE_AT / &key_expr;
+            let statesref = statesref.clone();
             let heartbeat_sub = conf
                 .session
                 .declare_subscriber(ke_heartbeat_sub)
-                .allowed_origin(conf.origin)
-                .wait()?;
+                .callback(move |sample_hb| {
+                    if sample_hb.kind() != SampleKind::Put {
+                        return;
+                    }
 
-            let statesref = statesref.clone();
-            let task = async move {
-                loop {
-                    if let Ok(sample_hb) = heartbeat_sub.recv_async().await {
-                        if sample_hb.kind() != SampleKind::Put {
-                            continue;
-                        }
-
-                        let heartbeat_keyexpr = sample_hb.key_expr().as_keyexpr();
-                        let Ok(parsed_keyexpr) = ke_liveliness::parse(heartbeat_keyexpr) else {
-                            continue;
+                    let heartbeat_keyexpr = sample_hb.key_expr().as_keyexpr();
+                    let Ok(parsed_keyexpr) = ke_liveliness::parse(heartbeat_keyexpr) else {
+                        return;
+                    };
+                    let source_id = {
+                        let Ok(zid) = ZenohId::from_str(parsed_keyexpr.zid().as_str()) else {
+                            return;
                         };
-                        let source_id = {
-                            let Ok(zid) = ZenohId::from_str(parsed_keyexpr.zid().as_str()) else {
-                                continue;
-                            };
-                            let Ok(eid) = EntityId::from_str(parsed_keyexpr.eid().as_str()) else {
-                                continue;
-                            };
-                            EntityGlobalId::new(zid, eid)
+                        let Ok(eid) = EntityId::from_str(parsed_keyexpr.eid().as_str()) else {
+                            return;
                         };
+                        EntityGlobalId::new(zid, eid)
+                    };
 
-                        let Ok(heartbeat_sn) = z_deserialize::<u32>(sample_hb.payload()) else {
-                            tracing::debug!(
-                                "Skipping invalid heartbeat payload on '{}'",
-                                heartbeat_keyexpr
-                            );
-                            continue;
+                    let Ok(heartbeat_sn) = z_deserialize::<u32>(sample_hb.payload()) else {
+                        tracing::debug!(
+                            "Skipping invalid heartbeat payload on '{}'",
+                            heartbeat_keyexpr
+                        );
+                        return;
+                    };
+
+                    let mut lock = zlock!(statesref);
+                    let states = &mut *lock;
+                    let entry = states.sequenced_states.entry(source_id);
+                    if matches!(&entry, Entry::Vacant(_)) && states.global_pending_queries > 0 {
+                        tracing::debug!("Skipping heartbeat on '{}' from publisher that is currently being pulled by liveliness task", heartbeat_keyexpr);
+                        return;
+                    }
+
+                    // FIXME: This breaks vacancy check in handle_sample: spawning periodic queries will not occur if heartbeat sample is received before data sample
+                    let state = entry.or_insert(SourceState::<u32> {
+                        last_delivered: None,
+                        pending_queries: 0,
+                        pending_samples: BTreeMap::new(),
+                    });
+                    // TODO: add state to avoid sending multiple queries for the same heartbeat if its periodicity is higher than the query response time
+
+                    // check that it's not an old sn or a pending sample's sn
+                    if (state.last_delivered.is_none()
+                        || state.last_delivered.is_some_and(|sn| heartbeat_sn > sn))
+                        && !state.pending_samples.contains_key(&heartbeat_sn)
+                    {
+                        let seq_num_range = seq_num_range(
+                            state.last_delivered.map(|s| s + 1),
+                            Some(heartbeat_sn),
+                        );
+
+                        let session = states.session.clone();
+                        let key_expr = states.key_expr.clone().into_owned();
+                        let query_target = states.query_target;
+                        let query_timeout = states.query_timeout;
+                        state.pending_queries += 1;
+                        drop(lock);
+
+                        let handler = SequencedRepliesHandler {
+                            source_id,
+                            statesref: statesref.clone(),
                         };
-
-                        let mut lock = zlock!(statesref);
-                        let states = &mut *lock;
-                        let entry = states.sequenced_states.entry(source_id);
-                        if matches!(&entry, Entry::Vacant(_)) && states.global_pending_queries > 0 {
-                            tracing::debug!("Skipping heartbeat on '{}' from publisher that is currently being pulled by liveliness task", heartbeat_keyexpr);
-                            continue;
-                        }
-
-                        // FIXME: This breaks vacancy check in handle_sample: spawning periodic queries will not occur if heartbeat sample is received before data sample
-                        let state = entry.or_insert(SourceState::<u32> {
-                            last_delivered: None,
-                            pending_queries: 0,
-                            pending_samples: BTreeMap::new(),
-                        });
-                        // TODO: add state to avoid sending multiple queries for the same heartbeat if its periodicity is higher than the query response time
-
-                        // check that it's not an old sn or a pending sample's sn
-                        if (state.last_delivered.is_none()
-                            || state.last_delivered.is_some_and(|sn| heartbeat_sn > sn))
-                            && !state.pending_samples.contains_key(&heartbeat_sn)
-                        {
-                            let seq_num_range = seq_num_range(
-                                state.last_delivered.map(|s| s + 1),
-                                Some(heartbeat_sn),
-                            );
-
-                            let session = states.session.clone();
-                            let key_expr = states.key_expr.clone().into_owned();
-                            let query_target = states.query_target;
-                            let query_timeout = states.query_timeout;
-                            state.pending_queries += 1;
-                            drop(lock);
-
-                            let handler = SequencedRepliesHandler {
-                                source_id,
-                                statesref: statesref.clone(),
-                            };
-                            let _ = session
-                                .get(Selector::from((heartbeat_keyexpr, seq_num_range)))
-                                .callback({
-                                    move |r: Reply| {
-                                        if let Ok(s) = r.into_result() {
-                                            if key_expr.intersects(s.key_expr()) {
-                                                let states = &mut *zlock!(handler.statesref);
-                                                handle_sample(states, s);
-                                            }
+                        let _ = session
+                            .get(Selector::from((heartbeat_keyexpr, seq_num_range)))
+                            .callback({
+                                move |r: Reply| {
+                                    if let Ok(s) = r.into_result() {
+                                        if key_expr.intersects(s.key_expr()) {
+                                            let states = &mut *zlock!(handler.statesref);
+                                            handle_sample(states, s);
                                         }
                                     }
-                                })
-                                .consolidation(ConsolidationMode::None)
-                                .accept_replies(ReplyKeyExpr::Any)
-                                .target(query_target)
-                                .timeout(query_timeout)
-                                .wait();
-                        }
+                                }
+                            })
+                            .consolidation(ConsolidationMode::None)
+                            .accept_replies(ReplyKeyExpr::Any)
+                            .target(query_target)
+                            .timeout(query_timeout)
+                            .wait();
                     }
-                }
-            };
-            Some(TerminatableTask::spawn_abortable(ZRuntime::Net, task))
+                })
+                .allowed_origin(conf.origin)
+                .wait()?;
+            Some(heartbeat_sub)
         } else {
             None
         };
@@ -1065,7 +1059,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
             subscriber,
             receiver,
             liveliness_subscriber,
-            _heartbeat_subscriber_task: heartbeat_subscriber_task,
+            _heartbeat_subscriber: heartbeat_subscriber,
         };
 
         Ok(reliable_subscriber)
