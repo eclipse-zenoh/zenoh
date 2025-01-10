@@ -372,7 +372,7 @@ impl<'s, Storage: IKeFormatStorage<'s>> core::fmt::Debug for KeFormatter<'s, Sto
             let sharp = if id.contains('}')
                 || pattern.contains('}')
                 || value.map_or_else(
-                    || spec.default().map_or(false, |v| v.contains('}')),
+                    || spec.default().is_some_and(|v| v.contains('}')),
                     |v| v.contains('}'),
                 ) {
                 "#"
