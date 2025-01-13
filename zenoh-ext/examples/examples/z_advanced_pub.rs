@@ -33,9 +33,7 @@ async fn main() {
     let publisher = session
         .declare_publisher(&key_expr)
         .cache(CacheConfig::default().max_samples(history))
-        .sample_miss_detection(
-            MissDetectionConfig::default().last_sample_miss_detection(Duration::from_secs(5)),
-        )
+        .sample_miss_detection(MissDetectionConfig::default().heartbeat(Duration::from_secs(5)))
         .publisher_detection()
         .await
         .unwrap();

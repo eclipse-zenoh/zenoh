@@ -67,7 +67,7 @@ pub struct MissDetectionConfig {
 #[zenoh_macros::unstable]
 impl MissDetectionConfig {
     #[zenoh_macros::unstable]
-    pub fn last_sample_miss_detection(mut self, period: Duration) -> Self {
+    pub fn heartbeat(mut self, period: Duration) -> Self {
         self.state_publisher = Some(period);
         self
     }

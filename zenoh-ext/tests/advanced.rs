@@ -771,16 +771,14 @@ async fn test_advanced_retransmission_heartbeat() {
 
     let sub = ztimeout!(client2
         .declare_subscriber(ADVANCED_RETRANSMISSION_KEYEXPR)
-        .recovery(RecoveryConfig::default().heartbeat_listener(true)))
+        .recovery(RecoveryConfig::default().heartbeat(true)))
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
     let publ = ztimeout!(client1
         .declare_publisher(ADVANCED_RETRANSMISSION_KEYEXPR)
         .cache(CacheConfig::default().max_samples(10))
-        .sample_miss_detection(
-            MissDetectionConfig::default().last_sample_miss_detection(HEARTBEAT_PERIOD)
-        ))
+        .sample_miss_detection(MissDetectionConfig::default().heartbeat(HEARTBEAT_PERIOD)))
     .unwrap();
     ztimeout!(publ.put("1")).unwrap();
 

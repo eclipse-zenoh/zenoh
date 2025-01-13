@@ -93,7 +93,7 @@ impl HistoryConfig {
 #[zenoh_macros::unstable]
 pub struct RecoveryConfig {
     periodic_queries: Option<Duration>,
-    heartbeat_listener: bool,
+    heartbeat: bool,
 }
 
 impl std::fmt::Debug for RecoveryConfig {
@@ -129,8 +129,8 @@ impl RecoveryConfig {
     /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
     #[zenoh_macros::unstable]
     #[inline]
-    pub fn heartbeat_listener(mut self, enabled: bool) -> Self {
-        self.heartbeat_listener = enabled;
+    pub fn heartbeat(mut self, enabled: bool) -> Self {
+        self.heartbeat = enabled;
         self
     }
 }
@@ -940,7 +940,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
             None
         };
 
-        let heartbeat_subscriber = if retransmission.is_some_and(|r| r.heartbeat_listener) {
+        let heartbeat_subscriber = if retransmission.is_some_and(|r| r.heartbeat) {
             let ke_heartbeat_sub = KE_ADV_PREFIX / KE_PUB / KE_STARSTAR / KE_AT / &key_expr;
             let statesref = statesref.clone();
             let heartbeat_sub = conf

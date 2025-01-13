@@ -35,7 +35,7 @@ async fn main() {
         .recovery(
             RecoveryConfig::default()
                 .periodic_queries(Some(Duration::from_secs(1)))
-                .heartbeat_listener(true),
+                .heartbeat(true),
         )
         .subscriber_detection()
         .await
