@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{collections::BTreeMap, future::IntoFuture, str::FromStr};
+use std::{collections::BTreeMap, future::IntoFuture, marker::PhantomData, str::FromStr};
 
 use zenoh::{
     config::ZenohId,
@@ -89,23 +89,30 @@ impl HistoryConfig {
 }
 
 #[derive(Default, Clone, Copy)]
+pub struct Unconfigured;
+#[derive(Default, Clone, Copy)]
+pub struct Configured;
+
+#[derive(Default, Clone, Copy)]
 /// Configure retransmission.
 #[zenoh_macros::unstable]
-pub struct RecoveryConfig {
+pub struct RecoveryConfig<T> {
     periodic_queries: Option<Duration>,
-    heartbeat: bool,
+    heartbeat: Option<()>,
+    phantom: PhantomData<T>,
 }
 
-impl std::fmt::Debug for RecoveryConfig {
+impl<T> std::fmt::Debug for RecoveryConfig<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut s = f.debug_struct("RetransmissionConf");
         s.field("periodic_queries", &self.periodic_queries);
+        s.field("heartbeat", &self.heartbeat);
         s.finish()
     }
 }
 
 #[zenoh_macros::unstable]
-impl RecoveryConfig {
+impl RecoveryConfig<Unconfigured> {
     /// Enable periodic queries for not yet received Samples and specify their period.
     ///
     /// This allows to retrieve the last Sample(s) if the last Sample(s) is/are lost.
@@ -116,22 +123,28 @@ impl RecoveryConfig {
     /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
     #[zenoh_macros::unstable]
     #[inline]
-    pub fn periodic_queries(mut self, period: Option<Duration>) -> Self {
-        self.periodic_queries = period;
-        self
+    pub fn periodic_queries(self, period: Duration) -> RecoveryConfig<Configured> {
+        RecoveryConfig {
+            periodic_queries: Some(period),
+            heartbeat: None,
+            phantom: PhantomData::<Configured>,
+        }
     }
 
     /// Subscribe to heartbeats of [`AdvancedPublishers`](crate::AdvancedPublisher).
     ///
     /// This allows to periodically receive the last published Sample's sequence number and check for misses.
-    /// Heartbeat listener must be paired with [`AdvancedPublishers`](crate::AdvancedPublisher)
+    /// Heartbeat subscriber must be paired with [`AdvancedPublishers`](crate::AdvancedPublisher)
     /// that enable [`cache`](crate::AdvancedPublisherBuilder::cache) and
-    /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
+    /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection) with heartbeat.
     #[zenoh_macros::unstable]
     #[inline]
-    pub fn heartbeat(mut self, enabled: bool) -> Self {
-        self.heartbeat = enabled;
-        self
+    pub fn heartbeat(self) -> RecoveryConfig<Configured> {
+        RecoveryConfig {
+            periodic_queries: None,
+            heartbeat: Some(()),
+            phantom: PhantomData::<Configured>,
+        }
     }
 }
 
@@ -141,7 +154,7 @@ pub struct AdvancedSubscriberBuilder<'a, 'b, 'c, Handler, const BACKGROUND: bool
     pub(crate) session: &'a Session,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) origin: Locality,
-    pub(crate) retransmission: Option<RecoveryConfig>,
+    pub(crate) retransmission: Option<RecoveryConfig<Configured>>,
     pub(crate) query_target: QueryTarget,
     pub(crate) query_timeout: Duration,
     pub(crate) history: Option<HistoryConfig>,
@@ -260,7 +273,7 @@ impl<'a, 'c, Handler, const BACKGROUND: bool>
     /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
     #[zenoh_macros::unstable]
     #[inline]
-    pub fn recovery(mut self, conf: RecoveryConfig) -> Self {
+    pub fn recovery(mut self, conf: RecoveryConfig<Configured>) -> Self {
         self.retransmission = Some(conf);
         self
     }
@@ -940,7 +953,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
             None
         };
 
-        let heartbeat_subscriber = if retransmission.is_some_and(|r| r.heartbeat) {
+        let heartbeat_subscriber = if retransmission.is_some_and(|r| r.heartbeat.is_some()) {
             let ke_heartbeat_sub = KE_ADV_PREFIX / KE_PUB / KE_STARSTAR / KE_AT / &key_expr;
             let statesref = statesref.clone();
             let heartbeat_sub = conf

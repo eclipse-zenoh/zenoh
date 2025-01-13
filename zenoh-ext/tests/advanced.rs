@@ -292,7 +292,7 @@ async fn test_advanced_retransmission_periodic() {
 
     let sub = ztimeout!(client2
         .declare_subscriber(ADVANCED_RETRANSMISSION_PERIODIC_KEYEXPR)
-        .recovery(RecoveryConfig::default().periodic_queries(Some(Duration::from_secs(1)))))
+        .recovery(RecoveryConfig::default().periodic_queries(Duration::from_secs(1))))
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
@@ -536,7 +536,7 @@ async fn test_advanced_retransmission_sample_miss() {
 
     let sub = ztimeout!(client2
         .declare_subscriber(ADVANCED_RETRANSMISSION_SAMPLE_MISS_KEYEXPR)
-        .recovery(RecoveryConfig::default().periodic_queries(Some(Duration::from_secs(1)))))
+        .recovery(RecoveryConfig::default().periodic_queries(Duration::from_secs(1))))
     .unwrap();
     let miss_listener = ztimeout!(sub.sample_miss_listener()).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -771,7 +771,7 @@ async fn test_advanced_retransmission_heartbeat() {
 
     let sub = ztimeout!(client2
         .declare_subscriber(ADVANCED_RETRANSMISSION_KEYEXPR)
-        .recovery(RecoveryConfig::default().heartbeat(true)))
+        .recovery(RecoveryConfig::default().heartbeat()))
     .unwrap();
     tokio::time::sleep(SLEEP).await;
 
