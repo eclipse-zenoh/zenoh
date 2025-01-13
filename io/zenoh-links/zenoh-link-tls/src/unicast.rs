@@ -11,7 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{cell::UnsafeCell, convert::TryInto, fmt, net::SocketAddr, sync::Arc, time::Duration};
+use std::{
+    cell::UnsafeCell,
+    convert::TryInto,
+    fmt::{self, Debug},
+    net::SocketAddr,
+    sync::Arc,
+    time::Duration,
+};
 
 use async_trait::async_trait;
 use time::OffsetDateTime;
@@ -503,7 +510,7 @@ async fn accept_task(
                             }
                         }
 
-                        tracing::debug!("Accepted TLS connection on {:?}: {:?}", src_addr, dst_addr);
+                        tracing::debug!("Accepted TLS connection on {:?}: {:?}. {:?}.", src_addr, dst_addr, auth_identifier);
                         // Create the new link object
                         let link = Arc::<LinkUnicastTls>::new_cyclic(|weak_link| {
                             let mut expiration_manager = None;
@@ -607,9 +614,18 @@ fn get_cert_chain_expiration(
     Ok(link_expiration)
 }
 
-#[derive(Debug)]
 struct TlsAuthId {
     auth_value: Option<String>,
+}
+
+impl Debug for TlsAuthId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Common Name: {}",
+            self.auth_value.as_deref().unwrap_or("None")
+        )
+    }
 }
 
 impl From<TlsAuthId> for LinkAuthId {

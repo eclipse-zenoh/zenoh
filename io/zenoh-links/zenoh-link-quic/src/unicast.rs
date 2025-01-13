@@ -13,7 +13,7 @@
 //
 
 use std::{
-    fmt,
+    fmt::{self, Debug},
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::Arc,
     time::Duration,
@@ -540,7 +540,7 @@ async fn accept_task(
                             }
                         }
 
-                        tracing::debug!("Accepted QUIC connection on {:?}: {:?}", src_addr, dst_addr);
+                        tracing::debug!("Accepted QUIC connection on {:?}: {:?}. {:?}.", src_addr, dst_addr, auth_id);
                         // Create the new link object
                         let link = Arc::<LinkUnicastQuic>::new_cyclic(|weak_link| {
                             let mut expiration_manager = None;
@@ -628,9 +628,19 @@ fn get_cert_chain_expiration(conn: &quinn::Connection) -> ZResult<Option<OffsetD
     Ok(link_expiration)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct QuicAuthId {
     auth_value: Option<String>,
+}
+
+impl Debug for QuicAuthId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Common Name: {}",
+            self.auth_value.as_deref().unwrap_or("None")
+        )
+    }
 }
 
 impl From<QuicAuthId> for LinkAuthId {
