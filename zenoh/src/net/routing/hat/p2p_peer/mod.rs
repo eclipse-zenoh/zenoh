@@ -21,6 +21,7 @@ use std::{
     any::Any,
     collections::HashMap,
     sync::{atomic::AtomicU32, Arc},
+    time::Duration,
 };
 
 use token::{token_new_face, undeclare_simple_token};
@@ -106,7 +107,9 @@ impl HatTables {
     }
 }
 
-pub(crate) struct HatCode {}
+pub(crate) struct HatCode {
+    pub(crate) interests_timeout: Duration,
+}
 
 impl HatBaseTrait for HatCode {
     fn init(&self, tables: &mut Tables, runtime: Runtime) -> ZResult<()> {

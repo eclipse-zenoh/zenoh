@@ -42,8 +42,6 @@ use crate::net::routing::{
     RoutingContext,
 };
 
-static INTEREST_TIMEOUT_MS: u64 = 10000;
-
 pub(crate) struct CurrentInterest {
     pub(crate) src_face: Arc<FaceState>,
     pub(crate) src_interest_id: InterestId,
@@ -129,6 +127,7 @@ pub(crate) struct CurrentInterestCleanup {
     tables: Arc<TablesLock>,
     face: Weak<FaceState>,
     id: InterestId,
+    interests_timeout: Duration,
 }
 
 impl CurrentInterestCleanup {
@@ -136,18 +135,20 @@ impl CurrentInterestCleanup {
         face: &Arc<FaceState>,
         tables_ref: &Arc<TablesLock>,
         id: u32,
+        interests_timeout: Duration,
     ) {
         let mut cleanup = CurrentInterestCleanup {
             tables: tables_ref.clone(),
             face: Arc::downgrade(face),
             id,
+            interests_timeout,
         };
         if let Some((_, cancellation_token)) = face.pending_current_interests.get(&id) {
             let c_cancellation_token = cancellation_token.clone();
             face.task_controller
                 .spawn_with_rt(zenoh_runtime::ZRuntime::Net, async move {
                     tokio::select! {
-                        _ = tokio::time::sleep(Duration::from_millis(INTEREST_TIMEOUT_MS)) => { cleanup.run().await }
+                        _ = tokio::time::sleep(cleanup.interests_timeout) => { cleanup.run().await }
                         _ = c_cancellation_token.cancelled() => {}
                     }
                 });
@@ -170,7 +171,7 @@ impl Timed for CurrentInterestCleanup {
                     interest.0.src_face,
                     self.id,
                     face,
-                    Duration::from_millis(INTEREST_TIMEOUT_MS),
+                    self.interests_timeout,
                 );
                 finalize_pending_interest(interest, &mut |p, m| p.send_declare(m));
             }

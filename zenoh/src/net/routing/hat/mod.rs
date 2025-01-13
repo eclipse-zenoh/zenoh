@@ -17,7 +17,7 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
-use std::{any::Any, sync::Arc};
+use std::{any::Any, sync::Arc, time::Duration};
 
 use zenoh_config::{unwrap_or_default, Config, WhatAmI};
 use zenoh_protocol::{
@@ -248,12 +248,22 @@ pub(crate) trait HatQueriesTrait {
 
 pub(crate) fn new_hat(whatami: WhatAmI, config: &Config) -> Box<dyn HatTrait + Send + Sync> {
     match whatami {
-        WhatAmI::Client => Box::new(client::HatCode {}),
+        WhatAmI::Client => Box::new(client::HatCode {
+            interests_timeout: Duration::from_millis(unwrap_or_default!(config
+                .routing()
+                .interests()
+                .timeout())),
+        }),
         WhatAmI::Peer => {
             if unwrap_or_default!(config.routing().peer().mode()) == *"linkstate" {
                 Box::new(linkstate_peer::HatCode {})
             } else {
-                Box::new(p2p_peer::HatCode {})
+                Box::new(p2p_peer::HatCode {
+                    interests_timeout: Duration::from_millis(unwrap_or_default!(config
+                        .routing()
+                        .interests()
+                        .timeout())),
+                })
             }
         }
         WhatAmI::Router => Box::new(router::HatCode {}),

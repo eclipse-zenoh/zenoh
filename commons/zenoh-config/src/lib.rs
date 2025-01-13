@@ -354,6 +354,13 @@ validated_struct::validator! {
                 /// The routing strategy to use in peers. ("peer_to_peer" or "linkstate").
                 mode: Option<String>,
             },
+            /// The interests-based routing configuration.
+            /// This configuration applies regardless of the mode (router, peer or client).
+            pub interests: #[derive(Default)]
+            InterestsConf {
+                /// The timeout to wait for incoming interests declarations.
+                timeout: Option<u64>,
+            },
         },
 
         /// The declarations aggregation strategy.
