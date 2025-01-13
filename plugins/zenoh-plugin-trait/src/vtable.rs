@@ -13,7 +13,7 @@
 //
 use zenoh_result::ZResult;
 
-use crate::{Plugin, StructVersion, FEATURES};
+use crate::{Plugin, StructVersion};
 
 pub type PluginLoaderVersion = u64;
 pub const PLUGIN_LOADER_VERSION: PluginLoaderVersion = 1;
@@ -31,7 +31,7 @@ impl<StartArgs, Instance> StructVersion for PluginVTable<StartArgs, Instance> {
         1
     }
     fn struct_features() -> &'static str {
-        FEATURES
+        ""
     }
 }
 

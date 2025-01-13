@@ -23,9 +23,6 @@ license = { workspace = true }
 categories = { workspace = true }
 description = { workspace = true }
 
-[features]
-default = []
-
 [lib]
 name = "zenoh_plugin_trait"
 
