@@ -23,10 +23,10 @@ use zenoh::{
     Result as ZResult,
 };
 
-use crate::advanced_subscriber::Configured;
 #[allow(deprecated)]
 use crate::{
-    advanced_subscriber::HistoryConfig, querying_subscriber::QueryingSubscriberBuilder,
+    advanced_subscriber::{Configured, HistoryConfig},
+    querying_subscriber::QueryingSubscriberBuilder,
     AdvancedSubscriberBuilder, ExtractSample, FetchingSubscriberBuilder, RecoveryConfig,
 };
 
