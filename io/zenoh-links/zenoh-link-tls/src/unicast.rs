@@ -496,7 +496,7 @@ async fn accept_task(
                             match get_cert_chain_expiration(&tls_conn.peer_certificates())? {
                                 exp @ Some(_) => maybe_expiration_time = exp,
                                 None => tracing::warn!(
-                                    "Cannot monitor expiration for TLS link {:?} => {:?} : client does not have certificates",
+                                    "Cannot monitor expiration for TLS link {:?} => {:?}: client does not have certificates",
                                     src_addr,
                                     dst_addr,
                                 ),
@@ -607,6 +607,7 @@ fn get_cert_chain_expiration(
     Ok(link_expiration)
 }
 
+#[derive(Debug)]
 struct TlsAuthId {
     auth_value: Option<String>,
 }
