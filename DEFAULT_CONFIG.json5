@@ -197,8 +197,8 @@
     /// The interests-based routing configuration.
     /// This configuration applies regardless of the mode (router, peer or client).
     interests: {
-        /// The timeout to wait for incoming interests declarations.
-        timeout: 10000,
+      /// The timeout to wait for incoming interests declarations in milliseconds.
+      timeout: 10000,
     },
   },
 
