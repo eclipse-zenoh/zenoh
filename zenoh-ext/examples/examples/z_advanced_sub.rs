@@ -11,8 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::time::Duration;
-
 use clap::{arg, Parser};
 use zenoh::config::Config;
 use zenoh_ext::{AdvancedSubscriberBuilderExt, HistoryConfig, RecoveryConfig};
@@ -32,7 +30,7 @@ async fn main() {
     let subscriber = session
         .declare_subscriber(key_expr)
         .history(HistoryConfig::default().detect_late_publishers())
-        .recovery(RecoveryConfig::default().periodic_queries(Duration::from_secs(5)))
+        .recovery(RecoveryConfig::default().heartbeat())
         .subscriber_detection()
         .await
         .unwrap();
