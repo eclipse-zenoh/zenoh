@@ -426,7 +426,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             format!("{host}:{local_port}"),
             endpoint.metadata(),
         )?;
-
+        let endpoint = EndPoint::new(
+            locator.protocol(),
+            locator.address(),
+            locator.metadata(),
+            endpoint.config(),
+        )?;
         self.listeners
             .add_listener(endpoint, local_addr, task, token)
             .await?;
