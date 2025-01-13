@@ -21,11 +21,10 @@ use std::{
     any::Any,
     collections::HashMap,
     sync::{atomic::AtomicU32, Arc},
-    time::Duration,
 };
 
 use token::{token_new_face, undeclare_simple_token};
-use zenoh_config::{unwrap_or_default, WhatAmI};
+use zenoh_config::WhatAmI;
 use zenoh_protocol::network::{
     declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
     interest::InterestId,
@@ -60,20 +59,6 @@ mod pubsub;
 mod queries;
 mod token;
 
-macro_rules! hat {
-    ($t:expr) => {
-        $t.hat.downcast_ref::<HatTables>().unwrap()
-    };
-}
-use hat;
-
-macro_rules! hat_mut {
-    ($t:expr) => {
-        $t.hat.downcast_mut::<HatTables>().unwrap()
-    };
-}
-use hat_mut;
-
 macro_rules! face_hat {
     ($f:expr) => {
         $f.hat.downcast_ref::<HatFace>().unwrap()
@@ -88,28 +73,18 @@ macro_rules! face_hat_mut {
 }
 use face_hat_mut;
 
-struct HatTables {
-    pub(crate) interests_timeout: Duration,
-}
+struct HatTables {}
 
 impl HatTables {
     fn new() -> Self {
-        Self {
-            interests_timeout: Duration::from_millis(
-                zenoh_config::defaults::routing::interests::timeout,
-            ),
-        }
+        Self {}
     }
 }
 
 pub(crate) struct HatCode {}
 
 impl HatBaseTrait for HatCode {
-    fn init(&self, tables: &mut Tables, runtime: Runtime) -> ZResult<()> {
-        let config_guard = runtime.config().lock();
-        let config = &config_guard.0;
-        hat_mut!(tables).interests_timeout =
-            Duration::from_millis(unwrap_or_default!(config.routing().interests().timeout()));
+    fn init(&self, _tables: &mut Tables, _runtime: Runtime) -> ZResult<()> {
         Ok(())
     }
 

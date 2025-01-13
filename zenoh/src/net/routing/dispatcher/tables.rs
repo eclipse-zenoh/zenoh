@@ -71,6 +71,7 @@ pub struct Tables {
     pub(crate) hlc: Option<Arc<HLC>>,
     pub(crate) drop_future_timestamp: bool,
     pub(crate) queries_default_timeout: Duration,
+    pub(crate) interests_timeout: Duration,
     pub(crate) root_res: Arc<Resource>,
     pub(crate) faces: HashMap<usize, Arc<FaceState>>,
     pub(crate) mcast_groups: Vec<Arc<FaceState>>,
@@ -93,6 +94,8 @@ impl Tables {
             unwrap_or_default!(config.routing().router().peers_failover_brokering());
         let queries_default_timeout =
             Duration::from_millis(unwrap_or_default!(config.queries_default_timeout()));
+        let interests_timeout =
+            Duration::from_millis(unwrap_or_default!(config.routing().interests().timeout()));
         let hat_code = hat::new_hat(whatami, config);
         Ok(Tables {
             zid,
@@ -102,6 +105,7 @@ impl Tables {
             hlc,
             drop_future_timestamp,
             queries_default_timeout,
+            interests_timeout,
             root_res: Resource::root(),
             faces: HashMap::new(),
             mcast_groups: vec![],
