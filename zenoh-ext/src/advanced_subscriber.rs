@@ -990,11 +990,10 @@ impl<Handler> AdvancedSubscriber<Handler> {
                     let states = &mut *lock;
                     let entry = states.sequenced_states.entry(source_id);
                     if matches!(&entry, Entry::Vacant(_)) && states.global_pending_queries > 0 {
-                        tracing::debug!("Skipping heartbeat on '{}' from publisher that is currently being pulled by liveliness task", heartbeat_keyexpr);
+                        tracing::debug!("Skipping heartbeat on '{}' from publisher that is currently being pulled by global query", heartbeat_keyexpr);
                         return;
                     }
 
-                    // FIXME: This breaks vacancy check in handle_sample: spawning periodic queries will not occur if heartbeat sample is received before data sample
                     let state = entry.or_insert(SourceState::<u32> {
                         last_delivered: None,
                         pending_queries: 0,
