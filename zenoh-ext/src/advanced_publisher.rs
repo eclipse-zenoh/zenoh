@@ -13,16 +13,22 @@
 //
 use std::{
     future::{IntoFuture, Ready},
-    sync::atomic::{AtomicU32, Ordering},
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        Arc,
+    },
+    time::Duration,
 };
 
 use zenoh::{
     bytes::{Encoding, OptionZBytes, ZBytes},
     internal::{
         bail,
+        runtime::ZRuntime,
         traits::{
             EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
         },
+        TerminatableTask,
     },
     key_expr::{keyexpr, KeyExpr},
     liveliness::LivelinessToken,
@@ -37,7 +43,10 @@ use zenoh::{
 };
 use zenoh_macros::ke;
 
-use crate::advanced_cache::{AdvancedCache, AdvancedCacheBuilder, CacheConfig, KE_UHLC};
+use crate::{
+    advanced_cache::{AdvancedCache, AdvancedCacheBuilder, CacheConfig, KE_UHLC},
+    z_serialize,
+};
 
 pub(crate) static KE_PUB: &keyexpr = ke!("pub");
 
@@ -47,6 +56,21 @@ pub(crate) enum Sequencing {
     None,
     Timestamp,
     SequenceNumber,
+}
+
+#[derive(Default)]
+#[zenoh_macros::unstable]
+pub struct MissDetectionConfig {
+    pub(crate) state_publisher: Option<Duration>,
+}
+
+#[zenoh_macros::unstable]
+impl MissDetectionConfig {
+    #[zenoh_macros::unstable]
+    pub fn heartbeat(mut self, period: Duration) -> Self {
+        self.state_publisher = Some(period);
+        self
+    }
 }
 
 /// The builder of PublicationCache, allowing to configure it.
@@ -63,6 +87,7 @@ pub struct AdvancedPublisherBuilder<'a, 'b, 'c> {
     is_express: bool,
     meta_key_expr: Option<ZResult<KeyExpr<'c>>>,
     sequencing: Sequencing,
+    miss_config: Option<MissDetectionConfig>,
     liveliness: bool,
     cache: bool,
     history: CacheConfig,
@@ -83,6 +108,7 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
             is_express: builder.is_express,
             meta_key_expr: None,
             sequencing: Sequencing::None,
+            miss_config: None,
             liveliness: false,
             cache: false,
             history: CacheConfig::default(),
@@ -118,8 +144,9 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
     ///
     /// Retransmission can only be achieved if [`cache`](crate::AdvancedPublisherBuilder::cache) is enabled.
     #[zenoh_macros::unstable]
-    pub fn sample_miss_detection(mut self) -> Self {
+    pub fn sample_miss_detection(mut self, config: MissDetectionConfig) -> Self {
         self.sequencing = Sequencing::SequenceNumber;
+        self.miss_config = Some(config);
         self
     }
 
@@ -230,9 +257,10 @@ impl IntoFuture for AdvancedPublisherBuilder<'_, '_, '_> {
 #[zenoh_macros::unstable]
 pub struct AdvancedPublisher<'a> {
     publisher: Publisher<'a>,
-    seqnum: Option<AtomicU32>,
+    seqnum: Option<Arc<AtomicU32>>,
     cache: Option<AdvancedCache>,
     _token: Option<LivelinessToken>,
+    _state_publisher: Option<TerminatableTask>,
 }
 
 #[zenoh_macros::unstable]
@@ -270,7 +298,7 @@ impl<'a> AdvancedPublisher<'a> {
         };
 
         let seqnum = match conf.sequencing {
-            Sequencing::SequenceNumber => Some(AtomicU32::new(0)),
+            Sequencing::SequenceNumber => Some(Arc::new(AtomicU32::new(0))),
             Sequencing::Timestamp => {
                 if conf.session.hlc().is_none() {
                     bail!(
@@ -299,9 +327,34 @@ impl<'a> AdvancedPublisher<'a> {
             Some(
                 conf.session
                     .liveliness()
-                    .declare_token(prefix / &key_expr)
+                    .declare_token(&prefix / &key_expr)
                     .wait()?,
             )
+        } else {
+            None
+        };
+
+        let state_publisher = if let Some(period) = conf.miss_config.and_then(|c| c.state_publisher)
+        {
+            if let Some(seqnum) = seqnum.as_ref() {
+                let seqnum = seqnum.clone();
+
+                let publisher = conf.session.declare_publisher(prefix / &key_expr).wait()?;
+                Some(TerminatableTask::spawn_abortable(
+                    ZRuntime::Net,
+                    async move {
+                        loop {
+                            tokio::time::sleep(period).await;
+                            let seqnum = seqnum.load(Ordering::Relaxed);
+                            if seqnum > 0 {
+                                let _ = publisher.put(z_serialize(&(seqnum - 1))).await;
+                            }
+                        }
+                    },
+                ))
+            } else {
+                None
+            }
         } else {
             None
         };
@@ -311,6 +364,7 @@ impl<'a> AdvancedPublisher<'a> {
             seqnum,
             cache,
             _token: token,
+            _state_publisher: state_publisher,
         })
     }
 

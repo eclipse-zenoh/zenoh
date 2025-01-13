@@ -41,7 +41,7 @@ pub use crate::serialization::{
 #[allow(deprecated)]
 pub use crate::{
     advanced_cache::{CacheConfig, RepliesConfig},
-    advanced_publisher::{AdvancedPublisher, AdvancedPublisherBuilder},
+    advanced_publisher::{AdvancedPublisher, AdvancedPublisherBuilder, MissDetectionConfig},
     advanced_subscriber::{
         AdvancedSubscriber, AdvancedSubscriberBuilder, HistoryConfig, Miss, RecoveryConfig,
         SampleMissHandlerUndeclaration, SampleMissListener, SampleMissListenerBuilder,

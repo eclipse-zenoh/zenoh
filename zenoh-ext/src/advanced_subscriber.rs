@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{collections::BTreeMap, future::IntoFuture, str::FromStr};
+use std::{collections::BTreeMap, future::IntoFuture, marker::PhantomData, str::FromStr};
 
 use zenoh::{
     config::ZenohId,
@@ -46,7 +46,10 @@ use {
     zenoh::Result as ZResult,
 };
 
-use crate::advanced_cache::{ke_liveliness, KE_UHLC};
+use crate::{
+    advanced_cache::{ke_liveliness, KE_UHLC},
+    z_deserialize,
+};
 
 #[derive(Debug, Default, Clone)]
 /// Configure query for historical data.
@@ -85,23 +88,31 @@ impl HistoryConfig {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
+pub struct Unconfigured;
+#[derive(Default, Clone, Copy)]
+pub struct Configured;
+
+#[derive(Default, Clone, Copy)]
 /// Configure retransmission.
 #[zenoh_macros::unstable]
-pub struct RecoveryConfig {
+pub struct RecoveryConfig<T> {
     periodic_queries: Option<Duration>,
+    heartbeat: Option<()>,
+    phantom: PhantomData<T>,
 }
 
-impl std::fmt::Debug for RecoveryConfig {
+impl<T> std::fmt::Debug for RecoveryConfig<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut s = f.debug_struct("RetransmissionConf");
         s.field("periodic_queries", &self.periodic_queries);
+        s.field("heartbeat", &self.heartbeat);
         s.finish()
     }
 }
 
 #[zenoh_macros::unstable]
-impl RecoveryConfig {
+impl RecoveryConfig<Unconfigured> {
     /// Enable periodic queries for not yet received Samples and specify their period.
     ///
     /// This allows to retrieve the last Sample(s) if the last Sample(s) is/are lost.
@@ -112,9 +123,28 @@ impl RecoveryConfig {
     /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
     #[zenoh_macros::unstable]
     #[inline]
-    pub fn periodic_queries(mut self, period: Option<Duration>) -> Self {
-        self.periodic_queries = period;
-        self
+    pub fn periodic_queries(self, period: Duration) -> RecoveryConfig<Configured> {
+        RecoveryConfig {
+            periodic_queries: Some(period),
+            heartbeat: None,
+            phantom: PhantomData::<Configured>,
+        }
+    }
+
+    /// Subscribe to heartbeats of [`AdvancedPublishers`](crate::AdvancedPublisher).
+    ///
+    /// This allows to periodically receive the last published Sample's sequence number and check for misses.
+    /// Heartbeat subscriber must be paired with [`AdvancedPublishers`](crate::AdvancedPublisher)
+    /// that enable [`cache`](crate::AdvancedPublisherBuilder::cache) and
+    /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection) with heartbeat.
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn heartbeat(self) -> RecoveryConfig<Configured> {
+        RecoveryConfig {
+            periodic_queries: None,
+            heartbeat: Some(()),
+            phantom: PhantomData::<Configured>,
+        }
     }
 }
 
@@ -124,7 +154,7 @@ pub struct AdvancedSubscriberBuilder<'a, 'b, 'c, Handler, const BACKGROUND: bool
     pub(crate) session: &'a Session,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) origin: Locality,
-    pub(crate) retransmission: Option<RecoveryConfig>,
+    pub(crate) retransmission: Option<RecoveryConfig<Configured>>,
     pub(crate) query_target: QueryTarget,
     pub(crate) query_timeout: Duration,
     pub(crate) history: Option<HistoryConfig>,
@@ -243,7 +273,7 @@ impl<'a, 'c, Handler, const BACKGROUND: bool>
     /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
     #[zenoh_macros::unstable]
     #[inline]
-    pub fn recovery(mut self, conf: RecoveryConfig) -> Self {
+    pub fn recovery(mut self, conf: RecoveryConfig<Configured>) -> Self {
         self.retransmission = Some(conf);
         self
     }
@@ -441,6 +471,7 @@ pub struct AdvancedSubscriber<Receiver> {
     subscriber: Subscriber<()>,
     receiver: Receiver,
     liveliness_subscriber: Option<Subscriber<()>>,
+    _heartbeat_subscriber: Option<Subscriber<()>>,
 }
 
 #[zenoh_macros::unstable]
@@ -733,12 +764,13 @@ impl<Handler> AdvancedSubscriber<Handler> {
                 .wait();
         }
 
-        let liveliness_subscriber = if let Some(historyconf) = conf.history {
+        let liveliness_subscriber = if let Some(historyconf) = conf.history.as_ref() {
             if historyconf.liveliness {
                 let live_callback = {
                     let session = conf.session.clone();
                     let statesref = statesref.clone();
                     let key_expr = key_expr.clone().into_owned();
+                    let historyconf = historyconf.clone();
                     move |s: Sample| {
                         if s.kind() == SampleKind::Put {
                             if let Ok(parsed) = ke_liveliness::parse(s.key_expr().as_keyexpr()) {
@@ -921,6 +953,104 @@ impl<Handler> AdvancedSubscriber<Handler> {
             None
         };
 
+        let heartbeat_subscriber = if retransmission.is_some_and(|r| r.heartbeat.is_some()) {
+            let ke_heartbeat_sub = KE_ADV_PREFIX / KE_PUB / KE_STARSTAR / KE_AT / &key_expr;
+            let statesref = statesref.clone();
+            let heartbeat_sub = conf
+                .session
+                .declare_subscriber(ke_heartbeat_sub)
+                .callback(move |sample_hb| {
+                    if sample_hb.kind() != SampleKind::Put {
+                        return;
+                    }
+
+                    let heartbeat_keyexpr = sample_hb.key_expr().as_keyexpr();
+                    let Ok(parsed_keyexpr) = ke_liveliness::parse(heartbeat_keyexpr) else {
+                        return;
+                    };
+                    let source_id = {
+                        let Ok(zid) = ZenohId::from_str(parsed_keyexpr.zid().as_str()) else {
+                            return;
+                        };
+                        let Ok(eid) = EntityId::from_str(parsed_keyexpr.eid().as_str()) else {
+                            return;
+                        };
+                        EntityGlobalId::new(zid, eid)
+                    };
+
+                    let Ok(heartbeat_sn) = z_deserialize::<u32>(sample_hb.payload()) else {
+                        tracing::debug!(
+                            "Skipping invalid heartbeat payload on '{}'",
+                            heartbeat_keyexpr
+                        );
+                        return;
+                    };
+
+                    let mut lock = zlock!(statesref);
+                    let states = &mut *lock;
+                    let entry = states.sequenced_states.entry(source_id);
+                    if matches!(&entry, Entry::Vacant(_)) {
+                        // NOTE: API does not allow both heartbeat and periodic_queries
+                        spawn_periodoic_queries!(states, source_id, statesref.clone());
+                        if states.global_pending_queries > 0 {
+                            tracing::debug!("Skipping heartbeat on '{}' from publisher that is currently being pulled by global query", heartbeat_keyexpr);
+                            return;
+                        }
+                    }
+
+                    let state = entry.or_insert(SourceState::<u32> {
+                        last_delivered: None,
+                        pending_queries: 0,
+                        pending_samples: BTreeMap::new(),
+                    });
+
+                    // check that it's not an old sn, and that there are no pending queries
+                    if (state.last_delivered.is_none()
+                        || state.last_delivered.is_some_and(|sn| heartbeat_sn > sn))
+                        && state.pending_queries == 0
+                    {
+                        let seq_num_range = seq_num_range(
+                            state.last_delivered.map(|s| s + 1),
+                            Some(heartbeat_sn),
+                        );
+
+                        let session = states.session.clone();
+                        let key_expr = states.key_expr.clone().into_owned();
+                        let query_target = states.query_target;
+                        let query_timeout = states.query_timeout;
+                        state.pending_queries += 1;
+                        drop(lock);
+
+                        let handler = SequencedRepliesHandler {
+                            source_id,
+                            statesref: statesref.clone(),
+                        };
+                        let _ = session
+                            .get(Selector::from((heartbeat_keyexpr, seq_num_range)))
+                            .callback({
+                                move |r: Reply| {
+                                    if let Ok(s) = r.into_result() {
+                                        if key_expr.intersects(s.key_expr()) {
+                                            let states = &mut *zlock!(handler.statesref);
+                                            handle_sample(states, s);
+                                        }
+                                    }
+                                }
+                            })
+                            .consolidation(ConsolidationMode::None)
+                            .accept_replies(ReplyKeyExpr::Any)
+                            .target(query_target)
+                            .timeout(query_timeout)
+                            .wait();
+                    }
+                })
+                .allowed_origin(conf.origin)
+                .wait()?;
+            Some(heartbeat_sub)
+        } else {
+            None
+        };
+
         if conf.liveliness {
             let prefix = KE_ADV_PREFIX
                 / KE_SUB
@@ -944,6 +1074,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
             subscriber,
             receiver,
             liveliness_subscriber,
+            _heartbeat_subscriber: heartbeat_subscriber,
         };
 
         Ok(reliable_subscriber)
