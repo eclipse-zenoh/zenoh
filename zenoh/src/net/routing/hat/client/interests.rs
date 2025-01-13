@@ -23,7 +23,9 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{face_hat, face_hat_mut, token::declare_token_interest, HatCode, HatFace};
+use super::{
+    face_hat, face_hat_mut, hat, token::declare_token_interest, HatCode, HatFace, HatTables,
+};
 use crate::net::routing::{
     dispatcher::{
         face::{FaceState, InterestState},
@@ -137,7 +139,7 @@ impl HatInterestTrait for HatCode {
                     dst_face,
                     tables_ref,
                     id,
-                    self.interests_timeout,
+                    hat!(tables).interests_timeout,
                 );
             }
             let wire_expr = res

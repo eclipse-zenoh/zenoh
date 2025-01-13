@@ -76,6 +76,13 @@ mod pubsub;
 mod queries;
 mod token;
 
+macro_rules! hat {
+    ($t:expr) => {
+        $t.hat.downcast_ref::<HatTables>().unwrap()
+    };
+}
+use hat;
+
 macro_rules! hat_mut {
     ($t:expr) => {
         $t.hat.downcast_mut::<HatTables>().unwrap()
@@ -99,17 +106,21 @@ use face_hat_mut;
 
 struct HatTables {
     gossip: Option<Network>,
+    interests_timeout: Duration,
 }
 
 impl HatTables {
     fn new() -> Self {
-        Self { gossip: None }
+        Self {
+            gossip: None,
+            interests_timeout: Duration::from_millis(
+                zenoh_config::defaults::routing::interests::timeout,
+            ),
+        }
     }
 }
 
-pub(crate) struct HatCode {
-    pub(crate) interests_timeout: Duration,
-}
+pub(crate) struct HatCode {}
 
 impl HatBaseTrait for HatCode {
     fn init(&self, tables: &mut Tables, runtime: Runtime) -> ZResult<()> {
@@ -130,6 +141,8 @@ impl HatBaseTrait for HatCode {
         let wait_declares = unwrap_or_default!(config.open().return_conditions().declares());
         let router_peers_failover_brokering =
             unwrap_or_default!(config.routing().router().peers_failover_brokering());
+        let interests_timeout =
+            Duration::from_millis(unwrap_or_default!(config.routing().interests().timeout()));
         drop(config_guard);
 
         if gossip {
@@ -145,6 +158,7 @@ impl HatBaseTrait for HatCode {
                 wait_declares,
             ));
         }
+        hat_mut!(tables).interests_timeout = interests_timeout;
         Ok(())
     }
 
