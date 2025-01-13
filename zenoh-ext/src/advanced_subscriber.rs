@@ -989,9 +989,13 @@ impl<Handler> AdvancedSubscriber<Handler> {
                     let mut lock = zlock!(statesref);
                     let states = &mut *lock;
                     let entry = states.sequenced_states.entry(source_id);
-                    if matches!(&entry, Entry::Vacant(_)) && states.global_pending_queries > 0 {
-                        tracing::debug!("Skipping heartbeat on '{}' from publisher that is currently being pulled by global query", heartbeat_keyexpr);
-                        return;
+                    if matches!(&entry, Entry::Vacant(_)) {
+                        // NOTE: API does not allow both heartbeat and periodic_queries
+                        spawn_periodoic_queries!(states, source_id, statesref.clone());
+                        if states.global_pending_queries > 0 {
+                            tracing::debug!("Skipping heartbeat on '{}' from publisher that is currently being pulled by global query", heartbeat_keyexpr);
+                            return;
+                        }
                     }
 
                     let state = entry.or_insert(SourceState::<u32> {
@@ -999,12 +1003,11 @@ impl<Handler> AdvancedSubscriber<Handler> {
                         pending_queries: 0,
                         pending_samples: BTreeMap::new(),
                     });
-                    // TODO: add state to avoid sending multiple queries for the same heartbeat if its periodicity is higher than the query response time
 
-                    // check that it's not an old sn or a pending sample's sn
+                    // check that it's not an old sn, and that there are no pending queries
                     if (state.last_delivered.is_none()
                         || state.last_delivered.is_some_and(|sn| heartbeat_sn > sn))
-                        && !state.pending_samples.contains_key(&heartbeat_sn)
+                        && state.pending_queries == 0
                     {
                         let seq_num_range = seq_num_range(
                             state.last_delivered.map(|s| s + 1),
