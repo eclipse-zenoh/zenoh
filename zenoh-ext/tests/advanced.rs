@@ -726,7 +726,7 @@ async fn test_advanced_retransmission_heartbeat() {
     const HEARTBEAT_PERIOD: Duration = Duration::from_secs(4);
     const ROUTER_ENDPOINT: &str = "tcp/localhost:47456";
 
-    const ADVANCED_RETRANSMISSION_KEYEXPR: &str = "test/advanced/retransmission";
+    const ADVANCED_RETRANSMISSION_KEYEXPR: &str = "test/advanced/retransmission/heartbeat";
 
     zenoh_util::init_log_from_env_or("error");
 
