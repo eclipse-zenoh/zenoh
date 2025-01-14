@@ -50,7 +50,7 @@ impl ValidatedStorage {
                 Transaction::Add => {
                     let _old = storage.insert(descriptor);
                     #[cfg(feature = "test")]
-                    assert!(_old.is_none());
+                    assert!(_old);
                 }
                 Transaction::Remove => {
                     let _ = storage.remove(&descriptor);
