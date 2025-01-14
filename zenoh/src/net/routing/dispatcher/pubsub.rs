@@ -353,6 +353,9 @@ macro_rules! inc_stats {
     };
 }
 
+// having all the arguments instead of an intermediate struct seems to enable a better inlining
+// see https://github.com/eclipse-zenoh/zenoh/pull/1713#issuecomment-2590130026
+#[allow(clippy::too_many_arguments)]
 pub fn route_data(
     tables_ref: &Arc<TablesLock>,
     face: &FaceState,
