@@ -19,20 +19,19 @@ use std::{
 };
 
 use static_init::dynamic;
-use zenoh_result::{zerror, ZResult};
+use zenoh_core::{zread, zwrite};
 
-use super::{
-    descriptor::{Descriptor, OwnedDescriptor, SegmentID},
-    periodic_task::PeriodicTask,
-    segment::Segment,
-};
+use crate::metadata::descriptor::{MetadataSegmentID, OwnedMetadataDescriptor};
+
+use super::periodic_task::PeriodicTask;
 
 #[dynamic(lazy, drop)]
 pub static mut GLOBAL_CONFIRMATOR: WatchdogConfirmator =
     WatchdogConfirmator::new(Duration::from_millis(50));
 
+#[derive(Debug)]
 pub struct ConfirmedDescriptor {
-    pub owned: OwnedDescriptor,
+    pub owned: OwnedMetadataDescriptor,
     confirmed: Arc<ConfirmedSegment>,
 }
 
@@ -43,7 +42,7 @@ impl Drop for ConfirmedDescriptor {
 }
 
 impl ConfirmedDescriptor {
-    fn new(owned: OwnedDescriptor, confirmed: Arc<ConfirmedSegment>) -> Self {
+    fn new(owned: OwnedMetadataDescriptor, confirmed: Arc<ConfirmedSegment>) -> Self {
         owned.confirm();
         confirmed.add(owned.clone());
         Self { owned, confirmed }
@@ -56,28 +55,27 @@ enum Transaction {
     Remove,
 }
 
+#[derive(Debug)]
 struct ConfirmedSegment {
-    segment: Arc<Segment>,
-    transactions: lockfree::queue::Queue<(Transaction, OwnedDescriptor)>,
+    transactions: lockfree::queue::Queue<(Transaction, OwnedMetadataDescriptor)>,
 }
 
 impl ConfirmedSegment {
-    fn new(segment: Arc<Segment>) -> Self {
+    fn new() -> Self {
         Self {
-            segment,
             transactions: lockfree::queue::Queue::default(),
         }
     }
 
-    fn add(&self, descriptor: OwnedDescriptor) {
+    fn add(&self, descriptor: OwnedMetadataDescriptor) {
         self.transactions.push((Transaction::Add, descriptor));
     }
 
-    fn remove(&self, descriptor: OwnedDescriptor) {
+    fn remove(&self, descriptor: OwnedMetadataDescriptor) {
         self.transactions.push((Transaction::Remove, descriptor));
     }
 
-    fn collect_transactions(&self, watchdogs: &mut BTreeMap<OwnedDescriptor, i32>) {
+    fn collect_transactions(&self, watchdogs: &mut BTreeMap<OwnedMetadataDescriptor, i32>) {
         while let Some((transaction, descriptor)) = self.transactions.pop() {
             // collect transactions
             match watchdogs.entry(descriptor) {
@@ -108,7 +106,7 @@ unsafe impl Sync for ConfirmedSegment {}
 // TODO: optimize confirmation by packing descriptors AND linked table together
 // TODO: think about linked table cleanup
 pub struct WatchdogConfirmator {
-    confirmed: RwLock<BTreeMap<SegmentID, Arc<ConfirmedSegment>>>,
+    confirmed: RwLock<BTreeMap<MetadataSegmentID, Arc<ConfirmedSegment>>>,
     segment_transactions: Arc<lockfree::queue::Queue<Arc<ConfirmedSegment>>>,
     _task: PeriodicTask,
 }
@@ -118,7 +116,10 @@ impl WatchdogConfirmator {
         let segment_transactions = Arc::<lockfree::queue::Queue<Arc<ConfirmedSegment>>>::default();
 
         let c_segment_transactions = segment_transactions.clone();
-        let mut segments: Vec<(Arc<ConfirmedSegment>, BTreeMap<OwnedDescriptor, i32>)> = vec![];
+        let mut segments: Vec<(
+            Arc<ConfirmedSegment>,
+            BTreeMap<OwnedMetadataDescriptor, i32>,
+        )> = vec![];
         let task = PeriodicTask::new("Watchdog Confirmator".to_owned(), interval, move || {
             // add new segments
             while let Some(new_segment) = c_segment_transactions.as_ref().pop() {
@@ -145,47 +146,30 @@ impl WatchdogConfirmator {
         }
     }
 
-    pub fn add_owned(&self, descriptor: &OwnedDescriptor) -> ZResult<ConfirmedDescriptor> {
-        self.add(&Descriptor::from(descriptor))
-    }
+    pub fn add(&self, descriptor: OwnedMetadataDescriptor) -> ConfirmedDescriptor {
+        // cofirm ASAP!
+        descriptor.confirm();
 
-    pub fn add(&self, descriptor: &Descriptor) -> ZResult<ConfirmedDescriptor> {
-        let guard = self.confirmed.read().map_err(|e| zerror!("{e}"))?;
-        if let Some(segment) = guard.get(&descriptor.id) {
-            return self.link(descriptor, segment);
+        let guard = zread!(self.confirmed);
+        if let Some(segment) = guard.get(&descriptor.segment.data.id()) {
+            return ConfirmedDescriptor::new(descriptor, segment.clone());
         }
         drop(guard);
 
-        let segment = Arc::new(Segment::open(descriptor.id)?);
-        let confirmed_segment = Arc::new(ConfirmedSegment::new(segment));
-        let confirmed_descriptoir = self.link(descriptor, &confirmed_segment);
+        let confirmed_segment = Arc::new(ConfirmedSegment::new());
+        let confirmed_descriptoir = ConfirmedDescriptor::new(descriptor.clone(), confirmed_segment.clone());
 
-        let mut guard = self.confirmed.write().map_err(|e| zerror!("{e}"))?;
-        match guard.entry(descriptor.id) {
+        let mut guard = zwrite!(self.confirmed);
+        match guard.entry(descriptor.segment.data.id()) {
             std::collections::btree_map::Entry::Vacant(vacant) => {
                 vacant.insert(confirmed_segment.clone());
                 self.segment_transactions.push(confirmed_segment);
                 confirmed_descriptoir
             }
             std::collections::btree_map::Entry::Occupied(occupied) => {
-                self.link(descriptor, occupied.get())
+                // this is intentional
+                ConfirmedDescriptor::new(descriptor, occupied.get().clone())
             }
         }
-    }
-
-    fn link(
-        &self,
-        descriptor: &Descriptor,
-        segment: &Arc<ConfirmedSegment>,
-    ) -> ZResult<ConfirmedDescriptor> {
-        let index = descriptor.index_and_bitpos >> 6;
-        let bitpos = descriptor.index_and_bitpos & 0x3f;
-
-        let atomic = unsafe { segment.segment.array.elem(index) };
-        let mask = 1u64 << bitpos;
-
-        let owned = OwnedDescriptor::new(segment.segment.clone(), atomic, mask);
-        let confirmed = ConfirmedDescriptor::new(owned, segment.clone());
-        Ok(confirmed)
     }
 }

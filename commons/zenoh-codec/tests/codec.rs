@@ -362,8 +362,7 @@ fn codec_encoding() {
 #[test]
 fn codec_shm_info() {
     use zenoh_shm::{
-        api::provider::chunk::ChunkDescriptor, header::descriptor::HeaderDescriptor,
-        watchdog::descriptor::Descriptor, ShmBufInfo,
+        api::provider::chunk::ChunkDescriptor, metadata::descriptor::MetadataDescriptor, ShmBufInfo,
     };
 
     run!(ShmBufInfo, {
@@ -372,11 +371,7 @@ fn codec_shm_info() {
             ChunkDescriptor::new(rng.gen(), rng.gen(), rng.gen()),
             rng.gen(),
             rng.gen(),
-            Descriptor {
-                id: rng.gen(),
-                index_and_bitpos: rng.gen(),
-            },
-            HeaderDescriptor {
+            MetadataDescriptor {
                 id: rng.gen(),
                 index: rng.gen(),
             },
