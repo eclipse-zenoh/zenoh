@@ -194,6 +194,14 @@
       /// The routing strategy to use in peers. ("peer_to_peer" or "linkstate").
       mode: "peer_to_peer",
     },
+    /// The interests-based routing configuration.
+    /// This configuration applies regardless of the mode (router, peer or client).
+    interests: {
+      /// The timeout to wait for incoming interests declarations in milliseconds.
+      /// The expiration of this timeout implies that the discovery protocol might be incomplete,
+      /// leading to potential loss of messages, queries or liveliness tokens.
+      timeout: 10000,
+    },
   },
 
   //  /// Overwrite QoS options for Zenoh messages by key expression (ignores Zenoh API QoS config for overwritten values)

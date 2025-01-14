@@ -141,6 +141,9 @@ pub mod routing {
     pub mod peer {
         pub const mode: &str = "peer_to_peer";
     }
+    pub mod interests {
+        pub const timeout: u64 = 10000;
+    }
 }
 
 impl Default for ListenConfig {
