@@ -410,10 +410,8 @@ pub fn route_data(
                             drop(tables);
                             #[cfg(feature = "stats")]
                             if !admin {
-                                inc_stats!(face, rx, user, payload);
                                 inc_stats!(outface, tx, user, payload);
                             } else {
-                                inc_stats!(face, rx, admin, payload);
                                 inc_stats!(outface, tx, admin, payload);
                             }
 
