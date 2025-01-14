@@ -224,7 +224,7 @@ pub(crate) fn compute_data_routes(tables: &Tables, expr: &mut RoutingExpr) -> Da
 }
 
 pub(crate) fn update_data_routes(tables: &Tables, res: &mut Arc<Resource>) {
-    if res.context.is_some() {
+    if res.context.is_some() && !res.expr().contains('*') && res.has_subs() {
         let mut res_mut = res.clone();
         let res_mut = get_mut_unchecked(&mut res_mut);
         compute_data_routes_(
@@ -232,6 +232,7 @@ pub(crate) fn update_data_routes(tables: &Tables, res: &mut Arc<Resource>) {
             &mut res_mut.context_mut().data_routes,
             &mut RoutingExpr::new(res, ""),
         );
+        res_mut.context_mut().valid_data_routes = true;
     }
 }
 
@@ -249,11 +250,13 @@ pub(crate) fn compute_matches_data_routes<'a>(
 ) -> Vec<(Arc<Resource>, DataRoutes)> {
     let mut routes = vec![];
     if res.context.is_some() {
-        let mut expr = RoutingExpr::new(res, "");
-        routes.push((res.clone(), compute_data_routes(tables, &mut expr)));
+        if !res.expr().contains('*') && res.has_subs() {
+            let mut expr = RoutingExpr::new(res, "");
+            routes.push((res.clone(), compute_data_routes(tables, &mut expr)));
+        }
         for match_ in &res.context().matches {
             let match_ = match_.upgrade().unwrap();
-            if !Arc::ptr_eq(&match_, res) {
+            if !Arc::ptr_eq(&match_, res) && !match_.expr().contains('*') && match_.has_subs() {
                 let mut expr = RoutingExpr::new(&match_, "");
                 let match_routes = compute_data_routes(tables, &mut expr);
                 routes.push((match_, match_routes));

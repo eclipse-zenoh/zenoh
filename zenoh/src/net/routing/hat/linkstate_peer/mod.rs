@@ -352,11 +352,17 @@ impl HatBaseTrait for HatCode {
         let mut matches_query_routes = vec![];
         let rtables = zread!(tables.tables);
         for _match in subs_matches.drain(..) {
-            let mut expr = RoutingExpr::new(&_match, "");
-            matches_data_routes.push((_match.clone(), compute_data_routes(&rtables, &mut expr)));
+            if !_match.expr().contains('*') && _match.has_subs() {
+                let mut expr = RoutingExpr::new(&_match, "");
+                matches_data_routes
+                    .push((_match.clone(), compute_data_routes(&rtables, &mut expr)));
+            }
         }
         for _match in qabls_matches.drain(..) {
-            matches_query_routes.push((_match.clone(), compute_query_routes(&rtables, &_match)));
+            if !_match.expr().contains('*') && _match.has_qabls() {
+                matches_query_routes
+                    .push((_match.clone(), compute_query_routes(&rtables, &_match)));
+            }
         }
         drop(rtables);
 

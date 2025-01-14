@@ -252,7 +252,7 @@ pub(crate) fn compute_query_routes(tables: &Tables, res: &Arc<Resource>) -> Quer
 }
 
 pub(crate) fn update_query_routes(tables: &Tables, res: &Arc<Resource>) {
-    if res.context.is_some() {
+    if res.context.is_some() && !res.expr().contains('*') && res.has_qabls() {
         let mut res_mut = res.clone();
         let res_mut = get_mut_unchecked(&mut res_mut);
         compute_query_routes_(
@@ -260,6 +260,7 @@ pub(crate) fn update_query_routes(tables: &Tables, res: &Arc<Resource>) {
             &mut res_mut.context_mut().query_routes,
             &mut RoutingExpr::new(res, ""),
         );
+        res_mut.context_mut().valid_query_routes = true;
     }
 }
 
@@ -277,10 +278,12 @@ pub(crate) fn compute_matches_query_routes(
 ) -> Vec<(Arc<Resource>, QueryRoutes)> {
     let mut routes = vec![];
     if res.context.is_some() {
-        routes.push((res.clone(), compute_query_routes(tables, res)));
+        if !res.expr().contains('*') && res.has_qabls() {
+            routes.push((res.clone(), compute_query_routes(tables, res)));
+        }
         for match_ in &res.context().matches {
             let match_ = match_.upgrade().unwrap();
-            if !Arc::ptr_eq(&match_, res) {
+            if !Arc::ptr_eq(&match_, res) && !match_.expr().contains('*') && match_.has_qabls() {
                 let match_routes = compute_query_routes(tables, &match_);
                 routes.push((match_, match_routes));
             }

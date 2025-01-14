@@ -258,6 +258,14 @@ impl Resource {
         }
     }
 
+    pub(crate) fn has_subs(&self) -> bool {
+        self.session_ctxs.values().any(|sc| sc.subs.is_some())
+    }
+
+    pub(crate) fn has_qabls(&self) -> bool {
+        self.session_ctxs.values().any(|sc| sc.qabl.is_some())
+    }
+
     #[inline]
     pub(crate) fn data_route(&self, whatami: WhatAmI, context: NodeId) -> Option<Arc<Route>> {
         match &self.context {
