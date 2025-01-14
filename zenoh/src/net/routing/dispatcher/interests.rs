@@ -167,7 +167,7 @@ impl Timed for CurrentInterestCleanup {
             {
                 drop(ctrl_lock);
                 tracing::warn!(
-                    "Didn't receive DeclareFinal {}:{} from {}: Timeout({:#?})!",
+                    "Didn't receive DeclareFinal {}:{} from {} for interests: Timeout({:#?})!",
                     interest.0.src_face,
                     self.id,
                     face,

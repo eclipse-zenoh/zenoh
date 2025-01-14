@@ -198,6 +198,8 @@
     /// This configuration applies regardless of the mode (router, peer or client).
     interests: {
       /// The timeout to wait for incoming interests declarations in milliseconds.
+      /// The expiration of this timeout implies that the discovery protocol might be incomplete,
+      /// leading to potential loss of messages, queries or liveliness tokens.
       timeout: 10000,
     },
   },
