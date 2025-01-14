@@ -81,8 +81,8 @@ pub mod scouting {
                 &crate::WhatAmIMatcher::empty();
             pub const peer: &crate::WhatAmIMatcher = // "router|peer"
                 &crate::WhatAmIMatcher::empty().router().peer();
-            pub const client: &crate::WhatAmIMatcher = // "router|peer"
-                &crate::WhatAmIMatcher::empty().router().peer();
+            pub const client: &crate::WhatAmIMatcher = // "router"
+                &crate::WhatAmIMatcher::empty().router();
             mode_accessor!(crate::WhatAmIMatcher);
         }
         pub mod listen {

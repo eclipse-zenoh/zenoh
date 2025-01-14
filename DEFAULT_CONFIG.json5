@@ -137,7 +137,7 @@
       /// Accepts a single value (e.g. autoconnect: ["router", "peer"]) which applies whatever the configured "mode" is,
       /// or different values for router, peer or client mode (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
       /// Each value is a list of: "peer", "router" and/or "client".
-      autoconnect: { router: [], peer: ["router", "peer"], client: ["router", "peer"] },
+      autoconnect: { router: [], peer: ["router", "peer"], client: ["router"] },
       /// Whether or not to listen for scout messages on UDP multicast and reply to them.
       listen: true,
     },
