@@ -43,7 +43,6 @@ impl Drop for ConfirmedDescriptor {
 
 impl ConfirmedDescriptor {
     fn new(owned: OwnedMetadataDescriptor, confirmed: Arc<ConfirmedSegment>) -> Self {
-        owned.confirm();
         confirmed.add(owned.clone());
         Self { owned, confirmed }
     }
@@ -147,7 +146,7 @@ impl WatchdogConfirmator {
     }
 
     pub fn add(&self, descriptor: OwnedMetadataDescriptor) -> ConfirmedDescriptor {
-        // cofirm ASAP!
+        // confirm ASAP!
         descriptor.confirm();
 
         let guard = zread!(self.confirmed);
