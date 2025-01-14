@@ -2151,40 +2151,34 @@ impl SessionInner {
         let timestamp = timestamp.or_else(|| self.runtime.new_timestamp());
         let wire_expr = key_expr.to_wire(self);
         if destination != Locality::SessionLocal {
-            primitives.send_push(
-                Push {
-                    wire_expr: wire_expr.to_owned(),
-                    ext_qos: push::ext::QoSType::new(
-                        priority.into(),
-                        congestion_control,
-                        is_express,
-                    ),
-                    ext_tstamp: None,
-                    ext_nodeid: push::ext::NodeIdType::DEFAULT,
-                    payload: match kind {
-                        SampleKind::Put => PushBody::Put(Put {
-                            timestamp,
-                            encoding: encoding.clone().into(),
-                            #[cfg(feature = "unstable")]
-                            ext_sinfo: source_info.clone().into(),
-                            #[cfg(not(feature = "unstable"))]
-                            ext_sinfo: None,
-                            #[cfg(feature = "shared-memory")]
-                            ext_shm: None,
-                            ext_attachment: attachment.clone().map(|a| a.into()),
-                            ext_unknown: vec![],
-                            payload: payload.clone().into(),
-                        }),
-                        SampleKind::Delete => PushBody::Del(Del {
-                            timestamp,
-                            #[cfg(feature = "unstable")]
-                            ext_sinfo: source_info.clone().into(),
-                            #[cfg(not(feature = "unstable"))]
-                            ext_sinfo: None,
-                            ext_attachment: attachment.clone().map(|a| a.into()),
-                            ext_unknown: vec![],
-                        }),
-                    },
+            primitives.send_push_lazy(
+                wire_expr.to_owned(),
+                push::ext::QoSType::new(priority.into(), congestion_control, is_express),
+                None,
+                push::ext::NodeIdType::DEFAULT,
+                || match kind {
+                    SampleKind::Put => PushBody::Put(Put {
+                        timestamp,
+                        encoding: encoding.clone().into(),
+                        #[cfg(feature = "unstable")]
+                        ext_sinfo: source_info.clone().into(),
+                        #[cfg(not(feature = "unstable"))]
+                        ext_sinfo: None,
+                        #[cfg(feature = "shared-memory")]
+                        ext_shm: None,
+                        ext_attachment: attachment.clone().map(|a| a.into()),
+                        ext_unknown: vec![],
+                        payload: payload.clone().into(),
+                    }),
+                    SampleKind::Delete => PushBody::Del(Del {
+                        timestamp,
+                        #[cfg(feature = "unstable")]
+                        ext_sinfo: source_info.clone().into(),
+                        #[cfg(not(feature = "unstable"))]
+                        ext_sinfo: None,
+                        ext_attachment: attachment.clone().map(|a| a.into()),
+                        ext_unknown: vec![],
+                    }),
                 },
                 #[cfg(feature = "unstable")]
                 reliability,
