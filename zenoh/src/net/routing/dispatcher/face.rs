@@ -19,14 +19,15 @@ use std::{
     time::Duration,
 };
 
+use foldhash::HashMapExt;
 use tokio_util::sync::CancellationToken;
 use zenoh_protocol::{
-    core::{ExprId, Reliability, WhatAmI, ZenohIdProto},
+    core::{ExprId, Reliability, WhatAmI, WireExpr, ZenohIdProto},
     network::{
         interest::{InterestId, InterestMode, InterestOptions},
-        Mapping, Push, Request, RequestId, Response, ResponseFinal,
+        push, Mapping, Push, Request, RequestId, Response, ResponseFinal,
     },
-    zenoh::RequestBody,
+    zenoh::{PushBody, RequestBody},
 };
 use zenoh_sync::get_mut_unchecked;
 use zenoh_task::TaskController;
@@ -68,8 +69,8 @@ pub struct FaceState {
     pub(crate) remote_key_interests: HashMap<InterestId, Option<Arc<Resource>>>,
     pub(crate) pending_current_interests:
         HashMap<InterestId, (Arc<CurrentInterest>, CancellationToken)>,
-    pub(crate) local_mappings: HashMap<ExprId, Arc<Resource>>,
-    pub(crate) remote_mappings: HashMap<ExprId, Arc<Resource>>,
+    pub(crate) local_mappings: foldhash::HashMap<ExprId, Arc<Resource>>,
+    pub(crate) remote_mappings: foldhash::HashMap<ExprId, Arc<Resource>>,
     pub(crate) next_qid: RequestId,
     pub(crate) pending_queries: HashMap<RequestId, (Arc<Query>, CancellationToken)>,
     pub(crate) mcast_group: Option<TransportMulticast>,
@@ -100,8 +101,8 @@ impl FaceState {
             local_interests: HashMap::new(),
             remote_key_interests: HashMap::new(),
             pending_current_interests: HashMap::new(),
-            local_mappings: HashMap::new(),
-            remote_mappings: HashMap::new(),
+            local_mappings: foldhash::HashMap::new(),
+            remote_mappings: foldhash::HashMap::new(),
             next_qid: 0,
             pending_queries: HashMap::new(),
             mcast_group,
@@ -207,6 +208,27 @@ pub struct Face {
 }
 
 impl Face {
+    pub(crate) fn send_push_lazy(
+        &self,
+        wire_expr: WireExpr,
+        qos: push::ext::QoSType,
+        ext_tstamp: Option<push::ext::TimestampType>,
+        ext_nodeid: push::ext::NodeIdType,
+        body: impl FnOnce() -> PushBody,
+        reliability: Reliability,
+    ) {
+        route_data(
+            &self.tables,
+            &self.state,
+            wire_expr,
+            qos,
+            ext_tstamp,
+            ext_nodeid,
+            body,
+            reliability,
+        );
+    }
+
     pub fn downgrade(&self) -> WeakFace {
         WeakFace {
             tables: Arc::downgrade(&self.tables),
@@ -388,7 +410,16 @@ impl Primitives for Face {
 
     #[inline]
     fn send_push(&self, msg: Push, reliability: Reliability) {
-        route_data(&self.tables, &self.state, msg, reliability);
+        route_data(
+            &self.tables,
+            &self.state,
+            msg.wire_expr,
+            msg.ext_qos,
+            msg.ext_tstamp,
+            msg.ext_nodeid,
+            move || msg.payload,
+            reliability,
+        );
     }
 
     fn send_request(&self, msg: Request) {

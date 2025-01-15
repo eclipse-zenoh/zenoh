@@ -49,6 +49,9 @@ impl TaskController {
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
+        #[cfg(feature = "tracing-instrument")]
+        let future = tracing::Instrument::instrument(future, tracing::Span::current());
+
         let token = self.token.child_token();
         let task = async move {
             tokio::select! {
@@ -56,6 +59,7 @@ impl TaskController {
                 _ = future => {}
             }
         };
+
         self.tracker.spawn(task)
     }
 
@@ -66,6 +70,9 @@ impl TaskController {
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
+        #[cfg(feature = "tracing-instrument")]
+        let future = tracing::Instrument::instrument(future, tracing::Span::current());
+
         let token = self.token.child_token();
         let task = async move {
             tokio::select! {
@@ -88,6 +95,9 @@ impl TaskController {
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
+        #[cfg(feature = "tracing-instrument")]
+        let future = tracing::Instrument::instrument(future, tracing::Span::current());
+
         self.tracker.spawn(future.map(|_f| ()))
     }
 
@@ -99,6 +109,9 @@ impl TaskController {
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
+        #[cfg(feature = "tracing-instrument")]
+        let future = tracing::Instrument::instrument(future, tracing::Span::current());
+
         self.tracker.spawn_on(future.map(|_f| ()), &rt)
     }
 

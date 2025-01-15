@@ -24,6 +24,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use foldhash::HashMapExt;
 #[zenoh_macros::internal]
 use ref_cast::ref_cast_custom;
 use ref_cast::RefCastCustom;
@@ -129,8 +130,8 @@ pub(crate) struct SessionState {
     pub(crate) expr_id_counter: AtomicExprId, // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicRequestId,
     pub(crate) liveliness_qid_counter: AtomicRequestId,
-    pub(crate) local_resources: HashMap<ExprId, Resource>,
-    pub(crate) remote_resources: HashMap<ExprId, Resource>,
+    pub(crate) local_resources: foldhash::HashMap<ExprId, Resource>,
+    pub(crate) remote_resources: foldhash::HashMap<ExprId, Resource>,
     #[cfg(feature = "unstable")]
     pub(crate) remote_subscribers: HashMap<SubscriberId, KeyExpr<'static>>,
     pub(crate) publishers: HashMap<Id, PublisherState>,
@@ -163,8 +164,8 @@ impl SessionState {
             expr_id_counter: AtomicExprId::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
             qid_counter: AtomicRequestId::new(0),
             liveliness_qid_counter: AtomicRequestId::new(0),
-            local_resources: HashMap::new(),
-            remote_resources: HashMap::new(),
+            local_resources: foldhash::HashMap::new(),
+            remote_resources: foldhash::HashMap::new(),
             #[cfg(feature = "unstable")]
             remote_subscribers: HashMap::new(),
             publishers: HashMap::new(),
@@ -2151,40 +2152,34 @@ impl SessionInner {
         let timestamp = timestamp.or_else(|| self.runtime.new_timestamp());
         let wire_expr = key_expr.to_wire(self);
         if destination != Locality::SessionLocal {
-            primitives.send_push(
-                Push {
-                    wire_expr: wire_expr.to_owned(),
-                    ext_qos: push::ext::QoSType::new(
-                        priority.into(),
-                        congestion_control,
-                        is_express,
-                    ),
-                    ext_tstamp: None,
-                    ext_nodeid: push::ext::NodeIdType::DEFAULT,
-                    payload: match kind {
-                        SampleKind::Put => PushBody::Put(Put {
-                            timestamp,
-                            encoding: encoding.clone().into(),
-                            #[cfg(feature = "unstable")]
-                            ext_sinfo: source_info.clone().into(),
-                            #[cfg(not(feature = "unstable"))]
-                            ext_sinfo: None,
-                            #[cfg(feature = "shared-memory")]
-                            ext_shm: None,
-                            ext_attachment: attachment.clone().map(|a| a.into()),
-                            ext_unknown: vec![],
-                            payload: payload.clone().into(),
-                        }),
-                        SampleKind::Delete => PushBody::Del(Del {
-                            timestamp,
-                            #[cfg(feature = "unstable")]
-                            ext_sinfo: source_info.clone().into(),
-                            #[cfg(not(feature = "unstable"))]
-                            ext_sinfo: None,
-                            ext_attachment: attachment.clone().map(|a| a.into()),
-                            ext_unknown: vec![],
-                        }),
-                    },
+            primitives.send_push_lazy(
+                wire_expr.to_owned(),
+                push::ext::QoSType::new(priority.into(), congestion_control, is_express),
+                None,
+                push::ext::NodeIdType::DEFAULT,
+                || match kind {
+                    SampleKind::Put => PushBody::Put(Put {
+                        timestamp,
+                        encoding: encoding.clone().into(),
+                        #[cfg(feature = "unstable")]
+                        ext_sinfo: source_info.clone().into(),
+                        #[cfg(not(feature = "unstable"))]
+                        ext_sinfo: None,
+                        #[cfg(feature = "shared-memory")]
+                        ext_shm: None,
+                        ext_attachment: attachment.clone().map(|a| a.into()),
+                        ext_unknown: vec![],
+                        payload: payload.clone().into(),
+                    }),
+                    SampleKind::Delete => PushBody::Del(Del {
+                        timestamp,
+                        #[cfg(feature = "unstable")]
+                        ext_sinfo: source_info.clone().into(),
+                        #[cfg(not(feature = "unstable"))]
+                        ext_sinfo: None,
+                        ext_attachment: attachment.clone().map(|a| a.into()),
+                        ext_unknown: vec![],
+                    }),
                 },
                 #[cfg(feature = "unstable")]
                 reliability,

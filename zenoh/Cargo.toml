@@ -66,6 +66,7 @@ transport_ws = ["zenoh-transport/transport_ws"]
 transport_vsock = ["zenoh-transport/transport_vsock"]
 unstable = ["internal_config", "zenoh-keyexpr/unstable", "zenoh-config/unstable"]
 internal_config = []
+tracing-instrument = ["zenoh-task/tracing-instrument", "zenoh-runtime/tracing-instrument"]
 
 [dependencies]
 tokio = { workspace = true, features = ["rt", "macros", "time"] }
@@ -74,6 +75,7 @@ ahash = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
 flume = { workspace = true }
+foldhash = { workspace = true, features = ["default"] }
 futures = { workspace = true }
 git-version = { workspace = true }
 itertools = { workspace = true }
