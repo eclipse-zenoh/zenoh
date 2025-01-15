@@ -5264,6 +5264,7 @@ version = "1.0.0-dev"
 dependencies = [
  "ahash",
  "criterion",
+ "getrandom 0.2.15",
  "hashbrown",
  "keyed-set",
  "lazy_static",
