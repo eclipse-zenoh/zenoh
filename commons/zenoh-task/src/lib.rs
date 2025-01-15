@@ -49,6 +49,7 @@ impl TaskController {
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
+        #[cfg(feature = "tracing-instrument")]
         let future = tracing::Instrument::instrument(future, tracing::Span::current());
 
         let token = self.token.child_token();
@@ -69,6 +70,7 @@ impl TaskController {
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
+        #[cfg(feature = "tracing-instrument")]
         let future = tracing::Instrument::instrument(future, tracing::Span::current());
 
         let token = self.token.child_token();
@@ -78,7 +80,7 @@ impl TaskController {
                 _ = future => {}
             }
         };
-        self.tracker.spawn_on(task, rt.handle())
+        self.tracker.spawn_on(task, &rt)
     }
 
     pub fn get_cancellation_token(&self) -> CancellationToken {
@@ -93,6 +95,7 @@ impl TaskController {
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
+        #[cfg(feature = "tracing-instrument")]
         let future = tracing::Instrument::instrument(future, tracing::Span::current());
 
         self.tracker.spawn(future.map(|_f| ()))
@@ -106,9 +109,10 @@ impl TaskController {
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
+        #[cfg(feature = "tracing-instrument")]
         let future = tracing::Instrument::instrument(future, tracing::Span::current());
 
-        self.tracker.spawn_on(future.map(|_f| ()), rt.handle())
+        self.tracker.spawn_on(future.map(|_f| ()), &rt)
     }
 
     /// Attempts tp terminate all previously spawned tasks

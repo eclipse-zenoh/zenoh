@@ -128,18 +128,15 @@ pub enum ZRuntime {
 }
 
 impl ZRuntime {
-    pub fn handle(&self) -> &Handle {
-        ZRUNTIME_POOL.get(self)
-    }
-
     pub fn spawn<F>(&self, future: F) -> JoinHandle<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send + 'static,
     {
+        #[cfg(feature = "tracing-instrument")]
         let future = tracing::Instrument::instrument(future, tracing::Span::current());
 
-        self.handle().spawn(future)
+        self.deref().spawn(future)
     }
 
     pub fn block_in_place<F, R>(&self, f: F) -> R
@@ -159,6 +156,7 @@ impl ZRuntime {
             }
         }
 
+        #[cfg(feature = "tracing-instrument")]
         let f = tracing::Instrument::instrument(f, tracing::Span::current());
 
         tokio::task::block_in_place(move || self.block_on(f))

@@ -66,6 +66,7 @@ transport_ws = ["zenoh-transport/transport_ws"]
 transport_vsock = ["zenoh-transport/transport_vsock"]
 unstable = ["internal_config", "zenoh-keyexpr/unstable", "zenoh-config/unstable"]
 internal_config = []
+tracing-instrument = ["zenoh-task/tracing-instrument", "zenoh-runtime/tracing-instrument"]
 
 [dependencies]
 tokio = { workspace = true, features = ["rt", "macros", "time"] }

@@ -24,6 +24,9 @@ categories = { workspace = true }
 description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+tracing-instrument = ["zenoh-runtime/tracing-instrument"]
+
 [dependencies]
 tokio = { workspace = true, features = ["default", "sync"] }
 futures = { workspace = true }
