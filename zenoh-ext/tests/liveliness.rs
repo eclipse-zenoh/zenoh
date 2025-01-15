@@ -107,7 +107,7 @@ async fn test_liveliness_querying_subscriber_brokered() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47448";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27449";
 
     const LIVELINESS_KEYEXPR_1: &str = "test/liveliness/querying-subscriber/brokered/1";
     const LIVELINESS_KEYEXPR_2: &str = "test/liveliness/querying-subscriber/brokered/2";
