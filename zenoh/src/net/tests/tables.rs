@@ -13,7 +13,7 @@
 //
 use std::{
     convert::{TryFrom, TryInto},
-    sync::Arc,
+    sync::{Arc, Weak},
 };
 
 use uhlc::HLC;
@@ -25,14 +25,14 @@ use zenoh_protocol::{
         key_expr::keyexpr, Encoding, ExprId, Reliability, WhatAmI, WireExpr, ZenohIdProto,
         EMPTY_EXPR_ID,
     },
-    network::{ext, Declare, DeclareBody, DeclareKeyExpr, Push},
+    network::{ext, Declare, DeclareBody, DeclareKeyExpr},
     zenoh::{PushBody, Put},
 };
 
 use crate::net::{
     primitives::{DummyPrimitives, EPrimitives, Primitives},
     routing::{
-        dispatcher::{pubsub::SubscriberInfo, tables::Tables},
+        dispatcher::{face::FaceState, pubsub::SubscriberInfo, tables::Tables},
         router::*,
         RoutingContext,
     },
@@ -722,27 +722,31 @@ fn client_test() {
     primitives1.clear_data();
     primitives2.clear_data();
 
-    route_data(
-        &tables,
-        &face0.upgrade().unwrap(),
-        Push {
-            wire_expr: "test/client/z1_wr1".into(),
-            ext_qos: ext::QoSType::DEFAULT,
-            ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType { node_id: 0 },
-            payload: PushBody::Put(Put {
-                timestamp: None,
-                encoding: Encoding::empty(),
-                ext_sinfo: None,
-                #[cfg(feature = "shared-memory")]
-                ext_shm: None,
-                ext_unknown: vec![],
-                payload: ZBuf::empty(),
-                ext_attachment: None,
-            }),
-        },
-        Reliability::Reliable,
-    );
+    let route_dummy_data = |face: &Weak<FaceState>, wire_expr| {
+        route_data(
+            &tables,
+            &face.upgrade().unwrap(),
+            wire_expr,
+            ext::QoSType::DEFAULT,
+            None,
+            ext::NodeIdType { node_id: 0 },
+            || {
+                PushBody::Put(Put {
+                    timestamp: None,
+                    encoding: Encoding::empty(),
+                    ext_sinfo: None,
+                    #[cfg(feature = "shared-memory")]
+                    ext_shm: None,
+                    ext_unknown: vec![],
+                    payload: ZBuf::empty(),
+                    ext_attachment: None,
+                })
+            },
+            Reliability::Reliable,
+        );
+    };
+
+    route_dummy_data(&face0, "test/client/z1_wr1".into());
 
     // functional check
     assert!(primitives1.get_last_name().is_some());
@@ -759,27 +763,7 @@ fn client_test() {
     primitives0.clear_data();
     primitives1.clear_data();
     primitives2.clear_data();
-    route_data(
-        &router.tables,
-        &face0.upgrade().unwrap(),
-        Push {
-            wire_expr: WireExpr::from(11).with_suffix("/z1_wr2"),
-            ext_qos: ext::QoSType::DEFAULT,
-            ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType { node_id: 0 },
-            payload: PushBody::Put(Put {
-                timestamp: None,
-                encoding: Encoding::empty(),
-                ext_sinfo: None,
-                #[cfg(feature = "shared-memory")]
-                ext_shm: None,
-                ext_unknown: vec![],
-                payload: ZBuf::empty(),
-                ext_attachment: None,
-            }),
-        },
-        Reliability::Reliable,
-    );
+    route_dummy_data(&face0, WireExpr::from(11).with_suffix("/z1_wr2"));
 
     // functional check
     assert!(primitives1.get_last_name().is_some());
@@ -796,27 +780,7 @@ fn client_test() {
     primitives0.clear_data();
     primitives1.clear_data();
     primitives2.clear_data();
-    route_data(
-        &router.tables,
-        &face1.upgrade().unwrap(),
-        Push {
-            wire_expr: "test/client/**".into(),
-            ext_qos: ext::QoSType::DEFAULT,
-            ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType { node_id: 0 },
-            payload: PushBody::Put(Put {
-                timestamp: None,
-                encoding: Encoding::empty(),
-                ext_sinfo: None,
-                #[cfg(feature = "shared-memory")]
-                ext_shm: None,
-                ext_unknown: vec![],
-                payload: ZBuf::empty(),
-                ext_attachment: None,
-            }),
-        },
-        Reliability::Reliable,
-    );
+    route_dummy_data(&face1, "test/client/**".into());
 
     // functional check
     assert!(primitives0.get_last_name().is_some());
@@ -833,27 +797,7 @@ fn client_test() {
     primitives0.clear_data();
     primitives1.clear_data();
     primitives2.clear_data();
-    route_data(
-        &router.tables,
-        &face0.upgrade().unwrap(),
-        Push {
-            wire_expr: 12.into(),
-            ext_qos: ext::QoSType::DEFAULT,
-            ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType { node_id: 0 },
-            payload: PushBody::Put(Put {
-                timestamp: None,
-                encoding: Encoding::empty(),
-                ext_sinfo: None,
-                #[cfg(feature = "shared-memory")]
-                ext_shm: None,
-                ext_unknown: vec![],
-                payload: ZBuf::empty(),
-                ext_attachment: None,
-            }),
-        },
-        Reliability::Reliable,
-    );
+    route_dummy_data(&face0, 12.into());
 
     // functional check
     assert!(primitives1.get_last_name().is_some());
@@ -870,27 +814,7 @@ fn client_test() {
     primitives0.clear_data();
     primitives1.clear_data();
     primitives2.clear_data();
-    route_data(
-        &router.tables,
-        &face1.upgrade().unwrap(),
-        Push {
-            wire_expr: 22.into(),
-            ext_qos: ext::QoSType::DEFAULT,
-            ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType { node_id: 0 },
-            payload: PushBody::Put(Put {
-                timestamp: None,
-                encoding: Encoding::empty(),
-                ext_sinfo: None,
-                #[cfg(feature = "shared-memory")]
-                ext_shm: None,
-                ext_unknown: vec![],
-                payload: ZBuf::empty(),
-                ext_attachment: None,
-            }),
-        },
-        Reliability::Reliable,
-    );
+    route_dummy_data(&face1, 22.into());
 
     // functional check
     assert!(primitives0.get_last_name().is_some());
