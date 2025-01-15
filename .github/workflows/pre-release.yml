@@ -53,7 +53,7 @@ jobs:
         run: rustup component add rustfmt clippy
 
       - name: Code format check
-        run: cargo fmt --check -- --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate"
+        run: rustfmt --check --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate,skip_children=true" $(git ls-files '*.rs')
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
