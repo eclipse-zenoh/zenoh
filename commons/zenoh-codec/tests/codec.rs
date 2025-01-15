@@ -361,9 +361,7 @@ fn codec_encoding() {
 #[cfg(feature = "shared-memory")]
 #[test]
 fn codec_shm_info() {
-    use zenoh_shm::{
-        api::provider::chunk::ChunkDescriptor, metadata::descriptor::MetadataDescriptor, ShmBufInfo,
-    };
+    use zenoh_shm::{metadata::descriptor::MetadataDescriptor, ShmBufInfo};
 
     run!(ShmBufInfo, {
         let mut rng = rand::thread_rng();
