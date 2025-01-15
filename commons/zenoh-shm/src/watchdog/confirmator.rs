@@ -98,8 +98,6 @@ impl ConfirmedSegment {
         }
     }
 }
-unsafe impl Send for ConfirmedSegment {}
-unsafe impl Sync for ConfirmedSegment {}
 
 // TODO: optimize confirmation by packing descriptors AND linked table together
 // TODO: think about linked table cleanup
