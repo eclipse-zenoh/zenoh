@@ -19,6 +19,7 @@ use std::{
     sync::{Arc, Weak},
 };
 
+use foldhash::HashMapExt;
 use zenoh_config::WhatAmI;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr},
@@ -168,9 +169,9 @@ pub struct Resource {
     pub(crate) expr: String,
     pub(crate) suffix: String,
     pub(crate) nonwild_prefix: Option<(Arc<Resource>, String)>,
-    pub(crate) children: HashMap<String, Arc<Resource>>,
+    pub(crate) children: foldhash::HashMap<String, Arc<Resource>>,
     pub(crate) context: Option<ResourceContext>,
-    pub(crate) session_ctxs: HashMap<usize, Arc<SessionContext>>,
+    pub(crate) session_ctxs: foldhash::HashMap<usize, Arc<SessionContext>>,
 }
 
 impl PartialEq for Resource {
@@ -208,9 +209,9 @@ impl Resource {
             expr: parent.expr.clone() + suffix,
             suffix: String::from(suffix),
             nonwild_prefix,
-            children: HashMap::new(),
+            children: foldhash::HashMap::new(),
             context,
-            session_ctxs: HashMap::new(),
+            session_ctxs: foldhash::HashMap::new(),
         }
     }
 
@@ -298,9 +299,9 @@ impl Resource {
             expr: String::from(""),
             suffix: String::from(""),
             nonwild_prefix: None,
-            children: HashMap::new(),
+            children: foldhash::HashMap::new(),
             context: None,
-            session_ctxs: HashMap::new(),
+            session_ctxs: foldhash::HashMap::new(),
         })
     }
 

@@ -74,6 +74,7 @@ ahash = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
 flume = { workspace = true }
+foldhash = { workspace = true, features = ["default"] }
 futures = { workspace = true }
 git-version = { workspace = true }
 itertools = { workspace = true }

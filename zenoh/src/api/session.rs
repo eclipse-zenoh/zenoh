@@ -24,6 +24,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use foldhash::HashMapExt;
 #[zenoh_macros::internal]
 use ref_cast::ref_cast_custom;
 use ref_cast::RefCastCustom;
@@ -129,8 +130,8 @@ pub(crate) struct SessionState {
     pub(crate) expr_id_counter: AtomicExprId, // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicRequestId,
     pub(crate) liveliness_qid_counter: AtomicRequestId,
-    pub(crate) local_resources: HashMap<ExprId, Resource>,
-    pub(crate) remote_resources: HashMap<ExprId, Resource>,
+    pub(crate) local_resources: foldhash::HashMap<ExprId, Resource>,
+    pub(crate) remote_resources: foldhash::HashMap<ExprId, Resource>,
     #[cfg(feature = "unstable")]
     pub(crate) remote_subscribers: HashMap<SubscriberId, KeyExpr<'static>>,
     pub(crate) publishers: HashMap<Id, PublisherState>,
@@ -163,8 +164,8 @@ impl SessionState {
             expr_id_counter: AtomicExprId::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
             qid_counter: AtomicRequestId::new(0),
             liveliness_qid_counter: AtomicRequestId::new(0),
-            local_resources: HashMap::new(),
-            remote_resources: HashMap::new(),
+            local_resources: foldhash::HashMap::new(),
+            remote_resources: foldhash::HashMap::new(),
             #[cfg(feature = "unstable")]
             remote_subscribers: HashMap::new(),
             publishers: HashMap::new(),
