@@ -37,6 +37,8 @@ schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["alloc"] }
 token-cell = { workspace = true }
 zenoh-result = { workspace = true }
+# NOTE: getrandom needs to be explicitly added here in order to enable the `js` feature when compiling the rand crate to WASM
+# more information: https://docs.rs/getrandom/latest/getrandom/#webassembly-support 
 getrandom = { workspace = true }
 
 [target.'cfg(not(features = "std"))'.dependencies]
