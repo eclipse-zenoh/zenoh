@@ -32,7 +32,7 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{face_hat, face_hat_mut, get_routes_entries, HatCode, HatFace};
+use super::{face_hat, face_hat_mut, HatCode, HatFace};
 use crate::{
     key_expr::KeyExpr,
     net::routing::{
@@ -41,8 +41,8 @@ use crate::{
             resource::{NodeId, Resource, SessionContext},
             tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
         },
-        hat::{HatQueriesTrait, SendDeclare, Sources},
-        router::{update_query_routes_from, RoutesIndexes},
+        hat::{HatQueriesTrait, QueryRoutes, SendDeclare, Sources},
+        router::update_query_routes_from,
         RoutingContext,
     },
 };
@@ -427,8 +427,17 @@ impl HatQueriesTrait for HatCode {
         Arc::new(route)
     }
 
-    fn get_query_routes_entries(&self, _tables: &Tables) -> RoutesIndexes {
-        get_routes_entries()
+    fn compute_query_routes(
+        &self,
+        tables: &Tables,
+        routes: &mut QueryRoutes,
+        expr: &mut RoutingExpr,
+    ) {
+        let route = self.compute_query_route(tables, expr, 0, WhatAmI::Peer);
+        routes.routers.resize_with(1, || route.clone());
+        routes.peers.resize_with(1, || route.clone());
+        let route = self.compute_query_route(tables, expr, 0, WhatAmI::Client);
+        routes.clients.resize_with(1, || route.clone());
     }
 
     #[cfg(feature = "unstable")]
