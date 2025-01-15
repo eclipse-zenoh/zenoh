@@ -55,5 +55,6 @@ rand = { workspace = true, features = ["default"] }
 name = "keyexpr_tree"
 harness = false
 
+# NOTE: for the above reason, we need to explicitly ignore getrandom in the CI because it's an indirect dependency which is not used directly by zenoh.
 [package.metadata.cargo-machete]
 ignored = ["getrandom"]
