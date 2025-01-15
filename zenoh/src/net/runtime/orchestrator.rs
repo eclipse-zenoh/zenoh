@@ -127,7 +127,7 @@ impl Runtime {
     }
 
     async fn start_client(&self) -> ZResult<()> {
-        let (peers, scouting, addr, ifaces, timeout, multicast_ttl) = {
+        let (peers, scouting, autoconnect, addr, ifaces, timeout, multicast_ttl) = {
             let guard = &self.state.config.lock().0;
             (
                 guard
@@ -137,6 +137,7 @@ impl Runtime {
                     .unwrap_or(&vec![])
                     .clone(),
                 unwrap_or_default!(guard.scouting().multicast().enabled()),
+                *unwrap_or_default!(guard.scouting().multicast().autoconnect().client()),
                 unwrap_or_default!(guard.scouting().multicast().address()),
                 unwrap_or_default!(guard.scouting().multicast().interface()),
                 std::time::Duration::from_millis(unwrap_or_default!(guard.scouting().timeout())),
@@ -146,7 +147,7 @@ impl Runtime {
         match peers.len() {
             0 => {
                 if scouting {
-                    tracing::info!("Scouting for router ...");
+                    tracing::info!("Scouting...");
                     let ifaces = Runtime::get_interfaces(&ifaces);
                     if ifaces.is_empty() {
                         bail!("Unable to find multicast interface!")
@@ -158,7 +159,7 @@ impl Runtime {
                         if sockets.is_empty() {
                             bail!("Unable to bind UDP port to any multicast interface!")
                         } else {
-                            self.connect_first(&sockets, WhatAmI::Router.into(), &addr, timeout)
+                            self.connect_first(&sockets, autoconnect, &addr, timeout)
                                 .await
                         }
                     }
