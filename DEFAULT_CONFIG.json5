@@ -354,11 +354,11 @@
       open_timeout: 10000,
       /// Timeout in milliseconds when accepting a link
       accept_timeout: 10000,
-      /// Maximum number of zenoh session in pending state while accepting
+      /// Maximum number of links in pending state while performing the handshake for accepting it
       accept_pending: 100,
-      /// Maximum number of sessions that can be simultaneously alive
+      /// Maximum number of transports that can be simultaneously alive for a single zenoh sessions
       max_sessions: 1000,
-      /// Maximum number of incoming links that are admitted per session
+      /// Maximum number of incoming links that are admitted per transport
       max_links: 1,
       /// Enables the LowLatency transport
       /// This option does not make LowLatency transport mandatory, the actual implementation of transport
