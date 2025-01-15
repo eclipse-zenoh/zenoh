@@ -80,6 +80,11 @@ impl OwnedMetadataDescriptor {
                 & self.watchdog_mask
         }
     }
+
+    #[cfg(feature = "test")]
+    pub fn test_validate(&self) -> u64 {
+        self.validate()
+    }
 }
 
 // The ordering strategy is important. See storage implementation for details
