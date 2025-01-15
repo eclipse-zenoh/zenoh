@@ -58,7 +58,7 @@ use crate::net::{
     routing::{
         dispatcher::{face::Face, interests::RemoteInterest},
         hat::TREES_COMPUTATION_DELAY_MS,
-        router::{compute_data_routes, compute_query_routes, RoutesIndexes},
+        router::{compute_data_routes, compute_query_routes},
     },
     runtime::Runtime,
 };
@@ -554,20 +554,3 @@ fn get_peer(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<Ze
 }
 
 impl HatTrait for HatCode {}
-
-#[inline]
-fn get_routes_entries(tables: &Tables) -> RoutesIndexes {
-    let indexes = hat!(tables)
-        .linkstatepeers_net
-        .as_ref()
-        .unwrap()
-        .graph
-        .node_indices()
-        .map(|i| i.index() as NodeId)
-        .collect::<Vec<NodeId>>();
-    RoutesIndexes {
-        routers: indexes.clone(),
-        peers: indexes,
-        clients: vec![0],
-    }
-}

@@ -29,7 +29,7 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{face_hat, face_hat_mut, get_routes_entries, HatCode, HatFace};
+use super::{face_hat, face_hat_mut, HatCode, HatFace};
 use crate::{
     key_expr::KeyExpr,
     net::routing::{
@@ -41,9 +41,10 @@ use crate::{
             tables::{Route, RoutingExpr, Tables},
         },
         hat::{
-            p2p_peer::initial_interest, CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources,
+            p2p_peer::initial_interest, CurrentFutureTrait, DataRoutes, HatPubSubTrait,
+            SendDeclare, Sources,
         },
-        router::{update_data_routes_from, RoutesIndexes},
+        router::update_data_routes_from,
         RoutingContext,
     },
 };
@@ -692,8 +693,18 @@ impl HatPubSubTrait for HatCode {
         Arc::new(route)
     }
 
-    fn get_data_routes_entries(&self, _tables: &Tables) -> RoutesIndexes {
-        get_routes_entries()
+    fn compute_data_routes(
+        &self,
+        tables: &Tables,
+        routes: &mut DataRoutes,
+        expr: &mut RoutingExpr,
+    ) {
+        let route = self.compute_data_route(tables, expr, 0, WhatAmI::Peer);
+        routes.routers.resize_with(1, || route.clone());
+        routes.peers.resize_with(1, || route.clone());
+        routes.clients.resize_with(1, || {
+            self.compute_data_route(tables, expr, 0, WhatAmI::Client)
+        });
     }
 
     #[zenoh_macros::unstable]

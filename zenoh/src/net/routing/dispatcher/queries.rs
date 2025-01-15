@@ -20,7 +20,6 @@ use std::{
 use async_trait::async_trait;
 use tokio_util::sync::CancellationToken;
 use zenoh_buffers::ZBuf;
-use zenoh_config::WhatAmI;
 #[cfg(feature = "stats")]
 use zenoh_protocol::zenoh::reply::ReplyBody;
 use zenoh_protocol::{
@@ -205,49 +204,11 @@ pub(crate) fn undeclare_queryable(
     }
 }
 
-fn compute_query_routes_(tables: &Tables, routes: &mut QueryRoutes, expr: &mut RoutingExpr) {
-    let indexes = tables.hat_code.get_query_routes_entries(tables);
-
-    let max_idx = indexes.routers.iter().max().unwrap();
-    routes.routers.resize_with((*max_idx as usize) + 1, || {
-        Arc::new(QueryTargetQablSet::new())
-    });
-
-    for idx in indexes.routers {
-        routes.routers[idx as usize] =
-            tables
-                .hat_code
-                .compute_query_route(tables, expr, idx, WhatAmI::Router);
-    }
-
-    let max_idx = indexes.peers.iter().max().unwrap();
-    routes.peers.resize_with((*max_idx as usize) + 1, || {
-        Arc::new(QueryTargetQablSet::new())
-    });
-
-    for idx in indexes.peers {
-        routes.peers[idx as usize] =
-            tables
-                .hat_code
-                .compute_query_route(tables, expr, idx, WhatAmI::Peer);
-    }
-
-    let max_idx = indexes.clients.iter().max().unwrap();
-    routes.clients.resize_with((*max_idx as usize) + 1, || {
-        Arc::new(QueryTargetQablSet::new())
-    });
-
-    for idx in indexes.clients {
-        routes.clients[idx as usize] =
-            tables
-                .hat_code
-                .compute_query_route(tables, expr, idx, WhatAmI::Client);
-    }
-}
-
 pub(crate) fn compute_query_routes(tables: &Tables, res: &Arc<Resource>) -> QueryRoutes {
     let mut routes = QueryRoutes::default();
-    compute_query_routes_(tables, &mut routes, &mut RoutingExpr::new(res, ""));
+    tables
+        .hat_code
+        .compute_query_routes(tables, &mut routes, &mut RoutingExpr::new(res, ""));
     routes
 }
 
@@ -255,7 +216,7 @@ pub(crate) fn update_query_routes(tables: &Tables, res: &Arc<Resource>) {
     if res.context.is_some() && !res.expr().contains('*') && res.has_qabls() {
         let mut res_mut = res.clone();
         let res_mut = get_mut_unchecked(&mut res_mut);
-        compute_query_routes_(
+        tables.hat_code.compute_query_routes(
             tables,
             &mut res_mut.context_mut().query_routes,
             &mut RoutingExpr::new(res, ""),

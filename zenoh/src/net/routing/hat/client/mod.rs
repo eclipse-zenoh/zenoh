@@ -49,7 +49,7 @@ use super::{
 use crate::net::{
     routing::{
         dispatcher::{face::Face, interests::RemoteInterest},
-        router::{compute_data_routes, compute_query_routes, RoutesIndexes},
+        router::{compute_data_routes, compute_query_routes},
     },
     runtime::Runtime,
 };
@@ -330,12 +330,3 @@ impl HatFace {
 }
 
 impl HatTrait for HatCode {}
-
-#[inline]
-fn get_routes_entries() -> RoutesIndexes {
-    RoutesIndexes {
-        routers: vec![0],
-        peers: vec![0],
-        clients: vec![0],
-    }
-}

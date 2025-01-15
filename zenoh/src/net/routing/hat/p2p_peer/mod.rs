@@ -63,7 +63,7 @@ use crate::net::{
             face::{Face, InterestState},
             interests::RemoteInterest,
         },
-        router::{compute_data_routes, compute_query_routes, RoutesIndexes},
+        router::{compute_data_routes, compute_query_routes},
         RoutingContext,
     },
     runtime::Runtime,
@@ -441,15 +441,6 @@ impl HatFace {
 }
 
 impl HatTrait for HatCode {}
-
-#[inline]
-fn get_routes_entries() -> RoutesIndexes {
-    RoutesIndexes {
-        routers: vec![0],
-        peers: vec![0],
-        clients: vec![0],
-    }
-}
 
 // In p2p, at connection, while no interest is sent on the network,
 // peers act as if they received an interest CurrentFuture with id 0
