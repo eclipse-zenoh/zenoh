@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023 ZettaScale Technology
+// Copyright (c) 2025 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -47,7 +47,8 @@ impl<const S: usize> Metadata<S> {
         )
     }
 
-    pub fn count(&self) -> usize {
+    #[inline(always)]
+    pub const fn count(&self) -> usize {
         S
     }
 }
