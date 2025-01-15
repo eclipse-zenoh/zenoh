@@ -23,6 +23,7 @@ use crate::{
         client_storage::ShmClientStorage,
         common::types::{ProtocolID, SegmentID},
     },
+    header::chunk_header::ChunkHeaderType,
     metadata::subscription::GLOBAL_METADATA_SUBSCRIPTION,
     watchdog::confirmator::GLOBAL_CONFIRMATOR,
     ShmBufInfo, ShmBufInner,
@@ -46,7 +47,7 @@ impl ShmReader {
         Self { client_storage }
     }
 
-    pub fn read_shmbuf(&self, info: &ShmBufInfo) -> ZResult<ShmBufInner> {
+    pub fn read_shmbuf(&self, info: ShmBufInfo) -> ZResult<ShmBufInner> {
         // Read does not increment the reference count as it is assumed
         // that the sender of this buffer has incremented it for us.
 
@@ -54,10 +55,17 @@ impl ShmReader {
         // attach to the watchdog before doing other things
         let confirmed_metadata = Arc::new(GLOBAL_CONFIRMATOR.read().add(metadata));
 
-        let segment = self.ensure_data_segment(info)?;
+        let segment = self.ensure_data_segment(confirmed_metadata.owned.header())?;
+        let buf = segment.map(
+            confirmed_metadata
+                .owned
+                .header()
+                .chunk
+                .load(std::sync::atomic::Ordering::Relaxed),
+        )?;
         let shmb = ShmBufInner {
             metadata: confirmed_metadata,
-            buf: segment.map(info.data_descriptor.chunk)?,
+            buf,
             info: info.clone(),
         };
 
@@ -68,8 +76,11 @@ impl ShmReader {
         }
     }
 
-    fn ensure_data_segment(&self, info: &ShmBufInfo) -> ZResult<Arc<dyn ShmSegment>> {
-        let id = GlobalDataSegmentID::new(info.shm_protocol, info.data_descriptor.segment);
+    fn ensure_data_segment(&self, header: &ChunkHeaderType) -> ZResult<Arc<dyn ShmSegment>> {
+        let id = GlobalDataSegmentID::new(
+            header.protocol.load(std::sync::atomic::Ordering::Relaxed),
+            header.segment.load(std::sync::atomic::Ordering::Relaxed),
+        );
 
         // fastest path: try to get access to already mounted SHM segment
         // read lock allows concurrent execution of multiple requests
@@ -99,7 +110,8 @@ impl ShmReader {
 
             // (common case) mount a new segment and add it to the map
             std::collections::hash_map::Entry::Vacant(vacant) => {
-                let new_segment = client.attach(info.data_descriptor.segment)?;
+                let new_segment =
+                    client.attach(header.segment.load(std::sync::atomic::Ordering::Relaxed))?;
                 Ok(vacant.insert(new_segment).clone())
             }
         }

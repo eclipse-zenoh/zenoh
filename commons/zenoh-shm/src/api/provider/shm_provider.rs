@@ -908,6 +908,26 @@ where
         allocated_metadata: AllocatedMetadataDescriptor,
         confirmed_metadata: ConfirmedDescriptor,
     ) -> ShmBufInner {
+        // write additional metadata
+        // chunk descriptor
+        allocated_metadata
+            .header()
+            .segment
+            .store(chunk.descriptor.segment, Ordering::Relaxed);
+        allocated_metadata
+            .header()
+            .chunk
+            .store(chunk.descriptor.chunk, Ordering::Relaxed);
+        allocated_metadata
+            .header()
+            .len
+            .store(chunk.descriptor.len.into(), Ordering::Relaxed);
+        // protocol
+        allocated_metadata
+            .header()
+            .protocol
+            .store(self.id.id(), Ordering::Relaxed);
+
         // add watchdog to validator
         GLOBAL_VALIDATOR
             .read()
@@ -915,12 +935,9 @@ where
 
         // Create buffer's info
         let info = ShmBufInfo::new(
-            chunk.descriptor.clone(),
-            self.id.id(),
             len,
             MetadataDescriptor::from(&confirmed_metadata.owned),
-            confirmed_metadata
-                .owned
+            allocated_metadata
                 .header()
                 .generation
                 .load(Ordering::SeqCst),

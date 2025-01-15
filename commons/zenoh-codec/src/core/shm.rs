@@ -70,15 +70,11 @@ where
 
     fn write(self, writer: &mut W, x: &ShmBufInfo) -> Self::Output {
         let ShmBufInfo {
-            data_descriptor,
-            shm_protocol,
             data_len,
             metadata,
             generation,
         } = x;
 
-        self.write(&mut *writer, data_descriptor)?;
-        self.write(&mut *writer, shm_protocol)?;
         self.write(&mut *writer, *data_len)?;
         self.write(&mut *writer, metadata)?;
         self.write(&mut *writer, generation)?;
@@ -139,19 +135,11 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ShmBufInfo, Self::Error> {
-        let data_descriptor = self.read(&mut *reader)?;
-        let shm_protocol = self.read(&mut *reader)?;
         let data_len = self.read(&mut *reader)?;
         let metadata = self.read(&mut *reader)?;
         let generation = self.read(&mut *reader)?;
 
-        let shm_info = ShmBufInfo::new(
-            data_descriptor,
-            shm_protocol,
-            data_len,
-            metadata,
-            generation,
-        );
+        let shm_info = ShmBufInfo::new(data_len, metadata, generation);
         Ok(shm_info)
     }
 }

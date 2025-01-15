@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::sync::atomic::{AtomicBool, AtomicU32};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize};
 
 // Chunk header
 #[stabby::stabby]
@@ -25,4 +25,12 @@ pub struct ChunkHeaderType {
     pub refcount: AtomicU32,
     pub watchdog_invalidated: AtomicBool,
     pub generation: AtomicU32,
+
+    /// Protocol identifier for particular SHM implementation
+    pub protocol: AtomicU32,
+
+    /// The data chunk descriptor
+    pub segment: AtomicU32,
+    pub chunk: AtomicU32,
+    pub len: AtomicUsize,
 }

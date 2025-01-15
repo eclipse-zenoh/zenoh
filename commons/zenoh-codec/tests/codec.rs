@@ -368,8 +368,6 @@ fn codec_shm_info() {
     run!(ShmBufInfo, {
         let mut rng = rand::thread_rng();
         ShmBufInfo::new(
-            ChunkDescriptor::new(rng.gen(), rng.gen(), rng.gen()),
-            rng.gen(),
             rng.gen(),
             MetadataDescriptor {
                 id: rng.gen(),

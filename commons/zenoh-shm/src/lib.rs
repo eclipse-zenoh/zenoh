@@ -26,7 +26,7 @@ use std::{
     },
 };
 
-use api::{common::types::ProtocolID, provider::chunk::ChunkDescriptor};
+use api::common::types::ProtocolID;
 use metadata::descriptor::MetadataDescriptor;
 use watchdog::confirmator::ConfirmedDescriptor;
 use zenoh_buffers::ZSliceBuffer;
@@ -64,10 +64,6 @@ pub mod watchdog;
 /// This that can be serialized and can be used to retrieve the [`ShmBufInner`] in a remote process.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ShmBufInfo {
-    /// The data chunk descriptor
-    pub data_descriptor: ChunkDescriptor,
-    /// Protocol identifier for particular SHM implementation
-    pub shm_protocol: ProtocolID,
     /// Actual data length
     /// NOTE: data_descriptor's len is >= of this len and describes the actual memory length
     /// dedicated in shared memory segment for this particular buffer.
@@ -81,15 +77,11 @@ pub struct ShmBufInfo {
 
 impl ShmBufInfo {
     pub fn new(
-        data_descriptor: ChunkDescriptor,
-        shm_protocol: ProtocolID,
         data_len: NonZeroUsize,
         metadata: MetadataDescriptor,
         generation: u32,
     ) -> ShmBufInfo {
         ShmBufInfo {
-            data_descriptor,
-            shm_protocol,
             data_len,
             metadata,
             generation,
@@ -125,6 +117,14 @@ impl std::fmt::Debug for ShmBufInner {
 }
 
 impl ShmBufInner {
+    pub fn protocol(&self) -> ProtocolID {
+        self.metadata
+            .owned
+            .header()
+            .protocol
+            .load(Ordering::Relaxed)
+    }
+
     pub fn len(&self) -> NonZeroUsize {
         self.info.data_len
     }
