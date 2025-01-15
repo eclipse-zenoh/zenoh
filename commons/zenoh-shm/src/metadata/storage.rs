@@ -20,7 +20,9 @@ use static_init::dynamic;
 use zenoh_result::{zerror, ZResult};
 
 use super::{
-    allocated_descriptor::AllocatedMetadataDescriptor, descriptor::{MetadataIndex, OwnedMetadataDescriptor}, segment::MetadataSegment
+    allocated_descriptor::AllocatedMetadataDescriptor,
+    descriptor::{MetadataIndex, OwnedMetadataDescriptor},
+    segment::MetadataSegment,
 };
 
 #[dynamic(lazy, drop)]
@@ -36,8 +38,13 @@ impl MetadataStorage {
         let mut initially_available = BTreeSet::<OwnedMetadataDescriptor>::default();
 
         for index in 0..initial_segment.data.count() {
-            let (header, watchdog, mask) = unsafe { initial_segment.data.fast_elem_compute(index as MetadataIndex) };
-            let descriptor = OwnedMetadataDescriptor::new(initial_segment.clone(), header, watchdog, mask);
+            let (header, watchdog, mask) = unsafe {
+                initial_segment
+                    .data
+                    .fast_elem_compute(index as MetadataIndex)
+            };
+            let descriptor =
+                OwnedMetadataDescriptor::new(initial_segment.clone(), header, watchdog, mask);
 
             // init generation (this is not really necessary, but we do)
             descriptor

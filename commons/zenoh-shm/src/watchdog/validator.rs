@@ -16,9 +16,8 @@ use std::{collections::BTreeSet, sync::Arc, time::Duration};
 
 use static_init::dynamic;
 
-use crate::metadata::descriptor::OwnedMetadataDescriptor;
-
 use super::periodic_task::PeriodicTask;
+use crate::metadata::descriptor::OwnedMetadataDescriptor;
 
 #[dynamic(lazy, drop)]
 pub static mut GLOBAL_VALIDATOR: WatchdogValidator =
@@ -36,8 +35,7 @@ struct ValidatedStorage {
 
 impl ValidatedStorage {
     fn add(&self, descriptor: OwnedMetadataDescriptor) {
-        self.transactions
-            .push((Transaction::Add, descriptor));
+        self.transactions.push((Transaction::Add, descriptor));
     }
 
     fn remove(&self, descriptor: OwnedMetadataDescriptor) {
@@ -78,7 +76,10 @@ impl WatchdogValidator {
             watchdogs.retain(|watchdog| {
                 let old_val = watchdog.validate();
                 if old_val == 0 {
-                    watchdog.header().watchdog_invalidated.store(true, std::sync::atomic::Ordering::Relaxed);
+                    watchdog
+                        .header()
+                        .watchdog_invalidated
+                        .store(true, std::sync::atomic::Ordering::Relaxed);
                     return false;
                 }
                 true

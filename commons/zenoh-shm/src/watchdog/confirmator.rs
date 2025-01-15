@@ -21,9 +21,8 @@ use std::{
 use static_init::dynamic;
 use zenoh_core::{zread, zwrite};
 
-use crate::metadata::descriptor::{MetadataSegmentID, OwnedMetadataDescriptor};
-
 use super::periodic_task::PeriodicTask;
+use crate::metadata::descriptor::{MetadataSegmentID, OwnedMetadataDescriptor};
 
 #[dynamic(lazy, drop)]
 pub static mut GLOBAL_CONFIRMATOR: WatchdogConfirmator =
@@ -156,7 +155,8 @@ impl WatchdogConfirmator {
         drop(guard);
 
         let confirmed_segment = Arc::new(ConfirmedSegment::new());
-        let confirmed_descriptoir = ConfirmedDescriptor::new(descriptor.clone(), confirmed_segment.clone());
+        let confirmed_descriptoir =
+            ConfirmedDescriptor::new(descriptor.clone(), confirmed_segment.clone());
 
         let mut guard = zwrite!(self.confirmed);
         match guard.entry(descriptor.segment.data.id()) {
