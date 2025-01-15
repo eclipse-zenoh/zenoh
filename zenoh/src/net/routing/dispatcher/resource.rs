@@ -76,13 +76,6 @@ impl SessionContext {
 }
 
 #[derive(Default)]
-pub(crate) struct RoutesIndexes {
-    pub(crate) routers: Vec<NodeId>,
-    pub(crate) peers: Vec<NodeId>,
-    pub(crate) clients: Vec<NodeId>,
-}
-
-#[derive(Default)]
 pub(crate) struct DataRoutes {
     pub(crate) routers: Vec<Arc<Route>>,
     pub(crate) peers: Vec<Arc<Route>>,
@@ -256,6 +249,14 @@ impl Resource {
                 }
             }
         }
+    }
+
+    pub(crate) fn has_subs(&self) -> bool {
+        self.session_ctxs.values().any(|sc| sc.subs.is_some())
+    }
+
+    pub(crate) fn has_qabls(&self) -> bool {
+        self.session_ctxs.values().any(|sc| sc.qabl.is_some())
     }
 
     #[inline]

@@ -11,11 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{collections::HashMap, sync::Arc};
+
+#[zenoh_macros::unstable]
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use zenoh_core::zread;
 use zenoh_protocol::{
-    core::{key_expr::keyexpr, Reliability, WhatAmI, WireExpr},
+    core::{key_expr::keyexpr, Reliability, WireExpr},
     network::{
         declare::{ext, SubscriberId},
         Push,
@@ -177,61 +180,24 @@ pub(crate) fn undeclare_subscription(
     }
 }
 
-fn compute_data_routes_(tables: &Tables, routes: &mut DataRoutes, expr: &mut RoutingExpr) {
-    let indexes = tables.hat_code.get_data_routes_entries(tables);
-
-    let max_idx = indexes.routers.iter().max().unwrap();
-    routes
-        .routers
-        .resize_with((*max_idx as usize) + 1, || Arc::new(HashMap::new()));
-
-    for idx in indexes.routers {
-        routes.routers[idx as usize] =
-            tables
-                .hat_code
-                .compute_data_route(tables, expr, idx, WhatAmI::Router);
-    }
-
-    let max_idx = indexes.peers.iter().max().unwrap();
-    routes
-        .peers
-        .resize_with((*max_idx as usize) + 1, || Arc::new(HashMap::new()));
-
-    for idx in indexes.peers {
-        routes.peers[idx as usize] =
-            tables
-                .hat_code
-                .compute_data_route(tables, expr, idx, WhatAmI::Peer);
-    }
-
-    let max_idx = indexes.clients.iter().max().unwrap();
-    routes
-        .clients
-        .resize_with((*max_idx as usize) + 1, || Arc::new(HashMap::new()));
-
-    for idx in indexes.clients {
-        routes.clients[idx as usize] =
-            tables
-                .hat_code
-                .compute_data_route(tables, expr, idx, WhatAmI::Client);
-    }
-}
-
 pub(crate) fn compute_data_routes(tables: &Tables, expr: &mut RoutingExpr) -> DataRoutes {
     let mut routes = DataRoutes::default();
-    compute_data_routes_(tables, &mut routes, expr);
+    tables
+        .hat_code
+        .compute_data_routes(tables, &mut routes, expr);
     routes
 }
 
 pub(crate) fn update_data_routes(tables: &Tables, res: &mut Arc<Resource>) {
-    if res.context.is_some() {
+    if res.context.is_some() && !res.expr().contains('*') && res.has_subs() {
         let mut res_mut = res.clone();
         let res_mut = get_mut_unchecked(&mut res_mut);
-        compute_data_routes_(
+        tables.hat_code.compute_data_routes(
             tables,
             &mut res_mut.context_mut().data_routes,
             &mut RoutingExpr::new(res, ""),
         );
+        res_mut.context_mut().valid_data_routes = true;
     }
 }
 
@@ -249,11 +215,13 @@ pub(crate) fn compute_matches_data_routes<'a>(
 ) -> Vec<(Arc<Resource>, DataRoutes)> {
     let mut routes = vec![];
     if res.context.is_some() {
-        let mut expr = RoutingExpr::new(res, "");
-        routes.push((res.clone(), compute_data_routes(tables, &mut expr)));
+        if !res.expr().contains('*') && res.has_subs() {
+            let mut expr = RoutingExpr::new(res, "");
+            routes.push((res.clone(), compute_data_routes(tables, &mut expr)));
+        }
         for match_ in &res.context().matches {
             let match_ = match_.upgrade().unwrap();
-            if !Arc::ptr_eq(&match_, res) {
+            if !Arc::ptr_eq(&match_, res) && !match_.expr().contains('*') && match_.has_subs() {
                 let mut expr = RoutingExpr::new(&match_, "");
                 let match_routes = compute_data_routes(tables, &mut expr);
                 routes.push((match_, match_routes));

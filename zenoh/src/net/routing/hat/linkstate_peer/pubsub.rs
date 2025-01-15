@@ -31,8 +31,8 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 use super::{
-    face_hat, face_hat_mut, get_peer, get_routes_entries, hat, hat_mut, network::Network, res_hat,
-    res_hat_mut, HatCode, HatContext, HatFace, HatTables,
+    face_hat, face_hat_mut, get_peer, hat, hat_mut, network::Network, res_hat, res_hat_mut,
+    HatCode, HatContext, HatFace, HatTables,
 };
 #[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
@@ -44,8 +44,7 @@ use crate::net::routing::{
         resource::{NodeId, Resource, SessionContext},
         tables::{Route, RoutingExpr, Tables},
     },
-    hat::{CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources},
-    router::RoutesIndexes,
+    hat::{CurrentFutureTrait, DataRoutes, HatPubSubTrait, SendDeclare, Sources},
     RoutingContext,
 };
 
@@ -986,8 +985,36 @@ impl HatPubSubTrait for HatCode {
         Arc::new(route)
     }
 
-    fn get_data_routes_entries(&self, tables: &Tables) -> RoutesIndexes {
-        get_routes_entries(tables)
+    fn compute_data_routes(
+        &self,
+        tables: &Tables,
+        routes: &mut DataRoutes,
+        expr: &mut RoutingExpr,
+    ) {
+        let indexes = hat!(tables)
+            .linkstatepeers_net
+            .as_ref()
+            .unwrap()
+            .graph
+            .node_indices()
+            .map(|i| i.index() as NodeId)
+            .collect::<Vec<NodeId>>();
+        let max_idx = indexes.iter().max().unwrap();
+        routes
+            .routers
+            .resize_with((*max_idx as usize) + 1, || Arc::new(HashMap::new()));
+        routes
+            .peers
+            .resize_with((*max_idx as usize) + 1, || Arc::new(HashMap::new()));
+        for idx in indexes {
+            let route = self.compute_data_route(tables, expr, idx, WhatAmI::Peer);
+            routes.routers[idx as usize] = route.clone();
+            routes.peers[idx as usize] = route;
+        }
+
+        routes.clients.resize_with(1, || {
+            self.compute_data_route(tables, expr, 0, WhatAmI::Client)
+        });
     }
 
     #[zenoh_macros::unstable]

@@ -177,7 +177,7 @@ impl PipeR {
             .open(path)?;
 
         #[cfg(not(target_os = "macos"))]
-        read.try_lock(FileLockMode::Exclusive)?;
+        AdvisoryFileLock::try_lock(&read, FileLockMode::Exclusive)?;
         Ok(read)
     }
 }
@@ -228,8 +228,8 @@ impl PipeW {
         let write = open_write(path)?;
         // the file must be already locked at the other side...
         #[cfg(not(target_os = "macos"))]
-        if write.try_lock(FileLockMode::Exclusive).is_ok() {
-            let _ = write.unlock();
+        if AdvisoryFileLock::try_lock(&write, FileLockMode::Exclusive).is_ok() {
+            let _ = AdvisoryFileLock::unlock(&write);
             bail!("no listener...")
         }
         Ok(write)

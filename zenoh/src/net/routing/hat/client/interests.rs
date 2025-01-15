@@ -133,7 +133,12 @@ impl HatInterestTrait for HatCode {
                 dst_face_mut
                     .pending_current_interests
                     .insert(id, (interest.clone(), cancellation_token));
-                CurrentInterestCleanup::spawn_interest_clean_up_task(dst_face, tables_ref, id);
+                CurrentInterestCleanup::spawn_interest_clean_up_task(
+                    dst_face,
+                    tables_ref,
+                    id,
+                    tables.interests_timeout,
+                );
             }
             let wire_expr = res
                 .as_ref()

@@ -23,7 +23,7 @@ async fn test_liveliness_subscriber_clique() {
     use zenoh_config::EndPoint;
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const PEER1_ENDPOINT: &str = "tcp/localhost:47447";
+    const PEER1_ENDPOINT: &str = "tcp/localhost:27347";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/clique";
 
     zenoh_util::init_log_from_env_or("error");
@@ -86,7 +86,7 @@ async fn test_liveliness_query_clique() {
     use zenoh_link::EndPoint;
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const PEER1_ENDPOINT: &str = "tcp/localhost:47448";
+    const PEER1_ENDPOINT: &str = "tcp/localhost:27348";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/query/clique";
 
     zenoh_util::init_log_from_env_or("error");
@@ -143,7 +143,7 @@ async fn test_liveliness_subscriber_brokered() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47449";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27350";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/brokered";
 
     zenoh_util::init_log_from_env_or("error");
@@ -220,7 +220,7 @@ async fn test_liveliness_query_brokered() {
     use zenoh_link::EndPoint;
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47450";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27451";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/query/brokered";
 
     zenoh_util::init_log_from_env_or("error");
@@ -365,7 +365,7 @@ async fn test_liveliness_after_close() {
     use zenoh_config::EndPoint;
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const PEER1_ENDPOINT: &str = "tcp/localhost:47451";
+    const PEER1_ENDPOINT: &str = "tcp/localhost:27452";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/clique";
 
     zenoh_util::init_log_from_env_or("error");
@@ -425,7 +425,7 @@ async fn test_liveliness_subscriber_double_client_before() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47452";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27453";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/double/client/before";
 
     zenoh_util::init_log_from_env_or("error");
@@ -519,7 +519,7 @@ async fn test_liveliness_subscriber_double_client_middle() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47453";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27454";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/double/client/middle";
 
     zenoh_util::init_log_from_env_or("error");
@@ -616,7 +616,7 @@ async fn test_liveliness_subscriber_double_client_after() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47454";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27354";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/double/client/after";
 
     zenoh_util::init_log_from_env_or("error");
@@ -715,7 +715,7 @@ async fn test_liveliness_subscriber_double_client_history_before() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47455";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27455";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/double/client/history/before";
 
     zenoh_util::init_log_from_env_or("error");
@@ -817,7 +817,7 @@ async fn test_liveliness_subscriber_double_client_history_middle() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47456";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27456";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/double/client/history/middle";
 
     zenoh_util::init_log_from_env_or("error");
@@ -919,7 +919,7 @@ async fn test_liveliness_subscriber_double_client_history_after() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47457";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27357";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/double/client/history/after";
 
     zenoh_util::init_log_from_env_or("error");
@@ -1023,7 +1023,7 @@ async fn test_liveliness_subscriber_double_peer_before() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47458";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27458";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/double/peer/before";
 
     zenoh_util::init_log_from_env_or("error");
@@ -1111,7 +1111,7 @@ async fn test_liveliness_subscriber_double_peer_middle() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47459";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27459";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/double/peer/middle";
 
     zenoh_util::init_log_from_env_or("error");
@@ -1202,7 +1202,7 @@ async fn test_liveliness_subscriber_double_peer_after() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47460";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27460";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/double/peer/after";
 
     zenoh_util::init_log_from_env_or("error");
@@ -1295,7 +1295,7 @@ async fn test_liveliness_subscriber_double_peer_history_before() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47461";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27461";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/double/peer/history/before";
 
     zenoh_util::init_log_from_env_or("error");
@@ -1397,7 +1397,7 @@ async fn test_liveliness_subscriber_double_peer_history_middle() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47462";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27462";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/double/peer/history/middle";
 
     zenoh_util::init_log_from_env_or("error");
@@ -1499,7 +1499,7 @@ async fn test_liveliness_subscriber_double_peer_history_after() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47463";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27463";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/double/peer/history/after";
 
     zenoh_util::init_log_from_env_or("error");
@@ -1702,8 +1702,8 @@ async fn test_liveliness_subscriber_double_router_middle() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47466";
-    const ROUTER_SUB_ENDPOINT: &str = "tcp/localhost:47467";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27466";
+    const ROUTER_SUB_ENDPOINT: &str = "tcp/localhost:27467";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/double/router/middle";
 
     zenoh_util::init_log_from_env_or("error");
@@ -1804,8 +1804,8 @@ async fn test_liveliness_subscriber_double_router_after() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47468";
-    const ROUTER_SUB_ENDPOINT: &str = "tcp/localhost:47469";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27468";
+    const ROUTER_SUB_ENDPOINT: &str = "tcp/localhost:27469";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/double/router/after";
 
     zenoh_util::init_log_from_env_or("error");
@@ -1908,8 +1908,8 @@ async fn test_liveliness_subscriber_double_router_history_before() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47470";
-    const ROUTER_SUB_ENDPOINT: &str = "tcp/localhost:47471";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27470";
+    const ROUTER_SUB_ENDPOINT: &str = "tcp/localhost:27471";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/double/router/history/before";
 
     zenoh_util::init_log_from_env_or("error");
@@ -2015,8 +2015,8 @@ async fn test_liveliness_subscriber_double_router_history_middle() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47472";
-    const ROUTER_SUB_ENDPOINT: &str = "tcp/localhost:47473";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27472";
+    const ROUTER_SUB_ENDPOINT: &str = "tcp/localhost:27473";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/double/router/history/middle";
 
     zenoh_util::init_log_from_env_or("error");
@@ -2122,8 +2122,8 @@ async fn test_liveliness_subscriber_double_router_history_after() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47474";
-    const ROUTER_SUB_ENDPOINT: &str = "tcp/localhost:47475";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27474";
+    const ROUTER_SUB_ENDPOINT: &str = "tcp/localhost:27475";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/double/router/history/after";
 
     zenoh_util::init_log_from_env_or("error");
@@ -2231,8 +2231,8 @@ async fn test_liveliness_subscriber_double_clientviapeer_before() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47476";
-    const PEER_DUMMY_ENDPOINT: &str = "tcp/localhost:47477";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27476";
+    const PEER_DUMMY_ENDPOINT: &str = "tcp/localhost:27477";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/double/clientviapeer/before";
 
     zenoh_util::init_log_from_env_or("error");
@@ -2344,8 +2344,8 @@ async fn test_liveliness_subscriber_double_clientviapeer_middle() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47478";
-    const PEER_DUMMY_ENDPOINT: &str = "tcp/localhost:47479";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27478";
+    const PEER_DUMMY_ENDPOINT: &str = "tcp/localhost:27479";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/double/clientviapeer/middle";
 
     zenoh_util::init_log_from_env_or("error");
@@ -2460,8 +2460,8 @@ async fn test_liveliness_subscriber_double_clientviapeer_after() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47480";
-    const PEER_DUMMY_ENDPOINT: &str = "tcp/localhost:47481";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27480";
+    const PEER_DUMMY_ENDPOINT: &str = "tcp/localhost:27481";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subscriber/double/clientviapeer/after";
 
     zenoh_util::init_log_from_env_or("error");
@@ -2578,8 +2578,8 @@ async fn test_liveliness_subscriber_double_clientviapeer_history_before() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47482";
-    const PEER_DUMMY_ENDPOINT: &str = "tcp/localhost:47483";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27482";
+    const PEER_DUMMY_ENDPOINT: &str = "tcp/localhost:27483";
     const LIVELINESS_KEYEXPR: &str =
         "test/liveliness/subscriber/double/clientviapeer/history/before";
 
@@ -3719,7 +3719,7 @@ async fn test_liveliness_subget_router_before() {
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
     const ROUTER_ENDPOINT: &str = "tcp/localhost:30496";
-    const ROUTER_SUBGET_ENDPOINT: &str = "tcp/localhost:47497";
+    const ROUTER_SUBGET_ENDPOINT: &str = "tcp/localhost:27497";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/subget/router/before";
 
     zenoh_util::init_log_from_env_or("error");

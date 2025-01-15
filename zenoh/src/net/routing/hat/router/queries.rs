@@ -37,7 +37,7 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 use super::{
-    face_hat, face_hat_mut, get_peer, get_router, get_routes_entries, hat, hat_mut,
+    face_hat, face_hat_mut, get_peer, get_router, hat, hat_mut,
     interests::push_declaration_profile, network::Network, res_hat, res_hat_mut, HatCode,
     HatContext, HatFace, HatTables,
 };
@@ -50,8 +50,7 @@ use crate::net::routing::{
         resource::{NodeId, Resource, SessionContext},
         tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
     },
-    hat::{CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
-    router::RoutesIndexes,
+    hat::{CurrentFutureTrait, HatQueriesTrait, QueryRoutes, SendDeclare, Sources},
     RoutingContext,
 };
 
@@ -1512,8 +1511,57 @@ impl HatQueriesTrait for HatCode {
         Arc::new(route)
     }
 
-    fn get_query_routes_entries(&self, tables: &Tables) -> RoutesIndexes {
-        get_routes_entries(tables)
+    fn compute_query_routes(
+        &self,
+        tables: &Tables,
+        routes: &mut QueryRoutes,
+        expr: &mut RoutingExpr,
+    ) {
+        let routers_indexes = hat!(tables)
+            .routers_net
+            .as_ref()
+            .unwrap()
+            .graph
+            .node_indices()
+            .map(|i| i.index() as NodeId)
+            .collect::<Vec<NodeId>>();
+        let max_idx = routers_indexes.iter().max().unwrap();
+        routes.routers.resize_with((*max_idx as usize) + 1, || {
+            Arc::new(QueryTargetQablSet::new())
+        });
+
+        for idx in routers_indexes {
+            routes.routers[idx as usize] =
+                self.compute_query_route(tables, expr, idx, WhatAmI::Router);
+        }
+
+        if hat!(tables).full_net(WhatAmI::Peer) {
+            let peers_indexes = hat!(tables)
+                .linkstatepeers_net
+                .as_ref()
+                .unwrap()
+                .graph
+                .node_indices()
+                .map(|i| i.index() as NodeId)
+                .collect::<Vec<NodeId>>();
+            let max_idx = peers_indexes.iter().max().unwrap();
+            routes.peers.resize_with((*max_idx as usize) + 1, || {
+                Arc::new(QueryTargetQablSet::new())
+            });
+            for idx in peers_indexes {
+                routes.peers[idx as usize] =
+                    self.compute_query_route(tables, expr, idx, WhatAmI::Peer);
+            }
+        } else {
+            routes.peers.resize_with(1, || {
+                self.compute_query_route(tables, expr, 0, WhatAmI::Peer)
+            });
+        };
+        routes.clients.resize_with(1, || {
+            tables
+                .hat_code
+                .compute_query_route(tables, expr, 0, WhatAmI::Client)
+        });
     }
 
     #[cfg(feature = "unstable")]
@@ -1575,7 +1623,7 @@ impl HatQueriesTrait for HatCode {
             if master {
                 for (sid, context) in &mres.session_ctxs {
                     if match complete {
-                        true => context.qabl.map_or(false, |q| q.complete),
+                        true => context.qabl.is_some_and(|q| q.complete),
                         false => context.qabl.is_some(),
                     } && context.face.whatami != WhatAmI::Router
                     {

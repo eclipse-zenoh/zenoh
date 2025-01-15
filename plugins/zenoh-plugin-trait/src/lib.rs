@@ -47,10 +47,6 @@ pub use plugin::{
     PluginStartArgs, PluginState, PluginStatus, PluginStatusRec,
 };
 pub use vtable::{PluginLoaderVersion, PluginVTable, PLUGIN_LOADER_VERSION};
-use zenoh_util::concat_enabled_features;
-
-pub const FEATURES: &str =
-    concat_enabled_features!(prefix = "zenoh-plugin-trait", features = []);
 
 #[doc(hidden)]
 pub mod export {

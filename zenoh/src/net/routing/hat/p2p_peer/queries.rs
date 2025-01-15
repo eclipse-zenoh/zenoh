@@ -35,7 +35,7 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{face_hat, face_hat_mut, get_routes_entries, HatCode, HatFace};
+use super::{face_hat, face_hat_mut, HatCode, HatFace};
 use crate::{
     key_expr::KeyExpr,
     net::routing::{
@@ -45,9 +45,10 @@ use crate::{
             tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
         },
         hat::{
-            p2p_peer::initial_interest, CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources,
+            p2p_peer::initial_interest, CurrentFutureTrait, HatQueriesTrait, QueryRoutes,
+            SendDeclare, Sources,
         },
-        router::{update_query_routes_from, RoutesIndexes},
+        router::update_query_routes_from,
         RoutingContext,
     },
 };
@@ -685,8 +686,17 @@ impl HatQueriesTrait for HatCode {
         Arc::new(route)
     }
 
-    fn get_query_routes_entries(&self, _tables: &Tables) -> RoutesIndexes {
-        get_routes_entries()
+    fn compute_query_routes(
+        &self,
+        tables: &Tables,
+        routes: &mut QueryRoutes,
+        expr: &mut RoutingExpr,
+    ) {
+        let route = self.compute_query_route(tables, expr, 0, WhatAmI::Peer);
+        routes.routers.resize_with(1, || route.clone());
+        routes.peers.resize_with(1, || route.clone());
+        let route = self.compute_query_route(tables, expr, 0, WhatAmI::Client);
+        routes.clients.resize_with(1, || route.clone());
     }
 
     #[cfg(feature = "unstable")]
@@ -719,7 +729,7 @@ impl HatQueriesTrait for HatCode {
             }
             for (sid, context) in &mres.session_ctxs {
                 if match complete {
-                    true => context.qabl.map_or(false, |q| q.complete),
+                    true => context.qabl.is_some_and(|q| q.complete),
                     false => context.qabl.is_some(),
                 } {
                     matching_queryables

@@ -27,7 +27,7 @@ pub(crate) mod unix {
 
     impl Drop for ShmLock {
         fn drop(&mut self) {
-            if self.0._tempfile.try_lock(FileLockMode::Exclusive).is_ok() {
+            if AdvisoryFileLock::try_lock(&self.0._tempfile, FileLockMode::Exclusive).is_ok() {
                 let _ = std::fs::remove_file(self.0.path.clone());
             }
         }
@@ -48,7 +48,7 @@ pub(crate) mod unix {
                 .open(path.clone())?;
 
             // lock tempfile with shared lock to indicate that file is managed
-            tempfile.try_lock(FileLockMode::Shared)?;
+            AdvisoryFileLock::try_lock(&tempfile, FileLockMode::Shared)?;
 
             Ok(Self(LockInner {
                 path,
@@ -67,7 +67,7 @@ pub(crate) mod unix {
             let tempfile = OpenOptions::new().read(true).open(path.clone())?;
 
             // lock tempfile with shared lock to indicate that file is managed
-            tempfile.try_lock(FileLockMode::Shared)?;
+            AdvisoryFileLock::try_lock(&tempfile, FileLockMode::Shared)?;
 
             Ok(Self(LockInner {
                 path,
@@ -95,7 +95,7 @@ pub(crate) mod unix {
                 .open(path.clone())?;
 
             // lock tempfile with exclusive lock to guarantee that the file is unmanaged
-            tempfile.try_lock(FileLockMode::Exclusive)?;
+            AdvisoryFileLock::try_lock(&tempfile, FileLockMode::Exclusive)?;
 
             Ok(Self(LockInner {
                 path,
@@ -114,7 +114,7 @@ pub(crate) mod unix {
         type Error = ();
 
         fn try_from(value: ShmLock) -> Result<Self, Self::Error> {
-            if value.0._tempfile.try_lock(FileLockMode::Exclusive).is_ok() {
+            if AdvisoryFileLock::try_lock(&value.0._tempfile, FileLockMode::Exclusive).is_ok() {
                 return Ok(unsafe { core::mem::transmute::<ShmLock, ExclusiveShmLock>(value) });
             }
             Err(())

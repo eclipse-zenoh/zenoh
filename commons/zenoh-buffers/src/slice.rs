@@ -43,7 +43,10 @@ impl Buffer for &mut [u8] {
 
 // SplitBuffer
 impl<'b> SplitBuffer for &'b [u8] {
-    type Slices<'a> = option::IntoIter<&'a [u8]> where 'b: 'a;
+    type Slices<'a>
+        = option::IntoIter<&'a [u8]>
+    where
+        'b: 'a;
 
     fn slices(&self) -> Self::Slices<'_> {
         Some(*self).into_iter()

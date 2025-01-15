@@ -67,8 +67,8 @@ async fn main() -> zenoh::Result<()> {
         // We reserve a small space at the beginning of the buffer to include the iteration index
         // of the write. This is simply to have the same format as zn_pub.
         let prefix = format!("[{idx:4}] ");
-        let prefix_len = prefix.as_bytes().len();
-        let slice_len = prefix_len + payload.as_bytes().len();
+        let prefix_len = prefix.len();
+        let slice_len = prefix_len + payload.len();
 
         sbuf[0..prefix_len].copy_from_slice(prefix.as_bytes());
         sbuf[prefix_len..slice_len].copy_from_slice(payload.as_bytes());

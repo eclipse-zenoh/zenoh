@@ -137,11 +137,11 @@
       /// Accepts a single value (e.g. autoconnect: ["router", "peer"]) which applies whatever the configured "mode" is,
       /// or different values for router, peer or client mode (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
       /// Each value is a list of: "peer", "router" and/or "client".
-      autoconnect: { router: [], peer: ["router", "peer"], client: ["router", "peer"] },
+      autoconnect: { router: [], peer: ["router", "peer"], client: ["router"] },
       /// Whether or not to listen for scout messages on UDP multicast and reply to them.
       listen: true,
     },
-    /// The gossip scouting configuration.
+    /// The gossip scouting configuration. Note that instances in "client" mode do not participate in gossip.
     gossip: {
       /// Whether gossip scouting is enabled or not
       enabled: true,
@@ -153,14 +153,14 @@
       multihop: false,
       /// Which type of Zenoh instances to send gossip messages to.
       /// Accepts a single value (e.g. target: ["router", "peer"]) which applies whatever the configured "mode" is,
-      /// or different values for router, peer or client mode (e.g. target: { router: ["router", "peer"], peer: ["router"] }).
-      /// Each value is a list of: "peer", "router" and/or "client".
+      /// or different values for router or peer mode (e.g. target: { router: ["router", "peer"], peer: ["router"] }).
+      /// Each value is a list of "peer" and/or "router".
       target: { router: ["router", "peer"], peer: ["router", "peer"]},
       /// Which type of Zenoh instances to automatically establish sessions with upon discovery on gossip.
       /// Accepts a single value (e.g. autoconnect: ["router", "peer"]) which applies whatever the configured "mode" is,
-      /// or different values for router, peer or client mode (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
-      /// Each value is a list of: "peer", "router" and/or "client".
-      autoconnect: { router: [], peer: ["router", "peer"], client: ["router", "peer"] },
+      /// or different values for router or peer mode (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
+      /// Each value is a list of: "peer" and/or "router".
+      autoconnect: { router: [], peer: ["router", "peer"] },
     },
   },
 
@@ -193,6 +193,14 @@
     peer: {
       /// The routing strategy to use in peers. ("peer_to_peer" or "linkstate").
       mode: "peer_to_peer",
+    },
+    /// The interests-based routing configuration.
+    /// This configuration applies regardless of the mode (router, peer or client).
+    interests: {
+      /// The timeout to wait for incoming interests declarations in milliseconds.
+      /// The expiration of this timeout implies that the discovery protocol might be incomplete,
+      /// leading to potential loss of messages, queries or liveliness tokens.
+      timeout: 10000,
     },
   },
 

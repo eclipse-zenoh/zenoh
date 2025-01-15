@@ -890,7 +890,7 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 -----END CERTIFICATE-----";
 
     // Define the locator
-    let mut endpoint: EndPoint = format!("quic/localhost:{}", 8040).parse().unwrap();
+    let mut endpoint: EndPoint = format!("quic/localhost:{}", 8041).parse().unwrap();
     endpoint
         .config_mut()
         .extend_from_iter(
