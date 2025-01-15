@@ -28,6 +28,7 @@ default = ["std"]
 std = ["zenoh-result/std", "dep:schemars"]
 internal = []
 unstable = []
+js = ["getrandom/js"]
 
 [dependencies]
 keyed-set = { workspace = true }
@@ -36,7 +37,7 @@ schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["alloc"] }
 token-cell = { workspace = true }
 zenoh-result = { workspace = true }
-getrandom = { workspace = true, features = ["js"] }
+getrandom = { workspace = true }
 
 [target.'cfg(not(features = "std"))'.dependencies]
 hashbrown = { workspace = true }
@@ -51,3 +52,6 @@ rand = { workspace = true, features = ["default"] }
 [[bench]]
 name = "keyexpr_tree"
 harness = false
+
+[package.metadata.cargo-machete]
+ignored = ["getrandom"]
