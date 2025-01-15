@@ -30,6 +30,7 @@ description = "Internal crate for zenoh."
 [features]
 std = []
 default = ["std"]
+tracing-instrument = ["zenoh-runtime/tracing-instrument"]
 
 [dependencies]
 tokio = { workspace = true, features = ["rt"] }

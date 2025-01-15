@@ -5609,6 +5609,7 @@ dependencies = [
  "ron",
  "serde",
  "tokio",
+ "tracing",
  "zenoh-macros",
  "zenoh-result",
 ]
