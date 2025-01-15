@@ -358,7 +358,7 @@
       accept_pending: 100,
       /// Maximum number of sessions that can be simultaneously alive
       max_sessions: 1000,
-      /// Maximum number of incoming links that are admitted per session
+      /// Maximum number of incoming links that are admitted per transport
       max_links: 1,
       /// Enables the LowLatency transport
       /// This option does not make LowLatency transport mandatory, the actual implementation of transport
