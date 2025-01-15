@@ -36,6 +36,7 @@ schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["alloc"] }
 token-cell = { workspace = true }
 zenoh-result = { workspace = true }
+getrandom = { workspace = true, features = ["js"] }
 
 [target.'cfg(not(features = "std"))'.dependencies]
 hashbrown = { workspace = true }
