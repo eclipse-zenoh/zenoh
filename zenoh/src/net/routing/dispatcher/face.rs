@@ -19,7 +19,6 @@ use std::{
     time::Duration,
 };
 
-use foldhash::HashMapExt;
 use tokio_util::sync::CancellationToken;
 use zenoh_protocol::{
     core::{ExprId, Reliability, WhatAmI, WireExpr, ZenohIdProto},
@@ -69,8 +68,8 @@ pub struct FaceState {
     pub(crate) remote_key_interests: HashMap<InterestId, Option<Arc<Resource>>>,
     pub(crate) pending_current_interests:
         HashMap<InterestId, (Arc<CurrentInterest>, CancellationToken)>,
-    pub(crate) local_mappings: foldhash::HashMap<ExprId, Arc<Resource>>,
-    pub(crate) remote_mappings: foldhash::HashMap<ExprId, Arc<Resource>>,
+    pub(crate) local_mappings: HashMap<ExprId, Arc<Resource>>,
+    pub(crate) remote_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) next_qid: RequestId,
     pub(crate) pending_queries: HashMap<RequestId, (Arc<Query>, CancellationToken)>,
     pub(crate) mcast_group: Option<TransportMulticast>,
@@ -101,8 +100,8 @@ impl FaceState {
             local_interests: HashMap::new(),
             remote_key_interests: HashMap::new(),
             pending_current_interests: HashMap::new(),
-            local_mappings: foldhash::HashMap::new(),
-            remote_mappings: foldhash::HashMap::new(),
+            local_mappings: HashMap::new(),
+            remote_mappings: HashMap::new(),
             next_qid: 0,
             pending_queries: HashMap::new(),
             mcast_group,
