@@ -17,7 +17,6 @@ use std::{
     collections::HashMap,
     convert::TryInto,
     fmt,
-    mem::ManuallyDrop,
     ops::Deref,
     sync::{
         atomic::{AtomicU16, AtomicUsize, Ordering},
