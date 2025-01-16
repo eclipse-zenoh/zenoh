@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "plugins")]
+use std::sync::MutexGuard;
 use std::{
     collections::{hash_map::Entry, HashMap},
     convert::TryInto,
@@ -68,6 +70,8 @@ use zenoh_shm::api::client_storage::ShmClientStorage;
 use zenoh_task::TaskController;
 
 use super::builders::close::{CloseBuilder, Closeable, Closee};
+#[cfg(feature = "plugins")]
+use crate::api::plugins::PluginsManager;
 #[cfg(feature = "unstable")]
 use crate::api::selector::ZenohParameters;
 #[cfg(feature = "unstable")]
@@ -711,6 +715,11 @@ impl Session {
     #[zenoh_macros::internal]
     pub fn hlc(&self) -> Option<&HLC> {
         self.0.runtime.hlc()
+    }
+
+    #[cfg(feature = "plugins")]
+    pub fn plugins_manager(&self) -> MutexGuard<'_, PluginsManager> {
+        self.0.runtime.plugins_manager()
     }
 
     /// Close the zenoh [`Session`](Session).
