@@ -618,8 +618,7 @@ impl Wait for KeyExprUndeclaration<'_> {
         };
         tracing::trace!("undeclare_keyexpr({:?})", expr_id);
         let mut state = zwrite!(session.0.state);
-        assert_ne!(expr_id, 0, "0 is not a valid keyexpr id");
-        state.local_resources.remove(expr_id as usize);
+        state.local_resources.remove(&expr_id);
 
         let primitives = state.primitives()?;
         drop(state);

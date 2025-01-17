@@ -19,13 +19,12 @@ use std::{
     time::Duration,
 };
 
-use slab::Slab;
 use tokio_util::sync::CancellationToken;
 use zenoh_protocol::{
     core::{ExprId, Reliability, WhatAmI, ZenohIdProto},
     network::{
         interest::{InterestId, InterestMode, InterestOptions},
-        Mapping, Push, Request, Response, ResponseFinal,
+        Mapping, Push, Request, RequestId, Response, ResponseFinal,
     },
     zenoh::RequestBody,
 };
@@ -71,7 +70,8 @@ pub struct FaceState {
         HashMap<InterestId, (Arc<CurrentInterest>, CancellationToken)>,
     pub(crate) local_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) remote_mappings: HashMap<ExprId, Arc<Resource>>,
-    pub(crate) pending_queries: Slab<(Arc<Query>, CancellationToken)>,
+    pub(crate) next_qid: RequestId,
+    pub(crate) pending_queries: HashMap<RequestId, (Arc<Query>, CancellationToken)>,
     pub(crate) mcast_group: Option<TransportMulticast>,
     pub(crate) in_interceptors: Option<Arc<InterceptorsChain>>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
@@ -102,7 +102,8 @@ impl FaceState {
             pending_current_interests: HashMap::new(),
             local_mappings: HashMap::new(),
             remote_mappings: HashMap::new(),
-            pending_queries: Slab::new(),
+            next_qid: 0,
+            pending_queries: HashMap::new(),
             mcast_group,
             in_interceptors,
             hat,

@@ -290,11 +290,13 @@ pub(crate) fn update_matches_query_routes(tables: &Tables, res: &Arc<Resource>) 
 #[inline]
 fn insert_pending_query(outface: &mut Arc<FaceState>, query: Arc<Query>) -> RequestId {
     let outface_mut = get_mut_unchecked(outface);
-    outface_mut
-        .pending_queries
-        .insert((query, outface_mut.task_controller.get_cancellation_token()))
-        .try_into()
-        .expect("too many pending queries")
+    outface_mut.next_qid += 1;
+    let qid = outface_mut.next_qid;
+    outface_mut.pending_queries.insert(
+        qid,
+        (query, outface_mut.task_controller.get_cancellation_token()),
+    );
+    qid
 }
 
 #[inline]
@@ -379,7 +381,7 @@ impl QueryCleanup {
             qid,
             timeout,
         };
-        if let Some((_, cancellation_token)) = face.pending_queries.get(qid as usize) {
+        if let Some((_, cancellation_token)) = face.pending_queries.get(&qid) {
             let c_cancellation_token = cancellation_token.clone();
             face.task_controller
                 .spawn_with_rt(zenoh_runtime::ZRuntime::Net, async move {
@@ -420,7 +422,7 @@ impl Timed for QueryCleanup {
             let queries_lock = zwrite!(self.tables.queries_lock);
             if let Some(query) = get_mut_unchecked(&mut face)
                 .pending_queries
-                .try_remove(self.qid as usize)
+                .remove(&self.qid)
             {
                 drop(queries_lock);
                 tracing::warn!(
@@ -680,7 +682,7 @@ pub(crate) fn route_send_response(
         inc_res_stats!(face, rx, admin, body)
     }
 
-    match face.pending_queries.get(qid as usize) {
+    match face.pending_queries.get(&qid) {
         Some((query, _)) => {
             drop(queries_lock);
 
@@ -715,10 +717,7 @@ pub(crate) fn route_send_response_final(
     qid: RequestId,
 ) {
     let queries_lock = zwrite!(tables_ref.queries_lock);
-    match get_mut_unchecked(face)
-        .pending_queries
-        .try_remove(qid as usize)
-    {
+    match get_mut_unchecked(face).pending_queries.remove(&qid) {
         Some(query) => {
             drop(queries_lock);
             tracing::debug!(
@@ -736,7 +735,7 @@ pub(crate) fn route_send_response_final(
 
 pub(crate) fn finalize_pending_queries(tables_ref: &TablesLock, face: &mut Arc<FaceState>) {
     let queries_lock = zwrite!(tables_ref.queries_lock);
-    for query in get_mut_unchecked(face).pending_queries.drain() {
+    for (_, query) in get_mut_unchecked(face).pending_queries.drain() {
         finalize_pending_query(query);
     }
     drop(queries_lock);
