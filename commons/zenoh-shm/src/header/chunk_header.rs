@@ -12,7 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize};
+use std::{
+    num::NonZeroUsize,
+    sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering},
+};
+
+use crate::api::provider::chunk::ChunkDescriptor;
 
 // Chunk header
 #[stabby::stabby]
@@ -30,7 +35,24 @@ pub struct ChunkHeaderType {
     pub protocol: AtomicU32,
 
     /// The data chunk descriptor
-    pub segment: AtomicU32,
-    pub chunk: AtomicU32,
-    pub len: AtomicUsize,
+    segment: AtomicU32,
+    chunk: AtomicU32,
+    len: AtomicUsize,
+}
+
+impl ChunkHeaderType {
+    pub fn set_data_descriptor(&self, descriptor: &ChunkDescriptor) {
+        self.segment.store(descriptor.segment, Ordering::Relaxed);
+        self.chunk.store(descriptor.chunk, Ordering::Relaxed);
+        self.len.store(descriptor.len.into(), Ordering::Relaxed);
+    }
+
+    pub fn data_descriptor(&self) -> ChunkDescriptor {
+        ChunkDescriptor::new(
+            self.segment.load(Ordering::Relaxed),
+            self.chunk.load(Ordering::Relaxed),
+            // SAFETY: this is safe because Write access to self.len is available only from set_data_descriptor
+            unsafe { NonZeroUsize::new_unchecked(self.len.load(Ordering::Relaxed)) },
+        )
+    }
 }

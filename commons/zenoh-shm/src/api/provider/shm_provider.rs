@@ -49,16 +49,16 @@ use crate::{
 
 #[derive(Debug)]
 struct BusyChunk {
-    descriptor: ChunkDescriptor,
     metadata: AllocatedMetadataDescriptor,
 }
 
 impl BusyChunk {
-    fn new(descriptor: ChunkDescriptor, metadata: AllocatedMetadataDescriptor) -> Self {
-        Self {
-            descriptor,
-            metadata,
-        }
+    fn new(metadata: AllocatedMetadataDescriptor) -> Self {
+        Self { metadata }
+    }
+
+    fn descriptor(&self) -> ChunkDescriptor {
+        self.metadata.header().data_descriptor()
     }
 }
 
@@ -219,7 +219,7 @@ impl ForceDeallocPolicy for DeallocOptimal {
         };
         drop(guard);
 
-        provider.backend.free(&chunk_to_dealloc.descriptor);
+        provider.backend.free(&chunk_to_dealloc.descriptor());
         true
     }
 }
@@ -233,7 +233,7 @@ impl ForceDeallocPolicy for DeallocYoungest {
     ) -> bool {
         match provider.busy_list.lock().unwrap().pop_back() {
             Some(val) => {
-                provider.backend.free(&val.descriptor);
+                provider.backend.free(&val.descriptor());
                 true
             }
             None => false,
@@ -250,7 +250,7 @@ impl ForceDeallocPolicy for DeallocEldest {
     ) -> bool {
         match provider.busy_list.lock().unwrap().pop_front() {
             Some(val) => {
-                provider.backend.free(&val.descriptor);
+                provider.backend.free(&val.descriptor());
                 true
             }
             None => false,
@@ -839,8 +839,9 @@ where
         guard.retain(|maybe_free| {
             if is_free_chunk(maybe_free) {
                 tracing::trace!("Garbage Collecting Chunk: {:?}", maybe_free);
-                self.backend.free(&maybe_free.descriptor);
-                largest = largest.max(maybe_free.descriptor.len.get());
+                let descriptor_to_free = maybe_free.descriptor();
+                self.backend.free(&descriptor_to_free);
+                largest = largest.max(descriptor_to_free.len.get());
                 return false;
             }
             true
@@ -912,16 +913,7 @@ where
         // chunk descriptor
         allocated_metadata
             .header()
-            .segment
-            .store(chunk.descriptor.segment, Ordering::Relaxed);
-        allocated_metadata
-            .header()
-            .chunk
-            .store(chunk.descriptor.chunk, Ordering::Relaxed);
-        allocated_metadata
-            .header()
-            .len
-            .store(chunk.descriptor.len.into(), Ordering::Relaxed);
+            .set_data_descriptor(&chunk.descriptor);
         // protocol
         allocated_metadata
             .header()
@@ -954,7 +946,7 @@ where
         self.busy_list
             .lock()
             .unwrap()
-            .push_back(BusyChunk::new(chunk.descriptor, allocated_metadata));
+            .push_back(BusyChunk::new(allocated_metadata));
 
         shmb
     }

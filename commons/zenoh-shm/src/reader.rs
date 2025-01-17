@@ -22,8 +22,8 @@ use crate::{
         client::shm_segment::ShmSegment,
         client_storage::ShmClientStorage,
         common::types::{ProtocolID, SegmentID},
+        provider::chunk::ChunkDescriptor,
     },
-    header::chunk_header::ChunkHeaderType,
     metadata::subscription::GLOBAL_METADATA_SUBSCRIPTION,
     watchdog::confirmator::GLOBAL_CONFIRMATOR,
     ShmBufInfo, ShmBufInner,
@@ -55,14 +55,18 @@ impl ShmReader {
         // attach to the watchdog before doing other things
         let confirmed_metadata = Arc::new(GLOBAL_CONFIRMATOR.read().add(metadata));
 
-        let segment = self.ensure_data_segment(confirmed_metadata.owned.header())?;
-        let buf = segment.map(
+        // retrieve data descriptor from metadata
+        let data_descriptor = confirmed_metadata.owned.header().data_descriptor();
+
+        let segment = self.ensure_data_segment(
             confirmed_metadata
                 .owned
                 .header()
-                .chunk
+                .protocol
                 .load(std::sync::atomic::Ordering::Relaxed),
+            &data_descriptor,
         )?;
+        let buf = segment.map(data_descriptor.chunk)?;
         let shmb = ShmBufInner {
             metadata: confirmed_metadata,
             buf,
@@ -76,11 +80,12 @@ impl ShmReader {
         }
     }
 
-    fn ensure_data_segment(&self, header: &ChunkHeaderType) -> ZResult<Arc<dyn ShmSegment>> {
-        let id = GlobalDataSegmentID::new(
-            header.protocol.load(std::sync::atomic::Ordering::Relaxed),
-            header.segment.load(std::sync::atomic::Ordering::Relaxed),
-        );
+    fn ensure_data_segment(
+        &self,
+        protocol_id: ProtocolID,
+        descriptor: &ChunkDescriptor,
+    ) -> ZResult<Arc<dyn ShmSegment>> {
+        let id = GlobalDataSegmentID::new(protocol_id, descriptor.segment);
 
         // fastest path: try to get access to already mounted SHM segment
         // read lock allows concurrent execution of multiple requests
@@ -110,8 +115,7 @@ impl ShmReader {
 
             // (common case) mount a new segment and add it to the map
             std::collections::hash_map::Entry::Vacant(vacant) => {
-                let new_segment =
-                    client.attach(header.segment.load(std::sync::atomic::Ordering::Relaxed))?;
+                let new_segment = client.attach(descriptor.segment)?;
                 Ok(vacant.insert(new_segment).clone())
             }
         }
