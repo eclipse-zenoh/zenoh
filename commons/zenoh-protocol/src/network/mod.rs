@@ -27,7 +27,7 @@ pub use declare::{
 pub use interest::Interest;
 pub use oam::Oam;
 pub use push::Push;
-pub use request::{AtomicRequestId, Request, RequestId};
+pub use request::{Request, RequestId};
 pub use response::{Response, ResponseFinal};
 
 use crate::core::{CongestionControl, Priority, Reliability};
