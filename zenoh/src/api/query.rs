@@ -15,6 +15,8 @@
 use std::{collections::HashMap, error::Error, fmt::Display};
 
 #[cfg(feature = "unstable")]
+use serde::Deserialize;
+#[cfg(feature = "unstable")]
 use zenoh_config::ZenohId;
 use zenoh_keyexpr::OwnedKeyExpr;
 use zenoh_protocol::core::Parameters;
@@ -172,7 +174,7 @@ impl QueryState {
 }
 /// The kind of accepted query replies.
 #[zenoh_macros::unstable]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Deserialize)]
 pub enum ReplyKeyExpr {
     /// Accept replies whose key expressions may not match the query key expression.
     Any,

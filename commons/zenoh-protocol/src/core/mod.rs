@@ -25,7 +25,7 @@ use core::{
     str::FromStr,
 };
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 pub use uhlc::{Timestamp, NTP64};
 use zenoh_keyexpr::OwnedKeyExpr;
 use zenoh_result::{bail, zerror};
@@ -454,7 +454,7 @@ impl TryFrom<u8> for Priority {
     }
 }
 
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Reliability {
     BestEffort = 0,
@@ -560,7 +560,7 @@ impl Channel {
 }
 
 /// Congestion control strategy.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Deserialize)]
 #[repr(u8)]
 pub enum CongestionControl {
     #[default]
