@@ -293,7 +293,7 @@ fn to_shm_partner<ShmCfg: PartnerShmConfig>(
     let mut res = false;
     for zs in zbuf.zslices_mut() {
         if let Some(shmb) = zs.downcast_ref::<ShmBufInner>() {
-            if partner_shm_cfg.supports_protocol(shmb.info.shm_protocol) {
+            if partner_shm_cfg.supports_protocol(shmb.protocol()) {
                 *zs = shmbuf_to_shminfo(shmb)?;
                 res = true;
             } else {
@@ -331,7 +331,7 @@ pub fn map_zslice_to_shmbuf(zslice: &mut ZSlice, shmr: &ShmReader) -> ZResult<()
     let shmbinfo: ShmBufInfo = codec.read(&mut reader).map_err(|e| zerror!("{:?}", e))?;
 
     // Mount shmbuf
-    let smb = shmr.read_shmbuf(&shmbinfo)?;
+    let smb = shmr.read_shmbuf(shmbinfo)?;
 
     // Replace the content of the slice
     *zslice = smb.into();

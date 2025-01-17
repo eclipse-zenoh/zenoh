@@ -937,8 +937,8 @@ async fn three_node_combination_multicast() -> Result<()> {
     ];
 
     let mut idx = 0;
-    // Ports going to be used: 17511 .. 17535
-    let base_port = 17510;
+    // Ports going to be used: 18511 .. 18535
+    let base_port = 18510;
 
     let recipe_list: Vec<_> = modes
         .map(|n1| modes.map(|n2| (n1, n2)))

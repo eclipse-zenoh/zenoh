@@ -12,12 +12,4 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-pub mod descriptor;
-
-tested_crate_module!(storage);
-tested_crate_module!(subscription);
-
-pub(crate) mod allocated_descriptor;
 pub(crate) mod chunk_header;
-
-mod segment;

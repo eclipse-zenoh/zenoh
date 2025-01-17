@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023 ZettaScale Technology
+// Copyright (c) 2025 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -20,15 +20,15 @@ use static_init::dynamic;
 use zenoh_result::{zerror, ZResult};
 
 use super::{
-    descriptor::{HeaderDescriptor, HeaderSegmentID, OwnedHeaderDescriptor},
-    segment::HeaderSegment,
+    descriptor::{MetadataDescriptor, MetadataSegmentID, OwnedMetadataDescriptor},
+    segment::MetadataSegment,
 };
 
 #[dynamic(lazy, drop)]
-pub static mut GLOBAL_HEADER_SUBSCRIPTION: Subscription = Subscription::new();
+pub static mut GLOBAL_METADATA_SUBSCRIPTION: Subscription = Subscription::new();
 
 pub struct Subscription {
-    linked_table: Mutex<BTreeMap<HeaderSegmentID, Arc<HeaderSegment>>>,
+    linked_table: Mutex<BTreeMap<MetadataSegmentID, Arc<MetadataSegment>>>,
 }
 
 impl Subscription {
@@ -38,12 +38,12 @@ impl Subscription {
         }
     }
 
-    pub fn link(&self, descriptor: &HeaderDescriptor) -> ZResult<OwnedHeaderDescriptor> {
+    pub fn link(&self, descriptor: &MetadataDescriptor) -> ZResult<OwnedMetadataDescriptor> {
         let mut guard = self.linked_table.lock().map_err(|e| zerror!("{e}"))?;
         // ensure segment
         let segment = match guard.entry(descriptor.id) {
             std::collections::btree_map::Entry::Vacant(vacant) => {
-                let segment = Arc::new(HeaderSegment::open(descriptor.id)?);
+                let segment = Arc::new(MetadataSegment::open(descriptor.id)?);
                 vacant.insert(segment.clone());
                 segment
             }
@@ -52,9 +52,11 @@ impl Subscription {
         drop(guard);
 
         // construct owned descriptor
-        // SAFETY: HeaderDescriptor source guarantees that descriptor.index is valid for segment
-        let header = unsafe { segment.array.elem(descriptor.index) };
-        let owned_descriptor = OwnedHeaderDescriptor::new(segment, header);
+        // SAFETY: MetadataDescriptor source guarantees that descriptor.index is valid for segment
+        let (header, watchdog, watchdog_mask) =
+            unsafe { segment.data.fast_elem_compute(descriptor.index) };
+        let owned_descriptor =
+            OwnedMetadataDescriptor::new(segment, header, watchdog, watchdog_mask);
         Ok(owned_descriptor)
     }
 }

@@ -19,6 +19,7 @@ use crate::api::common::types::{ChunkID, SegmentID};
 /// Uniquely identifies the particular chunk within particular segment
 #[zenoh_macros::unstable_doc]
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[stabby::stabby]
 pub struct ChunkDescriptor {
     pub segment: SegmentID,
     pub chunk: ChunkID,
