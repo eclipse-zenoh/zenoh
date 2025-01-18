@@ -69,6 +69,7 @@ internal_config = []
 tracing-instrument = ["zenoh-task/tracing-instrument", "zenoh-runtime/tracing-instrument"]
 
 [dependencies]
+async-channel = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros", "time"] }
 tokio-util = { workspace = true }
 ahash = { workspace = true }
