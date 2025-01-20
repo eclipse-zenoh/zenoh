@@ -533,41 +533,68 @@ impl Resource {
 
     #[inline]
     pub fn get_best_key<'a>(prefix: &Arc<Resource>, suffix: &'a str, sid: usize) -> WireExpr<'a> {
-        fn get_best_key_<'a>(
+        fn get_best_child_key<'a>(
             prefix: &Arc<Resource>,
             suffix: &'a str,
             sid: usize,
-            checkclildren: bool,
-        ) -> WireExpr<'a> {
-            if checkclildren && !suffix.is_empty() {
+        ) -> Option<WireExpr<'a>> {
+            if !suffix.is_empty() {
                 let (chunk, rest) = suffix.split_at(suffix.find('/').unwrap_or(suffix.len()));
                 if let Some(child) = prefix.children.get(chunk) {
-                    return get_best_key_(child, rest, sid, true);
+                    if let Some(key) = get_best_child_key(child, rest, sid) {
+                        return Some(key);
+                    }
                 }
             }
             if let Some(ctx) = prefix.session_ctxs.get(&sid) {
                 if let Some(expr_id) = ctx.remote_expr_id {
-                    return WireExpr {
+                    return Some(WireExpr {
                         scope: expr_id,
                         suffix: suffix.into(),
                         mapping: Mapping::Receiver,
-                    };
+                    });
                 } else if let Some(expr_id) = ctx.local_expr_id {
-                    return WireExpr {
+                    return Some(WireExpr {
                         scope: expr_id,
                         suffix: suffix.into(),
                         mapping: Mapping::Sender,
-                    };
+                    });
                 }
             }
-            match &prefix.parent {
+            None
+        }
+        fn get_best_parent_key<'a>(
+            parent: Option<&Arc<Resource>>,
+            prefix: &Arc<Resource>,
+            suffix: &'a str,
+            sid: usize,
+        ) -> WireExpr<'a> {
+            match parent {
                 Some(parent) => {
-                    get_best_key_(parent, &[&prefix.suffix, suffix].concat(), sid, false).to_owned()
+                    if let Some(ctx) = parent.session_ctxs.get(&sid) {
+                        if let Some(expr_id) = ctx.remote_expr_id {
+                            return WireExpr {
+                                scope: expr_id,
+                                suffix: (prefix.expr()[parent.expr().len()..].to_string() + suffix)
+                                    .into(),
+                                mapping: Mapping::Receiver,
+                            };
+                        } else if let Some(expr_id) = ctx.local_expr_id {
+                            return WireExpr {
+                                scope: expr_id,
+                                suffix: (prefix.expr()[parent.expr().len()..].to_string() + suffix)
+                                    .into(),
+                                mapping: Mapping::Sender,
+                            };
+                        }
+                    }
+                    get_best_parent_key(parent.parent.as_ref(), prefix, suffix, sid).to_owned()
                 }
-                None => suffix.into(),
+                None => (prefix.expr().to_string() + suffix).into(),
             }
         }
-        get_best_key_(prefix, suffix, sid, true)
+        get_best_child_key(prefix, suffix, sid)
+            .unwrap_or_else(|| get_best_parent_key(prefix.parent.as_ref(), prefix, suffix, sid))
     }
 
     pub fn get_matches(tables: &Tables, key_expr: &keyexpr) -> Vec<Weak<Resource>> {
