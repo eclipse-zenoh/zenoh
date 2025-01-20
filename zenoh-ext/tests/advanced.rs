@@ -27,7 +27,7 @@ async fn test_advanced_history() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const PEER1_ENDPOINT: &str = "tcp/localhost:47450";
+    const PEER1_ENDPOINT: &str = "tcp/localhost:27050";
 
     const ADVANCED_HISTORY_KEYEXPR: &str = "test/advanced/history";
 
@@ -116,7 +116,7 @@ async fn test_advanced_retransmission() {
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
     const RECONNECT_SLEEP: Duration = Duration::from_secs(5);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47451";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27051";
 
     const ADVANCED_RETRANSMISSION_KEYEXPR: &str = "test/advanced/retransmission";
 
@@ -245,7 +245,7 @@ async fn test_advanced_retransmission_periodic() {
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
     const RECONNECT_SLEEP: Duration = Duration::from_secs(8);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47452";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27052";
 
     const ADVANCED_RETRANSMISSION_PERIODIC_KEYEXPR: &str = "test/advanced/retransmission/periodic";
 
@@ -367,7 +367,7 @@ async fn test_advanced_sample_miss() {
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
     const RECONNECT_SLEEP: Duration = Duration::from_secs(5);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47453";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27053";
 
     const ADVANCED_SAMPLE_MISS_KEYEXPR: &str = "test/advanced/sample_miss";
 
@@ -488,7 +488,7 @@ async fn test_advanced_retransmission_sample_miss() {
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
     const RECONNECT_SLEEP: Duration = Duration::from_secs(5);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47454";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27054";
 
     const ADVANCED_RETRANSMISSION_SAMPLE_MISS_KEYEXPR: &str =
         "test/advanced/retransmission/sample_miss";
@@ -617,7 +617,7 @@ async fn test_advanced_late_joiner() {
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
     const RECONNECT_SLEEP: Duration = Duration::from_secs(8);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47455";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27055";
 
     const ADVANCED_LATE_JOINER_KEYEXPR: &str = "test/advanced/late_joiner";
 
