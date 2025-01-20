@@ -63,7 +63,8 @@ async fn main() -> zenoh::Result<()> {
             .with_policy::<BlockOn<GarbageCollect>>()
             .make_promise()?;
 
-        // put promise
+        // put the promise
+        // starting from this point, the promise will be distributed over zenoh
         publisher.put(promise.promise()).await?;
 
         // perform promised allocation
@@ -79,7 +80,6 @@ async fn main() -> zenoh::Result<()> {
         allocated_promise[0..prefix_len].copy_from_slice(prefix.as_bytes());
         allocated_promise[prefix_len..slice_len].copy_from_slice(payload.as_bytes());
 
-        // Write the data
         println!(
             "Put SHM Data ('{}': '{}')",
             path,
@@ -87,6 +87,8 @@ async fn main() -> zenoh::Result<()> {
         );
 
         // publish through promise object!
+        // here a signalling through promise object is made, making promised data
+        // available at the subscriber side at any stage
         allocated_promise.publish();
     }
 
