@@ -38,7 +38,7 @@ use super::{
 use crate::{
     api::{
         buffer::{
-            pbw::{PromiseAllocResult, PromiseResult, ZAllocatedPromise, ZPromise},
+            pbw::{PromiseAllocResult, PromiseResult, ZAllocatedPromise, ZLayoutedPromise},
             zshmmut::ZShmMut,
         },
         common::types::ProtocolID,
@@ -632,9 +632,9 @@ where
 
     /// Make promise to allocate the new buffer with this layout and policy
     #[zenoh_macros::unstable_doc]
-    pub fn make_promise(&'a self) -> PromiseResult<'a, IDSource, Backend, Policy> {
+    pub fn make_promise<'b>(&'b self) -> PromiseResult<'a, IDSource, Backend, Policy> {
         let inner = self.layout.provider.make_promise_inner(self.layout.size)?;
-        Ok(ZPromise::new(&self.layout, inner))
+        Ok(ZLayoutedPromise::new(&self.layout, inner))
     }
 }
 
@@ -948,7 +948,7 @@ where
         // wrap metadata without chunk
         let info = self.wrap_metadata(len, allocated_metadata);
 
-        Ok(PromiseInner::new(confirmed_metadata, info))
+        Ok(PromiseInner::new(Arc::new(confirmed_metadata), info))
     }
 
     fn wrap_chunk(

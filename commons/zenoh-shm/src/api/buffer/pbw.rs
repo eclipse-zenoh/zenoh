@@ -28,21 +28,21 @@ pub type PromiseAllocResult = Result<ZAllocatedPromise, ZAllocError>;
 /// SHM buffer promise creation result
 #[zenoh_macros::unstable_doc]
 pub type PromiseResult<'a, IDSource, Backend, Policy> =
-    zenoh_core::Result<ZPromise<'a, IDSource, Backend, Policy>>;
+    zenoh_core::Result<ZLayoutedPromise<'a, IDSource, Backend, Policy>>;
 
-/// A promise to publish SHM buffer
+/// A layouted promise to publish SHM buffer
 #[zenoh_macros::unstable_doc]
-pub struct ZPromise<'a, IDSource, Backend, Policy>
+pub struct ZLayoutedPromise<'a, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
     Backend: ShmProviderBackend,
 {
     layout: &'a AllocLayout<'a, IDSource, Backend>,
-    inner: PromiseInner,
+    pub(crate) inner: PromiseInner,
     _phantom: PhantomData<Policy>,
 }
 
-impl<'a, IDSource, Backend, Policy> ZPromise<'a, IDSource, Backend, Policy>
+impl<'a, IDSource, Backend, Policy> ZLayoutedPromise<'a, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
     Backend: ShmProviderBackend,
@@ -54,9 +54,13 @@ where
             _phantom: PhantomData::default(),
         }
     }
+
+    pub fn promise(&self) -> &ZPromise {
+        unsafe { core::mem::transmute::<&PromiseInner, &ZPromise>(&self.inner) }
+    }
 }
 
-impl<'a, IDSource, Backend, Policy> ZPromise<'a, IDSource, Backend, Policy>
+impl<'a, IDSource, Backend, Policy> ZLayoutedPromise<'a, IDSource, Backend, Policy>
 where
     IDSource: ProtocolIDSource,
     Backend: ShmProviderBackend,
@@ -65,11 +69,13 @@ where
     pub fn alloc(self) -> PromiseAllocResult {
         self.layout.provider.alloc_promise_inner::<Policy>(&self.layout.provider_layout, self.inner)
     }
-
 }
 
+#[repr(transparent)]
+pub struct ZPromise(pub(crate) PromiseInner);
+
 /*
-/// A builder for ZPromise
+/// A builder for ZLayoutedPromise
 #[zenoh_macros::unstable_doc]
 pub struct ZPromiseBuilder<'a, IDSource, Backend>
 where

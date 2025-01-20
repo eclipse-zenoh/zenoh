@@ -81,6 +81,11 @@ path = "examples/z_pub_shm.rs"
 required-features = ["unstable", "shared-memory"]
 
 [[example]]
+name = "z_pub_before_written_shm"
+path = "examples/z_pub_before_written_shm.rs"
+required-features = ["unstable", "shared-memory"]
+
+[[example]]
 name = "z_sub"
 path = "examples/z_sub.rs"
 
