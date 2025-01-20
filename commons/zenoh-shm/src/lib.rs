@@ -58,6 +58,7 @@ pub mod metadata;
 pub mod posix_shm;
 pub mod reader;
 pub mod watchdog;
+pub mod promise;
 
 /// Information about a [`ShmBufInner`].
 ///

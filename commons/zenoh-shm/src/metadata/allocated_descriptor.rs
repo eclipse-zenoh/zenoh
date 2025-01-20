@@ -33,6 +33,9 @@ impl AllocatedMetadataDescriptor {
             .watchdog_invalidated
             .store(false, std::sync::atomic::Ordering::SeqCst);
 
+        // drop data descriptor
+        header.reset_data_descriptor();
+
         // reset watchdog on allocation
         descriptor.validate();
 

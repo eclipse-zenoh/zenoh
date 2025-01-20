@@ -55,8 +55,14 @@ impl ShmReader {
         // attach to the watchdog before doing other things
         let confirmed_metadata = Arc::new(GLOBAL_CONFIRMATOR.read().add(metadata));
 
+        // TODO: make normal signalling, do not block async thread
         // retrieve data descriptor from metadata
-        let data_descriptor = confirmed_metadata.owned.header().data_descriptor();
+        let data_descriptor = loop {
+            if let Some(val) = confirmed_metadata.owned.header().data_descriptor() {
+                break val;
+            };
+            std::thread::yield_now();
+        };
 
         let segment = self.ensure_data_segment(
             confirmed_metadata

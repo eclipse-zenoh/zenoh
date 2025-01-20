@@ -41,18 +41,25 @@ pub struct ChunkHeaderType {
 }
 
 impl ChunkHeaderType {
+    pub fn reset_data_descriptor(&self) {
+        self.len.store(0, Ordering::SeqCst);
+    }
+
     pub fn set_data_descriptor(&self, descriptor: &ChunkDescriptor) {
         self.segment.store(descriptor.segment, Ordering::Relaxed);
         self.chunk.store(descriptor.chunk, Ordering::Relaxed);
-        self.len.store(descriptor.len.into(), Ordering::Relaxed);
+        self.len.store(descriptor.len.into(), Ordering::SeqCst);
     }
 
-    pub fn data_descriptor(&self) -> ChunkDescriptor {
-        ChunkDescriptor::new(
-            self.segment.load(Ordering::Relaxed),
-            self.chunk.load(Ordering::Relaxed),
-            // SAFETY: this is safe because Write access to self.len is available only from set_data_descriptor
-            unsafe { NonZeroUsize::new_unchecked(self.len.load(Ordering::Relaxed)) },
-        )
+    pub fn data_descriptor(&self) -> Option<ChunkDescriptor> {
+        let len = self.len.load(Ordering::Relaxed);
+
+        if let Ok(len) = NonZeroUsize::try_from(len) {
+            let segment = self.segment.load(Ordering::SeqCst);
+            let chunk = self.chunk.load(Ordering::SeqCst);
+
+            return Some(ChunkDescriptor::new(segment, chunk, len));
+        }
+        None
     }
 }
