@@ -122,6 +122,7 @@ pub(crate) fn declare_queryable(
             );
 
             disable_matches_query_routes(&mut wtables, &mut res);
+            drop(wtables);
         }
         None => tracing::error!(
             "{} Declare queryable {} for unknown scope {}!",
@@ -332,6 +333,19 @@ impl Timed for QueryCleanup {
             }
         }
     }
+}
+
+pub(crate) fn disable_all_query_routes(tables: &mut Tables) {
+    pub(crate) fn disable_all_query_routes_rec(res: &mut Arc<Resource>) {
+        let res = get_mut_unchecked(res);
+        if let Some(ctx) = &mut res.context {
+            ctx.data_routes.write().unwrap().clear();
+        }
+        for child in res.children.values_mut() {
+            disable_all_query_routes_rec(child);
+        }
+    }
+    disable_all_query_routes_rec(&mut tables.root_res)
 }
 
 pub(crate) fn disable_matches_query_routes(_tables: &mut Tables, res: &mut Arc<Resource>) {

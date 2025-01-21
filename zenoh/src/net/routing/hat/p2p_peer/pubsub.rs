@@ -43,6 +43,7 @@ use crate::{
         hat::{
             p2p_peer::initial_interest, CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources,
         },
+        router::disable_all_data_routes,
         RoutingContext,
     },
 };
@@ -402,6 +403,8 @@ pub(super) fn pubsub_new_face(
             }
         }
     }
+    // disable routes
+    disable_all_data_routes(tables);
 }
 
 #[inline]

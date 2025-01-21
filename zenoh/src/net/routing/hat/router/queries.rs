@@ -50,6 +50,7 @@ use crate::net::routing::{
         tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
     },
     hat::{CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
+    router::{disable_all_query_routes, disable_matches_query_routes},
     RoutingContext,
 };
 
@@ -897,6 +898,7 @@ pub(super) fn queries_remove_node(
             for mut res in qabls {
                 unregister_router_queryable(tables, &mut res, node, send_declare);
 
+                disable_matches_query_routes(tables, &mut res);
                 Resource::clean(&mut res);
             }
         }
@@ -934,6 +936,7 @@ pub(super) fn queries_remove_node(
                     );
                 }
 
+                disable_matches_query_routes(tables, &mut res);
                 Resource::clean(&mut res)
             }
         }
@@ -1071,6 +1074,9 @@ pub(super) fn queries_tree_change(
             }
         }
     }
+
+    // disable routes
+    disable_all_query_routes(tables);
 }
 
 #[inline]

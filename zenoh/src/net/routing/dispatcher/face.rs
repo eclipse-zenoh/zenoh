@@ -389,6 +389,10 @@ impl Primitives for Face {
                         id,
                         &mut |p, m| declares.push((p.clone(), m)),
                     );
+
+                    disable_all_data_routes(&mut wtables);
+                    disable_all_query_routes(&mut wtables);
+
                     drop(wtables);
                     drop(ctrl_lock);
                     for (p, m) in declares {

@@ -46,6 +46,7 @@ use crate::net::routing::{
         tables::{Route, RoutingExpr, Tables},
     },
     hat::{CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources},
+    router::{disable_all_data_routes, disable_matches_data_routes},
     RoutingContext,
 };
 
@@ -755,6 +756,7 @@ pub(super) fn pubsub_remove_node(
             {
                 unregister_router_subscription(tables, &mut res, node, send_declare);
 
+                disable_matches_data_routes(tables, &mut res);
                 Resource::clean(&mut res)
             }
         }
@@ -779,6 +781,7 @@ pub(super) fn pubsub_remove_node(
                     );
                 }
 
+                disable_matches_data_routes(tables, &mut res);
                 Resource::clean(&mut res)
             }
         }
@@ -833,6 +836,9 @@ pub(super) fn pubsub_tree_change(
             }
         }
     }
+
+    // disable routes
+    disable_all_data_routes(tables);
 }
 
 pub(super) fn pubsub_linkstate_change(

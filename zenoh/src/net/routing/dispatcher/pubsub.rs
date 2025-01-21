@@ -156,6 +156,19 @@ pub(crate) fn undeclare_subscription(
     }
 }
 
+pub(crate) fn disable_all_data_routes(tables: &mut Tables) {
+    pub(crate) fn disable_all_data_routes_rec(res: &mut Arc<Resource>) {
+        let res = get_mut_unchecked(res);
+        if let Some(ctx) = &mut res.context {
+            ctx.data_routes.write().unwrap().clear();
+        }
+        for child in res.children.values_mut() {
+            disable_all_data_routes_rec(child);
+        }
+    }
+    disable_all_data_routes_rec(&mut tables.root_res)
+}
+
 pub(crate) fn disable_matches_data_routes(_tables: &mut Tables, res: &mut Arc<Resource>) {
     if res.context.is_some() {
         get_mut_unchecked(res).context_mut().disable_data_routes();

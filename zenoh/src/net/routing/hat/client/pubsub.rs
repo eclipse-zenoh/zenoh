@@ -37,6 +37,7 @@ use crate::{
             tables::{Route, RoutingExpr, Tables},
         },
         hat::{HatPubSubTrait, SendDeclare, Sources},
+        router::disable_all_data_routes,
         RoutingContext,
     },
 };
@@ -258,6 +259,9 @@ pub(super) fn pubsub_new_face(
             );
         }
     }
+
+    // disable routes
+    disable_all_data_routes(tables);
 }
 
 impl HatPubSubTrait for HatCode {

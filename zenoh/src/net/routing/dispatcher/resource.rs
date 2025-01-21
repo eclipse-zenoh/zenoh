@@ -35,7 +35,11 @@ use super::{
     pubsub::SubscriberInfo,
     tables::{Tables, TablesLock},
 };
-use crate::net::routing::{dispatcher::face::Face, RoutingContext};
+use crate::net::routing::{
+    dispatcher::face::Face,
+    router::{disable_matches_data_routes, disable_matches_query_routes},
+    RoutingContext,
+};
 
 pub(crate) type NodeId = u16;
 
@@ -677,7 +681,7 @@ pub(crate) fn register_expr(
             }
             None => {
                 let res = Resource::get_resource(&prefix, &expr.suffix);
-                let (mut res, wtables) = if res
+                let (mut res, mut wtables) = if res
                     .as_ref()
                     .map(|r| r.context.is_some())
                     .unwrap_or(false)
@@ -709,6 +713,8 @@ pub(crate) fn register_expr(
                 get_mut_unchecked(face)
                     .remote_mappings
                     .insert(expr_id, res.clone());
+                disable_matches_data_routes(&mut wtables, &mut res);
+                disable_matches_query_routes(&mut wtables, &mut res);
                 face.update_interceptors_caches(&mut res);
                 drop(wtables);
             }
