@@ -47,10 +47,7 @@ use super::{
     HatBaseTrait, HatTrait, SendDeclare,
 };
 use crate::net::{
-    routing::{
-        dispatcher::{face::Face, interests::RemoteInterest},
-        router::{compute_data_routes, compute_query_routes},
-    },
+    routing::dispatcher::{face::Face, interests::RemoteInterest},
     runtime::Runtime,
 };
 
@@ -211,40 +208,11 @@ impl HatBaseTrait for HatCode {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
             undeclare_simple_token(&mut wtables, &mut face_clone, &mut res, send_declare);
         }
-        drop(wtables);
 
-        let mut matches_data_routes = vec![];
-        let mut matches_query_routes = vec![];
-        let rtables = zread!(tables.tables);
-        for _match in subs_matches.drain(..) {
-            let route = (!_match.expr().contains('*') && _match.has_subs()).then(|| {
-                let mut expr = RoutingExpr::new(&_match, "");
-                compute_data_routes(&rtables, &mut expr)
-            });
-            matches_data_routes.push((_match.clone(), route));
-        }
-        for _match in qabls_matches.drain(..) {
-            let route = (!_match.expr().contains('*') && _match.has_qabls())
-                .then(|| compute_query_routes(&rtables, &_match));
-            matches_query_routes.push((_match.clone(), route));
-        }
-        drop(rtables);
-
-        let mut wtables = zwrite!(tables.tables);
-        for (mut res, data_routes) in matches_data_routes {
-            if let Some(data_routes) = data_routes {
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .update_data_routes(data_routes);
-            }
+        for mut res in subs_matches {
             Resource::clean(&mut res);
         }
-        for (mut res, query_routes) in matches_query_routes {
-            if let Some(query_routes) = query_routes {
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .update_query_routes(query_routes);
-            }
+        for mut res in qabls_matches {
             Resource::clean(&mut res);
         }
         wtables.faces.remove(&face.id);

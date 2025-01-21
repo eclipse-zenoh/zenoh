@@ -40,11 +40,11 @@ use crate::net::routing::{
     dispatcher::{
         face::FaceState,
         interests::RemoteInterest,
-        pubsub::{update_data_routes_from, update_matches_data_routes, SubscriberInfo},
+        pubsub::SubscriberInfo,
         resource::{NodeId, Resource, SessionContext},
         tables::{Route, RoutingExpr, Tables},
     },
-    hat::{CurrentFutureTrait, DataRoutes, HatPubSubTrait, SendDeclare, Sources},
+    hat::{CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources},
     RoutingContext,
 };
 
@@ -628,7 +628,6 @@ pub(super) fn pubsub_remove_node(
     {
         unregister_peer_subscription(tables, &mut res, node, send_declare);
 
-        update_matches_data_routes(tables, &mut res);
         Resource::clean(&mut res)
     }
 }
@@ -670,9 +669,6 @@ pub(super) fn pubsub_tree_change(tables: &mut Tables, new_children: &[Vec<NodeIn
             }
         }
     }
-
-    // recompute routes
-    update_data_routes_from(tables, &mut tables.root_res.clone());
 }
 
 #[inline]
@@ -983,38 +979,6 @@ impl HatPubSubTrait for HatCode {
             );
         }
         Arc::new(route)
-    }
-
-    fn compute_data_routes(
-        &self,
-        tables: &Tables,
-        routes: &mut DataRoutes,
-        expr: &mut RoutingExpr,
-    ) {
-        let indexes = hat!(tables)
-            .linkstatepeers_net
-            .as_ref()
-            .unwrap()
-            .graph
-            .node_indices()
-            .map(|i| i.index() as NodeId)
-            .collect::<Vec<NodeId>>();
-        let max_idx = indexes.iter().max().unwrap();
-        routes
-            .routers
-            .resize_with((*max_idx as usize) + 1, || Arc::new(HashMap::new()));
-        routes
-            .peers
-            .resize_with((*max_idx as usize) + 1, || Arc::new(HashMap::new()));
-        for idx in indexes {
-            let route = self.compute_data_route(tables, expr, idx, WhatAmI::Peer);
-            routes.routers[idx as usize] = route.clone();
-            routes.peers[idx as usize] = route;
-        }
-
-        routes.clients.resize_with(1, || {
-            self.compute_data_route(tables, expr, 0, WhatAmI::Client)
-        });
     }
 
     #[zenoh_macros::unstable]

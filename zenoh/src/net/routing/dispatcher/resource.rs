@@ -16,7 +16,7 @@ use std::{
     collections::HashMap,
     convert::TryInto,
     hash::{Hash, Hasher},
-    sync::{Arc, Weak},
+    sync::{Arc, RwLock, Weak},
 };
 
 use zenoh_config::WhatAmI;
@@ -75,61 +75,77 @@ impl SessionContext {
     }
 }
 
-#[derive(Default)]
-pub(crate) struct DataRoutes {
-    pub(crate) routers: Vec<Arc<Route>>,
-    pub(crate) peers: Vec<Arc<Route>>,
-    pub(crate) clients: Vec<Arc<Route>>,
+pub(crate) struct Routes<T> {
+    routers: Vec<Option<T>>,
+    peers: Vec<Option<T>>,
+    clients: Vec<Option<T>>,
 }
 
-impl DataRoutes {
-    #[inline]
-    pub(crate) fn get_route(&self, whatami: WhatAmI, context: NodeId) -> Option<Arc<Route>> {
-        match whatami {
-            WhatAmI::Router => (self.routers.len() > context as usize)
-                .then(|| self.routers[context as usize].clone()),
-            WhatAmI::Peer => {
-                (self.peers.len() > context as usize).then(|| self.peers[context as usize].clone())
-            }
-            WhatAmI::Client => (self.clients.len() > context as usize)
-                .then(|| self.clients[context as usize].clone()),
+impl<T> Default for Routes<T> {
+    fn default() -> Self {
+        Self {
+            routers: Vec::new(),
+            peers: Vec::new(),
+            clients: Vec::new(),
         }
     }
 }
 
-#[derive(Default)]
-pub(crate) struct QueryRoutes {
-    pub(crate) routers: Vec<Arc<QueryTargetQablSet>>,
-    pub(crate) peers: Vec<Arc<QueryTargetQablSet>>,
-    pub(crate) clients: Vec<Arc<QueryTargetQablSet>>,
-}
+impl<T> Routes<T> {
+    pub(crate) fn clear(&mut self) {
+        self.routers.clear();
+        self.peers.clear();
+        self.clients.clear();
+    }
 
-impl QueryRoutes {
     #[inline]
-    pub(crate) fn get_route(
-        &self,
-        whatami: WhatAmI,
-        context: NodeId,
-    ) -> Option<Arc<QueryTargetQablSet>> {
-        match whatami {
-            WhatAmI::Router => (self.routers.len() > context as usize)
-                .then(|| self.routers[context as usize].clone()),
-            WhatAmI::Peer => {
-                (self.peers.len() > context as usize).then(|| self.peers[context as usize].clone())
-            }
-            WhatAmI::Client => (self.clients.len() > context as usize)
-                .then(|| self.clients[context as usize].clone()),
-        }
+    pub(crate) fn get_route(&self, whatami: WhatAmI, context: NodeId) -> Option<&T> {
+        let routes = match whatami {
+            WhatAmI::Router => &self.routers,
+            WhatAmI::Peer => &self.peers,
+            WhatAmI::Client => &self.clients,
+        };
+        routes.get(context as usize)?.as_ref()
+    }
+
+    #[inline]
+    pub(crate) fn set_route(&mut self, whatami: WhatAmI, context: NodeId, route: T) {
+        let routes = match whatami {
+            WhatAmI::Router => &mut self.routers,
+            WhatAmI::Peer => &mut self.peers,
+            WhatAmI::Client => &mut self.clients,
+        };
+        routes.resize_with(context as usize + 1, || None);
+        routes[context as usize] = Some(route);
     }
 }
+
+pub(crate) fn get_or_set_route<T: Clone>(
+    routes: &RwLock<Routes<T>>,
+    whatami: WhatAmI,
+    context: NodeId,
+    compute_route: impl FnOnce() -> T,
+) -> T {
+    if let Some(route) = routes.read().unwrap().get_route(whatami, context) {
+        return route.clone();
+    }
+    let mut routes = routes.write().unwrap();
+    if let Some(route) = routes.get_route(whatami, context) {
+        return route.clone();
+    }
+    let route = compute_route();
+    routes.set_route(whatami, context, route.clone());
+    route
+}
+
+pub(crate) type DataRoutes = Routes<Arc<Route>>;
+pub(crate) type QueryRoutes = Routes<Arc<QueryTargetQablSet>>;
 
 pub(crate) struct ResourceContext {
     pub(crate) matches: Vec<Weak<Resource>>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
-    pub(crate) valid_data_routes: bool,
-    pub(crate) data_routes: DataRoutes,
-    pub(crate) valid_query_routes: bool,
-    pub(crate) query_routes: QueryRoutes,
+    pub(crate) data_routes: RwLock<DataRoutes>,
+    pub(crate) query_routes: RwLock<QueryRoutes>,
 }
 
 impl ResourceContext {
@@ -137,29 +153,17 @@ impl ResourceContext {
         ResourceContext {
             matches: Vec::new(),
             hat,
-            valid_data_routes: false,
-            data_routes: DataRoutes::default(),
-            valid_query_routes: false,
-            query_routes: QueryRoutes::default(),
+            data_routes: Default::default(),
+            query_routes: Default::default(),
         }
     }
 
-    pub(crate) fn update_data_routes(&mut self, data_routes: DataRoutes) {
-        self.valid_data_routes = true;
-        self.data_routes = data_routes;
-    }
-
     pub(crate) fn disable_data_routes(&mut self) {
-        self.valid_data_routes = false;
-    }
-
-    pub(crate) fn update_query_routes(&mut self, query_routes: QueryRoutes) {
-        self.valid_query_routes = true;
-        self.query_routes = query_routes
+        self.data_routes.write().unwrap().clear();
     }
 
     pub(crate) fn disable_query_routes(&mut self) {
-        self.valid_query_routes = false;
+        self.query_routes.write().unwrap().clear();
     }
 }
 
@@ -248,47 +252,6 @@ impl Resource {
                     (None, res.expr().to_string())
                 }
             }
-        }
-    }
-
-    pub(crate) fn has_subs(&self) -> bool {
-        self.session_ctxs.values().any(|sc| sc.subs.is_some())
-    }
-
-    pub(crate) fn has_qabls(&self) -> bool {
-        self.session_ctxs.values().any(|sc| sc.qabl.is_some())
-    }
-
-    #[inline]
-    pub(crate) fn data_route(&self, whatami: WhatAmI, context: NodeId) -> Option<Arc<Route>> {
-        match &self.context {
-            Some(ctx) => {
-                if ctx.valid_data_routes {
-                    ctx.data_routes.get_route(whatami, context)
-                } else {
-                    None
-                }
-            }
-
-            None => None,
-        }
-    }
-
-    #[inline(always)]
-    pub(crate) fn query_route(
-        &self,
-        whatami: WhatAmI,
-        context: NodeId,
-    ) -> Option<Arc<QueryTargetQablSet>> {
-        match &self.context {
-            Some(ctx) => {
-                if ctx.valid_query_routes {
-                    ctx.query_routes.get_route(whatami, context)
-                } else {
-                    None
-                }
-            }
-            None => None,
         }
     }
 
@@ -714,7 +677,7 @@ pub(crate) fn register_expr(
             }
             None => {
                 let res = Resource::get_resource(&prefix, &expr.suffix);
-                let (mut res, mut wtables) = if res
+                let (mut res, wtables) = if res
                     .as_ref()
                     .map(|r| r.context.is_some())
                     .unwrap_or(false)
@@ -746,7 +709,6 @@ pub(crate) fn register_expr(
                 get_mut_unchecked(face)
                     .remote_mappings
                     .insert(expr_id, res.clone());
-                wtables.update_matches_routes(&mut res);
                 face.update_interceptors_caches(&mut res);
                 drop(wtables);
             }

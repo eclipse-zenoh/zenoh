@@ -41,8 +41,7 @@ use crate::{
             resource::{NodeId, Resource, SessionContext},
             tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
         },
-        hat::{HatQueriesTrait, QueryRoutes, SendDeclare, Sources},
-        router::update_query_routes_from,
+        hat::{HatQueriesTrait, SendDeclare, Sources},
         RoutingContext,
     },
 };
@@ -275,8 +274,6 @@ pub(super) fn queries_new_face(
             propagate_simple_queryable(tables, qabl, Some(&mut face.clone()), send_declare);
         }
     }
-    // recompute routes
-    update_query_routes_from(tables, &mut tables.root_res.clone());
 }
 
 lazy_static::lazy_static! {
@@ -425,19 +422,6 @@ impl HatQueriesTrait for HatCode {
         }
         route.sort_by_key(|qabl| qabl.info.map_or(u16::MAX, |i| i.distance));
         Arc::new(route)
-    }
-
-    fn compute_query_routes(
-        &self,
-        tables: &Tables,
-        routes: &mut QueryRoutes,
-        expr: &mut RoutingExpr,
-    ) {
-        let route = self.compute_query_route(tables, expr, 0, WhatAmI::Peer);
-        routes.routers.resize_with(1, || route.clone());
-        routes.peers.resize_with(1, || route.clone());
-        let route = self.compute_query_route(tables, expr, 0, WhatAmI::Client);
-        routes.clients.resize_with(1, || route.clone());
     }
 
     #[cfg(feature = "unstable")]

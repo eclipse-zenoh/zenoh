@@ -25,10 +25,9 @@ use zenoh_protocol::{
     network::Mapping,
 };
 use zenoh_result::ZResult;
-use zenoh_sync::get_mut_unchecked;
 
 use super::face::FaceState;
-pub use super::{pubsub::*, queries::*, resource::*};
+pub use super::resource::*;
 use crate::net::{
     routing::{
         hat::{self, HatTrait},
@@ -155,25 +154,6 @@ impl Tables {
     #[inline]
     pub(crate) fn get_face(&self, zid: &ZenohIdProto) -> Option<&Arc<FaceState>> {
         self.faces.values().find(|face| face.zid == *zid)
-    }
-
-    fn update_routes(&mut self, res: &mut Arc<Resource>) {
-        update_data_routes(self, res);
-        update_query_routes(self, res);
-    }
-
-    pub(crate) fn update_matches_routes(&mut self, res: &mut Arc<Resource>) {
-        if res.context.is_some() {
-            self.update_routes(res);
-
-            let resclone = res.clone();
-            for match_ in &mut get_mut_unchecked(res).context_mut().matches {
-                let match_ = &mut match_.upgrade().unwrap();
-                if !Arc::ptr_eq(match_, &resclone) && match_.context.is_some() {
-                    self.update_routes(match_);
-                }
-            }
-        }
     }
 }
 

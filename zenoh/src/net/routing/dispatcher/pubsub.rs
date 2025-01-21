@@ -26,12 +26,15 @@ use zenoh_sync::get_mut_unchecked;
 
 use super::{
     face::FaceState,
-    resource::{DataRoutes, Direction, Resource},
+    resource::{Direction, Resource},
     tables::{NodeId, Route, RoutingExpr, Tables, TablesLock},
 };
 #[zenoh_macros::unstable]
 use crate::key_expr::KeyExpr;
-use crate::net::routing::hat::{HatTrait, SendDeclare};
+use crate::net::routing::{
+    hat::{HatTrait, SendDeclare},
+    router::get_or_set_route,
+};
 
 #[derive(Copy, Clone)]
 pub(crate) struct SubscriberInfo;
@@ -93,18 +96,6 @@ pub(crate) fn declare_subscription(
 
             disable_matches_data_routes(&mut wtables, &mut res);
             drop(wtables);
-
-            let rtables = zread!(tables.tables);
-            let matches_data_routes = compute_matches_data_routes(&rtables, &res);
-            drop(rtables);
-
-            let wtables = zwrite!(tables.tables);
-            for (mut res, data_routes) in matches_data_routes {
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .update_data_routes(data_routes);
-            }
-            drop(wtables);
         }
         None => tracing::error!(
             "{} Declare subscriber {} for unknown scope {}!",
@@ -157,86 +148,11 @@ pub(crate) fn undeclare_subscription(
     {
         tracing::debug!("{} Undeclare subscriber {} ({})", face, id, res.expr());
         disable_matches_data_routes(&mut wtables, &mut res);
-        drop(wtables);
-
-        let rtables = zread!(tables.tables);
-        let matches_data_routes = compute_matches_data_routes(&rtables, &res);
-        drop(rtables);
-
-        let wtables = zwrite!(tables.tables);
-        for (mut res, data_routes) in matches_data_routes {
-            get_mut_unchecked(&mut res)
-                .context_mut()
-                .update_data_routes(data_routes);
-        }
         Resource::clean(&mut res);
         drop(wtables);
     } else {
         // NOTE: This is expected behavior if subscriber declarations are denied with ingress ACL interceptor.
         tracing::debug!("{} Undeclare unknown subscriber {}", face, id);
-    }
-}
-
-pub(crate) fn compute_data_routes(tables: &Tables, expr: &mut RoutingExpr) -> DataRoutes {
-    let mut routes = DataRoutes::default();
-    tables
-        .hat_code
-        .compute_data_routes(tables, &mut routes, expr);
-    routes
-}
-
-pub(crate) fn update_data_routes(tables: &Tables, res: &mut Arc<Resource>) {
-    if res.context.is_some() && !res.expr().contains('*') && res.has_subs() {
-        let mut res_mut = res.clone();
-        let res_mut = get_mut_unchecked(&mut res_mut);
-        tables.hat_code.compute_data_routes(
-            tables,
-            &mut res_mut.context_mut().data_routes,
-            &mut RoutingExpr::new(res, ""),
-        );
-        res_mut.context_mut().valid_data_routes = true;
-    }
-}
-
-pub(crate) fn update_data_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
-    update_data_routes(tables, res);
-    let res = get_mut_unchecked(res);
-    for child in res.children.values_mut() {
-        update_data_routes_from(tables, child);
-    }
-}
-
-pub(crate) fn compute_matches_data_routes<'a>(
-    tables: &'a Tables,
-    res: &'a Arc<Resource>,
-) -> Vec<(Arc<Resource>, DataRoutes)> {
-    let mut routes = vec![];
-    if res.context.is_some() {
-        if !res.expr().contains('*') && res.has_subs() {
-            let mut expr = RoutingExpr::new(res, "");
-            routes.push((res.clone(), compute_data_routes(tables, &mut expr)));
-        }
-        for match_ in &res.context().matches {
-            let match_ = match_.upgrade().unwrap();
-            if !Arc::ptr_eq(&match_, res) && !match_.expr().contains('*') && match_.has_subs() {
-                let mut expr = RoutingExpr::new(&match_, "");
-                let match_routes = compute_data_routes(tables, &mut expr);
-                routes.push((match_, match_routes));
-            }
-        }
-    }
-    routes
-}
-
-pub(crate) fn update_matches_data_routes<'a>(tables: &'a mut Tables, res: &'a mut Arc<Resource>) {
-    if res.context.is_some() {
-        update_data_routes(tables, res);
-        for match_ in &res.context().matches {
-            let mut match_ = match_.upgrade().unwrap();
-            if !Arc::ptr_eq(&match_, res) {
-                update_data_routes(tables, &mut match_);
-            }
-        }
     }
 }
 
@@ -298,16 +214,17 @@ fn get_data_route(
     expr: &mut RoutingExpr,
     routing_context: NodeId,
 ) -> Arc<Route> {
-    let local_context = tables
-        .hat_code
-        .map_routing_context(tables, face, routing_context);
-    res.as_ref()
-        .and_then(|res| res.data_route(face.whatami, local_context))
-        .unwrap_or_else(|| {
-            tables
-                .hat_code
-                .compute_data_route(tables, expr, local_context, face.whatami)
-        })
+    let hat = &tables.hat_code;
+    let local_context = hat.map_routing_context(tables, face, routing_context);
+    let mut compute_route = || hat.compute_data_route(tables, expr, local_context, face.whatami);
+    if let Some(data_routes) = res
+        .as_ref()
+        .and_then(|res| res.context.as_ref())
+        .map(|ctx| &ctx.data_routes)
+    {
+        return get_or_set_route(data_routes, face.whatami, local_context, compute_route);
+    }
+    compute_route()
 }
 
 #[zenoh_macros::unstable]
