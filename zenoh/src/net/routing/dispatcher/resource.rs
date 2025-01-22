@@ -163,11 +163,11 @@ impl ResourceContext {
     }
 
     pub(crate) fn disable_data_routes(&mut self) {
-        self.data_routes.write().unwrap().clear();
+        self.data_routes.get_mut().unwrap().clear();
     }
 
     pub(crate) fn disable_query_routes(&mut self) {
-        self.query_routes.write().unwrap().clear();
+        self.query_routes.get_mut().unwrap().clear();
     }
 }
 

@@ -298,15 +298,15 @@ impl HatBaseTrait for HatCode {
         }
 
         for mut res in subs_matches {
-            if let Some(ctx) = &res.context {
-                ctx.data_routes.write().unwrap().clear();
-            }
+            get_mut_unchecked(&mut res)
+                .context_mut()
+                .disable_data_routes();
             Resource::clean(&mut res);
         }
         for mut res in qabls_matches {
-            if let Some(ctx) = &res.context {
-                ctx.query_routes.write().unwrap().clear();
-            }
+            get_mut_unchecked(&mut res)
+                .context_mut()
+                .disable_query_routes();
             Resource::clean(&mut res);
         }
         wtables.faces.remove(&face.id);

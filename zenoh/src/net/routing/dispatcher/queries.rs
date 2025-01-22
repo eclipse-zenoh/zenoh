@@ -339,7 +339,7 @@ pub(crate) fn disable_all_query_routes(tables: &mut Tables) {
     pub(crate) fn disable_all_query_routes_rec(res: &mut Arc<Resource>) {
         let res = get_mut_unchecked(res);
         if let Some(ctx) = &mut res.context {
-            ctx.data_routes.write().unwrap().clear();
+            ctx.disable_query_routes();
         }
         for child in res.children.values_mut() {
             disable_all_query_routes_rec(child);
