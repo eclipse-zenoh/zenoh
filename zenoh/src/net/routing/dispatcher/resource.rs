@@ -558,10 +558,10 @@ impl Resource {
             if suffix.is_empty() {
                 return None;
             }
-            let (chunk, rest) = suffix.split_once('/').unwrap_or((suffix, ""));
+            let (chunk, remain) = suffix.split_once('/').unwrap_or((suffix, ""));
             let child = prefix.children.get(chunk)?;
-            get_best_child_key(child, rest, sid)
-                .or_else(|| get_wire_expr(child, || rest.into(), sid))
+            get_best_child_key(child, remain, sid)
+                .or_else(|| get_wire_expr(child, || remain.into(), sid))
         }
         fn get_best_parent_key<'a>(
             prefix: &Resource,
