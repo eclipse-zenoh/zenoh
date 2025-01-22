@@ -564,19 +564,18 @@ impl Resource {
                 .or_else(|| get_wire_expr(child, || suffix.into(), sid))
         }
         fn get_best_parent_key<'a>(
-            parent: Option<&Resource>,
             prefix: &Resource,
             suffix: &'a str,
             sid: usize,
+            parent: &Resource,
         ) -> Option<WireExpr<'a>> {
-            let parent = parent?;
             let parent_suffix = || [&prefix.expr[parent.expr.len()..], suffix].concat().into();
             get_wire_expr(parent, parent_suffix, sid)
-                .or_else(|| get_best_parent_key(parent.parent.as_deref(), prefix, suffix, sid))
+                .or_else(|| get_best_parent_key(prefix, suffix, sid, parent.parent.as_ref()?))
         }
         get_best_child_key(self, suffix, sid)
             .or_else(|| get_wire_expr(self, || suffix.into(), sid))
-            .or_else(|| get_best_parent_key(self.parent.as_deref(), self, suffix, sid))
+            .or_else(|| get_best_parent_key(self, suffix, sid, self.parent.as_ref()?))
             .unwrap_or_else(|| [&self.expr, suffix].concat().into())
     }
 
