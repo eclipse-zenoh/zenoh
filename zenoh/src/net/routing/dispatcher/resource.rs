@@ -561,7 +561,7 @@ impl Resource {
             let (chunk, rest) = suffix.split_once('/').unwrap_or((suffix, ""));
             let child = prefix.children.get(chunk)?;
             get_best_child_key(child, rest, sid)
-                .or_else(|| get_wire_expr(child, || suffix.into(), sid))
+                .or_else(|| get_wire_expr(child, || rest.into(), sid))
         }
         fn get_best_parent_key<'a>(
             prefix: &Resource,
@@ -573,10 +573,12 @@ impl Resource {
             get_wire_expr(parent, parent_suffix, sid)
                 .or_else(|| get_best_parent_key(prefix, suffix, sid, parent.parent.as_ref()?))
         }
-        get_best_child_key(self, suffix, sid)
+        let res = get_best_child_key(self, suffix, sid)
             .or_else(|| get_wire_expr(self, || suffix.into(), sid))
             .or_else(|| get_best_parent_key(self, suffix, sid, self.parent.as_ref()?))
-            .unwrap_or_else(|| [&self.expr, suffix].concat().into())
+            .unwrap_or_else(|| [&self.expr, suffix].concat().into());
+        dbg!(&self.expr, suffix, sid);
+        dbg!(res)
     }
 
     pub fn get_matches(tables: &Tables, key_expr: &keyexpr) -> Vec<Weak<Resource>> {
