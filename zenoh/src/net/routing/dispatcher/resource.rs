@@ -13,6 +13,7 @@
 //
 use std::{
     any::Any,
+    borrow::Cow,
     collections::HashMap,
     convert::TryInto,
     hash::{Hash, Hasher},
@@ -531,43 +532,51 @@ impl Resource {
         }
     }
 
-    #[inline]
-    pub fn get_best_key<'a>(prefix: &Arc<Resource>, suffix: &'a str, sid: usize) -> WireExpr<'a> {
-        fn get_best_key_<'a>(
-            prefix: &Arc<Resource>,
+    pub fn get_best_key<'a>(&self, suffix: &'a str, sid: usize) -> WireExpr<'a> {
+        fn get_wire_expr<'a>(
+            prefix: &Resource,
+            suffix: impl FnOnce() -> Cow<'a, str>,
+            sid: usize,
+        ) -> Option<WireExpr<'a>> {
+            let ctx = prefix.session_ctxs.get(&sid)?;
+            let (scope, mapping) = match (ctx.remote_expr_id, ctx.local_expr_id) {
+                (Some(expr_id), _) => (expr_id, Mapping::Receiver),
+                (_, Some(expr_id)) => (expr_id, Mapping::Sender),
+                _ => return None,
+            };
+            Some(WireExpr {
+                scope,
+                suffix: suffix(),
+                mapping,
+            })
+        }
+        fn get_best_child_key<'a>(
+            prefix: &Resource,
             suffix: &'a str,
             sid: usize,
-            checkclildren: bool,
-        ) -> WireExpr<'a> {
-            if checkclildren && !suffix.is_empty() {
-                let (chunk, rest) = suffix.split_at(suffix.find('/').unwrap_or(suffix.len()));
-                if let Some(child) = prefix.children.get(chunk) {
-                    return get_best_key_(child, rest, sid, true);
-                }
+        ) -> Option<WireExpr<'a>> {
+            if suffix.is_empty() {
+                return None;
             }
-            if let Some(ctx) = prefix.session_ctxs.get(&sid) {
-                if let Some(expr_id) = ctx.remote_expr_id {
-                    return WireExpr {
-                        scope: expr_id,
-                        suffix: suffix.into(),
-                        mapping: Mapping::Receiver,
-                    };
-                } else if let Some(expr_id) = ctx.local_expr_id {
-                    return WireExpr {
-                        scope: expr_id,
-                        suffix: suffix.into(),
-                        mapping: Mapping::Sender,
-                    };
-                }
-            }
-            match &prefix.parent {
-                Some(parent) => {
-                    get_best_key_(parent, &[&prefix.suffix, suffix].concat(), sid, false).to_owned()
-                }
-                None => suffix.into(),
-            }
+            let (chunk, remain) = suffix.split_once('/').unwrap_or((suffix, ""));
+            let child = prefix.children.get(chunk)?;
+            get_best_child_key(child, remain, sid)
+                .or_else(|| get_wire_expr(child, || remain.into(), sid))
         }
-        get_best_key_(prefix, suffix, sid, true)
+        fn get_best_parent_key<'a>(
+            prefix: &Resource,
+            suffix: &'a str,
+            sid: usize,
+            parent: &Resource,
+        ) -> Option<WireExpr<'a>> {
+            let parent_suffix = || [&prefix.expr[parent.expr.len()..], suffix].concat().into();
+            get_wire_expr(parent, parent_suffix, sid)
+                .or_else(|| get_best_parent_key(prefix, suffix, sid, parent.parent.as_ref()?))
+        }
+        get_best_child_key(self, suffix, sid)
+            .or_else(|| get_wire_expr(self, || suffix.into(), sid))
+            .or_else(|| get_best_parent_key(self, suffix, sid, self.parent.as_ref()?))
+            .unwrap_or_else(|| [&self.expr, suffix].concat().into())
     }
 
     pub fn get_matches(tables: &Tables, key_expr: &keyexpr) -> Vec<Weak<Resource>> {
