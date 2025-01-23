@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -47,7 +48,7 @@ pub(super) struct Node {
     pub(super) whatami: Option<WhatAmI>,
     pub(super) locators: Option<Vec<Locator>>,
     pub(super) sn: u64,
-    pub(super) links: Vec<ZenohIdProto>,
+    pub(super) links: HashSet<ZenohIdProto>,
 }
 
 impl std::fmt::Debug for Node {
@@ -125,7 +126,7 @@ impl Network {
             whatami: Some(runtime.whatami()),
             locators: None,
             sn: 1,
-            links: vec![],
+            links: HashSet::new(),
         });
         Network {
             name,
@@ -355,7 +356,7 @@ impl Network {
         let link_states = link_states
             .into_iter()
             .map(|(zid, wai, locs, sn, links)| {
-                let links: Vec<ZenohIdProto> = links
+                let links: HashSet<ZenohIdProto> = links
                     .iter()
                     .filter_map(|l| {
                         if let Some(zid) = src_link.get_zid(l) {
@@ -497,13 +498,13 @@ impl Network {
                             whatami: Some(whatami),
                             locators: None,
                             sn: 0,
-                            links: vec![],
+                            links: HashSet::new(),
                         }),
                         true,
                     )
                 }
             };
-            self.graph[self.idx].links.push(zid);
+            self.graph[self.idx].links.insert(zid);
             self.graph[self.idx].sn += 1;
 
             // Send updated self linkstate on all existing links except new one

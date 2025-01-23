@@ -843,7 +843,7 @@ pub(super) fn pubsub_tree_change(
 pub(super) fn pubsub_linkstate_change(
     tables: &mut Tables,
     zid: &ZenohIdProto,
-    links: &[ZenohIdProto],
+    links: &HashSet<ZenohIdProto>,
     send_declare: &mut SendDeclare,
 ) {
     if let Some(mut src_face) = tables.get_face(zid).cloned() {

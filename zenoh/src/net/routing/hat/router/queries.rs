@@ -13,7 +13,7 @@
 //
 use std::{
     borrow::Cow,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{atomic::Ordering, Arc},
 };
 
@@ -947,7 +947,7 @@ pub(super) fn queries_remove_node(
 pub(super) fn queries_linkstate_change(
     tables: &mut Tables,
     zid: &ZenohIdProto,
-    links: &[ZenohIdProto],
+    links: &HashSet<ZenohIdProto>,
     send_declare: &mut SendDeclare,
 ) {
     if let Some(mut src_face) = tables.get_face(zid).cloned() {

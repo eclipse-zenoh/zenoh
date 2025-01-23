@@ -21,6 +21,7 @@ use zenoh::{
     Wait,
 };
 use zenoh_examples::CommonArgs;
+use zenoh_ext::z_serialize;
 
 fn main() {
     // initiate logging

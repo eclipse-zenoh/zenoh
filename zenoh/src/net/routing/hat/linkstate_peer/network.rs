@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -52,7 +53,7 @@ pub(super) struct Node {
     pub(super) whatami: Option<WhatAmI>,
     pub(super) locators: Option<Vec<Locator>>,
     pub(super) sn: u64,
-    pub(super) links: Vec<ZenohIdProto>,
+    pub(super) links: HashSet<ZenohIdProto>,
 }
 
 impl std::fmt::Debug for Node {
@@ -149,7 +150,7 @@ impl Network {
             whatami: Some(runtime.whatami()),
             locators: None,
             sn: 1,
-            links: vec![],
+            links: HashSet::new(),
         });
         Network {
             name,
@@ -424,7 +425,7 @@ impl Network {
         let link_states = link_states
             .into_iter()
             .map(|(zid, wai, locs, sn, links)| {
-                let links: Vec<ZenohIdProto> = links
+                let links: HashSet<ZenohIdProto> = links
                     .iter()
                     .filter_map(|l| {
                         if let Some(zid) = src_link.get_zid(l) {
@@ -574,7 +575,7 @@ impl Network {
                     }
                 },
             )
-            .collect::<Vec<(Vec<ZenohIdProto>, NodeIndex, bool)>>();
+            .collect::<Vec<(HashSet<ZenohIdProto>, NodeIndex, bool)>>();
 
         // Add/remove edges from graph
         let mut reintroduced_nodes = vec![];
@@ -596,11 +597,11 @@ impl Network {
                         whatami: None,
                         locators: None,
                         sn: 0,
-                        links: vec![],
+                        links: HashSet::new(),
                     };
                     tracing::debug!("{} Add node (reintroduced) {}", self.name, link.clone());
                     let idx = self.add_node(node);
-                    reintroduced_nodes.push((vec![], idx, true));
+                    reintroduced_nodes.push((HashSet::new(), idx, true));
                 }
             }
             let mut edges = vec![];
@@ -626,7 +627,7 @@ impl Network {
         let link_states = link_states
             .into_iter()
             .filter(|ls| !removed.iter().any(|(idx, _)| idx == &ls.1))
-            .collect::<Vec<(Vec<ZenohIdProto>, NodeIndex, bool)>>();
+            .collect::<Vec<(HashSet<ZenohIdProto>, NodeIndex, bool)>>();
 
         if !self.autoconnect.is_empty() {
             // Connect discovered peers
@@ -665,8 +666,8 @@ impl Network {
         #[allow(clippy::type_complexity)] // This is only used here
         if !link_states.is_empty() {
             let (new_idxs, updated_idxs): (
-                Vec<(Vec<ZenohIdProto>, NodeIndex, bool)>,
-                Vec<(Vec<ZenohIdProto>, NodeIndex, bool)>,
+                Vec<(HashSet<ZenohIdProto>, NodeIndex, bool)>,
+                Vec<(HashSet<ZenohIdProto>, NodeIndex, bool)>,
             ) = link_states.into_iter().partition(|(_, _, new)| *new);
             for link in self.links.values() {
                 let new_idxs = new_idxs
@@ -742,7 +743,7 @@ impl Network {
                             whatami: Some(whatami),
                             locators: None,
                             sn: 0,
-                            links: vec![],
+                            links: HashSet::new(),
                         }),
                         true,
                     )
@@ -752,7 +753,7 @@ impl Network {
                 tracing::trace!("Update edge (link) {} {}", self.graph[self.idx].zid, zid);
                 self.update_edge(self.idx, idx);
             }
-            self.graph[self.idx].links.push(zid);
+            self.graph[self.idx].links.insert(zid);
             self.graph[self.idx].sn += 1;
 
             // Send updated self linkstate on all existing links except new one

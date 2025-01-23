@@ -224,7 +224,8 @@ impl HatTables {
             .as_ref()
             .unwrap()
             .get_links(peer)
-            .iter()
+            .into_iter()
+            .flatten()
             .filter(move |nid| {
                 if let Some(node) = self.routers_net.as_ref().unwrap().get_node(nid) {
                     node.whatami.unwrap_or(WhatAmI::Router) == WhatAmI::Router
@@ -269,7 +270,7 @@ impl HatTables {
     }
 
     #[inline]
-    fn failover_brokering_to(source_links: &[ZenohIdProto], dest: ZenohIdProto) -> bool {
+    fn failover_brokering_to(source_links: &HashSet<ZenohIdProto>, dest: ZenohIdProto) -> bool {
         // if source_links is empty then gossip is probably disabled in source peer
         !source_links.is_empty() && !source_links.contains(&dest)
     }
@@ -281,8 +282,9 @@ impl HatTables {
                 .linkstatepeers_net
                 .as_ref()
                 .map(|net| {
-                    let links = net.get_links(peer1);
-                    let res = HatTables::failover_brokering_to(links, peer2);
+                    let res = net
+                        .get_links(peer1)
+                        .is_some_and(|links| HatTables::failover_brokering_to(links, peer2));
                     tracing::trace!("failover_brokering {} {} : {}", peer1, peer2, res);
                     res
                 })

@@ -12,7 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::sync::{atomic::Ordering, Arc};
+use std::{
+    collections::HashSet,
+    sync::{atomic::Ordering, Arc},
+};
 
 use petgraph::graph::NodeIndex;
 use zenoh_protocol::{
@@ -888,7 +891,7 @@ pub(super) fn token_tree_change(
 pub(super) fn token_linkstate_change(
     tables: &mut Tables,
     zid: &ZenohIdProto,
-    links: &[ZenohIdProto],
+    links: &HashSet<ZenohIdProto>,
     send_declare: &mut SendDeclare,
 ) {
     if let Some(mut src_face) = tables.get_face(zid).cloned() {
