@@ -576,7 +576,7 @@ impl Resource {
         get_best_child_key(self, suffix, sid)
             .or_else(|| get_wire_expr(self, || suffix.into(), sid))
             .or_else(|| get_best_parent_key(self, suffix, sid, self.parent.as_ref()?))
-            .unwrap_or_else(|| [&self.expr, suffix].concat().into());
+            .unwrap_or_else(|| [&self.expr, suffix].concat().into())
     }
 
     pub fn get_matches(tables: &Tables, key_expr: &keyexpr) -> Vec<Weak<Resource>> {
