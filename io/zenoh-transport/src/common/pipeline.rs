@@ -274,6 +274,7 @@ impl StageIn {
                                     LOCAL_EPOCH.elapsed().as_micros() as MicroSeconds,
                                     Ordering::Relaxed,
                                 );
+                                self.congested = false;
                                 break batch;
                             }
                             None => {
@@ -303,14 +304,14 @@ impl StageIn {
                 if !self.batching || $msg.is_express() {
                     // Move out existing batch
                     self.s_out.move_batch($batch);
+                    return Ok(true);
                 } else {
                     let bytes = $batch.len();
                     *c_guard = Some($batch);
                     drop(c_guard);
                     self.s_out.notify(bytes);
+                    return Ok(true);
                 }
-                self.congested = false;
-                return Ok(true);
             }};
         }
 
@@ -419,7 +420,6 @@ impl StageIn {
 
         // Clean the fragbuf
         self.fragbuf.clear();
-        self.congested = false;
         Ok(true)
     }
 
@@ -440,6 +440,7 @@ impl StageIn {
                                     LOCAL_EPOCH.elapsed().as_micros() as MicroSeconds,
                                     Ordering::Relaxed,
                                 );
+                                self.congested = false;
                                 break batch;
                             }
                             None => {
@@ -460,14 +461,14 @@ impl StageIn {
                 if !self.batching {
                     // Move out existing batch
                     self.s_out.move_batch($batch);
+                    return true;
                 } else {
                     let bytes = $batch.len();
                     *c_guard = Some($batch);
                     drop(c_guard);
                     self.s_out.notify(bytes);
+                    return true;
                 }
-                self.congested = false;
-                return true;
             }};
         }
 
