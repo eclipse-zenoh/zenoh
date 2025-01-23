@@ -210,9 +210,7 @@ impl Router {
         });
         tables.mcast_groups.push(face);
 
-        // recompute routes
-        let mut root_res = tables.root_res.clone();
-        update_data_routes_from(&mut tables, &mut root_res);
+        disable_all_data_routes(&mut tables);
         Ok(())
     }
 
@@ -245,9 +243,7 @@ impl Router {
         );
         tables.mcast_faces.push(face_state.clone());
 
-        // recompute routes
-        let mut root_res = tables.root_res.clone();
-        update_data_routes_from(&mut tables, &mut root_res);
+        disable_all_data_routes(&mut tables);
         Ok(Arc::new(DeMux::new(
             Face {
                 tables: self.tables.clone(),

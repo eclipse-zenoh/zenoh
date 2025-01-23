@@ -39,12 +39,15 @@ use zenoh_util::Timed;
 
 use super::{
     face::FaceState,
-    resource::{QueryRoute, QueryRoutes, QueryTargetQablSet, Resource},
+    resource::{QueryRoute, QueryTargetQablSet, Resource},
     tables::{NodeId, RoutingExpr, Tables, TablesLock},
 };
 #[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
-use crate::net::routing::hat::{HatTrait, SendDeclare};
+use crate::net::routing::{
+    hat::{HatTrait, SendDeclare},
+    router::get_or_set_route,
+};
 
 pub(crate) struct Query {
     src_face: Arc<FaceState>,
@@ -120,18 +123,6 @@ pub(crate) fn declare_queryable(
 
             disable_matches_query_routes(&mut wtables, &mut res);
             drop(wtables);
-
-            let rtables = zread!(tables.tables);
-            let matches_query_routes = compute_matches_query_routes(&rtables, &res);
-            drop(rtables);
-
-            let wtables = zwrite!(tables.tables);
-            for (mut res, query_routes) in matches_query_routes {
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .update_query_routes(query_routes);
-            }
-            drop(wtables);
         }
         None => tracing::error!(
             "{} Declare queryable {} for unknown scope {}!",
@@ -184,84 +175,11 @@ pub(crate) fn undeclare_queryable(
     {
         tracing::debug!("{} Undeclare queryable {} ({})", face, id, res.expr());
         disable_matches_query_routes(&mut wtables, &mut res);
-        drop(wtables);
-
-        let rtables = zread!(tables.tables);
-        let matches_query_routes = compute_matches_query_routes(&rtables, &res);
-        drop(rtables);
-
-        let wtables = zwrite!(tables.tables);
-        for (mut res, query_routes) in matches_query_routes {
-            get_mut_unchecked(&mut res)
-                .context_mut()
-                .update_query_routes(query_routes);
-        }
         Resource::clean(&mut res);
         drop(wtables);
     } else {
         // NOTE: This is expected behavior if queryable declarations are denied with ingress ACL interceptor.
         tracing::debug!("{} Undeclare unknown queryable {}", face, id);
-    }
-}
-
-pub(crate) fn compute_query_routes(tables: &Tables, res: &Arc<Resource>) -> QueryRoutes {
-    let mut routes = QueryRoutes::default();
-    tables
-        .hat_code
-        .compute_query_routes(tables, &mut routes, &mut RoutingExpr::new(res, ""));
-    routes
-}
-
-pub(crate) fn update_query_routes(tables: &Tables, res: &Arc<Resource>) {
-    if res.context.is_some() && !res.expr().contains('*') && res.has_qabls() {
-        let mut res_mut = res.clone();
-        let res_mut = get_mut_unchecked(&mut res_mut);
-        tables.hat_code.compute_query_routes(
-            tables,
-            &mut res_mut.context_mut().query_routes,
-            &mut RoutingExpr::new(res, ""),
-        );
-        res_mut.context_mut().valid_query_routes = true;
-    }
-}
-
-pub(crate) fn update_query_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
-    update_query_routes(tables, res);
-    let res = get_mut_unchecked(res);
-    for child in res.children.values_mut() {
-        update_query_routes_from(tables, child);
-    }
-}
-
-pub(crate) fn compute_matches_query_routes(
-    tables: &Tables,
-    res: &Arc<Resource>,
-) -> Vec<(Arc<Resource>, QueryRoutes)> {
-    let mut routes = vec![];
-    if res.context.is_some() {
-        if !res.expr().contains('*') && res.has_qabls() {
-            routes.push((res.clone(), compute_query_routes(tables, res)));
-        }
-        for match_ in &res.context().matches {
-            let match_ = match_.upgrade().unwrap();
-            if !Arc::ptr_eq(&match_, res) && !match_.expr().contains('*') && match_.has_qabls() {
-                let match_routes = compute_query_routes(tables, &match_);
-                routes.push((match_, match_routes));
-            }
-        }
-    }
-    routes
-}
-
-pub(crate) fn update_matches_query_routes(tables: &Tables, res: &Arc<Resource>) {
-    if res.context.is_some() {
-        update_query_routes(tables, res);
-        for match_ in &res.context().matches {
-            let match_ = match_.upgrade().unwrap();
-            if !Arc::ptr_eq(&match_, res) {
-                update_query_routes(tables, &match_);
-            }
-        }
     }
 }
 
@@ -417,6 +335,19 @@ impl Timed for QueryCleanup {
     }
 }
 
+pub(crate) fn disable_all_query_routes(tables: &mut Tables) {
+    pub(crate) fn disable_all_query_routes_rec(res: &mut Arc<Resource>) {
+        let res = get_mut_unchecked(res);
+        if let Some(ctx) = &mut res.context {
+            ctx.disable_query_routes();
+        }
+        for child in res.children.values_mut() {
+            disable_all_query_routes_rec(child);
+        }
+    }
+    disable_all_query_routes_rec(&mut tables.root_res)
+}
+
 pub(crate) fn disable_matches_query_routes(_tables: &mut Tables, res: &mut Arc<Resource>) {
     if res.context.is_some() {
         get_mut_unchecked(res).context_mut().disable_query_routes();
@@ -439,16 +370,17 @@ fn get_query_route(
     expr: &mut RoutingExpr,
     routing_context: NodeId,
 ) -> Arc<QueryTargetQablSet> {
-    let local_context = tables
-        .hat_code
-        .map_routing_context(tables, face, routing_context);
-    res.as_ref()
-        .and_then(|res| res.query_route(face.whatami, local_context))
-        .unwrap_or_else(|| {
-            tables
-                .hat_code
-                .compute_query_route(tables, expr, local_context, face.whatami)
-        })
+    let hat = &tables.hat_code;
+    let local_context = hat.map_routing_context(tables, face, routing_context);
+    let mut compute_route = || hat.compute_query_route(tables, expr, local_context, face.whatami);
+    if let Some(query_routes) = res
+        .as_ref()
+        .and_then(|res| res.context.as_ref())
+        .map(|ctx| &ctx.query_routes)
+    {
+        return get_or_set_route(query_routes, face.whatami, local_context, compute_route);
+    }
+    compute_route()
 }
 
 #[cfg(feature = "stats")]

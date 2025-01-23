@@ -41,11 +41,12 @@ use crate::net::routing::{
     dispatcher::{
         face::FaceState,
         interests::RemoteInterest,
-        pubsub::{update_data_routes_from, update_matches_data_routes, SubscriberInfo},
+        pubsub::SubscriberInfo,
         resource::{NodeId, Resource, SessionContext},
         tables::{Route, RoutingExpr, Tables},
     },
-    hat::{CurrentFutureTrait, DataRoutes, HatPubSubTrait, SendDeclare, Sources},
+    hat::{CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources},
+    router::{disable_all_data_routes, disable_matches_data_routes},
     RoutingContext,
 };
 
@@ -755,7 +756,7 @@ pub(super) fn pubsub_remove_node(
             {
                 unregister_router_subscription(tables, &mut res, node, send_declare);
 
-                update_matches_data_routes(tables, &mut res);
+                disable_matches_data_routes(tables, &mut res);
                 Resource::clean(&mut res)
             }
         }
@@ -780,7 +781,7 @@ pub(super) fn pubsub_remove_node(
                     );
                 }
 
-                update_matches_data_routes(tables, &mut res);
+                disable_matches_data_routes(tables, &mut res);
                 Resource::clean(&mut res)
             }
         }
@@ -836,8 +837,8 @@ pub(super) fn pubsub_tree_change(
         }
     }
 
-    // recompute routes
-    update_data_routes_from(tables, &mut tables.root_res.clone());
+    // disable routes
+    disable_all_data_routes(tables);
 }
 
 pub(super) fn pubsub_linkstate_change(
@@ -1331,57 +1332,6 @@ impl HatPubSubTrait for HatCode {
             );
         }
         Arc::new(route)
-    }
-
-    fn compute_data_routes(
-        &self,
-        tables: &Tables,
-        routes: &mut DataRoutes,
-        expr: &mut RoutingExpr,
-    ) {
-        let routers_indexes = hat!(tables)
-            .routers_net
-            .as_ref()
-            .unwrap()
-            .graph
-            .node_indices()
-            .map(|i| i.index() as NodeId)
-            .collect::<Vec<NodeId>>();
-        let max_idx = routers_indexes.iter().max().unwrap();
-        routes
-            .routers
-            .resize_with((*max_idx as usize) + 1, || Arc::new(HashMap::new()));
-
-        for idx in routers_indexes {
-            routes.routers[idx as usize] =
-                self.compute_data_route(tables, expr, idx, WhatAmI::Router);
-        }
-
-        if hat!(tables).full_net(WhatAmI::Peer) {
-            let peers_indexes = hat!(tables)
-                .linkstatepeers_net
-                .as_ref()
-                .unwrap()
-                .graph
-                .node_indices()
-                .map(|i| i.index() as NodeId)
-                .collect::<Vec<NodeId>>();
-            let max_idx = peers_indexes.iter().max().unwrap();
-            routes
-                .peers
-                .resize_with((*max_idx as usize) + 1, || Arc::new(HashMap::new()));
-            for idx in peers_indexes {
-                routes.peers[idx as usize] =
-                    self.compute_data_route(tables, expr, idx, WhatAmI::Peer);
-            }
-        } else {
-            routes.peers.resize_with(1, || {
-                self.compute_data_route(tables, expr, 0, WhatAmI::Peer)
-            });
-        };
-        routes.clients.resize_with(1, || {
-            self.compute_data_route(tables, expr, 0, WhatAmI::Client)
-        });
     }
 
     #[zenoh_macros::unstable]

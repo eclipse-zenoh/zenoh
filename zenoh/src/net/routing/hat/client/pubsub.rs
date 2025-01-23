@@ -36,8 +36,8 @@ use crate::{
             resource::{NodeId, Resource, SessionContext},
             tables::{Route, RoutingExpr, Tables},
         },
-        hat::{DataRoutes, HatPubSubTrait, SendDeclare, Sources},
-        router::update_data_routes_from,
+        hat::{HatPubSubTrait, SendDeclare, Sources},
+        router::disable_all_data_routes,
         RoutingContext,
     },
 };
@@ -259,8 +259,9 @@ pub(super) fn pubsub_new_face(
             );
         }
     }
-    // recompute routes
-    update_data_routes_from(tables, &mut tables.root_res.clone());
+
+    // disable routes
+    disable_all_data_routes(tables);
 }
 
 impl HatPubSubTrait for HatCode {
@@ -400,19 +401,6 @@ impl HatPubSubTrait for HatCode {
             }
         }
         Arc::new(route)
-    }
-
-    fn compute_data_routes(
-        &self,
-        tables: &Tables,
-        routes: &mut DataRoutes,
-        expr: &mut RoutingExpr,
-    ) {
-        let route = self.compute_data_route(tables, expr, 0, WhatAmI::Peer);
-        routes.routers.resize_with(1, || route.clone());
-        routes.peers.resize_with(1, || route.clone());
-        let route = self.compute_data_route(tables, expr, 0, WhatAmI::Client);
-        routes.clients.resize_with(1, || route.clone());
     }
 
     #[zenoh_macros::unstable]

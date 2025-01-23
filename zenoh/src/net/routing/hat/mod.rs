@@ -39,7 +39,6 @@ use super::{
         pubsub::SubscriberInfo,
         tables::{NodeId, QueryTargetQablSet, Resource, Route, RoutingExpr, Tables, TablesLock},
     },
-    router::{DataRoutes, QueryRoutes},
     RoutingContext,
 };
 use crate::net::runtime::Runtime;
@@ -191,8 +190,6 @@ pub(crate) trait HatPubSubTrait {
         source_type: WhatAmI,
     ) -> Arc<Route>;
 
-    fn compute_data_routes(&self, tables: &Tables, routes: &mut DataRoutes, expr: &mut RoutingExpr);
-
     #[zenoh_macros::unstable]
     fn get_matching_subscriptions(
         &self,
@@ -234,13 +231,6 @@ pub(crate) trait HatQueriesTrait {
         source: NodeId,
         source_type: WhatAmI,
     ) -> Arc<QueryTargetQablSet>;
-
-    fn compute_query_routes(
-        &self,
-        tables: &Tables,
-        routes: &mut QueryRoutes,
-        expr: &mut RoutingExpr,
-    );
 
     #[zenoh_macros::unstable]
     fn get_matching_queryables(
