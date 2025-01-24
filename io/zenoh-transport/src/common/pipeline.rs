@@ -820,8 +820,8 @@ impl TransmissionPipelineProducer {
             sent = queue.push_network_message(&msg, priority, &mut deadline)?;
             // If the message is sent in the end, reset the status.
             // Setting the status to `true` is only done with the stage_in mutex acquired,
-            // so there it is not possible that further messages see the congestion flag
-            // set after this point.
+            // so it is not possible that further messages see the congestion flag set
+            // after this point.
             if sent {
                 self.status.set_congested(priority, false);
             }
