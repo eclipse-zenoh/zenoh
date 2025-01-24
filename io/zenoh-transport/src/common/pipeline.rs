@@ -806,7 +806,7 @@ impl TransmissionPipelineProducer {
         let mut deadline = Deadline::new(wait_time, max_wait_time);
         // Lock the channel. We are the only one that will be writing on it.
         let mut queue = zlock!(self.stage_in[idx]);
-        // Checked again for congestion in case in happens when blocking on the mutex.
+        // Check again for congestion in case it happens when blocking on the mutex.
         if self.status.is_congested(priority) {
             return Ok(false);
         }
