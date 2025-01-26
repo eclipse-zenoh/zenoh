@@ -12,7 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::sync::atomic::{AtomicBool, AtomicU32};
+use std::{
+    num::NonZeroUsize,
+    sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering},
+};
+
+use crate::api::provider::chunk::ChunkDescriptor;
 
 // Chunk header
 #[stabby::stabby]
@@ -25,4 +30,36 @@ pub struct ChunkHeaderType {
     pub refcount: AtomicU32,
     pub watchdog_invalidated: AtomicBool,
     pub generation: AtomicU32,
+
+    /// Protocol identifier for particular SHM implementation
+    pub protocol: AtomicU32,
+
+    /// The data chunk descriptor
+    segment: AtomicU32,
+    chunk: AtomicU32,
+    len: AtomicUsize,
+}
+
+impl ChunkHeaderType {
+    pub fn reset_data_descriptor(&self) {
+        self.len.store(0, Ordering::SeqCst);
+    }
+
+    pub fn set_data_descriptor(&self, descriptor: &ChunkDescriptor) {
+        self.segment.store(descriptor.segment, Ordering::Relaxed);
+        self.chunk.store(descriptor.chunk, Ordering::Relaxed);
+        self.len.store(descriptor.len.into(), Ordering::SeqCst);
+    }
+
+    pub fn data_descriptor(&self) -> Option<ChunkDescriptor> {
+        let len = self.len.load(Ordering::Relaxed);
+
+        if let Ok(len) = NonZeroUsize::try_from(len) {
+            let segment = self.segment.load(Ordering::SeqCst);
+            let chunk = self.chunk.load(Ordering::SeqCst);
+
+            return Some(ChunkDescriptor::new(segment, chunk, len));
+        }
+        None
+    }
 }

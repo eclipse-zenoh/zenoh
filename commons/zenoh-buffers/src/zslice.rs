@@ -234,7 +234,6 @@ impl fmt::Debug for ZSlice {
     }
 }
 
-// From impls
 impl<T> From<Arc<T>> for ZSlice
 where
     T: ZSliceBuffer + 'static,
