@@ -150,6 +150,7 @@ impl TreesComputationWorker {
                     pubsub::pubsub_tree_change(&mut tables, &new_children, net_type);
                     queries::queries_tree_change(&mut tables, &new_children, net_type);
                     token::token_tree_change(&mut tables, &new_children, net_type);
+                    tables.disable_all_routes();
                     drop(tables);
                 }
             }

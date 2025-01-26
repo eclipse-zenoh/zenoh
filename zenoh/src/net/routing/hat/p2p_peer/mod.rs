@@ -167,6 +167,7 @@ impl HatBaseTrait for HatCode {
         pubsub_new_face(tables, &mut face.state, send_declare);
         queries_new_face(tables, &mut face.state, send_declare);
         token_new_face(tables, &mut face.state, send_declare);
+        tables.disable_all_routes();
         Ok(())
     }
 
@@ -198,6 +199,7 @@ impl HatBaseTrait for HatCode {
         pubsub_new_face(tables, &mut face.state, send_declare);
         queries_new_face(tables, &mut face.state, send_declare);
         token_new_face(tables, &mut face.state, send_declare);
+        tables.disable_all_routes();
 
         if face.state.whatami == WhatAmI::Peer {
             send_declare(

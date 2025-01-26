@@ -78,6 +78,7 @@ pub struct Tables {
     pub(crate) interceptors: Vec<InterceptorFactory>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) hat_code: Arc<dyn HatTrait + Send + Sync>, // @TODO make this a Box
+    pub(crate) routes_version: RoutesVersion,
 }
 
 impl Tables {
@@ -112,6 +113,7 @@ impl Tables {
             interceptors: interceptor_factories(config)?,
             hat: hat_code.new_tables(router_peers_failover_brokering),
             hat_code: hat_code.into(),
+            routes_version: 0,
         })
     }
 
@@ -154,6 +156,10 @@ impl Tables {
     #[inline]
     pub(crate) fn get_face(&self, zid: &ZenohIdProto) -> Option<&Arc<FaceState>> {
         self.faces.values().find(|face| face.zid == *zid)
+    }
+
+    pub(crate) fn disable_all_routes(&mut self) {
+        self.routes_version = self.routes_version.saturating_add(1);
     }
 }
 

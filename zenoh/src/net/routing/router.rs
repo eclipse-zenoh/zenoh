@@ -210,7 +210,7 @@ impl Router {
         });
         tables.mcast_groups.push(face);
 
-        disable_all_data_routes(&mut tables);
+        tables.disable_all_routes();
         Ok(())
     }
 
@@ -243,7 +243,7 @@ impl Router {
         );
         tables.mcast_faces.push(face_state.clone());
 
-        disable_all_data_routes(&mut tables);
+        tables.disable_all_routes();
         Ok(Arc::new(DeMux::new(
             Face {
                 tables: self.tables.clone(),

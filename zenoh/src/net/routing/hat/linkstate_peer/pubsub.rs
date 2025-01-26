@@ -45,7 +45,7 @@ use crate::net::routing::{
         tables::{Route, RoutingExpr, Tables},
     },
     hat::{CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources},
-    router::{disable_all_data_routes, disable_matches_data_routes},
+    router::disable_matches_data_routes,
     RoutingContext,
 };
 
@@ -671,9 +671,6 @@ pub(super) fn pubsub_tree_change(tables: &mut Tables, new_children: &[Vec<NodeIn
             }
         }
     }
-
-    // disable routes
-    disable_all_data_routes(tables);
 }
 
 #[inline]

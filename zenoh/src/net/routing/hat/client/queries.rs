@@ -42,7 +42,6 @@ use crate::{
             tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
         },
         hat::{HatQueriesTrait, SendDeclare, Sources},
-        router::disable_all_query_routes,
         RoutingContext,
     },
 };
@@ -275,9 +274,6 @@ pub(super) fn queries_new_face(
             propagate_simple_queryable(tables, qabl, Some(&mut face.clone()), send_declare);
         }
     }
-
-    // disable routes
-    disable_all_query_routes(tables);
 }
 
 lazy_static::lazy_static! {

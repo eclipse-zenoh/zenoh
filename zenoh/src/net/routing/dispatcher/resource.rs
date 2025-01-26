@@ -80,10 +80,15 @@ impl SessionContext {
     }
 }
 
+/// Global version number for route computation.
+/// Use 64bit to not care about rollover.
+pub type RoutesVersion = u64;
+
 pub(crate) struct Routes<T> {
     routers: Vec<Option<T>>,
     peers: Vec<Option<T>>,
     clients: Vec<Option<T>>,
+    version: u64,
 }
 
 impl<T> Default for Routes<T> {
@@ -92,6 +97,7 @@ impl<T> Default for Routes<T> {
             routers: Vec::new(),
             peers: Vec::new(),
             clients: Vec::new(),
+            version: 0,
         }
     }
 }
@@ -104,7 +110,15 @@ impl<T> Routes<T> {
     }
 
     #[inline]
-    pub(crate) fn get_route(&self, whatami: WhatAmI, context: NodeId) -> Option<&T> {
+    pub(crate) fn get_route(
+        &self,
+        version: RoutesVersion,
+        whatami: WhatAmI,
+        context: NodeId,
+    ) -> Option<&T> {
+        if version != self.version {
+            return None;
+        }
         let routes = match whatami {
             WhatAmI::Router => &self.routers,
             WhatAmI::Peer => &self.peers,
@@ -114,7 +128,17 @@ impl<T> Routes<T> {
     }
 
     #[inline]
-    pub(crate) fn set_route(&mut self, whatami: WhatAmI, context: NodeId, route: T) {
+    pub(crate) fn set_route(
+        &mut self,
+        version: RoutesVersion,
+        whatami: WhatAmI,
+        context: NodeId,
+        route: T,
+    ) {
+        if self.version != version {
+            self.clear();
+            self.version = version;
+        }
         let routes = match whatami {
             WhatAmI::Router => &mut self.routers,
             WhatAmI::Peer => &mut self.peers,
@@ -127,19 +151,20 @@ impl<T> Routes<T> {
 
 pub(crate) fn get_or_set_route<T: Clone>(
     routes: &RwLock<Routes<T>>,
+    version: RoutesVersion,
     whatami: WhatAmI,
     context: NodeId,
     compute_route: impl FnOnce() -> T,
 ) -> T {
-    if let Some(route) = routes.read().unwrap().get_route(whatami, context) {
+    if let Some(route) = routes.read().unwrap().get_route(version, whatami, context) {
         return route.clone();
     }
     let mut routes = routes.write().unwrap();
-    if let Some(route) = routes.get_route(whatami, context) {
+    if let Some(route) = routes.get_route(version, whatami, context) {
         return route.clone();
     }
     let route = compute_route();
-    routes.set_route(whatami, context, route.clone());
+    routes.set_route(version, whatami, context, route.clone());
     route
 }
 

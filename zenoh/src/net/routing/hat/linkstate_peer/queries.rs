@@ -49,7 +49,7 @@ use crate::net::routing::{
         tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
     },
     hat::{CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
-    router::{disable_all_query_routes, disable_matches_query_routes},
+    router::disable_matches_query_routes,
     RoutingContext,
 };
 
@@ -690,9 +690,6 @@ pub(super) fn queries_tree_change(tables: &mut Tables, new_children: &[Vec<NodeI
             }
         }
     }
-
-    // disable routes
-    disable_all_query_routes(tables);
 }
 
 #[inline]
