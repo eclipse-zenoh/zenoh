@@ -514,7 +514,11 @@ impl Network {
                             );
                         }
 
-                        if !self.autoconnect.is_empty() && self.autoconnect.matches(whatami) {
+                        if !self.autoconnect.is_empty() && self.autoconnect.matches(whatami)
+                            // in order to avoid connection attempts from both nodes,
+                            // initiate the connection from the greater zid
+                            && self.graph[self.idx].zid > zid
+                        {
                             // Connect discovered peers
                             if let Some(locators) = locators {
                                 let runtime = self.runtime.clone();
