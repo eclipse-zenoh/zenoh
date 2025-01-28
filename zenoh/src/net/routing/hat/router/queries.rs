@@ -46,11 +46,11 @@ use crate::key_expr::KeyExpr;
 use crate::net::routing::{
     dispatcher::{
         face::FaceState,
-        queries::*,
         resource::{NodeId, Resource, SessionContext},
         tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
     },
-    hat::{CurrentFutureTrait, HatQueriesTrait, QueryRoutes, SendDeclare, Sources},
+    hat::{CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
+    router::{disable_all_query_routes, disable_matches_query_routes},
     RoutingContext,
 };
 
@@ -898,7 +898,7 @@ pub(super) fn queries_remove_node(
             for mut res in qabls {
                 unregister_router_queryable(tables, &mut res, node, send_declare);
 
-                update_matches_query_routes(tables, &res);
+                disable_matches_query_routes(tables, &mut res);
                 Resource::clean(&mut res);
             }
         }
@@ -936,7 +936,7 @@ pub(super) fn queries_remove_node(
                     );
                 }
 
-                update_matches_query_routes(tables, &res);
+                disable_matches_query_routes(tables, &mut res);
                 Resource::clean(&mut res)
             }
         }
@@ -1075,8 +1075,8 @@ pub(super) fn queries_tree_change(
         }
     }
 
-    // recompute routes
-    update_query_routes_from(tables, &mut tables.root_res.clone());
+    // disable routes
+    disable_all_query_routes(tables);
 }
 
 #[inline]
@@ -1509,59 +1509,6 @@ impl HatQueriesTrait for HatCode {
         }
         route.sort_by_key(|qabl| qabl.info.map_or(u16::MAX, |i| i.distance));
         Arc::new(route)
-    }
-
-    fn compute_query_routes(
-        &self,
-        tables: &Tables,
-        routes: &mut QueryRoutes,
-        expr: &mut RoutingExpr,
-    ) {
-        let routers_indexes = hat!(tables)
-            .routers_net
-            .as_ref()
-            .unwrap()
-            .graph
-            .node_indices()
-            .map(|i| i.index() as NodeId)
-            .collect::<Vec<NodeId>>();
-        let max_idx = routers_indexes.iter().max().unwrap();
-        routes.routers.resize_with((*max_idx as usize) + 1, || {
-            Arc::new(QueryTargetQablSet::new())
-        });
-
-        for idx in routers_indexes {
-            routes.routers[idx as usize] =
-                self.compute_query_route(tables, expr, idx, WhatAmI::Router);
-        }
-
-        if hat!(tables).full_net(WhatAmI::Peer) {
-            let peers_indexes = hat!(tables)
-                .linkstatepeers_net
-                .as_ref()
-                .unwrap()
-                .graph
-                .node_indices()
-                .map(|i| i.index() as NodeId)
-                .collect::<Vec<NodeId>>();
-            let max_idx = peers_indexes.iter().max().unwrap();
-            routes.peers.resize_with((*max_idx as usize) + 1, || {
-                Arc::new(QueryTargetQablSet::new())
-            });
-            for idx in peers_indexes {
-                routes.peers[idx as usize] =
-                    self.compute_query_route(tables, expr, idx, WhatAmI::Peer);
-            }
-        } else {
-            routes.peers.resize_with(1, || {
-                self.compute_query_route(tables, expr, 0, WhatAmI::Peer)
-            });
-        };
-        routes.clients.resize_with(1, || {
-            tables
-                .hat_code
-                .compute_query_route(tables, expr, 0, WhatAmI::Client)
-        });
     }
 
     #[cfg(feature = "unstable")]

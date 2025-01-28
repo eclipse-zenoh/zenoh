@@ -390,12 +390,8 @@ impl Primitives for Face {
                         &mut |p, m| declares.push((p.clone(), m)),
                     );
 
-                    // recompute routes
-                    // TODO: disable  routes and recompute them in parallel to avoid holding
-                    // tables write lock for a long time.
-                    let mut root_res = wtables.root_res.clone();
-                    update_data_routes_from(&mut wtables, &mut root_res);
-                    update_query_routes_from(&mut wtables, &mut root_res);
+                    disable_all_data_routes(&mut wtables);
+                    disable_all_query_routes(&mut wtables);
 
                     drop(wtables);
                     drop(ctrl_lock);

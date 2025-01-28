@@ -41,10 +41,9 @@ use crate::{
             tables::{Route, RoutingExpr, Tables},
         },
         hat::{
-            p2p_peer::initial_interest, CurrentFutureTrait, DataRoutes, HatPubSubTrait,
-            SendDeclare, Sources,
+            p2p_peer::initial_interest, CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources,
         },
-        router::update_data_routes_from,
+        router::disable_all_data_routes,
         RoutingContext,
     },
 };
@@ -404,10 +403,8 @@ pub(super) fn pubsub_new_face(
             }
         }
     }
-    // recompute routes
-    // TODO: disable data routes and recompute them in parallel to avoid holding
-    // tables write lock for a long time on peer connection.
-    update_data_routes_from(tables, &mut tables.root_res.clone());
+    // disable routes
+    disable_all_data_routes(tables);
 }
 
 #[inline]
@@ -691,20 +688,6 @@ impl HatPubSubTrait for HatCode {
             );
         }
         Arc::new(route)
-    }
-
-    fn compute_data_routes(
-        &self,
-        tables: &Tables,
-        routes: &mut DataRoutes,
-        expr: &mut RoutingExpr,
-    ) {
-        let route = self.compute_data_route(tables, expr, 0, WhatAmI::Peer);
-        routes.routers.resize_with(1, || route.clone());
-        routes.peers.resize_with(1, || route.clone());
-        routes.clients.resize_with(1, || {
-            self.compute_data_route(tables, expr, 0, WhatAmI::Client)
-        });
     }
 
     #[zenoh_macros::unstable]
