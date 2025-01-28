@@ -276,7 +276,6 @@ impl StageIn {
                                 break batch;
                             }
                             None => {
-                                drop(c_guard);
                                 // Wait for an available batch until deadline
                                 if !deadline.wait(&self.s_ref)? {
                                     // Still no available batch.
@@ -288,7 +287,6 @@ impl StageIn {
                                     );
                                     return Ok(false);
                                 }
-                                c_guard = self.mutex.current();
                             }
                         },
                     }
@@ -441,11 +439,9 @@ impl StageIn {
                                 break batch;
                             }
                             None => {
-                                drop(c_guard);
                                 if !self.s_ref.wait() {
                                     return false;
                                 }
-                                c_guard = self.mutex.current();
                             }
                         },
                     }
