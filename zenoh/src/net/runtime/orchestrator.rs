@@ -292,7 +292,7 @@ impl Runtime {
             let config_guard = self.config().lock();
             let config = &config_guard.0;
             (
-                config.id().clone().into(),
+                ZenohIdProto::from(*config.id()),
                 unwrap_or_default!(config.scouting().multicast().ttl()),
             )
         };
