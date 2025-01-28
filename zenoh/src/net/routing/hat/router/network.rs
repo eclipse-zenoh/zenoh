@@ -24,6 +24,7 @@ use zenoh_buffers::{
     ZBuf,
 };
 use zenoh_codec::WCodec;
+use zenoh_config::AutoConnectStrategy;
 use zenoh_link::Locator;
 use zenoh_protocol::{
     common::ZExtBody,
@@ -34,8 +35,9 @@ use zenoh_transport::unicast::TransportUnicast;
 
 use crate::net::{
     codec::Zenoh080Routing,
+    common::should_autoconnect,
     protocol::linkstate::{LinkState, LinkStateList},
-    routing::{dispatcher::tables::NodeId, hat::select_autoconnect_node},
+    routing::dispatcher::tables::NodeId,
     runtime::Runtime,
 };
 
@@ -121,6 +123,7 @@ pub(super) struct Network {
     pub(super) gossip_multihop: bool,
     pub(super) gossip_target: WhatAmIMatcher,
     pub(super) autoconnect: WhatAmIMatcher,
+    pub(super) autoconnect_strategy: Option<AutoConnectStrategy>,
     pub(super) idx: NodeIndex,
     pub(super) links: VecMap<Link>,
     pub(super) trees: Vec<Tree>,
@@ -141,6 +144,7 @@ impl Network {
         gossip_multihop: bool,
         gossip_target: WhatAmIMatcher,
         autoconnect: WhatAmIMatcher,
+        autoconnect_strategy: Option<AutoConnectStrategy>,
     ) -> Self {
         let mut graph = petgraph::stable_graph::StableGraph::default();
         tracing::debug!("{} Add node (self) {}", name, zid);
@@ -159,6 +163,7 @@ impl Network {
             gossip_multihop,
             gossip_target,
             autoconnect,
+            autoconnect_strategy,
             idx,
             links: VecMap::new(),
             trees: vec![Tree {
@@ -516,7 +521,11 @@ impl Network {
 
                         if !self.autoconnect.is_empty()
                             && self.autoconnect.matches(whatami)
-                            && select_autoconnect_node(self.graph[self.idx].zid, zid)
+                            && should_autoconnect(
+                                self.autoconnect_strategy,
+                                self.graph[self.idx].zid,
+                                zid,
+                            )
                         {
                             // Connect discovered peers
                             if let Some(locators) = locators {

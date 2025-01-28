@@ -123,6 +123,7 @@ impl HatBaseTrait for HatCode {
         } else {
             WhatAmIMatcher::empty()
         };
+        let autoconnect_strategy = *config.scouting().gossip().autoconnect_strategy();
         let wait_declares = unwrap_or_default!(config.open().return_conditions().declares());
         let router_peers_failover_brokering =
             unwrap_or_default!(config.routing().router().peers_failover_brokering());
@@ -138,6 +139,7 @@ impl HatBaseTrait for HatCode {
                 gossip_multihop,
                 gossip_target,
                 autoconnect,
+                autoconnect_strategy,
                 wait_declares,
             ));
         }

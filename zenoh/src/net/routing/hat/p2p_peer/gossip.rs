@@ -20,6 +20,7 @@ use zenoh_buffers::{
     ZBuf,
 };
 use zenoh_codec::WCodec;
+use zenoh_config::AutoConnectStrategy;
 use zenoh_link::Locator;
 use zenoh_protocol::{
     common::ZExtBody,
@@ -30,8 +31,8 @@ use zenoh_transport::unicast::TransportUnicast;
 
 use crate::net::{
     codec::Zenoh080Routing,
+    common::should_autoconnect,
     protocol::linkstate::{LinkState, LinkStateList},
-    routing::hat::select_autoconnect_node,
     runtime::{Runtime, WeakRuntime},
 };
 
@@ -99,6 +100,7 @@ pub(super) struct Network {
     pub(super) gossip_multihop: bool,
     pub(super) gossip_target: WhatAmIMatcher,
     pub(super) autoconnect: WhatAmIMatcher,
+    pub(super) autoconnect_strategy: Option<AutoConnectStrategy>,
     pub(super) wait_declares: bool,
     pub(super) idx: NodeIndex,
     pub(super) links: VecMap<Link>,
@@ -117,6 +119,7 @@ impl Network {
         gossip_multihop: bool,
         gossip_target: WhatAmIMatcher,
         autoconnect: WhatAmIMatcher,
+        autoconnect_strategy: Option<AutoConnectStrategy>,
         wait_declares: bool,
     ) -> Self {
         let mut graph = petgraph::stable_graph::StableGraph::default();
@@ -135,6 +138,7 @@ impl Network {
             gossip_multihop,
             gossip_target,
             autoconnect,
+            autoconnect_strategy,
             wait_declares,
             idx,
             links: VecMap::new(),
@@ -442,7 +446,11 @@ impl Network {
 
                     if !self.autoconnect.is_empty()
                         && self.autoconnect.matches(whatami)
-                        && select_autoconnect_node(self.graph[self.idx].zid, zid)
+                        && should_autoconnect(
+                            self.autoconnect_strategy,
+                            self.graph[self.idx].zid,
+                            zid,
+                        )
                     {
                         // Connect discovered peers
                         if let Some(locators) = locators {

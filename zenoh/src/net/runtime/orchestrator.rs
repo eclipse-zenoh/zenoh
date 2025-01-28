@@ -30,7 +30,8 @@ use zenoh_buffers::{
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_config::{
-    get_global_connect_timeout, get_global_listener_timeout, unwrap_or_default, ModeDependent,
+    get_global_connect_timeout, get_global_listener_timeout, unwrap_or_default,
+    AutoConnectStrategy, ModeDependent,
 };
 use zenoh_link::{Locator, LocatorInspector};
 use zenoh_protocol::{
@@ -40,6 +41,7 @@ use zenoh_protocol::{
 use zenoh_result::{bail, zerror, ZResult};
 
 use super::{Runtime, RuntimeSession};
+use crate::net::common::should_autoconnect;
 
 const RCV_BUF_SIZE: usize = u16::MAX as usize;
 const SCOUT_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
@@ -179,6 +181,7 @@ impl Runtime {
             wait_scouting,
             listen,
             autoconnect,
+            autoconnect_strategy,
             addr,
             ifaces,
             delay,
@@ -197,6 +200,7 @@ impl Runtime {
                 unwrap_or_default!(guard.open().return_conditions().connect_scouted()),
                 *unwrap_or_default!(guard.scouting().multicast().listen().peer()),
                 *unwrap_or_default!(guard.scouting().multicast().autoconnect().peer()),
+                *guard.scouting().multicast().autoconnect_strategy(),
                 unwrap_or_default!(guard.scouting().multicast().address()),
                 unwrap_or_default!(guard.scouting().multicast().interface()),
                 Duration::from_millis(unwrap_or_default!(guard.scouting().delay())),
@@ -209,7 +213,8 @@ impl Runtime {
         self.connect_peers(&peers, false).await?;
 
         if scouting {
-            self.start_scout(listen, autoconnect, addr, ifaces).await?;
+            self.start_scout(listen, autoconnect, autoconnect_strategy, addr, ifaces)
+                .await?;
         }
 
         if linkstate {
@@ -227,7 +232,17 @@ impl Runtime {
     }
 
     async fn start_router(&self) -> ZResult<()> {
-        let (listeners, peers, scouting, listen, autoconnect, addr, ifaces, delay) = {
+        let (
+            listeners,
+            peers,
+            scouting,
+            listen,
+            autoconnect,
+            autoconnect_strategy,
+            addr,
+            ifaces,
+            delay,
+        ) = {
             let guard = &self.state.config.lock().0;
             (
                 guard
@@ -245,6 +260,7 @@ impl Runtime {
                 unwrap_or_default!(guard.scouting().multicast().enabled()),
                 *unwrap_or_default!(guard.scouting().multicast().listen().router()),
                 *unwrap_or_default!(guard.scouting().multicast().autoconnect().router()),
+                *guard.scouting().multicast().autoconnect_strategy(),
                 unwrap_or_default!(guard.scouting().multicast().address()),
                 unwrap_or_default!(guard.scouting().multicast().interface()),
                 Duration::from_millis(unwrap_or_default!(guard.scouting().delay())),
@@ -256,7 +272,8 @@ impl Runtime {
         self.connect_peers(&peers, false).await?;
 
         if scouting {
-            self.start_scout(listen, autoconnect, addr, ifaces).await?;
+            self.start_scout(listen, autoconnect, autoconnect_strategy, addr, ifaces)
+                .await?;
         }
 
         tokio::time::sleep(delay).await;
@@ -267,13 +284,17 @@ impl Runtime {
         &self,
         listen: bool,
         autoconnect: WhatAmIMatcher,
+        autoconnect_strategy: Option<AutoConnectStrategy>,
         addr: SocketAddr,
         ifaces: String,
     ) -> ZResult<()> {
-        let multicast_ttl = {
+        let (zid, multicast_ttl) = {
             let config_guard = self.config().lock();
             let config = &config_guard.0;
-            unwrap_or_default!(config.scouting().multicast().ttl())
+            (
+                config.id().clone().into(),
+                unwrap_or_default!(config.scouting().multicast().ttl()),
+            )
         };
         let ifaces = Runtime::get_interfaces(&ifaces);
         let mcast_socket = Runtime::bind_mcast_port(&addr, &ifaces, multicast_ttl).await?;
@@ -289,7 +310,13 @@ impl Runtime {
                         self.spawn_abortable(async move {
                             tokio::select! {
                                 _ = this.responder(&mcast_socket, &sockets) => {},
-                                _ = this.connect_all(&sockets, autoconnect, &addr) => {},
+                                _ = this.autoconnect_all(
+                                    &sockets,
+                                    autoconnect,
+                                    autoconnect_strategy,
+                                    zid,
+                                    &addr
+                                ) => {},
                             }
                         });
                     }
@@ -300,7 +327,14 @@ impl Runtime {
                     }
                     (false, false) => {
                         self.spawn_abortable(async move {
-                            this.connect_all(&sockets, autoconnect, &addr).await
+                            this.autoconnect_all(
+                                &sockets,
+                                autoconnect,
+                                autoconnect_strategy,
+                                zid,
+                                &addr,
+                            )
+                            .await
                         });
                     }
                     _ => {}
@@ -1082,17 +1116,19 @@ impl Runtime {
         }
     }
 
-    async fn connect_all(
+    async fn autoconnect_all(
         &self,
         ucast_sockets: &[UdpSocket],
-        what: WhatAmIMatcher,
+        autoconnect: WhatAmIMatcher,
+        autoconnect_strategy: Option<AutoConnectStrategy>,
+        zid: ZenohIdProto,
         addr: &SocketAddr,
     ) {
-        Runtime::scout(ucast_sockets, what, addr, move |hello| async move {
-            if !hello.locators.is_empty() {
-                self.connect_peer(&hello.zid, &hello.locators).await;
-            } else {
+        Runtime::scout(ucast_sockets, autoconnect, addr, move |hello| async move {
+            if hello.locators.is_empty() {
                 tracing::warn!("Received Hello with no locators: {:?}", hello);
+            } else if should_autoconnect(autoconnect_strategy, zid, hello.zid) {
+                self.connect_peer(&hello.zid, &hello.locators).await;
             }
             Loop::Continue
         })

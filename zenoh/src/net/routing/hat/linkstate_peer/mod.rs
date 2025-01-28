@@ -193,6 +193,7 @@ impl HatBaseTrait for HatCode {
         } else {
             WhatAmIMatcher::empty()
         };
+        let autoconnect_strategy = *config.scouting().gossip().autoconnect_strategy();
 
         let peer_full_linkstate =
             unwrap_or_default!(config.routing().peer().mode()) == *"linkstate";
@@ -210,6 +211,7 @@ impl HatBaseTrait for HatCode {
             gossip_multihop,
             gossip_target,
             autoconnect,
+            autoconnect_strategy,
         ));
         Ok(())
     }

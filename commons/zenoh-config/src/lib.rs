@@ -25,7 +25,8 @@ pub mod qos;
 pub mod wrappers;
 
 #[allow(unused_imports)]
-use std::convert::TryFrom; // This is a false positive from the rust analyser
+use std::convert::TryFrom;
+// This is a false positive from the rust analyser
 use std::{
     any::Any, collections::HashSet, fmt, io::Read, net::SocketAddr, ops, path::Path, sync::Weak,
 };
@@ -184,6 +185,17 @@ pub enum Permission {
     Deny,
 }
 
+/// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum AutoConnectStrategy {
+    /// A node will attempt to connect to another one only if its own zid is greater than the
+    /// other one. If both nodes use this strategy, only one will attempt the connection.
+    /// This strategy may not be suited if one of the node is not reachable by the other one,
+    /// for example because of a private IP.
+    GreaterZid,
+}
+
 pub trait ConfigValidator: Send + Sync {
     fn check_config(
         &self,
@@ -301,6 +313,8 @@ validated_struct::validator! {
                 pub ttl: Option<u32>,
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through UDP multicast.
                 autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
+                /// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
+                autoconnect_strategy: Option<AutoConnectStrategy>,
                 /// Whether or not to listen for scout messages on UDP multicast and reply to them.
                 listen: Option<ModeDependentValue<bool>>,
             },
@@ -319,6 +333,8 @@ validated_struct::validator! {
                 target: Option<ModeDependentValue<WhatAmIMatcher>>,
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through gossip.
                 autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
+                /// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
+                autoconnect_strategy: Option<AutoConnectStrategy>,
             },
         },
 

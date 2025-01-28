@@ -85,6 +85,7 @@ pub mod scouting {
                 &crate::WhatAmIMatcher::empty().router();
             mode_accessor!(crate::WhatAmIMatcher);
         }
+        pub const autoconnect_strategy: Option<crate::AutoConnectStrategy> = None;
         pub mod listen {
             pub const router: &bool = &true;
             pub const peer: &bool = &true;
@@ -113,6 +114,7 @@ pub mod scouting {
                 &crate::WhatAmIMatcher::empty();
             mode_accessor!(crate::WhatAmIMatcher);
         }
+        pub const autoconnect_strategy: Option<crate::AutoConnectStrategy> = None;
     }
 }
 
