@@ -17,6 +17,7 @@ use std::{
 };
 
 use static_init::dynamic;
+use zenoh_core::zlock;
 use zenoh_result::{zerror, ZResult};
 
 use super::{
@@ -61,7 +62,7 @@ impl MetadataStorage {
     }
 
     pub fn allocate(&self) -> ZResult<AllocatedMetadataDescriptor> {
-        let mut guard = self.available.lock().map_err(|e| zerror!("{e}"))?;
+        let mut guard = zlock!(self.available);
         let popped = guard.pop_first();
         drop(guard);
 

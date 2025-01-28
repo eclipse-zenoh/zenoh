@@ -87,7 +87,7 @@ impl AuthSegment {
     pub fn validate_challenge(&self, expected_challenge: AuthChallenge, s: &str) -> bool {
         let challnge_in_shm = self.challenge();
         if challnge_in_shm != expected_challenge {
-            tracing::trace!(
+            tracing::debug!(
                 "{} Challenge mismatch: expected: {}, found in shm: {}.",
                 s,
                 expected_challenge,
@@ -98,7 +98,7 @@ impl AuthSegment {
 
         let version_in_shm = unsafe { *self.array.elem(VERSION_INDEX) };
         if version_in_shm != SHM_VERSION {
-            tracing::trace!(
+            tracing::debug!(
                 "{} Version mismatch: ours: {}, theirs: {}.",
                 s,
                 SHM_VERSION,

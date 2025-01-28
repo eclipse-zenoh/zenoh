@@ -88,10 +88,9 @@ impl Ord for OwnedMetadataDescriptor {
             .as_ptr()
             .cmp(&other.watchdog_atomic.as_ptr())
         {
-            core::cmp::Ordering::Equal => {}
+            core::cmp::Ordering::Equal => self.watchdog_mask.cmp(&other.watchdog_mask),
             ord => return ord,
         }
-        self.watchdog_mask.cmp(&other.watchdog_mask)
     }
 }
 
