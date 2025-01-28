@@ -107,9 +107,13 @@ pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
     features = [
         "auth_pubkey",
         "auth_usrpwd",
+        "internal",
+        "plugins",
+        "runtime_plugins",
         "shared-memory",
         "stats",
         "transport_multilink",
+        "transport_compression",
         "transport_quic",
         "transport_serial",
         "transport_unixpipe",
@@ -120,6 +124,8 @@ pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
         "transport_ws",
         "transport_vsock",
         "unstable",
+        "internal_config",
+        "tracing-instrument",
         "default"
     ]
 );
