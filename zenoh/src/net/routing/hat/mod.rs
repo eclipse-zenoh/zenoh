@@ -295,3 +295,16 @@ impl CurrentFutureTrait for InterestMode {
         self == &InterestMode::Current || self == &InterestMode::CurrentFuture
     }
 }
+
+/// Select the node that will autoconnect to the other.
+///
+/// Without this filtering, both node would attempt to connect to each other, resulting in a waste
+/// of resource because only one connection can be kept and the other one would be then closed.
+/// The selection criteria must be deterministic and consistent across all nodes. The current
+/// implementation select the greater zid.
+///
+/// **Once deployed, the criteria should not be changed**, otherwise nodes with different
+/// implementation may never autoconnect.
+fn select_autoconnect_node(self_zid: ZenohIdProto, other_zid: ZenohIdProto) -> bool {
+    self_zid > other_zid
+}

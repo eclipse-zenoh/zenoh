@@ -31,6 +31,7 @@ use zenoh_transport::unicast::TransportUnicast;
 use crate::net::{
     codec::Zenoh080Routing,
     protocol::linkstate::{LinkState, LinkStateList},
+    routing::hat::select_autoconnect_node,
     runtime::{Runtime, WeakRuntime},
 };
 
@@ -439,10 +440,9 @@ impl Network {
                         );
                     }
 
-                    if !self.autoconnect.is_empty() && self.autoconnect.matches(whatami)
-                        // in order to avoid connection attempts from both nodes,
-                        // initiate the connection from the greater zid
-                        && self.graph[self.idx].zid > zid
+                    if !self.autoconnect.is_empty()
+                        && self.autoconnect.matches(whatami)
+                        && select_autoconnect_node(self.graph[self.idx].zid, zid)
                     {
                         // Connect discovered peers
                         if let Some(locators) = locators {
