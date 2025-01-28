@@ -72,7 +72,7 @@ impl AuthSegment {
 
         // validate minimal array length
         if array.elem_count() < ID_START_INDEX {
-            bail!("SHM auth sgemnt too small, maybe other side is using incompatible version?")
+            bail!("SHM auth segment is too small, maybe the other side is using an incompatible SHM version?")
         }
 
         Ok(Self { array })
