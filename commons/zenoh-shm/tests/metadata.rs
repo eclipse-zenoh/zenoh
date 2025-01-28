@@ -72,7 +72,7 @@ fn metadata_link_failure_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + 
         drop(allocated_metadata);
 
         // Some comments on this behaviour...
-        // Even though the allocated_metadata is dropped, it's SHM segment still exists in GLOBAL_METADATA_STORAGE,
+        // Even though the allocated_metadata is dropped, its SHM segment still exists in GLOBAL_METADATA_STORAGE,
         // so there is no way to detect that metadata is "deallocated" and the code below succeeds. The invalidation
         // functionality is implemented on higher level by means of generation mechanism and protects from both metadata
         // and watchdog link-to-deallocated issues. This generation mechanism depends on the behaviour below, so
