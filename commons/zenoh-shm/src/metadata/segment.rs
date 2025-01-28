@@ -37,12 +37,12 @@ impl<const S: usize> Metadata<S> {
     pub unsafe fn fast_elem_compute(
         &self,
         index: MetadataIndex,
-    ) -> (*const ChunkHeaderType, *const AtomicU64, u64) {
+    ) -> (&'static ChunkHeaderType, &'static AtomicU64, u64) {
         let watchdog_index = index / 64;
         let watchdog_mask_index = index % 64;
         (
-            self.headers.as_ptr().offset(index as isize),
-            self.watchdogs.as_ptr().offset(watchdog_index as isize),
+            &*(self.headers.as_ptr().offset(index as isize)),
+            &*(self.watchdogs.as_ptr().offset(watchdog_index as isize)),
             1u64 << watchdog_mask_index,
         )
     }

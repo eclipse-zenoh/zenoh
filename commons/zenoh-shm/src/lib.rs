@@ -133,8 +133,8 @@ impl ShmBufInner {
     fn is_valid(&self) -> bool {
         let header = self.metadata.owned.header();
 
-        header.generation.load(Ordering::SeqCst) == self.info.generation
-            && !header.watchdog_invalidated.load(Ordering::SeqCst)
+        !header.watchdog_invalidated.load(Ordering::SeqCst)
+            && header.generation.load(Ordering::SeqCst) == self.info.generation
     }
 
     fn is_unique(&self) -> bool {
