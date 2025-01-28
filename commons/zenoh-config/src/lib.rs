@@ -189,7 +189,8 @@ pub enum Permission {
 #[derive(Default, Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum AutoConnectStrategy {
-    /// Always attempt to connect to another node, even if this one may do the same.
+    /// Always attempt to connect to another node, may result in redundant connection which
+    /// will be then be closed.
     #[default]
     Always,
     /// A node will attempt to connect to another one only if its own zid is greater than the

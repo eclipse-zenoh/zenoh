@@ -139,6 +139,12 @@
       /// Each value is a list of: "peer", "router" and/or "client".
       autoconnect: { router: [], peer: ["router", "peer"], client: ["router"] },
       /// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
+      /// Accepts either:
+      /// - "always": always attempt to autoconnect, may result in redundant connection which will be then be closed.
+      /// - "greater-zid": attempt to connect to another node only if its own zid is greater than the other one.
+      ///   If both nodes use this strategy, only one will attempt the connection.
+      ///   This strategy may not be suited if one of the node is not reachable by the other one, for example
+      ///   because of a private IP.
       autoconnect_strategy: "always",
       /// Whether or not to listen for scout messages on UDP multicast and reply to them.
       listen: true,
