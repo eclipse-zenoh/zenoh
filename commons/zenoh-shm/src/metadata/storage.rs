@@ -36,6 +36,8 @@ pub struct MetadataStorage {
 impl MetadataStorage {
     fn new() -> ZResult<Self> {
         let initial_segment = Arc::new(MetadataSegment::create()?);
+        // See ordering implementation for OwnedMetadataDescriptor
+        #[allow(clippy::mutable_key_type)]
         let mut initially_available = BTreeSet::<OwnedMetadataDescriptor>::default();
 
         for index in 0..initial_segment.data.count() {

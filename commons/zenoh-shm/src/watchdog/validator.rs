@@ -42,6 +42,8 @@ impl ValidatedStorage {
         self.transactions.push((Transaction::Remove, descriptor));
     }
 
+    // See ordering implementation for OwnedMetadataDescriptor
+    #[allow(clippy::mutable_key_type)]
     fn collect_transactions(&self, storage: &mut BTreeSet<OwnedMetadataDescriptor>) {
         while let Some((transaction, descriptor)) = self.transactions.pop() {
             match transaction {
@@ -69,6 +71,8 @@ impl WatchdogValidator {
         let storage = Arc::new(ValidatedStorage::default());
 
         let c_storage = storage.clone();
+        // See ordering implementation for OwnedMetadataDescriptor
+        #[allow(clippy::mutable_key_type)]
         let mut watchdogs = BTreeSet::default();
         let task = PeriodicTask::new("Watchdog Validator".to_owned(), interval, move || {
             c_storage.collect_transactions(&mut watchdogs);

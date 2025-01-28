@@ -73,6 +73,8 @@ impl ConfirmedSegment {
         self.transactions.push((Transaction::Remove, descriptor));
     }
 
+    // See ordering implementation for OwnedMetadataDescriptor
+    #[allow(clippy::mutable_key_type)]
     fn collect_transactions(&self, watchdogs: &mut BTreeMap<OwnedMetadataDescriptor, i32>) {
         while let Some((transaction, descriptor)) = self.transactions.pop() {
             // collect transactions
