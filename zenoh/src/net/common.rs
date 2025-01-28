@@ -6,12 +6,12 @@ use zenoh_protocol::core::ZenohIdProto;
 /// The goal is to avoid both node to attempt connecting to each other, as it would result into
 /// a waste of resource.
 pub(crate) fn should_autoconnect(
-    strategy: Option<AutoConnectStrategy>,
+    strategy: AutoConnectStrategy,
     self_zid: ZenohIdProto,
     other_zid: ZenohIdProto,
 ) -> bool {
     match strategy {
-        Some(AutoConnectStrategy::GreaterZid) => self_zid > other_zid,
-        None => true,
+        AutoConnectStrategy::Always => true,
+        AutoConnectStrategy::GreaterZid => self_zid > other_zid,
     }
 }

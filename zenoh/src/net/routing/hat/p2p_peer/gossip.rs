@@ -100,7 +100,7 @@ pub(super) struct Network {
     pub(super) gossip_multihop: bool,
     pub(super) gossip_target: WhatAmIMatcher,
     pub(super) autoconnect: WhatAmIMatcher,
-    pub(super) autoconnect_strategy: Option<AutoConnectStrategy>,
+    pub(super) autoconnect_strategy: AutoConnectStrategy,
     pub(super) wait_declares: bool,
     pub(super) idx: NodeIndex,
     pub(super) links: VecMap<Link>,
@@ -119,7 +119,7 @@ impl Network {
         gossip_multihop: bool,
         gossip_target: WhatAmIMatcher,
         autoconnect: WhatAmIMatcher,
-        autoconnect_strategy: Option<AutoConnectStrategy>,
+        autoconnect_strategy: AutoConnectStrategy,
         wait_declares: bool,
     ) -> Self {
         let mut graph = petgraph::stable_graph::StableGraph::default();

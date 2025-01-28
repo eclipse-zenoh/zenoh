@@ -186,9 +186,12 @@ pub enum Permission {
 }
 
 /// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+#[derive(Default, Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum AutoConnectStrategy {
+    /// Always attempt to connect to another node, even if this one may do the same.
+    #[default]
+    Always,
     /// A node will attempt to connect to another one only if its own zid is greater than the
     /// other one. If both nodes use this strategy, only one will attempt the connection.
     /// This strategy may not be suited if one of the node is not reachable by the other one,
@@ -708,9 +711,9 @@ fn config_deser() {
         &mut json5::Deserializer::from_str(
             r#"{transport: { auth: { usrpwd: { user: null, password: null, dictionary_file: "file" }}}}"#,
         )
-        .unwrap(),
+            .unwrap(),
     )
-    .unwrap();
+        .unwrap();
     assert_eq!(
         config
             .transport()
@@ -725,9 +728,9 @@ fn config_deser() {
         &mut json5::Deserializer::from_str(
             r#"{transport: { auth: { usrpwd: { user: null, password: null, user_password_dictionary: "file" }}}}"#,
         )
-        .unwrap(),
+            .unwrap(),
     )
-    .unwrap_err());
+        .unwrap_err());
     dbg!(Config::from_file("../../DEFAULT_CONFIG.json5").unwrap());
 }
 
@@ -1004,15 +1007,15 @@ impl PluginsConfig {
                 _ => id,
             };
 
-            if let Some(paths) = value.get("__path__"){
+            if let Some(paths) = value.get("__path__") {
                 let paths = match paths {
                     Value::String(s) => vec![s.clone()],
-                    Value::Array(a) => a.iter().map(|s| if let Value::String(s) = s {s.clone()} else {panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", id)}).collect(),
+                    Value::Array(a) => a.iter().map(|s| if let Value::String(s) = s { s.clone() } else { panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", id) }).collect(),
                     _ => panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", id)
                 };
-                PluginLoad {id: id.clone(), name: name.clone(), paths: Some(paths), required}
+                PluginLoad { id: id.clone(), name: name.clone(), paths: Some(paths), required }
             } else {
-                PluginLoad {id: id.clone(), name: name.clone(), paths: None, required}
+                PluginLoad { id: id.clone(), name: name.clone(), paths: None, required }
             }
         })
     }
