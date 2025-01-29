@@ -625,7 +625,9 @@ impl HatBaseTrait for HatCode {
                     use zenoh_codec::RCodec;
                     let codec = Zenoh080Routing::new();
                     let mut reader = buf.reader();
-                    let list: LinkStateList = codec.read(&mut reader).unwrap();
+                    let Ok(list): Result<LinkStateList, _> = codec.read(&mut reader) else {
+                        bail!("failed to decode link state");
+                    };
 
                     let whatami = transport.get_whatami()?;
                     match whatami {
