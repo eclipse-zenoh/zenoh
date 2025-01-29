@@ -18,32 +18,18 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
 };
 use zenoh_shm::{
-    api::provider::chunk::ChunkDescriptor, header::descriptor::HeaderDescriptor,
-    watchdog::descriptor::Descriptor, ShmBufInfo,
+    api::provider::chunk::ChunkDescriptor, metadata::descriptor::MetadataDescriptor, ShmBufInfo,
 };
 
 use crate::{RCodec, WCodec, Zenoh080};
 
-impl<W> WCodec<&Descriptor, &mut W> for Zenoh080
+impl<W> WCodec<&MetadataDescriptor, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &Descriptor) -> Self::Output {
-        self.write(&mut *writer, x.id)?;
-        self.write(&mut *writer, x.index_and_bitpos)?;
-        Ok(())
-    }
-}
-
-impl<W> WCodec<&HeaderDescriptor, &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, writer: &mut W, x: &HeaderDescriptor) -> Self::Output {
+    fn write(self, writer: &mut W, x: &MetadataDescriptor) -> Self::Output {
         self.write(&mut *writer, x.id)?;
         self.write(&mut *writer, x.index)?;
         Ok(())
@@ -84,52 +70,29 @@ where
 
     fn write(self, writer: &mut W, x: &ShmBufInfo) -> Self::Output {
         let ShmBufInfo {
-            data_descriptor,
-            shm_protocol,
             data_len,
-            watchdog_descriptor,
-            header_descriptor,
+            metadata,
             generation,
         } = x;
 
-        self.write(&mut *writer, data_descriptor)?;
-        self.write(&mut *writer, shm_protocol)?;
         self.write(&mut *writer, *data_len)?;
-        self.write(&mut *writer, watchdog_descriptor)?;
-        self.write(&mut *writer, header_descriptor)?;
+        self.write(&mut *writer, metadata)?;
         self.write(&mut *writer, generation)?;
         Ok(())
     }
 }
 
-impl<R> RCodec<Descriptor, &mut R> for Zenoh080
+impl<R> RCodec<MetadataDescriptor, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<Descriptor, Self::Error> {
-        let id = self.read(&mut *reader)?;
-        let index_and_bitpos = self.read(&mut *reader)?;
-
-        Ok(Descriptor {
-            id,
-            index_and_bitpos,
-        })
-    }
-}
-
-impl<R> RCodec<HeaderDescriptor, &mut R> for Zenoh080
-where
-    R: Reader,
-{
-    type Error = DidntRead;
-
-    fn read(self, reader: &mut R) -> Result<HeaderDescriptor, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<MetadataDescriptor, Self::Error> {
         let id = self.read(&mut *reader)?;
         let index = self.read(&mut *reader)?;
 
-        Ok(HeaderDescriptor { id, index })
+        Ok(MetadataDescriptor { id, index })
     }
 }
 
@@ -172,21 +135,11 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ShmBufInfo, Self::Error> {
-        let data_descriptor = self.read(&mut *reader)?;
-        let shm_protocol = self.read(&mut *reader)?;
         let data_len = self.read(&mut *reader)?;
-        let watchdog_descriptor = self.read(&mut *reader)?;
-        let header_descriptor = self.read(&mut *reader)?;
+        let metadata = self.read(&mut *reader)?;
         let generation = self.read(&mut *reader)?;
 
-        let shm_info = ShmBufInfo::new(
-            data_descriptor,
-            shm_protocol,
-            data_len,
-            watchdog_descriptor,
-            header_descriptor,
-            generation,
-        );
+        let shm_info = ShmBufInfo::new(data_len, metadata, generation);
         Ok(shm_info)
     }
 }

@@ -24,7 +24,9 @@ use zenoh_core::bail;
 use zenoh_crypto::PseudoRng;
 use zenoh_protocol::transport::{init, open};
 use zenoh_result::{zerror, Error as ZError, ZResult};
-use zenoh_shm::{api::common::types::ProtocolID, posix_shm::array::ArrayInSHM};
+use zenoh_shm::{
+    api::common::types::ProtocolID, posix_shm::array::ArrayInSHM, version::SHM_VERSION,
+};
 
 use crate::unicast::establishment::{AcceptFsm, OpenFsm};
 
@@ -38,7 +40,8 @@ pub(crate) type AuthChallenge = u64;
 
 const LEN_INDEX: usize = 0;
 const CHALLENGE_INDEX: usize = 1;
-const ID_START_INDEX: usize = 2;
+const VERSION_INDEX: usize = 2;
+const ID_START_INDEX: usize = 3;
 
 #[derive(Debug)]
 pub struct AuthSegment {
@@ -53,7 +56,10 @@ impl AuthSegment {
         )?;
         unsafe {
             (*array.elem_mut(LEN_INDEX)) = shm_protocols.len() as AuthChallenge;
-            (*array.elem_mut(CHALLENGE_INDEX)) = challenge;
+            // challenge field is inverted to prevent SHM probing between new versioned
+            // SHM implementation and the old one
+            (*array.elem_mut(CHALLENGE_INDEX)) = !challenge;
+            (*array.elem_mut(VERSION_INDEX)) = SHM_VERSION;
             for elem in ID_START_INDEX..array.elem_count() {
                 (*array.elem_mut(elem)) = shm_protocols[elem - ID_START_INDEX] as u64;
             }
@@ -63,11 +69,45 @@ impl AuthSegment {
 
     pub fn open(id: AuthSegmentID) -> ZResult<Self> {
         let array = ArrayInSHM::open(id, AUTH_SEGMENT_PREFIX)?;
+
+        // validate minimal array length
+        if array.elem_count() < ID_START_INDEX {
+            bail!("SHM auth segment is too small, maybe the other side is using an incompatible SHM version?")
+        }
+
         Ok(Self { array })
     }
 
     pub fn challenge(&self) -> AuthChallenge {
-        unsafe { *self.array.elem(CHALLENGE_INDEX) }
+        // challenge field is inverted to prevent SHM probing between new versioned
+        // SHM implementation and the old one
+        unsafe { !(*self.array.elem(CHALLENGE_INDEX)) }
+    }
+
+    pub fn validate_challenge(&self, expected_challenge: AuthChallenge, s: &str) -> bool {
+        let challnge_in_shm = self.challenge();
+        if challnge_in_shm != expected_challenge {
+            tracing::debug!(
+                "{} Challenge mismatch: expected: {}, found in shm: {}.",
+                s,
+                expected_challenge,
+                challnge_in_shm
+            );
+            return false;
+        }
+
+        let version_in_shm = unsafe { *self.array.elem(VERSION_INDEX) };
+        if version_in_shm != SHM_VERSION {
+            tracing::debug!(
+                "{} Version mismatch: ours: {}, theirs: {}.",
+                s,
+                SHM_VERSION,
+                version_in_shm
+            );
+            return false;
+        }
+
+        true
     }
 
     pub fn protocols(&self) -> Vec<ProtocolID> {
@@ -280,17 +320,8 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
             return Ok(None);
         };
 
-        // Alice challenge as seen by Alice
-        let challenge = self.inner.challenge();
-
         // Verify that Bob has correctly read Alice challenge
-        if challenge != init_ack.alice_challenge {
-            tracing::trace!(
-                "{} Challenge mismatch: {} != {}.",
-                S,
-                init_ack.alice_challenge,
-                challenge
-            );
+        if !self.inner.validate_challenge(init_ack.alice_challenge, S) {
             return Ok(None);
         }
 
@@ -455,18 +486,9 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
             return Ok(());
         };
 
-        // Bob challenge as seen by Bob
-        let challenge = self.inner.challenge();
-
         // Verify that Alice has correctly read Bob challenge
         let bob_challnge = ext.value;
-        if challenge != bob_challnge {
-            tracing::trace!(
-                "{} Challenge mismatch: {} != {}.",
-                S,
-                bob_challnge,
-                challenge
-            );
+        if !self.inner.validate_challenge(bob_challnge, S) {
             return Ok(());
         }
 

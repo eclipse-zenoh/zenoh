@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023 ZettaScale Technology
+// Copyright (c) 2024 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -12,17 +12,4 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use super::{descriptor::OwnedHeaderDescriptor, storage::GLOBAL_HEADER_STORAGE};
-
-#[derive(Debug)]
-pub struct AllocatedHeaderDescriptor {
-    pub descriptor: OwnedHeaderDescriptor,
-}
-
-impl Drop for AllocatedHeaderDescriptor {
-    fn drop(&mut self) {
-        GLOBAL_HEADER_STORAGE
-            .read()
-            .reclaim_header(self.descriptor.clone());
-    }
-}
+pub const SHM_VERSION: u64 = 1;

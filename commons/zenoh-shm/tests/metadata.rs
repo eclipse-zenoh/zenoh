@@ -12,43 +12,134 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "test")]
-use std::{
-    sync::{atomic::AtomicBool, Arc},
-    time::Duration,
-};
+use std::{ops::Deref, sync::atomic::Ordering::Relaxed, time::Duration};
 
-use zenoh_result::{bail, ZResult};
-use zenoh_shm::watchdog::{
-    confirmator::GLOBAL_CONFIRMATOR, storage::GLOBAL_STORAGE, validator::GLOBAL_VALIDATOR,
-};
+use rand::Rng;
+use zenoh_core::bail;
+use zenoh_result::ZResult;
 
 pub mod common;
 use common::{execute_concurrent, CpuLoad};
+use zenoh_shm::{
+    metadata::{
+        descriptor::MetadataDescriptor, storage::GLOBAL_METADATA_STORAGE,
+        subscription::GLOBAL_METADATA_SUBSCRIPTION,
+    },
+    watchdog::{confirmator::GLOBAL_CONFIRMATOR, validator::GLOBAL_VALIDATOR},
+};
 
-const VALIDATION_PERIOD: Duration = Duration::from_millis(100);
-const CONFIRMATION_PERIOD: Duration = Duration::from_millis(50);
-
-fn watchdog_alloc_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
+fn metadata_alloc_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
     |_task_index: usize, _iteration: usize| -> ZResult<()> {
-        let _allocated = GLOBAL_STORAGE.read().allocate_watchdog()?;
+        let _allocated_metadata = GLOBAL_METADATA_STORAGE.read().allocate()?;
         Ok(())
     }
 }
 
 #[test]
-fn watchdog_alloc() {
-    execute_concurrent(1, 10000, watchdog_alloc_fn());
+fn metadata_alloc() {
+    execute_concurrent(1, 1000, metadata_alloc_fn());
 }
 
 #[test]
-fn watchdog_alloc_concurrent() {
-    execute_concurrent(1000, 10000, watchdog_alloc_fn());
+fn metadata_alloc_concurrent() {
+    execute_concurrent(100, 1000, metadata_alloc_fn());
 }
+
+fn metadata_link_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
+    |_task_index: usize, _iteration: usize| {
+        let allocated_metadata = GLOBAL_METADATA_STORAGE.read().allocate()?;
+        let descr = MetadataDescriptor::from(allocated_metadata.deref());
+        let _linked_metadata = GLOBAL_METADATA_SUBSCRIPTION.read().link(&descr)?;
+        Ok(())
+    }
+}
+
+#[test]
+fn metadata_link() {
+    execute_concurrent(1, 1000, metadata_link_fn());
+}
+
+#[test]
+fn metadata_link_concurrent() {
+    execute_concurrent(100, 1000, metadata_link_fn());
+}
+
+fn metadata_link_failure_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static
+{
+    |_task_index: usize, _iteration: usize| {
+        let allocated_metadata = GLOBAL_METADATA_STORAGE.read().allocate()?;
+        let descr = MetadataDescriptor::from(allocated_metadata.deref());
+        drop(allocated_metadata);
+
+        // Some comments on this behaviour...
+        // Even though the allocated_metadata is dropped, its SHM segment still exists in GLOBAL_METADATA_STORAGE,
+        // so there is no way to detect that metadata is "deallocated" and the code below succeeds. The invalidation
+        // functionality is implemented on higher level by means of a generation mechanism that protects from both metadata
+        // and watchdog link-to-deallocated issues. This generation mechanism depends on the behaviour below, so
+        // everything is fair :)
+        let _linked_metadata = GLOBAL_METADATA_SUBSCRIPTION.read().link(&descr)?;
+        Ok(())
+    }
+}
+
+#[test]
+fn metadata_link_failure() {
+    execute_concurrent(1, 1000, metadata_link_failure_fn());
+}
+
+#[test]
+fn metadata_link_failure_concurrent() {
+    execute_concurrent(100, 1000, metadata_link_failure_fn());
+}
+
+fn metadata_check_memory_fn(parallel_tasks: usize, iterations: usize) {
+    let task_fun = |_task_index: usize, _iteration: usize| -> ZResult<()> {
+        let allocated_metadata = GLOBAL_METADATA_STORAGE.read().allocate()?;
+        let descr = MetadataDescriptor::from(allocated_metadata.deref());
+        let linked_metadata = GLOBAL_METADATA_SUBSCRIPTION.read().link(&descr)?;
+
+        let mut rng = rand::thread_rng();
+        let allocated = allocated_metadata.header();
+        let linked = linked_metadata.header();
+        for _ in 0..100 {
+            let gen = rng.gen();
+            allocated.generation.store(gen, Relaxed);
+            assert_eq!(gen, linked.generation.load(Relaxed));
+
+            let rc = rng.gen();
+            allocated.refcount.store(rc, Relaxed);
+            assert_eq!(rc, linked.refcount.load(Relaxed));
+
+            let watchdog_inv = rng.gen();
+            allocated.watchdog_invalidated.store(watchdog_inv, Relaxed);
+            assert_eq!(watchdog_inv, linked.watchdog_invalidated.load(Relaxed));
+
+            assert_eq!(gen, linked.generation.load(Relaxed));
+            assert_eq!(rc, linked.refcount.load(Relaxed));
+            assert_eq!(watchdog_inv, linked.watchdog_invalidated.load(Relaxed));
+        }
+        Ok(())
+    };
+    execute_concurrent(parallel_tasks, iterations, task_fun);
+}
+
+#[test]
+fn metadata_check_memory() {
+    metadata_check_memory_fn(1, 1000);
+}
+
+#[test]
+fn metadata_check_memory_concurrent() {
+    metadata_check_memory_fn(100, 100);
+}
+
+const VALIDATION_PERIOD: Duration = Duration::from_millis(100);
+const CONFIRMATION_PERIOD: Duration = Duration::from_millis(50);
 
 fn watchdog_confirmed_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
     |_task_index: usize, _iteration: usize| -> ZResult<()> {
-        let allocated = GLOBAL_STORAGE.read().allocate_watchdog()?;
-        let confirmed = GLOBAL_CONFIRMATOR.read().add_owned(&allocated.descriptor)?;
+        let allocated = GLOBAL_METADATA_STORAGE.read().allocate()?;
+        let confirmed = GLOBAL_CONFIRMATOR.read().add(allocated.clone());
 
         // check that the confirmed watchdog stays valid
         for i in 0..10 {
@@ -80,14 +171,11 @@ fn watchdog_confirmed_concurrent() {
 #[test]
 #[ignore]
 fn watchdog_confirmed_dangling() {
-    let allocated = GLOBAL_STORAGE
+    let allocated = GLOBAL_METADATA_STORAGE
         .read()
-        .allocate_watchdog()
+        .allocate()
         .expect("error allocating watchdog!");
-    let confirmed = GLOBAL_CONFIRMATOR
-        .read()
-        .add_owned(&allocated.descriptor)
-        .expect("error adding watchdog to confirmator!");
+    let confirmed = GLOBAL_CONFIRMATOR.read().add(allocated.clone());
     drop(allocated);
 
     // confirm dangling (not allocated) watchdog
@@ -99,24 +187,19 @@ fn watchdog_confirmed_dangling() {
 
 fn watchdog_validated_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
     |_task_index: usize, _iteration: usize| -> ZResult<()> {
-        let allocated = GLOBAL_STORAGE.read().allocate_watchdog()?;
-        let confirmed = GLOBAL_CONFIRMATOR.read().add_owned(&allocated.descriptor)?;
+        let allocated = GLOBAL_METADATA_STORAGE.read().allocate()?;
+        let confirmed = GLOBAL_CONFIRMATOR.read().add(allocated.clone());
 
-        let valid = Arc::new(AtomicBool::new(true));
-        {
-            let c_valid = valid.clone();
-            GLOBAL_VALIDATOR.read().add(
-                allocated.descriptor.clone(),
-                Box::new(move || {
-                    c_valid.store(false, std::sync::atomic::Ordering::SeqCst);
-                }),
-            );
-        }
+        GLOBAL_VALIDATOR.read().add(allocated.clone());
 
         // check that the watchdog stays valid as it is confirmed
         for i in 0..10 {
             std::thread::sleep(VALIDATION_PERIOD);
-            if !valid.load(std::sync::atomic::Ordering::SeqCst) {
+            if allocated
+                .header()
+                .watchdog_invalidated
+                .load(std::sync::atomic::Ordering::SeqCst)
+            {
                 bail!("Invalid watchdog, iteration {i}");
             }
         }
@@ -130,7 +213,10 @@ fn watchdog_validated_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Sen
         // check that the watchdog becomes invalid once we stop it's confirmation
         drop(confirmed);
         std::thread::sleep(VALIDATION_PERIOD * 3 + CONFIRMATION_PERIOD);
-        assert!(!valid.load(std::sync::atomic::Ordering::SeqCst));
+        assert!(allocated
+            .header()
+            .watchdog_invalidated
+            .load(std::sync::atomic::Ordering::SeqCst));
 
         Ok(())
     }
@@ -151,27 +237,23 @@ fn watchdog_validated_concurrent() {
 fn watchdog_validated_invalid_without_confirmator_fn(
 ) -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
     |_task_index: usize, _iteration: usize| -> ZResult<()> {
-        let allocated = GLOBAL_STORAGE
+        let allocated = GLOBAL_METADATA_STORAGE
             .read()
-            .allocate_watchdog()
+            .allocate()
             .expect("error allocating watchdog!");
 
-        let valid = Arc::new(AtomicBool::new(true));
-        {
-            let c_valid = valid.clone();
-            GLOBAL_VALIDATOR.read().add(
-                allocated.descriptor.clone(),
-                Box::new(move || {
-                    c_valid.store(false, std::sync::atomic::Ordering::SeqCst);
-                }),
-            );
-        }
+        assert!(allocated.test_validate() == 0);
 
-        assert!(allocated.descriptor.test_validate() == 0);
+        // add watchdog to validator
+        GLOBAL_VALIDATOR.read().add(allocated.clone());
 
         // check that the watchdog becomes invalid because we do not confirm it
         std::thread::sleep(VALIDATION_PERIOD * 2 + CONFIRMATION_PERIOD);
-        assert!(!valid.load(std::sync::atomic::Ordering::SeqCst));
+        assert!(allocated
+            .header()
+            .watchdog_invalidated
+            .load(std::sync::atomic::Ordering::SeqCst));
+
         Ok(())
     }
 }
@@ -195,26 +277,14 @@ fn watchdog_validated_invalid_without_confirmator_concurrent() {
 fn watchdog_validated_additional_confirmation_fn(
 ) -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
     |_task_index: usize, _iteration: usize| -> ZResult<()> {
-        let allocated = GLOBAL_STORAGE
+        let allocated = GLOBAL_METADATA_STORAGE
             .read()
-            .allocate_watchdog()
+            .allocate()
             .expect("error allocating watchdog!");
-        let confirmed = GLOBAL_CONFIRMATOR
-            .read()
-            .add_owned(&allocated.descriptor)
-            .expect("error adding watchdog to confirmator!");
+        let confirmed = GLOBAL_CONFIRMATOR.read().add(allocated.clone());
 
-        let allow_invalid = Arc::new(AtomicBool::new(false));
-        {
-            let c_allow_invalid = allow_invalid.clone();
-            GLOBAL_VALIDATOR.read().add(
-                allocated.descriptor.clone(),
-                Box::new(move || {
-                    assert!(c_allow_invalid.load(std::sync::atomic::Ordering::SeqCst));
-                    c_allow_invalid.store(false, std::sync::atomic::Ordering::SeqCst);
-                }),
-            );
-        }
+        // add watchdog to validator
+        GLOBAL_VALIDATOR.read().add(allocated.clone());
 
         // make additional confirmations
         for _ in 0..100 {
@@ -224,6 +294,10 @@ fn watchdog_validated_additional_confirmation_fn(
 
         // check that the watchdog stays valid as we stop additional confirmation
         std::thread::sleep(VALIDATION_PERIOD * 10);
+        assert!(!allocated
+            .header()
+            .watchdog_invalidated
+            .load(std::sync::atomic::Ordering::SeqCst));
 
         // Worst-case timings:
         // validation:       |___________|___________|___________|___________|
@@ -233,10 +307,13 @@ fn watchdog_validated_additional_confirmation_fn(
 
         // check that the watchdog becomes invalid once we stop it's regular confirmation
         drop(confirmed);
-        allow_invalid.store(true, std::sync::atomic::Ordering::SeqCst);
         std::thread::sleep(VALIDATION_PERIOD * 2 + CONFIRMATION_PERIOD);
         // check that invalidation event happened!
-        assert!(!allow_invalid.load(std::sync::atomic::Ordering::SeqCst));
+        assert!(allocated
+            .header()
+            .watchdog_invalidated
+            .load(std::sync::atomic::Ordering::SeqCst));
+
         Ok(())
     }
 }
@@ -256,29 +333,21 @@ fn watchdog_validated_additional_confirmation_concurrent() {
 fn watchdog_validated_overloaded_system_fn(
 ) -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
     |_task_index: usize, _iteration: usize| -> ZResult<()> {
-        let allocated = GLOBAL_STORAGE
+        let allocated = GLOBAL_METADATA_STORAGE
             .read()
-            .allocate_watchdog()
+            .allocate()
             .expect("error allocating watchdog!");
-        let confirmed = GLOBAL_CONFIRMATOR
-            .read()
-            .add_owned(&allocated.descriptor)
-            .expect("error adding watchdog to confirmator!");
+        let confirmed = GLOBAL_CONFIRMATOR.read().add(allocated.clone());
 
-        let allow_invalid = Arc::new(AtomicBool::new(false));
-        {
-            let c_allow_invalid = allow_invalid.clone();
-            GLOBAL_VALIDATOR.read().add(
-                allocated.descriptor.clone(),
-                Box::new(move || {
-                    assert!(c_allow_invalid.load(std::sync::atomic::Ordering::SeqCst));
-                    c_allow_invalid.store(false, std::sync::atomic::Ordering::SeqCst);
-                }),
-            );
-        }
+        // add watchdog to validator
+        GLOBAL_VALIDATOR.read().add(allocated.clone());
 
         // check that the watchdog stays valid
         std::thread::sleep(VALIDATION_PERIOD * 10);
+        assert!(!allocated
+            .header()
+            .watchdog_invalidated
+            .load(std::sync::atomic::Ordering::SeqCst));
 
         // Worst-case timings:
         // validation:       |___________|___________|___________|___________|
@@ -288,10 +357,13 @@ fn watchdog_validated_overloaded_system_fn(
 
         // check that the watchdog becomes invalid once we stop it's regular confirmation
         drop(confirmed);
-        allow_invalid.store(true, std::sync::atomic::Ordering::SeqCst);
         std::thread::sleep(VALIDATION_PERIOD * 2 + CONFIRMATION_PERIOD);
         // check that invalidation event happened!
-        assert!(!allow_invalid.load(std::sync::atomic::Ordering::SeqCst));
+        assert!(allocated
+            .header()
+            .watchdog_invalidated
+            .load(std::sync::atomic::Ordering::SeqCst));
+
         Ok(())
     }
 }

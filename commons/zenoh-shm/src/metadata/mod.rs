@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023 ZettaScale Technology
+// Copyright (c) 2025 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -12,6 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-tested_crate_module!(periodic_task);
-tested_crate_module!(validator);
-tested_crate_module!(confirmator);
+pub mod descriptor;
+
+tested_crate_module!(storage);
+tested_crate_module!(subscription);
+
+pub(crate) mod allocated_descriptor;
+
+mod segment;
