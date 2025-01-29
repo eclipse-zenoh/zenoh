@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use crossbeam_queue::SegQueue;
 use static_init::dynamic;
 
 use crate::posix_shm::cleanup::cleanup_orphaned_segments;
@@ -23,7 +24,7 @@ pub(crate) static mut CLEANUP: Cleanup = Cleanup::new();
 
 /// An RAII object that calls all registered routines upon destruction
 pub(crate) struct Cleanup {
-    cleanups: lockfree::queue::Queue<Option<Box<dyn FnOnce() + Send>>>,
+    cleanups: SegQueue<Option<Box<dyn FnOnce() + Send>>>,
 }
 
 impl Cleanup {

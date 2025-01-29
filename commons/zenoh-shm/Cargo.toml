@@ -46,8 +46,8 @@ static_init = { workspace = true }
 num-traits = { workspace = true }
 num_cpus = { workspace = true, optional = true }
 thread-priority = { workspace = true }
-lockfree = { workspace = true }
 stabby = { workspace = true }
+crossbeam-queue = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 advisory-lock = { workspace = true }

@@ -18,6 +18,7 @@ use std::{
     time::Duration,
 };
 
+use crossbeam_queue::SegQueue;
 use static_init::dynamic;
 use zenoh_core::{zread, zwrite};
 
@@ -53,18 +54,12 @@ enum Transaction {
     Remove,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct ConfirmedSegment {
-    transactions: lockfree::queue::Queue<(Transaction, OwnedMetadataDescriptor)>,
+    transactions: crossbeam_queue::SegQueue<(Transaction, OwnedMetadataDescriptor)>,
 }
 
 impl ConfirmedSegment {
-    fn new() -> Self {
-        Self {
-            transactions: lockfree::queue::Queue::default(),
-        }
-    }
-
     fn add(&self, descriptor: OwnedMetadataDescriptor) {
         self.transactions.push((Transaction::Add, descriptor));
     }
@@ -105,13 +100,13 @@ impl ConfirmedSegment {
 // TODO: think about linked table cleanup
 pub struct WatchdogConfirmator {
     confirmed: RwLock<BTreeMap<MetadataSegmentID, Arc<ConfirmedSegment>>>,
-    segment_transactions: Arc<lockfree::queue::Queue<Arc<ConfirmedSegment>>>,
+    segment_transactions: Arc<SegQueue<Arc<ConfirmedSegment>>>,
     _task: PeriodicTask,
 }
 
 impl WatchdogConfirmator {
     fn new(interval: Duration) -> Self {
-        let segment_transactions = Arc::<lockfree::queue::Queue<Arc<ConfirmedSegment>>>::default();
+        let segment_transactions = Arc::<SegQueue<Arc<ConfirmedSegment>>>::default();
 
         let c_segment_transactions = segment_transactions.clone();
         let mut segments: Vec<(
@@ -154,7 +149,7 @@ impl WatchdogConfirmator {
         }
         drop(guard);
 
-        let confirmed_segment = Arc::new(ConfirmedSegment::new());
+        let confirmed_segment = Arc::new(ConfirmedSegment::default());
         let confirmed_descriptoir =
             ConfirmedDescriptor::new(descriptor.clone(), confirmed_segment.clone());
 

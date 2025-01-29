@@ -30,7 +30,7 @@ enum Transaction {
 
 #[derive(Default)]
 struct ValidatedStorage {
-    transactions: lockfree::queue::Queue<(Transaction, OwnedMetadataDescriptor)>,
+    transactions: crossbeam_queue::SegQueue<(Transaction, OwnedMetadataDescriptor)>,
 }
 
 impl ValidatedStorage {
