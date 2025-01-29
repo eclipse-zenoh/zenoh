@@ -724,7 +724,7 @@ async fn test_advanced_retransmission_heartbeat() {
     const SLEEP: Duration = Duration::from_secs(1);
     const RECONNECT_SLEEP: Duration = Duration::from_secs(5);
     const HEARTBEAT_PERIOD: Duration = Duration::from_secs(4);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:27457";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27056";
 
     const ADVANCED_RETRANSMISSION_KEYEXPR: &str = "test/advanced/retransmission/heartbeat";
 
