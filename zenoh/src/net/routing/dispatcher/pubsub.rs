@@ -156,19 +156,6 @@ pub(crate) fn undeclare_subscription(
     }
 }
 
-pub(crate) fn disable_all_data_routes(tables: &mut Tables) {
-    pub(crate) fn disable_all_data_routes_rec(res: &mut Arc<Resource>) {
-        let res = get_mut_unchecked(res);
-        if let Some(ctx) = &mut res.context {
-            ctx.disable_data_routes();
-        }
-        for child in res.children.values_mut() {
-            disable_all_data_routes_rec(child);
-        }
-    }
-    disable_all_data_routes_rec(&mut tables.root_res)
-}
-
 pub(crate) fn disable_matches_data_routes(_tables: &mut Tables, res: &mut Arc<Resource>) {
     if res.context.is_some() {
         get_mut_unchecked(res).context_mut().disable_data_routes();
@@ -235,7 +222,13 @@ fn get_data_route(
         .and_then(|res| res.context.as_ref())
         .map(|ctx| &ctx.data_routes)
     {
-        return get_or_set_route(data_routes, face.whatami, local_context, compute_route);
+        return get_or_set_route(
+            data_routes,
+            tables.routes_version,
+            face.whatami,
+            local_context,
+            compute_route,
+        );
     }
     compute_route()
 }

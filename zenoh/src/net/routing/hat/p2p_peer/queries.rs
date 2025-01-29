@@ -47,7 +47,6 @@ use crate::{
         hat::{
             p2p_peer::initial_interest, CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources,
         },
-        router::disable_all_query_routes,
         RoutingContext,
     },
 };
@@ -375,8 +374,6 @@ pub(super) fn queries_new_face(
             }
         }
     }
-    // disable routes
-    disable_all_query_routes(tables);
 }
 
 lazy_static::lazy_static! {
