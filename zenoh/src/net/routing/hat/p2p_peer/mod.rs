@@ -257,7 +257,7 @@ impl HatBaseTrait for HatCode {
 
             if res.context.is_some() {
                 if let Some(key_expr) = res.key_expr() {
-                    subs_matches.extend(Resource::get_matches(&wtables.root_res, &key_expr));
+                    subs_matches.extend(Resource::get_matches(&wtables.root_res, key_expr));
                 }
             }
         }
@@ -269,7 +269,7 @@ impl HatBaseTrait for HatCode {
 
             if res.context.is_some() {
                 if let Some(key_expr) = res.key_expr() {
-                    qabls_matches.extend(Resource::get_matches(&wtables.root_res, &key_expr));
+                    qabls_matches.extend(Resource::get_matches(&wtables.root_res, key_expr));
                 }
             }
         }

@@ -445,11 +445,11 @@ fn propagate_forget_simple_subscription(
         let face_id = face.id;
         face_hat_mut!(&mut face).local_subs.retain(|res, &mut id| {
             if let Some(key_expr) = res.key_expr() {
-                if !Resource::any_matches(&root, &key_expr, |m| {
+                if !Resource::any_matches(&root, key_expr, |m| {
                     m.context.is_some()
-                        && (remote_simple_subs(&m, face_id)
-                            || remote_linkstatepeer_subs(tables, &m)
-                            || remote_router_subs(tables, &m))
+                        && (remote_simple_subs(m, face_id)
+                            || remote_linkstatepeer_subs(tables, m)
+                            || remote_router_subs(tables, m))
                 }) {
                     send_declare(
                         &primitives,
@@ -689,11 +689,11 @@ pub(super) fn undeclare_simple_subscription(
             let face_id = face.id;
             face_hat_mut!(&mut face).local_subs.retain(|res, &mut id| {
                 if let Some(key_expr) = res.key_expr() {
-                    if !Resource::any_matches(&root, &key_expr, |m| {
+                    if !Resource::any_matches(&root, key_expr, |m| {
                         m.context.is_some()
-                            && (remote_simple_subs(&m, face_id)
-                                || remote_linkstatepeer_subs(tables, &m)
-                                || remote_router_subs(tables, &m))
+                            && (remote_simple_subs(m, face_id)
+                                || remote_linkstatepeer_subs(tables, m)
+                                || remote_router_subs(tables, m))
                     }) {
                         send_declare(
                             &primitives,

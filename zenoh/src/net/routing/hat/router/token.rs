@@ -464,11 +464,11 @@ fn propagate_forget_simple_token(
             .local_tokens
             .retain(|res, &mut id| {
                 if let Some(key_expr) = res.key_expr() {
-                    if !Resource::any_matches(&root, &key_expr, |m| {
+                    if !Resource::any_matches(&root, key_expr, |m| {
                         m.context.is_some()
-                            && (remote_simple_tokens(tables, &m, face_id, face_zid)
-                                || remote_linkstatepeer_tokens(tables, &m)
-                                || remote_router_tokens(tables, &m))
+                            && (remote_simple_tokens(tables, m, face_id, face_zid)
+                                || remote_linkstatepeer_tokens(tables, m)
+                                || remote_router_tokens(tables, m))
                     }) {
                         send_declare(
                             &primitives,
@@ -723,11 +723,11 @@ pub(super) fn undeclare_simple_token(
                     .local_tokens
                     .retain(|res, &mut id| {
                         if let Some(key_expr) = res.key_expr() {
-                            if !Resource::any_matches(&root, &key_expr, |m| {
+                            if !Resource::any_matches(&root, key_expr, |m| {
                                 m.context.is_some()
-                                    && (remote_simple_tokens(tables, &m, face_id, face_zid)
-                                        || remote_linkstatepeer_tokens(tables, &m)
-                                        || remote_router_tokens(tables, &m))
+                                    && (remote_simple_tokens(tables, m, face_id, face_zid)
+                                        || remote_linkstatepeer_tokens(tables, m)
+                                        || remote_router_tokens(tables, m))
                             }) {
                                 send_declare(
                                     &primitives,

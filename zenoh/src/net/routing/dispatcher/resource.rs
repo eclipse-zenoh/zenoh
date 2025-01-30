@@ -658,7 +658,7 @@ impl Resource {
     pub(crate) fn get_matches(root: &Arc<Resource>, key_expr: &keyexpr) -> Vec<Arc<Resource>> {
         let mut vec = Vec::new();
         Self::iter_matches(root, key_expr, |res| vec.push(res.clone()));
-        vec.sort_unstable_by_key(|res| Arc::as_ptr(res));
+        vec.sort_unstable_by_key(Arc::as_ptr);
         vec.dedup_by_key(|res| Arc::as_ptr(res));
         vec
     }

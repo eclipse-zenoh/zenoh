@@ -427,10 +427,10 @@ fn propagate_forget_simple_queryable(
             .local_qabls
             .retain(|res, &mut (id, _)| {
                 if let Some(key_expr) = res.key_expr() {
-                    if !Resource::any_matches(&root, &key_expr, |m| {
+                    if !Resource::any_matches(&root, key_expr, |m| {
                         m.context.is_some()
-                            && (remote_simple_qabls(&m, face_id)
-                                || remote_linkstatepeer_qabls(tables, &m))
+                            && (remote_simple_qabls(m, face_id)
+                                || remote_linkstatepeer_qabls(tables, m))
                     }) {
                         send_declare(
                             &primitives,
@@ -588,10 +588,10 @@ pub(super) fn undeclare_simple_queryable(
             let face_id = face.id;
             face_hat_mut!(face).local_qabls.retain(|res, &mut (id, _)| {
                 if let Some(key_expr) = res.key_expr() {
-                    if !Resource::any_matches(&root, &key_expr, |m| {
+                    if !Resource::any_matches(&root, key_expr, |m| {
                         m.context.is_some()
-                            && (remote_simple_qabls(&m, face_id)
-                                || remote_linkstatepeer_qabls(tables, &m))
+                            && (remote_simple_qabls(m, face_id)
+                                || remote_linkstatepeer_qabls(tables, m))
                     }) {
                         send_declare(
                             &primitives,
