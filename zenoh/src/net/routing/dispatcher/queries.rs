@@ -186,7 +186,11 @@ pub(crate) fn undeclare_queryable(
 #[inline]
 fn insert_pending_query(outface: &mut Arc<FaceState>, query: Arc<Query>) -> RequestId {
     let outface_mut = get_mut_unchecked(outface);
-    outface_mut.next_qid += 1;
+    // This `wrapping_add` is kind of "safe" because it would require an incredible amount
+    // of parallel running queries to conflict a currently used id.
+    // However, query ids are encoded with varint algorithm, so an incremental id isn't a
+    // good match, and there is still room for optimization.
+    outface_mut.next_qid = outface_mut.next_qid.wrapping_add(1);
     let qid = outface_mut.next_qid;
     outface_mut.pending_queries.insert(
         qid,
