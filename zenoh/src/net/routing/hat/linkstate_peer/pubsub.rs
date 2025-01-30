@@ -1011,7 +1011,7 @@ impl HatPubSubTrait for HatCode {
         }
         tracing::trace!("get_matching_subscriptions({})", key_expr,);
 
-        for mres in Resource::get_matches(&tables.root_res, &key_expr).iter() {
+        for mres in Resource::get_matches(&tables.root_res, key_expr).iter() {
             let net = hat!(tables).linkstatepeers_net.as_ref().unwrap();
             insert_faces_for_subs(
                 &mut matching_subscriptions,

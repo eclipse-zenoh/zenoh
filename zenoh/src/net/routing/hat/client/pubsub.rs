@@ -423,7 +423,7 @@ impl HatPubSubTrait for HatCode {
             }
         }
 
-        for mres in Resource::get_matches(&tables.root_res, &key_expr).iter() {
+        for mres in Resource::get_matches(&tables.root_res, key_expr).iter() {
             for (sid, context) in &mres.session_ctxs {
                 if context.subs.is_some() && context.face.whatami == WhatAmI::Client {
                     matching_subscriptions

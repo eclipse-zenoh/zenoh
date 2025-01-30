@@ -1520,7 +1520,7 @@ impl HatQueriesTrait for HatCode {
             || *hat!(tables).elect_router(&tables.zid, key_expr, hat!(tables).shared_nodes.iter())
                 == tables.zid;
 
-        for mres in Resource::get_matches(&tables.root_res, &key_expr).iter() {
+        for mres in Resource::get_matches(&tables.root_res, key_expr).iter() {
             if complete && !KeyExpr::keyexpr_include(mres.expr(), key_expr) {
                 continue;
             }

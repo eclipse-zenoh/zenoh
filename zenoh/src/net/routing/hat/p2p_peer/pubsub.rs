@@ -687,7 +687,7 @@ impl HatPubSubTrait for HatCode {
         }
         tracing::trace!("get_matching_subscriptions({})", key_expr,);
 
-        for mres in Resource::get_matches(&tables.root_res, &key_expr).iter() {
+        for mres in Resource::get_matches(&tables.root_res, key_expr).iter() {
             for (sid, context) in &mres.session_ctxs {
                 if context.subs.is_some() {
                     matching_subscriptions
