@@ -154,11 +154,9 @@ pub(crate) fn disable_matches_data_routes(tables: &mut Tables, res: &mut Arc<Res
     if res.context.is_some() {
         if let Some(key_expr) = res.key_expr() {
             Resource::iter_matches(&tables.root_res, key_expr, |m| {
-                if !Arc::ptr_eq(res, m) {
-                    unsafe { &mut *Arc::as_ptr(m).cast_mut() }
-                        .context_mut()
-                        .disable_data_routes()
-                }
+                unsafe { &mut *Arc::as_ptr(m).cast_mut() }
+                    .context_mut()
+                    .disable_data_routes()
             })
         }
     }
