@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    borrow::Cow,
     collections::HashMap,
     sync::{atomic::Ordering, Arc},
 };
@@ -199,10 +198,10 @@ fn simple_qabls(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 }
 
 #[inline]
-fn remote_simple_qabls(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
+fn remote_simple_qabls(res: &Arc<Resource>, face_id: usize) -> bool {
     res.session_ctxs
         .values()
-        .any(|ctx| ctx.face.id != face.id && ctx.qabl.is_some())
+        .any(|ctx| ctx.face.id != face_id && ctx.qabl.is_some())
 }
 
 fn propagate_forget_simple_queryable(
@@ -229,19 +228,16 @@ fn propagate_forget_simple_queryable(
                 ),
             );
         }
-        for res in face_hat!(face)
-            .local_qabls
-            .keys()
-            .cloned()
-            .collect::<Vec<Arc<Resource>>>()
-        {
-            if !res.context().matches.iter().any(|m| {
-                m.upgrade()
-                    .is_some_and(|m| m.context.is_some() && remote_simple_qabls(&m, face))
-            }) {
-                if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(&res) {
+        let root = tables.root_res.clone();
+        let primitives = face.primitives.clone();
+        let face_id = face.id;
+        face_hat_mut!(face).local_qabls.retain(|res, &mut (id, _)| {
+            if let Some(key_expr) = res.key_expr() {
+                if !Resource::any_matches(&root, &key_expr, |m| {
+                    m.context.is_some() && remote_simple_qabls(m, face_id)
+                }) {
                     send_declare(
-                        &face.primitives,
+                        &primitives,
                         RoutingContext::with_expr(
                             Declare {
                                 interest_id: None,
@@ -256,9 +252,11 @@ fn propagate_forget_simple_queryable(
                             res.expr().to_string(),
                         ),
                     );
+                    return false;
                 }
             }
-        }
+            true
+        });
     }
 }
 
@@ -284,7 +282,7 @@ pub(super) fn undeclare_simple_queryable(
             propagate_simple_queryable(tables, res, None, send_declare);
         }
         if simple_qabls.len() == 1 {
-            let mut face = &mut simple_qabls[0];
+            let face = &mut simple_qabls[0];
             if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
                 send_declare(
                     &face.primitives,
@@ -303,19 +301,16 @@ pub(super) fn undeclare_simple_queryable(
                     ),
                 );
             }
-            for res in face_hat!(face)
-                .local_qabls
-                .keys()
-                .cloned()
-                .collect::<Vec<Arc<Resource>>>()
-            {
-                if !res.context().matches.iter().any(|m| {
-                    m.upgrade()
-                        .is_some_and(|m| m.context.is_some() && (remote_simple_qabls(&m, face)))
-                }) {
-                    if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
+            let root = tables.root_res.clone();
+            let primitives = face.primitives.clone();
+            let face_id = face.id;
+            face_hat_mut!(face).local_qabls.retain(|res, &mut (id, _)| {
+                if let Some(key_expr) = res.key_expr() {
+                    if !Resource::any_matches(&root, &key_expr, |m| {
+                        m.context.is_some() && remote_simple_qabls(m, face_id)
+                    }) {
                         send_declare(
-                            &face.primitives,
+                            &primitives,
                             RoutingContext::with_expr(
                                 Declare {
                                     interest_id: None,
@@ -330,9 +325,11 @@ pub(super) fn undeclare_simple_queryable(
                                 res.expr().to_string(),
                             ),
                         );
+                        return false;
                     }
                 }
-            }
+                true
+            });
         }
     }
 }
@@ -647,15 +644,7 @@ impl HatQueriesTrait for HatCode {
             }
         }
 
-        let res = Resource::get_resource(expr.prefix, expr.suffix);
-        let matches = res
-            .as_ref()
-            .and_then(|res| res.context.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
-
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
+        for mres in Resource::get_matches(&tables.root_res, &key_expr).iter() {
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
             for (sid, context) in &mres.session_ctxs {
                 if source_type == WhatAmI::Client || context.face.whatami == WhatAmI::Client {
@@ -696,15 +685,8 @@ impl HatQueriesTrait for HatCode {
             key_expr,
             complete
         );
-        let res = Resource::get_resource(&tables.root_res, key_expr);
-        let matches = res
-            .as_ref()
-            .and_then(|res| res.context.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
 
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
+        for mres in Resource::get_matches(&tables.root_res, &key_expr).iter() {
             if complete && !KeyExpr::keyexpr_include(mres.expr(), key_expr) {
                 continue;
             }

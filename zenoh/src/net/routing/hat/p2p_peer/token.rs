@@ -15,11 +15,14 @@
 use std::sync::{atomic::Ordering, Arc};
 
 use zenoh_config::WhatAmI;
-use zenoh_protocol::network::{
-    declare::{common::ext::WireExprType, TokenId},
-    ext,
-    interest::{InterestId, InterestMode},
-    Declare, DeclareBody, DeclareToken, UndeclareToken,
+use zenoh_protocol::{
+    core::ZenohIdProto,
+    network::{
+        declare::{common::ext::WireExprType, TokenId},
+        ext,
+        interest::{InterestId, InterestMode},
+        Declare, DeclareBody, DeclareToken, UndeclareToken,
+    },
 };
 use zenoh_sync::get_mut_unchecked;
 
@@ -242,10 +245,15 @@ fn simple_tokens(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 }
 
 #[inline]
-fn remote_simple_tokens(tables: &Tables, res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
+fn remote_simple_tokens(
+    tables: &Tables,
+    res: &Arc<Resource>,
+    face_id: usize,
+    face_zid: ZenohIdProto,
+) -> bool {
     res.session_ctxs
         .values()
-        .any(|ctx| (ctx.face.id != face.id || face.zid == tables.zid) && ctx.token)
+        .any(|ctx| (ctx.face.id != face_id || face_zid == tables.zid) && ctx.token)
 }
 
 fn propagate_forget_simple_token(
@@ -299,61 +307,38 @@ fn propagate_forget_simple_token(
                 ),
             );
         }
-        for res in face_hat!(face)
+        let root = tables.root_res.clone();
+        let primitives = face.primitives.clone();
+        let face_id = face.id;
+        let face_zid = face.zid;
+        face_hat_mut!(&mut face)
             .local_tokens
-            .keys()
-            .cloned()
-            .collect::<Vec<Arc<Resource>>>()
-        {
-            if !res.context().matches.iter().any(|m| {
-                m.upgrade()
-                    .is_some_and(|m| m.context.is_some() && remote_simple_tokens(tables, &m, &face))
-            }) {
-                if let Some(id) = face_hat_mut!(&mut face).local_tokens.remove(&res) {
-                    send_declare(
-                        &face.primitives,
-                        RoutingContext::with_expr(
-                            Declare {
-                                interest_id: None,
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::UndeclareToken(UndeclareToken {
-                                    id,
-                                    ext_wire_expr: WireExprType::null(),
-                                }),
-                            },
-                            res.expr().to_string(),
-                        ),
-                    );
-                } else if face_hat!(face)
-                    .remote_interests
-                    .values()
-                    .any(|i| i.options.tokens() && i.matches(&res) && !i.options.aggregate())
-                {
-                    // Token has never been declared on this face.
-                    // Send an Undeclare with a one shot generated id and a WireExpr ext.
-                    send_declare(
-                        &face.primitives,
-                        RoutingContext::with_expr(
-                            Declare {
-                                interest_id: None,
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::UndeclareToken(UndeclareToken {
-                                    id: face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst),
-                                    ext_wire_expr: WireExprType {
-                                        wire_expr: Resource::get_best_key(&res, "", face.id),
-                                    },
-                                }),
-                            },
-                            res.expr().to_string(),
-                        ),
-                    );
+            .retain(|res, &mut id| {
+                if let Some(key_expr) = res.key_expr() {
+                    if !Resource::any_matches(&root, &key_expr, |m| {
+                        m.context.is_some() && remote_simple_tokens(tables, &m, face_id, face_zid)
+                    }) {
+                        send_declare(
+                            &primitives,
+                            RoutingContext::with_expr(
+                                Declare {
+                                    interest_id: None,
+                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                                    body: DeclareBody::UndeclareToken(UndeclareToken {
+                                        id,
+                                        ext_wire_expr: WireExprType::null(),
+                                    }),
+                                },
+                                res.expr().to_string(),
+                            ),
+                        );
+                        return false;
+                    }
                 }
-            }
-        }
+                true
+            });
     }
 }
 
@@ -398,37 +383,39 @@ pub(super) fn undeclare_simple_token(
                         ),
                     );
                 }
-                for res in face_hat!(face)
+                let root = tables.root_res.clone();
+                let primitives = face.primitives.clone();
+                let face_id = face.id;
+                let face_zid = face.zid;
+                face_hat_mut!(&mut face)
                     .local_tokens
-                    .keys()
-                    .cloned()
-                    .collect::<Vec<Arc<Resource>>>()
-                {
-                    if !res.context().matches.iter().any(|m| {
-                        m.upgrade().is_some_and(|m| {
-                            m.context.is_some() && remote_simple_tokens(tables, &m, face)
-                        })
-                    }) {
-                        if let Some(id) = face_hat_mut!(&mut face).local_tokens.remove(&res) {
-                            send_declare(
-                                &face.primitives,
-                                RoutingContext::with_expr(
-                                    Declare {
-                                        interest_id: None,
-                                        ext_qos: ext::QoSType::DECLARE,
-                                        ext_tstamp: None,
-                                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                                        body: DeclareBody::UndeclareToken(UndeclareToken {
-                                            id,
-                                            ext_wire_expr: WireExprType::null(),
-                                        }),
-                                    },
-                                    res.expr().to_string(),
-                                ),
-                            );
+                    .retain(|res, &mut id| {
+                        if let Some(key_expr) = res.key_expr() {
+                            if !Resource::any_matches(&root, &key_expr, |m| {
+                                m.context.is_some()
+                                    && remote_simple_tokens(tables, &m, face_id, face_zid)
+                            }) {
+                                send_declare(
+                                    &primitives,
+                                    RoutingContext::with_expr(
+                                        Declare {
+                                            interest_id: None,
+                                            ext_qos: ext::QoSType::DECLARE,
+                                            ext_tstamp: None,
+                                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                                            body: DeclareBody::UndeclareToken(UndeclareToken {
+                                                id,
+                                                ext_wire_expr: WireExprType::null(),
+                                            }),
+                                        },
+                                        res.expr().to_string(),
+                                    ),
+                                );
+                                return false;
+                            }
                         }
-                    }
-                }
+                        true
+                    });
             }
         }
     }

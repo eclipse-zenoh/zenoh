@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    borrow::Cow,
     collections::HashMap,
     sync::{atomic::Ordering, Arc},
 };
@@ -377,16 +376,7 @@ impl HatPubSubTrait for HatCode {
             }
         }
 
-        let res = Resource::get_resource(expr.prefix, expr.suffix);
-        let matches = res
-            .as_ref()
-            .and_then(|res| res.context.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
-
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
-
+        for mres in Resource::get_matches(&tables.root_res, &key_expr).iter() {
             for (sid, context) in &mres.session_ctxs {
                 if context.subs.is_some() && context.face.whatami == WhatAmI::Client {
                     route.entry(*sid).or_insert_with(|| {
@@ -433,16 +423,7 @@ impl HatPubSubTrait for HatCode {
             }
         }
 
-        let res = Resource::get_resource(&tables.root_res, key_expr);
-        let matches = res
-            .as_ref()
-            .and_then(|res| res.context.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
-
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
-
+        for mres in Resource::get_matches(&tables.root_res, &key_expr).iter() {
             for (sid, context) in &mres.session_ctxs {
                 if context.subs.is_some() && context.face.whatami == WhatAmI::Client {
                     matching_subscriptions

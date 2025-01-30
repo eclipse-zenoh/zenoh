@@ -20,7 +20,6 @@ use std::{
 
 use async_trait::async_trait;
 use tokio_util::sync::CancellationToken;
-use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
     core::WireExpr,
     network::{
@@ -220,15 +219,10 @@ pub(crate) fn declare_interest(
                 } else {
                     let mut fullexpr = prefix.expr().to_string();
                     fullexpr.push_str(expr.suffix.as_ref());
-                    let mut matches = keyexpr::new(fullexpr.as_str())
-                        .map(|ke| Resource::get_matches(&rtables, ke))
-                        .unwrap_or_default();
                     drop(rtables);
                     let mut wtables = zwrite!(tables_ref.tables);
-                    let mut res =
+                    let res =
                         Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
-                    matches.push(Arc::downgrade(&res));
-                    Resource::match_resource(&wtables, &mut res, matches);
                     (res, wtables)
                 };
 

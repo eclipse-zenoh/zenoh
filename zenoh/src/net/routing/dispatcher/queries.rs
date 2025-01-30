@@ -23,7 +23,7 @@ use zenoh_buffers::ZBuf;
 #[cfg(feature = "stats")]
 use zenoh_protocol::zenoh::reply::ReplyBody;
 use zenoh_protocol::{
-    core::{key_expr::keyexpr, Encoding, WireExpr},
+    core::{Encoding, WireExpr},
     network::{
         declare::{ext, queryable::ext::QueryableInfoType, QueryableId},
         request::{
@@ -99,15 +99,10 @@ pub(crate) fn declare_queryable(
                 } else {
                     let mut fullexpr = prefix.expr().to_string();
                     fullexpr.push_str(expr.suffix.as_ref());
-                    let mut matches = keyexpr::new(fullexpr.as_str())
-                        .map(|ke| Resource::get_matches(&rtables, ke))
-                        .unwrap_or_default();
                     drop(rtables);
                     let mut wtables = zwrite!(tables.tables);
-                    let mut res =
+                    let res =
                         Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
-                    matches.push(Arc::downgrade(&res));
-                    Resource::match_resource(&wtables, &mut res, matches);
                     (res, wtables)
                 };
 
@@ -339,16 +334,16 @@ impl Timed for QueryCleanup {
     }
 }
 
-pub(crate) fn disable_matches_query_routes(_tables: &mut Tables, res: &mut Arc<Resource>) {
+pub(crate) fn disable_matches_query_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
     if res.context.is_some() {
-        get_mut_unchecked(res).context_mut().disable_query_routes();
-        for match_ in &res.context().matches {
-            let mut match_ = match_.upgrade().unwrap();
-            if !Arc::ptr_eq(&match_, res) {
-                get_mut_unchecked(&mut match_)
-                    .context_mut()
-                    .disable_query_routes();
-            }
+        if let Some(key_expr) = res.key_expr() {
+            Resource::iter_matches(&tables.root_res, key_expr, |m| {
+                if !Arc::ptr_eq(res, m) {
+                    unsafe { &mut *Arc::as_ptr(m).cast_mut() }
+                        .context_mut()
+                        .disable_query_routes()
+                }
+            })
         }
     }
 }

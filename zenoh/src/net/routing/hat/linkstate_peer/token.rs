@@ -304,10 +304,15 @@ fn simple_tokens(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 }
 
 #[inline]
-fn remote_simple_tokens(tables: &Tables, res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
+fn remote_simple_tokens(
+    tables: &Tables,
+    res: &Arc<Resource>,
+    face_id: usize,
+    face_zid: ZenohIdProto,
+) -> bool {
     res.session_ctxs
         .values()
-        .any(|ctx| (ctx.face.id != face.id || face.zid == tables.zid) && ctx.token)
+        .any(|ctx| (ctx.face.id != face_id || face_zid == tables.zid) && ctx.token)
 }
 
 #[inline]
@@ -377,39 +382,40 @@ fn propagate_forget_simple_token(
                 ),
             );
         }
-        for res in face_hat!(face)
+        let root = tables.root_res.clone();
+        let primitives = face.primitives.clone();
+        let face_id = face.id;
+        let face_zid = face.zid;
+        face_hat_mut!(&mut face)
             .local_tokens
-            .keys()
-            .cloned()
-            .collect::<Vec<Arc<Resource>>>()
-        {
-            if !res.context().matches.iter().any(|m| {
-                m.upgrade().is_some_and(|m| {
-                    m.context.is_some()
-                        && (remote_simple_tokens(tables, &m, &face)
-                            || remote_linkstatepeer_tokens(tables, &m))
-                })
-            }) {
-                if let Some(id) = face_hat_mut!(&mut face).local_tokens.remove(&res) {
-                    send_declare(
-                        &face.primitives,
-                        RoutingContext::with_expr(
-                            Declare {
-                                interest_id: None,
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::UndeclareToken(UndeclareToken {
-                                    id,
-                                    ext_wire_expr: WireExprType::null(),
-                                }),
-                            },
-                            res.expr().to_string(),
-                        ),
-                    );
+            .retain(|res, &mut id| {
+                if let Some(key_expr) = res.key_expr() {
+                    if !Resource::any_matches(&root, &key_expr, |m| {
+                        m.context.is_some()
+                            && (remote_simple_tokens(tables, &m, face_id, face_zid)
+                                || remote_linkstatepeer_tokens(tables, &m))
+                    }) {
+                        send_declare(
+                            &primitives,
+                            RoutingContext::with_expr(
+                                Declare {
+                                    interest_id: None,
+                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                                    body: DeclareBody::UndeclareToken(UndeclareToken {
+                                        id,
+                                        ext_wire_expr: WireExprType::null(),
+                                    }),
+                                },
+                                res.expr().to_string(),
+                            ),
+                        );
+                        return false;
+                    }
                 }
-            }
-        }
+                true
+            });
     }
 }
 
@@ -532,39 +538,40 @@ pub(super) fn undeclare_simple_token(
                         ),
                     );
                 }
-                for res in face_hat!(face)
+                let root = tables.root_res.clone();
+                let primitives = face.primitives.clone();
+                let face_id = face.id;
+                let face_zid = face.zid;
+                face_hat_mut!(&mut face)
                     .local_tokens
-                    .keys()
-                    .cloned()
-                    .collect::<Vec<Arc<Resource>>>()
-                {
-                    if !res.context().matches.iter().any(|m| {
-                        m.upgrade().is_some_and(|m| {
-                            m.context.is_some()
-                                && (remote_simple_tokens(tables, &m, face)
-                                    || remote_linkstatepeer_tokens(tables, &m))
-                        })
-                    }) {
-                        if let Some(id) = face_hat_mut!(&mut face).local_tokens.remove(&res) {
-                            send_declare(
-                                &face.primitives,
-                                RoutingContext::with_expr(
-                                    Declare {
-                                        interest_id: None,
-                                        ext_qos: ext::QoSType::DECLARE,
-                                        ext_tstamp: None,
-                                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                                        body: DeclareBody::UndeclareToken(UndeclareToken {
-                                            id,
-                                            ext_wire_expr: WireExprType::null(),
-                                        }),
-                                    },
-                                    res.expr().to_string(),
-                                ),
-                            );
+                    .retain(|res, &mut id| {
+                        if let Some(key_expr) = res.key_expr() {
+                            if !Resource::any_matches(&root, &key_expr, |m| {
+                                m.context.is_some()
+                                    && (remote_simple_tokens(tables, &m, face_id, face_zid)
+                                        || remote_linkstatepeer_tokens(tables, &m))
+                            }) {
+                                send_declare(
+                                    &primitives,
+                                    RoutingContext::with_expr(
+                                        Declare {
+                                            interest_id: None,
+                                            ext_qos: ext::QoSType::DECLARE,
+                                            ext_tstamp: None,
+                                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                                            body: DeclareBody::UndeclareToken(UndeclareToken {
+                                                id,
+                                                ext_wire_expr: WireExprType::null(),
+                                            }),
+                                        },
+                                        res.expr().to_string(),
+                                    ),
+                                );
+                                return false;
+                            }
                         }
-                    }
-                }
+                        true
+                    });
             }
         }
     }
@@ -669,7 +676,7 @@ pub(crate) fn declare_token_interest(
                 if hat!(tables).linkstatepeer_tokens.iter().any(|token| {
                     token.context.is_some()
                         && token.matches(res)
-                        && (remote_simple_tokens(tables, token, face)
+                        && (remote_simple_tokens(tables, token, face.id, face.zid)
                             || remote_linkstatepeer_tokens(tables, token))
                 }) {
                     let id = make_token_id(res, face, mode);
@@ -692,7 +699,7 @@ pub(crate) fn declare_token_interest(
                 for token in &hat!(tables).linkstatepeer_tokens {
                     if token.context.is_some()
                         && token.matches(res)
-                        && (remote_simple_tokens(tables, token, face)
+                        && (remote_simple_tokens(tables, token, face.id, face.zid)
                             || remote_linkstatepeer_tokens(tables, token))
                     {
                         let id = make_token_id(token, face, mode);
@@ -717,7 +724,7 @@ pub(crate) fn declare_token_interest(
         } else {
             for token in &hat!(tables).linkstatepeer_tokens {
                 if token.context.is_some()
-                    && (remote_simple_tokens(tables, token, face)
+                    && (remote_simple_tokens(tables, token, face.id, face.zid)
                         || remote_linkstatepeer_tokens(tables, token))
                 {
                     let id = make_token_id(token, face, mode);
