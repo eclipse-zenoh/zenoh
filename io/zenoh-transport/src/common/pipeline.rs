@@ -55,6 +55,8 @@ const RBLEN: usize = QueueSizeConf::MAX;
 struct StageInRefill {
     n_ref_r: Waiter,
     s_ref_r: RingBufferReader<WBatch, RBLEN>,
+    batch_config: (usize, BatchConfig),
+    batch_allocs: usize,
 }
 
 #[derive(Debug)]
@@ -68,7 +70,12 @@ impl std::error::Error for TransportClosed {}
 
 impl StageInRefill {
     fn pull(&mut self) -> Option<WBatch> {
-        self.s_ref_r.pull()
+        if self.batch_allocs < self.batch_config.0 {
+            self.batch_allocs += 1;
+            Some(WBatch::new(self.batch_config.1))
+        } else {
+            self.s_ref_r.pull()
+        }
     }
 
     fn wait(&self) -> bool {
@@ -666,12 +673,7 @@ impl TransmissionPipeline {
 
             // Create the refill ring buffer
             // This is a SPSC ring buffer
-            let (mut s_ref_w, s_ref_r) = RingBuffer::<WBatch, RBLEN>::init();
-            // Fill the refill ring buffer with batches
-            for _ in 0..*num {
-                let batch = WBatch::new(config.batch);
-                assert!(s_ref_w.push(batch).is_none());
-            }
+            let (s_ref_w, s_ref_r) = RingBuffer::<WBatch, RBLEN>::init();
             // Create the channel for notifying that new batches are in the refill ring buffer
             // This is a SPSC channel
             let (n_ref_w, n_ref_r) = event::new();
@@ -689,7 +691,12 @@ impl TransmissionPipeline {
             });
 
             stage_in.push(Mutex::new(StageIn {
-                s_ref: StageInRefill { n_ref_r, s_ref_r },
+                s_ref: StageInRefill {
+                    n_ref_r,
+                    s_ref_r,
+                    batch_config: (*num, config.batch),
+                    batch_allocs: 0,
+                },
                 s_out: StageInOut {
                     n_out_w: n_out_w.clone(),
                     s_out_w,
