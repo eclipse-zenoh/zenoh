@@ -566,10 +566,12 @@ impl Resource {
             .unwrap_or_else(|| [&self.expr, suffix].concat().into())
     }
 
+    /// Test a predicate on all resources matching a keyexpr from a root resource,
+    /// short-circuiting if the predicate return true.
     pub(crate) fn any_matches(
         root: &Arc<Resource>,
         key_expr: &keyexpr,
-        mut f: impl FnMut(&Arc<Resource>) -> bool,
+        mut predicate: impl FnMut(&Arc<Resource>) -> bool,
     ) -> bool {
         macro_rules! return_if_true {
             ($expr:expr) => {
@@ -641,20 +643,27 @@ impl Resource {
             }
             false
         }
-        any_matches_rec(key_expr, root, &mut f)
+        any_matches_rec(key_expr, root, &mut predicate)
     }
 
+    /// Apply a function on all resources matching a keyexpr from a root resource.
+    ///
+    /// The same resource node may be matched several times because of wildcards.
     pub(crate) fn iter_matches(
         root: &Arc<Resource>,
         key_expr: &keyexpr,
-        mut f: impl FnMut(&Arc<Resource>),
+        mut func: impl FnMut(&Arc<Resource>),
     ) {
         Self::any_matches(root, key_expr, |res| {
-            f(res);
+            func(res);
             false
         });
     }
 
+    /// Collect all resources matching a keyexpr from a root resource into a vector.
+    ///
+    /// Even if, the same resource node may be matched several times because of wildcards,
+    /// the result is deduplicated before being returned.
     pub(crate) fn get_matches(root: &Arc<Resource>, key_expr: &keyexpr) -> Vec<Arc<Resource>> {
         let mut vec = Vec::new();
         Self::iter_matches(root, key_expr, |res| vec.push(res.clone()));
