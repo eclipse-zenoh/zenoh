@@ -314,6 +314,7 @@ impl TransportLinkMulticastUniversal {
                 wait_before_close: self.transport.manager.config.wait_before_close,
                 batching_enabled: self.transport.manager.config.batching,
                 batching_time_limit: self.transport.manager.config.queue_backoff,
+                queue_alloc: self.transport.manager.config.queue_alloc,
             };
             // The pipeline
             let (producer, consumer) = TransmissionPipeline::make(tpc, &priority_tx);

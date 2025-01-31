@@ -475,6 +475,12 @@
             /// The maximum time limit (in ms) a message should be retained for batching when back-pressure happens.
             time_limit: 1,
           },
+          allocation: {
+            /// Mode for memoery allocation of batches in the prioritiey queues. 
+            /// - "init": batches are allocated at initialization time. 
+            /// - "lazy": batches are allocated when needed up to the maximum number of batches configured in the size configuration parameter.
+            mode: "init",
+          },
         },
       },
       /// Configure the zenoh RX parameters of a link

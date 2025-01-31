@@ -66,6 +66,7 @@ impl TransportLinkUnicastUniversal {
             wait_before_close: transport.manager.config.wait_before_close,
             batching_enabled: transport.manager.config.batching,
             batching_time_limit: transport.manager.config.queue_backoff,
+            queue_alloc: transport.manager.config.queue_alloc,
         };
 
         // The pipeline

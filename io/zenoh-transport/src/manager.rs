@@ -15,7 +15,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use rand::{RngCore, SeedableRng};
 use tokio::sync::Mutex as AsyncMutex;
-use zenoh_config::{Config, LinkRxConf, QueueConf, QueueSizeConf};
+use zenoh_config::{Config, LinkRxConf, QueueAllocConf, QueueConf, QueueSizeConf};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::NewLinkChannelSender;
 use zenoh_protocol::{
@@ -112,6 +112,7 @@ pub struct TransportManagerConfig {
     pub wait_before_close: Duration,
     pub queue_size: [usize; Priority::NUM],
     pub queue_backoff: Duration,
+    pub queue_alloc: QueueAllocConf,
     pub defrag_buff_size: usize,
     pub link_rx_buffer_size: usize,
     pub unicast: TransportManagerConfigUnicast,
@@ -143,6 +144,7 @@ pub struct TransportManagerBuilder {
     wait_before_drop: (Duration, Duration),
     wait_before_close: Duration,
     queue_size: QueueSizeConf,
+    queue_alloc: QueueAllocConf,
     defrag_buff_size: usize,
     link_rx_buffer_size: usize,
     unicast: TransportManagerBuilderUnicast,
@@ -188,6 +190,11 @@ impl TransportManagerBuilder {
 
     pub fn batching_time_limit(mut self, batching_time_limit: Duration) -> Self {
         self.batching_time_limit = batching_time_limit;
+        self
+    }
+
+    pub fn queue_alloc(mut self, queue_alloc: QueueAllocConf) -> Self {
+        self.queue_alloc = queue_alloc;
         self
     }
 
@@ -326,6 +333,7 @@ impl TransportManagerBuilder {
             wait_before_close: self.wait_before_close,
             queue_size,
             queue_backoff: self.batching_time_limit,
+            queue_alloc: self.queue_alloc,
             defrag_buff_size: self.defrag_buff_size,
             link_rx_buffer_size: self.link_rx_buffer_size,
             unicast: unicast.config,
@@ -377,6 +385,7 @@ impl Default for TransportManagerBuilder {
             ),
             wait_before_close: duration_from_i64us(*cc_block.wait_before_close()),
             queue_size: queue.size,
+            queue_alloc: queue.allocation,
             batching_time_limit: Duration::from_millis(backoff),
             defrag_buff_size: *link_rx.max_message_size(),
             link_rx_buffer_size: *link_rx.buffer_size(),
