@@ -476,8 +476,8 @@
             time_limit: 1,
           },
           allocation: {
-            /// Mode for memoery allocation of batches in the prioritiey queues. 
-            /// - "init": batches are allocated at initialization time. 
+            /// Mode for memory allocation of batches in the priority queues. 
+            /// - "init": batches are allocated at queue initialization time. 
             /// - "lazy": batches are allocated when needed up to the maximum number of batches configured in the size configuration parameter.
             mode: "init",
           },
