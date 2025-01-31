@@ -70,11 +70,14 @@ impl std::error::Error for TransportClosed {}
 
 impl StageInRefill {
     fn pull(&mut self) -> Option<WBatch> {
-        if self.batch_allocs < self.batch_config.0 {
-            self.batch_allocs += 1;
-            Some(WBatch::new(self.batch_config.1))
-        } else {
-            self.s_ref_r.pull()
+        match self.s_ref_r.pull() {
+            Some(b) => Some(b),
+            None if self.batch_allocs < self.batch_config.0 => {
+                println!("..............................................");
+                self.batch_allocs += 1;
+                Some(WBatch::new(self.batch_config.1))
+            }
+            None => None,
         }
     }
 
