@@ -273,6 +273,7 @@ impl TransportManagerBuilder {
         ));
         self = self.wait_before_close(duration_from_i64us(*cc_block.wait_before_close()));
         self = self.queue_size(link.tx().queue().size().clone());
+        self = self.queue_alloc(*link.tx().queue().allocation());
         self = self.tx_threads(*link.tx().threads());
         self = self.protocols(link.protocols().clone());
 
