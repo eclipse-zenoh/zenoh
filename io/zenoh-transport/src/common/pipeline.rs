@@ -73,7 +73,6 @@ impl StageInRefill {
         match self.s_ref_r.pull() {
             Some(b) => Some(b),
             None if self.batch_allocs < self.batch_config.0 => {
-                println!("..............................................");
                 self.batch_allocs += 1;
                 Some(WBatch::new(self.batch_config.1))
             }
