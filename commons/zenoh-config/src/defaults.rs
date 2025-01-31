@@ -87,15 +87,6 @@ pub mod scouting {
         }
         pub const autoconnect_strategy: crate::ModeDependentValue<crate::AutoConnectStrategy> =
             crate::ModeDependentValue::Unique(crate::AutoConnectStrategy::Always);
-        // pub mod autoconnect_strategy {
-        //     pub const router: &crate::AutoConnectStrategy::Always =
-        //         &crate::AutoConnectStrategy::Always;
-        //     pub const peer: &crate::AutoConnectStrategy::Always =
-        //         &crate::AutoConnectStrategy::Always;
-        //     pub const client: &crate::AutoConnectStrategy::Always =
-        //         &crate::AutoConnectStrategy::Always;
-        //     mode_accessor!(crate::AutoConnectStrategy);
-        // }
         pub mod listen {
             pub const router: &bool = &true;
             pub const peer: &bool = &true;
@@ -126,15 +117,6 @@ pub mod scouting {
         }
         pub const autoconnect_strategy: crate::ModeDependentValue<crate::AutoConnectStrategy> =
             crate::ModeDependentValue::Unique(crate::AutoConnectStrategy::Always);
-        // pub mod autoconnect_strategy {
-        //     pub const router: &crate::AutoConnectStrategy::Always =
-        //         &crate::AutoConnectStrategy::Always;
-        //     pub const peer: &crate::AutoConnectStrategy::Always =
-        //         &crate::AutoConnectStrategy::Always;
-        //     pub const client: &crate::AutoConnectStrategy::Always =
-        //         &crate::AutoConnectStrategy::Always;
-        //     mode_accessor!(crate::AutoConnectStrategy);
-        // }
     }
 }
 
