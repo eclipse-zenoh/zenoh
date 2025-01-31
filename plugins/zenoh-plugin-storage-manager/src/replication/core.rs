@@ -68,11 +68,8 @@ impl Replication {
     ///
     /// # Replica discovery
     ///
-    /// To discover a Replica, this method will create a Digest subscriber, wait to receive a
-    /// *valid* Digest and, upon reception, ask that Replica for all its entries.
-    ///
-    /// To avoid waiting indefinitely (in case there are no other Replica on the network), the
-    /// subscriber will wait for, at most, the duration of two Intervals.
+    /// To discover a Replica, this method will craft a specific [AlignmentQuery] using the
+    /// [Discovery] variant.
     pub(crate) async fn initial_alignment(&self) {
         let ke_all_replicas = match keformat!(
             aligner_key_expr_formatter::formatter(),
@@ -160,7 +157,7 @@ impl Replication {
                 }
             };
 
-            // We have no control over when a replica is going to be started. The purpose is here
+            // We have no control over when a replica is going to be started. The purpose here
             // is to try to align its publications and make it so that they happen more or less
             // at every interval (+ δ).
             let duration_until_next_interval = {
@@ -278,9 +275,9 @@ impl Replication {
 
     /// Spawns a task that subscribes to the [Digest] published by other Replicas.
     ///
-    /// Upon reception of a [Digest], it is compared with the local Replication Log. If this
-    /// comparison generates a [DigestDiff], the Aligner of the Replica that generated the [Digest]
-    /// that was processed is queried to start an alignment.
+    /// Upon reception of a [Digest], the local Digest is retrieved and both are compared. If this
+    /// comparison generates a [DigestDiff], the Aligner of the remote Replica is queried to start
+    /// an alignment.
     ///
     /// [DigestDiff]: super::digest::DigestDiff
     pub(crate) fn spawn_digest_subscriber(&self) -> JoinHandle<()> {
@@ -411,10 +408,10 @@ impl Replication {
 
     /// Spawns a task that handles alignment queries.
     ///
-    /// An alignment query will always come from a Replica. Hence, as multiple Replicas could query
-    /// at the same time, for each received query a new task is spawned. This newly spawned task is
-    /// responsible for fetching in the Replication Log or in the Storage the relevant information
-    /// to send to the Replica such that it can align its own Storage.
+    /// An alignment query will always come from a remote Replica. As multiple remote Replicas could
+    /// query at the same time, a new task is spawned for each received query. This newly spawned
+    /// task is responsible for fetching in the Replication Log or in the Storage the relevant
+    /// information to send to the remote Replica such that it can align its own Storage.
     pub(crate) fn spawn_aligner_queryable(&self) -> JoinHandle<()> {
         let replication = self.clone();
 
@@ -471,7 +468,7 @@ impl Replication {
         })
     }
 
-    /// Spawns a new task to query the Aligner of the Replica which potentially has data this
+    /// Spawns a new task to query the Aligner of the remote Replica which potentially has data this
     /// Storage is missing.
     ///
     /// This method will:
@@ -481,7 +478,7 @@ impl Replication {
     /// 3. Process all replies.
     ///
     /// Note that the processing of a reply can trigger a new query (requesting additional
-    /// information), spawning a new task.
+    /// information), consequently spawning a new task.
     ///
     /// This process is stateless and all the required information are carried in the query / reply.
     pub(crate) fn spawn_query_replica_aligner(
@@ -580,6 +577,18 @@ impl Replication {
     }
 }
 
+/// This function will search through the `events` structure and remove all event(s) that are
+/// "impacted" by the wildcard.
+///
+/// An event should be removed if:
+/// 1. The key expression of the wildcard, `wildcard_ke`, contains its key expression.
+/// 2. The timestamp of the event is older than the timestamp of the wildcard.
+/// 3. Their respective actions are "compatible": in particular, a Wildcard Put cannot "resuscitate"
+///    a deleted key expression. See the comments within this function for other special cases that
+///    need to be taken into consideration.
+///
+/// NOTE: This function is used to process both the `latest_updates` structure and the Replication
+///       Log. Given that their structures are identical, the code was factored out and put here.
 pub(crate) fn remove_events_overridden_by_wildcard_update(
     events: &mut HashMap<LogLatestKey, Event>,
     prefix: Option<&OwnedKeyExpr>,

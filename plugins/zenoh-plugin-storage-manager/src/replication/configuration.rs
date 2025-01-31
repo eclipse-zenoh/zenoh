@@ -79,6 +79,11 @@ impl Configuration {
         }
     }
 
+    /// Returns the `prefix`, if one is set, that is stripped before keys are stored in the Storage.
+    ///
+    /// This corresponds to the `strip_prefix` configuration parameter of the Storage.
+    ///
+    /// TODO Rename this field and method to `strip_prefix` for consistency.
     pub fn prefix(&self) -> Option<&OwnedKeyExpr> {
         self.prefix.as_ref()
     }
@@ -120,8 +125,8 @@ impl Configuration {
         Ok(IntervalIdx(last_elapsed_interval as u64))
     }
 
-    /// Returns the index of the lowest interval contained in the *hot* era, assuming that the
-    /// highest interval contained in the *hot* era is the one provided.
+    /// Returns the index of the lowest interval contained in the *Hot* Era, assuming that the
+    /// highest interval contained in the *Hot* Era is the one provided.
     ///
     /// # Example
     ///
@@ -139,8 +144,8 @@ impl Configuration {
         (*hot_era_upper_bound - self.hot + 1).into()
     }
 
-    /// Returns the index of the lowest interval contained in the *warm* era, assuming that the
-    /// highest interval contained in the *hot* era is the one provided.
+    /// Returns the index of the lowest interval contained in the *Warm* Era, assuming that the
+    /// highest interval contained in the *Hot* Era is the one provided.
     ///
     /// ⚠️ Note that, even though this method computes the lower bound of the WARM era, the index
     /// provided is the upper bound of the HOT era.
@@ -162,7 +167,7 @@ impl Configuration {
         (*hot_era_upper_bound - self.hot - self.warm + 1).into()
     }
 
-    /// Returns the time classification — [Interval] and [SubInterval] — of the provided
+    /// Returns the time classification — i.e. [Interval] and [SubInterval] — of the provided
     /// [Timestamp].
     ///
     /// # Errors
