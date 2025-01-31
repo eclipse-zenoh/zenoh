@@ -24,7 +24,6 @@ use zenoh_buffers::{
     ZBuf,
 };
 use zenoh_codec::WCodec;
-use zenoh_config::AutoConnectStrategy;
 use zenoh_link::Locator;
 use zenoh_protocol::{
     common::ZExtBody,
@@ -35,7 +34,7 @@ use zenoh_transport::unicast::TransportUnicast;
 
 use crate::net::{
     codec::Zenoh080Routing,
-    common::should_autoconnect,
+    common::AutoConnect,
     protocol::linkstate::{LinkState, LinkStateList},
     routing::dispatcher::tables::NodeId,
     runtime::{Runtime, WeakRuntime},
@@ -122,8 +121,7 @@ pub(super) struct Network {
     pub(super) gossip: bool,
     pub(super) gossip_multihop: bool,
     pub(super) gossip_target: WhatAmIMatcher,
-    pub(super) autoconnect: WhatAmIMatcher,
-    pub(super) autoconnect_strategy: AutoConnectStrategy,
+    pub(super) autoconnect: AutoConnect,
     pub(super) idx: NodeIndex,
     pub(super) links: VecMap<Link>,
     pub(super) trees: Vec<Tree>,
@@ -143,8 +141,7 @@ impl Network {
         gossip: bool,
         gossip_multihop: bool,
         gossip_target: WhatAmIMatcher,
-        autoconnect: WhatAmIMatcher,
-        autoconnect_strategy: AutoConnectStrategy,
+        autoconnect: AutoConnect,
     ) -> Self {
         let mut graph = petgraph::stable_graph::StableGraph::default();
         tracing::debug!("{} Add node (self) {}", name, zid);
@@ -163,7 +160,6 @@ impl Network {
             gossip_multihop,
             gossip_target,
             autoconnect,
-            autoconnect_strategy,
             idx,
             links: VecMap::new(),
             trees: vec![Tree {
@@ -515,14 +511,7 @@ impl Network {
                             );
                         }
 
-                        if !self.autoconnect.is_empty()
-                            && self.autoconnect.matches(whatami)
-                            && should_autoconnect(
-                                self.autoconnect_strategy,
-                                self.graph[self.idx].zid,
-                                zid,
-                            )
-                        {
+                        if self.autoconnect.should_autoconnect(zid, whatami) {
                             // Connect discovered peers
                             if let Some(locators) = locators {
                                 let runtime = strong_runtime.clone();
@@ -640,12 +629,12 @@ impl Network {
             .filter(|ls| !removed.iter().any(|(idx, _)| idx == &ls.1))
             .collect::<Vec<(Vec<ZenohIdProto>, NodeIndex, bool)>>();
 
-        if !self.autoconnect.is_empty() {
+        if self.autoconnect.is_enabled() {
             // Connect discovered peers
             for (_, idx, _) in &link_states {
                 let node = &self.graph[*idx];
                 if let Some(whatami) = node.whatami {
-                    if self.autoconnect.matches(whatami) {
+                    if self.autoconnect.should_autoconnect(node.zid, whatami) {
                         if let Some(locators) = &node.locators {
                             let runtime = strong_runtime.clone();
                             let zid = node.zid;

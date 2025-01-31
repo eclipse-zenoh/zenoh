@@ -15,10 +15,12 @@
 use std::{fmt, marker::PhantomData};
 
 use serde::{
-    de::{self, MapAccess, Visitor},
+    de::{self, IntoDeserializer, MapAccess, Visitor},
     Deserialize, Serialize,
 };
 use zenoh_protocol::core::{EndPoint, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor};
+
+use crate::AutoConnectStrategy;
 
 pub trait ModeDependent<T> {
     fn router(&self) -> Option<&T>;
@@ -35,7 +37,7 @@ pub trait ModeDependent<T> {
     fn get_mut(&mut self, whatami: WhatAmI) -> Option<&mut T>;
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct ModeValues<T> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub router: Option<T>,
@@ -71,7 +73,7 @@ impl<T> ModeDependent<T> for ModeValues<T> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum ModeDependentValue<T> {
     Unique(T),
     Dependent(ModeValues<T>),
@@ -276,6 +278,40 @@ impl<'a> serde::Deserialize<'a> for ModeDependentValue<WhatAmIMatcher> {
                 WhatAmIMatcherVisitor {}
                     .visit_seq(seq)
                     .map(ModeDependentValue::Unique)
+            }
+
+            fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                ModeValues::deserialize(de::value::MapAccessDeserializer::new(map))
+                    .map(ModeDependentValue::Dependent)
+            }
+        }
+        deserializer.deserialize_any(UniqueOrDependent(PhantomData))
+    }
+}
+
+impl<'a> serde::Deserialize<'a> for ModeDependentValue<AutoConnectStrategy> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'a>,
+    {
+        struct UniqueOrDependent<U>(PhantomData<fn() -> U>);
+
+        impl<'de> Visitor<'de> for UniqueOrDependent<ModeDependentValue<AutoConnectStrategy>> {
+            type Value = ModeDependentValue<AutoConnectStrategy>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("AutoConnectStrategy or mode dependent AutoConnectStrategy")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                let strategy = AutoConnectStrategy::deserialize(value.into_deserializer())?;
+                Ok(ModeDependentValue::Unique(strategy))
             }
 
             fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
