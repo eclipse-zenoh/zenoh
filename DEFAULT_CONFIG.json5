@@ -440,14 +440,14 @@
           /// then amount of memory being allocated for each queue is SIZE_XXX * LINK_MTU.
           /// If qos is false, then only the DATA priority will be allocated.
           size: {
-            control: 1,
-            real_time: 1,
-            interactive_high: 1,
-            interactive_low: 1,
+            control: 2,
+            real_time: 2,
+            interactive_high: 2,
+            interactive_low: 2,
             data_high: 2,
-            data: 4,
-            data_low: 4,
-            background: 4,
+            data: 2,
+            data_low: 2,
+            background: 2,
           },
           /// Congestion occurs when the queue is empty (no available batch).
           congestion_control: {
@@ -479,7 +479,7 @@
             /// Mode for memory allocation of batches in the priority queues. 
             /// - "init": batches are allocated at queue initialization time. 
             /// - "lazy": batches are allocated when needed up to the maximum number of batches configured in the size configuration parameter.
-            mode: "init",
+            mode: "lazy",
           },
         },
       },
