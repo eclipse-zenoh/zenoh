@@ -31,12 +31,11 @@ use super::{
 /// The `Action` enumeration facilitates dealing with Wildcard Updates. It is a super-set of
 /// [SampleKind].
 ///
-/// A Wildcard Update does not necessarily have the `strip_prefix` that the Storage was configured
-/// with.
+/// The non-stripped key expression of a Wildcard Update is kept as it actually cannot be stripped.
 ///
-/// For instance, if the configured `strip_prefix` is "test/replication" then the Wildcard Update
-/// `put test/** 1` will (i) apply to all entries of the Storage yet does not start with the prefix
-/// "test/replication".
+/// For instance, if the configured `strip_prefix` is "test/replication", then the Wildcard Update
+/// `put test/** 1` will (i) apply to all entries of the Storage yet (ii) does not start with the
+/// prefix "test/replication".
 ///
 /// We could, in theory, avoid storing the key expression of a Wildcard Update in this enumeration
 /// but doing so simplifies the code of the Replication: if we deal with a Wildcard Update we have
@@ -98,9 +97,6 @@ impl From<&Action> for ActionKind {
 
 /// The `EventMetadata` structure contains all the information needed by a replica to assess if it
 /// is missing an [Event] in its log.
-///
-/// Associating the `action` allows only sending the metadata when the associate action is
-/// [SampleKind::Delete].
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Hash)]
 pub struct EventMetadata {
     pub(crate) stripped_key: Option<OwnedKeyExpr>,
@@ -530,15 +526,7 @@ impl LogLatest {
         EventRemoval::NotFound
     }
 
-    /// Updates the replication log with the provided set of [Event]s and return the updated
-    /// [Digest].
-    ///
-    /// # Caveat: out of bounds [Event]s
-    ///
-    /// This method will log an error message for all [Event]s that have a [Timestamp] that is so
-    /// far in the future that the index of their interval is higher than [u64::MAX]. This should
-    /// not happen unless specifically crafted [Event]s are sent to this node or if the internal
-    /// clock of a host is (very) far in the future.
+    /// Updates the Replication Log with the provided set of [Event]s.
     pub fn update(&mut self, events: impl Iterator<Item = Event>) {
         events.for_each(|event| {
             self.insert_event(event);

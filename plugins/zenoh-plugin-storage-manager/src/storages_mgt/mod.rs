@@ -113,10 +113,6 @@ pub(crate) async fn create_and_start_storage(
     //
     //      Doing so also allows us to return early from the creation of the Storage, creation which
     //      blocks populating the routing tables.
-    //
-    // TODO Do we really want to perform such an initial alignment? Because this query will
-    //      target any Storage that matches the same key expression, regardless of if they have
-    //      been configured to be replicated.
     tokio::task::spawn(async move {
         let storage_service = Arc::new(
             StorageService::new(
