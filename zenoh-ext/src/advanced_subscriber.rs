@@ -421,6 +421,7 @@ struct State {
     key_expr: KeyExpr<'static>,
     retransmission: bool,
     period: Option<Period>,
+    history_depth: usize,
     query_target: QueryTarget,
     query_timeout: Duration,
     callback: Callback<Sample>,
@@ -502,8 +503,25 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
             pending_queries: 0,
             pending_samples: BTreeMap::new(),
         });
-        if states.global_pending_queries != 0 {
-            state.pending_samples.insert(source_sn, sample);
+        if state.last_delivered.is_none() && states.global_pending_queries != 0 {
+            // Avoid going through the Map if history_depth == 1
+            if states.history_depth == 1 {
+                state.last_delivered = Some(source_sn);
+                states.callback.call(sample);
+            } else {
+                state.pending_samples.insert(source_sn, sample);
+                if state.pending_samples.len() >= states.history_depth {
+                    if let Some((mut last_seq_num, sample)) = state.pending_samples.pop_first() {
+                        states.callback.call(sample);
+                        state.last_delivered = Some(last_seq_num);
+                        while let Some(s) = state.pending_samples.remove(&(last_seq_num + 1)) {
+                            states.callback.call(s);
+                            last_seq_num += 1;
+                            state.last_delivered = Some(last_seq_num);
+                        }
+                    }
+                }
+            }
         } else if state.last_delivered.is_some() && source_sn != state.last_delivered.unwrap() + 1 {
             if source_sn > state.last_delivered.unwrap() {
                 if states.retransmission {
@@ -547,7 +565,16 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
                 state.last_delivered = Some(*timestamp);
                 states.callback.call(sample);
             } else {
-                state.pending_samples.entry(*timestamp).or_insert(sample);
+                // Avoid going through the Map if history_depth == 1
+                if states.history_depth == 1 {
+                    state.last_delivered = Some(*timestamp);
+                    states.callback.call(sample);
+                } else {
+                    state.pending_samples.entry(*timestamp).or_insert(sample);
+                    if state.pending_samples.len() >= states.history_depth {
+                        flush_timestamped_source(state, &states.callback);
+                    }
+                }
             }
         }
         false
@@ -652,6 +679,11 @@ impl<Handler> AdvancedSubscriber<Handler> {
             }),
             key_expr: key_expr.clone().into_owned(),
             retransmission: retransmission.is_some(),
+            history_depth: conf
+                .history
+                .as_ref()
+                .and_then(|h| h.sample_depth)
+                .unwrap_or_default(),
             query_target: conf.query_target,
             query_timeout: conf.query_timeout,
             callback: callback.clone(),
