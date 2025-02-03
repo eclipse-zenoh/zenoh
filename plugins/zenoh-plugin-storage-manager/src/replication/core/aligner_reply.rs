@@ -43,7 +43,11 @@ use crate::{
 ///
 ///   Intervals -> SubIntervals -> Events -> Retrieval
 ///
-/// Not all replies are made, it depends on the Era when a misalignment was detected.
+/// Not all replies are made, it depends on the Era where a misalignment was detected.
+///
+/// The `Discovery` Reply is used to perform the initial alignment. The Replica sends its Zenoh ID
+/// such that the newly joined Replica can retrieve all the content without having to go through
+/// an exchange of Digest.
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) enum AlignmentReply {
     Discovery(ZenohId),
@@ -60,24 +64,24 @@ impl Replication {
     /// This method is a big "match" statement, processing each variant of the [AlignmentReply] in
     /// the following manner:
     ///
-    /// - Intervals: the Replica sent a list of [IntervalIdx] and their associated [Fingerprint].
-    ///   This Storage needs to compare these [Fingerprint] with its local state and, for each that
-    ///   differ, request the [Fingerprint] of their [SubInterval].
+    /// - Intervals: the remote Replica sent a list of [IntervalIdx] and their associated
+    ///   [Fingerprint]. This Replica needs to compare these [Fingerprint] with its local state
+    ///   and, for each that differ, request the [Fingerprint] of their [SubInterval].
     ///
     ///   This only happens as a response to a misalignment detected in the Cold Era.
     ///
     ///
-    /// - SubIntervals: the Replica sent a list of [IntervalIdx], their associated [SubIntervalIdx]
-    ///   and the [Fingerprint] of these [SubInterval].
-    ///   This Storage again needs to compare these [Fingerprint] with its local state and, for each
-    ///   that differ, request all the [EventMetadata] the [SubInterval] contains.
+    /// - SubIntervals: the remote Replica sent a list of [IntervalIdx], their associated
+    ///   [SubIntervalIdx] and the [Fingerprint] of these [SubInterval].  This Replica again needs
+    ///   to compare these [Fingerprint] with its local state and, for each that differ, request all
+    ///   the [EventMetadata] the [SubInterval] contains.
     ///
     ///   This would happen as a response to a misalignment detected in the Warm Era or as a
     ///   follow-up step from a misalignment in the Cold Era.
     ///
     ///
-    /// - Events: the Replica sent a list of [EventMetadata].
-    ///   This Storage needs to check, for each of them, if it has a newer [Event] stored. If not,
+    /// - Events: the remote Replica sent a list of [EventMetadata].
+    ///   This Replica needs to check, for each of them, if it has a newer [Event] stored. If not,
     ///   it needs to ask to retrieve the associated data from the Replica.
     ///   If the [EventMetadata] is indeed more recent and its associated action is `Delete` then
     ///   the data will be directly deleted from the Storage without requiring an extra exchange.
@@ -86,10 +90,10 @@ impl Replication {
     ///   follow-up step from a misalignment in the Cold / Warm Eras.
     ///
     ///
-    /// - Retrieval: the Replica sent an [Event] and its associated payload.
-    ///   This Storage needs to check if it is still more recent and, if so, add it.
+    /// - Retrieval: the remote Replica sent an [Event] and its associated payload.
+    ///   This Replica needs to check if it is still more recent and, if so, add it.
     ///
-    ///   Note that only one [Event] is sent per reply but multiple replies are sent to the same
+    ///   ⚠️ Note that only one [Event] is sent per reply but multiple replies are sent to the same
     ///   Query (by setting `Consolidation::None`).
     #[tracing::instrument(skip_all, fields(storage = self.storage_key_expr.as_str(), replica = replica_aligner_ke.as_str(), sample, t))]
     pub(crate) async fn process_alignment_reply(
@@ -224,23 +228,18 @@ impl Replication {
         }
     }
 
-    /// Processes the [EventMetadata] sent by the Replica we are aligning with, determining if we
-    /// need to retrieve the associated payload or not.
+    /// Processes the [EventMetadata] sent by the remote Replica we are aligning with, determining
+    /// if we need to retrieve the associated payload or not.
     ///
     /// If we need to retrieve the payload then this [EventMetadata] is returned. If we don't,
     /// `None` is returned.
     ///
-    /// Furthermore, depending on the `action` of the event, different operations are performed:
+    /// Depending on the `action` of the event, different operations are performed. For instance, if
+    /// it is a `Put` we need to check if a Wildcard Update overwrites it in which case we don't
+    /// need to retrieve the associated payload.
     ///
-    /// - If it is a [Put] then we only need to check if in the Cache or the Replication Log we
-    ///   have an event with the same or a more recent timestamp.
-    ///   If we do then we are either already up to date with that event or the Replica is
-    ///   "lagging". In both cases, we don't need to retrieve the associated payload and return
-    ///   `None`.
-    ///   If we don't, then we need to retrieve the payload and return the [EventMetadata].
-    ///
-    /// - If it is a [Delete] then if we don't have a more recent event in our Cache or Replication
-    ///   Log then we have all the information needed to perform the delete and, thus, perform it.
+    /// See the [needs_further_processing] function for more information on the specific cases we
+    /// need to be aware of.
     async fn process_event_metadata(&self, replica_event: EventMetadata) -> Option<EventMetadata> {
         if self
             .latest_updates
@@ -262,7 +261,7 @@ impl Replication {
 
         match &replica_event.action {
             // To apply a Put or a WildcardPut we need the payload so we return here to indicate
-            // that we need to retrieve it from the Replica.
+            // that we need to retrieve it from the remote Replica.
             Action::Put | Action::WildcardPut(_) => return Some(replica_event),
 
             // A Delete can be applied right away, we have all the information we need.
@@ -306,8 +305,8 @@ impl Replication {
         None
     }
 
-    /// Processes the [EventMetadata] and [Sample] sent by the Replica, adding it to our Storage if
-    /// needed.
+    /// Processes the [EventMetadata] and [Sample] sent by the remote Replica, adding it to our
+    /// Storage if needed.
     ///
     /// # Special case: initial alignment
     ///
@@ -404,17 +403,21 @@ impl Replication {
             }
         }
 
+        // NOTE: We can only safely call `insert_event_unchecked` because we called earlier
+        // `replication_log_guard.remove_older`.
         replication_log_guard.insert_event_unchecked(replica_event.into());
     }
 
     /// Returns `true` if the provided `replica_event` requires more processing.
     ///
     /// This method will:
-    /// - check if there is a Wildcard Update that overrides it or a more recent Event in the
+    /// - check if there is a Wildcard Update that overrides it and / or a more recent Event in the
     ///   Replication Log,
-    /// - if there is a Wildcard Update that overrides it, apply the Wildcard Update and return
-    ///   `false` as a Wildcard Update is self-contained,
-    /// - if there is a more recent Event, return `false` as this Replica is up-to-date,
+    /// - if there are both, we need to perform additional checks to assess which needs to be
+    ///   applied,
+    /// - if there is *only* a Wildcard Update that overrides it, apply the Wildcard Update and
+    ///   return `false` as a Wildcard Update is self-contained,
+    /// - if there is *only* a more recent Event, return `false` as this Replica is up-to-date,
     /// - if there is neither, return `true` as depending on where this method was called, different
     ///   operation(s) need to be performed.
     async fn needs_further_processing(
@@ -438,10 +441,11 @@ impl Replication {
         let maybe_newer_event = replication_log_guard.lookup_newer(replica_event);
 
         match (maybe_wildcard_update, maybe_newer_event) {
-            // No Event in the Replication Log or Wildcard Update, we go on, we need to process it.
+            // No Event in the Replication Log or Wildcard Update, we return true as we need to
+            // process it.
             (None, None) => {}
-            // If the timestamp of the Event in the Replication Log for the same key expression has
-            // a greater Timestamp then we discard this EventMetadata.
+            // The timestamp of the Event in the Replication Log for the same key expression has
+            // a greater Timestamp: we discard this EventMetadata.
             (None, Some(_)) => return false,
             // We have a Wildcard Update that overrides the Event -> we override it and we're done.
             (Some((wildcard_ke, wildcard_update)), None) => {
@@ -454,8 +458,9 @@ impl Replication {
                 .await;
                 return false;
             }
-            // The Wildcard Update we have and the Event have the same Timestamp: that means that
-            // what we have in the Replication Log is the application of the Wildcard Update.
+            // The Wildcard Update and the Event in the Replication Log have the same Timestamp:
+            // that means that what we have in the Replication Log is the application of the
+            // Wildcard Update.
             //
             // We thus need to check one very specific case: if the `replica_event` we received is a
             // Delete that came *before* a Wildcard Update Put and *after* the last non-wildcard
@@ -471,7 +476,7 @@ impl Replication {
             // - Delete "a" @t1 (@t0 < @t1 < @t2).
             //
             // Despite having @t2 > @t1, this earlier Event should actually lead to the deletion of
-            // "a" because a Wildcard Update should not revive a deleted Event.
+            // "a" because a Wildcard Update should not resuscitate a deleted Event.
             //
             // NOTE: Wildcard Delete needs separate processing, done in the `apply_wildcard_update`
             // method.
@@ -493,6 +498,9 @@ impl Replication {
                 }
 
                 let log_event_metadata = log_event.into();
+                // NOTE: Despite the `if let Some`, this call can only return `Some`. We entered
+                //       this code path because we found that particular Event in the Replication
+                //       Log.
                 if let Some(mut removed_event) =
                     replication_log_guard.remove_event(&log_event_metadata)
                 {
@@ -603,7 +611,7 @@ impl Replication {
             let overridden_event_action = overridden_event.action();
             tracing::trace!("Applying < {wildcard_ke:?} > on: < {overridden_event:?} >");
             match (overridden_event_action, wildcard_kind) {
-                // The methods `remove_events_overridden_by_wildcard_update` will not remove deleted
+                // The method `remove_events_overridden_by_wildcard_update` will not remove deleted
                 // Events.
                 (Action::Delete, _) => {
                     #[cfg(debug_assertions)]
@@ -672,6 +680,8 @@ impl Replication {
 
             overridden_event
                 .set_timestamp_and_action(replica_event.timestamp, replica_event.action.clone());
+            // NOTE: We can safely call `insert_event_unchecked` because the call to
+            // `remove_events_overridden_by_wildcard_update` already removed the overridden Events.
             replication_log_guard.insert_event_unchecked(overridden_event);
         }
 
@@ -732,8 +742,7 @@ impl Replication {
     //
     // NOTE: There is no need to attempt to delete an event in the Storage if the `wildcard_update`
     //       is a delete. Indeed, if the wildcard update is a delete then it is impossible to have
-    //       a previous event associated to the same key expression as, by definition of a wildcard
-    //       update, it would have been deleted.
+    //       a previous event associated to the same key expression as it would have been deleted.
     async fn store_event_overridden_by_wildcard_update(
         &self,
         replication_log_guard: &mut RwLockWriteGuard<'_, LogLatest>,

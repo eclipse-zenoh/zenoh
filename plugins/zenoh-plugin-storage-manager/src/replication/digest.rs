@@ -56,15 +56,15 @@ impl From<u64> for Fingerprint {
     }
 }
 
-/// A `Digest` is a concise view of the data present in a storage.
+/// A `Digest` is a concise view of the data present in a Storage.
 ///
-/// The purpose of this structure is to be sent over the network to other storage subscribing to the
-/// exact same key expression such that they can quickly assess if they are misaligned, i.e. if
-/// their data differ.
+/// The purpose of this structure is to be sent over the network to other replicated Storage
+/// (i.e. remote Replicas) such that they can quickly assess if they are misaligned, i.e. if their
+/// data differ.
 ///
 /// To make this assessment quick and lightweight, the `Digest` is composed of a set [Fingerprint]s
-/// for each "era". An "era" is a way of grouping sets of [Event]s according to their
-/// [Timestamp]. There are three eras: "hot", "warm" and "cold". The closer a timestamp is to the
+/// for each "Era". An "Era" is a way of grouping sets of [Event]s according to their
+/// [Timestamp]. There are three eras: "Hot", "Warm" and "Cold". The closer a timestamp is to the
 /// current time, the "hotter" the era it belongs to will be.
 ///
 /// Eras are further divided into [Interval]s and [SubInterval]s — which duration and number can be
@@ -84,15 +84,12 @@ pub struct Digest {
 
 /// The `DigestDiff` summarises the differences between two [Digest]s.
 ///
-/// For the Cold Era, a pair `(IntervalIdx, bool)` is computed. The `bool` indicates if the two
-/// [Fingerprint]s differ. The [IntervalIdx] is the lower bound of the Warm Era of the [Digest] of
-/// the storage that computed the `DigestDiff`. This allows the replica that receives the
-/// `DigestDiff` to know where to stop when sending the [Fingerprint]s of its intervals.
+/// For the Cold Era, a `bool` indicates if the two [Fingerprint]s differ.
 ///
-/// For the Warm Era, the set of [IntervalIdx] that differ is kept.
+/// For the Warm Era, the set of [IntervalIdx] that differ is computed.
 ///
 /// For the Hot Era, the set of [SubIntervalIdx], grouped by their [IntervalIdx], that differ is
-/// kept.
+/// computed.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct DigestDiff {
     pub(crate) cold_eras_differ: bool,
@@ -101,6 +98,14 @@ pub struct DigestDiff {
 }
 
 impl Digest {
+    /// Returns a [DigestDiff] if the two [Digest] differ, `None` otherwise.
+    ///
+    /// Two Digests are considered different if any of the following is true:
+    /// - The Fingerprints of their Cold Era differ.
+    /// - At least one Fingerprint in their Warm Era differ (for the same Interval).
+    /// - `other` contains at least one Interval in its Warm Era that `self` does not have.
+    /// - At least one Fingerprint in their Hot Era differ (for the same Interval and Sub-Interval).
+    /// - `other` contains at least one Sub-Interval in its Hot Era that `self` does not have.
     pub(crate) fn diff(&self, mut other: Digest) -> Option<DigestDiff> {
         if self.configuration_fingerprint != other.configuration_fingerprint {
             return None;
