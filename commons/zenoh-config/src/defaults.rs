@@ -256,14 +256,14 @@ impl QueueSizeConf {
 impl Default for QueueSizeConf {
     fn default() -> Self {
         Self {
-            control: 1,
-            real_time: 1,
-            interactive_low: 1,
-            interactive_high: 1,
+            control: 2,
+            real_time: 2,
+            interactive_low: 2,
+            interactive_high: 2,
             data_high: 2,
-            data: 4,
+            data: 2,
             data_low: 2,
-            background: 1,
+            background: 2,
         }
     }
 }
