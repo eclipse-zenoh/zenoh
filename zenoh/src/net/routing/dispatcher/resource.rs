@@ -550,7 +550,7 @@ impl Resource {
             if suffix.is_empty() {
                 return None;
             }
-            let (chunk, remain) = suffix.split_once('/').unwrap_or((suffix, ""));
+            let (chunk, remain) = suffix.split_at(suffix.find('/').unwrap_or(suffix.len()));
             let child = prefix.children.get(chunk)?;
             get_best_child_key(child, remain, sid)
                 .or_else(|| get_wire_expr(child, || remain.into(), sid))
