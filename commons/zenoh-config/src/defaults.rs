@@ -85,8 +85,15 @@ pub mod scouting {
                 &crate::WhatAmIMatcher::empty().router();
             mode_accessor!(crate::WhatAmIMatcher);
         }
-        pub const autoconnect_strategy: crate::ModeDependentValue<crate::AutoConnectStrategy> =
-            crate::ModeDependentValue::Unique(crate::AutoConnectStrategy::Always);
+        pub mod autoconnect_strategy {
+            pub const router: &crate::TargetDependentValue<crate::AutoConnectStrategy> =
+                &crate::TargetDependentValue::Unique(crate::AutoConnectStrategy::Always);
+            pub const peer: &crate::TargetDependentValue<crate::AutoConnectStrategy> =
+                &crate::TargetDependentValue::Unique(crate::AutoConnectStrategy::Always);
+            pub const client: &crate::TargetDependentValue<crate::AutoConnectStrategy> =
+                &crate::TargetDependentValue::Unique(crate::AutoConnectStrategy::Always);
+            mode_accessor!(crate::TargetDependentValue<crate::AutoConnectStrategy>);
+        }
         pub mod listen {
             pub const router: &bool = &true;
             pub const peer: &bool = &true;
@@ -115,8 +122,15 @@ pub mod scouting {
                 &crate::WhatAmIMatcher::empty();
             mode_accessor!(crate::WhatAmIMatcher);
         }
-        pub const autoconnect_strategy: crate::ModeDependentValue<crate::AutoConnectStrategy> =
-            crate::ModeDependentValue::Unique(crate::AutoConnectStrategy::Always);
+        pub mod autoconnect_strategy {
+            pub const router: &crate::TargetDependentValue<crate::AutoConnectStrategy> =
+                &crate::TargetDependentValue::Unique(crate::AutoConnectStrategy::Always);
+            pub const peer: &crate::TargetDependentValue<crate::AutoConnectStrategy> =
+                &crate::TargetDependentValue::Unique(crate::AutoConnectStrategy::Always);
+            pub const client: &crate::TargetDependentValue<crate::AutoConnectStrategy> =
+                &crate::TargetDependentValue::Unique(crate::AutoConnectStrategy::Always);
+            mode_accessor!(crate::TargetDependentValue<crate::AutoConnectStrategy>);
+        }
     }
 }
 

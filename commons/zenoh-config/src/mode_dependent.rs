@@ -15,7 +15,7 @@
 use std::{fmt, marker::PhantomData};
 
 use serde::{
-    de::{self, IntoDeserializer, MapAccess, Visitor},
+    de::{self, Error, IntoDeserializer, MapAccess, Visitor},
     Deserialize, Serialize,
 };
 use zenoh_protocol::core::{EndPoint, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor};
@@ -38,6 +38,7 @@ pub trait ModeDependent<T> {
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ModeValues<T> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub router: Option<T>,
@@ -292,40 +293,6 @@ impl<'a> serde::Deserialize<'a> for ModeDependentValue<WhatAmIMatcher> {
     }
 }
 
-impl<'a> serde::Deserialize<'a> for ModeDependentValue<AutoConnectStrategy> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'a>,
-    {
-        struct UniqueOrDependent<U>(PhantomData<fn() -> U>);
-
-        impl<'de> Visitor<'de> for UniqueOrDependent<ModeDependentValue<AutoConnectStrategy>> {
-            type Value = ModeDependentValue<AutoConnectStrategy>;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("AutoConnectStrategy or mode dependent AutoConnectStrategy")
-            }
-
-            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                let strategy = AutoConnectStrategy::deserialize(value.into_deserializer())?;
-                Ok(ModeDependentValue::Unique(strategy))
-            }
-
-            fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
-            where
-                M: MapAccess<'de>,
-            {
-                ModeValues::deserialize(de::value::MapAccessDeserializer::new(map))
-                    .map(ModeDependentValue::Dependent)
-            }
-        }
-        deserializer.deserialize_any(UniqueOrDependent(PhantomData))
-    }
-}
-
 impl<'a> serde::Deserialize<'a> for ModeDependentValue<Vec<EndPoint>> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -383,5 +350,180 @@ impl<T> ModeDependent<T> for Option<ModeDependentValue<T>> {
     #[inline]
     fn get_mut(&mut self, whatami: WhatAmI) -> Option<&mut T> {
         self.as_mut().and_then(|m| m.get_mut(whatami))
+    }
+}
+
+serde_with::with_prefix!(target_prefix "to-");
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+pub struct TargetValues<T> {
+    #[serde(
+        flatten,
+        bound(deserialize = "T: Deserialize<'de>", serialize = "T: Serialize"),
+        with = "target_prefix"
+    )]
+    pub values: ModeValues<T>,
+}
+
+impl<T> ModeDependent<T> for TargetValues<T> {
+    #[inline]
+    fn router(&self) -> Option<&T> {
+        self.values.router.as_ref()
+    }
+
+    #[inline]
+    fn peer(&self) -> Option<&T> {
+        self.values.peer.as_ref()
+    }
+
+    #[inline]
+    fn client(&self) -> Option<&T> {
+        self.values.client.as_ref()
+    }
+
+    #[inline]
+    fn get_mut(&mut self, whatami: WhatAmI) -> Option<&mut T> {
+        match whatami {
+            WhatAmI::Router => self.values.router.as_mut(),
+            WhatAmI::Peer => self.values.peer.as_mut(),
+            WhatAmI::Client => self.values.client.as_mut(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum TargetDependentValue<T> {
+    Unique(T),
+    Dependent(TargetValues<T>),
+}
+
+impl<T> ModeDependent<T> for TargetDependentValue<T> {
+    #[inline]
+    fn router(&self) -> Option<&T> {
+        match self {
+            Self::Unique(v) => Some(v),
+            Self::Dependent(o) => o.router(),
+        }
+    }
+
+    #[inline]
+    fn peer(&self) -> Option<&T> {
+        match self {
+            Self::Unique(v) => Some(v),
+            Self::Dependent(o) => o.peer(),
+        }
+    }
+
+    #[inline]
+    fn client(&self) -> Option<&T> {
+        match self {
+            Self::Unique(v) => Some(v),
+            Self::Dependent(o) => o.client(),
+        }
+    }
+
+    #[inline]
+    fn get_mut(&mut self, whatami: WhatAmI) -> Option<&mut T> {
+        match self {
+            Self::Unique(v) => Some(v),
+            Self::Dependent(o) => o.get_mut(whatami),
+        }
+    }
+}
+
+impl<T> serde::Serialize for TargetDependentValue<T>
+where
+    T: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            TargetDependentValue::Unique(value) => value.serialize(serializer),
+            TargetDependentValue::Dependent(options) => options.serialize(serializer),
+        }
+    }
+}
+
+impl<'a> serde::Deserialize<'a> for TargetDependentValue<AutoConnectStrategy> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'a>,
+    {
+        struct UniqueOrDependent<U>(PhantomData<fn() -> U>);
+
+        impl<'de> Visitor<'de> for UniqueOrDependent<TargetDependentValue<AutoConnectStrategy>> {
+            type Value = TargetDependentValue<AutoConnectStrategy>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("AutoConnectStrategy or target dependent AutoConnectStrategy")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                let strategy = AutoConnectStrategy::deserialize(value.into_deserializer())?;
+                Ok(TargetDependentValue::Unique(strategy))
+            }
+
+            fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                TargetValues::deserialize(de::value::MapAccessDeserializer::new(map))
+                    .map(TargetDependentValue::Dependent)
+            }
+        }
+        deserializer.deserialize_any(UniqueOrDependent(PhantomData))
+    }
+}
+
+impl<'a> serde::Deserialize<'a> for ModeDependentValue<TargetDependentValue<AutoConnectStrategy>> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'a>,
+    {
+        struct UniqueOrDependent<U>(PhantomData<fn() -> U>);
+
+        impl<'de> Visitor<'de>
+            for UniqueOrDependent<ModeDependentValue<TargetDependentValue<AutoConnectStrategy>>>
+        {
+            type Value = ModeDependentValue<TargetDependentValue<AutoConnectStrategy>>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("AutoConnectStrategy or mode dependent AutoConnectStrategy")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                let strategy = AutoConnectStrategy::deserialize(value.into_deserializer())?;
+                Ok(ModeDependentValue::Unique(TargetDependentValue::Unique(
+                    strategy,
+                )))
+            }
+
+            fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                let value =
+                    serde_json::Value::deserialize(de::value::MapAccessDeserializer::new(map))?;
+                dbg!(&value);
+                if let Ok(values) =
+                    ModeValues::<TargetDependentValue<AutoConnectStrategy>>::deserialize(&value)
+                {
+                    return dbg!(Ok(ModeDependentValue::Dependent(values)));
+                }
+                dbg!(Ok(ModeDependentValue::Unique(
+                    TargetDependentValue::deserialize(&value)
+                        .map_err(|err| M::Error::custom(err))?,
+                )))
+            }
+        }
+        deserializer.deserialize_any(UniqueOrDependent(PhantomData))
     }
 }

@@ -1,56 +1,59 @@
 use zenoh_config::{
-    unwrap_or_default, AutoConnectStrategy, Config, ModeDependent, ModeDependentValue,
+    unwrap_or_default, AutoConnectStrategy, Config, ModeDependent, TargetDependentValue,
 };
 use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher, ZenohIdProto};
 
+/// Auto-connection manager, combining autoconnect matcher and strategy from the config.
 #[derive(Clone, Copy)]
 pub(crate) struct AutoConnect {
     zid: ZenohIdProto,
     matcher: WhatAmIMatcher,
-    strategy: ModeDependentValue<AutoConnectStrategy>,
+    strategy: TargetDependentValue<AutoConnectStrategy>,
 }
 
 impl AutoConnect {
+    /// Builds an `AutoConnect` from multicast config.
     pub(crate) fn multicast(config: &Config, what: WhatAmI) -> Self {
         Self {
             zid: (*config.id()).into(),
             matcher: *unwrap_or_default!(config.scouting().multicast().autoconnect().get(what)),
-            strategy: unwrap_or_default!(config.scouting().multicast().autoconnect_strategy()),
+            strategy: *unwrap_or_default!(config
+                .scouting()
+                .multicast()
+                .autoconnect_strategy()
+                .get(what)),
         }
     }
 
+    /// Builds an `AutoConnect` from gossip config.
     pub(crate) fn gossip(config: &Config, what: WhatAmI) -> Self {
         Self {
             zid: (*config.id()).into(),
             matcher: *unwrap_or_default!(config.scouting().multicast().autoconnect().get(what)),
-            strategy: unwrap_or_default!(config.scouting().multicast().autoconnect_strategy()),
+            strategy: *unwrap_or_default!(config
+                .scouting()
+                .multicast()
+                .autoconnect_strategy()
+                .get(what)),
         }
     }
 
+    /// Builds a disabled `AutoConnect`, with [`is_enabled`](Self::is_enabled) or
+    /// [`should_autoconnect`](Self::should_autoconnect) always return false.
     pub(crate) fn disabled() -> Self {
         Self {
             zid: ZenohIdProto::default(),
             matcher: WhatAmIMatcher::empty(),
-            strategy: ModeDependentValue::Unique(AutoConnectStrategy::default()),
+            strategy: TargetDependentValue::Unique(AutoConnectStrategy::default()),
         }
     }
 
-    // pub(crate) fn new(
-    //     zid: impl Into<ZenohIdProto>,
-    //     matcher: WhatAmIMatcher,
-    //     strategy: ModeDependentValue<AutoConnectStrategy>,
-    // ) -> Self {
-    //     Self {
-    //         zid,
-    //         matcher,
-    //         strategy,
-    //     }
-    // }
-
+    /// Returns the autonnection matcher.
     pub(crate) fn matcher(&self) -> WhatAmIMatcher {
         self.matcher
     }
 
+    /// Returns if the autoconnection is enabled for at least one mode.
     pub(crate) fn is_enabled(&self) -> bool {
         !self.matcher.is_empty()
     }

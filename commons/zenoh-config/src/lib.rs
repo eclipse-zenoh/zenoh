@@ -318,7 +318,7 @@ validated_struct::validator! {
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through UDP multicast.
                 autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
                 /// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
-                autoconnect_strategy: Option<ModeDependentValue<AutoConnectStrategy>>,
+                autoconnect_strategy: Option<ModeDependentValue<TargetDependentValue<AutoConnectStrategy>>>,
                 /// Whether or not to listen for scout messages on UDP multicast and reply to them.
                 listen: Option<ModeDependentValue<bool>>,
             },
@@ -338,7 +338,7 @@ validated_struct::validator! {
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through gossip.
                 autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
                 /// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
-                autoconnect_strategy: Option<ModeDependentValue<AutoConnectStrategy>>,
+                autoconnect_strategy: Option<ModeDependentValue<TargetDependentValue<AutoConnectStrategy>>>,
             },
         },
 
