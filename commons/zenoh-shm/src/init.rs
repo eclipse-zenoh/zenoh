@@ -12,7 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use crate::{api::client_storage::GLOBAL_CLIENT_STORAGE, cleanup::CLEANUP, metadata::{storage::GLOBAL_METADATA_STORAGE, subscription::GLOBAL_METADATA_SUBSCRIPTION}, watchdog::{confirmator::GLOBAL_CONFIRMATOR, validator::GLOBAL_VALIDATOR}};
+use crate::{
+    api::client_storage::GLOBAL_CLIENT_STORAGE,
+    cleanup::CLEANUP,
+    metadata::{storage::GLOBAL_METADATA_STORAGE, subscription::GLOBAL_METADATA_SUBSCRIPTION},
+    watchdog::{confirmator::GLOBAL_CONFIRMATOR, validator::GLOBAL_VALIDATOR},
+};
 
 pub fn init() {
     let _ = CLEANUP.write();
