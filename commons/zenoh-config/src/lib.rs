@@ -548,9 +548,20 @@ validated_struct::validator! {
             pub shared_memory:
             ShmConf {
                 /// Whether shared memory is enabled or not.
-                /// If set to `true`, the SHM buffer optimization support will be announced to other parties. (default `false`).
+                /// If set to `true`, the SHM buffer optimization support will be announced to other parties. (default `true`).
                 /// This option doesn't make SHM buffer optimization mandatory, the real support depends on other party setting
+                /// A probing procedure for shared memory is performed upon session opening. To enable zenoh to operate
+                /// over shared memory (and to not fallback on network mode), shared memory needs to be enabled also on the
+                /// subscriber side. By doing so, the probing procedure will succeed and shared memory will operate as expected.
                 enabled: bool,
+                /// Lazy SHM resources initialization.
+                /// If set to `true`, the SHM subsystem internals will be initialized lazily upon the first SHM buffer
+                /// allocation or reception. (default `true`).
+                /// `true` setting provides better startup time and optimizes resource usage, but produces extra
+                /// latency at the first SHM buffer interaction moment.
+                /// `false` setting sacrifices startup time, but guarantees no latency impact when first SHM buffer is
+                /// processed.
+                lazy_init: bool,
             },
             pub auth: #[derive(Default)]
             AuthConf {

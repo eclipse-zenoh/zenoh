@@ -172,6 +172,9 @@ impl RuntimeBuilder {
             .unwrap_or_else(|| load_plugins(&config));
         // Admin space creation flag
         let start_admin_space = *config.adminspace.enabled();
+        // SHM lazy init flag
+        #[cfg(feature = "shared-memory")]
+        let shm_lazy_init = *config.transport.shared_memory.lazy_init();
 
         let config = Notifier::new(crate::config::Config(config));
         let runtime = Runtime {
@@ -230,6 +233,11 @@ impl RuntimeBuilder {
                 }
             }
         });
+
+        #[cfg(feature = "shared-memory")]
+        if !shm_lazy_init {
+            zenoh_shm::init::init();
+        }
 
         Ok(runtime)
     }
