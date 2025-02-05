@@ -543,10 +543,20 @@
     /// NOTE: shared memory can be used only if zenoh is compiled with "shared-memory" feature, otherwise
     /// settings in this section have no effect.
     shared_memory: {
+      /// Whether shared memory is enabled or not.
+      /// If set to `true`, the SHM buffer optimization support will be announced to other parties. (default `true`).
+      /// This option doesn't make SHM buffer optimization mandatory, the real support depends on other party setting.
       /// A probing procedure for shared memory is performed upon session opening. To enable zenoh to operate
       /// over shared memory (and to not fallback on network mode), shared memory needs to be enabled also on the
       /// subscriber side. By doing so, the probing procedure will succeed and shared memory will operate as expected.
       enabled: true,
+      /// SHM resources initialization mode (default "lazy").
+      /// - "lazy": SHM subsystem internals will be initialized lazily upon the first SHM buffer
+      /// allocation or reception. This setting provides better startup time and optimizes resource usage,
+      /// but produces extra latency at the first SHM buffer interaction.
+      /// - "init": SHM subsystem internals will be initialized upon Session opening. This setting sacrifices
+      /// startup time, but guarantees no latency impact when first SHM buffer is processed.
+      mode: "lazy",
     },
     auth: {
       /// The configuration of authentication.
