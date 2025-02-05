@@ -484,7 +484,7 @@ impl Resource {
     /// session.
     /// If none is found, and if the tested resource itself doesn't have a declared keyexpr,
     /// then the parent tree is walked through. If there is still no declared keyexpr, the whole
-    /// prefix+suffix sring is used.
+    /// prefix+suffix string is used.
     pub fn get_best_key<'a>(&self, suffix: &'a str, sid: usize) -> WireExpr<'a> {
         /// Retrieve a declared keyexpr, either local or remote.
         fn get_wire_expr<'a>(
