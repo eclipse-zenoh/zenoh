@@ -352,105 +352,57 @@ impl Resource {
         from: &mut Arc<Resource>,
         suffix: &str,
     ) -> Arc<Resource> {
-        if suffix.is_empty() {
+        let Some((chunk, rest)) = Self::split_first_chunk(suffix) else {
             Resource::upgrade_resource(from, tables.hat_code.new_resource());
-            from.clone()
-        } else if let Some(stripped_suffix) = suffix.strip_prefix('/') {
-            let (chunk, rest) = match stripped_suffix.find('/') {
-                Some(idx) => (&suffix[0..(idx + 1)], &suffix[(idx + 1)..]),
-                None => (suffix, ""),
-            };
-
-            match get_mut_unchecked(from).children.get_mut(chunk) {
-                Some(res) => Resource::make_resource(tables, res, rest),
-                None => {
-                    let mut new = Arc::new(Resource::new(from, chunk, None));
-                    if tracing::enabled!(tracing::Level::DEBUG) && rest.is_empty() {
-                        tracing::debug!("Register resource {}", new.expr());
-                    }
-                    let res = Resource::make_resource(tables, &mut new, rest);
-                    get_mut_unchecked(from)
-                        .children
-                        .insert(String::from(chunk), new);
-                    res
-                }
-            }
-        } else {
-            match from.parent.clone() {
-                Some(mut parent) => {
-                    Resource::make_resource(tables, &mut parent, &[&from.suffix, suffix].concat())
-                }
-                None => {
-                    let (chunk, rest) = match suffix[1..].find('/') {
-                        Some(idx) => (&suffix[0..(idx + 1)], &suffix[(idx + 1)..]),
-                        None => (suffix, ""),
-                    };
-
-                    match get_mut_unchecked(from).children.get_mut(chunk) {
-                        Some(res) => Resource::make_resource(tables, res, rest),
-                        None => {
-                            let mut new = Arc::new(Resource::new(from, chunk, None));
-                            if tracing::enabled!(tracing::Level::DEBUG) && rest.is_empty() {
-                                tracing::debug!("Register resource {}", new.expr());
-                            }
-                            let res = Resource::make_resource(tables, &mut new, rest);
-                            get_mut_unchecked(from)
-                                .children
-                                .insert(String::from(chunk), new);
-                            res
-                        }
-                    }
-                }
+            return from.clone();
+        };
+        if !chunk.starts_with('/') {
+            if let Some(parent) = &mut from.parent.clone() {
+                return Resource::make_resource(tables, parent, &[&from.suffix, suffix].concat());
             }
         }
+        if let Some(child) = get_mut_unchecked(from).children.get_mut(chunk) {
+            return Resource::make_resource(tables, child, rest);
+        }
+        let mut new = Arc::new(Resource::new(from, chunk, None));
+        if rest.is_empty() {
+            tracing::debug!("Register resource {}", new.expr());
+        }
+        let res = Resource::make_resource(tables, &mut new, rest);
+        get_mut_unchecked(from)
+            .children
+            .insert(String::from(chunk), new);
+        res
     }
 
     #[inline]
     pub fn get_resource(from: &Arc<Resource>, suffix: &str) -> Option<Arc<Resource>> {
-        if suffix.is_empty() {
-            Some(from.clone())
-        } else if let Some(stripped_suffix) = suffix.strip_prefix('/') {
-            let (chunk, rest) = match stripped_suffix.find('/') {
-                Some(idx) => (&suffix[0..(idx + 1)], &suffix[(idx + 1)..]),
-                None => (suffix, ""),
-            };
-
-            match from.children.get(chunk) {
-                Some(res) => Resource::get_resource(res, rest),
-                None => None,
-            }
-        } else {
-            match &from.parent {
-                Some(parent) => Resource::get_resource(parent, &[&from.suffix, suffix].concat()),
-                None => {
-                    let (chunk, rest) = match suffix[1..].find('/') {
-                        Some(idx) => (&suffix[0..(idx + 1)], &suffix[(idx + 1)..]),
-                        None => (suffix, ""),
-                    };
-
-                    match from.children.get(chunk) {
-                        Some(res) => Resource::get_resource(res, rest),
-                        None => None,
-                    }
-                }
+        let Some((chunk, rest)) = Self::split_first_chunk(suffix) else {
+            return Some(from.clone());
+        };
+        if !chunk.starts_with('/') {
+            if let Some(parent) = &from.parent {
+                return Resource::get_resource(parent, &[&from.suffix, suffix].concat());
             }
         }
+        Resource::get_resource(from.children.get(chunk)?, rest)
     }
 
-    fn fst_chunk(key_expr: &keyexpr) -> (&keyexpr, Option<&keyexpr>) {
-        match key_expr.as_bytes().iter().position(|c| *c == b'/') {
-            Some(pos) => {
-                let left = &key_expr.as_bytes()[..pos];
-                let right = &key_expr.as_bytes()[pos + 1..];
-                unsafe {
-                    (
-                        keyexpr::from_slice_unchecked(left),
-                        Some(keyexpr::from_slice_unchecked(right)),
-                    )
-                }
-            }
-            None => (key_expr, None),
+    /// Split the suffix at the next '/' (after leading one), returning None if the suffix is empty.
+    ///
+    /// Suffix usually starts with '/', so this first slash is kept as part of the split chunk.
+    /// The rest will contain the slash of the split.
+    /// For example `split_first_chunk("/a/b") == Some(("/a", "/b"))`.
+    fn split_first_chunk(suffix: &str) -> Option<(&str, &str)> {
+        if suffix.is_empty() {
+            return None;
         }
+        // don't count the first char which may be a leading slash to find the next one
+        Some(match suffix[1..].find('/') {
+            // don't forget to add 1 to the index because of `[1..]` slice above
+            Some(idx) => suffix.split_at(idx + 1),
+            None => (suffix, ""),
+        })
     }
 
     #[inline]
@@ -524,7 +476,17 @@ impl Resource {
         }
     }
 
+    /// Return the best locally/remotely declared keyexpr, i.e. with the smallest suffix, matching
+    /// the given suffix and session id.
+    ///
+    /// The goal is to save bandwidth by using the shortest keyexpr on the wire. It works by
+    /// recursively walk through the children tree, looking for an already declared keyexpr for the
+    /// session.
+    /// If none is found, and if the tested resource itself doesn't have a declared keyexpr,
+    /// then the parent tree is walked through. If there is still no declared keyexpr, the whole
+    /// prefix+suffix sring is used.
     pub fn get_best_key<'a>(&self, suffix: &'a str, sid: usize) -> WireExpr<'a> {
+        /// Retrieve a declared keyexpr, either local or remote.
         fn get_wire_expr<'a>(
             prefix: &Resource,
             suffix: impl FnOnce() -> Cow<'a, str>,
@@ -542,19 +504,18 @@ impl Resource {
                 mapping,
             })
         }
+        /// Walk through the children tree, looking for a declared keyexpr.
         fn get_best_child_key<'a>(
             prefix: &Resource,
             suffix: &'a str,
             sid: usize,
         ) -> Option<WireExpr<'a>> {
-            if suffix.is_empty() {
-                return None;
-            }
-            let (chunk, remain) = suffix.split_at(suffix.find('/').unwrap_or(suffix.len()));
+            let (chunk, rest) = Resource::split_first_chunk(suffix)?;
             let child = prefix.children.get(chunk)?;
-            get_best_child_key(child, remain, sid)
-                .or_else(|| get_wire_expr(child, || remain.into(), sid))
+            get_best_child_key(child, rest, sid)
+                .or_else(|| get_wire_expr(child, || rest.into(), sid))
         }
+        /// Walk through the parent tree, looking for a declared keyexpr.
         fn get_best_parent_key<'a>(
             prefix: &Resource,
             suffix: &'a str,
@@ -597,11 +558,20 @@ impl Resource {
                 .unwrap_or(&from.suffix)
                 .try_into()
                 .unwrap();
-            let (chunk, rest) = Resource::fst_chunk(key_expr);
-            if chunk.intersects(suffix) {
-                match rest {
+            let (ke_chunk, ke_rest) = match key_expr.split_once('/') {
+                // SAFETY: chunks of keyexpr are valid keyexprs
+                Some((chunk, rest)) => unsafe {
+                    (
+                        keyexpr::from_str_unchecked(chunk),
+                        Some(keyexpr::from_str_unchecked(rest)),
+                    )
+                },
+                None => (key_expr, None),
+            };
+            if ke_chunk.intersects(suffix) {
+                match ke_rest {
                     None => {
-                        if chunk.as_bytes() == b"**" {
+                        if ke_chunk.as_bytes() == b"**" {
                             recursive_push(from, matches)
                         } else {
                             if from.context.is_some() {
@@ -624,7 +594,7 @@ impl Resource {
                     Some(rest) if rest.as_bytes() == b"**" => recursive_push(from, matches),
                     Some(rest) => {
                         let recheck_keyexpr_one_level_lower =
-                            chunk.as_bytes() == b"**" || suffix.as_bytes() == b"**";
+                            ke_chunk.as_bytes() == b"**" || suffix.as_bytes() == b"**";
                         for child in from.children.values() {
                             get_matches_from(rest, child, matches);
                             if recheck_keyexpr_one_level_lower {
