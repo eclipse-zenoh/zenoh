@@ -558,7 +558,7 @@ validated_struct::validator! {
                 /// - "lazy": SHM subsystem internals will be initialized lazily upon the first SHM buffer
                 /// allocation or reception. This setting provides better startup time and optimizes resource usage,
                 /// but produces extra latency at the first SHM buffer interaction.
-                /// - "init" SHM subsystem internals will be initialized upon Session opening. This setting sacrifices
+                /// - "init": SHM subsystem internals will be initialized upon Session opening. This setting sacrifices
                 /// startup time, but guarantees no latency impact when first SHM buffer is processed.
                 mode: ShmInitMode,
             },
