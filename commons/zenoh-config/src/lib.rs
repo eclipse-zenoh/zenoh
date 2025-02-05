@@ -554,14 +554,13 @@ validated_struct::validator! {
                 /// over shared memory (and to not fallback on network mode), shared memory needs to be enabled also on the
                 /// subscriber side. By doing so, the probing procedure will succeed and shared memory will operate as expected.
                 enabled: bool,
-                /// Lazy SHM resources initialization.
-                /// If set to `true`, the SHM subsystem internals will be initialized lazily upon the first SHM buffer
-                /// allocation or reception. (default `true`).
-                /// `true` setting provides better startup time and optimizes resource usage, but produces extra
-                /// latency at the first SHM buffer interaction moment.
-                /// `false` setting sacrifices startup time, but guarantees no latency impact when first SHM buffer is
-                /// processed.
-                lazy_init: bool,
+                /// SHM resources initialization mode (default "lazy").
+                /// - "lazy": SHM subsystem internals will be initialized lazily upon the first SHM buffer
+                /// allocation or reception. This setting provides better startup time and optimizes resource usage,
+                /// but produces extra latency at the first SHM buffer interaction.
+                /// - "init" SHM subsystem internals will be initialized upon Session opening. This setting sacrifices
+                /// startup time, but guarantees no latency impact when first SHM buffer is processed.
+                mode: ShmInitMode,
             },
             pub auth: #[derive(Default)]
             AuthConf {
@@ -640,6 +639,14 @@ validated_struct::validator! {
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum QueueAllocMode {
+    Init,
+    #[default]
+    Lazy,
+}
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ShmInitMode {
     Init,
     #[default]
     Lazy,

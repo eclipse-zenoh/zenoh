@@ -20,10 +20,10 @@ use crate::{
 };
 
 pub fn init() {
-    let _ = CLEANUP.write();
-    let _ = GLOBAL_CLIENT_STORAGE.write();
-    let _ = GLOBAL_METADATA_STORAGE.write();
-    let _ = GLOBAL_METADATA_SUBSCRIPTION.write();
-    let _ = GLOBAL_CONFIRMATOR.write();
-    let _ = GLOBAL_VALIDATOR.write();
+    CLEANUP.init();
+    GLOBAL_CLIENT_STORAGE.init();
+    GLOBAL_METADATA_STORAGE.init();
+    GLOBAL_METADATA_SUBSCRIPTION.init();
+    GLOBAL_CONFIRMATOR.init();
+    GLOBAL_VALIDATOR.init();
 }

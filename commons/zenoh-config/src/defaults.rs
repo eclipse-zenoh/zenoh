@@ -309,7 +309,7 @@ impl Default for ShmConf {
     fn default() -> Self {
         Self {
             enabled: true,
-            lazy_init: true,
+            mode: ShmInitMode::default(),
         }
     }
 }

@@ -199,7 +199,11 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Re
 fn zenoh_shm_startup_init() {
     // Open the sessions
     let mut config = zenoh::Config::default();
-    config.transport.shared_memory.set_lazy_init(false).unwrap();
+    config
+        .transport
+        .shared_memory
+        .set_mode(zenoh_config::ShmInitMode::Init)
+        .unwrap();
     tokio::runtime::Runtime::new().unwrap().block_on(async {
         let _session = ztimeout!(zenoh::open(config)).unwrap();
     });
