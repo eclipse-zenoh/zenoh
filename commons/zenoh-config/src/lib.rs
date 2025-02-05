@@ -95,6 +95,8 @@ pub struct DownsamplingRuleConf {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct DownsamplingItemConf {
+    /// Optional identifier for the downsampling configuration item
+    pub id: Option<String>,
     /// A list of interfaces to which the downsampling will be applied
     /// Downsampling will be applied for all interfaces if the parameter is None
     pub interfaces: Option<Vec<String>>,

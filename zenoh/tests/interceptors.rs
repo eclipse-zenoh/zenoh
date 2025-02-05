@@ -151,6 +151,7 @@ fn downsampling_by_keyexpr_impl(flow: InterceptorFlow) {
     let ke_20hz: KeyExpr = format!("{ke_prefix}/20hz").try_into().unwrap();
 
     let ds_config = DownsamplingItemConf {
+        id: None,
         flow,
         interfaces: None,
         rules: vec![
@@ -206,6 +207,7 @@ fn downsampling_by_interface_impl(flow: InterceptorFlow) {
 
     let ds_config = vec![
         DownsamplingItemConf {
+            id: Some("someid".to_string()),
             flow,
             interfaces: Some(vec!["lo".to_string(), "lo0".to_string()]),
             rules: vec![DownsamplingRuleConf {
@@ -214,6 +216,7 @@ fn downsampling_by_interface_impl(flow: InterceptorFlow) {
             }],
         },
         DownsamplingItemConf {
+            id: None,
             flow,
             interfaces: Some(vec!["some_unknown_interface".to_string()]),
             rules: vec![DownsamplingRuleConf {
