@@ -240,7 +240,10 @@
   //  /// The downsampling declaration.
   //  downsampling: [
   //    {
-  //      /// A list of network interfaces messages will be processed on, the rest will be passed as is.
+  //      /// Optional Id, has to be unique
+  //      "id": "wlan0egress",
+  //      /// Optional list of network interfaces messages will be processed on, the rest will be passed as is.
+  //      /// If absent, the rules will be applied to all interfaces, in case of an empty list it means that they will not be applied to any.
   //      interfaces: [ "wlan0" ],
   //      /// Data flow messages will be processed on. ("egress" or "ingress")
   //      flow: "egress",
