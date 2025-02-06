@@ -561,19 +561,15 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
             pending_samples: BTreeMap::new(),
         });
         if state.last_delivered.map(|t| t < *timestamp).unwrap_or(true) {
-            if states.global_pending_queries == 0 && state.pending_queries == 0 {
+            if (states.global_pending_queries == 0 && state.pending_queries == 0)
+                || states.history_depth == 1
+            {
                 state.last_delivered = Some(*timestamp);
                 states.callback.call(sample);
             } else {
-                // Avoid going through the Map if history_depth == 1
-                if states.history_depth == 1 {
-                    state.last_delivered = Some(*timestamp);
-                    states.callback.call(sample);
-                } else {
-                    state.pending_samples.entry(*timestamp).or_insert(sample);
-                    if state.pending_samples.len() >= states.history_depth {
-                        flush_timestamped_source(state, &states.callback);
-                    }
+                state.pending_samples.entry(*timestamp).or_insert(sample);
+                if state.pending_samples.len() >= states.history_depth {
+                    flush_timestamped_source(state, &states.callback);
                 }
             }
         }
