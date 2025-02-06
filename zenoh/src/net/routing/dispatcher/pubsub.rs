@@ -18,11 +18,10 @@ use std::sync::Arc;
 
 use zenoh_core::zread;
 use zenoh_protocol::{
-    core::{key_expr::keyexpr, Reliability, WireExpr},
+    core::{Reliability, WireExpr},
     network::{declare::SubscriberId, push::ext, Push},
     zenoh::PushBody,
 };
-use zenoh_sync::get_mut_unchecked;
 
 use super::{
     face::FaceState,
@@ -72,15 +71,10 @@ pub(crate) fn declare_subscription(
                 } else {
                     let mut fullexpr = prefix.expr().to_string();
                     fullexpr.push_str(expr.suffix.as_ref());
-                    let mut matches = keyexpr::new(fullexpr.as_str())
-                        .map(|ke| Resource::get_matches(&rtables, ke))
-                        .unwrap_or_default();
                     drop(rtables);
                     let mut wtables = zwrite!(tables.tables);
-                    let mut res =
+                    let res =
                         Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
-                    matches.push(Arc::downgrade(&res));
-                    Resource::match_resource(&wtables, &mut res, matches);
                     (res, wtables)
                 };
 
@@ -156,16 +150,14 @@ pub(crate) fn undeclare_subscription(
     }
 }
 
-pub(crate) fn disable_matches_data_routes(_tables: &mut Tables, res: &mut Arc<Resource>) {
+pub(crate) fn disable_matches_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
     if res.context.is_some() {
-        get_mut_unchecked(res).context_mut().disable_data_routes();
-        for match_ in &res.context().matches {
-            let mut match_ = match_.upgrade().unwrap();
-            if !Arc::ptr_eq(&match_, res) {
-                get_mut_unchecked(&mut match_)
+        if let Some(key_expr) = res.key_expr() {
+            Resource::iter_matches(&tables.root_res, key_expr, |m| {
+                unsafe { &mut *Arc::as_ptr(m).cast_mut() }
                     .context_mut()
-                    .disable_data_routes();
-            }
+                    .disable_data_routes()
+            })
         }
     }
 }
