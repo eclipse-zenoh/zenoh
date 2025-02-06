@@ -15,7 +15,7 @@
 use std::{fmt, marker::PhantomData};
 
 use serde::{
-    de::{self, Error, IntoDeserializer, MapAccess, Visitor},
+    de::{self, IntoDeserializer, MapAccess, Visitor},
     Deserialize, Serialize,
 };
 use zenoh_protocol::core::{EndPoint, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor};
@@ -519,8 +519,7 @@ impl<'a> serde::Deserialize<'a> for ModeDependentValue<TargetDependentValue<Auto
                     return dbg!(Ok(ModeDependentValue::Dependent(values)));
                 }
                 dbg!(Ok(ModeDependentValue::Unique(
-                    TargetDependentValue::deserialize(&value)
-                        .map_err(|err| M::Error::custom(err))?,
+                    TargetDependentValue::deserialize(&value).map_err(de::Error::custom)?,
                 )))
             }
         }
