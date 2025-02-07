@@ -47,23 +47,6 @@ pub struct Push {
     pub payload: PushBody,
 }
 
-pub struct WithIdx<T> {
-    pub data: T,
-    pub idx: Option<(usize, usize)>,
-}
-
-pub trait WithIdxImpl {
-    type WithIdx;
-}
-
-impl WithIdxImpl for WireExpr<'static> {
-    type WithIdx = WithIdx<Self>;
-}
-
-pub struct PushWithIdx {
-    pub wire_expr: WithIdx<WireExpr<'static>>,
-}
-
 pub mod ext {
     use crate::{
         common::{ZExtZ64, ZExtZBuf},
