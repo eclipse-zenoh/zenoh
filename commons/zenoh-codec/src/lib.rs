@@ -22,13 +22,13 @@ extern crate alloc;
 
 pub mod common;
 pub mod core;
+pub mod deidx;
 pub mod network;
 pub mod scouting;
 pub mod transport;
 pub mod zenoh;
 
-use ::core::{fmt::Debug, marker::PhantomData};
-use zenoh_buffers::reader::Reader;
+use ::core::marker::PhantomData;
 use zenoh_protocol::core::Reliability;
 
 pub trait WCodec<Message, Buffer> {
@@ -39,61 +39,6 @@ pub trait WCodec<Message, Buffer> {
 pub trait RCodec<Message, Buffer> {
     type Error;
     fn read(self, buffer: Buffer) -> Result<Message, Self::Error>;
-}
-
-pub struct MessageIndex<T> {
-    pub msg: T,
-    pub idx: usize,
-    pub len: usize,
-}
-
-pub trait RCodecIndex<Message, Buffer> {
-    type Error;
-    fn read(self, buffer: Buffer) -> Result<MessageIndex<Message>, Self::Error>;
-}
-
-pub struct Zenoh080Index {
-    inner: Zenoh080,
-    pub idx: usize,
-}
-
-impl Zenoh080Index {
-    pub fn new() -> Self {
-        Self {
-            inner: Zenoh080::new(),
-            idx: 0,
-        }
-    }
-}
-
-impl Default for Zenoh080Index {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<Message, R> RCodecIndex<Message, R> for &mut Zenoh080Index
-where
-    R: Reader,
-    for<'a> Zenoh080: RCodec<Message, &'a mut R>,
-    for<'a> <Zenoh080 as RCodec<Message, &'a mut R>>::Error: Debug,
-{
-    type Error = String;
-
-    fn read(self, mut reader: R) -> Result<MessageIndex<Message>, Self::Error> {
-        let start = reader.remaining();
-        let msg = self.inner.read(&mut reader).unwrap();
-        let end = reader.remaining();
-
-        let len = end - start;
-        let msg = MessageIndex {
-            msg,
-            idx: self.idx,
-            len,
-        };
-        self.idx += len;
-        Ok(msg)
-    }
 }
 
 // Calculate the length of the value once serialized
