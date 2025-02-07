@@ -25,7 +25,8 @@ pub mod qos;
 pub mod wrappers;
 
 #[allow(unused_imports)]
-use std::convert::TryFrom; // This is a false positive from the rust analyser
+use std::convert::TryFrom;
+// This is a false positive from the rust analyser
 use std::{
     any::Any, collections::HashSet, fmt, io::Read, net::SocketAddr, ops, path::Path, sync::Weak,
 };
@@ -186,6 +187,21 @@ pub enum Permission {
     Deny,
 }
 
+/// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
+#[derive(Default, Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum AutoConnectStrategy {
+    /// Always attempt to connect to another node, may result in redundant connection which
+    /// will be then be closed.
+    #[default]
+    Always,
+    /// A node will attempt to connect to another one only if its own zid is greater than the
+    /// other one. If both nodes use this strategy, only one will attempt the connection.
+    /// This strategy may not be suited if one of the node is not reachable by the other one,
+    /// for example because of a private IP.
+    GreaterZid,
+}
+
 pub trait ConfigValidator: Send + Sync {
     fn check_config(
         &self,
@@ -303,6 +319,8 @@ validated_struct::validator! {
                 pub ttl: Option<u32>,
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through UDP multicast.
                 autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
+                /// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
+                autoconnect_strategy: Option<ModeDependentValue<TargetDependentValue<AutoConnectStrategy>>>,
                 /// Whether or not to listen for scout messages on UDP multicast and reply to them.
                 listen: Option<ModeDependentValue<bool>>,
             },
@@ -321,6 +339,8 @@ validated_struct::validator! {
                 target: Option<ModeDependentValue<WhatAmIMatcher>>,
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through gossip.
                 autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
+                /// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
+                autoconnect_strategy: Option<ModeDependentValue<TargetDependentValue<AutoConnectStrategy>>>,
             },
         },
 
@@ -727,9 +747,9 @@ fn config_deser() {
         &mut json5::Deserializer::from_str(
             r#"{transport: { auth: { usrpwd: { user: null, password: null, dictionary_file: "file" }}}}"#,
         )
-        .unwrap(),
+            .unwrap(),
     )
-    .unwrap();
+        .unwrap();
     assert_eq!(
         config
             .transport()
@@ -744,9 +764,9 @@ fn config_deser() {
         &mut json5::Deserializer::from_str(
             r#"{transport: { auth: { usrpwd: { user: null, password: null, user_password_dictionary: "file" }}}}"#,
         )
-        .unwrap(),
+            .unwrap(),
     )
-    .unwrap_err());
+        .unwrap_err());
     dbg!(Config::from_file("../../DEFAULT_CONFIG.json5").unwrap());
 }
 
@@ -1023,15 +1043,15 @@ impl PluginsConfig {
                 _ => id,
             };
 
-            if let Some(paths) = value.get("__path__"){
+            if let Some(paths) = value.get("__path__") {
                 let paths = match paths {
                     Value::String(s) => vec![s.clone()],
-                    Value::Array(a) => a.iter().map(|s| if let Value::String(s) = s {s.clone()} else {panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", id)}).collect(),
+                    Value::Array(a) => a.iter().map(|s| if let Value::String(s) = s { s.clone() } else { panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", id) }).collect(),
                     _ => panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", id)
                 };
-                PluginLoad {id: id.clone(), name: name.clone(), paths: Some(paths), required}
+                PluginLoad { id: id.clone(), name: name.clone(), paths: Some(paths), required }
             } else {
-                PluginLoad {id: id.clone(), name: name.clone(), paths: None, required}
+                PluginLoad { id: id.clone(), name: name.clone(), paths: None, required }
             }
         })
     }
