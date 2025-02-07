@@ -512,15 +512,14 @@ impl<'a> serde::Deserialize<'a> for ModeDependentValue<TargetDependentValue<Auto
             {
                 let value =
                     serde_json::Value::deserialize(de::value::MapAccessDeserializer::new(map))?;
-                dbg!(&value);
                 if let Ok(values) =
                     ModeValues::<TargetDependentValue<AutoConnectStrategy>>::deserialize(&value)
                 {
-                    return dbg!(Ok(ModeDependentValue::Dependent(values)));
+                    return Ok(ModeDependentValue::Dependent(values));
                 }
-                dbg!(Ok(ModeDependentValue::Unique(
+                Ok(ModeDependentValue::Unique(
                     TargetDependentValue::deserialize(&value).map_err(de::Error::custom)?,
-                )))
+                ))
             }
         }
         deserializer.deserialize_any(UniqueOrDependent(PhantomData))
