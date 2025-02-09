@@ -508,13 +508,6 @@ validated_struct::validator! {
                             /// The maximum time limit (in ms) a message should be retained for batching when back-pressure happens.
                             time_limit: u64,
                         },
-                        /// Perform lazy memory allocation of batches in the prioritiey queues. If set to false all batches are initialized at
-                        /// initialization time. If set to true the batches will be allocated when needed up to the maximum number of batches
-                        /// configured in the size configuration parameter.
-                        pub allocation: #[derive(Default, Copy, PartialEq, Eq)]
-                        QueueAllocConf {
-                            pub mode: QueueAllocMode,
-                        },
                     },
                     // Number of threads used for TX
                     threads: usize,
@@ -657,14 +650,6 @@ validated_struct::validator! {
         /// Please refer to [`PluginsConfig`]'s documentation for further details.
         plugins: PluginsConfig,
     }
-}
-
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum QueueAllocMode {
-    #[default]
-    Init,
-    Lazy,
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

@@ -314,7 +314,6 @@ impl TransportLinkMulticastUniversal {
                 wait_before_close: self.transport.manager.config.wait_before_close,
                 batching_enabled: self.transport.manager.config.batching,
                 batching_time_limit: self.transport.manager.config.queue_backoff,
-                queue_alloc: self.transport.manager.config.queue_alloc,
             };
             // The pipeline
             let (producer, consumer) = TransmissionPipeline::make(tpc, &priority_tx);
@@ -544,9 +543,8 @@ async fn rx_task(
     // The pool of buffers
     let mtu = link.inner.config.batch.mtu as usize;
     let mut n = rx_buffer_size / mtu;
-    if n == 0 {
-        tracing::debug!("RX configured buffer of {rx_buffer_size} bytes is too small for {link} that has an MTU of {mtu} bytes. Defaulting to {mtu} bytes for RX buffer.");
-        n = 1;
+    if rx_buffer_size % mtu != 0 {
+        n += 1;
     }
 
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());

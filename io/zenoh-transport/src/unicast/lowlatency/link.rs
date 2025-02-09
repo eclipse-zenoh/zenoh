@@ -154,9 +154,8 @@ impl TransportUnicastLowlatency {
             let pool = {
                 let mtu = link_rx.config.batch.mtu as usize;
                 let mut n = rx_buffer_size / mtu;
-                if n == 0 {
-                    tracing::debug!("RX configured buffer of {rx_buffer_size} bytes is too small for {link_rx} that has an MTU of {mtu} bytes. Defaulting to {mtu} bytes for RX buffer.");
-                    n = 1;
+                if rx_buffer_size % mtu != 0 {
+                    n += 1;
                 }
                 zenoh_sync::RecyclingObjectPool::new(n, move || vec![0_u8; mtu].into_boxed_slice())
             };

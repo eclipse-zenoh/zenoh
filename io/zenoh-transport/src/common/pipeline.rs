@@ -29,7 +29,7 @@ use zenoh_buffers::{
     ZBuf,
 };
 use zenoh_codec::{transport::batch::BatchError, WCodec, Zenoh080};
-use zenoh_config::{QueueAllocConf, QueueAllocMode, QueueSizeConf};
+use zenoh_config::QueueSizeConf;
 use zenoh_core::zlock;
 use zenoh_protocol::{
     core::Priority,
@@ -55,8 +55,6 @@ const RBLEN: usize = QueueSizeConf::MAX;
 struct StageInRefill {
     n_ref_r: Waiter,
     s_ref_r: RingBufferReader<WBatch, RBLEN>,
-    batch_config: (usize, BatchConfig),
-    batch_allocs: usize,
 }
 
 #[derive(Debug)]
@@ -70,14 +68,7 @@ impl std::error::Error for TransportClosed {}
 
 impl StageInRefill {
     fn pull(&mut self) -> Option<WBatch> {
-        match self.s_ref_r.pull() {
-            Some(b) => Some(b),
-            None if self.batch_allocs < self.batch_config.0 => {
-                self.batch_allocs += 1;
-                Some(WBatch::new(self.batch_config.1))
-            }
-            None => None,
-        }
+        self.s_ref_r.pull()
     }
 
     fn wait(&self) -> bool {
@@ -646,7 +637,6 @@ pub(crate) struct TransmissionPipelineConf {
     pub(crate) wait_before_close: Duration,
     pub(crate) batching_enabled: bool,
     pub(crate) batching_time_limit: Duration,
-    pub(crate) queue_alloc: QueueAllocConf,
 }
 
 // A 2-stage transmission pipeline
@@ -677,14 +667,10 @@ impl TransmissionPipeline {
             // Create the refill ring buffer
             // This is a SPSC ring buffer
             let (mut s_ref_w, s_ref_r) = RingBuffer::<WBatch, RBLEN>::init();
-            let mut batch_allocs = 0;
-            if *config.queue_alloc.mode() == QueueAllocMode::Init {
-                // Fill the refill ring buffer with batches
-                for _ in 0..*num {
-                    let batch = WBatch::new(config.batch);
-                    batch_allocs += 1;
-                    assert!(s_ref_w.push(batch).is_none());
-                }
+            // Fill the refill ring buffer with batches
+            for _ in 0..*num {
+                let batch = WBatch::new(config.batch);
+                assert!(s_ref_w.push(batch).is_none());
             }
             // Create the channel for notifying that new batches are in the refill ring buffer
             // This is a SPSC channel
@@ -703,12 +689,7 @@ impl TransmissionPipeline {
             });
 
             stage_in.push(Mutex::new(StageIn {
-                s_ref: StageInRefill {
-                    n_ref_r,
-                    s_ref_r,
-                    batch_config: (*num, config.batch),
-                    batch_allocs,
-                },
+                s_ref: StageInRefill { n_ref_r, s_ref_r },
                 s_out: StageInOut {
                     n_out_w: n_out_w.clone(),
                     s_out_w,
@@ -982,7 +963,6 @@ mod tests {
         ZBuf,
     };
     use zenoh_codec::{RCodec, Zenoh080};
-    use zenoh_config::{QueueAllocConf, QueueAllocMode};
     use zenoh_protocol::{
         core::{Bits, CongestionControl, Encoding, Priority},
         network::{ext, Push},
@@ -1008,9 +988,6 @@ mod tests {
         wait_before_drop: (Duration::from_millis(1), Duration::from_millis(1024)),
         wait_before_close: Duration::from_secs(5),
         batching_time_limit: Duration::from_micros(1),
-        queue_alloc: QueueAllocConf {
-            mode: QueueAllocMode::Init,
-        },
     };
 
     const CONFIG_NOT_STREAMED: TransmissionPipelineConf = TransmissionPipelineConf {
@@ -1025,9 +1002,6 @@ mod tests {
         wait_before_drop: (Duration::from_millis(1), Duration::from_millis(1024)),
         wait_before_close: Duration::from_secs(5),
         batching_time_limit: Duration::from_micros(1),
-        queue_alloc: QueueAllocConf {
-            mode: QueueAllocMode::Init,
-        },
     };
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
