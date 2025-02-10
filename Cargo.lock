@@ -5836,13 +5836,11 @@ name = "zenohd"
 version = "1.2.1"
 dependencies = [
  "clap",
- "futures",
  "git-version",
  "json5",
  "lazy_static",
  "rand 0.8.5",
  "rustc_version 0.4.1",
- "tokio",
  "tracing",
  "tracing-subscriber",
  "zenoh",
