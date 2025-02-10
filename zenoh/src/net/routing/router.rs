@@ -136,7 +136,7 @@ impl Router {
             )),
             InterceptorsChain::from(egress.into_iter().flatten().collect::<Vec<_>>()),
         );
-        let mux = Arc::new(Mux::new(transport.clone(), egress));
+        let mux = Arc::new(Mux::new(transport.clone(), Arc::new(egress)));
         let newface = tables
             .faces
             .entry(fid)
@@ -192,7 +192,7 @@ impl Router {
                 .filter_map(|itor| itor.new_transport_multicast(&transport))
                 .collect::<Vec<EgressInterceptor>>(),
         );
-        let mux = Arc::new(McastMux::new(transport.clone(), interceptor));
+        let mux = Arc::new(McastMux::new(transport.clone(), interceptor.into()));
         let face = FaceState::new(
             fid,
             ZenohIdProto::from_str("1").unwrap(),
