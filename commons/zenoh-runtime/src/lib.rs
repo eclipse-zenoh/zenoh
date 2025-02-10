@@ -66,7 +66,8 @@ impl Default for RuntimeParam {
 
 impl RuntimeParam {
     pub fn build(&self, zrt: ZRuntime) -> Result<Runtime> {
-        let rt = tokio::runtime::Builder::new_multi_thread()
+        let mut rt_builder = tokio::runtime::Builder::new_multi_thread();
+        rt_builder
             .worker_threads(self.worker_threads)
             .max_blocking_threads(self.max_blocking_threads)
             .enable_io()
@@ -77,8 +78,13 @@ impl RuntimeParam {
                     .unwrap()
                     .fetch_add(1, Ordering::SeqCst);
                 format!("{}-{}", zrt, id)
-            })
-            .build()?;
+            });
+        if let Some(size) = env::var_os("ZENOH_RUNTIME_MIN_STACK")
+            .and_then(|s| s.to_str().and_then(|s| s.parse().ok()))
+        {
+            rt_builder.thread_stack_size(size);
+        }
+        let rt = rt_builder.build()?;
         Ok(rt)
     }
 }
