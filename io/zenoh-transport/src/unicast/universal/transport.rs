@@ -372,7 +372,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
             }
             .into();
 
-            p.push_transport_message(msg, Priority::Background);
+            let _ = p.push_transport_message(msg, Priority::Background);
         }
         // Terminate and clean up the transport
         self.delete().await

@@ -220,7 +220,7 @@ impl TransportMulticastInner {
                         session: false,
                     }
                     .into();
-                    pipeline.push_transport_message(msg, Priority::Background);
+                    let _ = pipeline.push_transport_message(msg, Priority::Background);
                 }
             }
         }

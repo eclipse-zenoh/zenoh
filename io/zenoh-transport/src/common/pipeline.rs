@@ -12,16 +12,16 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    fmt,
-    ops::Add,
+    cmp::min,
+    fmt, mem,
     sync::{
-        atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering},
+        atomic::{AtomicI8, Ordering},
         Arc, Mutex, MutexGuard,
     },
     time::{Duration, Instant},
 };
 
-use crossbeam_utils::CachePadded;
+use futures::future::OptionFuture;
 use ringbuffer_spsc::{RingBuffer, RingBufferReader, RingBufferWriter};
 use zenoh_buffers::{
     reader::{HasReader, Reader},
@@ -38,24 +38,18 @@ use zenoh_protocol::{
         fragment,
         fragment::FragmentHeader,
         frame::{self, FrameHeader},
-        AtomicBatchSize, BatchSize, TransportMessage,
+        BatchSize, TransportMessage,
     },
 };
-use zenoh_sync::{event, Notifier, WaitDeadlineError, Waiter};
+use zenoh_sync::{event, Notifier, WaitDeadlineError, WaitError, Waiter};
 
 use super::{
     batch::{Encode, WBatch},
-    priority::{TransportChannelTx, TransportPriorityTx},
+    priority::TransportPriorityTx,
 };
 use crate::common::batch::BatchConfig;
 
 const RBLEN: usize = QueueSizeConf::MAX;
-
-// Inner structure to reuse serialization batches
-struct StageInRefill {
-    n_ref_r: Waiter,
-    s_ref_r: RingBufferReader<WBatch, RBLEN>,
-}
 
 #[derive(Debug)]
 pub(crate) struct TransportClosed;
@@ -66,262 +60,226 @@ impl fmt::Display for TransportClosed {
 }
 impl std::error::Error for TransportClosed {}
 
-impl StageInRefill {
-    fn pull(&mut self) -> Option<WBatch> {
-        self.s_ref_r.pull()
+/// Count of available batches for a pipeline.
+///
+/// When no batch is available, a "congested" flag can be set and checked later
+/// to shortcut the pipeline.
+///
+/// # Implementation
+///
+/// The counter is an atomic integer, initialized with the batch count. It is decremented
+/// when batches are acquired, and incremented when they are released. If the count is zero,
+/// meaning no batch is available, it can be updated to -1, meaning that the pipeline is
+/// congested.
+struct AvailableBatches(AtomicI8);
+
+impl AvailableBatches {
+    /// Initializes the count of available batch.
+    fn new(count: usize) -> Self {
+        Self(AtomicI8::new(count as i8))
     }
 
-    fn wait(&self) -> bool {
-        self.n_ref_r.wait().is_ok()
-    }
-
-    fn wait_deadline(&self, instant: Instant) -> Result<bool, TransportClosed> {
-        match self.n_ref_r.wait_deadline(instant) {
-            Ok(()) => Ok(true),
-            Err(WaitDeadlineError::Deadline) => Ok(false),
-            Err(WaitDeadlineError::WaitError) => Err(TransportClosed),
-        }
-    }
-}
-
-lazy_static::lazy_static! {
-   static ref LOCAL_EPOCH: Instant = Instant::now();
-}
-
-type AtomicMicroSeconds = AtomicU32;
-type MicroSeconds = u32;
-
-struct AtomicBackoff {
-    active: CachePadded<AtomicBool>,
-    bytes: CachePadded<AtomicBatchSize>,
-    first_write: CachePadded<AtomicMicroSeconds>,
-}
-
-// Inner structure to link the initial stage with the final stage of the pipeline
-struct StageInOut {
-    n_out_w: Notifier,
-    s_out_w: RingBufferWriter<WBatch, RBLEN>,
-    atomic_backoff: Arc<AtomicBackoff>,
-}
-
-impl StageInOut {
-    #[inline]
-    fn notify(&self, bytes: BatchSize) {
-        self.atomic_backoff.bytes.store(bytes, Ordering::Relaxed);
-        if !self.atomic_backoff.active.load(Ordering::Relaxed) {
-            let _ = self.n_out_w.notify();
-        }
-    }
-
-    #[inline]
-    fn move_batch(&mut self, batch: WBatch) {
-        let _ = self.s_out_w.push(batch);
-        self.atomic_backoff.bytes.store(0, Ordering::Relaxed);
-        let _ = self.n_out_w.notify();
-    }
-}
-
-// Inner structure containing mutexes for current serialization batch and SNs
-struct StageInMutex {
-    current: Arc<Mutex<Option<WBatch>>>,
-    priority: TransportPriorityTx,
-}
-
-impl StageInMutex {
-    #[inline]
-    fn current(&self) -> MutexGuard<'_, Option<WBatch>> {
-        zlock!(self.current)
-    }
-
-    #[inline]
-    fn channel(&self, is_reliable: bool) -> MutexGuard<'_, TransportChannelTx> {
-        if is_reliable {
-            zlock!(self.priority.reliable)
+    /// Tries to acquire a batch, returns if there is one available.
+    ///
+    /// If no batch is available and `set_congested` is `true`, then
+    /// the congested flag will be set.
+    fn try_acquire(&self, set_congested: bool) -> bool {
+        if set_congested {
+            // Try to acquire a batch; if count was zero, it is set to -1,
+            // resulting in the congested flag set.
+            self.0.fetch_sub(1, Ordering::Relaxed) > 0
+        } else if self.0.load(Ordering::Relaxed) > 0 {
+            // No need of a compare-and-swap operation to decrease the count
+            // only if it's positive, as there should only be a single acquirer.
+            self.0.fetch_sub(1, Ordering::Relaxed);
+            return true;
         } else {
-            zlock!(self.priority.best_effort)
+            false
+        }
+    }
+
+    /// Returns if the congested flag has been set, meaning no batch is available.
+    /// The congested flag should usually be set after waiting a bit.
+    fn is_congested(&self) -> bool {
+        self.0.load(Ordering::Relaxed) == -1
+    }
+
+    /// Releases a batch, making it available.
+    /// If the
+    fn release(&self) {
+        // If the pipeline was congested, increment the count a second time
+        if self.0.fetch_add(1, Ordering::Relaxed) == -1 {
+            self.0.fetch_add(1, Ordering::Relaxed);
         }
     }
 }
 
 #[derive(Debug)]
-struct WaitTime {
+struct Deadline {
     wait_time: Duration,
     max_wait_time: Option<Duration>,
-}
-
-impl WaitTime {
-    fn new(wait_time: Duration, max_wait_time: Option<Duration>) -> Self {
-        Self {
-            wait_time,
-            max_wait_time,
-        }
-    }
-
-    fn advance(&mut self, instant: &mut Instant) {
-        match &mut self.max_wait_time {
-            Some(max_wait_time) => {
-                if let Some(new_max_wait_time) = max_wait_time.checked_sub(self.wait_time) {
-                    *instant += self.wait_time;
-                    *max_wait_time = new_max_wait_time;
-                    self.wait_time *= 2;
-                }
-            }
-            None => {
-                *instant += self.wait_time;
-            }
-        }
-    }
-
-    fn wait_time(&self) -> Duration {
-        self.wait_time
-    }
-}
-
-#[derive(Clone)]
-enum DeadlineSetting {
-    Immediate,
-    Finite(Instant),
-}
-
-struct LazyDeadline {
-    deadline: Option<DeadlineSetting>,
-    wait_time: WaitTime,
-}
-
-impl LazyDeadline {
-    fn new(wait_time: WaitTime) -> Self {
-        Self {
-            deadline: None,
-            wait_time,
-        }
-    }
-
-    fn advance(&mut self) {
-        match self.deadline().to_owned() {
-            DeadlineSetting::Immediate => {}
-            DeadlineSetting::Finite(mut instant) => {
-                self.wait_time.advance(&mut instant);
-                self.deadline = Some(DeadlineSetting::Finite(instant));
-            }
-        }
-    }
-
-    #[inline]
-    fn deadline(&mut self) -> &mut DeadlineSetting {
-        self.deadline
-            .get_or_insert_with(|| match self.wait_time.wait_time() {
-                Duration::ZERO => DeadlineSetting::Immediate,
-                nonzero_wait_time => DeadlineSetting::Finite(Instant::now().add(nonzero_wait_time)),
-            })
-    }
-}
-
-struct Deadline {
-    lazy_deadline: LazyDeadline,
+    expiration: Option<Instant>,
 }
 
 impl Deadline {
     fn new(wait_time: Duration, max_wait_time: Option<Duration>) -> Self {
         Self {
-            lazy_deadline: LazyDeadline::new(WaitTime::new(wait_time, max_wait_time)),
+            wait_time,
+            max_wait_time,
+            expiration: None,
         }
     }
 
-    #[inline]
-    fn wait(&mut self, s_ref: &StageInRefill) -> Result<bool, TransportClosed> {
-        match self.lazy_deadline.deadline() {
-            DeadlineSetting::Immediate => Ok(false),
-            DeadlineSetting::Finite(instant) => s_ref.wait_deadline(*instant),
+    fn get_expiration(&mut self) -> Option<Instant> {
+        if self.expiration.is_none() && self.wait_time > Duration::ZERO {
+            self.expiration = Some(Instant::now() + self.wait_time);
         }
+        self.expiration
     }
 
-    fn on_next_fragment(&mut self) {
-        self.lazy_deadline.advance();
+    fn renew(&mut self) {
+        if let Some(expiration) = self.get_expiration() {
+            self.expiration = Some(expiration + self.wait_time);
+            if let Some(max) = self.max_wait_time {
+                self.max_wait_time = max.checked_sub(self.wait_time);
+                self.wait_time *= 2;
+            }
+        }
     }
 }
 
-// This is the initial stage of the pipeline where messages are serliazed on
+#[derive(Debug, Default)]
+struct CurrentBatch {
+    batch: Option<WBatch>,
+    timestamp: Option<Instant>,
+}
+
+struct StageInShared {
+    queue: Mutex<StageIn>,
+    current: Arc<Mutex<CurrentBatch>>,
+    chan_tx: TransportPriorityTx,
+    available: Arc<AvailableBatches>,
+}
+
+// This is the initial stage of the pipeline where messages are serialized on
 struct StageIn {
-    s_ref: StageInRefill,
-    s_out: StageInOut,
-    mutex: StageInMutex,
+    batch_tx: RingBufferWriter<WBatch, RBLEN>,
+    batch_notifier: Notifier,
+    available: Arc<AvailableBatches>,
+    available_waiter: Waiter,
+    use_small_batch: bool,
     fragbuf: ZBuf,
     batching: bool,
-    // used for stop fragment
     batch_config: BatchConfig,
 }
 
 impl StageIn {
+    const SMALL_BATCH_SIZE: BatchSize = 1 << 11;
+
+    /// Allocate a new batch, using small batch size when appropriate.
+    fn new_batch(&self) -> WBatch {
+        let mut batch_config = self.batch_config;
+        if self.use_small_batch {
+            batch_config.mtu = min(self.batch_config.mtu, Self::SMALL_BATCH_SIZE);
+        }
+        WBatch::new(batch_config)
+    }
+
+    /// Retrieve the current batch, or allocate a new one if there is a slot available.
+    fn get_batch(
+        &self,
+        current: &mut MutexGuard<'_, CurrentBatch>,
+        mut deadline: Option<&mut Deadline>,
+    ) -> Result<Option<WBatch>, TransportClosed> {
+        // retrieve current batch if any
+        if let Some(batch) = current.batch.take() {
+            return Ok(Some(batch));
+        }
+        loop {
+            // try to acquire an available batch
+            if self.available.try_acquire(false) {
+                return Ok(Some(self.new_batch()));
+            }
+            // otherwise, wait until one is available
+            match deadline.as_mut().map(|d| d.get_expiration()) {
+                Some(Some(deadline)) => match self.available_waiter.wait_deadline(deadline) {
+                    Ok(..) => continue,
+                    Err(WaitDeadlineError::Deadline) => break,
+                    Err(WaitDeadlineError::WaitError) => return Err(TransportClosed),
+                },
+                Some(None) => break,
+                None => match self.available_waiter.wait() {
+                    Ok(..) => continue,
+                    Err(WaitError) => return Err(TransportClosed),
+                },
+            }
+        }
+        // the deadline has been exceeded, try a last time, setting the congested flag
+        // if there is still no batch
+        if self.available.try_acquire(true) {
+            return Ok(Some(self.new_batch()));
+        }
+        Ok(None)
+    }
+
+    /// Push a batch to the TX task.
+    ///
+    /// If batching is enabled, unless `force` is set to `true`, then the batch will be
+    /// kept for reuse.
+    /// If the batch is small, the next batches will be allocated with a small capacity too.
+    fn push_batch(
+        &mut self,
+        current: &mut MutexGuard<'_, CurrentBatch>,
+        batch: WBatch,
+        force: bool,
+    ) {
+        if batch.len() < Self::SMALL_BATCH_SIZE {
+            self.use_small_batch = true;
+        }
+        if !self.batching || force {
+            self.batch_tx.push(batch);
+            let _ = self.batch_notifier.notify();
+        } else {
+            current.batch = Some(batch);
+            if current.timestamp.is_none() {
+                current.timestamp = Some(Instant::now());
+                let _ = self.batch_notifier.notify();
+            }
+        }
+    }
+
     fn push_network_message(
         &mut self,
+        shared: &StageInShared,
         msg: &NetworkMessage,
         priority: Priority,
         deadline: &mut Deadline,
     ) -> Result<bool, TransportClosed> {
         // Lock the current serialization batch.
-        let mut c_guard = self.mutex.current();
+        let mut current = zlock!(shared.current);
 
-        macro_rules! zgetbatch_rets {
-            ($($restore_sn:stmt)?) => {
-                loop {
-                    match c_guard.take() {
-                        Some(batch) => break batch,
-                        None => match self.s_ref.pull() {
-                            Some(mut batch) => {
-                                batch.clear();
-                                self.s_out.atomic_backoff.first_write.store(
-                                    LOCAL_EPOCH.elapsed().as_micros() as MicroSeconds,
-                                    Ordering::Relaxed,
-                                );
-                                break batch;
-                            }
-                            None => {
-                                // Wait for an available batch until deadline
-                                if !deadline.wait(&self.s_ref)? {
-                                    // Still no available batch.
-                                    // Restore the sequence number and drop the message
-                                    $($restore_sn)?
-                                    tracing::trace!(
-                                        "Zenoh message dropped because it's over the deadline {:?}: {:?}",
-                                        deadline.lazy_deadline.wait_time, msg
-                                    );
-                                    return Ok(false);
-                                }
-                            }
-                        },
-                    }
-                }
-            };
-        }
-
-        macro_rules! zretok {
-            ($batch:expr, $msg:expr) => {{
-                if !self.batching || $msg.is_express() {
-                    // Move out existing batch
-                    self.s_out.move_batch($batch);
-                    return Ok(true);
-                } else {
-                    let bytes = $batch.len();
-                    *c_guard = Some($batch);
-                    drop(c_guard);
-                    self.s_out.notify(bytes);
-                    return Ok(true);
-                }
-            }};
-        }
-
-        // Get the current serialization batch.
-        let mut batch = zgetbatch_rets!();
-        // Attempt the serialization on the current batch
-        let e = match batch.encode(msg) {
-            Ok(_) => zretok!(batch, msg),
-            Err(e) => e,
+        // Attempt the serialization on the current batch.
+        let Some(mut batch) = self.get_batch(&mut current, Some(deadline))? else {
+            return Ok(false);
+        };
+        let need_new_frame = match batch.encode(msg) {
+            Ok(_) => {
+                self.push_batch(&mut current, batch, msg.is_express());
+                return Ok(true);
+            }
+            Err(BatchError::NewFrame) => true,
+            Err(_) => false,
         };
 
         // Lock the channel. We are the only one that will be writing on it.
-        let mut tch = self.mutex.channel(msg.is_reliable());
+        let tch = if msg.is_reliable() {
+            &shared.chan_tx.reliable
+        } else {
+            &shared.chan_tx.best_effort
+        };
+        let mut tch = zlock!(tch);
 
-        // Retrieve the next SN
+        // Retrieve the next SN.
         let sn = tch.sn.get();
 
         // The Frame
@@ -331,33 +289,45 @@ impl StageIn {
             ext_qos: frame::ext::QoSType::new(priority),
         };
 
-        if let BatchError::NewFrame = e {
-            // Attempt a serialization with a new frame
+        // Attempt a serialization with a new frame.
+        if need_new_frame {
             if batch.encode((msg, &frame)).is_ok() {
-                zretok!(batch, msg);
+                self.push_batch(&mut current, batch, msg.is_express());
+                return Ok(true);
             }
         }
 
+        // Push the batch if not empty
         if !batch.is_empty() {
-            // Move out existing batch
-            self.s_out.move_batch(batch);
-            batch = zgetbatch_rets!(tch.sn.set(sn).unwrap());
+            self.push_batch(&mut current, batch, true);
+        } else {
+            drop(batch);
+            self.available.release();
         }
 
-        // Attempt a second serialization on fully empty batch
+        // Attempt a second serialization on fully empty batch (do not use small batch)
+        self.use_small_batch = false;
+        match self.get_batch(&mut current, Some(deadline))? {
+            Some(b) => batch = b,
+            None => {
+                tch.sn.set(sn).unwrap();
+                return Ok(false);
+            }
+        }
         if batch.encode((msg, &frame)).is_ok() {
-            zretok!(batch, msg);
+            self.push_batch(&mut current, batch, msg.is_express());
+            return Ok(true);
         }
 
         // The second serialization attempt has failed. This means that the message is
         // too large for the current batch size: we need to fragment.
         // Reinsert the current batch for fragmentation.
-        *c_guard = Some(batch);
+        current.batch = Some(batch);
 
         // Take the expandable buffer and serialize the totality of the message
-        self.fragbuf.clear();
+        let mut fragbuf = mem::take(&mut self.fragbuf);
 
-        let mut writer = self.fragbuf.writer();
+        let mut writer = fragbuf.writer();
         let codec = Zenoh080::new();
         codec.write(&mut writer, msg).unwrap();
 
@@ -370,37 +340,38 @@ impl StageIn {
             ext_first: Some(fragment::ext::First::new()),
             ext_drop: None,
         };
-        let mut reader = self.fragbuf.reader();
+        let mut reader = fragbuf.reader();
         while reader.can_read() {
-            // Get the current serialization batch
-            batch = zgetbatch_rets!({
-                // If no fragment has been sent, the sequence number is just reset
-                if fragment.ext_first.is_some() {
-                    tch.sn.set(sn).unwrap()
-                // Otherwise, an ephemeral batch is created to send the stop fragment
-                } else {
-                    let mut batch = WBatch::new_ephemeral(self.batch_config);
-                    self.fragbuf.clear();
-                    fragment.ext_drop = Some(fragment::ext::Drop::new());
-                    let _ = batch.encode((&mut self.fragbuf.reader(), &mut fragment));
-                    self.s_out.move_batch(batch);
+            match self.get_batch(&mut current, Some(deadline))? {
+                Some(b) => batch = b,
+                None => {
+                    // If no fragment has been sent, the sequence number is just reset
+                    if fragment.ext_first.is_some() {
+                        tch.sn.set(sn).unwrap()
+                    // Otherwise, an ephemeral batch is created to send the stop fragment
+                    } else {
+                        self.use_small_batch = true;
+                        let mut batch = self.new_batch();
+                        fragment.ext_drop = Some(fragment::ext::Drop::new());
+                        let _ = batch.encode((&mut self.fragbuf.reader(), &mut fragment));
+                        self.push_batch(&mut current, batch, true);
+                    }
+                    return Ok(false);
                 }
-            });
-
+            }
             // Serialize the message fragment
             match batch.encode((&mut reader, &mut fragment)) {
                 Ok(_) => {
                     // Update the SN
                     fragment.sn = tch.sn.get();
                     fragment.ext_first = None;
-                    // Move the serialization batch into the OUT pipeline
-                    self.s_out.move_batch(batch);
+                    self.push_batch(&mut current, batch, true);
                 }
                 Err(_) => {
                     // Restore the sequence number
                     tch.sn.set(sn).unwrap();
                     // Reinsert the batch
-                    *c_guard = Some(batch);
+                    current.batch = Some(batch);
                     tracing::warn!(
                         "Zenoh message dropped because it can not be fragmented: {:?}",
                         msg
@@ -409,220 +380,87 @@ impl StageIn {
                 }
             }
 
-            // adopt deadline for the next fragment
-            deadline.on_next_fragment();
+            // renew deadline for the next fragment
+            deadline.renew();
         }
 
         // Clean the fragbuf
+        self.fragbuf = fragbuf;
         self.fragbuf.clear();
 
         Ok(true)
     }
 
     #[inline]
-    fn push_transport_message(&mut self, msg: TransportMessage) -> bool {
+    fn push_transport_message(
+        &mut self,
+        shared: &StageInShared,
+        msg: TransportMessage,
+    ) -> Result<bool, TransportClosed> {
         // Lock the current serialization batch.
-        let mut c_guard = self.mutex.current();
+        let mut current = zlock!(shared.current);
 
-        macro_rules! zgetbatch_rets {
-            () => {
-                loop {
-                    match c_guard.take() {
-                        Some(batch) => break batch,
-                        None => match self.s_ref.pull() {
-                            Some(mut batch) => {
-                                batch.clear();
-                                self.s_out.atomic_backoff.first_write.store(
-                                    LOCAL_EPOCH.elapsed().as_micros() as MicroSeconds,
-                                    Ordering::Relaxed,
-                                );
-                                break batch;
-                            }
-                            None => {
-                                if !self.s_ref.wait() {
-                                    return false;
-                                }
-                            }
-                        },
-                    }
-                }
-            };
-        }
+        // Attempt the serialization on the current batch.
+        let mut batch = self.get_batch(&mut current, None)?.unwrap();
 
-        macro_rules! zretok {
-            ($batch:expr) => {{
-                if !self.batching {
-                    // Move out existing batch
-                    self.s_out.move_batch($batch);
-                    return true;
-                } else {
-                    let bytes = $batch.len();
-                    *c_guard = Some($batch);
-                    drop(c_guard);
-                    self.s_out.notify(bytes);
-                    return true;
-                }
-            }};
-        }
-
-        // Get the current serialization batch.
-        let mut batch = zgetbatch_rets!();
         // Attempt the serialization on the current batch
-        match batch.encode(&msg) {
-            Ok(_) => zretok!(batch),
-            Err(_) => {
-                if !batch.is_empty() {
-                    self.s_out.move_batch(batch);
-                    batch = zgetbatch_rets!();
-                }
-            }
-        };
-
+        if batch.encode(&msg).is_ok() {
+            self.push_batch(&mut current, batch, true);
+            return Ok(true);
+        }
         // The first serialization attempt has failed. This means that the current
         // batch is full. Therefore, we move the current batch to stage out.
-        batch.encode(&msg).is_ok()
-    }
-}
-
-// The result of the pull operation
-enum Pull {
-    Some(WBatch),
-    None,
-    Backoff(MicroSeconds),
-}
-
-// Inner structure to keep track and signal backoff operations
-#[derive(Clone)]
-struct Backoff {
-    threshold: MicroSeconds,
-    last_bytes: BatchSize,
-    atomic: Arc<AtomicBackoff>,
-    // active: bool,
-}
-
-impl Backoff {
-    fn new(threshold: Duration, atomic: Arc<AtomicBackoff>) -> Self {
-        Self {
-            threshold: threshold.as_micros() as MicroSeconds,
-            last_bytes: 0,
-            atomic,
-            // active: false,
+        self.push_batch(&mut current, batch, true);
+        self.use_small_batch = false;
+        batch = self.get_batch(&mut current, None)?.unwrap();
+        if batch.encode(&msg).is_ok() {
+            self.push_batch(&mut current, batch, true);
+            return Ok(true);
         }
-    }
-}
-
-// Inner structure to link the final stage with the initial stage of the pipeline
-struct StageOutIn {
-    s_out_r: RingBufferReader<WBatch, RBLEN>,
-    current: Arc<Mutex<Option<WBatch>>>,
-    backoff: Backoff,
-}
-
-impl StageOutIn {
-    #[inline]
-    fn try_pull(&mut self) -> Pull {
-        if let Some(batch) = self.s_out_r.pull() {
-            self.backoff.atomic.active.store(false, Ordering::Relaxed);
-            return Pull::Some(batch);
-        }
-
-        self.try_pull_deep()
-    }
-
-    fn try_pull_deep(&mut self) -> Pull {
-        // Verify first backoff is not active
-        let mut pull = !self.backoff.atomic.active.load(Ordering::Relaxed);
-
-        // If backoff is active, verify the current number of bytes is equal to the old number
-        // of bytes seen in the previous backoff iteration
-        if !pull {
-            let new_bytes = self.backoff.atomic.bytes.load(Ordering::Relaxed);
-            let old_bytes = self.backoff.last_bytes;
-            self.backoff.last_bytes = new_bytes;
-
-            pull = new_bytes == old_bytes;
-        }
-
-        // Verify that we have not been doing backoff for too long
-        let mut backoff = 0;
-        if !pull {
-            let diff = (LOCAL_EPOCH.elapsed().as_micros() as MicroSeconds)
-                .saturating_sub(self.backoff.atomic.first_write.load(Ordering::Relaxed));
-
-            if diff >= self.backoff.threshold {
-                pull = true;
-            } else {
-                backoff = self.backoff.threshold - diff;
-            }
-        }
-
-        if pull {
-            // It seems no new bytes have been written on the batch, try to pull
-            if let Ok(mut g) = self.current.try_lock() {
-                self.backoff.atomic.active.store(false, Ordering::Relaxed);
-
-                // First try to pull from stage OUT to make sure we are not in the case
-                // where new_bytes == old_bytes are because of two identical serializations
-                if let Some(batch) = self.s_out_r.pull() {
-                    return Pull::Some(batch);
-                }
-
-                // An incomplete (non-empty) batch may be available in the state IN pipeline.
-                match g.take() {
-                    Some(batch) => {
-                        return Pull::Some(batch);
-                    }
-                    None => {
-                        return Pull::None;
-                    }
-                }
-            }
-        }
-
-        // Activate backoff
-        self.backoff.atomic.active.store(true, Ordering::Relaxed);
-
-        // Do backoff
-        Pull::Backoff(backoff)
-    }
-}
-
-struct StageOutRefill {
-    n_ref_w: Notifier,
-    s_ref_w: RingBufferWriter<WBatch, RBLEN>,
-}
-
-impl StageOutRefill {
-    fn refill(&mut self, batch: WBatch) {
-        assert!(self.s_ref_w.push(batch).is_none());
-        let _ = self.n_ref_w.notify();
+        self.available.release();
+        Ok(false)
     }
 }
 
 struct StageOut {
-    s_in: StageOutIn,
-    s_ref: StageOutRefill,
+    batch_rx: RingBufferReader<WBatch, RBLEN>,
+    current: Arc<Mutex<CurrentBatch>>,
+    available: Arc<AvailableBatches>,
+    available_notifier: Notifier,
+    batching_time_limit: Duration,
 }
 
 impl StageOut {
-    #[inline]
-    fn try_pull(&mut self) -> Pull {
-        self.s_in.try_pull()
+    const DEFAULT_BACKOFF: Duration = Duration::from_millis(1);
+
+    fn pull(&mut self) -> Result<Option<WBatch>, Duration> {
+        if let Some(batch) = self.batch_rx.pull() {
+            return Ok(Some(batch));
+        }
+        let Ok(mut current) = self.current.try_lock() else {
+            return Err(Self::DEFAULT_BACKOFF);
+        };
+        if let Some(timestamp) = current.timestamp {
+            let elapsed = timestamp.elapsed();
+            if elapsed > self.batching_time_limit {
+                current.timestamp = None;
+                Ok(current.batch.take())
+            } else {
+                Err(self.batching_time_limit - elapsed)
+            }
+        } else {
+            Ok(None)
+        }
     }
 
-    #[inline]
-    fn refill(&mut self, batch: WBatch) {
-        self.s_ref.refill(batch);
-    }
-
-    fn drain(&mut self, guard: &mut MutexGuard<'_, Option<WBatch>>) -> Vec<WBatch> {
+    fn drain(&mut self) -> Vec<WBatch> {
         let mut batches = vec![];
         // Empty the ring buffer
-        while let Some(batch) = self.s_in.s_out_r.pull() {
+        while let Some(batch) = self.batch_rx.pull() {
             batches.push(batch);
         }
         // Take the current batch
-        if let Some(batch) = guard.take() {
+        if let Some(batch) = zlock!(self.current).batch.take() {
             batches.push(batch);
         }
         batches
@@ -657,120 +495,65 @@ impl TransmissionPipeline {
             config.queue_size.iter()
         };
 
-        // Create the channel for notifying that new batches are in the out ring buffer
-        // This is a MPSC channel
-        let (n_out_w, n_out_r) = event::new();
+        let (disable_notifier, disable_waiter) = event::new();
+        let (batch_notifier, batch_waiter) = event::new();
 
-        for (prio, num) in size_iter.enumerate() {
-            assert!(*num != 0 && *num <= RBLEN);
+        for (prio, &num) in size_iter.enumerate() {
+            assert!(num != 0 && num <= RBLEN);
+            let available = Arc::new(AvailableBatches::new(num));
+            let (available_notifier, available_waiter) = event::new();
 
-            // Create the refill ring buffer
-            // This is a SPSC ring buffer
-            let (mut s_ref_w, s_ref_r) = RingBuffer::<WBatch, RBLEN>::init();
-            // Fill the refill ring buffer with batches
-            for _ in 0..*num {
-                let batch = WBatch::new(config.batch);
-                assert!(s_ref_w.push(batch).is_none());
-            }
-            // Create the channel for notifying that new batches are in the refill ring buffer
-            // This is a SPSC channel
-            let (n_ref_w, n_ref_r) = event::new();
+            let (batch_tx, batch_rx) = RingBuffer::<WBatch, RBLEN>::init();
 
-            // Create the refill ring buffer
-            // This is a SPSC ring buffer
-            let (s_out_w, s_out_r) = RingBuffer::<WBatch, RBLEN>::init();
-            let current = Arc::new(Mutex::new(None));
-            let bytes = Arc::new(AtomicBackoff {
-                active: CachePadded::new(AtomicBool::new(false)),
-                bytes: CachePadded::new(AtomicBatchSize::new(0)),
-                first_write: CachePadded::new(AtomicMicroSeconds::new(
-                    LOCAL_EPOCH.elapsed().as_micros() as MicroSeconds,
-                )),
+            let current = Arc::new(Mutex::new(CurrentBatch::default()));
+
+            stage_in.push(StageInShared {
+                queue: Mutex::new(StageIn {
+                    batch_tx,
+                    batch_notifier: batch_notifier.clone(),
+                    available: available.clone(),
+                    available_waiter,
+                    use_small_batch: true,
+                    fragbuf: ZBuf::empty(),
+                    batching: config.batching_enabled,
+                    batch_config: config.batch,
+                }),
+                current: current.clone(),
+                chan_tx: priority[prio].clone(),
+                available: available.clone(),
             });
-
-            stage_in.push(Mutex::new(StageIn {
-                s_ref: StageInRefill { n_ref_r, s_ref_r },
-                s_out: StageInOut {
-                    n_out_w: n_out_w.clone(),
-                    s_out_w,
-                    atomic_backoff: bytes.clone(),
-                },
-                mutex: StageInMutex {
-                    current: current.clone(),
-                    priority: priority[prio].clone(),
-                },
-                fragbuf: ZBuf::empty(),
-                batching: config.batching_enabled,
-                batch_config: config.batch,
-            }));
 
             // The stage out for this priority
             stage_out.push(StageOut {
-                s_in: StageOutIn {
-                    s_out_r,
-                    current,
-                    backoff: Backoff::new(config.batching_time_limit, bytes),
-                },
-                s_ref: StageOutRefill { n_ref_w, s_ref_w },
+                batch_rx,
+                current,
+                available,
+                available_notifier,
+                batching_time_limit: config.batching_time_limit,
             });
         }
 
-        let active = Arc::new(TransmissionPipelineStatus {
-            disabled: AtomicBool::new(false),
-            congested: AtomicU8::new(0),
-        });
         let producer = TransmissionPipelineProducer {
             stage_in: stage_in.into_boxed_slice().into(),
-            status: active.clone(),
+            disable_notifier,
             wait_before_drop: config.wait_before_drop,
             wait_before_close: config.wait_before_close,
         };
         let consumer = TransmissionPipelineConsumer {
             stage_out: stage_out.into_boxed_slice(),
-            n_out_r,
-            status: active,
+            batch_waiter,
+            disable_waiter,
         };
 
         (producer, consumer)
     }
 }
 
-struct TransmissionPipelineStatus {
-    // The whole pipeline is enabled or disabled
-    disabled: AtomicBool,
-    // Bitflags to indicate the given priority queue is congested
-    congested: AtomicU8,
-}
-
-impl TransmissionPipelineStatus {
-    fn set_disabled(&self, status: bool) {
-        self.disabled.store(status, Ordering::Relaxed);
-    }
-
-    fn is_disabled(&self) -> bool {
-        self.disabled.load(Ordering::Relaxed)
-    }
-
-    fn set_congested(&self, priority: Priority, status: bool) {
-        let prioflag = 1 << priority as u8;
-        if status {
-            self.congested.fetch_or(prioflag, Ordering::Relaxed);
-        } else {
-            self.congested.fetch_and(!prioflag, Ordering::Relaxed);
-        }
-    }
-
-    fn is_congested(&self, priority: Priority) -> bool {
-        let prioflag = 1 << priority as u8;
-        self.congested.load(Ordering::Relaxed) & prioflag != 0
-    }
-}
-
 #[derive(Clone)]
 pub(crate) struct TransmissionPipelineProducer {
     // Each priority queue has its own Mutex
-    stage_in: Arc<[Mutex<StageIn>]>,
-    status: Arc<TransmissionPipelineStatus>,
+    stage_in: Arc<[StageInShared]>,
+    disable_notifier: Notifier,
     wait_before_drop: (Duration, Duration),
     wait_before_close: Duration,
 }
@@ -789,10 +572,12 @@ impl TransmissionPipelineProducer {
             (0, Priority::DEFAULT)
         };
 
+        let stage_in = &self.stage_in[idx];
+
         // If message is droppable, compute a deadline after which the sample could be dropped
         let (wait_time, max_wait_time) = if msg.is_droppable() {
             // Checked if we are blocked on the priority queue and we drop directly the message
-            if self.status.is_congested(priority) {
+            if stage_in.available.is_congested() {
                 return Ok(false);
             }
             (self.wait_before_drop.0, Some(self.wait_before_drop.1))
@@ -801,148 +586,79 @@ impl TransmissionPipelineProducer {
         };
         let mut deadline = Deadline::new(wait_time, max_wait_time);
         // Lock the channel. We are the only one that will be writing on it.
-        let mut queue = zlock!(self.stage_in[idx]);
+        let mut queue = zlock!(stage_in.queue);
         // Check again for congestion in case it happens when blocking on the mutex.
-        if self.status.is_congested(priority) {
+        if stage_in.available.is_congested() {
             return Ok(false);
         }
-        let mut sent = queue.push_network_message(&msg, priority, &mut deadline)?;
-        // If the message cannot be sent, mark the pipeline as congested.
-        if !sent {
-            self.status.set_congested(priority, true);
-            // During the time between deadline wakeup and setting the congested flag,
-            // all batches could have been refilled (especially if there is a single one),
-            // so try again with the same already expired deadline.
-            sent = queue.push_network_message(&msg, priority, &mut deadline)?;
-            // If the message is sent in the end, reset the status.
-            // Setting the status to `true` is only done with the stage_in mutex acquired,
-            // so it is not possible that further messages see the congestion flag set
-            // after this point.
-            if sent {
-                self.status.set_congested(priority, false);
-            }
-            // There is one edge case that is fortunately supported: if the message that
-            // has been pushed again is fragmented, we might have some batches actually
-            // refilled, but still end with dropping the message, not resetting the
-            // congested flag in that case. However, if some batches were available,
-            // that means that they would have still been pushed, so we can expect them to
-            // be refilled, and they will eventually unset the congested flag.
-        }
-        Ok(sent)
+        queue.push_network_message(&stage_in, &msg, priority, &mut deadline)
     }
 
     #[inline]
-    pub(crate) fn push_transport_message(&self, msg: TransportMessage, priority: Priority) -> bool {
+    pub(crate) fn push_transport_message(
+        &self,
+        msg: TransportMessage,
+        priority: Priority,
+    ) -> Result<bool, TransportClosed> {
         // If the queue is not QoS, it means that we only have one priority with index 0.
         let priority = if self.stage_in.len() > 1 {
             priority as usize
         } else {
             0
         };
+        let stage_in = &self.stage_in[priority];
         // Lock the channel. We are the only one that will be writing on it.
-        let mut queue = zlock!(self.stage_in[priority]);
-        queue.push_transport_message(msg)
+        let mut queue = zlock!(stage_in.queue);
+        queue.push_transport_message(stage_in, msg)
     }
 
     pub(crate) fn disable(&self) {
-        self.status.set_disabled(true);
-
-        // Acquire all the locks, in_guard first, out_guard later
-        // Use the same locking order as in drain to avoid deadlocks
-        let mut in_guards: Vec<MutexGuard<'_, StageIn>> =
-            self.stage_in.iter().map(|x| zlock!(x)).collect();
-
-        // Unblock waiting pullers
-        for ig in in_guards.iter_mut() {
-            ig.s_out.notify(BatchSize::MAX);
-        }
+        let _ = self.disable_notifier.notify();
     }
 }
 
 pub(crate) struct TransmissionPipelineConsumer {
     // A single Mutex for all the priority queues
     stage_out: Box<[StageOut]>,
-    n_out_r: Waiter,
-    status: Arc<TransmissionPipelineStatus>,
+    batch_waiter: Waiter,
+    disable_waiter: Waiter,
 }
 
 impl TransmissionPipelineConsumer {
     pub(crate) async fn pull(&mut self) -> Option<(WBatch, Priority)> {
-        while !self.status.is_disabled() {
-            let mut backoff = MicroSeconds::MAX;
-            // Calculate the backoff maximum
-            for (prio, queue) in self.stage_out.iter_mut().enumerate() {
-                match queue.try_pull() {
-                    Pull::Some(batch) => {
-                        let prio = Priority::try_from(prio as u8).unwrap();
-                        return Some((batch, prio));
-                    }
-                    Pull::Backoff(deadline) => {
-                        backoff = deadline;
-                        break;
-                    }
-                    Pull::None => {}
-                }
+        let mut sleep = OptionFuture::default();
+        loop {
+            tokio::select! {
+                biased;
+                _ = self.disable_waiter.wait_async() => return None,
+                _ = self.batch_waiter.wait_async() => {},
+                Some(_) = sleep => {}
             }
-
-            // In case of writing many small messages, `recv_async()` will most likely return immedietaly.
-            // While trying to pull from the queue, the stage_in `lock()` will most likely taken, leading to
-            // a spinning behaviour while attempting to take the lock. Yield the current task to avoid
-            // spinning the current task indefinitely.
-            tokio::task::yield_now().await;
-
-            // Wait for the backoff to expire or for a new message
-            let res = tokio::time::timeout(
-                Duration::from_micros(backoff as u64),
-                self.n_out_r.wait_async(),
-            )
-            .await;
-            match res {
-                Ok(Ok(())) => {
-                    // We have received a notification from the channel that some bytes are available, retry to pull.
-                }
-                Ok(Err(_channel_error)) => {
-                    // The channel is closed, we can't be notified anymore. Break the loop and return None.
-                    break;
-                }
-                Err(_timeout) => {
-                    // The backoff timeout expired. Be aware that tokio timeout may not sleep for short duration since
-                    // it has time resolution of 1ms: https://docs.rs/tokio/latest/tokio/time/fn.sleep.html
+            sleep = OptionFuture::default();
+            for (i, stage_out) in self.stage_out.iter_mut().enumerate() {
+                let prio = Priority::try_from(i as u8).unwrap();
+                match stage_out.pull() {
+                    Ok(Some(batch)) => return Some((batch, prio)),
+                    Ok(None) => continue,
+                    Err(backoff) => sleep = Some(tokio::time::sleep(backoff)).into(),
                 }
             }
         }
-        None
     }
 
-    pub(crate) fn refill(&mut self, batch: WBatch, priority: Priority) {
-        if !batch.is_ephemeral() {
-            self.stage_out[priority as usize].refill(batch);
-            self.status.set_congested(priority, false);
-        }
+    pub(crate) fn refill(&mut self, _batch: WBatch, priority: Priority) {
+        let stage_out = &self.stage_out[priority as usize];
+        stage_out.available.release();
+        let _ = stage_out.available_notifier.notify();
     }
 
     pub(crate) fn drain(&mut self) -> Vec<(WBatch, usize)> {
-        // Drain the remaining batches
-        let mut batches = vec![];
-
-        // Acquire all the locks, in_guard first, out_guard later
-        // Use the same locking order as in disable to avoid deadlocks
-        let locks = self
-            .stage_out
-            .iter()
-            .map(|x| x.s_in.current.clone())
-            .collect::<Vec<_>>();
-        let mut currents: Vec<MutexGuard<'_, Option<WBatch>>> =
-            locks.iter().map(|x| zlock!(x)).collect::<Vec<_>>();
-
-        for (prio, s_out) in self.stage_out.iter_mut().enumerate() {
-            let mut bs = s_out.drain(&mut currents[prio]);
-            for b in bs.drain(..) {
-                batches.push((b, prio));
-            }
-        }
-
-        batches
+        self.stage_out
+            .iter_mut()
+            .map(StageOut::drain)
+            .enumerate()
+            .flat_map(|(prio, batches)| batches.into_iter().map(move |batch| (batch, prio)))
+            .collect()
     }
 }
 

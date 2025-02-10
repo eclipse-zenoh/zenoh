@@ -44,7 +44,7 @@ transport_ws = ["zenoh-link/transport_ws"]
 transport_serial = ["zenoh-link/transport_serial"]
 transport_compression = []
 transport_unixpipe = ["zenoh-link/transport_unixpipe"]
-transport_vsock= ["zenoh-link/transport_vsock"]
+transport_vsock = ["zenoh-link/transport_vsock"]
 stats = ["zenoh-protocol/stats"]
 test = []
 unstable = []
@@ -54,18 +54,19 @@ default = ["test", "transport_multilink"]
 async-trait = { workspace = true }
 crossbeam-utils = { workspace = true }
 tokio = { workspace = true, features = [
-  "sync",
-  "fs",
-  "time",
-  "macros",
-  "rt-multi-thread",
-  "io-util",
-  "net",
+    "sync",
+    "fs",
+    "time",
+    "macros",
+    "rt-multi-thread",
+    "io-util",
+    "net",
 ] }
 lazy_static = { workspace = true }
-tokio-util = { workspace = true, features = ["rt"]}
+tokio-util = { workspace = true, features = ["rt"] }
 flume = { workspace = true }
-tracing = {workspace = true}
+futures = { workspace = true }
+tracing = { workspace = true }
 lz4_flex = { workspace = true }
 paste = { workspace = true }
 rand = { workspace = true, features = ["default"] }
@@ -90,8 +91,6 @@ zenoh-task = { workspace = true }
 
 
 [dev-dependencies]
-futures-util = { workspace = true }
-zenoh-util = {workspace = true }
+zenoh-util = { workspace = true }
 zenoh-protocol = { workspace = true, features = ["test"] }
-futures = { workspace = true }
 zenoh-link-commons = { workspace = true }

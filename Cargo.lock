@@ -5788,7 +5788,6 @@ dependencies = [
  "crossbeam-utils",
  "flume",
  "futures",
- "futures-util",
  "lazy_static",
  "lz4_flex",
  "paste",
