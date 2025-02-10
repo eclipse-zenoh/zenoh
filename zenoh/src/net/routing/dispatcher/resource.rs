@@ -172,9 +172,9 @@ pub(crate) type DataRoutes = Routes<Arc<Route>>;
 pub(crate) type QueryRoutes = Routes<Arc<QueryTargetQablSet>>;
 
 pub(crate) struct ResourceContext {
-    pub(crate) matches: Vec<Weak<Resource>>,
-    pub(crate) hat: Box<dyn Any + Send + Sync>,
-    pub(crate) data_routes: RwLock<DataRoutes>,
+    pub(crate) matches: Vec<Weak<Resource>>,    // 24
+    pub(crate) hat: Box<dyn Any + Send + Sync>, // 8
+    pub(crate) data_routes: RwLock<DataRoutes>, // 96 = 16 + 80
     pub(crate) query_routes: RwLock<QueryRoutes>,
 }
 
@@ -198,14 +198,14 @@ impl ResourceContext {
 }
 
 pub struct Resource {
-    pub(crate) parent: Option<Arc<Resource>>,
-    pub(crate) expr: String,
-    pub(crate) suffix: String,
-    pub(crate) nonwild_prefix: Option<(Arc<Resource>, String)>,
-    pub(crate) children: HashMap<String, Arc<Resource>>,
-    pub(crate) context: Option<ResourceContext>,
-    pub(crate) session_ctxs: HashMap<usize, Arc<SessionContext>>,
-}
+    pub(crate) parent: Option<Arc<Resource>>, // 8
+    pub(crate) expr: String,                  // 24
+    pub(crate) suffix: String,                // 24
+    pub(crate) nonwild_prefix: Option<(Arc<Resource>, String)>, // 32
+    pub(crate) children: HashMap<String, Arc<Resource>>, // 48
+    pub(crate) context: Option<Box<ResourceContext>>, // 232
+    pub(crate) session_ctxs: HashMap<usize, Arc<SessionContext>>, // 48
+} // 416
 
 impl PartialEq for Resource {
     fn eq(&self, other: &Self) -> bool {
@@ -225,7 +225,11 @@ impl Hash for Resource {
 }
 
 impl Resource {
-    fn new(parent: &Arc<Resource>, suffix: &str, context: Option<ResourceContext>) -> Resource {
+    fn new(
+        parent: &Arc<Resource>,
+        suffix: &str,
+        context: Option<Box<ResourceContext>>,
+    ) -> Resource {
         let nonwild_prefix = match &parent.nonwild_prefix {
             None => {
                 if suffix.contains('*') {
@@ -643,7 +647,7 @@ impl Resource {
 
     pub fn upgrade_resource(res: &mut Arc<Resource>, hat: Box<dyn Any + Send + Sync>) {
         if res.context.is_none() {
-            get_mut_unchecked(res).context = Some(ResourceContext::new(hat));
+            get_mut_unchecked(res).context = Some(Box::new(ResourceContext::new(hat)));
         }
     }
 
