@@ -79,9 +79,11 @@ impl RuntimeParam {
                     .fetch_add(1, Ordering::SeqCst);
                 format!("{}-{}", zrt, id)
             });
-        if let Some(size) = env::var_os("ZENOH_RUNTIME_MIN_STACK")
-            .and_then(|s| s.to_str().and_then(|s| s.parse().ok()))
+        if let Some(size) = env::var("ZENOH_RUNTIME_MIN_STACK")
+            .ok()
+            .and_then(|s| s.parse().ok())
         {
+            tracing::info!("Setting {zrt} stack size to {size}");
             rt_builder.thread_stack_size(size);
         }
         let rt = rt_builder.build()?;
