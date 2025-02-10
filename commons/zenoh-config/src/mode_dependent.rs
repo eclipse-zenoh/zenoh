@@ -353,7 +353,7 @@ impl<T> ModeDependent<T> for Option<ModeDependentValue<T>> {
     }
 }
 
-serde_with::with_prefix!(target_prefix "to-");
+serde_with::with_prefix!(target_prefix "to_");
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub struct TargetValues<T> {
