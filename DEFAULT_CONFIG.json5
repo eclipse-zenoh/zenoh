@@ -140,7 +140,7 @@
       autoconnect: { router: [], peer: ["router", "peer"], client: ["router"] },
       /// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
       /// Possible options are:
-      /// - "always": always attempt to autoconnect, may result in redundant connection which will then be closed.
+      /// - "always": always attempt to autoconnect, may result in redundant connections.
       /// - "greater-zid": attempt to connect to another node only if its own zid is greater than the other's.
       ///   If both nodes use this strategy, only one will attempt the connection.
       ///   This strategy may not be suited if one of the nodes is not reachable by the other one, for example
