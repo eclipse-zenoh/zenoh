@@ -20,9 +20,8 @@ edition = { workspace = true }
 publish = false
 
 [features]
-default = ["dynamic_plugin", "zenoh_default"]
+default = ["dynamic_plugin", "zenoh/default"]
 dynamic_plugin = []
-zenoh_default = ["zenoh/default"]
 
 [lib]
 name = "zenoh_backend_example"

@@ -28,16 +28,8 @@ publish = false
 maintenance = { status = "actively-developed" }
 
 [features]
-default = ["zenoh_default"]
+default = ["zenoh/default", "zenoh-ext/default"]
 unstable = []
-zenoh_default = [
-    "zenoh/default",
-    "zenoh/unstable",
-    "zenoh/internal_config",
-    "zenoh-examples/default",
-    "zenoh-ext/default",
-    "zenoh-ext/unstable",
-]
 
 [dependencies]
 clap = { workspace = true, features = ["derive"] }
@@ -50,7 +42,7 @@ tokio = { workspace = true, features = [
     "io-std",
 ] }
 zenoh = { workspace = true, default-features = false }
-zenoh-ext = { workspace = true, default-features = false }
+zenoh-ext = { workspace = true, default-features = false, features = ["unstable"]}
 zenoh-examples = { workspace = true, default-features = false }
 
 [dev-dependencies]
