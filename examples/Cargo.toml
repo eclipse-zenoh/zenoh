@@ -28,6 +28,8 @@ publish = false
 
 [features]
 default = ["zenoh/default", "zenoh-ext/default"]
+shared-memory = ["zenoh/shared-memory"]
+unstable = ["zenoh/unstable"]
 
 [dependencies]
 clap = { workspace = true, features = ["derive"] }

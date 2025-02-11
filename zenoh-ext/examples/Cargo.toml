@@ -28,7 +28,7 @@ publish = false
 maintenance = { status = "actively-developed" }
 
 [features]
-default = ["zenoh/default", "zenoh-ext/default"]
+default = ["zenoh/default", "zenoh-ext/default", "zenoh-examples/default"]
 unstable = []
 
 [dependencies]
