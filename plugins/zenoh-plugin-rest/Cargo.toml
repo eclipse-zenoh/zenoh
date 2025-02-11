@@ -24,9 +24,10 @@ categories = ["network-programming", "web-programming::http-server"]
 description = "The zenoh REST plugin"
 
 [features]
-default = ["dynamic_plugin"]
+default = ["dynamic_plugin", "zenoh_default"]
 dynamic_plugin = []
 static_plugin = ['async-std']
+zenoh_default = ["zenoh/default", "zenoh/plugins", "zenoh/internal", "zenoh/unstable"]
 
 [lib]
 name = "zenoh_plugin_rest"
@@ -47,12 +48,7 @@ serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 tide = { workspace = true }
 tokio = { workspace = true }
-zenoh = { workspace = true, features = [
-    "plugins",
-    "default",
-    "internal",
-    "unstable",
-] }
+zenoh = { workspace = true, default-features = false }
 zenoh-plugin-trait = { workspace = true }
 
 [build-dependencies]

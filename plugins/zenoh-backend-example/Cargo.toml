@@ -20,8 +20,9 @@ edition = { workspace = true }
 publish = false
 
 [features]
-default = ["dynamic_plugin"]
+default = ["dynamic_plugin", "zenoh_default"]
 dynamic_plugin = []
+zenoh_default = ["zenoh/default"]
 
 [lib]
 name = "zenoh_backend_example"
@@ -29,13 +30,13 @@ name = "zenoh_backend_example"
 crate-type = ["cdylib"]
 
 [dependencies]
-git-version = { workspace = true }
-tokio = { workspace = true }
-serde_json = { workspace = true }
-zenoh = { workspace = true, features = ["default"] }
-zenoh-plugin-trait = { workspace = true }
 async-trait = { workspace = true }
-zenoh_backend_traits = { workspace = true }
+git-version = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+zenoh = { workspace = true, default-features = false }
+zenoh-plugin-trait = { workspace = true, default-features = false }
+zenoh_backend_traits = { workspace = true, default-features = false }
 
 [package.metadata.cargo-machete]
 ignored = ["git-version"]

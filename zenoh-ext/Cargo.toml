@@ -27,8 +27,10 @@ description = "Zenoh: extensions to the client API."
 maintenance = { status = "actively-developed" }
 
 [features]
+default = ["zenoh_default"]
 internal = []
 unstable = ["zenoh/unstable", "zenoh/internal"]
+zenoh_default = ["zenoh/default"]
 
 [dependencies]
 tokio = { workspace = true, features = [

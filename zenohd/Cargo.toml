@@ -26,8 +26,15 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["zenoh/default"]
-shared-memory = ["zenoh/shared-memory"]
+default = ["zenoh_default"]
+zenoh_default = [
+  "zenoh/default",
+  "zenoh/unstable",
+  "zenoh/internal",
+  "zenoh/plugins",
+  "zenoh/runtime_plugins",
+  "zenoh/internal_config"
+]
 
 [dependencies]
 clap = { workspace = true, features = ["derive"] }
@@ -37,13 +44,7 @@ json5 = { workspace = true }
 lazy_static = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-zenoh = { workspace = true, features = [
-  "unstable",
-  "internal",
-  "plugins",
-  "runtime_plugins",
-  "internal_config",
-] }
+zenoh = { workspace = true, default-features = false }
 zenoh-config = { workspace = true }
 
 [dev-dependencies]

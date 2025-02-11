@@ -28,16 +28,30 @@ publish = false
 maintenance = { status = "actively-developed" }
 
 [features]
+default = ["zenoh_default"]
 unstable = []
-default = []
+zenoh_default = [
+    "zenoh/default",
+    "zenoh/unstable",
+    "zenoh/internal_config",
+    "zenoh-examples/default",
+    "zenoh-ext/default",
+    "zenoh-ext/unstable",
+]
 
 [dependencies]
-tokio = { workspace = true, features = ["rt", "sync", "time", "macros", "io-std"] }
-futures = { workspace = true }
-zenoh = { workspace = true, features = ["unstable", "internal_config"], default-features = false }
 clap = { workspace = true, features = ["derive"] }
-zenoh-ext = { workspace = true, features = ["unstable"] }
-zenoh-examples = { workspace = true }
+futures = { workspace = true }
+tokio = { workspace = true, features = [
+    "rt",
+    "sync",
+    "time",
+    "macros",
+    "io-std",
+] }
+zenoh = { workspace = true, default-features = false }
+zenoh-ext = { workspace = true, default-features = false }
+zenoh-examples = { workspace = true, default-features = false }
 
 [dev-dependencies]
 zenoh-config = { workspace = true }

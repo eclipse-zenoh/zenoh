@@ -194,7 +194,7 @@ z-serial = "0.3.1"
 either = "1.13.0"
 prost = "0.13.2"
 tls-listener = { version = "0.10.2", features = ["rustls-ring"] }
-zenoh-ext = { version = "1.2.1", path = "zenoh-ext" }
+zenoh-ext = { version = "1.2.1", path = "zenoh-ext", default-features = false }
 zenoh-shm = { version = "1.2.1", path = "commons/zenoh-shm" }
 zenoh-result = { version = "1.2.1", path = "commons/zenoh-result", default-features = false }
 zenoh-config = { version = "1.2.1", path = "commons/zenoh-config" }
@@ -209,7 +209,7 @@ zenoh-sync = { version = "1.2.1", path = "commons/zenoh-sync" }
 zenoh-collections = { version = "1.2.1", path = "commons/zenoh-collections", default-features = false }
 zenoh-macros = { version = "1.2.1", path = "commons/zenoh-macros" }
 zenoh-plugin-trait = { version = "1.2.1", path = "plugins/zenoh-plugin-trait", default-features = false }
-zenoh_backend_traits = { version = "1.2.1", path = "plugins/zenoh-backend-traits" }
+zenoh_backend_traits = { version = "1.2.1", path = "plugins/zenoh-backend-traits", default-features = false }
 zenoh-transport = { version = "1.2.1", path = "io/zenoh-transport", default-features = false }
 zenoh-link-tls = { version = "1.2.1", path = "io/zenoh-links/zenoh-link-tls" }
 zenoh-link-tcp = { version = "1.2.1", path = "io/zenoh-links/zenoh-link-tcp" }
@@ -225,7 +225,7 @@ zenoh-link-commons = { version = "1.2.1", path = "io/zenoh-link-commons" }
 zenoh = { version = "1.2.1", path = "zenoh", default-features = false }
 zenoh-runtime = { version = "1.2.1", path = "commons/zenoh-runtime" }
 zenoh-task = { version = "1.2.1", path = "commons/zenoh-task" }
-zenoh-examples = { version = "1.2.1", path = "examples" }
+zenoh-examples = { version = "1.2.1", path = "examples", default-features = false }
 
 [profile.dev]
 debug = true
