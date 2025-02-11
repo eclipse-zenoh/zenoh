@@ -20,9 +20,8 @@ edition = { workspace = true }
 publish = false
 
 [features]
-default = ["dynamic_plugin", "zenoh_default"]
+default = ["dynamic_plugin"]
 dynamic_plugin = []
-zenoh_default = ["zenoh/default", "zenoh/plugins", "zenoh/internal", "zenoh/unstable"]
 
 [lib]
 # When auto-detecting the "example" plugin, `zenohd` will look for a dynamic library named "zenoh_plugin_example"
@@ -42,7 +41,12 @@ git-version = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
 serde_json = { workspace = true }
-zenoh = { workspace = true, default-features = false }
+zenoh = { workspace = true, features = [
+    "default",
+    "plugins",
+    "internal",
+    "unstable",
+] }
 zenoh-plugin-trait = { workspace = true }
 
 [package.metadata.cargo-machete]

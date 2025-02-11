@@ -24,9 +24,8 @@ categories = { workspace = true }
 description = "The zenoh storages plugin."
 
 [features]
-default = ["dynamic_plugin", "zenoh_default"]
+default = ["dynamic_plugin", "zenoh/default"]
 dynamic_plugin = []
-zenoh_default = ["zenoh/default", "zenoh/plugins", "zenoh/internal", "zenoh/unstable"]
 
 [lib]
 name = "zenoh_plugin_storage_manager"
@@ -46,7 +45,11 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
-zenoh = { workspace = true, default-features = false }
+zenoh = { workspace = true, default-features = false, features = [
+    "plugins",
+    "internal",
+    "unstable",
+] }
 zenoh-plugin-trait = { workspace = true }
 zenoh_backend_traits = { workspace = true }
 

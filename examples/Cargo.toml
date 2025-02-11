@@ -27,8 +27,7 @@ readme = "README.md"
 publish = false
 
 [features]
-default = ["zenoh_default"]
-zenoh_default = ["zenoh/default", "zenoh-ext/unstable"]
+default = ["zenoh/default", "zenoh-ext/default"]
 
 [dependencies]
 clap = { workspace = true, features = ["derive"] }
@@ -37,7 +36,7 @@ prost = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "time", "io-std"] }
 zenoh = { workspace = true, default-features = false }
-zenoh-ext = { workspace = true, default-features = false }
+zenoh-ext = { workspace = true, default-features = false, features = ["unstable"] }
 
 [dev-dependencies]
 rand = { workspace = true, features = ["default"] }

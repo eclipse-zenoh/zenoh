@@ -27,14 +27,13 @@ description = "Zenoh: traits to be implemented by backends libraries"
 maintenance = { status = "actively-developed" }
 
 [features]
-default = ["zenoh_default"]
-zenoh_default = ["zenoh/unstable", "zenoh/internal"]
+default = ["zenoh/default"]
 
 [dependencies]
 async-trait = { workspace = true }
 derive_more = { workspace = true }
 serde_json = { workspace = true }
-zenoh = { workspace = true, default-features = false }
+zenoh = { workspace = true, default-features = false, features = ["unstable", "internal"] }
 zenoh-result = { workspace = true }
 zenoh-util = { workspace = true }
 schemars = { workspace = true }
