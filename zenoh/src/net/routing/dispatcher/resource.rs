@@ -14,10 +14,10 @@
 use std::{
     any::Any,
     borrow::Cow,
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     convert::TryInto,
     hash::{Hash, Hasher},
-    sync::{Arc, RwLock, Weak},
+    sync::{Arc, OnceLock, RwLock, Weak},
 };
 
 use zenoh_config::WhatAmI;
@@ -176,6 +176,7 @@ pub(crate) struct ResourceContext {
     pub(crate) hat: Box<dyn Any + Send + Sync>,   // 8
     pub(crate) data_routes: RwLock<DataRoutes>,   // 96 = 16 + 80
     pub(crate) query_routes: RwLock<QueryRoutes>, // 96 = 16 + 80
+    pub(crate) session_ctxs: BTreeMap<usize, Arc<SessionContext>>,
 }
 
 impl ResourceContext {
@@ -185,6 +186,7 @@ impl ResourceContext {
             hat,
             data_routes: Default::default(),
             query_routes: Default::default(),
+            session_ctxs: BTreeMap::new(),
         }
     }
 
@@ -198,14 +200,13 @@ impl ResourceContext {
 }
 
 pub struct Resource {
-    pub(crate) parent: Option<Arc<Resource>>, // 8
-    pub(crate) expr: String,                  // 24
-    pub(crate) suffix: String,                // 24
-    pub(crate) nonwild_prefix: Option<(Arc<Resource>, String)>, // 32
-    pub(crate) children: HashMap<String, Arc<Resource>>, // 48
-    pub(crate) context: Option<Box<ResourceContext>>, // 232
-    pub(crate) session_ctxs: HashMap<usize, Arc<SessionContext>>, // 48
-} // 416
+    pub(crate) parent: Option<Arc<Resource>>,
+    pub(crate) suffix: Box<str>,
+    pub(crate) lazy_expr: OnceLock<Box<str>>,
+    pub(crate) nonwild_prefix: Option<(Arc<Resource>, usize)>,
+    pub(crate) children: BTreeMap<String, Arc<Resource>>,
+    pub(crate) context: Option<Box<ResourceContext>>,
+}
 
 impl PartialEq for Resource {
     fn eq(&self, other: &Self) -> bool {
@@ -233,27 +234,37 @@ impl Resource {
         let nonwild_prefix = match &parent.nonwild_prefix {
             None => {
                 if suffix.contains('*') {
-                    Some((parent.clone(), String::from(suffix)))
+                    Some((parent.clone(), parent.expr().len()))
                 } else {
                     None
                 }
             }
-            Some((prefix, wildsuffix)) => Some((prefix.clone(), [wildsuffix, suffix].concat())),
+            Some((prefix, wildsuffix)) => Some((prefix.clone(), *wildsuffix)),
         };
 
         Resource {
             parent: Some(parent.clone()),
-            expr: parent.expr.clone() + suffix,
-            suffix: String::from(suffix),
+            lazy_expr: OnceLock::new(),
+            suffix: Box::from(suffix),
             nonwild_prefix,
-            children: HashMap::new(),
+            children: BTreeMap::new(),
             context,
-            session_ctxs: HashMap::new(),
         }
     }
 
+    pub fn suffix(&self) -> &str {
+        &self.suffix
+    }
+
     pub fn expr(&self) -> &str {
-        &self.expr
+        self.lazy_expr.get_or_init(|| {
+            [
+                self.parent.as_ref().map(|r| r.expr()).unwrap_or(""),
+                self.suffix(),
+            ]
+            .concat()
+            .into_boxed_str()
+        })
     }
 
     #[inline(always)]
@@ -281,7 +292,10 @@ impl Resource {
             None => (Some(res.clone()), "".to_string()),
             Some((nonwild_prefix, wildsuffix)) => {
                 if !nonwild_prefix.expr().is_empty() {
-                    (Some(nonwild_prefix.clone()), wildsuffix.clone())
+                    (
+                        Some(nonwild_prefix.clone()),
+                        res.expr()[*wildsuffix..].to_string(),
+                    )
                 } else {
                     (None, res.expr().to_string())
                 }
@@ -292,12 +306,11 @@ impl Resource {
     pub fn root() -> Arc<Resource> {
         Arc::new(Resource {
             parent: None,
-            expr: String::from(""),
-            suffix: String::from(""),
+            suffix: Box::from(""),
+            lazy_expr: OnceLock::new(),
             nonwild_prefix: None,
-            children: HashMap::new(),
+            children: BTreeMap::new(),
             context: None,
-            session_ctxs: HashMap::new(),
         })
     }
 
@@ -322,7 +335,7 @@ impl Resource {
                 }
                 mutres.nonwild_prefix.take();
                 {
-                    get_mut_unchecked(parent).children.remove(&res.suffix);
+                    get_mut_unchecked(parent).children.remove(res.suffix());
                 }
                 Resource::clean(parent);
             }
@@ -342,7 +355,6 @@ impl Resource {
         r.children.clear();
         r.nonwild_prefix.take();
         r.context.take();
-        r.session_ctxs.clear();
     }
 
     pub fn print_tree(from: &Arc<Resource>) -> String {
@@ -365,7 +377,7 @@ impl Resource {
         };
         if !chunk.starts_with('/') {
             if let Some(parent) = &mut from.parent.clone() {
-                return Resource::make_resource(tables, parent, &[&from.suffix, suffix].concat());
+                return Resource::make_resource(tables, parent, &[&from.suffix(), suffix].concat());
             }
         }
         if let Some(child) = get_mut_unchecked(from).children.get_mut(chunk) {
@@ -389,7 +401,7 @@ impl Resource {
         };
         if !chunk.starts_with('/') {
             if let Some(parent) = &from.parent {
-                return Resource::get_resource(parent, &[&from.suffix, suffix].concat());
+                return Resource::get_resource(parent, &[&from.suffix(), suffix].concat());
             }
         }
         Resource::get_resource(from.children.get(chunk)?, rest)
@@ -422,6 +434,7 @@ impl Resource {
         match nonwild_prefix {
             Some(mut nonwild_prefix) => {
                 if let Some(ctx) = get_mut_unchecked(&mut nonwild_prefix)
+                    .context() // NOTE(fuzzypixelz): this panics if there is no context
                     .session_ctxs
                     .get(&face.id)
                 {
@@ -448,6 +461,7 @@ impl Resource {
                     })
                 {
                     let ctx = get_mut_unchecked(&mut nonwild_prefix)
+                        .context_mut() // NOTE(fuzzypixelz): this panics if there is no context
                         .session_ctxs
                         .entry(face.id)
                         .or_insert_with(|| Arc::new(SessionContext::new(face.clone())));
@@ -499,7 +513,8 @@ impl Resource {
             suffix: impl FnOnce() -> Cow<'a, str>,
             sid: usize,
         ) -> Option<WireExpr<'a>> {
-            let ctx = prefix.session_ctxs.get(&sid)?;
+            // NOTE(fuzzypixelz): this panics if there is no context
+            let ctx = prefix.context().session_ctxs.get(&sid)?;
             let (scope, mapping) = match (ctx.remote_expr_id, ctx.local_expr_id) {
                 (Some(expr_id), _) => (expr_id, Mapping::Receiver),
                 (_, Some(expr_id)) => (expr_id, Mapping::Sender),
@@ -529,14 +544,19 @@ impl Resource {
             sid: usize,
             parent: &Resource,
         ) -> Option<WireExpr<'a>> {
-            let parent_suffix = || [&prefix.expr[parent.expr.len()..], suffix].concat().into();
+            let parent_suffix = || {
+                // [&prefix.expr[parent.expr().len()..], suffix]
+                //     .concat()
+                //     .into()
+                todo!()
+            };
             get_wire_expr(parent, parent_suffix, sid)
                 .or_else(|| get_best_parent_key(prefix, suffix, sid, parent.parent.as_ref()?))
         }
         get_best_child_key(self, suffix, sid)
             .or_else(|| get_wire_expr(self, || suffix.into(), sid))
             .or_else(|| get_best_parent_key(self, suffix, sid, self.parent.as_ref()?))
-            .unwrap_or_else(|| [&self.expr, suffix].concat().into())
+            .unwrap_or_else(|| [&self.expr(), suffix].concat().into())
     }
 
     pub fn get_matches(tables: &Tables, key_expr: &keyexpr) -> Vec<Weak<Resource>> {
@@ -553,16 +573,16 @@ impl Resource {
             from: &Arc<Resource>,
             matches: &mut Vec<Weak<Resource>>,
         ) {
-            if from.parent.is_none() || from.suffix == "/" {
+            if from.parent.is_none() || from.suffix() == "/" {
                 for child in from.children.values() {
                     get_matches_from(key_expr, child, matches);
                 }
                 return;
             }
             let suffix: &keyexpr = from
-                .suffix
+                .suffix()
                 .strip_prefix('/')
-                .unwrap_or(&from.suffix)
+                .unwrap_or(from.suffix())
                 .try_into()
                 .unwrap();
             let (ke_chunk, ke_rest) = match key_expr.split_once('/') {
@@ -655,13 +675,15 @@ impl Resource {
     }
 
     pub(crate) fn get_ingress_cache(&self, face: &Face) -> Option<&Box<dyn Any + Send + Sync>> {
-        self.session_ctxs
+        self.context()
+            .session_ctxs
             .get(&face.state.id)
             .and_then(|ctx| ctx.in_interceptor_cache.as_ref())
     }
 
     pub(crate) fn get_egress_cache(&self, face: &Face) -> Option<&Box<dyn Any + Send + Sync>> {
-        self.session_ctxs
+        self.context()
+            .session_ctxs
             .get(&face.state.id)
             .and_then(|ctx| ctx.e_interceptor_cache.as_ref())
     }
@@ -715,6 +737,7 @@ pub(crate) fn register_expr(
                     (res, wtables)
                 };
                 let ctx = get_mut_unchecked(&mut res)
+                    .context_mut()
                     .session_ctxs
                     .entry(face.id)
                     .or_insert_with(|| Arc::new(SessionContext::new(face.clone())));

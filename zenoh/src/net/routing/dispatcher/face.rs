@@ -149,6 +149,7 @@ impl FaceState {
                 let cache = interceptor.compute_keyexpr_cache(&expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
+                        .context_mut()
                         .session_ctxs
                         .get_mut(&self.id)
                         .unwrap(),
@@ -159,6 +160,7 @@ impl FaceState {
                 let cache = mux.interceptor.compute_keyexpr_cache(&expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
+                        .context_mut()
                         .session_ctxs
                         .get_mut(&self.id)
                         .unwrap(),
@@ -169,6 +171,7 @@ impl FaceState {
                 let cache = mux.interceptor.compute_keyexpr_cache(&expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
+                        .context_mut()
                         .session_ctxs
                         .get_mut(&self.id)
                         .unwrap(),

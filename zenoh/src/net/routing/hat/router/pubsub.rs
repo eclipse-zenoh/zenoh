@@ -304,7 +304,7 @@ fn register_simple_subscription(
     // Register subscription
     {
         let res = get_mut_unchecked(res);
-        match res.session_ctxs.get_mut(&face.id) {
+        match res.context_mut().session_ctxs.get_mut(&face.id) {
             Some(ctx) => {
                 if ctx.subs.is_none() {
                     get_mut_unchecked(ctx).subs = Some(*sub_info);
@@ -312,6 +312,7 @@ fn register_simple_subscription(
             }
             None => {
                 let ctx = res
+                    .context_mut()
                     .session_ctxs
                     .entry(face.id)
                     .or_insert_with(|| Arc::new(SessionContext::new(face.clone())));
@@ -355,7 +356,8 @@ fn remote_linkstatepeer_subs(tables: &Tables, res: &Arc<Resource>) -> bool {
 
 #[inline]
 fn simple_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
-    res.session_ctxs
+    res.context()
+        .session_ctxs
         .values()
         .filter_map(|ctx| {
             if ctx.subs.is_some() {
@@ -369,7 +371,8 @@ fn simple_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 
 #[inline]
 fn remote_simple_subs(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
-    res.session_ctxs
+    res.context()
+        .session_ctxs
         .values()
         .any(|ctx| ctx.face.id != face.id && ctx.subs.is_some())
 }
@@ -495,7 +498,7 @@ fn propagate_forget_simple_subscription_to_peers(
         {
             if face.whatami == WhatAmI::Peer
                 && face_hat!(face).local_subs.contains_key(res)
-                && !res.session_ctxs.values().any(|s| {
+                && !res.context().session_ctxs.values().any(|s| {
                     face.zid != s.face.zid
                         && s.subs.is_some()
                         && (s.face.whatami == WhatAmI::Client
@@ -639,7 +642,11 @@ fn forget_linkstatepeer_subscription(
     send_declare: &mut SendDeclare,
 ) {
     undeclare_linkstatepeer_subscription(tables, Some(face), res, peer);
-    let simple_subs = res.session_ctxs.values().any(|ctx| ctx.subs.is_some());
+    let simple_subs = res
+        .context()
+        .session_ctxs
+        .values()
+        .any(|ctx| ctx.subs.is_some());
     let linkstatepeer_subs = remote_linkstatepeer_subs(tables, res);
     let zid = tables.zid;
     if !simple_subs && !linkstatepeer_subs {
@@ -654,7 +661,11 @@ pub(super) fn undeclare_simple_subscription(
     send_declare: &mut SendDeclare,
 ) {
     if !face_hat_mut!(face).remote_subs.values().any(|s| *s == *res) {
-        if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
+        if let Some(ctx) = get_mut_unchecked(res)
+            .context_mut()
+            .session_ctxs
+            .get_mut(&face.id)
+        {
             get_mut_unchecked(ctx).subs = None;
         }
 
@@ -769,7 +780,11 @@ pub(super) fn pubsub_remove_node(
                 .collect::<Vec<Arc<Resource>>>()
             {
                 unregister_peer_subscription(tables, &mut res, node);
-                let simple_subs = res.session_ctxs.values().any(|ctx| ctx.subs.is_some());
+                let simple_subs = res
+                    .context()
+                    .session_ctxs
+                    .values()
+                    .any(|ctx| ctx.subs.is_some());
                 let linkstatepeer_subs = remote_linkstatepeer_subs(tables, &res);
                 if !simple_subs && !linkstatepeer_subs {
                     undeclare_router_subscription(
@@ -851,12 +866,13 @@ pub(super) fn pubsub_linkstate_change(
                 .keys()
                 .filter(|res| {
                     let client_subs = res
+                        .context()
                         .session_ctxs
                         .values()
                         .any(|ctx| ctx.face.whatami == WhatAmI::Client && ctx.subs.is_some());
                     !remote_router_subs(tables, res)
                         && !client_subs
-                        && !res.session_ctxs.values().any(|ctx| {
+                        && !res.context().session_ctxs.values().any(|ctx| {
                             ctx.face.whatami == WhatAmI::Peer
                                 && src_face.id != ctx.face.id
                                 && HatTables::failover_brokering_to(links, ctx.face.zid)
@@ -986,7 +1002,7 @@ pub(crate) fn declare_sub_interest(
                                 .linkstatepeer_subs
                                 .iter()
                                 .any(|r| *r != tables.zid)
-                            || sub.session_ctxs.values().any(|s| {
+                            || sub.context().session_ctxs.values().any(|s| {
                                 s.face.id != face.id
                                     && s.subs.is_some()
                                     && (s.face.whatami == WhatAmI::Client
@@ -1026,7 +1042,7 @@ pub(crate) fn declare_sub_interest(
                             .linkstatepeer_subs
                             .iter()
                             .any(|r| *r != tables.zid)
-                        || sub.session_ctxs.values().any(|s| {
+                        || sub.context().session_ctxs.values().any(|s| {
                             s.subs.is_some()
                                 && (s.face.whatami != WhatAmI::Peer
                                     || face.whatami != WhatAmI::Peer
@@ -1158,7 +1174,8 @@ impl HatPubSubTrait for HatCode {
                         peers: if hat!(tables).full_net(WhatAmI::Peer) {
                             Vec::from_iter(res_hat!(s).linkstatepeer_subs.iter().cloned())
                         } else {
-                            s.session_ctxs
+                            s.context()
+                                .session_ctxs
                                 .values()
                                 .filter_map(|f| {
                                     (f.face.whatami == WhatAmI::Peer && f.subs.is_some())
@@ -1167,6 +1184,7 @@ impl HatPubSubTrait for HatCode {
                                 .collect()
                         },
                         clients: s
+                            .context()
                             .session_ctxs
                             .values()
                             .filter_map(|f| {
@@ -1308,7 +1326,7 @@ impl HatPubSubTrait for HatCode {
             }
 
             if master || source_type == WhatAmI::Router {
-                for (sid, context) in &mres.session_ctxs {
+                for (sid, context) in &mres.context().session_ctxs {
                     if context.subs.is_some() && context.face.whatami != WhatAmI::Router {
                         route.entry(*sid).or_insert_with(|| {
                             let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
@@ -1407,7 +1425,7 @@ impl HatPubSubTrait for HatCode {
             }
 
             if master {
-                for (sid, context) in &mres.session_ctxs {
+                for (sid, context) in &mres.context().session_ctxs {
                     if context.subs.is_some() && context.face.whatami != WhatAmI::Router {
                         matching_subscriptions
                             .entry(*sid)

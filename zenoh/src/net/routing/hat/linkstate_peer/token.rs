@@ -250,7 +250,7 @@ fn register_simple_token(
     // Register liveliness
     {
         let res = get_mut_unchecked(res);
-        match res.session_ctxs.get_mut(&face.id) {
+        match res.context_mut().session_ctxs.get_mut(&face.id) {
             Some(ctx) => {
                 if !ctx.token {
                     get_mut_unchecked(ctx).token = true;
@@ -258,6 +258,7 @@ fn register_simple_token(
             }
             None => {
                 let ctx = res
+                    .context_mut()
                     .session_ctxs
                     .entry(face.id)
                     .or_insert_with(|| Arc::new(SessionContext::new(face.clone())));
@@ -291,7 +292,8 @@ fn remote_linkstatepeer_tokens(tables: &Tables, res: &Arc<Resource>) -> bool {
 
 #[inline]
 fn simple_tokens(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
-    res.session_ctxs
+    res.context()
+        .session_ctxs
         .values()
         .filter_map(|ctx| {
             if ctx.token {
@@ -305,7 +307,8 @@ fn simple_tokens(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 
 #[inline]
 fn remote_simple_tokens(tables: &Tables, res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
-    res.session_ctxs
+    res.context()
+        .session_ctxs
         .values()
         .any(|ctx| (ctx.face.id != face.id || face.zid == tables.zid) && ctx.token)
 }
@@ -501,7 +504,11 @@ pub(super) fn undeclare_simple_token(
         .values()
         .any(|s| *s == *res)
     {
-        if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
+        if let Some(ctx) = get_mut_unchecked(res)
+            .context_mut()
+            .session_ctxs
+            .get_mut(&face.id)
+        {
             get_mut_unchecked(ctx).token = false;
         }
 

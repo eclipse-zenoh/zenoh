@@ -81,7 +81,8 @@ fn local_router_qabl_info(tables: &Tables, res: &Arc<Resource>) -> QueryableInfo
     } else {
         None
     };
-    res.session_ctxs
+    res.context()
+        .session_ctxs
         .values()
         .fold(info, |accu, ctx| {
             if let Some(info) = ctx.qabl.as_ref() {
@@ -114,7 +115,8 @@ fn local_peer_qabl_info(tables: &Tables, res: &Arc<Resource>) -> QueryableInfoTy
     } else {
         None
     };
-    res.session_ctxs
+    res.context()
+        .session_ctxs
         .values()
         .fold(info, |accu, ctx| {
             if let Some(info) = ctx.qabl.as_ref() {
@@ -166,7 +168,8 @@ fn local_qabl_info(
                 }
             })
     }
-    res.session_ctxs
+    res.context()
+        .session_ctxs
         .values()
         .fold(info, |accu, ctx| {
             if ctx.face.id != face.id && ctx.face.whatami != WhatAmI::Peer
@@ -439,7 +442,8 @@ fn register_simple_queryable(
     {
         let res = get_mut_unchecked(res);
         get_mut_unchecked(
-            res.session_ctxs
+            res.context_mut()
+                .session_ctxs
                 .entry(face.id)
                 .or_insert_with(|| Arc::new(SessionContext::new(face.clone()))),
         )
@@ -482,7 +486,8 @@ fn remote_linkstatepeer_qabls(tables: &Tables, res: &Arc<Resource>) -> bool {
 
 #[inline]
 fn simple_qabls(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
-    res.session_ctxs
+    res.context()
+        .session_ctxs
         .values()
         .filter_map(|ctx| {
             if ctx.qabl.is_some() {
@@ -496,7 +501,8 @@ fn simple_qabls(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 
 #[inline]
 fn remote_simple_qabls(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
-    res.session_ctxs
+    res.context()
+        .session_ctxs
         .values()
         .any(|ctx| ctx.face.id != face.id && ctx.qabl.is_some())
 }
@@ -622,7 +628,7 @@ fn propagate_forget_simple_queryable_to_peers(
         {
             if face.whatami == WhatAmI::Peer
                 && face_hat!(face).local_qabls.contains_key(res)
-                && !res.session_ctxs.values().any(|s| {
+                && !res.context().session_ctxs.values().any(|s| {
                     face.zid != s.face.zid
                         && s.qabl.is_some()
                         && (s.face.whatami == WhatAmI::Client
@@ -769,7 +775,11 @@ fn forget_linkstatepeer_queryable(
 ) {
     undeclare_linkstatepeer_queryable(tables, Some(face), res, peer);
 
-    let simple_qabls = res.session_ctxs.values().any(|ctx| ctx.qabl.is_some());
+    let simple_qabls = res
+        .context()
+        .session_ctxs
+        .values()
+        .any(|ctx| ctx.qabl.is_some());
     let linkstatepeer_qabls = remote_linkstatepeer_qabls(tables, res);
     let zid = tables.zid;
     if !simple_qabls && !linkstatepeer_qabls {
@@ -791,7 +801,11 @@ pub(super) fn undeclare_simple_queryable(
         .values()
         .any(|s| *s == *res)
     {
-        if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
+        if let Some(ctx) = get_mut_unchecked(res)
+            .context_mut()
+            .session_ctxs
+            .get_mut(&face.id)
+        {
             get_mut_unchecked(ctx).qabl = None;
         }
 
@@ -914,7 +928,11 @@ pub(super) fn queries_remove_node(
             for mut res in qabls {
                 unregister_linkstatepeer_queryable(tables, &mut res, node);
 
-                let simple_qabls = res.session_ctxs.values().any(|ctx| ctx.qabl.is_some());
+                let simple_qabls = res
+                    .context()
+                    .session_ctxs
+                    .values()
+                    .any(|ctx| ctx.qabl.is_some());
                 let linkstatepeer_qabls = remote_linkstatepeer_qabls(tables, &res);
                 if !simple_qabls && !linkstatepeer_qabls {
                     undeclare_router_queryable(
@@ -957,12 +975,13 @@ pub(super) fn queries_linkstate_change(
                 .keys()
                 .filter(|res| {
                     let client_qabls = res
+                        .context()
                         .session_ctxs
                         .values()
                         .any(|ctx| ctx.face.whatami == WhatAmI::Client && ctx.qabl.is_some());
                     !remote_router_qabls(tables, res)
                         && !client_qabls
-                        && !res.session_ctxs.values().any(|ctx| {
+                        && !res.context().session_ctxs.values().any(|ctx| {
                             ctx.face.whatami == WhatAmI::Peer
                                 && src_face.id != ctx.face.id
                                 && HatTables::failover_brokering_to(links, ctx.face.zid)
@@ -1163,7 +1182,7 @@ pub(crate) fn declare_qabl_interest(
                                 .linkstatepeer_qabls
                                 .keys()
                                 .any(|r| *r != tables.zid)
-                            || qabl.session_ctxs.values().any(|s| {
+                            || qabl.context().session_ctxs.values().any(|s| {
                                 s.face.id != face.id
                                     && s.qabl.is_some()
                                     && (s.face.whatami == WhatAmI::Client
@@ -1204,7 +1223,7 @@ pub(crate) fn declare_qabl_interest(
                                 .linkstatepeer_qabls
                                 .keys()
                                 .any(|r| *r != tables.zid)
-                            || qabl.session_ctxs.values().any(|s| {
+                            || qabl.context().session_ctxs.values().any(|s| {
                                 s.qabl.is_some()
                                     && (s.face.whatami != WhatAmI::Peer
                                         || face.whatami != WhatAmI::Peer
@@ -1369,7 +1388,8 @@ impl HatQueriesTrait for HatCode {
                         peers: if hat!(tables).full_net(WhatAmI::Peer) {
                             Vec::from_iter(res_hat!(s).linkstatepeer_qabls.keys().cloned())
                         } else {
-                            s.session_ctxs
+                            s.context()
+                                .session_ctxs
                                 .values()
                                 .filter_map(|f| {
                                     (f.face.whatami == WhatAmI::Peer && f.qabl.is_some())
@@ -1378,6 +1398,7 @@ impl HatQueriesTrait for HatCode {
                                 .collect()
                         },
                         clients: s
+                            .context()
                             .session_ctxs
                             .values()
                             .filter_map(|f| {
@@ -1484,7 +1505,7 @@ impl HatQueriesTrait for HatCode {
             }
 
             if master || source_type == WhatAmI::Router {
-                for (sid, context) in &mres.session_ctxs {
+                for (sid, context) in &mres.context().session_ctxs {
                     if context.face.whatami != WhatAmI::Router {
                         let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
                         if let Some(qabl_info) = context.qabl.as_ref() {
@@ -1565,7 +1586,7 @@ impl HatQueriesTrait for HatCode {
             }
 
             if master {
-                for (sid, context) in &mres.session_ctxs {
+                for (sid, context) in &mres.context().session_ctxs {
                     if match complete {
                         true => context.qabl.is_some_and(|q| q.complete),
                         false => context.qabl.is_some(),
