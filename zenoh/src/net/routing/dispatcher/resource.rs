@@ -172,10 +172,10 @@ pub(crate) type DataRoutes = Routes<Arc<Route>>;
 pub(crate) type QueryRoutes = Routes<Arc<QueryTargetQablSet>>;
 
 pub(crate) struct ResourceContext {
-    pub(crate) matches: Vec<Weak<Resource>>,    // 24
-    pub(crate) hat: Box<dyn Any + Send + Sync>, // 8
-    pub(crate) data_routes: RwLock<DataRoutes>, // 96 = 16 + 80
-    pub(crate) query_routes: RwLock<QueryRoutes>,
+    pub(crate) matches: Vec<Weak<Resource>>,      // 24
+    pub(crate) hat: Box<dyn Any + Send + Sync>,   // 8
+    pub(crate) data_routes: RwLock<DataRoutes>,   // 96 = 16 + 80
+    pub(crate) query_routes: RwLock<QueryRoutes>, // 96 = 16 + 80
 }
 
 impl ResourceContext {
@@ -330,6 +330,10 @@ impl Resource {
     }
 
     pub fn close(self: &mut Arc<Resource>) {
+        if self.parent.is_none() {
+            eprintln!("{}", Resource::print_tree(self));
+        }
+
         let r = get_mut_unchecked(self);
         for c in r.children.values_mut() {
             Self::close(c);
@@ -341,7 +345,6 @@ impl Resource {
         r.session_ctxs.clear();
     }
 
-    #[cfg(test)]
     pub fn print_tree(from: &Arc<Resource>) -> String {
         let mut result = from.expr().to_string();
         result.push('\n');
