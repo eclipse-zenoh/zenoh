@@ -14,18 +14,17 @@
 use std::time::Duration;
 
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use zenoh_buffers::ZSliceBuffer;
+use zenoh_buffers::ZSlice;
 use zenoh_link::Link;
 use zenoh_protocol::transport::{KeepAlive, TransportMessage};
 use zenoh_result::{zerror, ZResult};
-use zenoh_sync::{RecyclingObject, RecyclingObjectPool};
 #[cfg(feature = "stats")]
 use {crate::common::stats::TransportStats, std::sync::Arc};
 
 use super::transport::TransportUnicastUniversal;
 use crate::{
     common::{
-        batch::{BatchConfig, RBatch},
+        batch::BatchConfig,
         pipeline::{
             TransmissionPipeline, TransmissionPipelineConf, TransmissionPipelineConsumer,
             TransmissionPipelineProducer,
@@ -122,14 +121,7 @@ impl TransportLinkUnicastUniversal {
         let token = self.token.clone();
         let task = async move {
             // Start the consume task
-            let res = rx_task(
-                &mut rx,
-                transport.clone(),
-                lease,
-                transport.manager.config.link_rx_buffer_size,
-                token,
-            )
-            .await;
+            let res = rx_task(&mut rx, transport.clone(), lease, token).await;
 
             // TODO(yuyuan): improve this callback
             if let Err(e) = res {
@@ -241,42 +233,18 @@ async fn rx_task(
     link: &mut TransportLinkUnicastRx,
     transport: TransportUnicastUniversal,
     lease: Duration,
-    rx_buffer_size: usize,
     token: CancellationToken,
 ) -> ZResult<()> {
-    async fn read<T, F>(
-        link: &mut TransportLinkUnicastRx,
-        pool: &RecyclingObjectPool<T, F>,
-    ) -> ZResult<RBatch>
-    where
-        T: ZSliceBuffer + 'static,
-        F: Fn() -> T,
-        RecyclingObject<T>: AsMut<[u8]> + ZSliceBuffer,
-    {
-        let batch = link
-            .recv_batch(|| pool.try_take().unwrap_or_else(|| pool.alloc()))
-            .await?;
-        Ok(batch)
-    }
-
-    // The pool of buffers
-    let mtu = link.config.batch.mtu as usize;
-    let mut n = rx_buffer_size / mtu;
-    if n == 0 {
-        tracing::debug!("RX configured buffer of {rx_buffer_size} bytes is too small for {link} that has an MTU of {mtu} bytes. Defaulting to {mtu} bytes for RX buffer.");
-        n = 1;
-    }
-
-    let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     let l = Link::new_unicast(
         &link.link,
         link.config.priorities.clone(),
         link.config.reliability,
     );
 
+    let mut buffer = ZSlice::from(vec![0u8; link.config.batch.mtu as usize]);
     loop {
         tokio::select! {
-            batch = tokio::time::timeout(lease, read(link, &pool)) => {
+            batch = tokio::time::timeout(lease, link.recv_batch(&mut buffer)) => {
                 let batch = batch.map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
                 #[cfg(feature = "stats")]
                 {

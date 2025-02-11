@@ -16,7 +16,7 @@ use std::sync::{
     Arc,
 };
 
-use tokio::sync::Semaphore;
+use tokio::sync::Notify;
 
 #[derive(Debug, Clone)]
 pub struct Signal {
@@ -25,7 +25,7 @@ pub struct Signal {
 
 #[derive(Debug)]
 struct Inner {
-    semaphore: Semaphore,
+    notify: Notify,
     triggered: AtomicBool,
 }
 
@@ -33,22 +33,15 @@ impl Signal {
     pub fn new() -> Self {
         Signal {
             shared: Arc::new(Inner {
-                semaphore: Semaphore::new(0),
+                notify: Notify::new(),
                 triggered: AtomicBool::new(false),
             }),
         }
     }
 
     pub fn trigger(&self) {
-        let result = self
-            .shared
-            .triggered
-            .compare_exchange(false, true, AcqRel, Acquire);
-
-        if result.is_ok() {
-            // The maximum # of permits is defined in tokio doc.
-            // https://docs.rs/tokio/latest/tokio/sync/struct.Semaphore.html#method.add_permits
-            self.shared.semaphore.add_permits(usize::MAX >> 3);
+        if !self.shared.triggered.swap(true, AcqRel) {
+            self.shared.notify.notify_waiters();
         }
     }
 
@@ -58,7 +51,10 @@ impl Signal {
 
     pub async fn wait(&self) {
         if !self.is_triggered() {
-            let _ = self.shared.semaphore.acquire().await;
+            let notified = self.shared.notify.notified();
+            if !self.is_triggered() {
+                notified.await;
+            }
         }
     }
 }

@@ -26,7 +26,10 @@ use zenoh_runtime::ZRuntime;
 use super::transport::TransportUnicastLowlatency;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
-use crate::unicast::link::{TransportLinkUnicast, TransportLinkUnicastRx};
+use crate::{
+    common::read_with_buffer,
+    unicast::link::{TransportLinkUnicast, TransportLinkUnicastRx},
+};
 
 pub(crate) async fn send_with_link(
     link: &LinkUnicast,
@@ -139,7 +142,6 @@ impl TransportUnicastLowlatency {
     }
 
     pub(super) fn internal_start_rx(&self, lease: Duration) {
-        let rx_buffer_size = self.manager.config.link_rx_buffer_size;
         let token = self.token.child_token();
 
         let c_transport = self.clone();
@@ -149,25 +151,11 @@ impl TransportUnicastLowlatency {
             drop(guard);
 
             let is_streamed = link_rx.link.is_streamed();
-
-            // The pool of buffers
-            let pool = {
-                let mtu = link_rx.config.batch.mtu as usize;
-                let mut n = rx_buffer_size / mtu;
-                if n == 0 {
-                    tracing::debug!("RX configured buffer of {rx_buffer_size} bytes is too small for {link_rx} that has an MTU of {mtu} bytes. Defaulting to {mtu} bytes for RX buffer.");
-                    n = 1;
-                }
-                zenoh_sync::RecyclingObjectPool::new(n, move || vec![0_u8; mtu].into_boxed_slice())
-            };
-
+            let mut buffer = ZSlice::from(vec![0u8; link_rx.config.batch.mtu as usize]);
             loop {
-                // Retrieve one buffer
-                let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
-
                 tokio::select! {
                     // Async read from the underlying link
-                    res = tokio::time::timeout(lease, read_with_link(&link_rx, &mut buffer, is_streamed)) => {
+                    res = tokio::time::timeout(lease, read_with_buffer(&mut buffer, |buf| read_with_link(&link_rx, buf, is_streamed))) => {
                         let bytes = res.map_err(|_| zerror!("{}: expired after {} milliseconds", link_rx, lease.as_millis()))??;
 
                         #[cfg(feature = "stats")] {
@@ -176,8 +164,7 @@ impl TransportUnicastLowlatency {
                         }
 
                         // Deserialize all the messages from the current ZBuf
-                        let zslice = ZSlice::new(Arc::new(buffer), 0, bytes).unwrap();
-                        c_transport.read_messages(zslice, &link_rx.link).await?;
+                        c_transport.read_messages(buffer.subslice(0..bytes).unwrap(), &link_rx.link).await?;
                     }
 
                     _ = token.cancelled() => {

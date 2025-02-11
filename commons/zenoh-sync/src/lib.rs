@@ -28,18 +28,6 @@ use futures::FutureExt;
 pub mod event;
 pub use event::*;
 
-pub mod fifo_queue;
-pub use fifo_queue::*;
-
-pub mod lifo_queue;
-pub use lifo_queue::*;
-
-pub mod object_pool;
-pub use object_pool::*;
-
-pub mod mvar;
-pub use mvar::*;
-
 pub mod condition;
 pub use condition::*;
 

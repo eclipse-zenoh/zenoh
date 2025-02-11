@@ -5499,6 +5499,7 @@ name = "zenoh-link-udp"
 version = "1.2.1"
 dependencies = [
  "async-trait",
+ "flume",
  "socket2 0.5.7",
  "tokio",
  "tokio-util",

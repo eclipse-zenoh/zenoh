@@ -519,12 +519,6 @@ validated_struct::validator! {
                     threads: usize,
                 },
                 pub rx: LinkRxConf {
-                    /// Receiving buffer size in bytes for each link
-                    /// The default the rx_buffer_size value is the same as the default batch size: 65535.
-                    /// For very high throughput scenarios, the rx_buffer_size can be increased to accommodate
-                    /// more in-flight data. This is particularly relevant when dealing with large messages.
-                    /// E.g. for 16MiB rx_buffer_size set the value to: 16777216.
-                    buffer_size: usize,
                     /// Maximum size of the defragmentation buffer at receiver end (default: 1GiB).
                     /// Fragmented messages that are larger than the configured size will be dropped.
                     max_message_size: usize,

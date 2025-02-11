@@ -11,9 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{fmt, sync::Arc};
+use std::fmt;
 
-use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
+use zenoh_buffers::{BBuf, ZSlice};
 use zenoh_core::zcondfeat;
 use zenoh_link::{Link, LinkUnicast};
 use zenoh_protocol::{
@@ -22,7 +22,10 @@ use zenoh_protocol::{
 };
 use zenoh_result::{zerror, ZResult};
 
-use crate::common::batch::{BatchConfig, Decode, Encode, Finalize, RBatch, WBatch};
+use crate::common::{
+    batch::{BatchConfig, Decode, Encode, Finalize, RBatch, WBatch},
+    read_with_buffer,
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum TransportLinkUnicastDirection {
@@ -202,39 +205,36 @@ pub(crate) struct TransportLinkUnicastRx {
 }
 
 impl TransportLinkUnicastRx {
-    pub async fn recv_batch<C, T>(&mut self, buff: C) -> ZResult<RBatch>
-    where
-        C: Fn() -> T + Copy,
-        T: AsMut<[u8]> + ZSliceBuffer + 'static,
-    {
+    pub async fn recv_batch(&mut self, buffer: &mut ZSlice) -> ZResult<RBatch> {
         const ERR: &str = "Read error from link: ";
 
-        let mut into = (buff)();
-        let end = if self.link.is_streamed() {
+        let end = read_with_buffer(buffer, |buf: &mut [u8]| async {
+            if !self.link.is_streamed() {
+                return self.link.read(buf).await;
+            }
             // Read and decode the message length
             let mut len = BatchSize::MIN.to_le_bytes();
             self.link.read_exact(&mut len).await?;
             let l = BatchSize::from_le_bytes(len) as usize;
 
             // Read the bytes
-            let slice = into
-                .as_mut()
+            let slice = buf
                 .get_mut(len.len()..len.len() + l)
                 .ok_or_else(|| zerror!("{ERR}{self}. Invalid batch length or buffer size."))?;
             self.link.read_exact(slice).await?;
-            len.len() + l
-        } else {
-            // Read the bytes
-            self.link.read(into.as_mut()).await?
-        };
-
+            Ok(len.len() + l)
+        })
+        .await?;
         // tracing::trace!("RBytes: {:02x?}", &into.as_slice()[0..end]);
 
-        let buffer = ZSlice::new(Arc::new(into), 0, end)
-            .map_err(|_| zerror!("{ERR}{self}. ZSlice index(es) out of bounds"))?;
-        let mut batch = RBatch::new(self.config.batch, buffer);
+        let mut batch = RBatch::new(
+            self.config.batch,
+            buffer
+                .subslice(0..end)
+                .ok_or_else(|| zerror!("{ERR}{self}. ZSlice index(es) out of bounds"))?,
+        );
         batch
-            .initialize(buff)
+            .initialize()
             .map_err(|e| zerror!("{ERR}{self}. {e}."))?;
 
         // tracing::trace!("RBatch: {:?}", batch);
@@ -244,9 +244,7 @@ impl TransportLinkUnicastRx {
 
     pub async fn recv(&mut self) -> ZResult<TransportMessage> {
         let mtu = self.config.batch.mtu as usize;
-        let mut batch = self
-            .recv_batch(|| zenoh_buffers::vec::uninit(mtu).into_boxed_slice())
-            .await?;
+        let mut batch = self.recv_batch(&mut vec![0u8; mtu].into()).await?;
         let msg = batch
             .decode()
             .map_err(|_| zerror!("Decode error on link: {}", self))?;

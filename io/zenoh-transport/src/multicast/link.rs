@@ -19,7 +19,7 @@ use std::{
 };
 
 use tokio::task::JoinHandle;
-use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
+use zenoh_buffers::{BBuf, ZSlice};
 use zenoh_core::{zcondfeat, zlock};
 use zenoh_link::{LinkMulticast, Locator};
 use zenoh_protocol::{
@@ -29,7 +29,7 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::{zerror, ZResult};
-use zenoh_sync::{RecyclingObject, RecyclingObjectPool, Signal};
+use zenoh_sync::Signal;
 
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
@@ -41,10 +41,10 @@ use crate::{
             TransmissionPipelineProducer,
         },
         priority::TransportPriorityTx,
+        read_with_buffer,
     },
     multicast::transport::TransportMulticastInner,
 };
-
 /****************************/
 /* TRANSPORT MULTICAST LINK */
 /****************************/
@@ -192,31 +192,16 @@ pub(crate) struct TransportLinkMulticastRx {
 }
 
 impl TransportLinkMulticastRx {
-    pub async fn recv_batch<C, T>(&self, buff: C) -> ZResult<(RBatch, Locator)>
-    where
-        C: Fn() -> T + Copy,
-        T: AsMut<[u8]> + ZSliceBuffer + 'static,
-    {
+    pub async fn recv_batch(&self, buffer: &mut ZSlice) -> ZResult<(RBatch, Locator)> {
         const ERR: &str = "Read error from link: ";
-
-        let mut into = (buff)();
-        let (n, locator) = self.inner.link.read(into.as_mut()).await?;
-        let buffer = ZSlice::new(Arc::new(into), 0, n).map_err(|_| zerror!("Error"))?;
-        let mut batch = RBatch::new(self.inner.config.batch, buffer);
-        batch.initialize(buff).map_err(|_| zerror!("{ERR}{self}"))?;
+        let (n, locator) = read_with_buffer(buffer, |buf| self.inner.link.read(buf)).await?;
+        let mut batch = RBatch::new(
+            self.inner.config.batch,
+            buffer.subslice(0..n).ok_or_else(|| zerror!("Error"))?,
+        );
+        batch.initialize().map_err(|_| zerror!("{ERR}{self}"))?;
         Ok((batch, locator.into_owned()))
     }
-
-    // pub async fn recv(&mut self) -> ZResult<(TransportMessage, Locator)> {
-    //     let mtu = self.inner.config.mtu as usize;
-    //     let (mut batch, locator) = self
-    //         .recv_batch(|| zenoh_buffers::vec::uninit(mtu).into_boxed_slice())
-    //         .await?;
-    //     let msg = batch
-    //         .decode()
-    //         .map_err(|_| zerror!("Decode error on link: {}", self))?;
-    //     Ok((msg, locator))
-    // }
 }
 
 impl fmt::Display for TransportLinkMulticastRx {
@@ -357,7 +342,6 @@ impl TransportLinkMulticastUniversal {
             let c_link = self.link.clone();
             let c_transport = self.transport.clone();
             let c_signal = self.signal_rx.clone();
-            let c_rx_buffer_size = self.transport.manager.config.link_rx_buffer_size;
 
             let handle = zenoh_runtime::ZRuntime::RX.spawn(async move {
                 // Start the consume task
@@ -365,7 +349,6 @@ impl TransportLinkMulticastUniversal {
                     c_link.rx(),
                     c_transport.clone(),
                     c_signal.clone(),
-                    c_rx_buffer_size,
                     batch_size,
                 )
                 .await;
@@ -520,40 +503,16 @@ async fn tx_task(
 }
 
 async fn rx_task(
-    mut link: TransportLinkMulticastRx,
+    link: TransportLinkMulticastRx,
     transport: TransportMulticastInner,
     signal: Signal,
-    rx_buffer_size: usize,
     batch_size: BatchSize,
 ) -> ZResult<()> {
-    async fn read<T, F>(
-        link: &mut TransportLinkMulticastRx,
-        pool: &RecyclingObjectPool<T, F>,
-    ) -> ZResult<(RBatch, Locator)>
-    where
-        T: ZSliceBuffer + 'static,
-        F: Fn() -> T,
-        RecyclingObject<T>: AsMut<[u8]> + ZSliceBuffer,
-    {
-        let (rbatch, locator) = link
-            .recv_batch(|| pool.try_take().unwrap_or_else(|| pool.alloc()))
-            .await?;
-        Ok((rbatch, locator))
-    }
-
-    // The pool of buffers
-    let mtu = link.inner.config.batch.mtu as usize;
-    let mut n = rx_buffer_size / mtu;
-    if n == 0 {
-        tracing::debug!("RX configured buffer of {rx_buffer_size} bytes is too small for {link} that has an MTU of {mtu} bytes. Defaulting to {mtu} bytes for RX buffer.");
-        n = 1;
-    }
-
-    let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
+    let mut buffer = ZSlice::from(vec![0u8; link.inner.config.batch.mtu as usize]);
     loop {
         tokio::select! {
             _ = signal.wait() => break,
-            res = read(&mut link, &pool) => {
+            res = link.recv_batch(&mut buffer) => {
                 let (batch, locator) = res?;
 
                 #[cfg(feature = "stats")]

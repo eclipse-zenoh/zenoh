@@ -32,7 +32,6 @@ use zenoh_protocol::{
     transport::BatchSize,
 };
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
-use zenoh_sync::Mvar;
 
 use super::{
     get_udp_addrs, socket_addr_to_udp_locator, UDP_ACCEPT_THROTTLE_TIME, UDP_DEFAULT_MTU,
@@ -70,13 +69,14 @@ impl LinkUnicastUdpConnected {
 struct LinkUnicastUdpUnconnected {
     socket: Weak<UdpSocket>,
     links: LinkHashMap,
-    input: Mvar<LinkInput>,
+    input_tx: flume::Sender<LinkInput>,
+    input_rx: flume::Receiver<LinkInput>,
     leftover: AsyncMutex<Option<LinkLeftOver>>,
 }
 
 impl LinkUnicastUdpUnconnected {
     async fn received(&self, buffer: Vec<u8>, len: usize) {
-        self.input.put((buffer, len)).await;
+        self.input_tx.send_async((buffer, len)).await.unwrap();
     }
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
@@ -84,7 +84,7 @@ impl LinkUnicastUdpUnconnected {
         let (slice, start, len) = match guard.take() {
             Some(tuple) => tuple,
             None => {
-                let (slice, len) = self.input.take().await;
+                let (slice, len) = self.input_rx.recv_async().await.unwrap();
                 (slice, 0, len)
             }
         };
@@ -533,10 +533,12 @@ async fn accept_read_task(
                                 None => {
                                     // A new peers has sent data to this socket
                                     tracing::debug!("Accepted UDP connection on {}: {}", src_addr, dst_addr);
+                                    let (input_tx, input_rx) = flume::bounded(1);
                                     let unconnected = Arc::new(LinkUnicastUdpUnconnected {
                                         socket: Arc::downgrade(&socket),
                                         links: links.clone(),
-                                        input: Mvar::new(),
+                                        input_tx,
+                                        input_rx,
                                         leftover: AsyncMutex::new(None),
                                     });
                                     zaddlink!(src_addr, dst_addr, Arc::downgrade(&unconnected));
