@@ -90,6 +90,7 @@ impl TransportLinkUnicast {
         TransportLinkUnicastRx {
             link: self.link.clone(),
             config: self.config.clone(),
+            buffer: vec![0u8; self.config.batch.mtu as usize].into(),
         }
     }
 
@@ -202,13 +203,14 @@ impl fmt::Debug for TransportLinkUnicastTx {
 pub(crate) struct TransportLinkUnicastRx {
     pub(crate) link: LinkUnicast,
     pub(crate) config: TransportLinkUnicastConfig,
+    buffer: ZSlice,
 }
 
 impl TransportLinkUnicastRx {
-    pub async fn recv_batch(&mut self, buffer: &mut ZSlice) -> ZResult<RBatch> {
+    pub async fn recv_batch(&mut self) -> ZResult<RBatch> {
         const ERR: &str = "Read error from link: ";
 
-        let end = read_with_buffer(buffer, |buf: &mut [u8]| async {
+        let end = read_with_buffer(&mut self.buffer, |buf: &mut [u8]| async {
             if !self.link.is_streamed() {
                 return self.link.read(buf).await;
             }
@@ -220,7 +222,7 @@ impl TransportLinkUnicastRx {
             // Read the bytes
             let slice = buf
                 .get_mut(len.len()..len.len() + l)
-                .ok_or_else(|| zerror!("{ERR}{self}. Invalid batch length or buffer size."))?;
+                .ok_or_else(|| zerror!("Invalid batch length or buffer size."))?;
             self.link.read_exact(slice).await?;
             Ok(len.len() + l)
         })
@@ -229,7 +231,7 @@ impl TransportLinkUnicastRx {
 
         let mut batch = RBatch::new(
             self.config.batch,
-            buffer
+            self.buffer
                 .subslice(0..end)
                 .ok_or_else(|| zerror!("{ERR}{self}. ZSlice index(es) out of bounds"))?,
         );
@@ -243,8 +245,7 @@ impl TransportLinkUnicastRx {
     }
 
     pub async fn recv(&mut self) -> ZResult<TransportMessage> {
-        let mtu = self.config.batch.mtu as usize;
-        let mut batch = self.recv_batch(&mut vec![0u8; mtu].into()).await?;
+        let mut batch = self.recv_batch().await?;
         let msg = batch
             .decode()
             .map_err(|_| zerror!("Decode error on link: {}", self))?;

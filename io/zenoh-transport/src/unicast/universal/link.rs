@@ -14,7 +14,6 @@
 use std::time::Duration;
 
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use zenoh_buffers::ZSlice;
 use zenoh_link::Link;
 use zenoh_protocol::transport::{KeepAlive, TransportMessage};
 use zenoh_result::{zerror, ZResult};
@@ -241,10 +240,9 @@ async fn rx_task(
         link.config.reliability,
     );
 
-    let mut buffer = ZSlice::from(vec![0u8; link.config.batch.mtu as usize]);
     loop {
         tokio::select! {
-            batch = tokio::time::timeout(lease, link.recv_batch(&mut buffer)) => {
+            batch = tokio::time::timeout(lease, link.recv_batch()) => {
                 let batch = batch.map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
                 #[cfg(feature = "stats")]
                 {

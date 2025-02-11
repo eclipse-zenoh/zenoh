@@ -85,6 +85,7 @@ impl TransportLinkMulticast {
     pub(crate) fn rx(&self) -> TransportLinkMulticastRx {
         TransportLinkMulticastRx {
             inner: self.clone(),
+            buffer: vec![0u8; self.config.batch.mtu as usize].into(),
         }
     }
 
@@ -188,16 +189,18 @@ impl fmt::Debug for TransportLinkMulticastTx {
 }
 
 pub(crate) struct TransportLinkMulticastRx {
-    pub(crate) inner: TransportLinkMulticast,
+    inner: TransportLinkMulticast,
+    buffer: ZSlice,
 }
 
 impl TransportLinkMulticastRx {
-    pub async fn recv_batch(&self, buffer: &mut ZSlice) -> ZResult<(RBatch, Locator)> {
+    pub async fn recv_batch(&mut self) -> ZResult<(RBatch, Locator)> {
         const ERR: &str = "Read error from link: ";
-        let (n, locator) = read_with_buffer(buffer, |buf| self.inner.link.read(buf)).await?;
+        let (n, locator) =
+            read_with_buffer(&mut self.buffer, |buf| self.inner.link.read(buf)).await?;
         let mut batch = RBatch::new(
             self.inner.config.batch,
-            buffer.subslice(0..n).ok_or_else(|| zerror!("Error"))?,
+            self.buffer.subslice(0..n).ok_or_else(|| zerror!("Error"))?,
         );
         batch.initialize().map_err(|_| zerror!("{ERR}{self}"))?;
         Ok((batch, locator.into_owned()))
@@ -503,16 +506,15 @@ async fn tx_task(
 }
 
 async fn rx_task(
-    link: TransportLinkMulticastRx,
+    mut link: TransportLinkMulticastRx,
     transport: TransportMulticastInner,
     signal: Signal,
     batch_size: BatchSize,
 ) -> ZResult<()> {
-    let mut buffer = ZSlice::from(vec![0u8; link.inner.config.batch.mtu as usize]);
     loop {
         tokio::select! {
             _ = signal.wait() => break,
-            res = link.recv_batch(&mut buffer) => {
+            res = link.recv_batch() => {
                 let (batch, locator) = res?;
 
                 #[cfg(feature = "stats")]
