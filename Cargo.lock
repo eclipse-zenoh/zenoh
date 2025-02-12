@@ -5509,7 +5509,6 @@ dependencies = [
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
- "zenoh-sync",
  "zenoh-util",
 ]
 
