@@ -27,7 +27,7 @@ use crate::common::{
     read_with_buffer,
 };
 
-const SMALL_BUFFER_SIZE: usize = 1 << 11;
+const SMALL_BUFFER_SIZE: usize = 1 << 5;
 const SMALL_READ_COUNT_BEFORE_SHRINK: usize = 10;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -247,16 +247,6 @@ impl TransportLinkUnicastRx {
         if let Some(buffer) = new_buffer {
             self.buffer = buffer.into();
         }
-        if end <= SMALL_BUFFER_SIZE {
-            self.small_buffer_count += 1;
-            if self.small_buffer_count == SMALL_READ_COUNT_BEFORE_SHRINK
-                && self.buffer.len() > SMALL_BUFFER_SIZE
-            {
-                self.buffer = vec![0u8; SMALL_BUFFER_SIZE].into();
-            }
-        } else {
-            self.small_buffer_count = 0;
-        }
         // tracing::trace!("RBytes: {:02x?}", &into.as_slice()[0..end]);
 
         let mut batch = RBatch::new(
@@ -268,6 +258,17 @@ impl TransportLinkUnicastRx {
         batch
             .initialize()
             .map_err(|e| zerror!("{ERR}{self}. {e}."))?;
+
+        if end <= SMALL_BUFFER_SIZE {
+            self.small_buffer_count += 1;
+            if self.small_buffer_count == SMALL_READ_COUNT_BEFORE_SHRINK
+                && self.buffer.len() > SMALL_BUFFER_SIZE
+            {
+                self.buffer = vec![0u8; SMALL_BUFFER_SIZE].into();
+            }
+        } else {
+            self.small_buffer_count = 0;
+        }
 
         // tracing::trace!("RBatch: {:?}", batch);
 
