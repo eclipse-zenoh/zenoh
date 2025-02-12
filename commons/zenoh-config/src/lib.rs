@@ -609,6 +609,13 @@ validated_struct::validator! {
 
         },
 
+        /// Namespace prefix
+        /// If not None, all outgoing key expressions will be
+        /// automatically prefixed with specified string,
+        /// and all incoming key expressions will be stripped
+        /// of specified prefix
+        pub namespace: Option<OwnedKeyExpr>,
+
         /// Configuration of the downsampling.
         downsampling: Vec<DownsamplingItemConf>,
 

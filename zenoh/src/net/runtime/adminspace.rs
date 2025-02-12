@@ -475,6 +475,7 @@ impl Primitives for AdminSpace {
                         qid: msg.id,
                         zid: zid.into(),
                         primitives,
+                        session: None,
                     }),
                     eid: self.queryable_id,
                     value: query

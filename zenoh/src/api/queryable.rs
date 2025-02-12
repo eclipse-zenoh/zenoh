@@ -55,6 +55,7 @@ pub(crate) struct QueryInner {
     pub(crate) qid: RequestId,
     pub(crate) zid: ZenohIdProto,
     pub(crate) primitives: Arc<dyn Primitives>,
+    pub(crate) session: Option<Arc<WeakSession>>,
 }
 
 impl Drop for QueryInner {
@@ -263,7 +264,7 @@ impl Query {
         let ext_sinfo = None;
         #[cfg(feature = "unstable")]
         let ext_sinfo = sample.source_info.into();
-        self.inner.primitives.send_response(Response {
+        let mut response = Response {
             rid: self.inner.qid,
             wire_expr: WireExpr {
                 scope: 0,
@@ -298,7 +299,12 @@ impl Query {
                 zid: self.inner.zid,
                 eid: self.eid,
             }),
-        });
+        };
+
+        if let Some(ns) = self.inner.session.as_ref().and_then(|s| s.namespace()) {
+            ns.handle_response_egress(&mut response);
+        }
+        self.inner.primitives.send_response(response);
         Ok(())
     }
 }
