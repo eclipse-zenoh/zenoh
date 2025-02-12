@@ -204,7 +204,7 @@ pub struct Resource {
     pub(crate) suffix: String,
     pub(crate) nonwild_prefix: Option<(Arc<Resource>, String)>,
     pub(crate) children: HashSet<Child>,
-    pub(crate) context: Option<ResourceContext>,
+    pub(crate) context: Option<Box<ResourceContext>>,
     pub(crate) session_ctxs: HashMap<usize, Arc<SessionContext>>,
 }
 
@@ -281,7 +281,7 @@ impl Resource {
             suffix: String::from(suffix),
             nonwild_prefix,
             children: HashSet::new(),
-            context,
+            context: context.map(Box::new),
             session_ctxs: HashMap::new(),
         }
     }
@@ -680,7 +680,7 @@ impl Resource {
 
     pub fn upgrade_resource(res: &mut Arc<Resource>, hat: Box<dyn Any + Send + Sync>) {
         if res.context.is_none() {
-            get_mut_unchecked(res).context = Some(ResourceContext::new(hat));
+            get_mut_unchecked(res).context = Some(Box::new(ResourceContext::new(hat)));
         }
     }
 
