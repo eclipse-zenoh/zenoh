@@ -624,15 +624,8 @@ pub(crate) struct TransmissionPipelineConsumer {
 
 impl TransmissionPipelineConsumer {
     pub(crate) async fn pull(&mut self) -> Option<(WBatch, Priority)> {
-        let mut sleep = OptionFuture::default();
         loop {
-            tokio::select! {
-                biased;
-                _ = self.disable_waiter.wait_async() => return None,
-                _ = self.batch_waiter.wait_async() => {},
-                Some(_) = sleep => {}
-            }
-            sleep = OptionFuture::default();
+            let mut sleep = OptionFuture::default();
             for (i, stage_out) in self.stage_out.iter_mut().enumerate() {
                 let prio = Priority::try_from(i as u8).unwrap();
                 match stage_out.pull() {
@@ -640,6 +633,12 @@ impl TransmissionPipelineConsumer {
                     Ok(None) => continue,
                     Err(backoff) => sleep = Some(tokio::time::sleep(backoff)).into(),
                 }
+            }
+            tokio::select! {
+                biased;
+                _ = self.disable_waiter.wait_async() => return None,
+                _ = self.batch_waiter.wait_async() => {},
+                Some(_) = sleep => {}
             }
         }
     }
