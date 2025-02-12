@@ -27,12 +27,12 @@ use async_trait::async_trait;
 #[zenoh_macros::internal]
 use ref_cast::ref_cast_custom;
 use ref_cast::RefCastCustom;
+use smallvec::SmallVec;
 use tracing::{error, info, trace, warn};
 use uhlc::Timestamp;
 #[cfg(feature = "internal")]
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
-use zenoh_collections::SingleOrVec;
 use zenoh_config::{qos::PublisherQoSConfig, unwrap_or_default, wrappers::ZenohId};
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Wait};
 use zenoh_keyexpr::keyexpr_tree::KeBoxTree;
@@ -2064,7 +2064,7 @@ impl SessionInner {
         #[cfg(feature = "unstable")] reliability: Reliability,
         attachment: Option<ZBytes>,
     ) {
-        let mut callbacks = SingleOrVec::default();
+        let mut callbacks = SmallVec::<[_; 1]>::default();
         let state = zread!(self.state);
         if state.primitives.is_none() {
             return; // Session closing or closed
@@ -2119,8 +2119,9 @@ impl SessionInner {
             reliability,
             attachment,
         );
-        let zenoh_collections::single_or_vec::IntoIter { drain, last } = callbacks.into_iter();
-        for (cb, key_expr) in drain {
+
+        let last = callbacks.pop();
+        for (cb, key_expr) in callbacks {
             sample.key_expr = key_expr;
             cb.call(sample.clone());
         }

@@ -94,7 +94,7 @@ pub struct ZBytes(ZBuf);
 
 impl ZBytes {
     /// Create an empty ZBytes.
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self(ZBuf::empty())
     }
 

@@ -16,7 +16,6 @@ resolver = "2"
 members = [
     "commons/zenoh-buffers",
     "commons/zenoh-codec",
-    "commons/zenoh-collections",
     "commons/zenoh-config",
     "commons/zenoh-core",
     "commons/zenoh-crypto",
@@ -160,6 +159,7 @@ serde = { version = "1.0.210", default-features = false, features = [
 serde_json = "1.0.128"
 serde_with = "3.12.0"
 serde_yaml = "0.9.34"
+smallvec = "1.13.2"
 static_init = "1.0.3"
 stabby = "36.1.1"
 sha3 = "0.10.8"
@@ -206,7 +206,6 @@ zenoh-util = { version = "1.2.1", path = "commons/zenoh-util" }
 zenoh-crypto = { version = "1.2.1", path = "commons/zenoh-crypto" }
 zenoh-codec = { version = "1.2.1", path = "commons/zenoh-codec" }
 zenoh-sync = { version = "1.2.1", path = "commons/zenoh-sync" }
-zenoh-collections = { version = "1.2.1", path = "commons/zenoh-collections", default-features = false }
 zenoh-macros = { version = "1.2.1", path = "commons/zenoh-macros" }
 zenoh-plugin-trait = { version = "1.2.1", path = "plugins/zenoh-plugin-trait", default-features = false }
 zenoh_backend_traits = { version = "1.2.1", path = "plugins/zenoh-backend-traits", default-features = false }

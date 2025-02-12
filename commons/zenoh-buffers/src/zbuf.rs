@@ -16,7 +16,7 @@ use core::{cmp, iter, num::NonZeroUsize, ptr::NonNull};
 #[cfg(feature = "std")]
 use std::io;
 
-use zenoh_collections::SingleOrVec;
+use smallvec::SmallVec;
 
 use crate::{
     buffer::{Buffer, SplitBuffer},
@@ -30,14 +30,14 @@ use crate::{
 
 #[derive(Debug, Clone, Default, Eq)]
 pub struct ZBuf {
-    slices: SingleOrVec<ZSlice>,
+    slices: SmallVec<[ZSlice; 1]>,
 }
 
 impl ZBuf {
     #[must_use]
-    pub const fn empty() -> Self {
+    pub fn empty() -> Self {
         Self {
-            slices: SingleOrVec::empty(),
+            slices: SmallVec::new(),
         }
     }
 

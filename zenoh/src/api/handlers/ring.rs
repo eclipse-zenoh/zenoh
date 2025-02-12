@@ -14,11 +14,11 @@
 
 //! Callback handler trait.
 use std::{
-    sync::{Arc, Weak},
+    collections::VecDeque,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
-use zenoh_collections::RingBuffer;
 use zenoh_result::ZResult;
 
 use crate::api::{
@@ -48,27 +48,23 @@ impl Default for RingChannel {
 }
 
 struct RingChannelInner<T> {
-    ring: std::sync::Mutex<RingBuffer<T>>,
-    not_empty: flume::Receiver<()>,
+    ring: std::sync::Mutex<Option<VecDeque<T>>>,
+    capacity: usize,
+    not_empty_rx: flume::Receiver<()>,
 }
 
-pub struct RingChannelHandler<T> {
-    ring: Weak<RingChannelInner<T>>,
-}
+pub struct RingChannelHandler<T>(Arc<RingChannelInner<T>>);
 
 impl<T> RingChannelHandler<T> {
     /// Receive from the ring channel.
     ///
     /// If the ring channel is empty, this call will block until an element is available in the channel.
     pub fn recv(&self) -> ZResult<T> {
-        let Some(channel) = self.ring.upgrade() else {
-            bail!("The ringbuffer has been deleted.");
-        };
         loop {
-            if let Some(t) = channel.ring.lock().map_err(|e| zerror!("{}", e))?.pull() {
+            if let Some(t) = self.try_recv()? {
                 return Ok(t);
             }
-            channel.not_empty.recv().map_err(|e| zerror!("{}", e))?;
+            self.0.not_empty_rx.recv()?
         }
     }
 
@@ -77,18 +73,14 @@ impl<T> RingChannelHandler<T> {
     /// If the ring channel is empty, this call will block until an element is available in the channel,
     /// or return `None` if the deadline has passed.
     pub fn recv_deadline(&self, deadline: Instant) -> ZResult<Option<T>> {
-        let Some(channel) = self.ring.upgrade() else {
-            bail!("The ringbuffer has been deleted.");
-        };
-
         loop {
-            if let Some(t) = channel.ring.lock().map_err(|e| zerror!("{}", e))?.pull() {
+            if let Some(t) = self.try_recv()? {
                 return Ok(Some(t));
             }
-            match channel.not_empty.recv_deadline(deadline) {
-                Ok(()) => {}
+            match self.0.not_empty_rx.recv_deadline(deadline) {
+                Ok(()) => continue,
                 Err(flume::RecvTimeoutError::Timeout) => return Ok(None),
-                Err(err) => bail!("{}", err),
+                Err(err) => return Err(err.into()),
             }
         }
     }
@@ -98,38 +90,18 @@ impl<T> RingChannelHandler<T> {
     /// If the ring channel is empty, this call will block until an element is available in the channel,
     /// or return `None` if the deadline has expired.
     pub fn recv_timeout(&self, timeout: Duration) -> ZResult<Option<T>> {
-        let Some(channel) = self.ring.upgrade() else {
-            bail!("The ringbuffer has been deleted.");
-        };
-
-        loop {
-            if let Some(t) = channel.ring.lock().map_err(|e| zerror!("{}", e))?.pull() {
-                return Ok(Some(t));
-            }
-            match channel.not_empty.recv_timeout(timeout) {
-                Ok(()) => {}
-                Err(flume::RecvTimeoutError::Timeout) => return Ok(None),
-                Err(err) => bail!("{}", err),
-            }
-        }
+        self.recv_deadline(Instant::now() + timeout)
     }
 
     /// Receive from the ring channel.
     ///
     /// If the ring channel is empty, this call will block until an element is available in the channel.
     pub async fn recv_async(&self) -> ZResult<T> {
-        let Some(channel) = self.ring.upgrade() else {
-            bail!("The ringbuffer has been deleted.");
-        };
         loop {
-            if let Some(t) = channel.ring.lock().map_err(|e| zerror!("{}", e))?.pull() {
+            if let Some(t) = self.try_recv()? {
                 return Ok(t);
             }
-            channel
-                .not_empty
-                .recv_async()
-                .await
-                .map_err(|e| zerror!("{}", e))?;
+            self.0.not_empty_rx.recv_async().await?
         }
     }
 
@@ -137,11 +109,34 @@ impl<T> RingChannelHandler<T> {
     ///
     /// If the ring channel is empty, this call will return immediately without blocking.
     pub fn try_recv(&self) -> ZResult<Option<T>> {
-        let Some(channel) = self.ring.upgrade() else {
-            bail!("The ringbuffer has been deleted.");
-        };
-        let mut guard = channel.ring.lock().map_err(|e| zerror!("{}", e))?;
-        Ok(guard.pull())
+        let mut opt_buffer = self.0.ring.lock().unwrap();
+        let buffer = opt_buffer
+            .as_mut()
+            .ok_or_else(|| zerror!("The ringbuffer has been deleted."))?;
+        Ok(buffer.pop_front())
+    }
+}
+
+struct RingChannelCallback<T> {
+    inner: Arc<RingChannelInner<T>>,
+    not_empty_tx: flume::Sender<()>,
+}
+
+impl<T> RingChannelCallback<T> {
+    fn push(&self, value: T) {
+        let mut guard = self.inner.ring.lock().unwrap();
+        let buffer = guard.as_mut().unwrap();
+        if buffer.len() == self.inner.capacity {
+            buffer.pop_front();
+        }
+        buffer.push_back(value);
+        let _ = self.not_empty_tx.try_send(());
+    }
+}
+
+impl<T> Drop for RingChannelCallback<T> {
+    fn drop(&mut self) {
+        self.inner.ring.lock().unwrap().take();
     }
 }
 
@@ -149,25 +144,17 @@ impl<T: Send + 'static> IntoHandler<T> for RingChannel {
     type Handler = RingChannelHandler<T>;
 
     fn into_handler(self) -> (Callback<T>, Self::Handler) {
-        let (sender, receiver) = flume::bounded(1);
+        let (not_empty_tx, not_empty_rx) = flume::bounded(1);
         let inner = Arc::new(RingChannelInner {
-            ring: std::sync::Mutex::new(RingBuffer::new(self.capacity)),
-            not_empty: receiver,
+            ring: std::sync::Mutex::new(Some(VecDeque::with_capacity(self.capacity))),
+            capacity: self.capacity,
+            not_empty_rx,
         });
-        let receiver = RingChannelHandler {
-            ring: Arc::downgrade(&inner),
+        let handler = RingChannelHandler(inner.clone());
+        let callback = RingChannelCallback {
+            inner,
+            not_empty_tx,
         };
-        (
-            Callback::new(Arc::new(move |t| match inner.ring.lock() {
-                Ok(mut g) => {
-                    // Eventually drop the oldest element.
-                    g.push_force(t);
-                    drop(g);
-                    let _ = sender.try_send(());
-                }
-                Err(e) => tracing::error!("{}", e),
-            })),
-            receiver,
-        )
+        (Callback::new(Arc::new(move |t| callback.push(t))), handler)
     }
 }

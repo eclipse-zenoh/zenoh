@@ -5191,6 +5191,7 @@ dependencies = [
  "rustc_version 0.4.1",
  "serde",
  "serde_json",
+ "smallvec",
  "socket2 0.5.7",
  "tokio",
  "tokio-util",
@@ -5199,7 +5200,6 @@ dependencies = [
  "vec_map",
  "zenoh-buffers",
  "zenoh-codec",
- "zenoh-collections",
  "zenoh-config",
  "zenoh-core",
  "zenoh-keyexpr",
@@ -5234,7 +5234,7 @@ name = "zenoh-buffers"
 version = "1.2.1"
 dependencies = [
  "rand 0.8.5",
- "zenoh-collections",
+ "smallvec",
 ]
 
 [[package]]
@@ -5250,10 +5250,6 @@ dependencies = [
  "zenoh-shm",
  "zenoh-util",
 ]
-
-[[package]]
-name = "zenoh-collections"
-version = "1.2.1"
 
 [[package]]
 name = "zenoh-config"
