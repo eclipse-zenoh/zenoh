@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::fmt;
+use std::{fmt, mem::size_of};
 
 use zenoh_buffers::{BBuf, ZSlice};
 use zenoh_core::zcondfeat;
@@ -26,6 +26,9 @@ use crate::common::{
     batch::{BatchConfig, Decode, Encode, Finalize, RBatch, WBatch},
     read_with_buffer,
 };
+
+const SMALL_BUFFER_SIZE: usize = 1 << 11;
+const SMALL_READ_COUNT_BEFORE_SHRINK: usize = 10;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum TransportLinkUnicastDirection {
@@ -87,10 +90,16 @@ impl TransportLinkUnicast {
     }
 
     pub(crate) fn rx(&self) -> TransportLinkUnicastRx {
+        let buffer_size = if self.config.batch.is_streamed {
+            SMALL_BUFFER_SIZE
+        } else {
+            self.config.batch.mtu as usize
+        };
         TransportLinkUnicastRx {
             link: self.link.clone(),
             config: self.config.clone(),
-            buffer: vec![0u8; self.config.batch.mtu as usize].into(),
+            buffer: vec![0u8; buffer_size].into(),
+            small_buffer_count: 0,
         }
     }
 
@@ -204,29 +213,50 @@ pub(crate) struct TransportLinkUnicastRx {
     pub(crate) link: LinkUnicast,
     pub(crate) config: TransportLinkUnicastConfig,
     buffer: ZSlice,
+    small_buffer_count: usize,
 }
 
 impl TransportLinkUnicastRx {
     pub async fn recv_batch(&mut self) -> ZResult<RBatch> {
         const ERR: &str = "Read error from link: ";
 
+        let mut new_buffer = None;
         let end = read_with_buffer(&mut self.buffer, |buf: &mut [u8]| async {
             if !self.link.is_streamed() {
                 return self.link.read(buf).await;
             }
             // Read and decode the message length
-            let mut len = BatchSize::MIN.to_le_bytes();
-            self.link.read_exact(&mut len).await?;
-            let l = BatchSize::from_le_bytes(len) as usize;
-
+            let mut len_bytes = [0u8; size_of::<BatchSize>()];
+            self.link.read_exact(&mut len_bytes).await?;
+            let len = BatchSize::from_le_bytes(len_bytes) as usize;
+            let total_len = size_of::<BatchSize>() + len;
+            // Realloc a new buffer if it's too small
+            let buf = if buf.len() < total_len {
+                new_buffer = Some(vec![0u8; total_len]);
+                new_buffer.as_mut().unwrap()[0..size_of::<BatchSize>()].copy_from_slice(&len_bytes);
+                new_buffer.as_deref_mut().unwrap()
+            } else {
+                buf
+            };
             // Read the bytes
-            let slice = buf
-                .get_mut(len.len()..len.len() + l)
-                .ok_or_else(|| zerror!("Invalid batch length or buffer size."))?;
+            let slice = &mut buf[size_of::<BatchSize>()..total_len];
             self.link.read_exact(slice).await?;
-            Ok(len.len() + l)
+            Ok(total_len)
         })
         .await?;
+        if let Some(buffer) = new_buffer {
+            self.buffer = buffer.into();
+        }
+        if end <= SMALL_BUFFER_SIZE {
+            self.small_buffer_count += 1;
+            if self.small_buffer_count == SMALL_READ_COUNT_BEFORE_SHRINK
+                && self.buffer.len() > SMALL_BUFFER_SIZE
+            {
+                self.buffer = vec![0u8; SMALL_BUFFER_SIZE].into();
+            }
+        } else {
+            self.small_buffer_count = 0;
+        }
         // tracing::trace!("RBytes: {:02x?}", &into.as_slice()[0..end]);
 
         let mut batch = RBatch::new(
