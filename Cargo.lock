@@ -5743,10 +5743,6 @@ dependencies = [
  "event-listener 5.3.1",
  "futures",
  "tokio",
- "zenoh-buffers",
- "zenoh-collections",
- "zenoh-core",
- "zenoh-result",
 ]
 
 [[package]]

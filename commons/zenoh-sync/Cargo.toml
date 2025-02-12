@@ -18,9 +18,9 @@ version = { workspace = true }
 repository = { workspace = true }
 homepage = { workspace = true }
 authors = [
-  "kydos <angelo@icorsaro.net>",
-  "Luca Cominardi <luca.cominardi@zettascale.tech>",
-  "Pierre Avital <pierre.avital@zettascale.tech>",
+    "kydos <angelo@icorsaro.net>",
+    "Luca Cominardi <luca.cominardi@zettascale.tech>",
+    "Pierre Avital <pierre.avital@zettascale.tech>",
 ]
 edition = { workspace = true }
 license = { workspace = true }
@@ -32,10 +32,6 @@ description = "Internal crate for zenoh."
 event-listener = { workspace = true }
 futures = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }
-zenoh-buffers = { workspace = true }
-zenoh-collections = { workspace = true, features = ["default"] }
-zenoh-core = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "sync", "rt-multi-thread", "time"] }
-zenoh-result = { workspace = true }
