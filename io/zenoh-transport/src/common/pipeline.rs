@@ -290,11 +290,9 @@ impl StageIn {
         };
 
         // Attempt a serialization with a new frame.
-        if need_new_frame {
-            if batch.encode((msg, &frame)).is_ok() {
-                self.push_batch(&mut current, batch, msg.is_express());
-                return Ok(true);
-            }
+        if need_new_frame && batch.encode((msg, &frame)).is_ok() {
+            self.push_batch(&mut current, batch, msg.is_express());
+            return Ok(true);
         }
 
         // Push the batch if not empty
@@ -591,7 +589,7 @@ impl TransmissionPipelineProducer {
         if stage_in.available.is_congested() {
             return Ok(false);
         }
-        queue.push_network_message(&stage_in, &msg, priority, &mut deadline)
+        queue.push_network_message(stage_in, &msg, priority, &mut deadline)
     }
 
     #[inline]
