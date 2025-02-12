@@ -566,7 +566,7 @@ mod tests {
 
                 let mut rbatch = RBatch::new(config, bytes.to_vec().into());
                 println!("Decoded RBatch: {:?}", rbatch);
-                rbatch.initialize(config.mtu).unwrap();
+                rbatch.initialize().unwrap();
                 println!("Initialized RBatch: {:?}", rbatch);
                 let msg_out: TransportMessage = rbatch.decode().unwrap();
                 assert_eq!(msg_in, msg_out);
