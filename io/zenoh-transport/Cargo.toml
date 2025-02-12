@@ -52,7 +52,6 @@ default = ["test", "transport_multilink"]
 
 [dependencies]
 async-trait = { workspace = true }
-crossbeam-utils = { workspace = true }
 tokio = { workspace = true, features = [
     "sync",
     "fs",
