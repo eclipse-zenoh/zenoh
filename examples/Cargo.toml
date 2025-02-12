@@ -27,9 +27,9 @@ readme = "README.md"
 publish = false
 
 [features]
+default = ["zenoh/default", "zenoh-ext/default"]
 shared-memory = ["zenoh/shared-memory"]
 unstable = ["zenoh/unstable"]
-transport_unixpipe = ["zenoh/transport_unixpipe"]
 
 [dependencies]
 clap = { workspace = true, features = ["derive"] }
@@ -37,15 +37,15 @@ futures = { workspace = true }
 prost = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "time", "io-std"] }
-zenoh = { workspace = true, default-features = true }
-zenoh-ext = { workspace = true, features = ["unstable"] }
+zenoh = { workspace = true, default-features = false }
+zenoh-ext = { workspace = true, default-features = false, features = ["unstable"] }
 
 [dev-dependencies]
 rand = { workspace = true, features = ["default"] }
 
 [build-dependencies]
 prost-build = "0.13"
-which = "6"
+which = "7.0.2"
 
 [[example]]
 name = "z_scout"
