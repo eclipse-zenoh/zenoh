@@ -90,7 +90,7 @@ fn register_simple_token(
     // Register liveliness
     {
         let res = get_mut_unchecked(res);
-        match res.context_mut().session_ctxs.get_mut(&face.id) {
+        match res.session_ctxs.get_mut(&face.id) {
             Some(ctx) => {
                 if !ctx.token {
                     get_mut_unchecked(ctx).token = true;
@@ -98,7 +98,6 @@ fn register_simple_token(
             }
             None => {
                 let ctx = res
-                    .context_mut()
                     .session_ctxs
                     .entry(face.id)
                     .or_insert_with(|| Arc::new(SessionContext::new(face.clone())));
@@ -154,8 +153,7 @@ fn declare_simple_token(
 
 #[inline]
 fn simple_tokens(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
-    res.context()
-        .session_ctxs
+    res.session_ctxs
         .values()
         .filter_map(|ctx| {
             if ctx.token {
@@ -230,11 +228,7 @@ pub(super) fn undeclare_simple_token(
         .values()
         .any(|s| *s == *res)
     {
-        if let Some(ctx) = get_mut_unchecked(res)
-            .context_mut()
-            .session_ctxs
-            .get_mut(&face.id)
-        {
+        if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
             get_mut_unchecked(ctx).token = false;
         }
 

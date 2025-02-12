@@ -61,8 +61,7 @@ fn merge_qabl_infos(mut this: QueryableInfoType, info: &QueryableInfoType) -> Qu
 }
 
 fn local_peer_qabl_info(_tables: &Tables, res: &Arc<Resource>) -> QueryableInfoType {
-    res.context()
-        .session_ctxs
+    res.session_ctxs
         .values()
         .fold(None, |accu, ctx| {
             if let Some(info) = ctx.qabl.as_ref() {
@@ -99,8 +98,7 @@ fn local_qabl_info(
     } else {
         None
     };
-    res.context()
-        .session_ctxs
+    res.session_ctxs
         .values()
         .fold(info, |accu, ctx| {
             if ctx.face.id != face.id && ctx.face.whatami != WhatAmI::Peer
@@ -303,8 +301,7 @@ fn register_simple_queryable(
     {
         let res = get_mut_unchecked(res);
         get_mut_unchecked(
-            res.context_mut()
-                .session_ctxs
+            res.session_ctxs
                 .entry(face.id)
                 .or_insert_with(|| Arc::new(SessionContext::new(face.clone()))),
         )
@@ -338,8 +335,7 @@ fn remote_linkstatepeer_qabls(tables: &Tables, res: &Arc<Resource>) -> bool {
 
 #[inline]
 fn simple_qabls(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
-    res.context()
-        .session_ctxs
+    res.session_ctxs
         .values()
         .filter_map(|ctx| {
             if ctx.qabl.is_some() {
@@ -353,8 +349,7 @@ fn simple_qabls(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 
 #[inline]
 fn remote_simple_qabls(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
-    res.context()
-        .session_ctxs
+    res.session_ctxs
         .values()
         .any(|ctx| ctx.face.id != face.id && ctx.qabl.is_some())
 }
@@ -548,11 +543,7 @@ pub(super) fn undeclare_simple_queryable(
         .values()
         .any(|s| *s == *res)
     {
-        if let Some(ctx) = get_mut_unchecked(res)
-            .context_mut()
-            .session_ctxs
-            .get_mut(&face.id)
-        {
+        if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
             get_mut_unchecked(ctx).qabl = None;
         }
 
@@ -928,7 +919,6 @@ impl HatQueriesTrait for HatCode {
                         routers: vec![],
                         peers: Vec::from_iter(res_hat!(s).linkstatepeer_qabls.keys().cloned()),
                         clients: s
-                            .context()
                             .session_ctxs
                             .values()
                             .filter_map(|f| {
@@ -1012,7 +1002,7 @@ impl HatQueriesTrait for HatCode {
                 complete,
             );
 
-            for (sid, context) in &mres.context().session_ctxs {
+            for (sid, context) in &mres.session_ctxs {
                 if source_type == WhatAmI::Client || context.face.whatami == WhatAmI::Client {
                     let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
                     if let Some(qabl_info) = context.qabl.as_ref() {
@@ -1074,7 +1064,7 @@ impl HatQueriesTrait for HatCode {
                 complete,
             );
 
-            for (sid, context) in &mres.context().session_ctxs {
+            for (sid, context) in &mres.session_ctxs {
                 if match complete {
                     true => context.qabl.is_some_and(|q| q.complete),
                     false => context.qabl.is_some(),

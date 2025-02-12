@@ -110,7 +110,7 @@ fn register_simple_subscription(
     // Register subscription
     {
         let res = get_mut_unchecked(res);
-        match res.context_mut().session_ctxs.get_mut(&face.id) {
+        match res.session_ctxs.get_mut(&face.id) {
             Some(ctx) => {
                 if ctx.subs.is_none() {
                     get_mut_unchecked(ctx).subs = Some(*sub_info);
@@ -118,7 +118,6 @@ fn register_simple_subscription(
             }
             None => {
                 let ctx = res
-                    .context_mut()
                     .session_ctxs
                     .entry(face.id)
                     .or_insert_with(|| Arc::new(SessionContext::new(face.clone())));
@@ -144,8 +143,7 @@ fn declare_simple_subscription(
 
 #[inline]
 fn simple_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
-    res.context()
-        .session_ctxs
+    res.session_ctxs
         .values()
         .filter_map(|ctx| {
             if ctx.subs.is_some() {
@@ -191,11 +189,7 @@ pub(super) fn undeclare_simple_subscription(
     send_declare: &mut SendDeclare,
 ) {
     if !face_hat_mut!(face).remote_subs.values().any(|s| *s == *res) {
-        if let Some(ctx) = get_mut_unchecked(res)
-            .context_mut()
-            .session_ctxs
-            .get_mut(&face.id)
-        {
+        if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
             get_mut_unchecked(ctx).subs = None;
         }
 
@@ -393,7 +387,7 @@ impl HatPubSubTrait for HatCode {
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
 
-            for (sid, context) in &mres.context().session_ctxs {
+            for (sid, context) in &mres.session_ctxs {
                 if context.subs.is_some() && context.face.whatami == WhatAmI::Client {
                     route.entry(*sid).or_insert_with(|| {
                         let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
@@ -449,7 +443,7 @@ impl HatPubSubTrait for HatCode {
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
 
-            for (sid, context) in &mres.context().session_ctxs {
+            for (sid, context) in &mres.session_ctxs {
                 if context.subs.is_some() && context.face.whatami == WhatAmI::Client {
                     matching_subscriptions
                         .entry(*sid)

@@ -58,8 +58,7 @@ fn local_qabl_info(
     res: &Arc<Resource>,
     face: &Arc<FaceState>,
 ) -> QueryableInfoType {
-    res.context()
-        .session_ctxs
+    res.session_ctxs
         .values()
         .fold(None, |accu, ctx| {
             if ctx.face.id != face.id {
@@ -139,8 +138,7 @@ fn register_simple_queryable(
     {
         let res = get_mut_unchecked(res);
         get_mut_unchecked(
-            res.context_mut()
-                .session_ctxs
+            res.session_ctxs
                 .entry(face.id)
                 .or_insert_with(|| Arc::new(SessionContext::new(face.clone()))),
         )
@@ -163,8 +161,7 @@ fn declare_simple_queryable(
 
 #[inline]
 fn simple_qabls(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
-    res.context()
-        .session_ctxs
+    res.session_ctxs
         .values()
         .filter_map(|ctx| {
             if ctx.qabl.is_some() {
@@ -214,11 +211,7 @@ pub(super) fn undeclare_simple_queryable(
         .values()
         .any(|s| *s == *res)
     {
-        if let Some(ctx) = get_mut_unchecked(res)
-            .context_mut()
-            .session_ctxs
-            .get_mut(&face.id)
-        {
+        if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
             get_mut_unchecked(ctx).qabl = None;
         }
 
@@ -414,7 +407,7 @@ impl HatQueriesTrait for HatCode {
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
-            for (sid, context) in &mres.context().session_ctxs {
+            for (sid, context) in &mres.session_ctxs {
                 let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
                 if let Some(qabl_info) = context.qabl.as_ref() {
                     route.push(QueryTargetQabl {
@@ -465,8 +458,7 @@ impl HatQueriesTrait for HatCode {
                 .values()
                 .any(|qbl| match complete {
                     true => {
-                        qbl.context()
-                            .session_ctxs
+                        qbl.session_ctxs
                             .get(&face.id)
                             .and_then(|sc| sc.qabl)
                             .is_some_and(|q| q.complete)
@@ -491,7 +483,7 @@ impl HatQueriesTrait for HatCode {
             if complete && !KeyExpr::keyexpr_include(mres.expr(), key_expr) {
                 continue;
             }
-            for (sid, context) in &mres.context().session_ctxs {
+            for (sid, context) in &mres.session_ctxs {
                 if context.face.whatami == WhatAmI::Client
                     && match complete {
                         true => context.qabl.is_some_and(|q| q.complete),

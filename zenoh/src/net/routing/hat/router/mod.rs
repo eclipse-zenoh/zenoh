@@ -460,28 +460,19 @@ impl HatBaseTrait for HatCode {
         hat_face.local_tokens.clear();
 
         for res in face.remote_mappings.values_mut() {
-            get_mut_unchecked(res)
-                .context_mut()
-                .session_ctxs
-                .remove(&face.id);
+            get_mut_unchecked(res).session_ctxs.remove(&face.id);
             Resource::clean(res);
         }
         face.remote_mappings.clear();
         for res in face.local_mappings.values_mut() {
-            get_mut_unchecked(res)
-                .context_mut()
-                .session_ctxs
-                .remove(&face.id);
+            get_mut_unchecked(res).session_ctxs.remove(&face.id);
             Resource::clean(res);
         }
         face.local_mappings.clear();
 
         let mut subs_matches = vec![];
         for (_id, mut res) in hat_face.remote_subs.drain() {
-            get_mut_unchecked(&mut res)
-                .context_mut()
-                .session_ctxs
-                .remove(&face.id);
+            get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
             undeclare_simple_subscription(&mut wtables, &mut face_clone, &mut res, send_declare);
 
             if res.context.is_some() {
@@ -503,10 +494,7 @@ impl HatBaseTrait for HatCode {
 
         let mut qabls_matches = vec![];
         for (_, mut res) in hat_face.remote_qabls.drain() {
-            get_mut_unchecked(&mut res)
-                .context_mut()
-                .session_ctxs
-                .remove(&face.id);
+            get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
             undeclare_simple_queryable(&mut wtables, &mut face_clone, &mut res, send_declare);
 
             if res.context.is_some() {
@@ -527,10 +515,7 @@ impl HatBaseTrait for HatCode {
         }
 
         for (_id, mut res) in hat_face.remote_tokens.drain() {
-            get_mut_unchecked(&mut res)
-                .context_mut()
-                .session_ctxs
-                .remove(&face.id);
+            get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
             undeclare_simple_token(&mut wtables, &mut face_clone, &mut res, send_declare);
         }
 

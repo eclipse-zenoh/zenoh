@@ -280,7 +280,7 @@ fn register_simple_token(
     // Register liveliness
     {
         let res = get_mut_unchecked(res);
-        match res.context_mut().session_ctxs.get_mut(&face.id) {
+        match res.session_ctxs.get_mut(&face.id) {
             Some(ctx) => {
                 if !ctx.token {
                     get_mut_unchecked(ctx).token = true;
@@ -288,7 +288,6 @@ fn register_simple_token(
             }
             None => {
                 let ctx = res
-                    .context_mut()
                     .session_ctxs
                     .entry(face.id)
                     .or_insert_with(|| Arc::new(SessionContext::new(face.clone())));
@@ -331,8 +330,7 @@ fn remote_linkstatepeer_tokens(tables: &Tables, res: &Arc<Resource>) -> bool {
 
 #[inline]
 fn simple_tokens(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
-    res.context()
-        .session_ctxs
+    res.session_ctxs
         .values()
         .filter_map(|ctx| {
             if ctx.token {
@@ -346,8 +344,7 @@ fn simple_tokens(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 
 #[inline]
 fn remote_simple_tokens(tables: &Tables, res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
-    res.context()
-        .session_ctxs
+    res.session_ctxs
         .values()
         .any(|ctx| (ctx.face.id != face.id || face.zid == tables.zid) && ctx.token)
 }
@@ -538,7 +535,7 @@ fn propagate_forget_simple_token_to_peers(
         {
             if face.whatami == WhatAmI::Peer
                 && face_hat!(face).local_tokens.contains_key(res)
-                && !res.context().session_ctxs.values().any(|s| {
+                && !res.session_ctxs.values().any(|s| {
                     face.zid != s.face.zid
                         && s.token
                         && (s.face.whatami == WhatAmI::Client
@@ -689,7 +686,7 @@ fn forget_linkstatepeer_token(
     send_declare: &mut SendDeclare,
 ) {
     undeclare_linkstatepeer_token(tables, Some(face), res, peer);
-    let simple_tokens = res.context().session_ctxs.values().any(|ctx| ctx.token);
+    let simple_tokens = res.session_ctxs.values().any(|ctx| ctx.token);
     let linkstatepeer_tokens = remote_linkstatepeer_tokens(tables, res);
     let zid = tables.zid;
     if !simple_tokens && !linkstatepeer_tokens {
@@ -708,11 +705,7 @@ pub(super) fn undeclare_simple_token(
         .values()
         .any(|s| *s == *res)
     {
-        if let Some(ctx) = get_mut_unchecked(res)
-            .context_mut()
-            .session_ctxs
-            .get_mut(&face.id)
-        {
+        if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
             get_mut_unchecked(ctx).token = false;
         }
 
@@ -827,7 +820,7 @@ pub(super) fn token_remove_node(
                 .collect::<Vec<Arc<Resource>>>()
             {
                 unregister_linkstatepeer_token(tables, &mut res, node);
-                let simple_tokens = res.context().session_ctxs.values().any(|ctx| ctx.token);
+                let simple_tokens = res.session_ctxs.values().any(|ctx| ctx.token);
                 let linkstatepeer_tokens = remote_linkstatepeer_tokens(tables, &res);
                 if !simple_tokens && !linkstatepeer_tokens {
                     undeclare_router_token(
@@ -905,13 +898,12 @@ pub(super) fn token_linkstate_change(
                 .keys()
                 .filter(|res| {
                     let client_tokens = res
-                        .context()
                         .session_ctxs
                         .values()
                         .any(|ctx| ctx.face.whatami == WhatAmI::Client && ctx.token);
                     !remote_router_tokens(tables, res)
                         && !client_tokens
-                        && !res.context().session_ctxs.values().any(|ctx| {
+                        && !res.session_ctxs.values().any(|ctx| {
                             ctx.face.whatami == WhatAmI::Peer
                                 && src_face.id != ctx.face.id
                                 && HatTables::failover_brokering_to(links, ctx.face.zid)
@@ -1044,7 +1036,7 @@ pub(crate) fn declare_token_interest(
                                 .linkstatepeer_tokens
                                 .iter()
                                 .any(|r| *r != tables.zid)
-                            || token.context().session_ctxs.values().any(|s| {
+                            || token.session_ctxs.values().any(|s| {
                                 s.face.id != face.id
                                     && s.token
                                     && (s.face.whatami == WhatAmI::Client
@@ -1084,7 +1076,7 @@ pub(crate) fn declare_token_interest(
                             .linkstatepeer_tokens
                             .iter()
                             .any(|r| *r != tables.zid)
-                        || token.context().session_ctxs.values().any(|s| {
+                        || token.session_ctxs.values().any(|s| {
                             s.token
                                 && (s.face.whatami != WhatAmI::Peer
                                     || face.whatami != WhatAmI::Peer
