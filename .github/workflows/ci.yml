@@ -52,6 +52,8 @@ jobs:
 
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
 
       - name: Install latest cargo-deny
         uses: taiki-e/install-action@cargo-deny
@@ -131,6 +133,8 @@ jobs:
 
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
 
       - name: Set rustflags
         shell: bash
@@ -172,6 +176,8 @@ jobs:
         uses: taiki-e/install-action@valgrind
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
 
       - name: Run memory leaks check
         run: ci/valgrind-check/run.sh
