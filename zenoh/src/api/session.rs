@@ -3407,33 +3407,27 @@ impl Namespace {
                     .is_none()
             }
             DeclareBody::DeclareSubscriber(m) => {
-                match self.handle_namespace_ingress(&mut m.wire_expr, None) {
-                    true => true,
-                    false => {
-                        zwrite!(self.blocked_subscribers).insert(m.id);
-                        false
-                    }
+                if !self.handle_namespace_ingress(&mut m.wire_expr, None) {
+                    zwrite!(self.blocked_subscribers).insert(m.id);
+                    return false;
                 }
+                true
             }
             DeclareBody::UndeclareSubscriber(m) => !zwrite!(self.blocked_subscribers).remove(&m.id),
             DeclareBody::DeclareQueryable(m) => {
-                match self.handle_namespace_ingress(&mut m.wire_expr, None) {
-                    true => true,
-                    false => {
-                        zwrite!(self.blocked_queryables).insert(m.id);
-                        false
-                    }
+                if !self.handle_namespace_ingress(&mut m.wire_expr, None) {
+                    zwrite!(self.blocked_queryables).insert(m.id);
+                    return false;
                 }
+                true
             }
             DeclareBody::UndeclareQueryable(m) => !zwrite!(self.blocked_queryables).remove(&m.id),
             DeclareBody::DeclareToken(m) => {
-                match self.handle_namespace_ingress(&mut m.wire_expr, None) {
-                    true => true,
-                    false => {
-                        zwrite!(self.blocked_tokens).insert(m.id);
-                        false
-                    }
+                if !self.handle_namespace_ingress(&mut m.wire_expr, None) {
+                    zwrite!(self.blocked_tokens).insert(m.id);
+                    return false;
                 }
+                true
             }
             DeclareBody::UndeclareToken(m) => !zwrite!(self.blocked_tokens).remove(&m.id),
             DeclareBody::DeclareFinal(_) => true,
@@ -3463,13 +3457,13 @@ impl Namespace {
         match msg.mode {
             InterestMode::Final => !zwrite!(self.blocked_interests).remove(&msg.id),
             _ => match &mut msg.wire_expr {
-                Some(wire_expr) => match self.handle_namespace_ingress(wire_expr, None) {
-                    true => true,
-                    false => {
+                Some(wire_expr) => {
+                    if !self.handle_namespace_ingress(wire_expr, None) {
                         zwrite!(self.blocked_interests).insert(msg.id);
-                        false
+                        return false;
                     }
-                },
+                    true
+                }
                 None => true,
             },
         }
