@@ -3375,16 +3375,9 @@ impl Namespace {
 
         let key = key_expr.suffix.as_ref();
         let ke = unsafe { keyexpr::from_str_unchecked(key) };
-        let suffixes = ke.strip_prefix(&self.namespace);
-        if !suffixes.is_empty() {
-            // pick the longest suffix (i.e. the one that corresponds to the shortest prefix)
-            let mut longest = suffixes[0];
-            for s in suffixes.iter().skip(1) {
-                if s.len() > longest.len() {
-                    longest = s;
-                }
-            }
-            key_expr.suffix = longest.as_str().to_owned().into();
+        if let Some(tail) = ke.strip_namespace_prefix(&self.namespace) {
+            key_expr.suffix = tail.as_str().to_owned().into();
+            true;
 
             true
         } else if let Some(id) = message_id {

@@ -283,6 +283,81 @@ impl keyexpr {
         result
     }
 
+    /// Remove the specified namespace `prefix` from `self`.
+    ///
+    /// This method works essentialy like namespace prefix, but returns only the longest possible suffix.
+    /// Prefix can not contain '*' character.
+    #[cfg(feature = "internal")]
+    #[doc(hidden)]
+    pub fn strip_namespace_prefix(&self, prefix: &Self) -> Option<&keyexpr> {
+        fn is_chunk_matching<'a, 'b>(target: &'a [u8], prefix: &'b [u8]) -> bool {
+            let mut target_idx: usize = 0;
+            let mut prefix_idx: usize = 0;
+            let mut target_prev: u8 = b'/';
+
+            while target_idx < target.len() && prefix_idx < prefix.len() {
+                if target[target_idx] == b'*' {
+                    if target_prev == b'*' || target_idx + 1 == target.len() {
+                        // either a ** wild chunk or a single * chunk at the end of the string - this matches anything
+                        return true;
+                    } else if target_prev == b'$' {
+                        for i in prefix_idx..prefix.len() - 1 {
+                            if is_chunk_matching(&target[target_idx + 1..], &prefix[i..]) {
+                                return true;
+                            }
+                        }
+                    }
+                } else if target[target_idx] == prefix[prefix_idx] {
+                    prefix_idx += 1;
+                } else if target[target_idx] != b'$' {
+                    return false;
+                }
+                target_prev = target[target_idx];
+                target_idx += 1;
+            }
+
+            return prefix_idx == prefix.len();
+        }
+
+        let target_bytes = self.0.as_bytes();
+        let prefix_bytes = prefix.0.as_bytes();
+
+        let mut target_idx = 0;
+        let mut prefix_idx = 0;
+
+        while target_idx < target_bytes.len() && prefix_idx < prefix_bytes.len() {
+            let target_end = target_idx
+                + target_bytes[target_idx..]
+                    .iter()
+                    .position(|&i| i == b'/')
+                    .unwrap_or(target_bytes.len() - target_idx);
+            let prefix_end = prefix_idx
+                + prefix_bytes[prefix_idx..]
+                    .iter()
+                    .position(|&i| i == b'/')
+                    .unwrap_or(prefix_bytes.len() - prefix_idx);
+            let target_chunk = &target_bytes[target_idx..target_end];
+            let prefix_chunk = &prefix_bytes[prefix_idx..prefix_end];
+            if target_chunk.len() == 2 && target_chunk[0] == b'*' {
+                return unsafe { Some(keyexpr::from_str_unchecked(&self.0[target_idx..])) };
+            }
+            if target_end == target_bytes.len() {
+                // target contains no more chuncs than prefix and the last one is non double-wild - so it can non match
+                return None;
+            }
+            if !is_chunk_matching(target_chunk, prefix_chunk) {
+                return None;
+            }
+            if prefix_end == prefix_bytes.len() {
+                return unsafe { Some(keyexpr::from_str_unchecked(&self.0[(target_end + 1)..])) };
+            }
+            target_idx = target_end + 1;
+            prefix_idx = prefix_end + 1;
+        }
+
+        return None;
+    }
+
     pub const fn as_str(&self) -> &str {
         &self.0
     }
@@ -797,5 +872,43 @@ fn test_keyexpr_strip_prefix() {
     for ((ke, prefix), expected) in expectations {
         dbg!(ke, prefix);
         assert_eq!(ke.strip_prefix(prefix), expected)
+    }
+}
+
+#[test]
+fn test_keyexpr_strip_namespace_prefix() {
+    let expectations = [
+        (("demo/example/test/**", "demo/example/test"), Some("**")),
+        (("demo/example/**", "demo/example/test"), Some("**")),
+        (("**", "demo/example/test"), Some("**")),
+        (
+            ("demo/example/test/**/x$*/**", "demo/example/test"),
+            Some("**/x$*/**"),
+        ),
+        (("demo/**/xyz", "demo/example/test"), Some("**/xyz")),
+        (("demo/**/test/**", "demo/example/test"), Some("**/test/**")),
+        (
+            ("demo/**/ex$*/*/xyz", "demo/example/test"),
+            Some("**/ex$*/*/xyz"),
+        ),
+        (
+            ("demo/**/ex$*/t$*/xyz", "demo/example/test"),
+            Some("**/ex$*/t$*/xyz"),
+        ),
+        (
+            ("demo/**/te$*/*/xyz", "demo/example/test"),
+            Some("**/te$*/*/xyz"),
+        ),
+        (("demo/example/test", "demo/example/test"), None),
+    ]
+    .map(|((a, b), expected)| {
+        (
+            (keyexpr::new(a).unwrap(), keyexpr::new(b).unwrap()),
+            expected.map(|t| keyexpr::new(t).unwrap()),
+        )
+    });
+    for ((ke, prefix), expected) in expectations {
+        dbg!(ke, prefix);
+        assert_eq!(ke.strip_namespace_prefix(prefix), expected)
     }
 }
