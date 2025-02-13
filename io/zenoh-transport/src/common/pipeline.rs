@@ -631,7 +631,10 @@ impl TransmissionPipelineConsumer {
                 match stage_out.pull() {
                     Ok(Some(batch)) => return Some((batch, prio)),
                     Ok(None) => continue,
-                    Err(backoff) => sleep = Some(tokio::time::sleep(backoff)).into(),
+                    Err(backoff) => {
+                        sleep = Some(tokio::time::sleep(backoff)).into();
+                        break;
+                    }
                 }
             }
             tokio::select! {
