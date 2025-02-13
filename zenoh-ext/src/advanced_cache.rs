@@ -223,7 +223,7 @@ impl AdvancedCache {
         // the queryable_prefix (optional), and the key_expr for AdvancedCache's queryable ("[<queryable_prefix>]/<pub_key_expr>")
         let queryable_key_expr = match conf.queryable_prefix {
             None => key_expr.clone(),
-            Some(Ok(ke)) => (&ke) / &key_expr,
+            Some(Ok(ke)) => (&ke) / &conf.session.apply_namespace_prefix(key_expr.clone()),
             Some(Err(e)) => bail!("Invalid key expression for queryable_prefix: {}", e),
         };
         tracing::debug!(

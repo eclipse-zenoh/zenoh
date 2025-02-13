@@ -839,6 +839,14 @@ impl Session {
 }
 
 impl Session {
+    #[cfg(feature = "internal")]
+    /// Prepend session's namespace (if any) to the specified key expression.
+    pub fn apply_namespace_prefix<'a>(&self, key_expr: KeyExpr<'a>) -> KeyExpr<'a> {
+        match self.0.namespace() {
+            Some(ns) => (ns.namespace_prefix() / &key_expr).into(),
+            None => key_expr,
+        }
+    }
     /// Get information about the zenoh [`Session`](Session).
     ///
     /// # Examples

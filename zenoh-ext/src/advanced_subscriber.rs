@@ -940,7 +940,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                     conf
                 .session
                 .liveliness()
-                .declare_subscriber(KE_ADV_PREFIX / KE_PUB / KE_STARSTAR / KE_AT / &key_expr)
+                .declare_subscriber(KE_ADV_PREFIX / KE_PUB / KE_STARSTAR / KE_AT / &conf.session.apply_namespace_prefix(key_expr.clone()))
                 // .declare_subscriber(keformat!(ke_liveliness_all::formatter(), zid = 0, eid = 0, remaining = key_expr).unwrap())
                 .history(true)
                 .callback(live_callback)
@@ -954,7 +954,11 @@ impl<Handler> AdvancedSubscriber<Handler> {
         };
 
         let heartbeat_subscriber = if retransmission.is_some_and(|r| r.heartbeat.is_some()) {
-            let ke_heartbeat_sub = KE_ADV_PREFIX / KE_PUB / KE_STARSTAR / KE_AT / &key_expr;
+            let ke_heartbeat_sub = KE_ADV_PREFIX
+                / KE_PUB
+                / KE_STARSTAR
+                / KE_AT
+                / &conf.session.apply_namespace_prefix(key_expr.clone());
             let statesref = statesref.clone();
             let heartbeat_sub = conf
                 .session
@@ -1064,7 +1068,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
             let token = conf
                 .session
                 .liveliness()
-                .declare_token(prefix / &key_expr)
+                .declare_token(prefix / &conf.session.apply_namespace_prefix(key_expr))
                 .wait()?;
             zlock!(statesref).token = Some(token)
         }
@@ -1127,7 +1131,14 @@ impl<Handler> AdvancedSubscriber<Handler> {
     #[zenoh_macros::unstable]
     pub fn detect_publishers(&self) -> LivelinessSubscriberBuilder<'_, '_, DefaultHandler> {
         self.subscriber.session().liveliness().declare_subscriber(
-            KE_ADV_PREFIX / KE_PUB / KE_STARSTAR / KE_AT / self.subscriber.key_expr(),
+            KE_ADV_PREFIX
+                / KE_PUB
+                / KE_STARSTAR
+                / KE_AT
+                / &self
+                    .subscriber
+                    .session()
+                    .apply_namespace_prefix(self.subscriber.key_expr().clone()),
         )
     }
 

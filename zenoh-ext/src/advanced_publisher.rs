@@ -327,7 +327,7 @@ impl<'a> AdvancedPublisher<'a> {
             Some(
                 conf.session
                     .liveliness()
-                    .declare_token(&prefix / &key_expr)
+                    .declare_token(&prefix / &conf.session.apply_namespace_prefix(key_expr.clone()))
                     .wait()?,
             )
         } else {
@@ -339,7 +339,10 @@ impl<'a> AdvancedPublisher<'a> {
             if let Some(seqnum) = seqnum.as_ref() {
                 let seqnum = seqnum.clone();
 
-                let publisher = conf.session.declare_publisher(prefix / &key_expr).wait()?;
+                let publisher = conf
+                    .session
+                    .declare_publisher(prefix / &conf.session.apply_namespace_prefix(key_expr))
+                    .wait()?;
                 Some(TerminatableTask::spawn_abortable(
                     ZRuntime::Net,
                     async move {

@@ -197,7 +197,8 @@ impl PublicationCache {
             match conf.queryable_prefix {
                 None => (None, key_expr.clone()),
                 Some(Ok(ke)) => {
-                    let queryable_key_expr = (&ke) / &key_expr;
+                    let queryable_key_expr =
+                        (&ke) / &conf.session.apply_namespace_prefix(key_expr.clone());
                     (Some(ke.into()), queryable_key_expr)
                 }
                 Some(Err(e)) => bail!("Invalid key expression for queryable_prefix: {}", e),
