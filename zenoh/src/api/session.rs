@@ -114,7 +114,7 @@ use crate::{
         runtime::{Runtime, RuntimeBuilder},
     },
     query::ReplyError,
-    Config, KE_AT,
+    Config,
 };
 
 zconfigurable! {
@@ -3301,6 +3301,7 @@ impl Closeable for Session {
     }
 }
 
+static IGNORE_NAMESAPCE_PREFIX: char = '@'; // admin space and advanced
 pub(crate) struct Namespace {
     namespace: OwnedKeyExpr,
     incomplete_ingress_keyexpr_declarations: RwLock<HashMap<u16, String>>,
@@ -3326,7 +3327,7 @@ impl Namespace {
         if key_expr.scope == EMPTY_EXPR_ID || new_keyexpr_declare {
             // non - optimized ke
             let key = key_expr.suffix.as_ref();
-            if !key.starts_with(KE_AT.as_str()) {
+            if !key.starts_with(IGNORE_NAMESAPCE_PREFIX) {
                 key_expr.suffix = std::borrow::Cow::Owned(
                     (self.namespace.join(key).unwrap().as_str()).to_string(),
                 );
@@ -3358,7 +3359,11 @@ impl Namespace {
                 }
                 None => return true,
             }
-        } else if key_expr.suffix.as_ref().starts_with(KE_AT.as_str()) {
+        } else if key_expr
+            .suffix
+            .as_ref()
+            .starts_with(IGNORE_NAMESAPCE_PREFIX)
+        {
             // ignore namespace for admin queries
             return true;
         }
