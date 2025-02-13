@@ -690,7 +690,7 @@ impl Session {
                 state,
                 id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
                 owns_runtime,
-                namespace: namespace.map(|n| Namespace::new(n)),
+                namespace: namespace.map(Namespace::new),
                 task_controller: TaskController::default(),
             }));
 
@@ -1285,6 +1285,7 @@ impl SessionInner {
         primitives.send_request(msg);
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn send_push_lazy_with_namespace(
         &self,
         primitives: &Arc<Face>,
@@ -3323,7 +3324,7 @@ impl Namespace {
         }
     }
 
-    fn handle_namespace_egress<'a>(&self, key_expr: &mut WireExpr<'a>, new_keyexpr_declare: bool) {
+    fn handle_namespace_egress(&self, key_expr: &mut WireExpr, new_keyexpr_declare: bool) {
         if key_expr.scope == EMPTY_EXPR_ID || new_keyexpr_declare {
             // non - optimized ke
             let key = key_expr.suffix.as_ref();
@@ -3337,11 +3338,7 @@ impl Namespace {
         // it should already account for namespace prefix, and thus no extra processing is needed
     }
 
-    fn handle_namespace_ingress<'a>(
-        &self,
-        key_expr: &mut WireExpr<'a>,
-        message_id: Option<u16>,
-    ) -> bool {
+    fn handle_namespace_ingress(&self, key_expr: &mut WireExpr, message_id: Option<u16>) -> bool {
         if key_expr.scope != EMPTY_EXPR_ID && key_expr.mapping == Mapping::Receiver {
             return true;
         }
@@ -3374,14 +3371,14 @@ impl Namespace {
         if !suffixes.is_empty() {
             // pick the longest suffix (i.e. the one that corresponds to the shortest prefix)
             let mut longest = suffixes[0];
-            for i in 1..suffixes.len() {
-                if suffixes[i].len() > longest.len() {
-                    longest = suffixes[i];
+            for s in suffixes.iter().skip(1) {
+                if s.len() > longest.len() {
+                    longest = s;
                 }
             }
             key_expr.suffix = longest.as_str().to_owned().into();
 
-            return true;
+            true
         } else if let Some(id) = message_id {
             if key_expr.mapping == Mapping::Sender {
                 // ke does not match namespace - but this can be a partial declaration
@@ -3389,10 +3386,10 @@ impl Namespace {
                 zwrite!(self.incomplete_ingress_keyexpr_declarations)
                     .insert(id, key_expr.suffix.as_ref().to_string());
             }
-            return false;
+            false
         } else {
             trace!("Rejecting message containing wire expression `{}`, since it does not match namespace `{}`", &key_expr, self.namespace);
-            return false;
+            false
         }
     }
 
@@ -3524,6 +3521,7 @@ impl Namespace {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn namespace_prefix(&self) -> &OwnedKeyExpr {
         &self.namespace
     }
