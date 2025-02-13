@@ -148,15 +148,9 @@ impl Deadline {
     }
 }
 
-#[derive(Debug, Default)]
-struct CurrentBatch {
-    batch: Option<WBatch>,
-    timestamp: Option<Instant>,
-}
-
 struct StageInShared {
     queue: Mutex<StageIn>,
-    current: Arc<Mutex<CurrentBatch>>,
+    current: Arc<Mutex<Option<WBatch>>>,
     chan_tx: TransportPriorityTx,
     available: Arc<AvailableBatches>,
 }
@@ -168,6 +162,7 @@ struct StageIn {
     available: Arc<AvailableBatches>,
     available_waiter: Waiter,
     use_small_batch: bool,
+    current_reused: bool,
     fragbuf: ZBuf,
     batching: bool,
     batch_config: BatchConfig,
@@ -187,14 +182,16 @@ impl StageIn {
 
     /// Retrieve the current batch, or allocate a new one if there is a slot available.
     fn get_batch(
-        &self,
-        current: &mut MutexGuard<'_, CurrentBatch>,
+        &mut self,
+        current: &mut MutexGuard<'_, Option<WBatch>>,
         mut deadline: Option<&mut Deadline>,
     ) -> Result<Option<WBatch>, TransportClosed> {
         // retrieve current batch if any
-        if let Some(batch) = current.batch.take() {
+        if let Some(batch) = current.take() {
+            self.current_reused = true;
             return Ok(Some(batch));
         }
+        self.current_reused = false;
         loop {
             // try to acquire an available batch
             if self.available.try_acquire(false) {
@@ -223,9 +220,6 @@ impl StageIn {
     }
 
     fn push_batch(&mut self, batch: WBatch) {
-        if batch.len() <= Self::SMALL_BATCH_SIZE {
-            self.use_small_batch = true;
-        }
         self.batch_tx.push(batch);
         let _ = self.batch_notifier.notify();
     }
@@ -235,22 +229,21 @@ impl StageIn {
     /// If batching is enabled, unless `force` is set to `true`, then the batch will be
     /// kept for reuse.
     /// If the batch is small, the next batches will be allocated with a small capacity too.
-    fn push_or_keep_batch(
+    fn push_or_reinsert_batch(
         &mut self,
-        mut current: MutexGuard<'_, CurrentBatch>,
+        mut current: MutexGuard<'_, Option<WBatch>>,
         batch: WBatch,
         force: bool,
     ) {
+        if batch.len() <= Self::SMALL_BATCH_SIZE {
+            self.use_small_batch = true;
+        }
         if !self.batching || force {
             self.push_batch(batch);
         } else {
-            if batch.len() <= Self::SMALL_BATCH_SIZE {
-                self.use_small_batch = true;
-            }
-            current.batch = Some(batch);
-            if current.timestamp.is_none() {
-                current.timestamp = Some(Instant::now());
-                drop(current);
+            *current = Some(batch);
+            drop(current);
+            if !self.current_reused {
                 let _ = self.batch_notifier.notify();
             }
         }
@@ -272,7 +265,7 @@ impl StageIn {
         };
         let need_new_frame = match batch.encode(msg) {
             Ok(_) => {
-                self.push_or_keep_batch(current, batch, msg.is_express());
+                self.push_or_reinsert_batch(current, batch, msg.is_express());
                 return Ok(true);
             }
             Err(BatchError::NewFrame) => true,
@@ -299,7 +292,7 @@ impl StageIn {
 
         // Attempt a serialization with a new frame.
         if need_new_frame && batch.encode((msg, &frame)).is_ok() {
-            self.push_or_keep_batch(current, batch, msg.is_express());
+            self.push_or_reinsert_batch(current, batch, msg.is_express());
             return Ok(true);
         }
 
@@ -321,14 +314,14 @@ impl StageIn {
             }
         }
         if batch.encode((msg, &frame)).is_ok() {
-            self.push_or_keep_batch(current, batch, msg.is_express());
+            self.push_or_reinsert_batch(current, batch, msg.is_express());
             return Ok(true);
         }
 
         // The second serialization attempt has failed. This means that the message is
         // too large for the current batch size: we need to fragment.
         // Reinsert the current batch for fragmentation.
-        current.batch = Some(batch);
+        *current = Some(batch);
 
         // Take the expandable buffer and serialize the totality of the message
         let mut fragbuf = mem::take(&mut self.fragbuf);
@@ -377,7 +370,7 @@ impl StageIn {
                     // Restore the sequence number
                     tch.sn.set(sn).unwrap();
                     // Reinsert the batch
-                    current.batch = Some(batch);
+                    *current = Some(batch);
                     tracing::warn!(
                         "Zenoh message dropped because it can not be fragmented: {:?}",
                         msg
@@ -411,7 +404,7 @@ impl StageIn {
 
         // Attempt the serialization on the current batch
         if batch.encode(&msg).is_ok() {
-            self.push_or_keep_batch(current, batch, true);
+            self.push_or_reinsert_batch(current, batch, true);
             return Ok(true);
         }
         // The first serialization attempt has failed. This means that the current
@@ -420,7 +413,7 @@ impl StageIn {
         self.use_small_batch = false;
         batch = self.get_batch(&mut current, None)?.unwrap();
         if batch.encode(&msg).is_ok() {
-            self.push_or_keep_batch(current, batch, true);
+            self.push_or_reinsert_batch(current, batch, true);
             return Ok(true);
         }
         self.available.release();
@@ -430,37 +423,25 @@ impl StageIn {
 
 struct StageOut {
     batch_rx: RingBufferReader<WBatch, RBLEN>,
-    current: Arc<Mutex<CurrentBatch>>,
+    current: Arc<Mutex<Option<WBatch>>>,
     available: Arc<AvailableBatches>,
     available_notifier: Notifier,
     batching_time_limit: Duration,
 }
 
 impl StageOut {
-    const DEFAULT_BACKOFF: Duration = Duration::from_millis(1);
-
     fn pull(&mut self) -> Result<Option<WBatch>, Instant> {
         if let Some(batch) = self.batch_rx.pull() {
             return Ok(Some(batch));
         }
         let Ok(mut current) = self.current.try_lock() else {
-            return Err(Instant::now() + Self::DEFAULT_BACKOFF);
+            return Err(Instant::now() + self.batching_time_limit);
         };
         // try pull a second time with the lock hold to not miss any message push in between
         if let Some(batch) = self.batch_rx.pull() {
             return Ok(Some(batch));
         }
-        if let Some(timestamp) = current.timestamp {
-            let now = Instant::now();
-            if now >= timestamp + self.batching_time_limit {
-                current.timestamp = None;
-                Ok(current.batch.take())
-            } else {
-                Err(timestamp + self.batching_time_limit)
-            }
-        } else {
-            Ok(None)
-        }
+        Ok(current.take())
     }
 
     fn drain(&mut self) -> Vec<WBatch> {
@@ -470,7 +451,7 @@ impl StageOut {
             batches.push(batch);
         }
         // Take the current batch
-        if let Some(batch) = zlock!(self.current).batch.take() {
+        if let Some(batch) = zlock!(self.current).take() {
             batches.push(batch);
         }
         batches
@@ -515,7 +496,7 @@ impl TransmissionPipeline {
 
             let (batch_tx, batch_rx) = RingBuffer::<WBatch, RBLEN>::init();
 
-            let current = Arc::new(Mutex::new(CurrentBatch::default()));
+            let current = Arc::new(Mutex::new(None));
 
             stage_in.push(StageInShared {
                 queue: Mutex::new(StageIn {
@@ -524,6 +505,7 @@ impl TransmissionPipeline {
                     available: available.clone(),
                     available_waiter,
                     use_small_batch: true,
+                    current_reused: false,
                     fragbuf: ZBuf::empty(),
                     batching: config.batching_enabled,
                     batch_config: config.batch,
