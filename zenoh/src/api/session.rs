@@ -3302,7 +3302,7 @@ impl Closeable for Session {
     }
 }
 
-static IGNORE_NAMESAPCE_PREFIX: char = '@'; // admin space and advanced
+static IGNORE_NAMESPACE_PREFIX: char = '@'; // admin space and advanced
 pub(crate) struct Namespace {
     namespace: OwnedKeyExpr,
     incomplete_ingress_keyexpr_declarations: RwLock<HashMap<u16, String>>,
@@ -3328,7 +3328,7 @@ impl Namespace {
         if key_expr.scope == EMPTY_EXPR_ID || new_keyexpr_declare {
             // non - optimized ke
             let key = key_expr.suffix.as_ref();
-            if !key.starts_with(IGNORE_NAMESAPCE_PREFIX) {
+            if !key.starts_with(IGNORE_NAMESPACE_PREFIX) {
                 key_expr.suffix = std::borrow::Cow::Owned(
                     (self.namespace.join(key).unwrap().as_str()).to_string(),
                 );
@@ -3359,7 +3359,7 @@ impl Namespace {
         } else if key_expr
             .suffix
             .as_ref()
-            .starts_with(IGNORE_NAMESAPCE_PREFIX)
+            .starts_with(IGNORE_NAMESPACE_PREFIX)
         {
             // ignore namespace for admin queries
             return true;
