@@ -14,13 +14,14 @@
 use std::{
     any::Any,
     borrow::{Borrow, Cow},
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     convert::TryInto,
     hash::{Hash, Hasher},
     ops::{Deref, DerefMut},
     sync::{Arc, RwLock, Weak},
 };
 
+use zenoh_collections::SingleOrBoxHashSet;
 use zenoh_config::WhatAmI;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr},
@@ -203,7 +204,7 @@ pub struct Resource {
     pub(crate) expr: String,
     pub(crate) suffix: String,
     pub(crate) nonwild_prefix: Option<(Arc<Resource>, String)>,
-    pub(crate) children: HashSet<Child>,
+    pub(crate) children: SingleOrBoxHashSet<Child>,
     pub(crate) context: Option<Box<ResourceContext>>,
     pub(crate) session_ctxs: HashMap<usize, Arc<SessionContext>>,
 }
@@ -280,7 +281,7 @@ impl Resource {
             expr: parent.expr.clone() + suffix,
             suffix: String::from(suffix),
             nonwild_prefix,
-            children: HashSet::new(),
+            children: SingleOrBoxHashSet::new(),
             context: context.map(Box::new),
             session_ctxs: HashMap::new(),
         }
@@ -329,7 +330,7 @@ impl Resource {
             expr: String::from(""),
             suffix: String::from(""),
             nonwild_prefix: None,
-            children: HashSet::new(),
+            children: SingleOrBoxHashSet::new(),
             context: None,
             session_ctxs: HashMap::new(),
         })
