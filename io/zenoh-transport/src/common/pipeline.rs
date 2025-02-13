@@ -222,27 +222,35 @@ impl StageIn {
         Ok(None)
     }
 
+    fn push_batch(&mut self, batch: WBatch) {
+        if batch.len() <= Self::SMALL_BATCH_SIZE {
+            self.use_small_batch = true;
+        }
+        self.batch_tx.push(batch);
+        let _ = self.batch_notifier.notify();
+    }
+
     /// Push a batch to the TX task.
     ///
     /// If batching is enabled, unless `force` is set to `true`, then the batch will be
     /// kept for reuse.
     /// If the batch is small, the next batches will be allocated with a small capacity too.
-    fn push_batch(
+    fn push_or_keep_batch(
         &mut self,
-        current: &mut MutexGuard<'_, CurrentBatch>,
+        mut current: MutexGuard<'_, CurrentBatch>,
         batch: WBatch,
         force: bool,
     ) {
-        if batch.len() < Self::SMALL_BATCH_SIZE {
-            self.use_small_batch = true;
-        }
         if !self.batching || force {
-            self.batch_tx.push(batch);
-            let _ = self.batch_notifier.notify();
+            self.push_batch(batch);
         } else {
+            if batch.len() <= Self::SMALL_BATCH_SIZE {
+                self.use_small_batch = true;
+            }
             current.batch = Some(batch);
             if current.timestamp.is_none() {
                 current.timestamp = Some(Instant::now());
+                drop(current);
                 let _ = self.batch_notifier.notify();
             }
         }
@@ -264,7 +272,7 @@ impl StageIn {
         };
         let need_new_frame = match batch.encode(msg) {
             Ok(_) => {
-                self.push_batch(&mut current, batch, msg.is_express());
+                self.push_or_keep_batch(current, batch, msg.is_express());
                 return Ok(true);
             }
             Err(BatchError::NewFrame) => true,
@@ -291,13 +299,13 @@ impl StageIn {
 
         // Attempt a serialization with a new frame.
         if need_new_frame && batch.encode((msg, &frame)).is_ok() {
-            self.push_batch(&mut current, batch, msg.is_express());
+            self.push_or_keep_batch(current, batch, msg.is_express());
             return Ok(true);
         }
 
         // Push the batch if not empty
         if !batch.is_empty() {
-            self.push_batch(&mut current, batch, true);
+            self.push_batch(batch);
         } else {
             drop(batch);
             self.available.release();
@@ -313,7 +321,7 @@ impl StageIn {
             }
         }
         if batch.encode((msg, &frame)).is_ok() {
-            self.push_batch(&mut current, batch, msg.is_express());
+            self.push_or_keep_batch(current, batch, msg.is_express());
             return Ok(true);
         }
 
@@ -352,7 +360,7 @@ impl StageIn {
                         let mut batch = self.new_batch();
                         fragment.ext_drop = Some(fragment::ext::Drop::new());
                         let _ = batch.encode((&mut self.fragbuf.reader(), &mut fragment));
-                        self.push_batch(&mut current, batch, true);
+                        self.push_batch(batch);
                     }
                     return Ok(false);
                 }
@@ -363,7 +371,7 @@ impl StageIn {
                     // Update the SN
                     fragment.sn = tch.sn.get();
                     fragment.ext_first = None;
-                    self.push_batch(&mut current, batch, true);
+                    self.push_batch(batch);
                 }
                 Err(_) => {
                     // Restore the sequence number
@@ -403,16 +411,16 @@ impl StageIn {
 
         // Attempt the serialization on the current batch
         if batch.encode(&msg).is_ok() {
-            self.push_batch(&mut current, batch, true);
+            self.push_or_keep_batch(current, batch, true);
             return Ok(true);
         }
         // The first serialization attempt has failed. This means that the current
         // batch is full. Therefore, we move the current batch to stage out.
-        self.push_batch(&mut current, batch, true);
+        self.push_batch(batch);
         self.use_small_batch = false;
         batch = self.get_batch(&mut current, None)?.unwrap();
         if batch.encode(&msg).is_ok() {
-            self.push_batch(&mut current, batch, true);
+            self.push_or_keep_batch(current, batch, true);
             return Ok(true);
         }
         self.available.release();
@@ -431,20 +439,24 @@ struct StageOut {
 impl StageOut {
     const DEFAULT_BACKOFF: Duration = Duration::from_millis(1);
 
-    fn pull(&mut self) -> Result<Option<WBatch>, Duration> {
+    fn pull(&mut self) -> Result<Option<WBatch>, Instant> {
         if let Some(batch) = self.batch_rx.pull() {
             return Ok(Some(batch));
         }
         let Ok(mut current) = self.current.try_lock() else {
-            return Err(Self::DEFAULT_BACKOFF);
+            return Err(Instant::now() + Self::DEFAULT_BACKOFF);
         };
+        // try pull a second time with the lock hold to not miss any message push in between
+        if let Some(batch) = self.batch_rx.pull() {
+            return Ok(Some(batch));
+        }
         if let Some(timestamp) = current.timestamp {
-            let elapsed = timestamp.elapsed();
-            if elapsed > self.batching_time_limit {
+            let now = Instant::now();
+            if now >= timestamp + self.batching_time_limit {
                 current.timestamp = None;
                 Ok(current.batch.take())
             } else {
-                Err(self.batching_time_limit - elapsed)
+                Err(timestamp + self.batching_time_limit)
             }
         } else {
             Ok(None)
@@ -632,7 +644,7 @@ impl TransmissionPipelineConsumer {
                     Ok(Some(batch)) => return Some((batch, prio)),
                     Ok(None) => continue,
                     Err(backoff) => {
-                        sleep = Some(tokio::time::sleep(backoff)).into();
+                        sleep = Some(tokio::time::sleep_until(backoff.into())).into();
                         break;
                     }
                 }
