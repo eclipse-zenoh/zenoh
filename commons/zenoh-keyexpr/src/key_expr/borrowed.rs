@@ -310,13 +310,18 @@ impl keyexpr {
                 } else if target[target_idx] == prefix[prefix_idx] {
                     prefix_idx += 1;
                 } else if target[target_idx] != b'$' {
+                    // non-special character, which do not match the one in prefix
                     return false;
                 }
                 target_prev = target[target_idx];
                 target_idx += 1;
             }
-
-            prefix_idx == prefix.len()
+            if prefix_idx != prefix.len() {
+                // prefix was not matched entirely
+                return false;
+            }
+            target_idx == target.len()
+                || (target_idx + 2 == target.len() && target[target_idx] == b'$')
         }
 
         let target_bytes = self.0.as_bytes();
@@ -900,6 +905,11 @@ fn test_keyexpr_strip_namespace_prefix() {
             Some("**/te$*/*/xyz"),
         ),
         (("demo/example/test", "demo/example/test"), None),
+        (("demo/example/test1/something", "demo/example/test"), None),
+        (
+            ("demo/example/test$*/something", "demo/example/test"),
+            Some("something"),
+        ),
     ]
     .map(|((a, b), expected)| {
         (
