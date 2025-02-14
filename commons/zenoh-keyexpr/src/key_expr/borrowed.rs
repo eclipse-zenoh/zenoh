@@ -290,7 +290,7 @@ impl keyexpr {
     #[cfg(feature = "internal")]
     #[doc(hidden)]
     pub fn strip_namespace_prefix(&self, prefix: &Self) -> Option<&keyexpr> {
-        fn is_chunk_matching<'a, 'b>(target: &'a [u8], prefix: &'b [u8]) -> bool {
+        fn is_chunk_matching(target: &[u8], prefix: &[u8]) -> bool {
             let mut target_idx: usize = 0;
             let mut prefix_idx: usize = 0;
             let mut target_prev: u8 = b'/';
@@ -316,7 +316,7 @@ impl keyexpr {
                 target_idx += 1;
             }
 
-            return prefix_idx == prefix.len();
+            prefix_idx == prefix.len()
         }
 
         let target_bytes = self.0.as_bytes();
@@ -355,7 +355,7 @@ impl keyexpr {
             prefix_idx = prefix_end + 1;
         }
 
-        return None;
+        None
     }
 
     pub const fn as_str(&self) -> &str {
