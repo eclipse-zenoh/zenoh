@@ -3350,7 +3350,7 @@ impl Namespace {
         if key_expr.scope != EMPTY_EXPR_ID && key_expr.mapping == Mapping::Receiver {
             return true;
         }
-        if key_expr.scope != EMPTY_EXPR_ID {
+        if key_expr.scope != EMPTY_EXPR_ID { // mapping sender
             // optimized ke
             match zread!(self.incomplete_ingress_keyexpr_declarations).get(&key_expr.scope) {
                 Some(head) => {
@@ -3377,7 +3377,6 @@ impl Namespace {
         let ke = unsafe { keyexpr::from_str_unchecked(key) };
         if let Some(tail) = ke.strip_namespace_prefix(&self.namespace) {
             key_expr.suffix = tail.as_str().to_owned().into();
-            true;
 
             true
         } else if let Some(id) = message_id {
