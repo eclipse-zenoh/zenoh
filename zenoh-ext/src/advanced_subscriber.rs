@@ -588,7 +588,9 @@ impl Timed for PeriodicQuery {
                 / &KeyExpr::try_from(self.source_id.eid().to_string()).unwrap()
                 / KE_STARSTAR
                 / KE_AT
-                / &states.key_expr;
+                / &states
+                    .session
+                    .apply_namespace_prefix(states.key_expr.clone());
             let seq_num_range = seq_num_range(state.last_delivered.map(|s| s + 1), None);
 
             let session = states.session.clone();
@@ -687,7 +689,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                 / &KeyExpr::try_from(source_id.eid().to_string()).unwrap()
                                 / KE_STARSTAR
                                 / KE_AT
-                                / &key_expr;
+                                / &session.apply_namespace_prefix(key_expr.clone());
                             let seq_num_range =
                                 seq_num_range(state.last_delivered.map(|s| s + 1), None);
                             drop(lock);
@@ -743,7 +745,10 @@ impl<Handler> AdvancedSubscriber<Handler> {
             let _ = conf
                 .session
                 .get(Selector::from((
-                    KE_ADV_PREFIX / KE_STARSTAR / KE_AT / &key_expr,
+                    KE_ADV_PREFIX
+                        / KE_STARSTAR
+                        / KE_AT
+                        / &conf.session.apply_namespace_prefix(key_expr.clone()),
                     params,
                 )))
                 .callback({

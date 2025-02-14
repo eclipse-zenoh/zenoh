@@ -3350,7 +3350,8 @@ impl Namespace {
         if key_expr.scope != EMPTY_EXPR_ID && key_expr.mapping == Mapping::Receiver {
             return true;
         }
-        if key_expr.scope != EMPTY_EXPR_ID { // mapping sender
+        if key_expr.scope != EMPTY_EXPR_ID {
+            // mapping sender
             // optimized ke
             match zread!(self.incomplete_ingress_keyexpr_declarations).get(&key_expr.scope) {
                 Some(head) => {
