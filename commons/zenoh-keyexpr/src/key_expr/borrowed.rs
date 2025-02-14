@@ -285,7 +285,7 @@ impl keyexpr {
 
     /// Remove the specified namespace `prefix` from `self`.
     ///
-    /// This method works essentialy like namespace prefix, but returns only the longest possible suffix.
+    /// This method works essentially like [`keyexpr::strip_prefix()`], but returns only the longest possible suffix.
     /// Prefix can not contain '*' character.
     #[cfg(feature = "internal")]
     #[doc(hidden)]
@@ -344,22 +344,23 @@ impl keyexpr {
             let target_chunk = &target_bytes[target_idx..target_end];
             let prefix_chunk = &prefix_bytes[prefix_idx..prefix_end];
             if target_chunk.len() == 2 && target_chunk[0] == b'*' {
+                // Safety: every chunk of keyexpr is also a valid keyexpr
                 return unsafe { Some(keyexpr::from_str_unchecked(&self.0[target_idx..])) };
             }
             if target_end == target_bytes.len() {
-                // target contains no more chuncs than prefix and the last one is non double-wild - so it can non match
+                // target contains no more chunks than prefix and the last one is non double-wild - so it can non match
                 return None;
             }
             if !is_chunk_matching(target_chunk, prefix_chunk) {
                 return None;
             }
             if prefix_end == prefix_bytes.len() {
+                // Safety: every chunk of keyexpr is also a valid keyexpr
                 return unsafe { Some(keyexpr::from_str_unchecked(&self.0[(target_end + 1)..])) };
             }
             target_idx = target_end + 1;
             prefix_idx = prefix_end + 1;
         }
-
         None
     }
 
