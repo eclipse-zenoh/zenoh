@@ -201,8 +201,8 @@ impl ResourceContext {
 pub struct Resource {
     pub(crate) parent: Option<Arc<Resource>>,
     pub(crate) expr: String,
-    pub(crate) suffix: String,
-    pub(crate) nonwild_prefix: Option<(Arc<Resource>, String)>,
+    pub(crate) suffix: usize,
+    pub(crate) nonwild_prefix: Option<Arc<Resource>>,
     pub(crate) children: HashSet<Child>,
     pub(crate) context: Option<Box<ResourceContext>>,
     pub(crate) session_ctxs: HashMap<usize, Arc<SessionContext>>,
@@ -258,7 +258,7 @@ impl Hash for Child {
 
 impl Borrow<str> for Child {
     fn borrow(&self) -> &str {
-        &self.0.suffix
+        self.0.suffix()
     }
 }
 
@@ -267,18 +267,18 @@ impl Resource {
         let nonwild_prefix = match &parent.nonwild_prefix {
             None => {
                 if suffix.contains('*') {
-                    Some((parent.clone(), String::from(suffix)))
+                    Some(parent.clone())
                 } else {
                     None
                 }
             }
-            Some((prefix, wildsuffix)) => Some((prefix.clone(), [wildsuffix, suffix].concat())),
+            Some(prefix) => Some(prefix.clone()),
         };
 
         Resource {
             parent: Some(parent.clone()),
             expr: parent.expr.clone() + suffix,
-            suffix: String::from(suffix),
+            suffix: parent.expr.len(),
             nonwild_prefix,
             children: HashSet::new(),
             context: context.map(Box::new),
@@ -288,6 +288,10 @@ impl Resource {
 
     pub fn expr(&self) -> &str {
         &self.expr
+    }
+
+    pub fn suffix(&self) -> &str {
+        &self.expr[self.suffix..]
     }
 
     #[inline(always)]
@@ -313,9 +317,12 @@ impl Resource {
     pub fn nonwild_prefix(res: &Arc<Resource>) -> (Option<Arc<Resource>>, String) {
         match &res.nonwild_prefix {
             None => (Some(res.clone()), "".to_string()),
-            Some((nonwild_prefix, wildsuffix)) => {
+            Some(nonwild_prefix) => {
                 if !nonwild_prefix.expr().is_empty() {
-                    (Some(nonwild_prefix.clone()), wildsuffix.clone())
+                    (
+                        Some(nonwild_prefix.clone()),
+                        res.expr[nonwild_prefix.expr.len()..].to_string(),
+                    )
                 } else {
                     (None, res.expr().to_string())
                 }
@@ -327,7 +334,7 @@ impl Resource {
         Arc::new(Resource {
             parent: None,
             expr: String::from(""),
-            suffix: String::from(""),
+            suffix: 0,
             nonwild_prefix: None,
             children: HashSet::new(),
             context: None,
@@ -356,9 +363,7 @@ impl Resource {
                 }
                 mutres.nonwild_prefix.take();
                 {
-                    get_mut_unchecked(parent)
-                        .children
-                        .remove(res.suffix.as_str());
+                    get_mut_unchecked(parent).children.remove(res.suffix());
                 }
                 Resource::clean(parent);
             }
@@ -397,7 +402,7 @@ impl Resource {
         };
         if !chunk.starts_with('/') {
             if let Some(parent) = &mut from.parent.clone() {
-                return Resource::make_resource(tables, parent, &[&from.suffix, suffix].concat());
+                return Resource::make_resource(tables, parent, &[from.suffix(), suffix].concat());
             }
         }
         if let Some(child) = get_mut_unchecked(from).children.get(chunk) {
@@ -419,7 +424,7 @@ impl Resource {
         };
         if !chunk.starts_with('/') {
             if let Some(parent) = &from.parent {
-                return Resource::get_resource(parent, &[&from.suffix, suffix].concat());
+                return Resource::get_resource(parent, &[from.suffix(), suffix].concat());
             }
         }
         Resource::get_resource(from.children.get(chunk)?, rest)
@@ -583,16 +588,16 @@ impl Resource {
             from: &Arc<Resource>,
             matches: &mut Vec<Weak<Resource>>,
         ) {
-            if from.parent.is_none() || from.suffix == "/" {
+            if from.parent.is_none() || from.suffix() == "/" {
                 for child in from.children.iter() {
                     get_matches_from(key_expr, child, matches);
                 }
                 return;
             }
             let suffix: &keyexpr = from
-                .suffix
+                .suffix()
                 .strip_prefix('/')
-                .unwrap_or(&from.suffix)
+                .unwrap_or(from.suffix())
                 .try_into()
                 .unwrap();
             let (ke_chunk, ke_rest) = match key_expr.split_once('/') {
