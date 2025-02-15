@@ -440,7 +440,9 @@ impl Sample {
             encoding: Encoding::default(),
             timestamp: None,
             qos: QoS::default(),
+            #[cfg(feature = "unstable")]
             reliability: Reliability::default(),
+            #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
             attachment: None,
         }
