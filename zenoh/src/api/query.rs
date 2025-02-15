@@ -161,6 +161,7 @@ impl Reply {
     pub unsafe fn empty() -> Self {
         Reply {
             result: Ok(Sample::empty()),
+            #[cfg(feature = "unstable")]
             replier_id: None,
         }
     }
