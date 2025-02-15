@@ -82,7 +82,7 @@ fn posix_shm_provider_allocator() {
 
     let layout = MemoryLayout::new(BUFFER_SIZE, AllocAlignment::default()).unwrap();
 
-    // exaust memory by allocating it all
+    // exhaust memory by allocating it all
     let mut buffers = vec![];
     for _ in 0..BUFFER_NUM {
         let buf = backend
