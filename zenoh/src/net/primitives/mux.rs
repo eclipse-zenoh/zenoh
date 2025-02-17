@@ -37,11 +37,11 @@ pub struct Mux {
 }
 
 impl Mux {
-    pub(crate) fn new(handler: TransportUnicast, interceptor: Arc<InterceptorsChain>) -> Mux {
+    pub(crate) fn new(handler: TransportUnicast, interceptor: InterceptorsChain) -> Mux {
         Mux {
             handler,
             face: OnceLock::new(),
-            interceptor: ArcSwap::new(interceptor),
+            interceptor: ArcSwap::new(interceptor.into()),
         }
     }
 }

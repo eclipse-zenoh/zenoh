@@ -163,10 +163,12 @@ impl Tables {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn regen_interceptors(&self) {
+    pub(crate) fn regen_interceptors(&mut self, config: &Config) -> ZResult<()> {
+        self.interceptors = interceptor_factories(config)?;
         self.faces
             .values()
             .for_each(|face| face.regen_interceptors(&self.interceptors));
+        Ok(())
     }
 }
 
