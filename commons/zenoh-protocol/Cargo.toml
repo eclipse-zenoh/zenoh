@@ -25,6 +25,7 @@ description = "Internal crate for zenoh."
 
 [features]
 default = ["std"]
+internal = []
 std = [
     "rand?/std",
     "rand?/std_rng",
@@ -33,9 +34,9 @@ std = [
     "zenoh-keyexpr/std",
     "zenoh-result/std",
 ]
-test = ["rand", "zenoh-buffers/test"]
 shared-memory = ["std", "zenoh-buffers/shared-memory"]
 stats = []
+test = ["rand", "zenoh-buffers/test"]
 
 [dependencies]
 const_format = { workspace = true }

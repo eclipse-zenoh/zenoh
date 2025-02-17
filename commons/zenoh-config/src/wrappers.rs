@@ -119,6 +119,17 @@ impl Hello {
     pub fn whatami(&self) -> WhatAmI {
         self.0.whatami
     }
+
+    /// Constructs an empty Hello message.
+    #[zenoh_macros::internal]
+    pub fn empty() -> Self {
+        Hello(HelloProto {
+            version: zenoh_protocol::VERSION,
+            whatami: WhatAmI::default(),
+            zid: ZenohIdProto::default(),
+            locators: Vec::default(),
+        })
+    }
 }
 
 impl From<HelloProto> for Hello {

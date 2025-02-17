@@ -99,6 +99,15 @@ impl ReplyError {
     pub fn encoding(&self) -> &Encoding {
         &self.encoding
     }
+
+    /// Constructs an uninitialized empty ReplyError.
+    #[zenoh_macros::internal]
+    pub fn empty() -> Self {
+        ReplyError {
+            payload: ZBytes::new(),
+            encoding: Encoding::default(),
+        }
+    }
 }
 
 impl Display for ReplyError {
@@ -145,6 +154,16 @@ impl Reply {
     /// Gets the id of the zenoh instance that answered this Reply.
     pub fn replier_id(&self) -> Option<ZenohId> {
         self.replier_id.map(Into::into)
+    }
+
+    /// Constructs an uninitialized empty Reply.
+    #[zenoh_macros::internal]
+    pub unsafe fn empty() -> Self {
+        Reply {
+            result: Ok(Sample::empty()),
+            #[cfg(feature = "unstable")]
+            replier_id: None,
+        }
     }
 }
 
