@@ -193,9 +193,10 @@ impl FaceState {
                 InterceptorsChain::from(egress.into_iter().flatten().collect::<Vec<_>>()),
             );
             mux.interceptor.store(egress.into());
-            self.in_interceptors
-                .as_ref()
-                .map(|itor| itor.store(ingress.into()));
+            // FIXME: Handle case when this is None
+            if let Some(itor) = self.in_interceptors.as_ref() {
+                itor.store(ingress.into());
+            }
         } else if let Some(mux) = self.primitives.as_any().downcast_ref::<&mut McastMux>() {
             let interceptor = InterceptorsChain::from(
                 factories
@@ -212,9 +213,10 @@ impl FaceState {
                     .filter_map(|itor| itor.new_peer_multicast(transport))
                     .collect::<Vec<IngressInterceptor>>(),
             ));
-            self.in_interceptors
-                .as_ref()
-                .map(|itor| itor.store(interceptor));
+            // FIXME: Handle case when this is None
+            if let Some(itor) = self.in_interceptors.as_ref() {
+                itor.store(interceptor);
+            }
         }
     }
 }
