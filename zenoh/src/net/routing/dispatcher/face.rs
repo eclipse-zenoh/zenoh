@@ -19,7 +19,7 @@ use std::{
     time::Duration,
 };
 
-use arc_swap::ArcSwapOption;
+use arc_swap::ArcSwap;
 use tokio_util::sync::CancellationToken;
 use zenoh_protocol::{
     core::{ExprId, Reliability, WhatAmI, WireExpr, ZenohIdProto},
@@ -77,7 +77,7 @@ pub struct FaceState {
     pub(crate) next_qid: RequestId,
     pub(crate) pending_queries: HashMap<RequestId, (Arc<Query>, CancellationToken)>,
     pub(crate) mcast_group: Option<TransportMulticast>,
-    pub(crate) in_interceptors: ArcSwapOption<InterceptorsChain>,
+    pub(crate) in_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) task_controller: TaskController,
 }
@@ -91,7 +91,7 @@ impl FaceState {
         #[cfg(feature = "stats")] stats: Option<Arc<TransportStats>>,
         primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
         mcast_group: Option<TransportMulticast>,
-        in_interceptors: Option<Arc<InterceptorsChain>>,
+        in_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
         hat: Box<dyn Any + Send + Sync>,
     ) -> Arc<FaceState> {
         Arc::new(FaceState {
@@ -109,7 +109,7 @@ impl FaceState {
             next_qid: 0,
             pending_queries: HashMap::new(),
             mcast_group,
-            in_interceptors: in_interceptors.into(),
+            in_interceptors,
             hat,
             task_controller: TaskController::default(),
         })
@@ -149,7 +149,7 @@ impl FaceState {
 
     pub(crate) fn update_interceptors_caches(&self, res: &mut Arc<Resource>) {
         if let Ok(expr) = KeyExpr::try_from(res.expr().to_string()) {
-            if let Some(interceptor) = self.in_interceptors.load().as_ref() {
+            if let Some(interceptor) = self.in_interceptors.as_ref().map(|itor| itor.load()) {
                 let cache = interceptor.compute_keyexpr_cache(&expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
@@ -189,15 +189,14 @@ impl FaceState {
                 .map(|itor| itor.new_transport_unicast(&mux.handler))
                 .unzip();
             let (ingress, egress) = (
-                Arc::new(InterceptorsChain::from(
-                    ingress.into_iter().flatten().collect::<Vec<_>>(),
-                )),
+                InterceptorsChain::from(ingress.into_iter().flatten().collect::<Vec<_>>()),
                 InterceptorsChain::from(egress.into_iter().flatten().collect::<Vec<_>>()),
             );
-            mux.interceptor.store(Arc::new(egress));
-            self.in_interceptors.store(Some(ingress));
-        }
-        if let Some(mux) = self.primitives.as_any().downcast_ref::<&mut McastMux>() {
+            mux.interceptor.store(egress.into());
+            self.in_interceptors
+                .as_ref()
+                .map(|itor| itor.store(ingress.into()));
+        } else if let Some(mux) = self.primitives.as_any().downcast_ref::<&mut McastMux>() {
             let interceptor = InterceptorsChain::from(
                 factories
                     .iter()
@@ -213,7 +212,9 @@ impl FaceState {
                     .filter_map(|itor| itor.new_peer_multicast(transport))
                     .collect::<Vec<IngressInterceptor>>(),
             ));
-            self.in_interceptors.store(Some(interceptor));
+            self.in_interceptors
+                .as_ref()
+                .map(|itor| itor.store(interceptor));
         }
     }
 }
