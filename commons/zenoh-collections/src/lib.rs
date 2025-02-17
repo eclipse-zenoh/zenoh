@@ -21,7 +21,10 @@
 extern crate alloc;
 
 pub mod single_or_vec;
-pub use single_or_vec::*;
+pub use single_or_vec::SingleOrVec;
+
+pub mod single_or_box_hashset;
+pub use single_or_box_hashset::SingleOrBoxHashSet;
 
 #[cfg(feature = "std")]
 pub mod ring_buffer;
