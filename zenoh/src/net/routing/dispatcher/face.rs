@@ -182,7 +182,7 @@ impl FaceState {
         }
     }
 
-    pub(crate) fn regen_interceptors(&self, factories: &Vec<InterceptorFactory>) {
+    pub(crate) fn regen_interceptors(&self, factories: &[InterceptorFactory]) {
         if let Some(mux) = self.primitives.as_any().downcast_ref::<&mut Mux>() {
             let (ingress, egress): (Vec<_>, Vec<_>) = factories
                 .iter()
@@ -210,7 +210,7 @@ impl FaceState {
             let interceptor = Arc::new(InterceptorsChain::from(
                 factories
                     .iter()
-                    .filter_map(|itor| itor.new_peer_multicast(&transport))
+                    .filter_map(|itor| itor.new_peer_multicast(transport))
                     .collect::<Vec<IngressInterceptor>>(),
             ));
             self.in_interceptors.store(Some(interceptor));
