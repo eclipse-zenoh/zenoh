@@ -244,7 +244,7 @@ impl DerefMut for Child {
 
 impl PartialEq for Child {
     fn eq(&self, other: &Self) -> bool {
-        self.0.suffix == other.0.suffix
+        self.0.suffix() == other.0.suffix()
     }
 }
 
@@ -252,7 +252,7 @@ impl Eq for Child {}
 
 impl Hash for Child {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.suffix.hash(state);
+        self.0.suffix().hash(state);
     }
 }
 
