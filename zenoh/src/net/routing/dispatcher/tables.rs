@@ -161,6 +161,13 @@ impl Tables {
     pub(crate) fn disable_all_routes(&mut self) {
         self.routes_version = self.routes_version.saturating_add(1);
     }
+
+    #[allow(dead_code)]
+    pub(crate) fn regen_interceptors(&self) {
+        self.faces
+            .values()
+            .for_each(|face| face.regen_interceptors(&self.interceptors));
+    }
 }
 
 pub struct TablesLock {
