@@ -193,10 +193,10 @@ impl FaceState {
                 InterceptorsChain::from(egress.into_iter().flatten().collect::<Vec<_>>()),
             );
             mux.interceptor.store(egress.into());
-            // FIXME: Handle case when this is None
-            if let Some(itor) = self.in_interceptors.as_ref() {
-                itor.store(ingress.into());
-            }
+            self.in_interceptors
+                .as_ref()
+                .expect("face in_interceptors should not be None when primitives are Mux")
+                .store(ingress.into());
         } else if let Some(mux) = self.primitives.as_any().downcast_ref::<&mut McastMux>() {
             let interceptor = InterceptorsChain::from(
                 factories
@@ -205,18 +205,19 @@ impl FaceState {
                     .collect::<Vec<EgressInterceptor>>(),
             );
             mux.interceptor.store(Arc::new(interceptor));
+            debug_assert!(self.in_interceptors.is_none());
         }
         if let Some(transport) = &self.mcast_group {
-            let interceptor = Arc::new(InterceptorsChain::from(
+            let interceptor = InterceptorsChain::from(
                 factories
                     .iter()
                     .filter_map(|itor| itor.new_peer_multicast(transport))
                     .collect::<Vec<IngressInterceptor>>(),
-            ));
-            // FIXME: Handle case when this is None
-            if let Some(itor) = self.in_interceptors.as_ref() {
-                itor.store(interceptor);
-            }
+            );
+            self.in_interceptors
+                .as_ref()
+                .expect("face in_interceptors should not be None when mcast_group is set")
+                .store(interceptor.into());
         }
     }
 }
