@@ -183,7 +183,7 @@ impl FaceState {
     }
 
     pub(crate) fn regen_interceptors(&self, factories: &[InterceptorFactory]) {
-        if let Some(mux) = self.primitives.as_any().downcast_ref::<&mut Mux>() {
+        if let Some(mux) = self.primitives.as_any().downcast_ref::<Mux>() {
             let (ingress, egress): (Vec<_>, Vec<_>) = factories
                 .iter()
                 .map(|itor| itor.new_transport_unicast(&mux.handler))
@@ -197,7 +197,7 @@ impl FaceState {
                 .as_ref()
                 .expect("face in_interceptors should not be None when primitives are Mux")
                 .store(ingress.into());
-        } else if let Some(mux) = self.primitives.as_any().downcast_ref::<&mut McastMux>() {
+        } else if let Some(mux) = self.primitives.as_any().downcast_ref::<McastMux>() {
             let interceptor = InterceptorsChain::from(
                 factories
                     .iter()
@@ -206,8 +206,7 @@ impl FaceState {
             );
             mux.interceptor.store(Arc::new(interceptor));
             debug_assert!(self.in_interceptors.is_none());
-        }
-        if let Some(transport) = &self.mcast_group {
+        } else if let Some(transport) = &self.mcast_group {
             let interceptor = InterceptorsChain::from(
                 factories
                     .iter()
