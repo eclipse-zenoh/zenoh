@@ -258,7 +258,7 @@ async fn test_acl_config_format(port: u16) {
     assert!(ztimeout!(zenoh::open(config_router.clone()))
         .is_err_and(|e| e.to_string().contains("Policy id must be unique")));
 
-    // non-existant rule in policy
+    // non-existent rule in policy
     config_router
         .insert_json5(
             "access_control",
@@ -290,7 +290,7 @@ async fn test_acl_config_format(port: u16) {
                     },
                     {
                         id: "p2",
-                        rules: ["NON-EXISTANT"],
+                        rules: ["NON-EXISTENT"],
                         subjects: ["all"],
                     }
                 ],
@@ -300,7 +300,7 @@ async fn test_acl_config_format(port: u16) {
     assert!(ztimeout!(zenoh::open(config_router.clone()))
         .is_err_and(|e| e.to_string().contains("does not exist in rules list")));
 
-    // non-existant subject in policy
+    // non-existent subject in policy
     config_router
         .insert_json5(
             "access_control",
@@ -333,7 +333,7 @@ async fn test_acl_config_format(port: u16) {
                     {
                         id: "p2",
                         rules: ["r2"],
-                        subjects: ["NON-EXISTANT"],
+                        subjects: ["NON-EXISTENT"],
                     }
                 ],
             }"#,
