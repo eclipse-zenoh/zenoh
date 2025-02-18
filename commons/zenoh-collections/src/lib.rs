@@ -23,7 +23,9 @@ extern crate alloc;
 pub mod single_or_vec;
 pub use single_or_vec::SingleOrVec;
 
+#[cfg(feature = "std")]
 pub mod single_or_box_hashset;
+#[cfg(feature = "std")]
 pub use single_or_box_hashset::SingleOrBoxHashSet;
 
 #[cfg(feature = "std")]
