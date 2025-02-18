@@ -80,6 +80,10 @@ impl InterceptorsChain {
             interceptors: vec![],
         }
     }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.interceptors.is_empty()
+    }
 }
 
 impl From<Vec<Interceptor>> for InterceptorsChain {
