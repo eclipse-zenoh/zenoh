@@ -26,6 +26,9 @@ pub use single_or_vec::SingleOrVec;
 pub mod single_or_box_hashset;
 pub use single_or_box_hashset::SingleOrBoxHashSet;
 
+pub mod compact_map;
+pub use compact_map::CompactMap;
+
 #[cfg(feature = "std")]
 pub mod ring_buffer;
 #[cfg(feature = "std")]

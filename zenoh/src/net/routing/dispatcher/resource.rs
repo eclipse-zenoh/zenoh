@@ -14,14 +14,14 @@
 use std::{
     any::Any,
     borrow::{Borrow, Cow},
-    collections::{BTreeMap, HashMap},
+    collections::HashMap,
     convert::TryInto,
     hash::{Hash, Hasher},
     ops::{Deref, DerefMut},
     sync::{Arc, OnceLock, RwLock, Weak},
 };
 
-use zenoh_collections::SingleOrBoxHashSet;
+use zenoh_collections::{CompactMap, SingleOrBoxHashSet};
 use zenoh_config::WhatAmI;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr},
@@ -200,14 +200,16 @@ impl ResourceContext {
 }
 
 pub struct Resource {
-    pub(crate) parent: Option<Arc<Resource>>,
-    pub(crate) suffix: Box<str>,
-    pub(crate) lazy_expr: OnceLock<Box<str>>,
-    pub(crate) nonwild_prefix: Option<(Arc<Resource>, usize)>,
-    pub(crate) children: SingleOrBoxHashSet<Child>,
-    pub(crate) context: Option<Box<ResourceContext>>,
-    pub(crate) session_ctxs: BTreeMap<usize, Arc<SessionContext>>,
-}
+    pub(crate) parent: Option<Arc<Resource>>, // 8
+    pub(crate) suffix: Box<str>,              // 16
+    pub(crate) lazy_expr: OnceLock<Box<str>>, // 24
+    pub(crate) nonwild_prefix: Option<(Arc<Resource>, usize)>, // 16
+    pub(crate) children: SingleOrBoxHashSet<Child>, // 16
+    pub(crate) context: Option<Box<ResourceContext>>, // 8
+    pub(crate) session_ctxs: CompactMap<usize, Arc<SessionContext>>, // 24
+} // 112
+
+struct X(CompactMap<usize, Arc<SessionContext>>);
 
 impl PartialEq for Resource {
     fn eq(&self, other: &Self) -> bool {
@@ -311,7 +313,7 @@ impl Resource {
             nonwild_prefix,
             children: SingleOrBoxHashSet::new(),
             context,
-            session_ctxs: BTreeMap::new(),
+            session_ctxs: CompactMap::new(),
         }
     }
 
@@ -414,7 +416,7 @@ impl Resource {
             nonwild_prefix: None,
             children: SingleOrBoxHashSet::new(),
             context: None,
-            session_ctxs: BTreeMap::new(),
+            session_ctxs: CompactMap::new(),
         })
     }
 
