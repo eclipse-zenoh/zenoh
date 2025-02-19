@@ -11,9 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "internal")]
 use zenoh::key_expr::KeyExpr;
 
 #[test]
+#[cfg(feature = "internal")]
 fn keyexpr_test_dummy() {
     let dummy_expr = KeyExpr::dummy();
     assert!(dummy_expr.is_dummy());

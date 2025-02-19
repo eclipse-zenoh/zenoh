@@ -114,6 +114,11 @@ impl<'a> KeyExpr<'a> {
         Self(KeyExprInner::Borrowed(KEYEXPR_DUMMY))
     }
 
+    #[cfg(not(feature = "internal"))]
+    pub(crate) fn dummy() -> Self {
+        Self(KeyExprInner::Borrowed(KEYEXPR_DUMMY))
+    }
+
     /// Checks if the key expression is the dummy one.
     /// This method is not supposed to be called in user code,
     /// but may be used in language bindings (zenoh-c)

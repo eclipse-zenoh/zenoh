@@ -34,6 +34,8 @@ use {
 
 #[zenoh_macros::unstable]
 use crate::api::selector::ZenohParameters;
+#[zenoh_macros::internal]
+use crate::net::primitives::DummyPrimitives;
 use crate::{
     api::{
         builders::reply::{ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
@@ -46,7 +48,7 @@ use crate::{
         Id,
     },
     handlers::Callback,
-    net::primitives::{DummyPrimitives, Primitives},
+    net::primitives::Primitives,
 };
 
 pub(crate) struct QueryInner {
