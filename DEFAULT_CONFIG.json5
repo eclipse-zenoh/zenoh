@@ -365,6 +365,8 @@
   //   [
   //      /// Each policy associates one or multiple rules to one or multiple subject combinations
   //      {
+  //         /// Id is optional. If provided, it has to be unique within the policies list
+  //         "id": "policy1",
   //         /// Rules and Subjects are identified with their unique IDs declared above
   //         "rules": ["rule1"],
   //         "subjects": ["subject1", "subject2"],

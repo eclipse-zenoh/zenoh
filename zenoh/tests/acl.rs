@@ -32,6 +32,7 @@ const VALUE: &str = "zenoh";
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_acl_pub_sub() {
     zenoh::init_log_from_env_or("error");
+    test_acl_config_format(27447).await;
     test_pub_sub_deny(27447).await;
     test_pub_sub_allow(27447).await;
     test_pub_sub_deny_then_allow(27447).await;
@@ -122,6 +123,224 @@ async fn close_sessions(s01: Session, s02: Session) {
     println!("Closing client sessions");
     ztimeout!(s01.close()).unwrap();
     ztimeout!(s02.close()).unwrap();
+}
+
+async fn test_acl_config_format(port: u16) {
+    println!("test_acl_config_format");
+    let mut config_router = get_basic_router_config(port).await;
+
+    // missing lists
+    config_router
+        .insert_json5(
+            "access_control",
+            r#"{
+                    "enabled": true,
+                    "default_permission": "deny"
+                }"#,
+        )
+        .unwrap();
+    assert!(ztimeout!(zenoh::open(config_router.clone()))
+        .is_err_and(|e| e.to_string().contains("config lists must be provided")));
+
+    // repeated rule id
+    config_router
+        .insert_json5(
+            "access_control",
+            r#"{
+                "enabled": true,
+                "default_permission": "deny",
+                "rules": [
+                    {
+                        "id": "r1",
+                        "permission": "allow",
+                        "flows": ["egress", "ingress"],
+                        "messages": ["put"],
+                        "key_exprs": ["foo"],
+                    },
+                    {
+                        "id": "r1",
+                        "permission": "allow",
+                        "flows": ["egress", "ingress"],
+                        "messages": ["put"],
+                        "key_exprs": ["bar"],
+                    },
+                ],
+                "subjects": [{id: "all"}],
+                "policies": [
+                    {
+                        rules: ["r1"],
+                        subjects: ["all"],
+                    }
+                ],
+            }"#,
+        )
+        .unwrap();
+    assert!(ztimeout!(zenoh::open(config_router.clone()))
+        .is_err_and(|e| e.to_string().contains("Rule id must be unique")));
+
+    // repeated subject id
+    config_router
+        .insert_json5(
+            "access_control",
+            r#"{
+                "enabled": true,
+                "default_permission": "deny",
+                "rules": [
+                    {
+                        "id": "r1",
+                        "permission": "allow",
+                        "flows": ["egress", "ingress"],
+                        "messages": ["put"],
+                        "key_exprs": ["foo"],
+                    },
+                ],
+                "subjects": [
+                    {
+                        id: "s1",
+                        interfaces: ["lo"],
+                    },
+                    {
+                        id: "s1",
+                        interfaces: ["lo0"],
+                    },
+                ],
+                "policies": [
+                    {
+                        rules: ["r1"],
+                        subjects: ["s1"],
+                    }
+                ],
+            }"#,
+        )
+        .unwrap();
+    assert!(ztimeout!(zenoh::open(config_router.clone()))
+        .is_err_and(|e| e.to_string().contains("Subject id must be unique")));
+
+    // repeated policy id
+    config_router
+        .insert_json5(
+            "access_control",
+            r#"{
+                "enabled": true,
+                "default_permission": "deny",
+                "rules": [
+                    {
+                        "id": "r1",
+                        "permission": "allow",
+                        "flows": ["egress", "ingress"],
+                        "messages": ["put"],
+                        "key_exprs": ["foo"],
+                    },
+                    {
+                        "id": "r2",
+                        "permission": "allow",
+                        "flows": ["egress", "ingress"],
+                        "messages": ["put"],
+                        "key_exprs": ["bar"],
+                    },
+                ],
+                "subjects": [{id: "all"}],
+                "policies": [
+                    {
+                        id: "p1",
+                        rules: ["r1"],
+                        subjects: ["all"],
+                    },
+                    {
+                        id: "p1",
+                        rules: ["r2"],
+                        subjects: ["all"],
+                    }
+                ],
+            }"#,
+        )
+        .unwrap();
+    assert!(ztimeout!(zenoh::open(config_router.clone()))
+        .is_err_and(|e| e.to_string().contains("Policy id must be unique")));
+
+    // non-existent rule in policy
+    config_router
+        .insert_json5(
+            "access_control",
+            r#"{
+                "enabled": true,
+                "default_permission": "deny",
+                "rules": [
+                    {
+                        "id": "r1",
+                        "permission": "allow",
+                        "flows": ["egress", "ingress"],
+                        "messages": ["put"],
+                        "key_exprs": ["foo"],
+                    },
+                    {
+                        "id": "r2",
+                        "permission": "allow",
+                        "flows": ["egress", "ingress"],
+                        "messages": ["put"],
+                        "key_exprs": ["bar"],
+                    },
+                ],
+                "subjects": [{id: "all"}],
+                "policies": [
+                    {
+                        id: "p1",
+                        rules: ["r1"],
+                        subjects: ["all"],
+                    },
+                    {
+                        id: "p2",
+                        rules: ["NON-EXISTENT"],
+                        subjects: ["all"],
+                    }
+                ],
+            }"#,
+        )
+        .unwrap();
+    assert!(ztimeout!(zenoh::open(config_router.clone()))
+        .is_err_and(|e| e.to_string().contains("does not exist in rules list")));
+
+    // non-existent subject in policy
+    config_router
+        .insert_json5(
+            "access_control",
+            r#"{
+                "enabled": true,
+                "default_permission": "deny",
+                "rules": [
+                    {
+                        "id": "r1",
+                        "permission": "allow",
+                        "flows": ["egress", "ingress"],
+                        "messages": ["put"],
+                        "key_exprs": ["foo"],
+                    },
+                    {
+                        "id": "r2",
+                        "permission": "allow",
+                        "flows": ["egress", "ingress"],
+                        "messages": ["put"],
+                        "key_exprs": ["bar"],
+                    },
+                ],
+                "subjects": [{id: "all"}],
+                "policies": [
+                    {
+                        id: "p1",
+                        rules: ["r1"],
+                        subjects: ["all"],
+                    },
+                    {
+                        id: "p2",
+                        rules: ["r2"],
+                        subjects: ["NON-EXISTENT"],
+                    }
+                ],
+            }"#,
+        )
+        .unwrap();
+    assert!(ztimeout!(zenoh::open(config_router.clone()))
+        .is_err_and(|e| e.to_string().contains("does not exist in subjects list")));
 }
 
 async fn test_pub_sub_deny(port: u16) {

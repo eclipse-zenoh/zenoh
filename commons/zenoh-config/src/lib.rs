@@ -153,6 +153,7 @@ impl std::fmt::Display for Username {
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub struct AclConfigPolicyEntry {
+    pub id: Option<String>,
     pub rules: Vec<String>,
     pub subjects: Vec<String>,
 }
