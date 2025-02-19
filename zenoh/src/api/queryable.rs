@@ -58,9 +58,10 @@ pub(crate) struct QueryInner {
 }
 
 impl QueryInner {
+    #[zenoh_macros::internal]
     fn empty() -> Self {
         QueryInner {
-            key_expr: unsafe { KeyExpr::from_str_unchecked("") },
+            key_expr: KeyExpr::dummy(),
             parameters: Parameters::empty(),
             qid: 0,
             zid: ZenohIdProto::default(),

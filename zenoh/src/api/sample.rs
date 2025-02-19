@@ -434,7 +434,7 @@ impl Sample {
     #[zenoh_macros::internal]
     pub unsafe fn empty() -> Self {
         Sample {
-            key_expr: KeyExpr::from_str_unchecked(""),
+            key_expr: KeyExpr::dummy(),
             payload: ZBytes::new(),
             kind: SampleKind::Put,
             encoding: Encoding::default(),
