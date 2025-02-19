@@ -5193,6 +5193,7 @@ name = "zenoh"
 version = "1.2.1"
 dependencies = [
  "ahash",
+ "async-channel 2.3.1",
  "async-trait",
  "bytes",
  "flume",
