@@ -209,8 +209,6 @@ pub struct Resource {
     pub(crate) session_ctxs: CompactMap<usize, Arc<SessionContext>>, // 24
 } // 112
 
-struct X(CompactMap<usize, Arc<SessionContext>>);
-
 impl PartialEq for Resource {
     fn eq(&self, other: &Self) -> bool {
         if self.suffix != other.suffix {

@@ -267,7 +267,7 @@ where
 impl<'a, K, V> Extend<&'a (K, V)> for CompactMap<K, V>
 where
     K: 'a + Eq + Hash + Copy,
-    V: Clone,
+    V: 'a + Clone,
 {
     #[inline]
     fn extend<I: IntoIterator<Item = &'a (K, V)>>(&mut self, iter: I) {
