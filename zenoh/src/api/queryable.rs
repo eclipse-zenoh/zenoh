@@ -46,7 +46,7 @@ use crate::{
         Id,
     },
     handlers::Callback,
-    net::primitives::Primitives,
+    net::primitives::{DummyPrimitives, Primitives},
 };
 
 pub(crate) struct QueryInner {
@@ -55,6 +55,18 @@ pub(crate) struct QueryInner {
     pub(crate) qid: RequestId,
     pub(crate) zid: ZenohIdProto,
     pub(crate) primitives: Arc<dyn Primitives>,
+}
+
+impl QueryInner {
+    fn empty() -> Self {
+        QueryInner {
+            key_expr: unsafe { KeyExpr::from_str_unchecked("") },
+            parameters: Parameters::empty(),
+            qid: 0,
+            zid: ZenohIdProto::default(),
+            primitives: Arc::new(DummyPrimitives),
+        }
+    }
 }
 
 impl Drop for QueryInner {
@@ -202,9 +214,9 @@ impl Query {
 
     /// Constructs an empty Query without payload, nor attachment referencing the same inner query.
     #[zenoh_macros::internal]
-    pub unsafe fn empty(&self) -> Self {
+    pub unsafe fn empty() -> Self {
         Query {
-            inner: self.inner.clone(),
+            inner: Arc::new(QueryInner::empty()),
             eid: 0,
             value: None,
             attachment: None,
