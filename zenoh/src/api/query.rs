@@ -158,7 +158,7 @@ impl Reply {
 
     /// Constructs an uninitialized empty Reply.
     #[zenoh_macros::internal]
-    pub unsafe fn empty() -> Self {
+    pub fn empty() -> Self {
         Reply {
             result: Ok(Sample::empty()),
             #[cfg(feature = "unstable")]
