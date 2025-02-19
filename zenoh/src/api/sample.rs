@@ -432,7 +432,7 @@ impl Sample {
 
     /// Constructs an uninitialized empty Sample.
     #[zenoh_macros::internal]
-    pub unsafe fn empty() -> Self {
+    pub fn empty() -> Self {
         Sample {
             key_expr: KeyExpr::dummy(),
             payload: ZBytes::new(),
