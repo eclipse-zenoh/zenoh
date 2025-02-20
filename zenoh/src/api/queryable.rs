@@ -69,6 +69,7 @@ impl QueryInner {
             qid: 0,
             zid: ZenohIdProto::default(),
             primitives: Arc::new(DummyPrimitives),
+            session: None,
         }
     }
 }
