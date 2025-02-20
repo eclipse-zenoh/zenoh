@@ -1534,7 +1534,7 @@ impl SessionInner {
         }
     }
 
-    pub(crate) fn optimize_key_expression(&self, key_expr: &KeyExpr) -> ZResult<WireExpr<'static>> {
+    pub(crate) fn optimize_nonwild_prefix(&self, key_expr: &KeyExpr) -> ZResult<WireExpr<'static>> {
         let ke = key_expr.as_keyexpr();
         if let Some(prefix) = ke.get_nonwild_prefix() {
             let expr_id = self.declare_prefix(prefix.as_str()).wait()?;
@@ -1560,7 +1560,7 @@ impl SessionInner {
         if let Some(key_expr) = declared_sub {
             let primitives = state.primitives()?;
             drop(state);
-            let wire_expr = self.optimize_key_expression(&key_expr)?;
+            let wire_expr = self.optimize_nonwild_prefix(&key_expr)?;
 
             self.send_declare_with_namespace(
                 &primitives,
@@ -1725,7 +1725,7 @@ impl SessionInner {
                 complete,
                 distance: 0,
             };
-            let wire_expr = self.optimize_key_expression(key_expr)?;
+            let wire_expr = self.optimize_nonwild_prefix(key_expr)?;
             self.send_declare_with_namespace(
                 &primitives,
                 Declare {
