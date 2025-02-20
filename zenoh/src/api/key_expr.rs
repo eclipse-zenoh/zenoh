@@ -89,6 +89,9 @@ impl KeyExpr<'static> {
         )))
     }
 }
+
+static KEYEXPR_DUMMY: &keyexpr = unsafe { keyexpr::from_str_unchecked("dummy") };
+
 impl<'a> KeyExpr<'a> {
     /// Equivalent to `<KeyExpr as TryFrom>::try_from(t)`.
     ///
@@ -101,6 +104,31 @@ impl<'a> KeyExpr<'a> {
         Self: TryFrom<T, Error = E>,
     {
         Self::try_from(t)
+    }
+
+    /// Constructs key expression object to be used as dummy value
+    /// for empty objects. This method is not supposed to be called in user code,
+    /// but may be used in language bindings (zenoh-c)
+    #[zenoh_macros::internal]
+    pub fn dummy() -> Self {
+        Self(KeyExprInner::Borrowed(KEYEXPR_DUMMY))
+    }
+
+    #[cfg(not(feature = "internal"))]
+    pub(crate) fn dummy() -> Self {
+        Self(KeyExprInner::Borrowed(KEYEXPR_DUMMY))
+    }
+
+    /// Checks if the key expression is the dummy one.
+    /// This method is not supposed to be called in user code,
+    /// but may be used in language bindings (zenoh-c)
+    #[zenoh_macros::internal]
+    pub fn is_dummy(&self) -> bool {
+        let Self(inner) = self;
+        let KeyExprInner::Borrowed(key_expr) = inner else {
+            return false;
+        };
+        std::ptr::eq(*key_expr, KEYEXPR_DUMMY)
     }
 
     /// Constructs a new [`KeyExpr`] aliasing `self`.

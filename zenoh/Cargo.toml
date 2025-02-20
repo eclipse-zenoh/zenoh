@@ -107,7 +107,7 @@ zenoh-codec = { workspace = true }
 zenoh-collections = { workspace = true, features = ["std"] }
 zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
-zenoh-keyexpr = { workspace = true }
+zenoh-keyexpr = { workspace = true, features = ["internal"] }
 zenoh-link = { workspace = true }
 zenoh-macros = { workspace = true }
 zenoh-plugin-trait = { workspace = true }
