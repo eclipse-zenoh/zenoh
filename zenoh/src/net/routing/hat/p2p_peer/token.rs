@@ -65,7 +65,11 @@ fn propagate_simple_token_to(
         if dst_face.whatami != WhatAmI::Client {
             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
             face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
-            let key_expr = Resource::decl_key(res, dst_face, dst_face.whatami != WhatAmI::Client);
+            let key_expr = Resource::decl_key(
+                res,
+                dst_face,
+                dst_face.whatami != WhatAmI::Client || dst_face.is_local(),
+            );
             send_declare(
                 &dst_face.primitives,
                 RoutingContext::with_expr(
@@ -108,8 +112,11 @@ fn propagate_simple_token_to(
                 if !face_hat!(dst_face).local_tokens.contains_key(res) {
                     let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
                     face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
-                    let key_expr =
-                        Resource::decl_key(res, dst_face, dst_face.whatami != WhatAmI::Client);
+                    let key_expr = Resource::decl_key(
+                        res,
+                        dst_face,
+                        dst_face.whatami != WhatAmI::Client || dst_face.is_local(),
+                    );
                     send_declare(
                         &dst_face.primitives,
                         RoutingContext::with_expr(
@@ -514,7 +521,11 @@ pub(crate) fn declare_token_interest(
                         .any(|token| token.context.is_some() && token.matches(res))
                 }) {
                     let id = make_token_id(res, face, mode);
-                    let wire_expr = Resource::decl_key(res, face, face.whatami != WhatAmI::Client);
+                    let wire_expr = Resource::decl_key(
+                        res,
+                        face,
+                        face.whatami != WhatAmI::Client || face.is_local(),
+                    );
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -540,8 +551,11 @@ pub(crate) fn declare_token_interest(
                     for token in face_hat!(src_face).remote_tokens.values() {
                         if token.context.is_some() && token.matches(res) {
                             let id = make_token_id(token, face, mode);
-                            let wire_expr =
-                                Resource::decl_key(token, face, face.whatami != WhatAmI::Client);
+                            let wire_expr = Resource::decl_key(
+                                token,
+                                face,
+                                face.whatami != WhatAmI::Client || face.is_local(),
+                            );
                             send_declare(
                                 &face.primitives,
                                 RoutingContext::with_expr(
@@ -572,8 +586,11 @@ pub(crate) fn declare_token_interest(
             {
                 for token in face_hat!(src_face).remote_tokens.values() {
                     let id = make_token_id(token, face, mode);
-                    let wire_expr =
-                        Resource::decl_key(token, face, face.whatami != WhatAmI::Client);
+                    let wire_expr = Resource::decl_key(
+                        token,
+                        face,
+                        face.whatami != WhatAmI::Client || face.is_local(),
+                    );
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(

@@ -112,6 +112,14 @@ impl FaceState {
     }
 
     #[inline]
+    pub(crate) fn is_local(&self) -> bool {
+        self.primitives
+            .as_any()
+            .downcast_ref::<crate::api::session::WeakSession>()
+            .is_some()
+    }
+
+    #[inline]
     pub(crate) fn get_mapping(
         &self,
         prefixid: &ExprId,
