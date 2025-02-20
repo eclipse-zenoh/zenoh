@@ -28,13 +28,13 @@ use zenoh::{
     qos::{CongestionControl, Priority},
     query::{Queryable, ZenohParameters},
     sample::{Locality, Sample, SampleBuilder},
-    Resolvable, Result as ZResult, Session, Wait, KE_ADV_PREFIX, KE_AT, KE_STARSTAR,
+    Resolvable, Result as ZResult, Session, Wait, KE_ADV_PREFIX, KE_STARSTAR,
 };
 
 pub(crate) static KE_UHLC: &keyexpr = ke!("uhlc");
 #[zenoh_macros::unstable]
 kedefine!(
-    pub(crate) ke_liveliness: "@adv/${entity:*}/${zid:*}/${eid:*}/${meta:**}/@/${remaining:**}",
+    pub(crate) ke_liveliness: "${remaining:**}/@adv/${entity:*}/${zid:*}/${eid:*}/${meta:**}",
 );
 
 #[zenoh_macros::unstable]
@@ -122,7 +122,7 @@ impl CacheConfig {
 pub struct AdvancedCacheBuilder<'a, 'b, 'c> {
     session: &'a Session,
     pub_key_expr: ZResult<KeyExpr<'b>>,
-    queryable_prefix: Option<ZResult<KeyExpr<'c>>>,
+    queryable_suffix: Option<ZResult<KeyExpr<'c>>>,
     queryable_origin: Locality,
     history: CacheConfig,
     liveliness: bool,
@@ -138,21 +138,21 @@ impl<'a, 'b, 'c> AdvancedCacheBuilder<'a, 'b, 'c> {
         AdvancedCacheBuilder {
             session,
             pub_key_expr,
-            queryable_prefix: Some(Ok((KE_ADV_PREFIX / KE_STARSTAR / KE_AT).into())),
+            queryable_suffix: Some(Ok((KE_ADV_PREFIX / KE_STARSTAR).into())),
             queryable_origin: Locality::default(),
             history: CacheConfig::default(),
             liveliness: false,
         }
     }
 
-    /// Change the prefix used for queryable.
+    /// Change the suffix used for queryable.
     #[zenoh_macros::unstable]
-    pub fn queryable_prefix<TryIntoKeyExpr>(mut self, queryable_prefix: TryIntoKeyExpr) -> Self
+    pub fn queryable_suffix<TryIntoKeyExpr>(mut self, queryable_suffix: TryIntoKeyExpr) -> Self
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'c>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'c>>>::Error: Into<zenoh::Error>,
     {
-        self.queryable_prefix = Some(queryable_prefix.try_into().map_err(Into::into));
+        self.queryable_suffix = Some(queryable_suffix.try_into().map_err(Into::into));
         self
     }
 
@@ -220,11 +220,11 @@ impl AdvancedCache {
     #[zenoh_macros::unstable]
     fn new(conf: AdvancedCacheBuilder<'_, '_, '_>) -> ZResult<AdvancedCache> {
         let key_expr = conf.pub_key_expr?.into_owned();
-        // the queryable_prefix (optional), and the key_expr for AdvancedCache's queryable ("[<queryable_prefix>]/<pub_key_expr>")
-        let queryable_key_expr = match conf.queryable_prefix {
+        // the queryable_suffix (optional), and the key_expr for AdvancedCache's queryable ("<pub_key_expr>/[<queryable_suffix>]")
+        let queryable_key_expr = match conf.queryable_suffix {
             None => key_expr.clone(),
-            Some(Ok(ke)) => (&ke) / &conf.session.apply_namespace_prefix(key_expr.clone()),
-            Some(Err(e)) => bail!("Invalid key expression for queryable_prefix: {}", e),
+            Some(Ok(ke)) => &key_expr / &ke,
+            Some(Err(e)) => bail!("Invalid key expression for queryable_suffix: {}", e),
         };
         tracing::debug!(
             "Create AdvancedCache on {} with max_samples={:?}",

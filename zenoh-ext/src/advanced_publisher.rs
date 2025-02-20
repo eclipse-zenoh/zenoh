@@ -39,7 +39,7 @@ use zenoh::{
     qos::{CongestionControl, Priority, Reliability},
     sample::{Locality, SourceInfo},
     session::EntityGlobalId,
-    Resolvable, Resolve, Result as ZResult, Session, Wait, KE_ADV_PREFIX, KE_AT, KE_EMPTY,
+    Resolvable, Resolve, Result as ZResult, Session, Wait, KE_ADV_PREFIX, KE_EMPTY,
 };
 use zenoh_macros::ke;
 
@@ -284,17 +284,17 @@ impl<'a> AdvancedPublisher<'a> {
             .express(conf.is_express)
             .wait()?;
         let id = publisher.id();
-        let prefix = KE_ADV_PREFIX / KE_PUB / &id.zid().into_keyexpr();
-        let prefix = match conf.sequencing {
+        let suffix = KE_ADV_PREFIX / KE_PUB / &id.zid().into_keyexpr();
+        let suffix = match conf.sequencing {
             Sequencing::SequenceNumber => {
-                prefix / &KeyExpr::try_from(id.eid().to_string()).unwrap()
+                suffix / &KeyExpr::try_from(id.eid().to_string()).unwrap()
             }
-            _ => prefix / KE_UHLC,
+            _ => suffix / KE_UHLC,
         };
-        let prefix = match meta {
-            Some(meta) => prefix / &meta / KE_AT,
+        let suffix = match meta {
+            Some(meta) => suffix / &meta,
             // We need this empty chunk because af a routing matching bug
-            _ => prefix / KE_EMPTY / KE_AT,
+            _ => suffix / KE_EMPTY,
         };
 
         let seqnum = match conf.sequencing {
@@ -316,7 +316,7 @@ impl<'a> AdvancedPublisher<'a> {
             Some(
                 AdvancedCacheBuilder::new(conf.session, Ok(key_expr.clone()))
                     .history(conf.history)
-                    .queryable_prefix(&prefix)
+                    .queryable_suffix(&suffix)
                     .wait()?,
             )
         } else {
@@ -327,7 +327,7 @@ impl<'a> AdvancedPublisher<'a> {
             Some(
                 conf.session
                     .liveliness()
-                    .declare_token(&prefix / &conf.session.apply_namespace_prefix(key_expr.clone()))
+                    .declare_token(&key_expr / &suffix)
                     .wait()?,
             )
         } else {
@@ -339,10 +339,7 @@ impl<'a> AdvancedPublisher<'a> {
             if let Some(seqnum) = seqnum.as_ref() {
                 let seqnum = seqnum.clone();
 
-                let publisher = conf
-                    .session
-                    .declare_publisher(prefix / &conf.session.apply_namespace_prefix(key_expr))
-                    .wait()?;
+                let publisher = conf.session.declare_publisher(&key_expr / &suffix).wait()?;
                 Some(TerminatableTask::spawn_abortable(
                     ZRuntime::Net,
                     async move {
