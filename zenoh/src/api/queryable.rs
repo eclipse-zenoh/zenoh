@@ -34,6 +34,8 @@ use {
 
 #[zenoh_macros::unstable]
 use crate::api::selector::ZenohParameters;
+#[zenoh_macros::internal]
+use crate::net::primitives::DummyPrimitives;
 use crate::{
     api::{
         builders::reply::{ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
@@ -56,6 +58,19 @@ pub(crate) struct QueryInner {
     pub(crate) zid: ZenohIdProto,
     pub(crate) primitives: Arc<dyn Primitives>,
     pub(crate) session: Option<Arc<WeakSession>>,
+}
+
+impl QueryInner {
+    #[zenoh_macros::internal]
+    fn empty() -> Self {
+        QueryInner {
+            key_expr: KeyExpr::dummy(),
+            parameters: Parameters::empty(),
+            qid: 0,
+            zid: ZenohIdProto::default(),
+            primitives: Arc::new(DummyPrimitives),
+        }
+    }
 }
 
 impl Drop for QueryInner {
@@ -199,6 +214,17 @@ impl Query {
     #[cfg(feature = "unstable")]
     fn _accepts_any_replies(&self) -> ZResult<bool> {
         Ok(self.parameters().reply_key_expr_any())
+    }
+
+    /// Constructs an empty Query without payload, nor attachment referencing the same inner query.
+    #[zenoh_macros::internal]
+    pub unsafe fn empty() -> Self {
+        Query {
+            inner: Arc::new(QueryInner::empty()),
+            eid: 0,
+            value: None,
+            attachment: None,
+        }
     }
 }
 

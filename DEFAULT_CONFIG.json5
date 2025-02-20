@@ -138,6 +138,19 @@
       /// or different values for router, peer or client mode (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
       /// Each value is a list of: "peer", "router" and/or "client".
       autoconnect: { router: [], peer: ["router", "peer"], client: ["router"] },
+      /// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
+      /// Possible options are:
+      /// - "always": always attempt to autoconnect, may result in redundant connections.
+      /// - "greater-zid": attempt to connect to another node only if its own zid is greater than the other's.
+      ///   If both nodes use this strategy, only one will attempt the connection.
+      ///   This strategy may not be suited if one of the nodes is not reachable by the other one, for example
+      ///   because of a private IP.
+      /// Accepts a single value (e.g. autoconnect: "always") which applies whatever node would be auto-connected to,
+      /// or different values for router and/or peer depending on the type of node detected
+      /// (e.g. autoconnect_strategy : { to_router:  "always", to_peer: "greater-zid" }),
+      /// or different values for router or peer mode
+      /// (e.g. autoconnect_strategy : { peer: { to_router:  "always", to_peer: "greater-zid" } }).
+      autoconnect_strategy: { peer: { to_router: "always", to_peer: "always" } },
       /// Whether or not to listen for scout messages on UDP multicast and reply to them.
       listen: true,
     },
@@ -161,6 +174,19 @@
       /// or different values for router or peer mode (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
       /// Each value is a list of: "peer" and/or "router".
       autoconnect: { router: [], peer: ["router", "peer"] },
+      /// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
+      /// Possible options are:
+      /// - "always": always attempt to autoconnect, may result in redundant connection which will then be closed.
+      /// - "greater-zid": attempt to connect to another node only if its own zid is greater than the other's.
+      ///   If both nodes use this strategy, only one will attempt the connection.
+      ///   This strategy may not be suited if one of the nodes is not reachable by the other one, for example
+      ///   because of a private IP.
+      /// Accepts a single value (e.g. autoconnect: "always") which applies whatever node would be auto-connected to,
+      /// or different values for router and/or peer depending on the type of node detected
+      /// (e.g. autoconnect_strategy : { "to-router":  "always", "to-peer": "greater-zid" }),
+      /// or different values for router or peer mode
+      /// (e.g. autoconnect_strategy : { peer: { "to-router":  "always", "to-peer": "greater-zid" } }).
+      autoconnect_strategy: { peer: { "to-router": "always", "to-peer": "always" } },
     },
   },
 
@@ -240,7 +266,10 @@
   //  /// The downsampling declaration.
   //  downsampling: [
   //    {
-  //      /// A list of network interfaces messages will be processed on, the rest will be passed as is.
+  //      /// Optional Id, has to be unique
+  //      "id": "wlan0egress",
+  //      /// Optional list of network interfaces messages will be processed on, the rest will be passed as is.
+  //      /// If absent, the rules will be applied to all interfaces, in case of an empty list it means that they will not be applied to any.
   //      interfaces: [ "wlan0" ],
   //      /// Data flow messages will be processed on. ("egress" or "ingress")
   //      flow: "egress",
@@ -336,6 +365,8 @@
   //   [
   //      /// Each policy associates one or multiple rules to one or multiple subject combinations
   //      {
+  //         /// Id is optional. If provided, it has to be unique within the policies list
+  //         "id": "policy1",
   //         /// Rules and Subjects are identified with their unique IDs declared above
   //         "rules": ["rule1"],
   //         "subjects": ["subject1", "subject2"],

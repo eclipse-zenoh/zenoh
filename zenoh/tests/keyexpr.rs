@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023 ZettaScale Technology
+// Copyright (c) 2025 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -11,19 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "internal")]
+use zenoh::key_expr::KeyExpr;
 
-//! ⚠️ WARNING ⚠️
-//!
-//! This module is intended for Zenoh's internal use.
-//!
-//! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
-pub(crate) mod codec;
-mod common;
-pub(crate) mod primitives;
-pub(crate) mod protocol;
-pub(crate) mod routing;
-#[doc(hidden)]
-pub mod runtime;
+#[test]
+#[cfg(feature = "internal")]
+fn keyexpr_test_dummy() {
+    let dummy_expr = KeyExpr::dummy();
+    assert!(dummy_expr.is_dummy());
 
-#[cfg(test)]
-pub(crate) mod tests;
+    let non_dummy_expr = KeyExpr::try_from("dummy").unwrap();
+    assert!(!non_dummy_expr.is_dummy());
+}

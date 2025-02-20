@@ -2213,7 +2213,7 @@ impl SessionInner {
         drop(state);
         let mut sample = info.clone().into_sample(
             // SAFETY: the keyexpr is valid
-            unsafe { KeyExpr::from_str_unchecked("dummy") },
+            KeyExpr::dummy(),
             payload,
             #[cfg(feature = "unstable")]
             reliability,

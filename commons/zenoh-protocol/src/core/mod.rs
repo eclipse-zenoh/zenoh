@@ -574,6 +574,31 @@ pub enum CongestionControl {
 
 impl CongestionControl {
     pub const DEFAULT: Self = Self::Drop;
+
+    #[cfg(feature = "internal")]
+    pub const DEFAULT_PUSH: Self = Self::Drop;
+    #[cfg(not(feature = "internal"))]
+    pub(crate) const DEFAULT_PUSH: Self = Self::Drop;
+
+    #[cfg(feature = "internal")]
+    pub const DEFAULT_REQUEST: Self = Self::Block;
+    #[cfg(not(feature = "internal"))]
+    pub(crate) const DEFAULT_REQUEST: Self = Self::Block;
+
+    #[cfg(feature = "internal")]
+    pub const DEFAULT_RESPONSE: Self = Self::Block;
+    #[cfg(not(feature = "internal"))]
+    pub(crate) const DEFAULT_RESPONSE: Self = Self::Block;
+
+    #[cfg(feature = "internal")]
+    pub const DEFAULT_DECLARE: Self = Self::Block;
+    #[cfg(not(feature = "internal"))]
+    pub(crate) const DEFAULT_DECLARE: Self = Self::Block;
+
+    #[cfg(feature = "internal")]
+    pub const DEFAULT_OAM: Self = Self::Block;
+    #[cfg(not(feature = "internal"))]
+    pub(crate) const DEFAULT_OAM: Self = Self::Block;
 }
 
 #[cfg(test)]

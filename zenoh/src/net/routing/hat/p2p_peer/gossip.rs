@@ -30,6 +30,7 @@ use zenoh_transport::unicast::TransportUnicast;
 
 use crate::net::{
     codec::Zenoh080Routing,
+    common::AutoConnect,
     protocol::linkstate::{LinkState, LinkStateList},
     runtime::{Runtime, WeakRuntime},
 };
@@ -97,7 +98,7 @@ pub(super) struct Network {
     pub(super) gossip: bool,
     pub(super) gossip_multihop: bool,
     pub(super) gossip_target: WhatAmIMatcher,
-    pub(super) autoconnect: WhatAmIMatcher,
+    pub(super) autoconnect: AutoConnect,
     pub(super) wait_declares: bool,
     pub(super) idx: NodeIndex,
     pub(super) links: VecMap<Link>,
@@ -115,7 +116,7 @@ impl Network {
         gossip: bool,
         gossip_multihop: bool,
         gossip_target: WhatAmIMatcher,
-        autoconnect: WhatAmIMatcher,
+        autoconnect: AutoConnect,
         wait_declares: bool,
     ) -> Self {
         let mut graph = petgraph::stable_graph::StableGraph::default();
@@ -439,7 +440,7 @@ impl Network {
                         );
                     }
 
-                    if !self.autoconnect.is_empty() && self.autoconnect.matches(whatami) {
+                    if self.autoconnect.should_autoconnect(zid, whatami) {
                         // Connect discovered peers
                         if let Some(locators) = locators {
                             let runtime = strong_runtime.clone();

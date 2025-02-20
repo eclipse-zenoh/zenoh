@@ -32,7 +32,11 @@ use zenoh_protocol::{
 use crate::net::{
     primitives::{DummyPrimitives, EPrimitives, Primitives},
     routing::{
-        dispatcher::{face::FaceState, pubsub::SubscriberInfo, tables::Tables},
+        dispatcher::{
+            face::{Face, FaceState},
+            pubsub::SubscriberInfo,
+            tables::Tables,
+        },
         router::*,
         RoutingContext,
     },
@@ -827,4 +831,57 @@ fn client_test() {
     assert_eq!(primitives2.get_last_name().unwrap(), "test/client/z2_pub1");
     // mapping strategy check
     // assert_eq!(primitives2.get_last_key().unwrap(), KeyExpr::IdWithSuffix(31, "/z2_pub1".to_string()));
+}
+
+#[test]
+fn get_best_key_test() {
+    let config = Config::default();
+    let router = Router::new(
+        ZenohIdProto::try_from([1]).unwrap(),
+        WhatAmI::Client,
+        None,
+        &config,
+    )
+    .unwrap();
+
+    let primitives = Arc::new(DummyPrimitives {});
+    let face1 = router.new_primitives(primitives.clone());
+    let face2 = router.new_primitives(primitives.clone());
+    let face3 = router.new_primitives(primitives);
+
+    let root = zread!(router.tables.tables)._get_root().clone();
+    let register_expr = |face: &Face, id: ExprId, expr: &str| {
+        register_expr(&router.tables, &mut face.state.clone(), id, &expr.into());
+    };
+    let get_best_key = |resource, suffix, face: &Face| {
+        Resource::get_resource(&root, resource)
+            .unwrap()
+            .get_best_key(suffix, face.state.id)
+    };
+
+    register_expr(&face1, 1, "a");
+    register_expr(&face2, 2, "a/b");
+    register_expr(&face2, 3, "a/b/c");
+    register_expr(&face3, 4, "a/d");
+
+    macro_rules! assert_wire_expr {
+        ($key:expr, {scope: $scope:expr, suffix: $suffix:expr}) => {
+            assert_eq!($key.scope, $scope);
+            assert_eq!($key.suffix, $suffix);
+        };
+    }
+    assert_wire_expr!(get_best_key("", "a", &face1), { scope: 1, suffix: "" });
+    assert_wire_expr!(get_best_key("", "a/b", &face1), { scope: 1, suffix: "/b" });
+    assert_wire_expr!(get_best_key("a", "", &face1), { scope: 1, suffix: "" });
+    assert_wire_expr!(get_best_key("a", "/b", &face1), { scope: 1, suffix: "/b" });
+    assert_wire_expr!(get_best_key("a/b", "", &face1), { scope: 1, suffix: "/b" });
+    assert_wire_expr!(get_best_key("", "e", &face1), { scope: 0, suffix: "e" });
+    assert_wire_expr!(get_best_key("", "a", &face2), { scope: 0, suffix: "a" });
+    assert_wire_expr!(get_best_key("", "a/b", &face2), { scope: 2, suffix: "" });
+    assert_wire_expr!(get_best_key("", "a/b/c", &face2), { scope: 3, suffix: "" });
+    assert_wire_expr!(get_best_key("", "a/b/c/d", &face2), { scope: 3, suffix: "/d" });
+    assert_wire_expr!(get_best_key("a", "", &face2), { scope: 0, suffix: "a" });
+    assert_wire_expr!(get_best_key("a", "/b", &face2), { scope: 2, suffix: "" });
+    assert_wire_expr!(get_best_key("a", "/d", &face2), { scope: 0, suffix: "a/d" });
+    assert_wire_expr!(get_best_key("a/b", "", &face2), { scope: 2, suffix: "" });
 }

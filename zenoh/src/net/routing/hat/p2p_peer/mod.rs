@@ -24,7 +24,7 @@ use std::{
 };
 
 use token::{token_new_face, undeclare_simple_token};
-use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher};
+use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI};
 use zenoh_protocol::{
     common::ZExtBody,
     network::{
@@ -95,6 +95,8 @@ macro_rules! face_hat_mut {
 }
 use face_hat_mut;
 
+use crate::net::common::AutoConnect;
+
 struct HatTables {
     gossip: Option<Network>,
 }
@@ -119,9 +121,9 @@ impl HatBaseTrait for HatCode {
             bail!("\"client\" is not allowed as gossip target")
         }
         let autoconnect = if gossip {
-            *unwrap_or_default!(config.scouting().gossip().autoconnect().get(whatami))
+            AutoConnect::gossip(config, whatami)
         } else {
-            WhatAmIMatcher::empty()
+            AutoConnect::disabled()
         };
         let wait_declares = unwrap_or_default!(config.open().return_conditions().declares());
         let router_peers_failover_brokering =
