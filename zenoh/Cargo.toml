@@ -83,6 +83,7 @@ tracing-instrument = [
 tokio = { workspace = true, features = ["rt", "macros", "time"] }
 tokio-util = { workspace = true }
 ahash = { workspace = true }
+arc-swap = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
 flume = { workspace = true }
@@ -120,7 +121,6 @@ zenoh-util = { workspace = true }
 zenoh-runtime = { workspace = true }
 zenoh-task = { workspace = true }
 once_cell = { workspace = true }
-arc-swap = "1.7.1"
 
 [dev-dependencies]
 tokio = { workspace = true }
