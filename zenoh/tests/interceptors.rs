@@ -276,3 +276,36 @@ fn downsampling_config_error_wrong_strategy() {
 
     zenoh::open(config).wait().unwrap();
 }
+
+#[test]
+#[should_panic(expected = "Invalid Downsampling config: id 'REPEATED' is repeated")]
+fn downsampling_config_error_repeated_id() {
+    zenoh::init_log_from_env_or("error");
+
+    let mut config = Config::default();
+    config
+        .insert_json5(
+            "downsampling",
+            r#"
+              [
+                {
+                  id: "REPEATED",
+                  flow: "egress",
+                  rules: [
+                    { key_expr: "test/downsamples_by_keyexp/r100", freq: 10, },
+                  ],
+                },
+                {
+                  id: "REPEATED",
+                  flow: "ingress",
+                  rules: [
+                    { key_expr: "test/downsamples_by_keyexp/r50", freq: 20, }
+                  ],
+                },
+              ]
+            "#,
+        )
+        .unwrap();
+
+    zenoh::open(config).wait().unwrap();
+}
