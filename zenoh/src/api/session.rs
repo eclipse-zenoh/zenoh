@@ -3300,7 +3300,6 @@ impl Closeable for Session {
     }
 }
 
-static IGNORE_NAMESPACE_PREFIX: char = '@'; // admin space and advanced
 pub(crate) struct Namespace {
     namespace: OwnedNonWildKeyExpr,
     incomplete_ingress_keyexpr_declarations: RwLock<HashMap<u16, String>>,
@@ -3326,12 +3325,10 @@ impl Namespace {
         if key_expr.scope == EMPTY_EXPR_ID || new_keyexpr_declare {
             // non - optimized ke
             let key = key_expr.suffix.as_ref();
-            if !key.starts_with(IGNORE_NAMESPACE_PREFIX) {
-                key_expr.suffix = std::borrow::Cow::Owned(match key.is_empty() {
-                    true => self.namespace.as_str().to_owned(), // a case where only a namespace was declared
-                    false => self.namespace.as_str().to_owned() + "/" + key,
-                });
-            }
+            key_expr.suffix = std::borrow::Cow::Owned(match key.is_empty() {
+                true => self.namespace.as_str().to_owned(), // a case where only a namespace was declared
+                false => self.namespace.as_str().to_owned() + "/" + key,
+            });
         }
         // already optimized ke, given that all of the ke declarations pass through this functions
         // it should already account for namespace prefix, and thus no extra processing is needed
@@ -3356,15 +3353,7 @@ impl Namespace {
                 }
                 None => return true,
             }
-        } else if key_expr
-            .suffix
-            .as_ref()
-            .starts_with(IGNORE_NAMESPACE_PREFIX)
-        {
-            // ignore namespace for admin queries
-            return true;
         }
-
         let key = key_expr.suffix.as_ref();
         let ke = unsafe { keyexpr::from_str_unchecked(key) };
         if let Some(tail) = ke.strip_nonwild_prefix(&self.namespace) {
