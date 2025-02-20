@@ -323,11 +323,10 @@ impl serde::Serialize for WhatAmIMatcher {
     {
         let values = [WhatAmI::Router, WhatAmI::Peer, WhatAmI::Client]
             .iter()
-            .filter(|v| self.matches(**v))
-            .collect::<Vec<_>>();
-        let mut seq = serializer.serialize_seq(Some(values.len()))?;
+            .filter(|v| self.matches(**v));
+        let mut seq = serializer.serialize_seq(Some(values.clone().count()))?;
         for v in values {
-            seq.serialize_element(&v)?;
+            seq.serialize_element(v)?;
         }
         seq.end()
     }
