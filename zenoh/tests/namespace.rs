@@ -19,15 +19,15 @@ use std::time::Duration;
 use zenoh::{sample::Locality, Result as ZResult, Session};
 use zenoh_config::{ModeDependentValue, WhatAmI};
 use zenoh_core::ztimeout;
-use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
-use zenoh_macros::ke;
+use zenoh_keyexpr::{keyexpr, OwnedNonWildKeyExpr};
+use zenoh_macros::{ke, nonwild_ke};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
 
 async fn create_peer_client_pair(
     locator: &str,
-    namespaces: &[Option<OwnedKeyExpr>; 2],
+    namespaces: &[Option<OwnedNonWildKeyExpr>; 2],
 ) -> (Session, Session) {
     let config1 = {
         let mut config = zenoh::Config::default();
@@ -55,7 +55,7 @@ async fn create_peer_client_pair(
 
 async fn create_routed_clients_pair(
     locator: &str,
-    namespaces: &[Option<OwnedKeyExpr>; 2],
+    namespaces: &[Option<OwnedNonWildKeyExpr>; 2],
 ) -> (Session, Session, Session) {
     let config_router = {
         let mut config = zenoh::Config::default();
@@ -92,7 +92,7 @@ async fn create_routed_clients_pair(
     (session1, session2, router)
 }
 
-async fn create_local_session(namespace: Option<OwnedKeyExpr>) -> (Session, Session) {
+async fn create_local_session(namespace: Option<OwnedNonWildKeyExpr>) -> (Session, Session) {
     let config1 = {
         let mut config = zenoh::Config::default();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
@@ -217,7 +217,10 @@ async fn zenoh_namespace_pub_sub_peer_client_nested() -> ZResult<()> {
     zenoh_util::init_log_from_env_or("error");
     let (s1, s2) = ztimeout!(create_peer_client_pair(
         "tcp/127.0.0.1:19101",
-        &[Some(ke!("ext/ns1").to_owned()), Some(ke!("ext").to_owned())]
+        &[
+            Some(nonwild_ke!("ext/ns1").to_owned()),
+            Some(nonwild_ke!("ext").to_owned())
+        ]
     ));
     ztimeout!(zenoh_namespace_pub_sub_inner(
         s1,
@@ -230,8 +233,8 @@ async fn zenoh_namespace_pub_sub_peer_client_nested() -> ZResult<()> {
     let (s1, s2) = ztimeout!(create_peer_client_pair(
         "tcp/127.0.0.1:19101",
         &[
-            Some(ke!("ext/ns2").to_owned()),
-            Some(ke!("ext/ns2").to_owned())
+            Some(nonwild_ke!("ext/ns2").to_owned()),
+            Some(nonwild_ke!("ext/ns2").to_owned())
         ]
     ));
     ztimeout!(zenoh_namespace_pub_sub_inner(
@@ -244,7 +247,10 @@ async fn zenoh_namespace_pub_sub_peer_client_nested() -> ZResult<()> {
 
     let (s1, s2) = ztimeout!(create_peer_client_pair(
         "tcp/127.0.0.1:19101",
-        &[Some(ke!("ext").to_owned()), Some(ke!("ext/ns3").to_owned())]
+        &[
+            Some(nonwild_ke!("ext").to_owned()),
+            Some(nonwild_ke!("ext/ns3").to_owned())
+        ]
     ));
     ztimeout!(zenoh_namespace_pub_sub_inner(
         s1,
@@ -260,7 +266,9 @@ async fn zenoh_namespace_pub_sub_peer_client_nested() -> ZResult<()> {
 async fn zenoh_namespace_pub_sub_local_nested() -> ZResult<()> {
     zenoh_util::init_log_from_env_or("error");
 
-    let (s1, s2) = ztimeout!(create_local_session(Some(ke!("ext/ns4").to_owned())));
+    let (s1, s2) = ztimeout!(create_local_session(Some(
+        nonwild_ke!("ext/ns4").to_owned()
+    )));
     ztimeout!(zenoh_namespace_pub_sub_inner(
         s1,
         s2,
@@ -269,7 +277,9 @@ async fn zenoh_namespace_pub_sub_local_nested() -> ZResult<()> {
         Locality::Any
     ));
 
-    let (s1, s2) = ztimeout!(create_local_session(Some(ke!("ext/ns4").to_owned())));
+    let (s1, s2) = ztimeout!(create_local_session(Some(
+        nonwild_ke!("ext/ns4").to_owned()
+    )));
     ztimeout!(zenoh_namespace_pub_sub_inner(
         s1,
         s2,
@@ -285,7 +295,10 @@ async fn zenoh_namespace_pub_sub_routed_clients_nested() -> ZResult<()> {
     zenoh_util::init_log_from_env_or("error");
     let (s1, s2, _router) = ztimeout!(create_routed_clients_pair(
         "tcp/127.0.0.1:19103",
-        &[Some(ke!("ext/ns4").to_owned()), Some(ke!("ext").to_owned())]
+        &[
+            Some(nonwild_ke!("ext/ns4").to_owned()),
+            Some(nonwild_ke!("ext").to_owned())
+        ]
     ));
     ztimeout!(zenoh_namespace_pub_sub_inner(
         s1,
@@ -298,8 +311,8 @@ async fn zenoh_namespace_pub_sub_routed_clients_nested() -> ZResult<()> {
     let (s1, s2, _router) = ztimeout!(create_routed_clients_pair(
         "tcp/127.0.0.1:19105",
         &[
-            Some(ke!("ext/ns5").to_owned()),
-            Some(ke!("ext/ns5").to_owned())
+            Some(nonwild_ke!("ext/ns5").to_owned()),
+            Some(nonwild_ke!("ext/ns5").to_owned())
         ]
     ));
     ztimeout!(zenoh_namespace_pub_sub_inner(
@@ -312,7 +325,10 @@ async fn zenoh_namespace_pub_sub_routed_clients_nested() -> ZResult<()> {
 
     let (s1, s2, _router) = ztimeout!(create_routed_clients_pair(
         "tcp/127.0.0.1:19107",
-        &[Some(ke!("ext").to_owned()), Some(ke!("ext/ns6").to_owned())]
+        &[
+            Some(nonwild_ke!("ext").to_owned()),
+            Some(nonwild_ke!("ext/ns6").to_owned())
+        ]
     ));
     ztimeout!(zenoh_namespace_pub_sub_inner(
         s1,
@@ -329,7 +345,10 @@ async fn zenoh_namespace_queryable_get_peer_client_nested() -> ZResult<()> {
     zenoh_util::init_log_from_env_or("error");
     let (s1, s2) = ztimeout!(create_peer_client_pair(
         "tcp/127.0.0.1:19102",
-        &[Some(ke!("ext/ns1").to_owned()), Some(ke!("ext").to_owned())]
+        &[
+            Some(nonwild_ke!("ext/ns1").to_owned()),
+            Some(nonwild_ke!("ext").to_owned())
+        ]
     ));
     ztimeout!(zenoh_namespace_queryable_get_inner(
         s1,
@@ -342,8 +361,8 @@ async fn zenoh_namespace_queryable_get_peer_client_nested() -> ZResult<()> {
     let (s1, s2) = ztimeout!(create_peer_client_pair(
         "tcp/127.0.0.1:19102",
         &[
-            Some(ke!("ext/ns2").to_owned()),
-            Some(ke!("ext/ns2").to_owned())
+            Some(nonwild_ke!("ext/ns2").to_owned()),
+            Some(nonwild_ke!("ext/ns2").to_owned())
         ]
     ));
     ztimeout!(zenoh_namespace_queryable_get_inner(
@@ -356,7 +375,10 @@ async fn zenoh_namespace_queryable_get_peer_client_nested() -> ZResult<()> {
 
     let (s1, s2) = ztimeout!(create_peer_client_pair(
         "tcp/127.0.0.1:19102",
-        &[Some(ke!("ext").to_owned()), Some(ke!("ext/ns3").to_owned())]
+        &[
+            Some(nonwild_ke!("ext").to_owned()),
+            Some(nonwild_ke!("ext/ns3").to_owned())
+        ]
     ));
     ztimeout!(zenoh_namespace_queryable_get_inner(
         s1,
@@ -371,7 +393,9 @@ async fn zenoh_namespace_queryable_get_peer_client_nested() -> ZResult<()> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_namespace_queryable_get_local_nested() -> ZResult<()> {
     zenoh_util::init_log_from_env_or("error");
-    let (s1, s2) = ztimeout!(create_local_session(Some(ke!("ext/ns4").to_owned())));
+    let (s1, s2) = ztimeout!(create_local_session(Some(
+        nonwild_ke!("ext/ns4").to_owned()
+    )));
     ztimeout!(zenoh_namespace_queryable_get_inner(
         s1,
         s2,
@@ -380,7 +404,9 @@ async fn zenoh_namespace_queryable_get_local_nested() -> ZResult<()> {
         Locality::Any
     ));
 
-    let (s1, s2) = ztimeout!(create_local_session(Some(ke!("ext/ns4").to_owned())));
+    let (s1, s2) = ztimeout!(create_local_session(Some(
+        nonwild_ke!("ext/ns4").to_owned()
+    )));
     ztimeout!(zenoh_namespace_queryable_get_inner(
         s1,
         s2,
@@ -396,7 +422,10 @@ async fn zenoh_namespace_queryable_get_routed_clients_nested() -> ZResult<()> {
     zenoh_util::init_log_from_env_or("error");
     let (s1, s2, _router) = ztimeout!(create_routed_clients_pair(
         "tcp/127.0.0.1:19104",
-        &[Some(ke!("ext/ns4").to_owned()), Some(ke!("ext").to_owned())]
+        &[
+            Some(nonwild_ke!("ext/ns4").to_owned()),
+            Some(nonwild_ke!("ext").to_owned())
+        ]
     ));
     ztimeout!(zenoh_namespace_queryable_get_inner(
         s1,
@@ -409,8 +438,8 @@ async fn zenoh_namespace_queryable_get_routed_clients_nested() -> ZResult<()> {
     let (s1, s2, _router) = ztimeout!(create_routed_clients_pair(
         "tcp/127.0.0.1:19106",
         &[
-            Some(ke!("ext/ns5").to_owned()),
-            Some(ke!("ext/ns5").to_owned())
+            Some(nonwild_ke!("ext/ns5").to_owned()),
+            Some(nonwild_ke!("ext/ns5").to_owned())
         ]
     ));
     ztimeout!(zenoh_namespace_queryable_get_inner(
@@ -423,7 +452,10 @@ async fn zenoh_namespace_queryable_get_routed_clients_nested() -> ZResult<()> {
 
     let (s1, s2, _router) = ztimeout!(create_routed_clients_pair(
         "tcp/127.0.0.1:19108",
-        &[Some(ke!("ext").to_owned()), Some(ke!("ext/ns6").to_owned())]
+        &[
+            Some(nonwild_ke!("ext").to_owned()),
+            Some(nonwild_ke!("ext/ns6").to_owned())
+        ]
     ));
     ztimeout!(zenoh_namespace_queryable_get_inner(
         s1,
@@ -440,7 +472,7 @@ async fn zenoh_namespace_pub_sub_peer_client() -> ZResult<()> {
     zenoh_util::init_log_from_env_or("error");
     let (s1, s2) = ztimeout!(create_peer_client_pair(
         "tcp/127.0.0.1:19001",
-        &[Some(ke!("ns1").to_owned()), None]
+        &[Some(nonwild_ke!("ns1").to_owned()), None]
     ));
     ztimeout!(zenoh_namespace_pub_sub_inner(
         s1,
@@ -452,7 +484,10 @@ async fn zenoh_namespace_pub_sub_peer_client() -> ZResult<()> {
 
     let (s1, s2) = ztimeout!(create_peer_client_pair(
         "tcp/127.0.0.1:19001",
-        &[Some(ke!("ns2").to_owned()), Some(ke!("ns2").to_owned())]
+        &[
+            Some(nonwild_ke!("ns2").to_owned()),
+            Some(nonwild_ke!("ns2").to_owned())
+        ]
     ));
     ztimeout!(zenoh_namespace_pub_sub_inner(
         s1,
@@ -464,7 +499,7 @@ async fn zenoh_namespace_pub_sub_peer_client() -> ZResult<()> {
 
     let (s1, s2) = ztimeout!(create_peer_client_pair(
         "tcp/127.0.0.1:19001",
-        &[None, Some(ke!("ns3").to_owned())]
+        &[None, Some(nonwild_ke!("ns3").to_owned())]
     ));
     ztimeout!(zenoh_namespace_pub_sub_inner(
         s1,
@@ -479,7 +514,7 @@ async fn zenoh_namespace_pub_sub_peer_client() -> ZResult<()> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_namespace_pub_sub_local() -> ZResult<()> {
     zenoh_util::init_log_from_env_or("error");
-    let (s1, s2) = ztimeout!(create_local_session(Some(ke!("ns4").to_owned())));
+    let (s1, s2) = ztimeout!(create_local_session(Some(nonwild_ke!("ns4").to_owned())));
     ztimeout!(zenoh_namespace_pub_sub_inner(
         s1,
         s2,
@@ -488,7 +523,7 @@ async fn zenoh_namespace_pub_sub_local() -> ZResult<()> {
         Locality::Any
     ));
 
-    let (s1, s2) = ztimeout!(create_local_session(Some(ke!("ns4").to_owned())));
+    let (s1, s2) = ztimeout!(create_local_session(Some(nonwild_ke!("ns4").to_owned())));
     ztimeout!(zenoh_namespace_pub_sub_inner(
         s1,
         s2,
@@ -504,7 +539,7 @@ async fn zenoh_namespace_pub_sub_routed_clients() -> ZResult<()> {
     zenoh_util::init_log_from_env_or("error");
     let (s1, s2, _router) = ztimeout!(create_routed_clients_pair(
         "tcp/127.0.0.1:19003",
-        &[Some(ke!("ns4").to_owned()), None]
+        &[Some(nonwild_ke!("ns4").to_owned()), None]
     ));
     ztimeout!(zenoh_namespace_pub_sub_inner(
         s1,
@@ -516,7 +551,10 @@ async fn zenoh_namespace_pub_sub_routed_clients() -> ZResult<()> {
 
     let (s1, s2, _router) = ztimeout!(create_routed_clients_pair(
         "tcp/127.0.0.1:19005",
-        &[Some(ke!("ns5").to_owned()), Some(ke!("ns5").to_owned())]
+        &[
+            Some(nonwild_ke!("ns5").to_owned()),
+            Some(nonwild_ke!("ns5").to_owned())
+        ]
     ));
     ztimeout!(zenoh_namespace_pub_sub_inner(
         s1,
@@ -528,7 +566,7 @@ async fn zenoh_namespace_pub_sub_routed_clients() -> ZResult<()> {
 
     let (s1, s2, _router) = ztimeout!(create_routed_clients_pair(
         "tcp/127.0.0.1:19007",
-        &[None, Some(ke!("ns6").to_owned())]
+        &[None, Some(nonwild_ke!("ns6").to_owned())]
     ));
     ztimeout!(zenoh_namespace_pub_sub_inner(
         s1,
@@ -545,7 +583,7 @@ async fn zenoh_namespace_queryable_get_peer_client() -> ZResult<()> {
     zenoh_util::init_log_from_env_or("error");
     let (s1, s2) = ztimeout!(create_peer_client_pair(
         "tcp/127.0.0.1:19002",
-        &[Some(ke!("ns1").to_owned()), None]
+        &[Some(nonwild_ke!("ns1").to_owned()), None]
     ));
     ztimeout!(zenoh_namespace_queryable_get_inner(
         s1,
@@ -557,7 +595,10 @@ async fn zenoh_namespace_queryable_get_peer_client() -> ZResult<()> {
 
     let (s1, s2) = ztimeout!(create_peer_client_pair(
         "tcp/127.0.0.1:19002",
-        &[Some(ke!("ns2").to_owned()), Some(ke!("ns2").to_owned())]
+        &[
+            Some(nonwild_ke!("ns2").to_owned()),
+            Some(nonwild_ke!("ns2").to_owned())
+        ]
     ));
     ztimeout!(zenoh_namespace_queryable_get_inner(
         s1,
@@ -569,7 +610,7 @@ async fn zenoh_namespace_queryable_get_peer_client() -> ZResult<()> {
 
     let (s1, s2) = ztimeout!(create_peer_client_pair(
         "tcp/127.0.0.1:19002",
-        &[None, Some(ke!("ns3").to_owned())]
+        &[None, Some(nonwild_ke!("ns3").to_owned())]
     ));
     ztimeout!(zenoh_namespace_queryable_get_inner(
         s1,
@@ -584,7 +625,7 @@ async fn zenoh_namespace_queryable_get_peer_client() -> ZResult<()> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_namespace_queryable_get_local() -> ZResult<()> {
     zenoh_util::init_log_from_env_or("error");
-    let (s1, s2) = ztimeout!(create_local_session(Some(ke!("ns4").to_owned())));
+    let (s1, s2) = ztimeout!(create_local_session(Some(nonwild_ke!("ns4").to_owned())));
     ztimeout!(zenoh_namespace_queryable_get_inner(
         s1,
         s2,
@@ -593,7 +634,7 @@ async fn zenoh_namespace_queryable_get_local() -> ZResult<()> {
         Locality::Any
     ));
 
-    let (s1, s2) = ztimeout!(create_local_session(Some(ke!("ns4").to_owned())));
+    let (s1, s2) = ztimeout!(create_local_session(Some(nonwild_ke!("ns4").to_owned())));
     ztimeout!(zenoh_namespace_queryable_get_inner(
         s1,
         s2,
@@ -609,7 +650,7 @@ async fn zenoh_namespace_queryable_get_routed_clients() -> ZResult<()> {
     zenoh_util::init_log_from_env_or("error");
     let (s1, s2, _router) = ztimeout!(create_routed_clients_pair(
         "tcp/127.0.0.1:19004",
-        &[Some(ke!("ns4").to_owned()), None]
+        &[Some(nonwild_ke!("ns4").to_owned()), None]
     ));
     ztimeout!(zenoh_namespace_queryable_get_inner(
         s1,
@@ -621,7 +662,10 @@ async fn zenoh_namespace_queryable_get_routed_clients() -> ZResult<()> {
 
     let (s1, s2, _router) = ztimeout!(create_routed_clients_pair(
         "tcp/127.0.0.1:19006",
-        &[Some(ke!("ns5").to_owned()), Some(ke!("ns5").to_owned())]
+        &[
+            Some(nonwild_ke!("ns5").to_owned()),
+            Some(nonwild_ke!("ns5").to_owned())
+        ]
     ));
     ztimeout!(zenoh_namespace_queryable_get_inner(
         s1,
@@ -633,7 +677,7 @@ async fn zenoh_namespace_queryable_get_routed_clients() -> ZResult<()> {
 
     let (s1, s2, _router) = ztimeout!(create_routed_clients_pair(
         "tcp/127.0.0.1:19008",
-        &[None, Some(ke!("ns6").to_owned())]
+        &[None, Some(nonwild_ke!("ns6").to_owned())]
     ));
     ztimeout!(zenoh_namespace_queryable_get_inner(
         s1,

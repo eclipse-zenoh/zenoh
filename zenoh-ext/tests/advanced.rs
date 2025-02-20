@@ -12,19 +12,19 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use zenoh::{key_expr::OwnedKeyExpr, sample::SampleKind};
+use zenoh::{key_expr::OwnedNonWildKeyExpr, sample::SampleKind};
 use zenoh_config::{EndPoint, ModeDependentValue, WhatAmI};
 use zenoh_ext::{
     AdvancedPublisherBuilderExt, AdvancedSubscriberBuilderExt, CacheConfig, HistoryConfig,
     MissDetectionConfig, RecoveryConfig,
 };
-use zenoh_macros::ke;
+use zenoh_macros::nonwild_ke;
 
 async fn test_advanced_history_inner(
     pub_ke: &str,
     sub_ke: &str,
-    pub_namespace: Option<OwnedKeyExpr>,
-    sub_namespace: Option<OwnedKeyExpr>,
+    pub_namespace: Option<OwnedNonWildKeyExpr>,
+    sub_namespace: Option<OwnedNonWildKeyExpr>,
     endpoint: &str,
 ) {
     use std::time::Duration;
@@ -125,7 +125,7 @@ async fn test_advanced_history() {
     test_advanced_history_inner(
         "test/advanced/history",
         "ns/test/advanced/history",
-        Some(ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
         None,
         "tcp/localhost:27051",
     )
@@ -134,15 +134,15 @@ async fn test_advanced_history() {
         "ns/test/advanced/history",
         "test/advanced/history",
         None,
-        Some(ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
         "tcp/localhost:27052",
     )
     .await;
     test_advanced_history_inner(
         "test/advanced/history",
         "test/advanced/history",
-        Some(ke!("ns").into()),
-        Some(ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
         "tcp/localhost:27053",
     )
     .await;
@@ -151,8 +151,8 @@ async fn test_advanced_history() {
 async fn test_advanced_retransmission_inner(
     pub_ke: &str,
     sub_ke: &str,
-    pub_namespace: Option<OwnedKeyExpr>,
-    sub_namespace: Option<OwnedKeyExpr>,
+    pub_namespace: Option<OwnedNonWildKeyExpr>,
+    sub_namespace: Option<OwnedNonWildKeyExpr>,
     endpoint: &str,
 ) {
     use std::time::Duration;
@@ -294,7 +294,7 @@ async fn test_advanced_retransmission() {
     test_advanced_retransmission_inner(
         "test/advanced/retransmission",
         "ns/test/advanced/retransmission",
-        Some(ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
         None,
         "tcp/localhost:27055",
     )
@@ -303,15 +303,15 @@ async fn test_advanced_retransmission() {
         "ns/test/advanced/retransmission",
         "test/advanced/retransmission",
         None,
-        Some(ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
         "tcp/localhost:27056",
     )
     .await;
     test_advanced_retransmission_inner(
         "test/advanced/retransmission",
         "test/advanced/retransmission",
-        Some(ke!("ns").into()),
-        Some(ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
         "tcp/localhost:27057",
     )
     .await;
@@ -320,8 +320,8 @@ async fn test_advanced_retransmission() {
 async fn test_advanced_retransmission_periodic_inner(
     pub_ke: &str,
     sub_ke: &str,
-    pub_namespace: Option<OwnedKeyExpr>,
-    sub_namespace: Option<OwnedKeyExpr>,
+    pub_namespace: Option<OwnedNonWildKeyExpr>,
+    sub_namespace: Option<OwnedNonWildKeyExpr>,
     endpoint: &str,
 ) {
     use std::time::Duration;
@@ -456,7 +456,7 @@ async fn test_advanced_retransmission_periodic() {
     test_advanced_retransmission_periodic_inner(
         "test/advanced/retransmission/periodic",
         "ns/test/advanced/retransmission/periodic",
-        Some(ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
         None,
         "tcp/localhost:27059",
     )
@@ -465,15 +465,15 @@ async fn test_advanced_retransmission_periodic() {
         "ns/test/advanced/retransmission/periodic",
         "test/advanced/retransmission/periodic",
         None,
-        Some(ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
         "tcp/localhost:27060",
     )
     .await;
     test_advanced_retransmission_periodic_inner(
         "test/advanced/retransmission/periodic",
         "test/advanced/retransmission/periodic",
-        Some(ke!("ns").into()),
-        Some(ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
         "tcp/localhost:27061",
     )
     .await;
@@ -482,8 +482,8 @@ async fn test_advanced_retransmission_periodic() {
 async fn test_advanced_sample_miss_inner(
     pub_ke: &str,
     sub_ke: &str,
-    pub_namespace: Option<OwnedKeyExpr>,
-    sub_namespace: Option<OwnedKeyExpr>,
+    pub_namespace: Option<OwnedNonWildKeyExpr>,
+    sub_namespace: Option<OwnedNonWildKeyExpr>,
     endpoint: &str,
 ) {
     use std::time::Duration;
@@ -614,7 +614,7 @@ async fn test_advanced_sample_miss() {
     test_advanced_sample_miss_inner(
         "test/advanced/sample_miss",
         "ns/test/advanced/sample_miss",
-        Some(ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
         None,
         "tcp/localhost:27063",
     )
@@ -623,15 +623,15 @@ async fn test_advanced_sample_miss() {
         "ns/test/advanced/sample_miss",
         "test/advanced/sample_miss",
         None,
-        Some(ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
         "tcp/localhost:27064",
     )
     .await;
     test_advanced_sample_miss_inner(
         "test/advanced/sample_miss",
         "test/advanced/sample_miss",
-        Some(ke!("ns").into()),
-        Some(ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
         "tcp/localhost:27065",
     )
     .await;
@@ -640,8 +640,8 @@ async fn test_advanced_sample_miss() {
 async fn test_advanced_retransmission_sample_miss_inner(
     pub_ke: &str,
     sub_ke: &str,
-    pub_namespace: Option<OwnedKeyExpr>,
-    sub_namespace: Option<OwnedKeyExpr>,
+    pub_namespace: Option<OwnedNonWildKeyExpr>,
+    sub_namespace: Option<OwnedNonWildKeyExpr>,
     endpoint: &str,
 ) {
     use std::time::Duration;
@@ -782,7 +782,7 @@ async fn test_advanced_retransmission_sample_miss() {
     test_advanced_retransmission_sample_miss_inner(
         "test/advanced/retransmission/sample_miss",
         "ns/test/advanced/retransmission/sample_miss",
-        Some(ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
         None,
         "tcp/localhost:27067",
     )
@@ -791,15 +791,15 @@ async fn test_advanced_retransmission_sample_miss() {
         "ns/test/advanced/retransmission/sample_miss",
         "test/advanced/retransmission/sample_miss",
         None,
-        Some(ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
         "tcp/localhost:27068",
     )
     .await;
     test_advanced_retransmission_sample_miss_inner(
         "test/advanced/retransmission/sample_miss",
         "test/advanced/retransmission/sample_miss",
-        Some(ke!("ns").into()),
-        Some(ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
         "tcp/localhost:27069",
     )
     .await;
@@ -808,8 +808,8 @@ async fn test_advanced_retransmission_sample_miss() {
 async fn test_advanced_late_joiner_inner(
     pub_ke: &str,
     sub_ke: &str,
-    pub_namespace: Option<OwnedKeyExpr>,
-    sub_namespace: Option<OwnedKeyExpr>,
+    pub_namespace: Option<OwnedNonWildKeyExpr>,
+    sub_namespace: Option<OwnedNonWildKeyExpr>,
     endpoint: &str,
 ) {
     use std::time::Duration;
@@ -928,7 +928,7 @@ async fn test_advanced_late_joiner() {
     test_advanced_late_joiner_inner(
         "test/advanced/late_joiner",
         "ns/test/advanced/late_joiner",
-        Some(ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
         None,
         "tcp/localhost:27071",
     )
@@ -937,15 +937,15 @@ async fn test_advanced_late_joiner() {
         "ns/test/advanced/late_joiner",
         "test/advanced/late_joiner",
         None,
-        Some(ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
         "tcp/localhost:27072",
     )
     .await;
     test_advanced_late_joiner_inner(
         "test/advanced/late_joiner",
         "test/advanced/late_joiner",
-        Some(ke!("ns").into()),
-        Some(ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
         "tcp/localhost:27073",
     )
     .await;
@@ -954,8 +954,8 @@ async fn test_advanced_late_joiner() {
 async fn test_advanced_retransmission_heartbeat_inner(
     pub_ke: &str,
     sub_ke: &str,
-    pub_namespace: Option<OwnedKeyExpr>,
-    sub_namespace: Option<OwnedKeyExpr>,
+    pub_namespace: Option<OwnedNonWildKeyExpr>,
+    sub_namespace: Option<OwnedNonWildKeyExpr>,
     endpoint: &str,
 ) {
     use std::time::Duration;
@@ -1091,7 +1091,7 @@ async fn test_advanced_retransmission_heartbeat() {
     test_advanced_retransmission_heartbeat_inner(
         "test/advanced/retransmission/heartbeat",
         "ns/test/advanced/retransmission/heartbeat",
-        Some(ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
         None,
         "tcp/localhost:27075",
     )
@@ -1100,15 +1100,15 @@ async fn test_advanced_retransmission_heartbeat() {
         "ns/test/advanced/retransmission/heartbeat",
         "test/advanced/retransmission/heartbeat",
         None,
-        Some(ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
         "tcp/localhost:27076",
     )
     .await;
     test_advanced_retransmission_heartbeat_inner(
         "test/advanced/retransmission/heartbeat",
         "test/advanced/retransmission/heartbeat",
-        Some(ke!("ns").into()),
-        Some(ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
+        Some(nonwild_ke!("ns").into()),
         "tcp/localhost:27077",
     )
     .await;

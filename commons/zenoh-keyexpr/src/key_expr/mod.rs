@@ -21,7 +21,7 @@ pub(crate) const STAR_DSL: &[u8] = b"$*";
 pub(crate) const FORBIDDEN_CHARS: [u8; 3] = [b'#', b'?', b'$'];
 
 pub(crate) mod owned;
-pub use owned::OwnedKeyExpr;
+pub use owned::{OwnedKeyExpr, OwnedNonWildKeyExpr};
 
 pub(crate) mod borrowed;
 pub use borrowed::*;

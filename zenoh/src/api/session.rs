@@ -35,7 +35,7 @@ use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::{qos::PublisherQoSConfig, unwrap_or_default, wrappers::ZenohId};
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Wait};
-use zenoh_keyexpr::keyexpr_tree::KeBoxTree;
+use zenoh_keyexpr::{keyexpr_tree::KeBoxTree, OwnedNonWildKeyExpr};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::network::declare::SubscriberId;
 use zenoh_protocol::{
@@ -843,7 +843,7 @@ impl Session {
     /// Prepend session's namespace (if any) to the specified key expression.
     pub fn apply_namespace_prefix<'a>(&self, key_expr: KeyExpr<'a>) -> KeyExpr<'a> {
         match self.0.namespace() {
-            Some(ns) => (ns.namespace_prefix() / &key_expr).into(),
+            Some(ns) => (ns.namespace_prefix() / key_expr.deref()).into(),
             None => key_expr,
         }
     }
@@ -2019,7 +2019,7 @@ impl SessionInner {
     ) -> ZResult<MatchingStatus> {
         if let Some(ns) = self.namespace() {
             self.matching_status_remote_inner(
-                &(ns.namespace_prefix() / key_expr).into(),
+                &(ns.namespace_prefix() / key_expr.deref()).into(),
                 destination,
                 matching_type,
             )
@@ -3302,7 +3302,7 @@ impl Closeable for Session {
 
 static IGNORE_NAMESPACE_PREFIX: char = '@'; // admin space and advanced
 pub(crate) struct Namespace {
-    namespace: OwnedKeyExpr,
+    namespace: OwnedNonWildKeyExpr,
     incomplete_ingress_keyexpr_declarations: RwLock<HashMap<u16, String>>,
     blocked_subscribers: RwLock<HashSet<u32>>,
     blocked_queryables: RwLock<HashSet<u32>>,
@@ -3311,7 +3311,7 @@ pub(crate) struct Namespace {
 }
 
 impl Namespace {
-    fn new(namespace: OwnedKeyExpr) -> Self {
+    fn new(namespace: OwnedNonWildKeyExpr) -> Self {
         Namespace {
             namespace,
             incomplete_ingress_keyexpr_declarations: HashMap::new().into(),
@@ -3367,7 +3367,7 @@ impl Namespace {
 
         let key = key_expr.suffix.as_ref();
         let ke = unsafe { keyexpr::from_str_unchecked(key) };
-        if let Some(tail) = ke.strip_namespace_prefix(&self.namespace) {
+        if let Some(tail) = ke.strip_nonwild_prefix(&self.namespace) {
             key_expr.suffix = tail.as_str().to_owned().into();
 
             true
@@ -3380,7 +3380,7 @@ impl Namespace {
             }
             false
         } else {
-            trace!("Rejecting message containing wire expression `{}`, since it does not match namespace `{}`", &key_expr, self.namespace);
+            trace!("Rejecting message containing wire expression `{}`, since it does not match namespace `{}`", &key_expr, self.namespace.as_ref());
             false
         }
     }
@@ -3508,7 +3508,7 @@ impl Namespace {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn namespace_prefix(&self) -> &OwnedKeyExpr {
+    pub(crate) fn namespace_prefix(&self) -> &OwnedNonWildKeyExpr {
         &self.namespace
     }
 }

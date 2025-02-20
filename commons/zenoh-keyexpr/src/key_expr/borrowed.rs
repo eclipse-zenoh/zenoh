@@ -27,7 +27,7 @@ use core::{
 
 use zenoh_result::{bail, Error as ZError, ZResult};
 
-use super::{canon::Canonize, OwnedKeyExpr, FORBIDDEN_CHARS};
+use super::{canon::Canonize, OwnedKeyExpr, OwnedNonWildKeyExpr, FORBIDDEN_CHARS};
 
 /// A [`str`] newtype that is statically known to be a valid key expression.
 ///
@@ -289,7 +289,7 @@ impl keyexpr {
     /// Prefix can not contain '*' character.
     #[cfg(feature = "internal")]
     #[doc(hidden)]
-    pub fn strip_namespace_prefix(&self, prefix: &Self) -> Option<&keyexpr> {
+    pub fn strip_nonwild_prefix(&self, prefix: &nonwild_keyexpr) -> Option<&keyexpr> {
         fn is_chunk_matching(target: &[u8], prefix: &[u8]) -> bool {
             let mut target_idx: usize = 0;
             let mut prefix_idx: usize = 0;
@@ -840,6 +840,66 @@ impl ToOwned for keyexpr {
     }
 }
 
+/// A keyexpr that is statically known not to contain any wild chunks.
+#[allow(non_camel_case_types)]
+#[repr(transparent)]
+#[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub struct nonwild_keyexpr(keyexpr);
+
+impl nonwild_keyexpr {
+    /// Attempts to construct a non-wild key expression from anything convertible to keyexpression.
+    ///
+    /// Will return an Err if `t` isn't a valid key expression.
+    pub fn new<'a, T, E>(t: &'a T) -> Result<&'a Self, ZError>
+    where
+        &'a keyexpr: TryFrom<&'a T, Error = E>,
+        E: Into<ZError>,
+        T: ?Sized,
+    {
+        let ke: &'a keyexpr = t.try_into().map_err(|e: E| e.into())?;
+        ke.try_into()
+    }
+
+    /// # Safety
+    /// This constructs a [`nonwild_keyexpr`] without ensuring that it is a valid key-expression without wild chunks.
+    ///
+    /// Much like [`core::str::from_utf8_unchecked`], this is memory-safe, but calling this without maintaining
+    /// [`nonwild_keyexpr`]'s invariants yourself may lead to unexpected behaviors, the Zenoh network dropping your messages.
+    pub const unsafe fn from_str_unchecked(s: &str) -> &Self {
+        core::mem::transmute(s)
+    }
+}
+
+impl Deref for nonwild_keyexpr {
+    type Target = keyexpr;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'a> TryFrom<&'a keyexpr> for &'a nonwild_keyexpr {
+    type Error = ZError;
+    fn try_from(value: &'a keyexpr) -> Result<Self, Self::Error> {
+        if value.is_wild_impl() {
+            bail!("nonwild_keyexpr can not contain any wild chunks")
+        }
+        Ok(unsafe { core::mem::transmute::<&keyexpr, &nonwild_keyexpr>(value) })
+    }
+}
+
+impl Borrow<nonwild_keyexpr> for OwnedNonWildKeyExpr {
+    fn borrow(&self) -> &nonwild_keyexpr {
+        self
+    }
+}
+
+impl ToOwned for nonwild_keyexpr {
+    type Owned = OwnedNonWildKeyExpr;
+    fn to_owned(&self) -> Self::Owned {
+        OwnedNonWildKeyExpr::from(self)
+    }
+}
+
 #[test]
 fn test_keyexpr_strip_prefix() {
     let expectations = [
@@ -882,7 +942,7 @@ fn test_keyexpr_strip_prefix() {
 }
 
 #[test]
-fn test_keyexpr_strip_namespace_prefix() {
+fn test_keyexpr_strip_nonwild_prefix() {
     let expectations = [
         (("demo/example/test/**", "demo/example/test"), Some("**")),
         (("demo/example/**", "demo/example/test"), Some("**")),
@@ -914,12 +974,12 @@ fn test_keyexpr_strip_namespace_prefix() {
     ]
     .map(|((a, b), expected)| {
         (
-            (keyexpr::new(a).unwrap(), keyexpr::new(b).unwrap()),
+            (keyexpr::new(a).unwrap(), nonwild_keyexpr::new(b).unwrap()),
             expected.map(|t| keyexpr::new(t).unwrap()),
         )
     });
     for ((ke, prefix), expected) in expectations {
         dbg!(ke, prefix);
-        assert_eq!(ke.strip_namespace_prefix(prefix), expected)
+        assert_eq!(ke.strip_nonwild_prefix(prefix), expected)
     }
 }
