@@ -1534,6 +1534,19 @@ impl SessionInner {
         }
     }
 
+    pub(crate) fn optimize_key_expression(&self, key_expr: &KeyExpr) -> ZResult<WireExpr<'static>> {
+        let ke = key_expr.as_keyexpr();
+        if let Some(prefix) = ke.get_nonwild_prefix() {
+            let expr_id = self.declare_prefix(prefix.as_str()).wait()?;
+            return Ok(WireExpr {
+                scope: expr_id,
+                suffix: key_expr.as_str()[prefix.len()..].to_string().into(),
+                mapping: Mapping::Sender,
+            });
+        }
+        Ok(key_expr.to_wire(self).to_owned())
+    }
+
     pub(crate) fn declare_subscriber_inner(
         self: &Arc<Self>,
         key_expr: &KeyExpr,
@@ -1547,28 +1560,7 @@ impl SessionInner {
         if let Some(key_expr) = declared_sub {
             let primitives = state.primitives()?;
             drop(state);
-            // If key_expr is a pure Expr, remap it to optimal Rid or RidWithSuffix
-            // let key_expr = if !key_expr.is_optimized(self) {
-            //     match key_expr.as_str().find('*') {
-            //         Some(0) => key_expr.to_wire(self),
-            //         Some(pos) => {
-            //             let expr_id = self.declare_prefix(&key_expr.as_str()[..pos]).wait();
-            //             WireExpr {
-            //                 scope: expr_id,
-            //                 suffix: std::borrow::Cow::Borrowed(&key_expr.as_str()[pos..]),
-            //             }
-            //         }
-            //         None => {
-            //             let expr_id = self.declare_prefix(key_expr.as_str()).wait();
-            //             WireExpr {
-            //                 scope: expr_id,
-            //                 suffix: std::borrow::Cow::Borrowed(""),
-            //             }
-            //         }
-            //     }
-            // } else {
-            //     key_expr.to_wire(self)
-            // };
+            let wire_expr = self.optimize_key_expression(&key_expr)?;
 
             self.send_declare_with_namespace(
                 &primitives,
@@ -1577,10 +1569,7 @@ impl SessionInner {
                     ext_qos: declare::ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                        id,
-                        wire_expr: key_expr.to_wire(self).to_owned(),
-                    }),
+                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber { id, wire_expr }),
                 },
             );
             #[cfg(feature = "unstable")]
@@ -1736,6 +1725,7 @@ impl SessionInner {
                 complete,
                 distance: 0,
             };
+            let wire_expr = self.optimize_key_expression(key_expr)?;
             self.send_declare_with_namespace(
                 &primitives,
                 Declare {
@@ -1745,7 +1735,7 @@ impl SessionInner {
                     ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                     body: DeclareBody::DeclareQueryable(DeclareQueryable {
                         id,
-                        wire_expr: wire_expr.to_owned(),
+                        wire_expr,
                         ext_info: qabl_info,
                     }),
                 },
@@ -3337,9 +3327,10 @@ impl Namespace {
             // non - optimized ke
             let key = key_expr.suffix.as_ref();
             if !key.starts_with(IGNORE_NAMESPACE_PREFIX) {
-                key_expr.suffix = std::borrow::Cow::Owned(
-                    (self.namespace.join(key).unwrap().as_str()).to_string(),
-                );
+                key_expr.suffix = std::borrow::Cow::Owned(match key.is_empty() {
+                    true => self.namespace.as_str().to_owned(), // a case where only a namespace was declared
+                    false => self.namespace.as_str().to_owned() + "/" + key,
+                });
             }
         }
         // already optimized ke, given that all of the ke declarations pass through this functions
@@ -3360,7 +3351,7 @@ impl Namespace {
                         return false;
                     }
                     key_expr.scope = EMPTY_EXPR_ID;
-                    key_expr.suffix = (head.clone() + "/" + key_expr.suffix.as_ref()).into();
+                    key_expr.suffix = (head.clone() + key_expr.suffix.as_ref()).into();
                     return self.handle_namespace_ingress(key_expr, None);
                 }
                 None => return true,

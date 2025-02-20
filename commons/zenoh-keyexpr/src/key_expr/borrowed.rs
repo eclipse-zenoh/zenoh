@@ -348,7 +348,7 @@ impl keyexpr {
                 return unsafe { Some(keyexpr::from_str_unchecked(&self.0[target_idx..])) };
             }
             if target_end == target_bytes.len() {
-                // target contains no more chunks than prefix and the last one is non double-wild - so it can non match
+                // target contains no more chunks than prefix and the last one is non double-wild - so it can not match
                 return None;
             }
             if !is_chunk_matching(target_chunk, prefix_chunk) {
