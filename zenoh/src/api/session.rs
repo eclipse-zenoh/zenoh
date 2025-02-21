@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
+    collections::{hash_map::Entry, HashMap},
     convert::TryInto,
     fmt,
     ops::Deref,
@@ -24,6 +24,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use once_cell::sync::OnceCell;
 #[zenoh_macros::internal]
 use ref_cast::ref_cast_custom;
 use ref_cast::RefCastCustom;
@@ -110,7 +111,10 @@ use crate::{
     },
     net::{
         primitives::Primitives,
-        routing::dispatcher::face::Face,
+        routing::{
+            dispatcher::face::Face,
+            namespace::{ENamespace, Namespace},
+        },
         runtime::{Runtime, RuntimeBuilder},
     },
     query::ReplyError,
@@ -125,8 +129,8 @@ zconfigurable! {
 }
 
 pub(crate) struct SessionState {
-    pub(crate) primitives: Option<Arc<Face>>, // @TODO replace with MaybeUninit ??
-    pub(crate) expr_id_counter: AtomicExprId, // @TODO: manage rollover and uniqueness
+    pub(crate) primitives: Option<Arc<dyn Primitives>>, // @TODO replace with MaybeUninit ??
+    pub(crate) expr_id_counter: AtomicExprId,           // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicRequestId,
     pub(crate) liveliness_qid_counter: AtomicRequestId,
     pub(crate) local_resources: HashMap<ExprId, Resource>,
@@ -190,7 +194,7 @@ impl SessionState {
 
 impl SessionState {
     #[inline]
-    pub(crate) fn primitives(&self) -> ZResult<Arc<Face>> {
+    pub(crate) fn primitives(&self) -> ZResult<Arc<dyn Primitives>> {
         self.primitives
             .as_ref()
             .cloned()
@@ -527,8 +531,11 @@ pub(crate) struct SessionInner {
     pub(crate) state: RwLock<SessionState>,
     pub(crate) id: u16,
     owns_runtime: bool,
-    pub(crate) namespace: Option<Namespace>,
     task_controller: TaskController,
+    #[cfg(feature = "unstable")]
+    namespace: Option<OwnedNonWildKeyExpr>,
+    #[cfg(feature = "unstable")]
+    face_id: OnceCell<usize>,
 }
 
 impl fmt::Debug for SessionInner {
@@ -690,14 +697,32 @@ impl Session {
                 state,
                 id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
                 owns_runtime,
-                namespace: namespace.map(Namespace::new),
                 task_controller: TaskController::default(),
+                #[cfg(feature = "unstable")]
+                namespace: namespace.clone(),
+                #[cfg(feature = "unstable")]
+                face_id: OnceCell::new(),
             }));
 
             runtime.new_handler(Arc::new(admin::Handler::new(session.downgrade())));
 
-            let primitives = Some(router.new_primitives(Arc::new(session.downgrade())));
-            zwrite!(session.0.state).primitives = primitives;
+            let primitives: Arc<dyn Primitives> = match namespace {
+                Some(ns) => {
+                    let face = router.new_primitives(Arc::new(ENamespace::new(
+                        ns.clone(),
+                        Arc::new(session.downgrade()),
+                    )));
+                    session.0.face_id.set(face.state.id).unwrap(); // this is the only attempt to set value
+                    Arc::new(Namespace::new(ns, face))
+                }
+                None => {
+                    let face = router.new_primitives(Arc::new(session.downgrade()));
+                    session.0.face_id.set(face.state.id).unwrap(); // this is the only attempt to set value
+                    face
+                }
+            };
+
+            zwrite!(session.0.state).primitives = Some(primitives);
 
             admin::init(session.downgrade());
 
@@ -839,14 +864,6 @@ impl Session {
 }
 
 impl Session {
-    #[cfg(feature = "internal")]
-    /// Prepend session's namespace (if any) to the specified key expression.
-    pub fn apply_namespace_prefix<'a>(&self, key_expr: KeyExpr<'a>) -> KeyExpr<'a> {
-        match self.0.namespace() {
-            Some(ns) => (ns.namespace_prefix() / key_expr.deref()).into(),
-            None => key_expr,
-        }
-    }
     /// Get information about the zenoh [`Session`](Session).
     ///
     /// # Examples
@@ -1268,48 +1285,6 @@ impl SessionInner {
         self.runtime.zid()
     }
 
-    pub(crate) fn namespace(&self) -> Option<&Namespace> {
-        self.namespace.as_ref()
-    }
-
-    fn send_interest_with_namespace(&self, primitives: &Arc<Face>, mut msg: Interest) {
-        if let Some(ns) = self.namespace() {
-            ns.handle_interest_egress(&mut msg);
-        }
-        primitives.send_interest(msg);
-    }
-
-    fn send_declare_with_namespace(&self, primitives: &Arc<Face>, mut msg: Declare) {
-        if let Some(ns) = self.namespace() {
-            ns.handle_declare_egress(&mut msg);
-        }
-        primitives.send_declare(msg);
-    }
-
-    fn send_request_with_namespace(&self, primitives: &Arc<Face>, mut msg: Request) {
-        if let Some(ns) = self.namespace() {
-            ns.handle_request_egress(&mut msg);
-        }
-        primitives.send_request(msg);
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn send_push_lazy_with_namespace(
-        &self,
-        primitives: &Arc<Face>,
-        mut wire_expr: WireExpr,
-        qos: push::ext::QoSType,
-        ext_tstamp: Option<push::ext::TimestampType>,
-        ext_nodeid: push::ext::NodeIdType,
-        body: impl FnOnce() -> PushBody,
-        reliability: Reliability,
-    ) {
-        if let Some(ns) = self.namespace() {
-            ns.handle_namespace_egress(&mut wire_expr, false);
-        }
-        primitives.send_push_lazy(wire_expr, qos, ext_tstamp, ext_nodeid, body, reliability);
-    }
-
     pub(crate) fn declare_prefix<'a>(
         &'a self,
         prefix: &'a str,
@@ -1341,23 +1316,20 @@ impl SessionInner {
                     }
                     state.local_resources.insert(expr_id, res);
                     drop(state);
-                    self.send_declare_with_namespace(
-                        &primitives,
-                        Declare {
-                            interest_id: None,
-                            ext_qos: declare::ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
-                                id: expr_id,
-                                wire_expr: WireExpr {
-                                    scope: 0,
-                                    suffix: prefix.to_owned().into(),
-                                    mapping: Mapping::Sender,
-                                },
-                            }),
-                        },
-                    );
+                    primitives.send_declare(Declare {
+                        interest_id: None,
+                        ext_qos: declare::ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+                            id: expr_id,
+                            wire_expr: WireExpr {
+                                scope: 0,
+                                suffix: prefix.to_owned().into(),
+                                mapping: Mapping::Sender,
+                            },
+                        }),
+                    });
                     Ok(expr_id)
                 }
             }
@@ -1417,18 +1389,15 @@ impl SessionInner {
         if let Some(res) = declared_pub {
             let primitives = state.primitives()?;
             drop(state);
-            self.send_interest_with_namespace(
-                &primitives,
-                Interest {
-                    id,
-                    mode: InterestMode::CurrentFuture,
-                    options: InterestOptions::KEYEXPRS + InterestOptions::SUBSCRIBERS,
-                    wire_expr: Some(res.to_wire(self).to_owned()),
-                    ext_qos: network::ext::QoSType::DEFAULT,
-                    ext_tstamp: None,
-                    ext_nodeid: network::ext::NodeIdType::DEFAULT,
-                },
-            );
+            primitives.send_interest(Interest {
+                id,
+                mode: InterestMode::CurrentFuture,
+                options: InterestOptions::KEYEXPRS + InterestOptions::SUBSCRIBERS,
+                wire_expr: Some(res.to_wire(self).to_owned()),
+                ext_qos: network::ext::QoSType::DEFAULT,
+                ext_tstamp: None,
+                ext_nodeid: network::ext::NodeIdType::DEFAULT,
+            });
         }
         Ok(id)
     }
@@ -1447,20 +1416,17 @@ impl SessionInner {
                     p.destination != Locality::SessionLocal && p.remote_id == pub_state.remote_id
                 }) {
                     drop(state);
-                    self.send_interest_with_namespace(
-                        &primitives,
-                        Interest {
-                            id: pub_state.remote_id,
-                            mode: InterestMode::Final,
-                            // Note: InterestMode::Final options are undefined in the current protocol specification,
-                            //       they are initialized here for internal use by local egress interceptors.
-                            options: InterestOptions::SUBSCRIBERS,
-                            wire_expr: None,
-                            ext_qos: declare::ext::QoSType::DEFAULT,
-                            ext_tstamp: None,
-                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                        },
-                    );
+                    primitives.send_interest(Interest {
+                        id: pub_state.remote_id,
+                        mode: InterestMode::Final,
+                        // Note: InterestMode::Final options are undefined in the current protocol specification,
+                        //       they are initialized here for internal use by local egress interceptors.
+                        options: InterestOptions::SUBSCRIBERS,
+                        wire_expr: None,
+                        ext_qos: declare::ext::QoSType::DEFAULT,
+                        ext_tstamp: None,
+                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                    });
                 }
             }
             Ok(())
@@ -1482,18 +1448,15 @@ impl SessionInner {
         if let Some(res) = declared_querier {
             let primitives = state.primitives()?;
             drop(state);
-            self.send_interest_with_namespace(
-                &primitives,
-                Interest {
-                    id,
-                    mode: InterestMode::CurrentFuture,
-                    options: InterestOptions::KEYEXPRS + InterestOptions::QUERYABLES,
-                    wire_expr: Some(res.to_wire(self).to_owned()),
-                    ext_qos: network::ext::QoSType::DEFAULT,
-                    ext_tstamp: None,
-                    ext_nodeid: network::ext::NodeIdType::DEFAULT,
-                },
-            );
+            primitives.send_interest(Interest {
+                id,
+                mode: InterestMode::CurrentFuture,
+                options: InterestOptions::KEYEXPRS + InterestOptions::QUERYABLES,
+                wire_expr: Some(res.to_wire(self).to_owned()),
+                ext_qos: network::ext::QoSType::DEFAULT,
+                ext_tstamp: None,
+                ext_nodeid: network::ext::NodeIdType::DEFAULT,
+            });
         }
         Ok(id)
     }
@@ -1514,18 +1477,15 @@ impl SessionInner {
                         && p.remote_id == querier_state.remote_id
                 }) {
                     drop(state);
-                    self.send_interest_with_namespace(
-                        &primitives,
-                        Interest {
-                            id: querier_state.remote_id,
-                            mode: InterestMode::Final,
-                            options: InterestOptions::empty(),
-                            wire_expr: None,
-                            ext_qos: declare::ext::QoSType::DEFAULT,
-                            ext_tstamp: None,
-                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                        },
-                    );
+                    primitives.send_interest(Interest {
+                        id: querier_state.remote_id,
+                        mode: InterestMode::Final,
+                        options: InterestOptions::empty(),
+                        wire_expr: None,
+                        ext_qos: declare::ext::QoSType::DEFAULT,
+                        ext_tstamp: None,
+                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                    });
                 }
             }
             Ok(())
@@ -1562,16 +1522,13 @@ impl SessionInner {
             drop(state);
             let wire_expr = self.optimize_nonwild_prefix(&key_expr)?;
 
-            self.send_declare_with_namespace(
-                &primitives,
-                Declare {
-                    interest_id: None,
-                    ext_qos: declare::ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber { id, wire_expr }),
-                },
-            );
+            primitives.send_declare(Declare {
+                interest_id: None,
+                ext_qos: declare::ext::QoSType::DECLARE,
+                ext_tstamp: None,
+                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                body: DeclareBody::DeclareSubscriber(DeclareSubscriber { id, wire_expr }),
+            });
             #[cfg(feature = "unstable")]
             {
                 let state = zread!(self.state);
@@ -1627,21 +1584,18 @@ impl SessionInner {
                             s.origin != Locality::SessionLocal && s.remote_id == sub_state.remote_id
                         }) {
                             drop(state);
-                            self.send_declare_with_namespace(
-                                &primitives,
-                                Declare {
-                                    interest_id: None,
-                                    ext_qos: declare::ext::QoSType::DECLARE,
-                                    ext_tstamp: None,
-                                    ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                                    body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                        id: sub_state.remote_id,
-                                        ext_wire_expr: WireExprType {
-                                            wire_expr: WireExpr::empty(),
-                                        },
-                                    }),
-                                },
-                            );
+                            primitives.send_declare(Declare {
+                                interest_id: None,
+                                ext_qos: declare::ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                                    id: sub_state.remote_id,
+                                    ext_wire_expr: WireExprType {
+                                        wire_expr: WireExpr::empty(),
+                                    },
+                                }),
+                            });
                             #[cfg(feature = "unstable")]
                             {
                                 let state = zread!(self.state);
@@ -1674,20 +1628,17 @@ impl SessionInner {
                         let primitives = state.primitives()?;
                         drop(state);
 
-                        self.send_interest_with_namespace(
-                            &primitives,
-                            Interest {
-                                id: sub_state.id,
-                                mode: InterestMode::Final,
-                                // Note: InterestMode::Final options are undefined in the current protocol specification,
-                                //       they are initialized here for internal use by local egress interceptors.
-                                options: InterestOptions::TOKENS,
-                                wire_expr: None,
-                                ext_qos: declare::ext::QoSType::DEFAULT,
-                                ext_tstamp: None,
-                                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                            },
-                        );
+                        primitives.send_interest(Interest {
+                            id: sub_state.id,
+                            mode: InterestMode::Final,
+                            // Note: InterestMode::Final options are undefined in the current protocol specification,
+                            //       they are initialized here for internal use by local egress interceptors.
+                            options: InterestOptions::TOKENS,
+                            wire_expr: None,
+                            ext_qos: declare::ext::QoSType::DEFAULT,
+                            ext_tstamp: None,
+                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                        });
                     }
                 }
             }
@@ -1726,20 +1677,17 @@ impl SessionInner {
                 distance: 0,
             };
             let wire_expr = self.optimize_nonwild_prefix(key_expr)?;
-            self.send_declare_with_namespace(
-                &primitives,
-                Declare {
-                    interest_id: None,
-                    ext_qos: declare::ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                        id,
-                        wire_expr,
-                        ext_info: qabl_info,
-                    }),
-                },
-            );
+            primitives.send_declare(Declare {
+                interest_id: None,
+                ext_qos: declare::ext::QoSType::DECLARE,
+                ext_tstamp: None,
+                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                    id,
+                    wire_expr,
+                    ext_info: qabl_info,
+                }),
+            });
         } else {
             drop(state);
         }
@@ -1767,21 +1715,18 @@ impl SessionInner {
             trace!("undeclare_queryable({:?})", qable_state);
             if qable_state.origin != Locality::SessionLocal {
                 drop(state);
-                self.send_declare_with_namespace(
-                    &primitives,
-                    Declare {
-                        interest_id: None,
-                        ext_qos: declare::ext::QoSType::DECLARE,
-                        ext_tstamp: None,
-                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                        body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                            id: qable_state.id,
-                            ext_wire_expr: WireExprType {
-                                wire_expr: qable_state.key_expr.clone(),
-                            },
-                        }),
-                    },
-                );
+                primitives.send_declare(Declare {
+                    interest_id: None,
+                    ext_qos: declare::ext::QoSType::DECLARE,
+                    ext_tstamp: None,
+                    ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                    body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                        id: qable_state.id,
+                        ext_wire_expr: WireExprType {
+                            wire_expr: qable_state.key_expr.clone(),
+                        },
+                    }),
+                });
             } else {
                 drop(state);
             }
@@ -1805,19 +1750,16 @@ impl SessionInner {
         tracing::trace!("declare_liveliness({:?})", key_expr);
         let id = self.runtime.next_id();
         let primitives = zread!(self.state).primitives()?;
-        self.send_declare_with_namespace(
-            &primitives,
-            Declare {
-                interest_id: None,
-                ext_qos: declare::ext::QoSType::DECLARE,
-                ext_tstamp: None,
-                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                body: DeclareBody::DeclareToken(DeclareToken {
-                    id,
-                    wire_expr: key_expr.to_wire(self).to_owned(),
-                }),
-            },
-        );
+        primitives.send_declare(Declare {
+            interest_id: None,
+            ext_qos: declare::ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+            body: DeclareBody::DeclareToken(DeclareToken {
+                id,
+                wire_expr: key_expr.to_wire(self).to_owned(),
+            }),
+        });
         Ok(id)
     }
 
@@ -1903,22 +1845,19 @@ impl SessionInner {
                 });
         }
 
-        self.send_interest_with_namespace(
-            &primitives,
-            Interest {
-                id,
-                mode: if history {
-                    InterestMode::CurrentFuture
-                } else {
-                    InterestMode::Future
-                },
-                options: InterestOptions::KEYEXPRS + InterestOptions::TOKENS,
-                wire_expr: Some(key_expr.to_wire(self).to_owned()),
-                ext_qos: declare::ext::QoSType::DECLARE,
-                ext_tstamp: None,
-                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+        primitives.send_interest(Interest {
+            id,
+            mode: if history {
+                InterestMode::CurrentFuture
+            } else {
+                InterestMode::Future
             },
-        );
+            options: InterestOptions::KEYEXPRS + InterestOptions::TOKENS,
+            wire_expr: Some(key_expr.to_wire(self).to_owned()),
+            ext_qos: declare::ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+        });
 
         Ok(sub_state)
     }
@@ -1928,19 +1867,16 @@ impl SessionInner {
             return Ok(());
         };
         trace!("undeclare_liveliness({:?})", tid);
-        self.send_declare_with_namespace(
-            &primitives,
-            Declare {
-                interest_id: None,
-                ext_qos: ext::QoSType::DECLARE,
-                ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::DEFAULT,
-                body: DeclareBody::UndeclareToken(UndeclareToken {
-                    id: tid,
-                    ext_wire_expr: WireExprType::null(),
-                }),
-            },
-        );
+        primitives.send_declare(Declare {
+            interest_id: None,
+            ext_qos: ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::DEFAULT,
+            body: DeclareBody::UndeclareToken(UndeclareToken {
+                id: tid,
+                ext_wire_expr: WireExprType::null(),
+            }),
+        });
         Ok(())
     }
 
@@ -2017,9 +1953,9 @@ impl SessionInner {
         destination: Locality,
         matching_type: MatchingStatusType,
     ) -> ZResult<MatchingStatus> {
-        if let Some(ns) = self.namespace() {
+        if let Some(ns) = &self.namespace {
             self.matching_status_remote_inner(
-                &(ns.namespace_prefix() / key_expr.deref()).into(),
+                &(ns / key_expr.deref()).into(),
                 destination,
                 matching_type,
             )
@@ -2054,20 +1990,12 @@ impl SessionInner {
         drop(tables);
         let matching = match destination {
             Locality::Any => !matches.is_empty(),
-            Locality::Remote => {
-                if let Some(face) = zread!(self.state).primitives.as_ref() {
-                    matches.values().any(|dir| !Arc::ptr_eq(dir, &face.state))
-                } else {
-                    !matches.is_empty()
-                }
-            }
-            Locality::SessionLocal => {
-                if let Some(face) = zread!(self.state).primitives.as_ref() {
-                    matches.values().any(|dir| Arc::ptr_eq(dir, &face.state))
-                } else {
-                    false
-                }
-            }
+            Locality::Remote => matches
+                .values()
+                .any(|dir| dir.id != *self.face_id.get().unwrap()),
+            Locality::SessionLocal => matches
+                .values()
+                .any(|dir| dir.id == *self.face_id.get().unwrap()),
         };
         Ok(MatchingStatus { matching })
     }
@@ -2251,41 +2179,57 @@ impl SessionInner {
         let timestamp = timestamp.or_else(|| self.runtime.new_timestamp());
         let wire_expr = key_expr.to_wire(self);
         if destination != Locality::SessionLocal {
-            self.send_push_lazy_with_namespace(
-                &primitives,
-                wire_expr.to_owned(),
-                push::ext::QoSType::new(priority.into(), congestion_control, is_express),
-                None,
-                push::ext::NodeIdType::DEFAULT,
-                || match kind {
-                    SampleKind::Put => PushBody::Put(Put {
-                        timestamp,
-                        encoding: encoding.clone().into(),
-                        #[cfg(feature = "unstable")]
-                        ext_sinfo: source_info.clone().into(),
-                        #[cfg(not(feature = "unstable"))]
-                        ext_sinfo: None,
-                        #[cfg(feature = "shared-memory")]
-                        ext_shm: None,
-                        ext_attachment: attachment.clone().map(|a| a.into()),
-                        ext_unknown: vec![],
-                        payload: payload.clone().into(),
-                    }),
-                    SampleKind::Delete => PushBody::Del(Del {
-                        timestamp,
-                        #[cfg(feature = "unstable")]
-                        ext_sinfo: source_info.clone().into(),
-                        #[cfg(not(feature = "unstable"))]
-                        ext_sinfo: None,
-                        ext_attachment: attachment.clone().map(|a| a.into()),
-                        ext_unknown: vec![],
-                    }),
-                },
-                #[cfg(feature = "unstable")]
-                reliability,
-                #[cfg(not(feature = "unstable"))]
-                Reliability::DEFAULT,
-            );
+            let body = || match kind {
+                SampleKind::Put => PushBody::Put(Put {
+                    timestamp,
+                    encoding: encoding.clone().into(),
+                    #[cfg(feature = "unstable")]
+                    ext_sinfo: source_info.clone().into(),
+                    #[cfg(not(feature = "unstable"))]
+                    ext_sinfo: None,
+                    #[cfg(feature = "shared-memory")]
+                    ext_shm: None,
+                    ext_attachment: attachment.clone().map(|a| a.into()),
+                    ext_unknown: vec![],
+                    payload: payload.clone().into(),
+                }),
+                SampleKind::Delete => PushBody::Del(Del {
+                    timestamp,
+                    #[cfg(feature = "unstable")]
+                    ext_sinfo: source_info.clone().into(),
+                    #[cfg(not(feature = "unstable"))]
+                    ext_sinfo: None,
+                    ext_attachment: attachment.clone().map(|a| a.into()),
+                    ext_unknown: vec![],
+                }),
+            };
+            if let Some(face) = primitives.as_any().downcast_ref::<Face>() {
+                face.send_push_lazy(
+                    wire_expr.to_owned(),
+                    push::ext::QoSType::new(priority.into(), congestion_control, is_express),
+                    None,
+                    push::ext::NodeIdType::DEFAULT,
+                    body,
+                    #[cfg(feature = "unstable")]
+                    reliability,
+                    #[cfg(not(feature = "unstable"))]
+                    Reliability::DEFAULT,
+                );
+            } else if let Some(ns) = primitives.as_any().downcast_ref::<Namespace>() {
+                ns.send_push_lazy(
+                    wire_expr.to_owned(),
+                    push::ext::QoSType::new(priority.into(), congestion_control, is_express),
+                    None,
+                    push::ext::NodeIdType::DEFAULT,
+                    body,
+                    #[cfg(feature = "unstable")]
+                    reliability,
+                    #[cfg(not(feature = "unstable"))]
+                    Reliability::DEFAULT,
+                );
+            } else {
+                unreachable!()
+            }
         }
         if destination != Locality::Remote {
             let data_info = DataInfo {
@@ -2402,35 +2346,32 @@ impl SessionInner {
 
         if destination != Locality::SessionLocal {
             let ext_attachment = attachment.clone().map(Into::into);
-            self.send_request_with_namespace(
-                &primitives,
-                Request {
-                    id: qid,
-                    wire_expr: wexpr.clone(),
-                    ext_qos: qos.into(),
-                    ext_tstamp: None,
-                    ext_nodeid: request::ext::NodeIdType::DEFAULT,
-                    ext_target: target,
-                    ext_budget: None,
-                    ext_timeout: Some(timeout),
-                    payload: RequestBody::Query(zenoh_protocol::zenoh::Query {
-                        consolidation,
-                        parameters: parameters.to_string(),
-                        #[cfg(feature = "unstable")]
-                        ext_sinfo: source.into(),
-                        #[cfg(not(feature = "unstable"))]
-                        ext_sinfo: None,
-                        ext_body: value.as_ref().map(|v| query::ext::QueryBodyType {
-                            #[cfg(feature = "shared-memory")]
-                            ext_shm: None,
-                            encoding: v.1.clone().into(),
-                            payload: v.0.clone().into(),
-                        }),
-                        ext_attachment,
-                        ext_unknown: vec![],
+            primitives.send_request(Request {
+                id: qid,
+                wire_expr: wexpr.clone(),
+                ext_qos: qos.into(),
+                ext_tstamp: None,
+                ext_nodeid: request::ext::NodeIdType::DEFAULT,
+                ext_target: target,
+                ext_budget: None,
+                ext_timeout: Some(timeout),
+                payload: RequestBody::Query(zenoh_protocol::zenoh::Query {
+                    consolidation,
+                    parameters: parameters.to_string(),
+                    #[cfg(feature = "unstable")]
+                    ext_sinfo: source.into(),
+                    #[cfg(not(feature = "unstable"))]
+                    ext_sinfo: None,
+                    ext_body: value.as_ref().map(|v| query::ext::QueryBodyType {
+                        #[cfg(feature = "shared-memory")]
+                        ext_shm: None,
+                        encoding: v.1.clone().into(),
+                        payload: v.0.clone().into(),
                     }),
-                },
-            );
+                    ext_attachment,
+                    ext_unknown: vec![],
+                }),
+            });
         }
         if destination != Locality::Remote {
             self.handle_query(
@@ -2493,18 +2434,15 @@ impl SessionInner {
         let primitives = state.primitives()?;
         drop(state);
 
-        self.send_interest_with_namespace(
-            &primitives,
-            Interest {
-                id,
-                mode: InterestMode::Current,
-                options: InterestOptions::KEYEXPRS + InterestOptions::TOKENS,
-                wire_expr: Some(wexpr.clone()),
-                ext_qos: request::ext::QoSType::DEFAULT,
-                ext_tstamp: None,
-                ext_nodeid: request::ext::NodeIdType::DEFAULT,
-            },
-        );
+        primitives.send_interest(Interest {
+            id,
+            mode: InterestMode::Current,
+            options: InterestOptions::KEYEXPRS + InterestOptions::TOKENS,
+            wire_expr: Some(wexpr.clone()),
+            ext_qos: request::ext::QoSType::DEFAULT,
+            ext_tstamp: None,
+            ext_nodeid: request::ext::NodeIdType::DEFAULT,
+        });
 
         Ok(())
     }
@@ -2572,7 +2510,6 @@ impl SessionInner {
             qid,
             zid: zid.into(),
             primitives: if local { s.clone() } else { primitives },
-            session: Some(s),
         });
         let mut query = Query {
             inner: query_inner,
@@ -2588,20 +2525,10 @@ impl SessionInner {
 }
 
 impl Primitives for WeakSession {
-    fn send_interest(&self, mut msg: zenoh_protocol::network::Interest) {
-        if let Some(ns) = &self.0.namespace {
-            if !ns.handle_interest_ingress(&mut msg) {
-                return;
-            }
-        }
+    fn send_interest(&self, msg: zenoh_protocol::network::Interest) {
         trace!("recv Interest {} {:?}", msg.id, msg.wire_expr);
     }
-    fn send_declare(&self, mut msg: zenoh_protocol::network::Declare) {
-        if let Some(ns) = &self.0.namespace {
-            if !ns.handle_declare_ingress(&mut msg) {
-                return;
-            }
-        }
+    fn send_declare(&self, msg: zenoh_protocol::network::Declare) {
         match msg.body {
             zenoh_protocol::network::DeclareBody::DeclareKeyExpr(m) => {
                 trace!("recv DeclareKeyExpr {} {:?}", m.id, m.wire_expr);
@@ -2862,12 +2789,7 @@ impl Primitives for WeakSession {
         }
     }
 
-    fn send_push(&self, mut msg: Push, _reliability: Reliability) {
-        if let Some(ns) = &self.0.namespace {
-            if !ns.handle_push_ingress(&mut msg) {
-                return;
-            }
-        }
+    fn send_push(&self, msg: Push, _reliability: Reliability) {
         trace!("recv Push {:?}", msg);
         match msg.payload {
             PushBody::Put(m) => {
@@ -2913,12 +2835,7 @@ impl Primitives for WeakSession {
         }
     }
 
-    fn send_request(&self, mut msg: Request) {
-        if let Some(ns) = &self.0.namespace {
-            if !ns.handle_request_ingress(&mut msg) {
-                return;
-            }
-        }
+    fn send_request(&self, msg: Request) {
         trace!("recv Request {:?}", msg);
         match msg.payload {
             RequestBody::Query(m) => self.handle_query(
@@ -2934,12 +2851,7 @@ impl Primitives for WeakSession {
         }
     }
 
-    fn send_response(&self, mut msg: Response) {
-        if let Some(ns) = &self.0.namespace {
-            if !ns.handle_response_ingress(&mut msg) {
-                return;
-            }
-        }
+    fn send_response(&self, msg: Response) {
         trace!("recv Response {:?}", msg);
         match msg.payload {
             ResponseBody::Err(e) => {
@@ -3143,12 +3055,7 @@ impl Primitives for WeakSession {
         }
     }
 
-    fn send_response_final(&self, mut msg: ResponseFinal) {
-        if let Some(ns) = &self.0.namespace {
-            if !ns.handle_response_final_ingress(&mut msg) {
-                return;
-            }
-        }
+    fn send_response_final(&self, msg: ResponseFinal) {
         trace!("recv ResponseFinal {:?}", msg);
         let mut state = zwrite!(self.state);
         if state.primitives.is_none() {
@@ -3176,6 +3083,10 @@ impl Primitives for WeakSession {
 
     fn send_close(&self) {
         trace!("recv Close");
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
@@ -3297,207 +3208,5 @@ impl Closeable for Session {
 
     fn get_closee(&self) -> Self::TClosee {
         self.0.clone()
-    }
-}
-
-pub(crate) struct Namespace {
-    namespace: OwnedNonWildKeyExpr,
-    incomplete_ingress_keyexpr_declarations: RwLock<HashMap<u16, String>>,
-    blocked_subscribers: RwLock<HashSet<u32>>,
-    blocked_queryables: RwLock<HashSet<u32>>,
-    blocked_tokens: RwLock<HashSet<u32>>,
-    blocked_interests: RwLock<HashSet<u32>>,
-}
-
-impl Namespace {
-    fn new(namespace: OwnedNonWildKeyExpr) -> Self {
-        Namespace {
-            namespace,
-            incomplete_ingress_keyexpr_declarations: HashMap::new().into(),
-            blocked_subscribers: HashSet::new().into(),
-            blocked_queryables: HashSet::new().into(),
-            blocked_tokens: HashSet::new().into(),
-            blocked_interests: HashSet::new().into(),
-        }
-    }
-
-    fn handle_namespace_egress(&self, key_expr: &mut WireExpr, new_keyexpr_declare: bool) {
-        if key_expr.scope == EMPTY_EXPR_ID || new_keyexpr_declare {
-            // non - optimized ke
-            let key = key_expr.suffix.as_ref();
-            key_expr.suffix = std::borrow::Cow::Owned(match key.is_empty() {
-                true => self.namespace.as_str().to_owned(), // a case where only a namespace was declared
-                false => self.namespace.as_str().to_owned() + "/" + key,
-            });
-        }
-        // already optimized ke, given that all of the ke declarations pass through this functions
-        // it should already account for namespace prefix, and thus no extra processing is needed
-    }
-
-    fn handle_namespace_ingress(&self, key_expr: &mut WireExpr, message_id: Option<u16>) -> bool {
-        if key_expr.scope != EMPTY_EXPR_ID && key_expr.mapping == Mapping::Receiver {
-            return true;
-        }
-        if key_expr.scope != EMPTY_EXPR_ID {
-            // mapping sender
-            // optimized ke
-            match zread!(self.incomplete_ingress_keyexpr_declarations).get(&key_expr.scope) {
-                Some(head) => {
-                    // if it references an incomplete keyexpr, we concatenate them and verify again as fully non-optimized ke
-                    if key_expr.suffix.is_empty() {
-                        return false;
-                    }
-                    key_expr.scope = EMPTY_EXPR_ID;
-                    key_expr.suffix = (head.clone() + key_expr.suffix.as_ref()).into();
-                    return self.handle_namespace_ingress(key_expr, None);
-                }
-                None => return true,
-            }
-        }
-        let key = key_expr.suffix.as_ref();
-        let ke = unsafe { keyexpr::from_str_unchecked(key) };
-        if let Some(tail) = ke.strip_nonwild_prefix(&self.namespace) {
-            key_expr.suffix = tail.as_str().to_owned().into();
-
-            true
-        } else if let Some(id) = message_id {
-            if key_expr.mapping == Mapping::Sender {
-                // ke does not match namespace - but this can be a partial declaration
-                // we store this ke for checking future keyexprs, referencing it
-                zwrite!(self.incomplete_ingress_keyexpr_declarations)
-                    .insert(id, key_expr.suffix.as_ref().to_string());
-            }
-            false
-        } else {
-            trace!("Rejecting message containing wire expression `{}`, since it does not match namespace `{}`", &key_expr, self.namespace.as_ref());
-            false
-        }
-    }
-
-    pub(crate) fn handle_declare_ingress(
-        &self,
-        msg: &mut zenoh_protocol::network::Declare,
-    ) -> bool {
-        match &mut msg.body {
-            DeclareBody::DeclareKeyExpr(m) => {
-                self.handle_namespace_ingress(&mut m.wire_expr, Some(m.id))
-            }
-            DeclareBody::UndeclareKeyExpr(m) => {
-                zwrite!(self.incomplete_ingress_keyexpr_declarations)
-                    .remove(&m.id)
-                    .is_none()
-            }
-            DeclareBody::DeclareSubscriber(m) => {
-                if !self.handle_namespace_ingress(&mut m.wire_expr, None) {
-                    zwrite!(self.blocked_subscribers).insert(m.id);
-                    return false;
-                }
-                true
-            }
-            DeclareBody::UndeclareSubscriber(m) => !zwrite!(self.blocked_subscribers).remove(&m.id),
-            DeclareBody::DeclareQueryable(m) => {
-                if !self.handle_namespace_ingress(&mut m.wire_expr, None) {
-                    zwrite!(self.blocked_queryables).insert(m.id);
-                    return false;
-                }
-                true
-            }
-            DeclareBody::UndeclareQueryable(m) => !zwrite!(self.blocked_queryables).remove(&m.id),
-            DeclareBody::DeclareToken(m) => {
-                if !self.handle_namespace_ingress(&mut m.wire_expr, None) {
-                    zwrite!(self.blocked_tokens).insert(m.id);
-                    return false;
-                }
-                true
-            }
-            DeclareBody::UndeclareToken(m) => !zwrite!(self.blocked_tokens).remove(&m.id),
-            DeclareBody::DeclareFinal(_) => true,
-        }
-    }
-
-    pub(crate) fn handle_push_ingress(&self, msg: &mut Push) -> bool {
-        self.handle_namespace_ingress(&mut msg.wire_expr, None)
-    }
-
-    pub(crate) fn handle_request_ingress(&self, msg: &mut Request) -> bool {
-        self.handle_namespace_ingress(&mut msg.wire_expr, None)
-    }
-
-    pub(crate) fn handle_response_ingress(&self, msg: &mut Response) -> bool {
-        self.handle_namespace_ingress(&mut msg.wire_expr, None)
-    }
-
-    pub(crate) fn handle_response_final_ingress(&self, _msg: &mut ResponseFinal) -> bool {
-        true
-    }
-
-    pub(crate) fn handle_interest_ingress(
-        &self,
-        msg: &mut zenoh_protocol::network::Interest,
-    ) -> bool {
-        match msg.mode {
-            InterestMode::Final => !zwrite!(self.blocked_interests).remove(&msg.id),
-            _ => match &mut msg.wire_expr {
-                Some(wire_expr) => {
-                    if !self.handle_namespace_ingress(wire_expr, None) {
-                        zwrite!(self.blocked_interests).insert(msg.id);
-                        return false;
-                    }
-                    true
-                }
-                None => true,
-            },
-        }
-    }
-
-    pub(crate) fn handle_declare_egress(&self, msg: &mut zenoh_protocol::network::Declare) {
-        match &mut msg.body {
-            DeclareBody::DeclareKeyExpr(m) => {
-                self.handle_namespace_egress(&mut m.wire_expr, true);
-            }
-            DeclareBody::UndeclareKeyExpr(_) => {}
-            DeclareBody::DeclareSubscriber(m) => {
-                self.handle_namespace_egress(&mut m.wire_expr, false);
-            }
-            DeclareBody::UndeclareSubscriber(_) => {}
-            DeclareBody::DeclareQueryable(m) => {
-                self.handle_namespace_egress(&mut m.wire_expr, false);
-            }
-            DeclareBody::UndeclareQueryable(m) => {
-                self.handle_namespace_egress(&mut m.ext_wire_expr.wire_expr, false);
-            }
-            DeclareBody::DeclareToken(m) => {
-                self.handle_namespace_egress(&mut m.wire_expr, false);
-            }
-            DeclareBody::UndeclareToken(_) => {}
-            DeclareBody::DeclareFinal(_) => {}
-        }
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn handle_push_egress(&self, mut msg: Push) {
-        self.handle_namespace_egress(&mut msg.wire_expr, false);
-    }
-
-    pub(crate) fn handle_request_egress(&self, msg: &mut Request) {
-        self.handle_namespace_egress(&mut msg.wire_expr, false);
-    }
-
-    pub(crate) fn handle_response_egress(&self, msg: &mut Response) {
-        self.handle_namespace_egress(&mut msg.wire_expr, false);
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn handle_response_final_egress(&self, _msg: &mut ResponseFinal) {}
-
-    pub(crate) fn handle_interest_egress(&self, msg: &mut zenoh_protocol::network::Interest) {
-        if let Some(w) = &mut msg.wire_expr {
-            self.handle_namespace_egress(w, false);
-        }
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn namespace_prefix(&self) -> &OwnedNonWildKeyExpr {
-        &self.namespace
     }
 }

@@ -39,6 +39,8 @@ pub trait Primitives: Send + Sync {
     fn send_response_final(&self, msg: ResponseFinal);
 
     fn send_close(&self);
+
+    fn as_any(&self) -> &dyn Any;
 }
 
 pub(crate) trait EPrimitives: Send + Sync {
@@ -74,6 +76,10 @@ impl Primitives for DummyPrimitives {
     fn send_response_final(&self, _msg: ResponseFinal) {}
 
     fn send_close(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 impl EPrimitives for DummyPrimitives {

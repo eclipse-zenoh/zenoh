@@ -475,7 +475,6 @@ impl Primitives for AdminSpace {
                         qid: msg.id,
                         zid: zid.into(),
                         primitives,
-                        session: None,
                     }),
                     eid: self.queryable_id,
                     value: query
@@ -503,6 +502,10 @@ impl Primitives for AdminSpace {
 
     fn send_close(&self) {
         trace!("recv Close");
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 

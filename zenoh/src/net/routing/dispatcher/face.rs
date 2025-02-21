@@ -474,6 +474,10 @@ impl Primitives for Face {
             p.send_declare(m);
         }
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 impl fmt::Display for Face {
