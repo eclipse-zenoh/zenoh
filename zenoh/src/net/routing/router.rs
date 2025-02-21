@@ -92,6 +92,7 @@ impl Router {
                     None,
                     None,
                     ctrl_lock.new_face(),
+                    true,
                 )
             })
             .clone();
@@ -151,6 +152,7 @@ impl Router {
                     None,
                     Some(ingress.clone()),
                     ctrl_lock.new_face(),
+                    false,
                 )
             })
             .clone();
@@ -203,6 +205,7 @@ impl Router {
             Some(transport),
             None,
             ctrl_lock.new_face(),
+            false,
         );
         let _ = mux.face.set(Face {
             state: face.clone(),
@@ -240,6 +243,7 @@ impl Router {
             Some(transport),
             Some(interceptor.clone()),
             ctrl_lock.new_face(),
+            false,
         );
         tables.mcast_faces.push(face_state.clone());
 

@@ -76,6 +76,7 @@ pub struct FaceState {
     pub(crate) in_interceptors: Option<Arc<InterceptorsChain>>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) task_controller: TaskController,
+    pub(crate) is_local: bool,
 }
 
 impl FaceState {
@@ -89,6 +90,7 @@ impl FaceState {
         mcast_group: Option<TransportMulticast>,
         in_interceptors: Option<Arc<InterceptorsChain>>,
         hat: Box<dyn Any + Send + Sync>,
+        is_local: bool,
     ) -> Arc<FaceState> {
         Arc::new(FaceState {
             id,
@@ -108,15 +110,8 @@ impl FaceState {
             in_interceptors,
             hat,
             task_controller: TaskController::default(),
+            is_local,
         })
-    }
-
-    #[inline]
-    pub(crate) fn is_local(&self) -> bool {
-        self.primitives
-            .as_any()
-            .downcast_ref::<crate::api::session::WeakSession>()
-            .is_some()
     }
 
     #[inline]
