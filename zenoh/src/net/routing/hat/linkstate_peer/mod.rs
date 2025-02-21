@@ -538,5 +538,5 @@ impl HatTrait for HatCode {}
 
 #[inline]
 pub(super) fn push_declaration_profile(face: &FaceState) -> bool {
-    face.is_local || face.whatami != WhatAmI::Client
+    face.whatami != WhatAmI::Client
 }
