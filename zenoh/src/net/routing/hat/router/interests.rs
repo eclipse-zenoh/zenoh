@@ -125,6 +125,7 @@ impl HatInterestTrait for HatCode {
 
 #[inline]
 pub(super) fn push_declaration_profile(tables: &Tables, face: &FaceState) -> bool {
-    !(face.whatami == WhatAmI::Client
-        || (face.whatami == WhatAmI::Peer && !hat!(tables).full_net(WhatAmI::Peer)))
+    face.is_local
+        || !(face.whatami == WhatAmI::Client
+            || (face.whatami == WhatAmI::Peer && !hat!(tables).full_net(WhatAmI::Peer)))
 }
