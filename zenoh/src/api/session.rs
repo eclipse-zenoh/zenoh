@@ -2503,13 +2503,16 @@ impl SessionInner {
 
         let zid = self.zid();
 
-        let s = Arc::new(WeakSession::new(self));
         let query_inner = Arc::new(QueryInner {
             key_expr,
             parameters: parameters.to_owned().into(),
             qid,
             zid: zid.into(),
-            primitives: if local { s.clone() } else { primitives },
+            primitives: if local {
+                Arc::new(WeakSession::new(self))
+            } else {
+                primitives
+            },
         });
         let mut query = Query {
             inner: query_inner,
