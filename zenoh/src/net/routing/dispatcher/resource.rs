@@ -411,6 +411,10 @@ impl Resource {
         face: &mut Arc<FaceState>,
         push: bool,
     ) -> WireExpr<'static> {
+        if face.is_local {
+            return res.expr().to_string().into();
+        }
+
         let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(res);
         match nonwild_prefix {
             Some(mut nonwild_prefix) => {
