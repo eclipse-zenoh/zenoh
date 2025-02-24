@@ -15,6 +15,7 @@ use std::{
     any::Any,
     collections::HashMap,
     fmt,
+    ops::Not,
     sync::{Arc, Weak},
     time::Duration,
 };
@@ -80,6 +81,7 @@ pub struct FaceState {
     pub(crate) in_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) task_controller: TaskController,
+    pub(crate) is_local: bool,
 }
 
 impl FaceState {
@@ -93,6 +95,7 @@ impl FaceState {
         mcast_group: Option<TransportMulticast>,
         in_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
         hat: Box<dyn Any + Send + Sync>,
+        is_local: bool,
     ) -> Arc<FaceState> {
         Arc::new(FaceState {
             id,
@@ -112,6 +115,7 @@ impl FaceState {
             in_interceptors,
             hat,
             task_controller: TaskController::default(),
+            is_local,
         })
     }
 
@@ -148,8 +152,13 @@ impl FaceState {
     }
 
     pub(crate) fn update_interceptors_caches(&self, res: &mut Arc<Resource>) {
-        if let Ok(expr) = KeyExpr::try_from(res.expr().to_string()) {
-            if let Some(interceptor) = self.in_interceptors.as_ref().map(|itor| itor.load()) {
+        if let Some(interceptor) = self
+            .in_interceptors
+            .as_ref()
+            .map(|itor| itor.load())
+            .and_then(|is| is.is_empty().not().then_some(is))
+        {
+            if let Ok(expr) = KeyExpr::try_from(res.expr().to_string()) {
                 let cache = interceptor.compute_keyexpr_cache(&expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
@@ -159,8 +168,17 @@ impl FaceState {
                 )
                 .in_interceptor_cache = cache;
             }
-            if let Some(mux) = self.primitives.as_any().downcast_ref::<Mux>() {
-                let cache = mux.interceptor.load().compute_keyexpr_cache(&expr);
+        }
+
+        if let Some(interceptor) = self
+            .primitives
+            .as_any()
+            .downcast_ref::<Mux>()
+            .map(|mux| mux.interceptor.load())
+            .and_then(|is| is.is_empty().not().then_some(is))
+        {
+            if let Ok(expr) = KeyExpr::try_from(res.expr().to_string()) {
+                let cache = interceptor.compute_keyexpr_cache(&expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
                         .session_ctxs
@@ -169,8 +187,17 @@ impl FaceState {
                 )
                 .e_interceptor_cache = cache;
             }
-            if let Some(mux) = self.primitives.as_any().downcast_ref::<McastMux>() {
-                let cache = mux.interceptor.load().compute_keyexpr_cache(&expr);
+        }
+
+        if let Some(interceptor) = self
+            .primitives
+            .as_any()
+            .downcast_ref::<McastMux>()
+            .map(|mux| mux.interceptor.load())
+            .and_then(|is| is.is_empty().not().then_some(is))
+        {
+            if let Ok(expr) = KeyExpr::try_from(res.expr().to_string()) {
+                let cache = interceptor.compute_keyexpr_cache(&expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
                         .session_ctxs

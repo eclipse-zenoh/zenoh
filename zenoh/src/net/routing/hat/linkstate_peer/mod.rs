@@ -535,3 +535,8 @@ fn get_peer(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<Ze
 }
 
 impl HatTrait for HatCode {}
+
+#[inline]
+pub(super) fn push_declaration_profile(face: &FaceState) -> bool {
+    face.whatami != WhatAmI::Client
+}

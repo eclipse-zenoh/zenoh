@@ -37,8 +37,8 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 use super::{
-    face_hat, face_hat_mut, get_peer, hat, hat_mut, network::Network, res_hat, res_hat_mut,
-    HatCode, HatContext, HatFace, HatTables,
+    face_hat, face_hat_mut, get_peer, hat, hat_mut, network::Network, push_declaration_profile,
+    res_hat, res_hat_mut, HatCode, HatContext, HatFace, HatTables,
 };
 #[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
@@ -138,7 +138,7 @@ fn send_sourced_queryable_to_net_children(
                         .map(|src_face| someface.id != src_face.id)
                         .unwrap_or(true)
                     {
-                        let push_declaration = someface.whatami != WhatAmI::Client;
+                        let push_declaration = push_declaration_profile(&someface);
                         let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
@@ -192,7 +192,7 @@ fn propagate_simple_queryable(
             face_hat_mut!(&mut dst_face)
                 .local_qabls
                 .insert(res.clone(), (id, info));
-            let push_declaration = dst_face.whatami != WhatAmI::Client;
+            let push_declaration = push_declaration_profile(&dst_face);
             let key_expr = Resource::decl_key(res, &mut dst_face, push_declaration);
             send_declare(
                 &dst_face.primitives,
@@ -371,7 +371,7 @@ fn send_forget_sourced_queryable_to_net_children(
                         .map(|src_face| someface.id != src_face.id)
                         .unwrap_or(true)
                     {
-                        let push_declaration = someface.whatami != WhatAmI::Client;
+                        let push_declaration = push_declaration_profile(&someface);
                         let wire_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
@@ -779,7 +779,7 @@ pub(super) fn declare_qabl_interest(
                 }) {
                     let info = local_qabl_info(tables, res, face);
                     let id = make_qabl_id(res, face, mode, info);
-                    let wire_expr = Resource::decl_key(res, face, face.whatami != WhatAmI::Client);
+                    let wire_expr = Resource::decl_key(res, face, push_declaration_profile(face));
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -808,7 +808,7 @@ pub(super) fn declare_qabl_interest(
                         let info = local_qabl_info(tables, qabl, face);
                         let id = make_qabl_id(qabl, face, mode, info);
                         let key_expr =
-                            Resource::decl_key(qabl, face, face.whatami != WhatAmI::Client);
+                            Resource::decl_key(qabl, face, push_declaration_profile(face));
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(
@@ -836,7 +836,7 @@ pub(super) fn declare_qabl_interest(
                 {
                     let info = local_qabl_info(tables, qabl, face);
                     let id = make_qabl_id(qabl, face, mode, info);
-                    let key_expr = Resource::decl_key(qabl, face, face.whatami != WhatAmI::Client);
+                    let key_expr = Resource::decl_key(qabl, face, push_declaration_profile(face));
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(

@@ -27,8 +27,8 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 use super::{
-    face_hat, face_hat_mut, get_peer, hat, hat_mut, network::Network, res_hat, res_hat_mut,
-    HatCode, HatContext, HatFace, HatTables,
+    face_hat, face_hat_mut, get_peer, hat, hat_mut, network::Network, push_declaration_profile,
+    res_hat, res_hat_mut, HatCode, HatContext, HatFace, HatTables,
 };
 use crate::net::routing::{
     dispatcher::{face::FaceState, interests::RemoteInterest, tables::Tables},
@@ -54,7 +54,7 @@ fn send_sourced_token_to_net_clildren(
                         .map(|src_face| someface.id != src_face.id)
                         .unwrap_or(true)
                     {
-                        let push_declaration = someface.whatami != WhatAmI::Client;
+                        let push_declaration = push_declaration_profile(&someface);
                         let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
@@ -95,7 +95,7 @@ fn propagate_simple_token_to(
         if dst_face.whatami != WhatAmI::Client {
             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
             face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
-            let key_expr = Resource::decl_key(res, dst_face, dst_face.whatami != WhatAmI::Client);
+            let key_expr = Resource::decl_key(res, dst_face, push_declaration_profile(dst_face));
             send_declare(
                 &dst_face.primitives,
                 RoutingContext::with_expr(
@@ -135,7 +135,7 @@ fn propagate_simple_token_to(
                     let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
                     face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
                     let key_expr =
-                        Resource::decl_key(res, dst_face, dst_face.whatami != WhatAmI::Client);
+                        Resource::decl_key(res, dst_face, push_declaration_profile(dst_face));
                     send_declare(
                         &dst_face.primitives,
                         RoutingContext::with_expr(
@@ -327,7 +327,7 @@ fn send_forget_sourced_token_to_net_clildren(
                         .map(|src_face| someface.id != src_face.id)
                         .unwrap_or(true)
                     {
-                        let push_declaration = someface.whatami != WhatAmI::Client;
+                        let push_declaration = push_declaration_profile(&someface);
                         let wire_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
@@ -673,7 +673,7 @@ pub(crate) fn declare_token_interest(
                             || remote_linkstatepeer_tokens(tables, token))
                 }) {
                     let id = make_token_id(res, face, mode);
-                    let wire_expr = Resource::decl_key(res, face, face.whatami != WhatAmI::Client);
+                    let wire_expr = Resource::decl_key(res, face, push_declaration_profile(face));
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -697,7 +697,7 @@ pub(crate) fn declare_token_interest(
                     {
                         let id = make_token_id(token, face, mode);
                         let wire_expr =
-                            Resource::decl_key(token, face, face.whatami != WhatAmI::Client);
+                            Resource::decl_key(token, face, push_declaration_profile(face));
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(
@@ -721,8 +721,7 @@ pub(crate) fn declare_token_interest(
                         || remote_linkstatepeer_tokens(tables, token))
                 {
                     let id = make_token_id(token, face, mode);
-                    let wire_expr =
-                        Resource::decl_key(token, face, face.whatami != WhatAmI::Client);
+                    let wire_expr = Resource::decl_key(token, face, push_declaration_profile(face));
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
