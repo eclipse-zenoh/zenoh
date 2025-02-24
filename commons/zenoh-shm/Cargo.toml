@@ -51,6 +51,7 @@ crossbeam-queue = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 advisory-lock = { workspace = true }
+nix = { workspace = true, default-features = false, features = ["fs", "mman"] }
 
 [dev-dependencies]
 libc = { workspace = true }

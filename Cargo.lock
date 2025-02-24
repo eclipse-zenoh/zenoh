@@ -5740,6 +5740,7 @@ dependencies = [
  "crc",
  "crossbeam-queue",
  "libc",
+ "nix 0.29.0",
  "num-traits",
  "num_cpus",
  "rand 0.8.5",
