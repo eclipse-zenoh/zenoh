@@ -532,7 +532,6 @@ pub(crate) struct SessionInner {
     pub(crate) id: u16,
     owns_runtime: bool,
     task_controller: TaskController,
-    #[cfg(feature = "unstable")]
     namespace: Option<OwnedNonWildKeyExpr>,
     #[cfg(feature = "unstable")]
     face_id: OnceCell<usize>,
@@ -698,7 +697,6 @@ impl Session {
                 id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
                 owns_runtime,
                 task_controller: TaskController::default(),
-                #[cfg(feature = "unstable")]
                 namespace: namespace.clone(),
                 #[cfg(feature = "unstable")]
                 face_id: OnceCell::new(),
@@ -712,11 +710,13 @@ impl Session {
                         ns.clone(),
                         Arc::new(session.downgrade()),
                     )));
+                    #[cfg(feature = "unstable")]
                     session.0.face_id.set(face.state.id).unwrap(); // this is the only attempt to set value
                     Arc::new(Namespace::new(ns, face))
                 }
                 None => {
                     let face = router.new_primitives(Arc::new(session.downgrade()));
+                    #[cfg(feature = "unstable")]
                     session.0.face_id.set(face.state.id).unwrap(); // this is the only attempt to set value
                     face
                 }
@@ -2203,32 +2203,35 @@ impl SessionInner {
                     ext_unknown: vec![],
                 }),
             };
-            if let Some(face) = primitives.as_any().downcast_ref::<Face>() {
-                face.send_push_lazy(
-                    wire_expr.to_owned(),
-                    push::ext::QoSType::new(priority.into(), congestion_control, is_express),
-                    None,
-                    push::ext::NodeIdType::DEFAULT,
-                    body,
-                    #[cfg(feature = "unstable")]
-                    reliability,
-                    #[cfg(not(feature = "unstable"))]
-                    Reliability::DEFAULT,
-                );
-            } else if let Some(ns) = primitives.as_any().downcast_ref::<Namespace>() {
-                ns.send_push_lazy(
-                    wire_expr.to_owned(),
-                    push::ext::QoSType::new(priority.into(), congestion_control, is_express),
-                    None,
-                    push::ext::NodeIdType::DEFAULT,
-                    body,
-                    #[cfg(feature = "unstable")]
-                    reliability,
-                    #[cfg(not(feature = "unstable"))]
-                    Reliability::DEFAULT,
-                );
-            } else {
-                unreachable!()
+            match &self.namespace {
+                Some(_) => {
+                    let face = primitives.as_any().downcast_ref::<Namespace>().unwrap();
+                    face.send_push_lazy(
+                        wire_expr.to_owned(),
+                        push::ext::QoSType::new(priority.into(), congestion_control, is_express),
+                        None,
+                        push::ext::NodeIdType::DEFAULT,
+                        body,
+                        #[cfg(feature = "unstable")]
+                        reliability,
+                        #[cfg(not(feature = "unstable"))]
+                        Reliability::DEFAULT,
+                    );
+                }
+                None => {
+                    let face = primitives.as_any().downcast_ref::<Face>().unwrap();
+                    face.send_push_lazy(
+                        wire_expr.to_owned(),
+                        push::ext::QoSType::new(priority.into(), congestion_control, is_express),
+                        None,
+                        push::ext::NodeIdType::DEFAULT,
+                        body,
+                        #[cfg(feature = "unstable")]
+                        reliability,
+                        #[cfg(not(feature = "unstable"))]
+                        Reliability::DEFAULT,
+                    );
+                }
             }
         }
         if destination != Locality::Remote {
