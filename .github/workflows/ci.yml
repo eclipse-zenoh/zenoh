@@ -137,11 +137,10 @@ jobs:
           cache-bin: false
 
       - name: Set rustflags
+        if: ${{ matrix.os == 'windows-latest' }}
         shell: bash
         run: |
-          case ${{ matrix.os }} in
-            *windows*) echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV ;;
-          esac
+            echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV
 
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
