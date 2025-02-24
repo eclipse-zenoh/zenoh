@@ -38,7 +38,7 @@ jobs:
   determine-runner:
     runs-on: ubuntu-latest
     outputs:
-      runner: ${{ steps.set-runner.outputs.use-runner }}
+      runner: ${{ steps.set-runner.outputs.runner }}
     steps:
       - name: Clone this repository
         uses: actions/checkout@v4
@@ -47,9 +47,9 @@ jobs:
         id: set-runner
         run: |
           if [[ -f ci/runners.json ]]; then
-            echo "use-runner=$(cat ci/runners.json)" >> $GITHUB_OUTPUT
+            echo "runner=$(cat ci/runners.json)" >> $GITHUB_OUTPUT
           else
-            echo "use-runner=['ubuntu-latest', 'windows-latest', 'macos-latest']" >> $GITHUB_OUTPUT
+            echo "runner=['ubuntu-latest', 'windows-latest', 'macos-latest']" >> $GITHUB_OUTPUT
           fi
 
   check:
@@ -58,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJson(needs.determine-runner.outputs.runner) }}
+        os: ${{ fromJSON(needs.determine-runner.outputs.runner) }}
 
     steps:
       - name: Clone this repository
@@ -139,7 +139,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJson(needs.determine-runner.outputs.runner) }}
+        os: ${{ fromJSON(needs.determine-runner.outputs.runner) }}
 
     steps:
       - name: Clone this repository
