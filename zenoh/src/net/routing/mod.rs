@@ -20,6 +20,7 @@
 pub mod dispatcher;
 pub mod hat;
 pub mod interceptor;
+pub mod namespace;
 pub mod router;
 
 use std::{cell::OnceCell, sync::Arc};

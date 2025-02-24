@@ -43,7 +43,10 @@ pub use zenoh_protocol::core::{
     whatami, EndPoint, Locator, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor,
 };
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, Bits},
+    core::{
+        key_expr::{OwnedKeyExpr, OwnedNonWildKeyExpr},
+        Bits,
+    },
     transport::{BatchSize, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -631,6 +634,13 @@ validated_struct::validator! {
             },
 
         },
+
+        /// Namespace prefix
+        /// If not None, all outgoing key expressions will be
+        /// automatically prefixed with specified string,
+        /// and all incoming key expressions will be stripped
+        /// of specified prefix
+        pub namespace: Option<OwnedNonWildKeyExpr>,
 
         /// Configuration of the downsampling.
         downsampling: Vec<DownsamplingItemConf>,
