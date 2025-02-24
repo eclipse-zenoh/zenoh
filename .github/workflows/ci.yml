@@ -53,6 +53,7 @@ jobs:
           fi
 
   check:
+    needs: determine-runner
     name: Lints and doc tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -134,6 +135,7 @@ jobs:
         run: cargo +stable semver-checks --verbose --default-features --package zenoh --release-type ${{ env.CARGO_SEMVER_CHECKS_RELEASE_TYPE }} --baseline-version ${{ env.CARGO_SEMVER_CHECKS_BASELINE_VERSION }}
 
   test:
+    needs: determine-runner
     name: Unit tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
