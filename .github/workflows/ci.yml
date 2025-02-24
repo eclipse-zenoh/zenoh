@@ -49,7 +49,7 @@ jobs:
           if [[ -f ci/runners.json ]]; then
             echo "use-runner=$(cat ci/runners.json)" >> $GITHUB_OUTPUT
           else
-            echo "use-runner=[ubuntu-latest, windows-latest, macos-latest]" >> $GITHUB_OUTPUT
+            echo "use-runner=['ubuntu-latest', 'windows-latest', 'macos-latest']" >> $GITHUB_OUTPUT
           fi
 
   check:
