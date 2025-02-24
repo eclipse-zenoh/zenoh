@@ -16,6 +16,7 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
+use arc_swap::ArcSwap;
 use uhlc::HLC;
 use zenoh_config::Config;
 use zenoh_protocol::core::{WhatAmI, ZenohIdProto};
@@ -132,11 +133,10 @@ impl Router {
             .map(|itor| itor.new_transport_unicast(&transport))
             .unzip();
         let (ingress, egress) = (
-            Arc::new(InterceptorsChain::from(
-                ingress.into_iter().flatten().collect::<Vec<_>>(),
-            )),
+            InterceptorsChain::from(ingress.into_iter().flatten().collect::<Vec<_>>()),
             InterceptorsChain::from(egress.into_iter().flatten().collect::<Vec<_>>()),
         );
+        let ingress = Arc::new(ArcSwap::new(ingress.into()));
         let mux = Arc::new(Mux::new(transport.clone(), egress));
         let newface = tables
             .faces
@@ -194,7 +194,7 @@ impl Router {
                 .filter_map(|itor| itor.new_transport_multicast(&transport))
                 .collect::<Vec<EgressInterceptor>>(),
         );
-        let mux = Arc::new(McastMux::new(transport.clone(), interceptor));
+        let mux = Arc::new(McastMux::new(transport.clone(), interceptor.into()));
         let face = FaceState::new(
             fid,
             ZenohIdProto::from_str("1").unwrap(),
@@ -226,13 +226,14 @@ impl Router {
         let mut tables = zwrite!(self.tables.tables);
         let fid = tables.face_counter;
         tables.face_counter += 1;
-        let interceptor = Arc::new(InterceptorsChain::from(
+        let interceptor = InterceptorsChain::from(
             tables
                 .interceptors
                 .iter()
                 .filter_map(|itor| itor.new_peer_multicast(&transport))
                 .collect::<Vec<IngressInterceptor>>(),
-        ));
+        );
+        let interceptor = Arc::new(ArcSwap::new(interceptor.into()));
         let face_state = FaceState::new(
             fid,
             peer.zid,

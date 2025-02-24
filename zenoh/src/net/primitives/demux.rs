@@ -13,6 +13,7 @@
 //
 use std::{any::Any, sync::Arc};
 
+use arc_swap::ArcSwap;
 use zenoh_link::Link;
 use zenoh_protocol::network::{NetworkBody, NetworkMessage};
 use zenoh_result::ZResult;
@@ -28,14 +29,14 @@ use crate::net::routing::{
 pub struct DeMux {
     face: Face,
     pub(crate) transport: Option<TransportUnicast>,
-    pub(crate) interceptor: Arc<InterceptorsChain>,
+    pub(crate) interceptor: Arc<ArcSwap<InterceptorsChain>>,
 }
 
 impl DeMux {
     pub(crate) fn new(
         face: Face,
         transport: Option<TransportUnicast>,
-        interceptor: Arc<InterceptorsChain>,
+        interceptor: Arc<ArcSwap<InterceptorsChain>>,
     ) -> Self {
         Self {
             face,
@@ -48,7 +49,8 @@ impl DeMux {
 impl TransportPeerEventHandler for DeMux {
     #[inline]
     fn handle_message(&self, mut msg: NetworkMessage) -> ZResult<()> {
-        if !self.interceptor.interceptors.is_empty() {
+        let interceptor = self.interceptor.load();
+        if !interceptor.interceptors.is_empty() {
             let ctx = RoutingContext::new_in(msg, self.face.clone());
             let prefix = ctx
                 .wire_expr()
@@ -58,7 +60,7 @@ impl TransportPeerEventHandler for DeMux {
             let cache = prefix
                 .as_ref()
                 .and_then(|p| p.get_ingress_cache(&self.face));
-            let ctx = match self.interceptor.intercept(ctx, cache) {
+            let ctx = match interceptor.intercept(ctx, cache) {
                 Some(ctx) => ctx,
                 None => return Ok(()),
             };
