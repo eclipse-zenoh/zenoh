@@ -17,13 +17,14 @@ mod scout;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
+    ZSlice,
 };
 use zenoh_protocol::{
-    common::imsg,
-    scouting::{id, ScoutingBody, ScoutingMessage},
+    common::{imsg, ZExtZBufHeader},
+    scouting::{ext::GroupsType, id, ScoutingBody, ScoutingMessage},
 };
 
-use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
+use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Header};
 
 impl<W> WCodec<&ScoutingMessage, &mut W> for Zenoh080
 where
@@ -57,5 +58,46 @@ where
             _ => return Err(DidntRead),
         };
         Ok(body.into())
+    }
+}
+
+impl<const ID: u8, W> WCodec<(&GroupsType<{ ID }>, bool), &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: (&GroupsType<{ ID }>, bool)) -> Self::Output {
+        let (x, more) = x;
+
+        // Compute the total extension length
+        let w_len = x.iter().fold(0_usize, |len, zs| len + self.w_len(zs));
+        // Write the extension header
+        let header: ZExtZBufHeader<ID> = ZExtZBufHeader::new(w_len);
+        self.write(&mut *writer, (&header, more))?;
+        // Write the extension body
+        for zs in x.iter() {
+            self.write(&mut *writer, zs)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl<const ID: u8, R> RCodec<GroupsType<{ ID }>, &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<GroupsType<{ ID }>, Self::Error> {
+        let mut groups = Vec::new();
+
+        while reader.can_read() {
+            let zs: ZSlice = self.read(&mut *reader)?;
+            groups.push(zs);
+        }
+
+        Ok(GroupsType::new(groups))
     }
 }

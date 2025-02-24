@@ -21,7 +21,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use zenoh_protocol::{
     core::{key_expr::OwnedKeyExpr, EntityGlobalIdProto, Locator, WhatAmI, ZenohIdProto},
-    scouting::HelloProto,
+    scouting::{ext::GroupsType, HelloProto},
 };
 
 /// The global unique id of a Zenoh session.
@@ -128,6 +128,7 @@ impl Hello {
             whatami: WhatAmI::default(),
             zid: ZenohIdProto::default(),
             locators: Vec::default(),
+            ext_groups: GroupsType::default(),
         })
     }
 }

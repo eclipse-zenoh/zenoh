@@ -35,7 +35,7 @@ use zenoh_config::{
 use zenoh_link::{Locator, LocatorInspector};
 use zenoh_protocol::{
     core::{whatami::WhatAmIMatcher, EndPoint, Metadata, PriorityRange, WhatAmI, ZenohIdProto},
-    scouting::{HelloProto, Scout, ScoutingBody, ScoutingMessage},
+    scouting::{ext::GroupsType, HelloProto, Scout, ScoutingBody, ScoutingMessage},
 };
 use zenoh_result::{bail, zerror, ZResult};
 
@@ -838,6 +838,7 @@ impl Runtime {
                 version: zenoh_protocol::VERSION,
                 what: matcher,
                 zid: None,
+                ext_groups: GroupsType::default(),
             }
             .into();
             let mut wbuf = vec![];
@@ -1163,6 +1164,7 @@ impl Runtime {
                             whatami: self.whatami(),
                             zid,
                             locators: self.get_locators(),
+                            ext_groups: GroupsType::default(),
                         }
                         .into();
                         let socket = get_best_match(&peer.ip(), ucast_sockets).unwrap();

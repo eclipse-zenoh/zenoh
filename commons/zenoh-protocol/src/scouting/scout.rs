@@ -76,11 +76,21 @@ pub struct Scout {
     pub version: u8,
     pub what: WhatAmIMatcher,
     pub zid: Option<ZenohIdProto>,
+    pub ext_groups: ext::GroupsType,
+}
+
+// Extensions
+pub mod ext {
+    use crate::{common::ZExtZBuf, zextzbuf};
+
+    pub type Groups = zextzbuf!(0x1, false);
+    pub type GroupsType = crate::scouting::ext::GroupsType<{ Groups::ID }>;
 }
 
 impl Scout {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
+        use crate::scouting::ext::GroupsType;
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
@@ -88,6 +98,16 @@ impl Scout {
         let version: u8 = rng.gen();
         let what = WhatAmIMatcher::rand();
         let zid = rng.gen_bool(0.5).then_some(ZenohIdProto::rand());
-        Self { version, what, zid }
+        let ext_groups = if rng.gen_bool(0.5) {
+            GroupsType::rand()
+        } else {
+            GroupsType::default()
+        };
+        Self {
+            version,
+            what,
+            zid,
+            ext_groups,
+        }
     }
 }

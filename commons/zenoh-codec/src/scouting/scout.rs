@@ -14,15 +14,18 @@
 use core::convert::TryFrom;
 
 use zenoh_buffers::{
-    reader::{DidntRead, Reader},
+    reader::{DidntRead, HasReader, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
-    common::{imsg, ZExtUnknown},
+    common::{iext, imsg, ZExtUnknown, ZExtZBuf},
     core::{whatami::WhatAmIMatcher, ZenohIdProto},
     scouting::{
         id,
-        scout::{flag, Scout},
+        scout::{
+            ext::{self, GroupsType},
+            flag, Scout,
+        },
     },
 };
 
@@ -35,10 +38,19 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Scout) -> Self::Output {
-        let Scout { version, what, zid } = x;
+        let Scout {
+            version,
+            what,
+            zid,
+            ext_groups,
+        } = x;
 
         // Header
-        let header = id::SCOUT;
+        let mut header = id::SCOUT;
+        let n_exts = (ext_groups != &GroupsType::default()) as u8;
+        if n_exts != 0 {
+            header |= flag::Z;
+        }
         self.write(&mut *writer, header)?;
 
         // Body
@@ -55,6 +67,11 @@ where
         if let Some(zid) = zid.as_ref() {
             let lodec = Zenoh080Length::new(zid.size());
             lodec.write(&mut *writer, zid)?;
+        }
+
+        // Extensions
+        if ext_groups != &GroupsType::default() {
+            self.write(&mut *writer, (ext_groups, false))?;
         }
 
         Ok(())
@@ -98,14 +115,35 @@ where
         } else {
             None
         };
+        let mut ext_groups = GroupsType::default();
 
         // Extensions
-        let mut has_extensions = imsg::has_flag(self.header, flag::Z);
-        while has_extensions {
-            let (_, more): (ZExtUnknown, bool) = self.codec.read(&mut *reader)?;
-            has_extensions = more;
+        let mut has_ext = imsg::has_flag(self.header, flag::Z);
+        while has_ext {
+            let ext: u8 = self.codec.read(&mut *reader)?;
+            let eodec = Zenoh080Header::new(ext);
+            match iext::eid(ext) {
+                ext::Groups::ID => {
+                    let (b, ext): (ZExtZBuf<{ ext::Groups::ID }>, bool) =
+                        eodec.read(&mut *reader)?;
+
+                    let mut br = b.value.reader();
+                    ext_groups = self.codec.read(&mut br)?;
+
+                    has_ext = ext;
+                }
+                _ => {
+                    let (_, more): (ZExtUnknown, bool) = self.codec.read(&mut *reader)?;
+                    has_ext = more;
+                }
+            }
         }
 
-        Ok(Scout { version, what, zid })
+        Ok(Scout {
+            version,
+            what,
+            zid,
+            ext_groups,
+        })
     }
 }

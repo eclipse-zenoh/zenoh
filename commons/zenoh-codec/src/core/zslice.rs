@@ -17,7 +17,7 @@ use zenoh_buffers::{
     ZSlice,
 };
 
-use crate::{RCodec, WCodec, Zenoh080, Zenoh080Bounded};
+use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Bounded};
 
 // ZSlice - Bounded
 macro_rules! zslice_impl {
@@ -79,5 +79,11 @@ where
     fn read(self, reader: &mut R) -> Result<ZSlice, Self::Error> {
         let zodec = Zenoh080Bounded::<usize>::new();
         zodec.read(&mut *reader)
+    }
+}
+
+impl LCodec<&ZSlice> for Zenoh080 {
+    fn w_len(self, x: &ZSlice) -> usize {
+        self.w_len(x.as_slice())
     }
 }

@@ -74,3 +74,58 @@ impl From<HelloProto> for ScoutingMessage {
         ScoutingBody::Hello(hello).into()
     }
 }
+
+// Extensions
+pub mod ext {
+    use core::ops::Deref;
+    use zenoh_buffers::ZSlice;
+
+    /// ```text
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |Z|1_0|    ID   |
+    /// +-+-+-+---------+
+    /// %     len       %
+    /// +---------------+
+    /// ~    [[u8]]     ~
+    /// +---------------+
+    /// ```
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct GroupsType<const ID: u8> {
+        inner: Vec<ZSlice>,
+    }
+
+    impl<const ID: u8> GroupsType<{ ID }> {
+        pub fn new(gs: Vec<ZSlice>) -> Self {
+            Self { inner: gs }
+        }
+
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+
+            let mut inner = vec![];
+            for _ in 0..rng.gen_range(1..4) {
+                let g = ZSlice::rand(rng.gen_range(1..64));
+                inner.push(g);
+            }
+
+            Self { inner }
+        }
+    }
+
+    impl<const ID: u8> Default for GroupsType<{ ID }> {
+        fn default() -> Self {
+            Self { inner: Vec::new() }
+        }
+    }
+
+    impl<const ID: u8> Deref for GroupsType<{ ID }> {
+        type Target = [ZSlice];
+
+        fn deref(&self) -> &Self::Target {
+            &self.inner
+        }
+    }
+}
