@@ -24,6 +24,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+#[cfg(feature = "unstable")]
 use once_cell::sync::OnceCell;
 #[zenoh_macros::internal]
 use ref_cast::ref_cast_custom;
