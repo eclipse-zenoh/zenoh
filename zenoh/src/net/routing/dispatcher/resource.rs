@@ -13,13 +13,15 @@
 //
 use std::{
     any::Any,
-    borrow::Cow,
+    borrow::{Borrow, Cow},
     collections::HashMap,
     convert::TryInto,
     hash::{Hash, Hasher},
+    ops::{Deref, DerefMut},
     sync::{Arc, RwLock},
 };
 
+use zenoh_collections::SingleOrBoxHashSet;
 use zenoh_config::WhatAmI;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr},
@@ -198,10 +200,10 @@ impl ResourceContext {
 pub struct Resource {
     pub(crate) parent: Option<Arc<Resource>>,
     pub(crate) expr: String,
-    pub(crate) suffix: String,
-    pub(crate) nonwild_prefix: Option<(Arc<Resource>, String)>,
-    pub(crate) children: HashMap<String, Arc<Resource>>,
-    pub(crate) context: Option<ResourceContext>,
+    pub(crate) suffix: usize,
+    pub(crate) nonwild_prefix: Option<Arc<Resource>>,
+    pub(crate) children: SingleOrBoxHashSet<Child>,
+    pub(crate) context: Option<Box<ResourceContext>>,
     pub(crate) session_ctxs: HashMap<usize, Arc<SessionContext>>,
 }
 
@@ -222,26 +224,63 @@ impl Hash for Resource {
     }
 }
 
+#[derive(Clone)]
+pub(crate) struct Child(Arc<Resource>);
+
+impl Deref for Child {
+    type Target = Arc<Resource>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Child {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl PartialEq for Child {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.suffix() == other.0.suffix()
+    }
+}
+
+impl Eq for Child {}
+
+impl Hash for Child {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.suffix().hash(state);
+    }
+}
+
+impl Borrow<str> for Child {
+    fn borrow(&self) -> &str {
+        self.0.suffix()
+    }
+}
+
 impl Resource {
     fn new(parent: &Arc<Resource>, suffix: &str, context: Option<ResourceContext>) -> Resource {
         let nonwild_prefix = match &parent.nonwild_prefix {
             None => {
                 if suffix.contains('*') {
-                    Some((parent.clone(), String::from(suffix)))
+                    Some(parent.clone())
                 } else {
                     None
                 }
             }
-            Some((prefix, wildsuffix)) => Some((prefix.clone(), [wildsuffix, suffix].concat())),
+            Some(prefix) => Some(prefix.clone()),
         };
 
         Resource {
             parent: Some(parent.clone()),
             expr: parent.expr.clone() + suffix,
-            suffix: String::from(suffix),
+            suffix: parent.expr.len(),
             nonwild_prefix,
-            children: HashMap::new(),
-            context,
+            children: SingleOrBoxHashSet::new(),
+            context: context.map(Box::new),
             session_ctxs: HashMap::new(),
         }
     }
@@ -257,6 +296,10 @@ impl Resource {
         } else {
             None
         }
+    }
+
+    pub fn suffix(&self) -> &str {
+        &self.expr[self.suffix..]
     }
 
     #[inline(always)]
@@ -282,9 +325,12 @@ impl Resource {
     pub fn nonwild_prefix(res: &Arc<Resource>) -> (Option<Arc<Resource>>, String) {
         match &res.nonwild_prefix {
             None => (Some(res.clone()), "".to_string()),
-            Some((nonwild_prefix, wildsuffix)) => {
+            Some(nonwild_prefix) => {
                 if !nonwild_prefix.expr().is_empty() {
-                    (Some(nonwild_prefix.clone()), wildsuffix.clone())
+                    (
+                        Some(nonwild_prefix.clone()),
+                        res.expr[nonwild_prefix.expr.len()..].to_string(),
+                    )
                 } else {
                     (None, res.expr().to_string())
                 }
@@ -296,9 +342,9 @@ impl Resource {
         Arc::new(Resource {
             parent: None,
             expr: String::from(""),
-            suffix: String::from(""),
+            suffix: 0,
             nonwild_prefix: None,
-            children: HashMap::new(),
+            children: SingleOrBoxHashSet::new(),
             context: None,
             session_ctxs: HashMap::new(),
         })
@@ -313,7 +359,7 @@ impl Resource {
                 tracing::debug!("Unregister resource {}", res.expr());
                 mutres.nonwild_prefix.take();
                 {
-                    get_mut_unchecked(parent).children.remove(&res.suffix);
+                    get_mut_unchecked(parent).children.remove(res.suffix());
                 }
                 Resource::clean(parent);
             }
@@ -322,11 +368,10 @@ impl Resource {
 
     pub fn close(self: &mut Arc<Resource>) {
         let r = get_mut_unchecked(self);
-        for c in r.children.values_mut() {
-            Self::close(c);
+        for mut c in r.children.drain() {
+            Self::close(&mut c);
         }
         r.parent.take();
-        r.children.clear();
         r.nonwild_prefix.take();
         r.context.take();
         r.session_ctxs.clear();
@@ -336,7 +381,7 @@ impl Resource {
     pub fn print_tree(from: &Arc<Resource>) -> String {
         let mut result = from.expr().to_string();
         result.push('\n');
-        for child in from.children.values() {
+        for child in from.children.iter() {
             result.push_str(&Resource::print_tree(child));
         }
         result
@@ -347,105 +392,55 @@ impl Resource {
         from: &mut Arc<Resource>,
         suffix: &str,
     ) -> Arc<Resource> {
-        if suffix.is_empty() {
+        let Some((chunk, rest)) = Self::split_first_chunk(suffix) else {
             Resource::upgrade_resource(from, tables.hat_code.new_resource());
-            from.clone()
-        } else if let Some(stripped_suffix) = suffix.strip_prefix('/') {
-            let (chunk, rest) = match stripped_suffix.find('/') {
-                Some(idx) => (&suffix[0..(idx + 1)], &suffix[(idx + 1)..]),
-                None => (suffix, ""),
-            };
-
-            match get_mut_unchecked(from).children.get_mut(chunk) {
-                Some(res) => Resource::make_resource(tables, res, rest),
-                None => {
-                    let mut new = Arc::new(Resource::new(from, chunk, None));
-                    if tracing::enabled!(tracing::Level::DEBUG) && rest.is_empty() {
-                        tracing::debug!("Register resource {}", new.expr());
-                    }
-                    let res = Resource::make_resource(tables, &mut new, rest);
-                    get_mut_unchecked(from)
-                        .children
-                        .insert(String::from(chunk), new);
-                    res
-                }
-            }
-        } else {
-            match from.parent.clone() {
-                Some(mut parent) => {
-                    Resource::make_resource(tables, &mut parent, &[&from.suffix, suffix].concat())
-                }
-                None => {
-                    let (chunk, rest) = match suffix[1..].find('/') {
-                        Some(idx) => (&suffix[0..(idx + 1)], &suffix[(idx + 1)..]),
-                        None => (suffix, ""),
-                    };
-
-                    match get_mut_unchecked(from).children.get_mut(chunk) {
-                        Some(res) => Resource::make_resource(tables, res, rest),
-                        None => {
-                            let mut new = Arc::new(Resource::new(from, chunk, None));
-                            if tracing::enabled!(tracing::Level::DEBUG) && rest.is_empty() {
-                                tracing::debug!("Register resource {}", new.expr());
-                            }
-                            let res = Resource::make_resource(tables, &mut new, rest);
-                            get_mut_unchecked(from)
-                                .children
-                                .insert(String::from(chunk), new);
-                            res
-                        }
-                    }
-                }
+            return from.clone();
+        };
+        if !chunk.starts_with('/') {
+            if let Some(parent) = &mut from.parent.clone() {
+                return Resource::make_resource(tables, parent, &[from.suffix(), suffix].concat());
             }
         }
+        if let Some(child) = get_mut_unchecked(from).children.get(chunk) {
+            return Resource::make_resource(tables, &mut child.0.clone(), rest);
+        }
+        let mut new = Arc::new(Resource::new(from, chunk, None));
+        if rest.is_empty() {
+            tracing::debug!("Register resource {}", new.expr());
+        }
+        let res = Resource::make_resource(tables, &mut new, rest);
+        get_mut_unchecked(from).children.insert(Child(new));
+        res
     }
 
     #[inline]
     pub fn get_resource(from: &Arc<Resource>, suffix: &str) -> Option<Arc<Resource>> {
-        if suffix.is_empty() {
-            Some(from.clone())
-        } else if let Some(stripped_suffix) = suffix.strip_prefix('/') {
-            let (chunk, rest) = match stripped_suffix.find('/') {
-                Some(idx) => (&suffix[0..(idx + 1)], &suffix[(idx + 1)..]),
-                None => (suffix, ""),
-            };
-
-            match from.children.get(chunk) {
-                Some(res) => Resource::get_resource(res, rest),
-                None => None,
-            }
-        } else {
-            match &from.parent {
-                Some(parent) => Resource::get_resource(parent, &[&from.suffix, suffix].concat()),
-                None => {
-                    let (chunk, rest) = match suffix[1..].find('/') {
-                        Some(idx) => (&suffix[0..(idx + 1)], &suffix[(idx + 1)..]),
-                        None => (suffix, ""),
-                    };
-
-                    match from.children.get(chunk) {
-                        Some(res) => Resource::get_resource(res, rest),
-                        None => None,
-                    }
-                }
+        let Some((chunk, rest)) = Self::split_first_chunk(suffix) else {
+            return Some(from.clone());
+        };
+        if !chunk.starts_with('/') {
+            if let Some(parent) = &from.parent {
+                return Resource::get_resource(parent, &[from.suffix(), suffix].concat());
             }
         }
+        Resource::get_resource(from.children.get(chunk)?, rest)
     }
 
-    fn fst_chunk(key_expr: &keyexpr) -> (&keyexpr, Option<&keyexpr>) {
-        match key_expr.as_bytes().iter().position(|c| *c == b'/') {
-            Some(pos) => {
-                let left = &key_expr.as_bytes()[..pos];
-                let right = &key_expr.as_bytes()[pos + 1..];
-                unsafe {
-                    (
-                        keyexpr::from_slice_unchecked(left),
-                        Some(keyexpr::from_slice_unchecked(right)),
-                    )
-                }
-            }
-            None => (key_expr, None),
+    /// Split the suffix at the next '/' (after leading one), returning None if the suffix is empty.
+    ///
+    /// Suffix usually starts with '/', so this first slash is kept as part of the split chunk.
+    /// The rest will contain the slash of the split.
+    /// For example `split_first_chunk("/a/b") == Some(("/a", "/b"))`.
+    fn split_first_chunk(suffix: &str) -> Option<(&str, &str)> {
+        if suffix.is_empty() {
+            return None;
         }
+        // don't count the first char which may be a leading slash to find the next one
+        Some(match suffix[1..].find('/') {
+            // don't forget to add 1 to the index because of `[1..]` slice above
+            Some(idx) => suffix.split_at(idx + 1),
+            None => (suffix, ""),
+        })
     }
 
     #[inline]
@@ -454,6 +449,10 @@ impl Resource {
         face: &mut Arc<FaceState>,
         push: bool,
     ) -> WireExpr<'static> {
+        if face.is_local {
+            return res.expr().to_string().into();
+        }
+
         let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(res);
         match nonwild_prefix {
             Some(mut nonwild_prefix) => {
@@ -519,7 +518,17 @@ impl Resource {
         }
     }
 
+    /// Return the best locally/remotely declared keyexpr, i.e. with the smallest suffix, matching
+    /// the given suffix and session id.
+    ///
+    /// The goal is to save bandwidth by using the shortest keyexpr on the wire. It works by
+    /// recursively walk through the children tree, looking for an already declared keyexpr for the
+    /// session.
+    /// If none is found, and if the tested resource itself doesn't have a declared keyexpr,
+    /// then the parent tree is walked through. If there is still no declared keyexpr, the whole
+    /// prefix+suffix string is used.
     pub fn get_best_key<'a>(&self, suffix: &'a str, sid: usize) -> WireExpr<'a> {
+        /// Retrieve a declared keyexpr, either local or remote.
         fn get_wire_expr<'a>(
             prefix: &Resource,
             suffix: impl FnOnce() -> Cow<'a, str>,
@@ -537,19 +546,18 @@ impl Resource {
                 mapping,
             })
         }
+        /// Walk through the children tree, looking for a declared keyexpr.
         fn get_best_child_key<'a>(
             prefix: &Resource,
             suffix: &'a str,
             sid: usize,
         ) -> Option<WireExpr<'a>> {
-            if suffix.is_empty() {
-                return None;
-            }
-            let (chunk, remain) = suffix.split_once('/').unwrap_or((suffix, ""));
+            let (chunk, rest) = Resource::split_first_chunk(suffix)?;
             let child = prefix.children.get(chunk)?;
-            get_best_child_key(child, remain, sid)
-                .or_else(|| get_wire_expr(child, || remain.into(), sid))
+            get_best_child_key(child, rest, sid)
+                .or_else(|| get_wire_expr(child, || rest.into(), sid))
         }
+        /// Walk through the parent tree, looking for a declared keyexpr.
         fn get_best_parent_key<'a>(
             prefix: &Resource,
             suffix: &'a str,
@@ -585,7 +593,7 @@ impl Resource {
             f: &mut impl FnMut(&Arc<Resource>) -> bool,
         ) -> bool {
             return_if_true!(res.context.is_some() && f(res));
-            for child in res.children.values() {
+            for child in res.children.iter() {
                 return_if_true!(any_matches_trailing_wildcard(child, f));
             }
             false
@@ -595,26 +603,35 @@ impl Resource {
             res: &Arc<Resource>,
             f: &mut impl FnMut(&Arc<Resource>) -> bool,
         ) -> bool {
-            if res.parent.is_none() || res.suffix == "/" {
-                for child in res.children.values() {
+            if res.parent.is_none() || res.suffix() == "/" {
+                for child in res.children.iter() {
                     return_if_true!(any_matches_rec(key_expr, child, f));
                 }
                 return false;
             }
             let suffix: &keyexpr = res
-                .suffix
+                .suffix()
                 .strip_prefix('/')
-                .unwrap_or(&res.suffix)
+                .unwrap_or(res.suffix())
                 .try_into()
                 .unwrap();
-            let (chunk, rest) = Resource::fst_chunk(key_expr);
-            if chunk.intersects(suffix) {
-                match rest {
-                    None if chunk == "**" => return any_matches_trailing_wildcard(res, f),
+            let (ke_chunk, ke_rest) = match key_expr.split_once('/') {
+                // SAFETY: chunks of keyexpr are valid keyexprs
+                Some((chunk, rest)) => unsafe {
+                    (
+                        keyexpr::from_str_unchecked(chunk),
+                        Some(keyexpr::from_str_unchecked(rest)),
+                    )
+                },
+                None => (key_expr, None),
+            };
+            if ke_chunk.intersects(suffix) {
+                match ke_rest {
+                    None if ke_chunk == "**" => return any_matches_trailing_wildcard(res, f),
                     None => {
                         return_if_true!(res.context.is_some() && f(res));
                         if suffix == "**" {
-                            for child in res.children.values() {
+                            for child in res.children.iter() {
                                 return_if_true!(any_matches_rec(key_expr, child, f));
                             }
                         }
@@ -628,8 +645,8 @@ impl Resource {
                         return_if_true!(any_matches_trailing_wildcard(res, f))
                     }
                     Some(rest) => {
-                        let recheck_keyexpr_one_level_lower = chunk == "**" || suffix == "**";
-                        for child in res.children.values() {
+                        let recheck_keyexpr_one_level_lower = ke_chunk == "**" || suffix == "**";
+                        for child in res.children.iter() {
                             return_if_true!(any_matches_rec(rest, child, f));
                             if recheck_keyexpr_one_level_lower {
                                 return_if_true!(any_matches_rec(key_expr, child, f));
@@ -674,7 +691,7 @@ impl Resource {
 
     pub fn upgrade_resource(res: &mut Arc<Resource>, hat: Box<dyn Any + Send + Sync>) {
         if res.context.is_none() {
-            get_mut_unchecked(res).context = Some(ResourceContext::new(hat));
+            get_mut_unchecked(res).context = Some(Box::new(ResourceContext::new(hat)));
         }
     }
 

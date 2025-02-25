@@ -25,7 +25,8 @@ pub mod qos;
 pub mod wrappers;
 
 #[allow(unused_imports)]
-use std::convert::TryFrom; // This is a false positive from the rust analyser
+use std::convert::TryFrom;
+// This is a false positive from the rust analyser
 use std::{
     any::Any, collections::HashSet, fmt, io::Read, net::SocketAddr, ops, path::Path, sync::Weak,
 };
@@ -95,6 +96,8 @@ pub struct DownsamplingRuleConf {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct DownsamplingItemConf {
+    /// Optional identifier for the downsampling configuration item
+    pub id: Option<String>,
     /// A list of interfaces to which the downsampling will be applied
     /// Downsampling will be applied for all interfaces if the parameter is None
     pub interfaces: Option<Vec<String>>,
@@ -150,6 +153,7 @@ impl std::fmt::Display for Username {
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub struct AclConfigPolicyEntry {
+    pub id: Option<String>,
     pub rules: Vec<String>,
     pub subjects: Vec<String>,
 }
@@ -182,6 +186,21 @@ pub enum AclMessage {
 pub enum Permission {
     Allow,
     Deny,
+}
+
+/// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
+#[derive(Default, Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum AutoConnectStrategy {
+    /// Always attempt to connect to another node, may result in redundant connection which
+    /// will be then be closed.
+    #[default]
+    Always,
+    /// A node will attempt to connect to another one only if its own zid is greater than the
+    /// other one. If both nodes use this strategy, only one will attempt the connection.
+    /// This strategy may not be suited if one of the node is not reachable by the other one,
+    /// for example because of a private IP.
+    GreaterZid,
 }
 
 pub trait ConfigValidator: Send + Sync {
@@ -301,6 +320,8 @@ validated_struct::validator! {
                 pub ttl: Option<u32>,
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through UDP multicast.
                 autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
+                /// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
+                autoconnect_strategy: Option<ModeDependentValue<TargetDependentValue<AutoConnectStrategy>>>,
                 /// Whether or not to listen for scout messages on UDP multicast and reply to them.
                 listen: Option<ModeDependentValue<bool>>,
             },
@@ -319,6 +340,8 @@ validated_struct::validator! {
                 target: Option<ModeDependentValue<WhatAmIMatcher>>,
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through gossip.
                 autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
+                /// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
+                autoconnect_strategy: Option<ModeDependentValue<TargetDependentValue<AutoConnectStrategy>>>,
             },
         },
 
@@ -485,6 +508,13 @@ validated_struct::validator! {
                             /// The maximum time limit (in ms) a message should be retained for batching when back-pressure happens.
                             time_limit: u64,
                         },
+                        /// Perform lazy memory allocation of batches in the prioritiey queues. If set to false all batches are initialized at
+                        /// initialization time. If set to true the batches will be allocated when needed up to the maximum number of batches
+                        /// configured in the size configuration parameter.
+                        pub allocation: #[derive(Default, Copy, PartialEq, Eq)]
+                        QueueAllocConf {
+                            pub mode: QueueAllocMode,
+                        },
                     },
                     // Number of threads used for TX
                     threads: usize,
@@ -541,9 +571,19 @@ validated_struct::validator! {
             pub shared_memory:
             ShmConf {
                 /// Whether shared memory is enabled or not.
-                /// If set to `true`, the SHM buffer optimization support will be announced to other parties. (default `false`).
+                /// If set to `true`, the SHM buffer optimization support will be announced to other parties. (default `true`).
                 /// This option doesn't make SHM buffer optimization mandatory, the real support depends on other party setting
+                /// A probing procedure for shared memory is performed upon session opening. To enable zenoh to operate
+                /// over shared memory (and to not fallback on network mode), shared memory needs to be enabled also on the
+                /// subscriber side. By doing so, the probing procedure will succeed and shared memory will operate as expected.
                 enabled: bool,
+                /// SHM resources initialization mode (default "lazy").
+                /// - "lazy": SHM subsystem internals will be initialized lazily upon the first SHM buffer
+                /// allocation or reception. This setting provides better startup time and optimizes resource usage,
+                /// but produces extra latency at the first SHM buffer interaction.
+                /// - "init": SHM subsystem internals will be initialized upon Session opening. This setting sacrifices
+                /// startup time, but guarantees no latency impact when first SHM buffer is processed.
+                mode: ShmInitMode,
             },
             pub auth: #[derive(Default)]
             AuthConf {
@@ -619,6 +659,22 @@ validated_struct::validator! {
     }
 }
 
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QueueAllocMode {
+    Init,
+    #[default]
+    Lazy,
+}
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ShmInitMode {
+    Init,
+    #[default]
+    Lazy,
+}
+
 impl Default for PermissionsConf {
     fn default() -> Self {
         PermissionsConf {
@@ -692,9 +748,9 @@ fn config_deser() {
         &mut json5::Deserializer::from_str(
             r#"{transport: { auth: { usrpwd: { user: null, password: null, dictionary_file: "file" }}}}"#,
         )
-        .unwrap(),
+            .unwrap(),
     )
-    .unwrap();
+        .unwrap();
     assert_eq!(
         config
             .transport()
@@ -709,9 +765,9 @@ fn config_deser() {
         &mut json5::Deserializer::from_str(
             r#"{transport: { auth: { usrpwd: { user: null, password: null, user_password_dictionary: "file" }}}}"#,
         )
-        .unwrap(),
+            .unwrap(),
     )
-    .unwrap_err());
+        .unwrap_err());
     dbg!(Config::from_file("../../DEFAULT_CONFIG.json5").unwrap());
 }
 
@@ -988,15 +1044,15 @@ impl PluginsConfig {
                 _ => id,
             };
 
-            if let Some(paths) = value.get("__path__"){
+            if let Some(paths) = value.get("__path__") {
                 let paths = match paths {
                     Value::String(s) => vec![s.clone()],
-                    Value::Array(a) => a.iter().map(|s| if let Value::String(s) = s {s.clone()} else {panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", id)}).collect(),
+                    Value::Array(a) => a.iter().map(|s| if let Value::String(s) = s { s.clone() } else { panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", id) }).collect(),
                     _ => panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", id)
                 };
-                PluginLoad {id: id.clone(), name: name.clone(), paths: Some(paths), required}
+                PluginLoad { id: id.clone(), name: name.clone(), paths: Some(paths), required }
             } else {
-                PluginLoad {id: id.clone(), name: name.clone(), paths: None, required}
+                PluginLoad { id: id.clone(), name: name.clone(), paths: None, required }
             }
         })
     }

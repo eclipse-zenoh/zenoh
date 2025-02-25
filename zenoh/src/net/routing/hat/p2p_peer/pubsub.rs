@@ -62,7 +62,8 @@ fn propagate_simple_subscription_to(
         if dst_face.whatami != WhatAmI::Client {
             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
             face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
-            let key_expr = Resource::decl_key(res, dst_face, dst_face.whatami != WhatAmI::Client);
+            let key_expr =
+                Resource::decl_key(res, dst_face, super::push_declaration_profile(dst_face));
             send_declare(
                 &dst_face.primitives,
                 RoutingContext::with_expr(
@@ -101,8 +102,11 @@ fn propagate_simple_subscription_to(
                 if !face_hat!(dst_face).local_subs.contains_key(res) {
                     let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
                     face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
-                    let key_expr =
-                        Resource::decl_key(res, dst_face, dst_face.whatami != WhatAmI::Client);
+                    let key_expr = Resource::decl_key(
+                        res,
+                        dst_face,
+                        super::push_declaration_profile(dst_face),
+                    );
                     send_declare(
                         &dst_face.primitives,
                         RoutingContext::with_expr(
@@ -437,7 +441,8 @@ pub(super) fn declare_sub_interest(
                             .any(|sub| sub.context.is_some() && sub.matches(res))
                 }) {
                     let id = make_sub_id(res, face, mode);
-                    let wire_expr = Resource::decl_key(res, face, face.whatami != WhatAmI::Client);
+                    let wire_expr =
+                        Resource::decl_key(res, face, super::push_declaration_profile(face));
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -466,8 +471,11 @@ pub(super) fn declare_sub_interest(
                         for sub in face_hat!(src_face).remote_subs.values() {
                             if sub.context.is_some() && sub.matches(res) {
                                 let id = make_sub_id(sub, face, mode);
-                                let wire_expr =
-                                    Resource::decl_key(sub, face, face.whatami != WhatAmI::Client);
+                                let wire_expr = Resource::decl_key(
+                                    sub,
+                                    face,
+                                    super::push_declaration_profile(face),
+                                );
                                 send_declare(
                                     &face.primitives,
                                     RoutingContext::with_expr(
@@ -499,7 +507,7 @@ pub(super) fn declare_sub_interest(
                     for sub in face_hat!(src_face).remote_subs.values() {
                         let id = make_sub_id(sub, face, mode);
                         let wire_expr =
-                            Resource::decl_key(sub, face, face.whatami != WhatAmI::Client);
+                            Resource::decl_key(sub, face, super::push_declaration_profile(face));
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(

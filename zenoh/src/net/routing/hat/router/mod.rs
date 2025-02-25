@@ -25,7 +25,7 @@ use std::{
 };
 
 use token::{token_linkstate_change, token_remove_node, undeclare_simple_token};
-use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher};
+use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI};
 use zenoh_protocol::{
     common::ZExtBody,
     core::ZenohIdProto,
@@ -114,6 +114,8 @@ macro_rules! face_hat_mut {
     };
 }
 use face_hat_mut;
+
+use crate::net::common::AutoConnect;
 
 struct TreesComputationWorker {
     _task: TerminatableTask,
@@ -317,9 +319,9 @@ impl HatBaseTrait for HatCode {
             bail!("\"client\" is not allowed as gossip target")
         }
         let autoconnect = if gossip {
-            *unwrap_or_default!(config.scouting().gossip().autoconnect().get(whatami))
+            AutoConnect::gossip(config, whatami)
         } else {
-            WhatAmIMatcher::empty()
+            AutoConnect::disabled()
         };
 
         let router_full_linkstate = true;
@@ -906,3 +908,9 @@ fn get_peer(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<Ze
 }
 
 impl HatTrait for HatCode {}
+
+#[inline]
+pub(super) fn push_declaration_profile(tables: &Tables, face: &FaceState) -> bool {
+    !(face.whatami == WhatAmI::Client
+        || (face.whatami == WhatAmI::Peer && !hat!(tables).full_net(WhatAmI::Peer)))
+}

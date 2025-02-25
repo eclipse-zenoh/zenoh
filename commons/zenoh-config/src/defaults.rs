@@ -85,6 +85,15 @@ pub mod scouting {
                 &crate::WhatAmIMatcher::empty().router();
             mode_accessor!(crate::WhatAmIMatcher);
         }
+        pub mod autoconnect_strategy {
+            pub const router: &crate::TargetDependentValue<crate::AutoConnectStrategy> =
+                &crate::TargetDependentValue::Unique(crate::AutoConnectStrategy::Always);
+            pub const peer: &crate::TargetDependentValue<crate::AutoConnectStrategy> =
+                &crate::TargetDependentValue::Unique(crate::AutoConnectStrategy::Always);
+            pub const client: &crate::TargetDependentValue<crate::AutoConnectStrategy> =
+                &crate::TargetDependentValue::Unique(crate::AutoConnectStrategy::Always);
+            mode_accessor!(crate::TargetDependentValue<crate::AutoConnectStrategy>);
+        }
         pub mod listen {
             pub const router: &bool = &true;
             pub const peer: &bool = &true;
@@ -112,6 +121,15 @@ pub mod scouting {
             pub const client: &crate::WhatAmIMatcher = // ""
                 &crate::WhatAmIMatcher::empty();
             mode_accessor!(crate::WhatAmIMatcher);
+        }
+        pub mod autoconnect_strategy {
+            pub const router: &crate::TargetDependentValue<crate::AutoConnectStrategy> =
+                &crate::TargetDependentValue::Unique(crate::AutoConnectStrategy::Always);
+            pub const peer: &crate::TargetDependentValue<crate::AutoConnectStrategy> =
+                &crate::TargetDependentValue::Unique(crate::AutoConnectStrategy::Always);
+            pub const client: &crate::TargetDependentValue<crate::AutoConnectStrategy> =
+                &crate::TargetDependentValue::Unique(crate::AutoConnectStrategy::Always);
+            mode_accessor!(crate::TargetDependentValue<crate::AutoConnectStrategy>);
         }
     }
 }
@@ -256,14 +274,14 @@ impl QueueSizeConf {
 impl Default for QueueSizeConf {
     fn default() -> Self {
         Self {
-            control: 1,
-            real_time: 1,
-            interactive_low: 1,
-            interactive_high: 1,
+            control: 2,
+            real_time: 2,
+            interactive_low: 2,
+            interactive_high: 2,
             data_high: 2,
-            data: 4,
+            data: 2,
             data_low: 2,
-            background: 1,
+            background: 2,
         }
     }
 }
@@ -307,7 +325,10 @@ impl Default for LinkRxConf {
 #[allow(clippy::derivable_impls)]
 impl Default for ShmConf {
     fn default() -> Self {
-        Self { enabled: true }
+        Self {
+            enabled: true,
+            mode: ShmInitMode::default(),
+        }
     }
 }
 

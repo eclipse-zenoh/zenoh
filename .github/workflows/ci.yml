@@ -35,13 +35,31 @@ env:
   CARGO_SEMVER_CHECKS_BASELINE_VERSION: 1.0.0
 
 jobs:
+  determine-runner:
+    runs-on: ubuntu-latest
+    outputs:
+      runner: ${{ steps.set-runner.outputs.runner }}
+    steps:
+      - name: Clone this repository
+        uses: actions/checkout@v4
+
+      - name: Determine which runner to use
+        id: set-runner
+        run: |
+          if [[ -f ci/runners.json ]]; then
+            echo "runner=$(cat ci/runners.json)" >> $GITHUB_OUTPUT
+          else
+            echo "runner=['ubuntu-latest', 'windows-latest', 'macos-latest']" >> $GITHUB_OUTPUT
+          fi
+
   check:
+    needs: determine-runner
     name: Lints and doc tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-13, macos-14]
+        os: ${{ fromJSON(needs.determine-runner.outputs.runner) }}
 
     steps:
       - name: Clone this repository
@@ -52,6 +70,8 @@ jobs:
 
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
 
       - name: Install latest cargo-deny
         uses: taiki-e/install-action@cargo-deny
@@ -87,7 +107,7 @@ jobs:
         run: cargo +stable clippy --all-targets --features unstable,test -- --deny warnings
 
       - name: Clippy all features
-        if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest' }}
+        if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest' }}
         run: cargo +stable clippy --all-targets --all-features -- --deny warnings
 
       - name: Install generic no_std target
@@ -115,12 +135,13 @@ jobs:
         run: cargo +stable semver-checks --verbose --default-features --package zenoh --release-type ${{ env.CARGO_SEMVER_CHECKS_RELEASE_TYPE }} --baseline-version ${{ env.CARGO_SEMVER_CHECKS_BASELINE_VERSION }}
 
   test:
+    needs: determine-runner
     name: Unit tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-13, macos-14]
+        os: ${{ fromJSON(needs.determine-runner.outputs.runner) }}
 
     steps:
       - name: Clone this repository
@@ -131,13 +152,14 @@ jobs:
 
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
 
       - name: Set rustflags
+        if: ${{ matrix.os == 'windows-latest' }}
         shell: bash
         run: |
-          case ${{ matrix.os }} in
-            *windows*) echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV ;;
-          esac
+            echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV
 
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
@@ -146,7 +168,7 @@ jobs:
         run: cargo nextest run -F test -F internal_config --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Run tests with SHM
-        if: ${{ matrix.os == 'macOS-latest' || matrix.os == 'windows-latest' }}
+        if: ${{ matrix.os == 'macos-latest' || matrix.os == 'windows-latest' }}
         run: cargo nextest run -F test -F shared-memory -F unstable -F internal_config -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Run tests with SHM + unixpipe
@@ -172,6 +194,8 @@ jobs:
         uses: taiki-e/install-action@valgrind
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
 
       - name: Run memory leaks check
         run: ci/valgrind-check/run.sh

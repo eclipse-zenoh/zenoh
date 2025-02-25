@@ -24,7 +24,7 @@ categories = { workspace = true }
 description = "The zenoh storages plugin."
 
 [features]
-default = ["dynamic_plugin"]
+default = ["dynamic_plugin", "zenoh/default"]
 dynamic_plugin = []
 
 [lib]
@@ -45,8 +45,7 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
-zenoh = { workspace = true, features = [
-    "default",
+zenoh = { workspace = true, default-features = false, features = [
     "plugins",
     "internal",
     "unstable",
@@ -72,7 +71,7 @@ maintainer = "zenoh-dev@eclipse.org"
 copyright = "2024 ZettaScale Technology"
 section = "net"
 license-file = ["../../LICENSE", "0"]
-depends = "zenohd (=1.1.1)"
+depends = "zenohd (=1.2.1)"
 
 [package.metadata.cargo-machete]
 ignored = ["git-version"]

@@ -40,6 +40,7 @@ use zenoh_protocol::{
 use zenoh_result::{bail, zerror, ZResult};
 
 use super::{Runtime, RuntimeSession};
+use crate::net::common::AutoConnect;
 
 const RCV_BUF_SIZE: usize = u16::MAX as usize;
 const SCOUT_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
@@ -196,7 +197,7 @@ impl Runtime {
                 unwrap_or_default!(guard.scouting().multicast().enabled()),
                 unwrap_or_default!(guard.open().return_conditions().connect_scouted()),
                 *unwrap_or_default!(guard.scouting().multicast().listen().peer()),
-                *unwrap_or_default!(guard.scouting().multicast().autoconnect().peer()),
+                AutoConnect::multicast(guard, WhatAmI::Peer),
                 unwrap_or_default!(guard.scouting().multicast().address()),
                 unwrap_or_default!(guard.scouting().multicast().interface()),
                 Duration::from_millis(unwrap_or_default!(guard.scouting().delay())),
@@ -244,7 +245,7 @@ impl Runtime {
                     .clone(),
                 unwrap_or_default!(guard.scouting().multicast().enabled()),
                 *unwrap_or_default!(guard.scouting().multicast().listen().router()),
-                *unwrap_or_default!(guard.scouting().multicast().autoconnect().router()),
+                AutoConnect::multicast(guard, WhatAmI::Router),
                 unwrap_or_default!(guard.scouting().multicast().address()),
                 unwrap_or_default!(guard.scouting().multicast().interface()),
                 Duration::from_millis(unwrap_or_default!(guard.scouting().delay())),
@@ -266,7 +267,7 @@ impl Runtime {
     async fn start_scout(
         &self,
         listen: bool,
-        autoconnect: WhatAmIMatcher,
+        autoconnect: AutoConnect,
         addr: SocketAddr,
         ifaces: String,
     ) -> ZResult<()> {
@@ -284,23 +285,27 @@ impl Runtime {
                 .collect();
             if !sockets.is_empty() {
                 let this = self.clone();
-                match (listen, autoconnect.is_empty()) {
-                    (true, false) => {
+                match (listen, autoconnect.is_enabled()) {
+                    (true, true) => {
                         self.spawn_abortable(async move {
                             tokio::select! {
                                 _ = this.responder(&mcast_socket, &sockets) => {},
-                                _ = this.connect_all(&sockets, autoconnect, &addr) => {},
+                                _ = this.autoconnect_all(
+                                    &sockets,
+                                    autoconnect,
+                                    &addr
+                                ) => {},
                             }
                         });
                     }
-                    (true, true) => {
+                    (true, false) => {
                         self.spawn_abortable(async move {
                             this.responder(&mcast_socket, &sockets).await;
                         });
                     }
-                    (false, false) => {
+                    (false, true) => {
                         self.spawn_abortable(async move {
-                            this.connect_all(&sockets, autoconnect, &addr).await
+                            this.autoconnect_all(&sockets, autoconnect, &addr).await
                         });
                     }
                     _ => {}
@@ -1082,20 +1087,25 @@ impl Runtime {
         }
     }
 
-    async fn connect_all(
+    async fn autoconnect_all(
         &self,
         ucast_sockets: &[UdpSocket],
-        what: WhatAmIMatcher,
+        autoconnect: AutoConnect,
         addr: &SocketAddr,
     ) {
-        Runtime::scout(ucast_sockets, what, addr, move |hello| async move {
-            if !hello.locators.is_empty() {
-                self.connect_peer(&hello.zid, &hello.locators).await;
-            } else {
-                tracing::warn!("Received Hello with no locators: {:?}", hello);
-            }
-            Loop::Continue
-        })
+        Runtime::scout(
+            ucast_sockets,
+            autoconnect.matcher(),
+            addr,
+            move |hello| async move {
+                if hello.locators.is_empty() {
+                    tracing::warn!("Received Hello with no locators: {:?}", hello);
+                } else if autoconnect.should_autoconnect(hello.zid, hello.whatami) {
+                    self.connect_peer(&hello.zid, &hello.locators).await;
+                }
+                Loop::Continue
+            },
+        )
         .await
     }
 

@@ -12,10 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use futures::future;
 use git_version::git_version;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
-use zenoh::{config::WhatAmI, Config, Result};
+use zenoh::{config::WhatAmI, Config, Result, Wait};
 use zenoh_config::{EndPoint, ModeDependentValue, PermissionsConf};
 use zenoh_util::LibSearchDirs;
 
@@ -77,29 +76,26 @@ struct Args {
 }
 
 fn main() {
-    tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .unwrap()
-        .block_on(async {
-            init_logging().unwrap();
+    if let Err(e) = init_logging() {
+        eprintln!("{e}. Exiting...");
+        std::process::exit(-1);
+    }
 
-            tracing::info!("zenohd {}", *LONG_VERSION);
+    tracing::info!("zenohd {}", *LONG_VERSION);
 
-            let args = Args::parse();
-            let config = config_from_args(&args);
-            tracing::info!("Initial conf: {}", &config);
+    let args = Args::parse();
+    let config = config_from_args(&args);
+    tracing::info!("Initial conf: {}", &config);
 
-            let _session = match zenoh::open(config).await {
-                Ok(runtime) => runtime,
-                Err(e) => {
-                    println!("{e}. Exiting...");
-                    std::process::exit(-1);
-                }
-            };
+    let _session = match zenoh::open(config).wait() {
+        Ok(runtime) => runtime,
+        Err(e) => {
+            eprintln!("{e}. Exiting...");
+            std::process::exit(-1);
+        }
+    };
 
-            future::pending::<()>().await;
-        });
+    std::thread::park();
 }
 
 fn config_from_args(args: &Args) -> Config {

@@ -17,7 +17,7 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use ahash::RandomState;
 use itertools::Itertools;
@@ -389,6 +389,7 @@ impl PolicyEnforcer {
         let mut policy_rules: Vec<PolicyRule> = Vec::new();
         let mut rule_map = HashMap::new();
         let mut subject_id_map = HashMap::<String, Vec<usize>>::new();
+        let mut policy_id_set = HashSet::<String>::new();
         let mut subject_map_builder = SubjectMapBuilder::new();
 
         // validate rules config and insert them in hashmaps
@@ -511,6 +512,14 @@ impl PolicyEnforcer {
         }
         // finally, handle policy content
         for (entry_id, entry) in policies.iter().enumerate() {
+            if let Some(policy_custom_id) = &entry.id {
+                if !policy_id_set.insert(policy_custom_id.clone()) {
+                    bail!(
+                        "Policy id must be unique: id '{}' is repeated",
+                        policy_custom_id
+                    );
+                }
+            }
             // validate policy config lists
             if entry.rules.is_empty() || entry.subjects.is_empty() {
                 bail!(

@@ -57,44 +57,54 @@ impl PeriodicTask {
         let builder = ThreadBuilder::default().name(name);
 
         let _ = builder.spawn(move |result| {
-                if let Err(e) = result {
-                    #[cfg(windows)]
-                    tracing::warn!("{:?}: error setting scheduling priority for thread: {:?}, will run with the default one...", std::thread::current().name(), e);
-                    #[cfg(unix)]
-                    {
-                        tracing::warn!("{:?}: error setting realtime FIFO scheduling policy for thread: {:?}, will run with the default one...", std::thread::current().name(), e);
-                        for priority in (ThreadPriorityValue::MIN..ThreadPriorityValue::MAX).rev() {
-                            if let Ok(p) = priority.try_into() {
-                                if set_current_thread_priority(ThreadPriority::Crossplatform(p)).is_ok() {
-                                    tracing::warn!("{:?}: will use priority {}", std::thread::current().name(), priority);
-                                    break;
-                                }
+            if let Err(e) = result {
+                let mut err = format!(
+                    "{:?}: error setting scheduling priority for thread: {:?}, will run with ",
+                    std::thread::current().name(),
+                    e
+                );
+                #[cfg(windows)]
+                {
+                    err.push_str("the default one. ");
+                }
+                #[cfg(unix)]
+                {
+                    for priority in (ThreadPriorityValue::MIN..ThreadPriorityValue::MAX).rev() {
+                        if let Ok(p) = priority.try_into() {
+                            if set_current_thread_priority(ThreadPriority::Crossplatform(p)).is_ok()
+                            {
+                                err.push_str(&format!("priority {}. ", priority));
+                                break;
                             }
                         }
                     }
                 }
+                err.push_str("This is not an hard error and it can be safely ignored under normal operating conditions. \
+                Though the SHM subsystem may experience some timeouts in case of an heavy congested system where this watchdog thread may not be scheduled at the required frequency.");
+                tracing::warn!("{}", err);
+            }
 
-                //TODO: need mlock here!
+            //TODO: need mlock here!
 
-                while c_running.load(Ordering::Relaxed) {
-                    let cycle_start = std::time::Instant::now();
+            while c_running.load(Ordering::Relaxed) {
+                let cycle_start = std::time::Instant::now();
 
-                    f();
+                f();
 
-                    // sleep for next iteration
-                    let elapsed = cycle_start.elapsed();
-                    if elapsed < interval {
-                        let sleep_interval = interval - elapsed;
-                        std::thread::sleep(sleep_interval);
-                    } else {
-                        let err = format!("{:?}: timer overrun", std::thread::current().name());
-                        #[cfg(not(feature = "test"))]
-                        tracing::error!("{err}");
-                        #[cfg(feature = "test")]
-                        panic!("{err}");
-                    }
+                // sleep for next iteration
+                let elapsed = cycle_start.elapsed();
+                if elapsed < interval {
+                    let sleep_interval = interval - elapsed;
+                    std::thread::sleep(sleep_interval);
+                } else {
+                    let err = format!("{:?}: timer overrun", std::thread::current().name());
+                    #[cfg(not(feature = "test"))]
+                    tracing::error!("{err}");
+                    #[cfg(feature = "test")]
+                    panic!("{err}");
                 }
-            });
+            }
+        });
 
         Self { running }
     }

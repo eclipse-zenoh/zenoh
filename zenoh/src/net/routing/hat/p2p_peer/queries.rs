@@ -114,7 +114,7 @@ fn propagate_simple_queryable_to(
         face_hat_mut!(dst_face)
             .local_qabls
             .insert(res.clone(), (id, info));
-        let key_expr = Resource::decl_key(res, dst_face, dst_face.whatami != WhatAmI::Client);
+        let key_expr = Resource::decl_key(res, dst_face, super::push_declaration_profile(dst_face));
         send_declare(
             &dst_face.primitives,
             RoutingContext::with_expr(
@@ -421,7 +421,8 @@ pub(super) fn declare_qabl_interest(
                 }) {
                     let info = local_qabl_info(tables, res, face);
                     let id = make_qabl_id(res, face, mode, info);
-                    let wire_expr = Resource::decl_key(res, face, face.whatami != WhatAmI::Client);
+                    let wire_expr =
+                        Resource::decl_key(res, face, super::push_declaration_profile(face));
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -452,8 +453,11 @@ pub(super) fn declare_qabl_interest(
                             if qabl.context.is_some() && qabl.matches(res) {
                                 let info = local_qabl_info(tables, qabl, face);
                                 let id = make_qabl_id(qabl, face, mode, info);
-                                let key_expr =
-                                    Resource::decl_key(qabl, face, face.whatami != WhatAmI::Client);
+                                let key_expr = Resource::decl_key(
+                                    qabl,
+                                    face,
+                                    super::push_declaration_profile(face),
+                                );
                                 send_declare(
                                     &face.primitives,
                                     RoutingContext::with_expr(
@@ -488,8 +492,11 @@ pub(super) fn declare_qabl_interest(
                         if qabl.context.is_some() {
                             let info = local_qabl_info(tables, qabl, face);
                             let id = make_qabl_id(qabl, face, mode, info);
-                            let key_expr =
-                                Resource::decl_key(qabl, face, face.whatami != WhatAmI::Client);
+                            let key_expr = Resource::decl_key(
+                                qabl,
+                                face,
+                                super::push_declaration_profile(face),
+                            );
                             send_declare(
                                 &face.primitives,
                                 RoutingContext::with_expr(
