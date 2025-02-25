@@ -1164,7 +1164,6 @@ impl Runtime {
                             whatami: self.whatami(),
                             zid,
                             locators: self.get_locators(),
-                            ext_groups: GroupsType::default(),
                         }
                         .into();
                         let socket = get_best_match(&peer.ip(), ucast_sockets).unwrap();

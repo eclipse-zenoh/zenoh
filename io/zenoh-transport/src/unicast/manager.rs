@@ -395,18 +395,39 @@ impl TransportManager {
         let manager = self
             .new_link_manager_unicast(endpoint.protocol().as_str())
             .await?;
-        // Fill and merge the endpoint configuration
-        if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
+
+        // File and merge the endpoint metadata and config
+        if let Some((metadata, config)) = self.config.endpoints.get(endpoint.protocol().as_str()) {
+            // File and merge the endpoint metadata
+            let mut metadata = parameters::Parameters::from(metadata.as_str());
+            // Overwrite config with current endpoint parameters
+            metadata.extend_from_iter(endpoint.metadata().iter());
+
+            // Fill and merge the endpoint configuration
             let mut config = parameters::Parameters::from(config.as_str());
             // Overwrite config with current endpoint parameters
             config.extend_from_iter(endpoint.config().iter());
+
             endpoint = EndPoint::new(
                 endpoint.protocol(),
                 endpoint.address(),
-                endpoint.metadata(),
+                metadata.as_str(),
                 config.as_str(),
             )?;
         };
+
+        // // Fill and merge the endpoint configuration
+        // if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
+        //     let mut config = parameters::Parameters::from(config.as_str());
+        //     // Overwrite config with current endpoint parameters
+        //     config.extend_from_iter(endpoint.config().iter());
+        //     endpoint = EndPoint::new(
+        //         endpoint.protocol(),
+        //         endpoint.address(),
+        //         endpoint.metadata(),
+        //         config.as_str(),
+        //     )?;
+        // };
         manager.new_listener(endpoint).await
     }
 
@@ -721,15 +742,23 @@ impl TransportManager {
         let manager = self
             .new_link_manager_unicast(endpoint.protocol().as_str())
             .await?;
-        // Fill and merge the endpoint configuration
-        if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
+
+        // File and merge the endpoint metadata and config
+        if let Some((metadata, config)) = self.config.endpoints.get(endpoint.protocol().as_str()) {
+            // File and merge the endpoint metadata
+            let mut metadata = parameters::Parameters::from(metadata.as_str());
+            // Overwrite config with current endpoint parameters
+            metadata.extend_from_iter(endpoint.metadata().iter());
+
+            // Fill and merge the endpoint configuration
             let mut config = parameters::Parameters::from(config.as_str());
             // Overwrite config with current endpoint parameters
             config.extend_from_iter(endpoint.config().iter());
+
             endpoint = EndPoint::new(
                 endpoint.protocol(),
                 endpoint.address(),
-                endpoint.metadata(),
+                metadata.as_str(),
                 config.as_str(),
             )?;
         };

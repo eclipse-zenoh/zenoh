@@ -70,6 +70,7 @@ use zenoh_link_vsock::{LinkManagerUnicastVsock, VsockLocatorInspector, VSOCK_LOC
 pub use zenoh_link_ws as ws;
 #[cfg(feature = "transport_ws")]
 use zenoh_link_ws::{LinkManagerUnicastWs, WsLocatorInspector, WS_LOCATOR_PREFIX};
+use zenoh_protocol::core::{parameters, Metadata};
 pub use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, ZResult};
 
@@ -190,19 +191,30 @@ impl LinkConfigurator {
         &self,
         config: &Config,
     ) -> (
-        HashMap<String, String>,
+        HashMap<String, (String, String)>, // (protocol, (metadata, config))
         HashMap<String, zenoh_result::Error>,
     ) {
         let mut configs = HashMap::new();
         let mut errors = HashMap::new();
+
+        // Common metadata
+        let metadata = match config.groups().connectivity() {
+            Some(gs) => {
+                let gs = gs.join(&parameters::VALUE_SEPARATOR.to_string());
+                parameters::from_iter(Some((Metadata::GROUPS, gs.as_str())).into_iter())
+            }
+            None => String::new(),
+        };
+
         let mut insert_config = |proto: String, cfg: ZResult<String>| match cfg {
             Ok(v) => {
-                configs.insert(proto, v);
+                configs.insert(proto, (metadata.clone(), v));
             }
             Err(e) => {
                 errors.insert(proto, e);
             }
         };
+
         #[cfg(feature = "transport_tcp")]
         {
             insert_config(

@@ -117,7 +117,7 @@ pub struct TransportManagerConfig {
     pub link_rx_buffer_size: usize,
     pub unicast: TransportManagerConfigUnicast,
     pub multicast: TransportManagerConfigMulticast,
-    pub endpoints: HashMap<String, String>, // (protocol, config)
+    pub endpoints: HashMap<String, (String, String)>, // (protocol, (metadata, config))
     pub handler: Arc<dyn TransportEventHandler>,
     pub tx_threads: usize,
     pub protocols: Vec<String>,
@@ -149,7 +149,7 @@ pub struct TransportManagerBuilder {
     link_rx_buffer_size: usize,
     unicast: TransportManagerBuilderUnicast,
     multicast: TransportManagerBuilderMulticast,
-    endpoints: HashMap<String, String>, // (protocol, config)
+    endpoints: HashMap<String, (String, String)>, // (protocol, (metadata, config))
     tx_threads: usize,
     protocols: Option<Vec<String>>,
     #[cfg(feature = "shared-memory")]
@@ -223,7 +223,7 @@ impl TransportManagerBuilder {
         self
     }
 
-    pub fn endpoints(mut self, endpoints: HashMap<String, String>) -> Self {
+    pub fn endpoints(mut self, endpoints: HashMap<String, (String, String)>) -> Self {
         self.endpoints = endpoints;
         self
     }

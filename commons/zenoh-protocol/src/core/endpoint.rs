@@ -189,6 +189,7 @@ pub struct Metadata<'a>(pub(super) &'a str);
 impl<'a> Metadata<'a> {
     pub const RELIABILITY: &'static str = "rel";
     pub const PRIORITIES: &'static str = "prio";
+    pub const GROUPS: &'static str = "group";
 
     pub fn as_str(&self) -> &'a str {
         self.0

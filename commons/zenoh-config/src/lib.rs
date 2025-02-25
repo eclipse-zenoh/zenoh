@@ -287,6 +287,11 @@ validated_struct::validator! {
             pub exit_on_failure: Option<ModeDependentValue<bool>>,
             pub retry: Option<connection_retry::ConnectionRetryModeDependentConf>,
         },
+        /// Groups
+        pub groups: #[derive(Default)]
+        GroupsConfig {
+            pub connectivity: Option<Vec<String>>,
+        },
         /// Configure the session open behavior.
         pub open: #[derive(Default)]
         OpenConf {

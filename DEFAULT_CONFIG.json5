@@ -117,6 +117,9 @@
       declares: true,
     },
   },
+  groups: {
+    connectivity: ["a", "b", "c"],
+  },
   /// Configure the scouting mechanisms and their behaviours
   scouting: {
     /// In client mode, the period in milliseconds dedicated to scouting for a router before failing.

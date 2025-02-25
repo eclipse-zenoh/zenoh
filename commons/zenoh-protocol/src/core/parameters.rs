@@ -29,9 +29,9 @@ use core::{borrow::Borrow, fmt};
 #[cfg(feature = "std")]
 use std::collections::HashMap;
 
-pub(super) const LIST_SEPARATOR: char = ';';
-pub(super) const FIELD_SEPARATOR: char = '=';
-pub(super) const VALUE_SEPARATOR: char = '|';
+pub const LIST_SEPARATOR: char = ';';
+pub const FIELD_SEPARATOR: char = '=';
+pub const VALUE_SEPARATOR: char = '|';
 
 fn split_once(s: &str, c: char) -> (&str, &str) {
     match s.find(c) {
