@@ -21,7 +21,6 @@ use std::{
 
 use tokio::runtime::Handle;
 use zenoh::{config::WhatAmI, sample::SampleKind, Config, Session};
-use zenoh_config::{EndPoint, ModeDependentValue};
 use zenoh_core::{zlock, ztimeout};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
