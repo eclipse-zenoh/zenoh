@@ -13,14 +13,13 @@
 //
 
 use std::{
-    fmt::Display,
-    marker::PhantomData,
-    mem::size_of,
-    ops::{Deref, DerefMut},
+    marker::PhantomData, mem::size_of, num::NonZeroUsize, ops::{Deref, DerefMut}
 };
 
 // use stabby::IStable;
 use zenoh_result::ZResult;
+
+use crate::shm;
 
 use super::segment::Segment;
 
@@ -29,7 +28,7 @@ use super::segment::Segment;
 pub struct StructInSHM<ID, Elem>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
-    ID: Clone + Display,
+    ID: shm::SegmentID,
 {
     inner: Segment<ID>,
     _phantom: PhantomData<Elem>,
@@ -38,13 +37,13 @@ where
 unsafe impl<ID, Elem: Sync> Sync for StructInSHM<ID, Elem>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
-    ID: Clone + Display,
+    ID: shm::SegmentID,
 {
 }
 unsafe impl<ID, Elem: Send> Send for StructInSHM<ID, Elem>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
-    ID: Clone + Display,
+    ID: shm::SegmentID,
 {
 }
 
@@ -52,7 +51,7 @@ impl<ID, Elem> StructInSHM<ID, Elem>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
     // Elem: IStable<ContainsIndirections = stabby::abi::B0>, // todo: stabby does not support IStable for big arrays
-    ID: Clone + Display,
+    ID: shm::SegmentID,
 {
     // Perform compile time check that Elem is not a ZST
     const _S: () = if size_of::<Elem>() == 0 {
@@ -60,7 +59,7 @@ where
     };
 
     pub fn create(file_prefix: &str) -> ZResult<Self> {
-        let alloc_size = size_of::<Elem>();
+        let alloc_size = NonZeroUsize::try_from(size_of::<Elem>())?;
         let inner = Segment::create(alloc_size, file_prefix)?;
         Ok(Self {
             inner,
@@ -90,7 +89,7 @@ impl<ID, Elem> Deref for StructInSHM<ID, Elem>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
     // Elem: IStable<ContainsIndirections = stabby::abi::B0>, // todo: stabby does not support IStable for big arrays
-    ID: Clone + Display,
+    ID: shm::SegmentID,
 {
     type Target = Elem;
 
@@ -103,7 +102,7 @@ impl<ID, Elem> DerefMut for StructInSHM<ID, Elem>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
     // Elem: IStable<ContainsIndirections = stabby::abi::B0>, // todo: stabby does not support IStable for big arrays
-    ID: Clone + Display,
+    ID: shm::SegmentID,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { &mut *(self.inner.as_ptr() as *mut Elem) }

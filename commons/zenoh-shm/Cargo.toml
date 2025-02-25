@@ -35,7 +35,6 @@ test = ["num_cpus"]
 async-trait = { workspace = true }
 crc = { workspace = true }
 tracing = { workspace = true }
-shared_memory = { workspace = true }
 tokio = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-core = { workspace = true }

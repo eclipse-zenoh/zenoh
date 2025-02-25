@@ -163,7 +163,6 @@ serde_yaml = "0.9.34"
 static_init = "1.0.3"
 stabby = "36.1.1"
 sha3 = "0.10.8"
-shared_memory = "0.12.4"
 shellexpand = "3.1.0"
 socket2 = { version = "0.5.7", features = ["all"] }
 stop-token = "0.7.0"

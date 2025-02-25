@@ -12,15 +12,14 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::fmt::{Debug, Display};
+use std::{fmt::Debug, num::NonZeroUsize};
 
 use rand::Rng;
-use shared_memory::{Shmem, ShmemConf, ShmemError};
 use zenoh_result::{bail, zerror, ZResult};
 
 #[cfg(target_os = "linux")]
 use super::segment_lock::unix::{ExclusiveShmLock, ShmLock};
-use crate::cleanup::CLEANUP;
+use crate::{cleanup::CLEANUP, shm};
 
 const SEGMENT_DEDICATE_TRIES: usize = 100;
 const ECMA: crc::Crc<u64> = crc::Crc::<u64>::new(&crc::CRC_64_ECMA_182);
@@ -29,10 +28,9 @@ const ECMA: crc::Crc<u64> = crc::Crc::<u64>::new(&crc::CRC_64_ECMA_182);
 pub struct Segment<ID>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
-    ID: Clone + Display,
+    ID: shm::SegmentID,
 {
-    shmem: Shmem, // <-------------|
-    id: ID,       //               |
+    shmem: shm::Segment<ID>, // <--|
     #[cfg(target_os = "linux")] // | location of these two fields matters!
     _lock: Option<ShmLock>, // <---|
 }
@@ -41,13 +39,13 @@ where
 impl<ID> Drop for Segment<ID>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
-    ID: Clone + Display,
+    ID: shm::SegmentID,
 {
     fn drop(&mut self) {
         if let Some(lock) = self._lock.take() {
             if let Ok(_exclusive) = std::convert::TryInto::<ExclusiveShmLock>::try_into(lock) {
-                // in case if we are the last holder of this segment make ourselves owner to unlink it
-                self.shmem.set_owner(true);
+                // in case if we are the last holder of this segment we unlink it
+                self.shmem.unlink();
             }
         }
     }
@@ -57,12 +55,11 @@ impl<ID> Debug for Segment<ID>
 where
     ID: Debug,
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
-    ID: Clone + Display,
+    ID: shm::SegmentID,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Segment")
             .field("shmem", &self.shmem.as_ptr())
-            .field("id", &self.id)
             .finish()
     }
 }
@@ -70,18 +67,18 @@ where
 impl<ID> Segment<ID>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
-    ID: Clone + Display,
+    ID: shm::SegmentID,
 {
     // Automatically generate free id and create a new segment identified by this id
-    pub fn create(alloc_size: usize, id_prefix: &str) -> ZResult<Self> {
+    pub fn create(len: NonZeroUsize, id_prefix: &str) -> ZResult<Self> {
         for _ in 0..SEGMENT_DEDICATE_TRIES {
             // Generate random id
             let id: ID = rand::thread_rng().gen();
-            let os_id = Self::os_id(id.clone(), id_prefix);
-
+            
             #[cfg(target_os = "linux")]
             // Create lock to indicate that segment is managed
             let lock = {
+                let os_id = Self::os_id(id.clone(), id_prefix);
                 match ShmLock::create(&os_id) {
                     Ok(lock) => lock,
                     Err(_) => continue,
@@ -89,38 +86,28 @@ where
             };
 
             // Register cleanup routine to make sure Segment will be unlinked on exit
-            let c_os_id = os_id.clone();
             CLEANUP.read().register_cleanup(Box::new(move || {
-                if let Ok(mut shmem) = ShmemConf::new().os_id(c_os_id).open() {
-                    shmem.set_owner(true);
-                    drop(shmem);
+                if let Ok(shmem) = shm::Segment::open(id) {
+                    shmem.unlink();
                 }
             }));
 
             // Try to create a new segment identified by prefix and generated id.
             // If creation fails because segment already exists for this id,
             // the creation attempt will be repeated with another id
-            match ShmemConf::new().size(alloc_size).os_id(os_id).create() {
+            match shm::Segment::create(id, len) {
                 Ok(shmem) => {
                     tracing::debug!(
-                        "Created SHM segment, size: {alloc_size}, prefix: {id_prefix}, id: {id}"
+                        "Created SHM segment, len: {len}, prefix: {id_prefix}, id: {id}"
                     );
-                    #[cfg(target_os = "linux")]
-                    let shmem = {
-                        let mut shmem = shmem;
-                        shmem.set_owner(false);
-                        shmem
-                    };
                     return Ok(Segment {
                         shmem,
-                        id,
                         #[cfg(target_os = "linux")]
                         _lock: Some(lock),
                     });
                 }
-                Err(ShmemError::LinkExists) => {}
-                Err(ShmemError::MappingIdExists) => {}
-                Err(e) => bail!("Unable to create POSIX shm segment: {}", e),
+                Err(shm::SegmentCreateError::SegmentExists) => {}
+                Err(shm::SegmentCreateError::OsError(e)) => bail!("Unable to create POSIX shm segment: {}", e),
             }
         }
         bail!("Unable to dedicate POSIX shm segment file after {SEGMENT_DEDICATE_TRIES} tries!");
@@ -135,9 +122,9 @@ where
         let lock = ShmLock::open(&os_id)?;
 
         // Open SHM segment
-        let shmem = ShmemConf::new().os_id(os_id).open().map_err(|e| {
+        let shmem = shm::Segment::open(id).map_err(|e| {
             zerror!(
-                "Error opening POSIX shm segment id {id}, prefix: {id_prefix}: {}",
+                "Error opening POSIX shm segment id {id}, prefix: {id_prefix}: {:?}",
                 e
             )
         })?;
@@ -146,7 +133,6 @@ where
 
         Ok(Self {
             shmem,
-            id,
             #[cfg(target_os = "linux")]
             _lock: Some(lock),
         })
@@ -166,17 +152,11 @@ where
     /// NOTE: one some platforms (at least windows) the returned len will be the actual length of an shm segment
     /// (a required len rounded up to the nearest multiply of page size), on other (at least linux and macos) this
     /// returns a value requested upon segment creation
-    pub fn len(&self) -> usize {
+    pub fn len(&self) -> NonZeroUsize {
         self.shmem.len()
     }
 
-    // TODO: dead code warning occurs because of `tested_crate_module!()` macro when feature `test` is not enabled. Better to fix that
-    #[allow(dead_code)]
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
     pub fn id(&self) -> ID {
-        self.id.clone()
+        self.shmem.id()
     }
 }

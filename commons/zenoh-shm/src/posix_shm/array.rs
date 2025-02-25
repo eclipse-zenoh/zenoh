@@ -12,11 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{fmt::Display, marker::PhantomData, mem::size_of};
+use std::{marker::PhantomData, mem::size_of, num::NonZeroUsize};
 
 use num_traits::{AsPrimitive, PrimInt, Unsigned};
 use stabby::IStable;
 use zenoh_result::{bail, ZResult};
+
+use crate::shm;
 
 use super::segment::Segment;
 
@@ -25,7 +27,7 @@ use super::segment::Segment;
 pub struct ArrayInSHM<ID, Elem, ElemIndex>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
-    ID: Clone + Display,
+    ID: shm::SegmentID,
 {
     inner: Segment<ID>,
     _phantom: PhantomData<(Elem, ElemIndex)>,
@@ -34,20 +36,20 @@ where
 unsafe impl<ID, Elem: Sync, ElemIndex> Sync for ArrayInSHM<ID, Elem, ElemIndex>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
-    ID: Clone + Display,
+    ID: shm::SegmentID,
 {
 }
 unsafe impl<ID, Elem: Send, ElemIndex> Send for ArrayInSHM<ID, Elem, ElemIndex>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
-    ID: Clone + Display,
+    ID: shm::SegmentID,
 {
 }
 
 impl<ID, Elem, ElemIndex> ArrayInSHM<ID, Elem, ElemIndex>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
-    ID: Clone + Display,
+    ID: shm::SegmentID,
     ElemIndex: Unsigned + PrimInt + 'static + AsPrimitive<usize>,
     Elem: IStable<ContainsIndirections = stabby::abi::B0>,
     isize: AsPrimitive<ElemIndex>,
@@ -67,7 +69,7 @@ where
             bail!("Unable to create SHM array segment of {elem_count} elements: out of range for ElemIndex!")
         }
 
-        let alloc_size = elem_count * size_of::<Elem>();
+        let alloc_size = NonZeroUsize::try_from(elem_count * size_of::<Elem>())?;
         let inner = Segment::create(alloc_size, file_prefix)?;
         Ok(Self {
             inner,
@@ -88,7 +90,7 @@ where
     }
 
     pub fn elem_count(&self) -> usize {
-        self.inner.len() / size_of::<Elem>()
+        self.inner.len().get() / size_of::<Elem>()
     }
 
     /// # Safety
