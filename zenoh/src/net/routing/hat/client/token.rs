@@ -117,7 +117,11 @@ fn declare_simple_token(
     send_declare: &mut SendDeclare,
 ) {
     if let Some(interest_id) = interest_id {
-        if let Some((interest, _)) = face.pending_current_interests.get(&interest_id) {
+        if let Some(interest) = face
+            .pending_current_interests
+            .get(&interest_id)
+            .map(|p| &p.interest)
+        {
             if interest.mode == InterestMode::CurrentFuture {
                 register_simple_token(tables, &mut face.clone(), id, res);
             }
