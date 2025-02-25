@@ -27,6 +27,7 @@ pub use unix as platform;
 #[cfg(all(not(target_os="windows"), not(any(target_os="freebsd", target_os="linux", target_os="macos"))))]
 compile_error!("shared_memory isnt implemented for this platform...");
 
+#[derive(Debug)]
 pub enum SegmentCreateError {
     SegmentExists,
     OsError(u32),

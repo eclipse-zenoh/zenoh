@@ -40,7 +40,7 @@ zenoh-result = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-macros = { workspace = true }
 zenoh-buffers = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["std", "std_rng"] }
 static_init = { workspace = true }
 num-traits = { workspace = true }
 num_cpus = { workspace = true, optional = true }

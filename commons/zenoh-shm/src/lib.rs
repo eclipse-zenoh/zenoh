@@ -60,7 +60,7 @@ pub mod posix_shm;
 pub mod reader;
 pub mod version;
 pub mod watchdog;
-pub(crate) mod shm;
+tested_crate_module!(shm);
 
 /// Information about a [`ShmBufInner`].
 ///
