@@ -154,8 +154,8 @@ impl BatchPool {
         let mut batch = Some(batch);
         let mut state = self.state.load(Ordering::Relaxed);
         loop {
-            let mut next_state = state + 1 & !Self::CONGESTED_FLAG;
-            if state + 1 & Self::COUNT_MASK == self.count {
+            let mut next_state = (state + 1) & !Self::CONGESTED_FLAG;
+            if next_state & Self::COUNT_MASK == self.count {
                 next_state &= !Self::BATCHING_FLAG;
             }
             if state & Self::REFILLED_FLAG == 0 {
