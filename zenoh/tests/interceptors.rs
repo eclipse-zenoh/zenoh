@@ -24,7 +24,9 @@ use std::{
 };
 
 use zenoh::{key_expr::KeyExpr, Config, Wait};
-use zenoh_config::{DownsamplingItemConf, DownsamplingRuleConf, InterceptorFlow};
+use zenoh_config::{
+    DownsamplingItemConf, DownsamplingMessage, DownsamplingRuleConf, InterceptorFlow,
+};
 
 // Tokio's time granularity on different platforms
 #[cfg(target_os = "windows")]
@@ -152,14 +154,16 @@ fn downsampling_by_keyexpr_impl(flow: InterceptorFlow) {
 
     let ds_config = DownsamplingItemConf {
         id: None,
-        flow,
+        flows: Some(vec![flow]),
         interfaces: None,
         rules: vec![
             DownsamplingRuleConf {
+                messages: vec![DownsamplingMessage::Push],
                 key_expr: ke_10hz.clone().into(),
                 freq: 10.0,
             },
             DownsamplingRuleConf {
+                messages: vec![DownsamplingMessage::Push],
                 key_expr: ke_20hz.clone().into(),
                 freq: 20.0,
             },
@@ -208,18 +212,20 @@ fn downsampling_by_interface_impl(flow: InterceptorFlow) {
     let ds_config = vec![
         DownsamplingItemConf {
             id: Some("someid".to_string()),
-            flow,
+            flows: Some(vec![flow]),
             interfaces: Some(vec!["lo".to_string(), "lo0".to_string()]),
             rules: vec![DownsamplingRuleConf {
+                messages: vec![DownsamplingMessage::Push],
                 key_expr: ke_10hz.clone().into(),
                 freq: 10.0,
             }],
         },
         DownsamplingItemConf {
             id: None,
-            flow,
+            flows: Some(vec![flow]),
             interfaces: Some(vec!["some_unknown_interface".to_string()]),
             rules: vec![DownsamplingRuleConf {
+                messages: vec![DownsamplingMessage::Push],
                 key_expr: ke_no_effect.clone().into(),
                 freq: 10.0,
             }],

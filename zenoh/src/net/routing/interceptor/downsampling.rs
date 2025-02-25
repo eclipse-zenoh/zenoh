@@ -46,7 +46,17 @@ pub(crate) fn downsampling_interceptor_factories(
                 bail!("Invalid Downsampling config: id '{id}' is repeated");
             }
         }
-        res.push(Box::new(DownsamplingInterceptorFactory::new(ds.clone())));
+        let mut ds = ds.clone();
+        // check for undefined flows and initialize them
+        ds.flows
+            .get_or_insert(vec![InterceptorFlow::Ingress, InterceptorFlow::Egress]);
+        // validate rules
+        for rule in &ds.rules {
+            if rule.messages.is_empty() {
+                bail!("Invalid Downsampling config: messages list in rules must not be empty");
+            }
+        }
+        res.push(Box::new(DownsamplingInterceptorFactory::new(ds)));
     }
 
     Ok(res)
@@ -55,7 +65,7 @@ pub(crate) fn downsampling_interceptor_factories(
 pub struct DownsamplingInterceptorFactory {
     interfaces: Option<Vec<String>>,
     rules: Vec<DownsamplingRuleConf>,
-    flow: InterceptorFlow,
+    flows: InterfaceEnabled,
 }
 
 impl DownsamplingInterceptorFactory {
@@ -63,7 +73,11 @@ impl DownsamplingInterceptorFactory {
         Self {
             interfaces: conf.interfaces,
             rules: conf.rules,
-            flow: conf.flow,
+            flows: conf
+                .flows
+                .expect("config flows should be set")
+                .as_slice()
+                .into(),
         }
     }
 }
@@ -91,21 +105,14 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
                 }
             }
         };
-
-        match self.flow {
-            InterceptorFlow::Ingress => (
-                Some(Box::new(ComputeOnMiss::new(DownsamplingInterceptor::new(
-                    self.rules.clone(),
-                )))),
-                None,
-            ),
-            InterceptorFlow::Egress => (
-                None,
-                Some(Box::new(ComputeOnMiss::new(DownsamplingInterceptor::new(
-                    self.rules.clone(),
-                )))),
-            ),
-        }
+        (
+            self.flows.ingress.then_some(Box::new(ComputeOnMiss::new(
+                DownsamplingInterceptor::new(self.rules.clone()),
+            ))),
+            self.flows.egress.then_some(Box::new(ComputeOnMiss::new(
+                DownsamplingInterceptor::new(self.rules.clone()),
+            ))),
+        )
     }
 
     fn new_transport_multicast(
