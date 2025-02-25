@@ -530,8 +530,8 @@ struct StageOut {
     refill_notifier: Notifier,
     /// Current backoff deadline if there is one.
     backoff: Option<Instant>,
-    /// Last successful pull instant, used to compute the next backoff deadline.
-    last_pull: Instant,
+    /// Latest successful pull instant, used to compute the next backoff deadline.
+    latest_pull: Instant,
     /// Backoff duration limit.
     batching_time_limit: Duration,
 }
@@ -540,13 +540,13 @@ impl StageOut {
     /// Pull a batch from the given priority queue, or back off if the pipeline
     /// is batching.
     ///
-    /// The backoff deadline is computed from the last successful pull instant.
+    /// The backoff deadline is computed from the latest successful pull instant.
     /// Indeed, starting the backoff at pull could introduce unnecessary latency,
-    /// as a lot of messages could have been written between the last pull and
+    /// as a lot of messages could have been written between the latest pull and
     /// this one. We could add a mechanism to start backoff at the time the first
     /// message of the current batch is written, but I don't think it's worth the
     /// complexity, and don't even know why it would be better. The less we wait,
-    /// the better is the latency, and starting from the last pull still cover
+    /// the better is the latency, and starting from the latest pull still cover
     /// the high throughput case.
     fn pull(&mut self) -> Result<Option<WBatch>, Instant> {
         // First, try to pull a pushed batch.
@@ -563,8 +563,8 @@ impl StageOut {
             Some(backoff) => return Err(backoff),
             // If the pipeline is batching, back off with the configuration delay.
             None if self.batch_pool.is_batching() => {
-                // Starts backoff delay from the last pull.
-                self.backoff = Some(self.last_pull + self.batching_time_limit);
+                // Starts backoff delay from the latest pull.
+                self.backoff = Some(self.latest_pull + self.batching_time_limit);
                 return Err(self.backoff.unwrap());
             }
             None => {}
@@ -676,7 +676,7 @@ impl TransmissionPipeline {
                 batch_pool,
                 refill_notifier,
                 backoff: None,
-                last_pull: Instant::now(),
+                latest_pull: Instant::now(),
                 batching_time_limit: config.batching_time_limit,
             });
         }
