@@ -511,9 +511,10 @@ impl Network {
                             );
                         }
 
-                        if self.autoconnect.should_autoconnect(zid, whatami) {
-                            // Connect discovered peers
-                            if let Some(locators) = locators {
+                        // Connect discovered peers
+                        if let Some(locators) = locators {
+                            let locs = self.autoconnect.should_autoconnect(zid, whatami, &locators);
+                            if !locs.is_empty() {
                                 let runtime = strong_runtime.clone();
                                 strong_runtime.spawn(async move {
                                     if runtime
@@ -634,8 +635,11 @@ impl Network {
             for (_, idx, _) in &link_states {
                 let node = &self.graph[*idx];
                 if let Some(whatami) = node.whatami {
-                    if self.autoconnect.should_autoconnect(node.zid, whatami) {
-                        if let Some(locators) = &node.locators {
+                    if let Some(locators) = &node.locators {
+                        let locs = self
+                            .autoconnect
+                            .should_autoconnect(node.zid, whatami, &locators);
+                        if !locs.is_empty() {
                             let runtime = strong_runtime.clone();
                             let zid = node.zid;
                             let locators = locators.clone();

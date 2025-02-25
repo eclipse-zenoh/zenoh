@@ -440,9 +440,10 @@ impl Network {
                         );
                     }
 
-                    if self.autoconnect.should_autoconnect(zid, whatami) {
-                        // Connect discovered peers
-                        if let Some(locators) = locators {
+                    // Connect discovered peers
+                    if let Some(locators) = locators {
+                        let locs = self.autoconnect.should_autoconnect(zid, whatami, &locators);
+                        if !locs.is_empty() {
                             let runtime = strong_runtime.clone();
                             let wait_declares = self.wait_declares;
                             strong_runtime.spawn(async move {

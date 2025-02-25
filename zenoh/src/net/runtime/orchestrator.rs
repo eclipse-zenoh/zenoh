@@ -1094,19 +1094,21 @@ impl Runtime {
         autoconnect: AutoConnect,
         addr: &SocketAddr,
     ) {
-        Runtime::scout(
-            ucast_sockets,
-            autoconnect.matcher(),
-            addr,
-            move |hello| async move {
+        Runtime::scout(ucast_sockets, autoconnect.matcher(), addr, move |hello| {
+            let c_autoconnect = autoconnect.clone();
+            async move {
                 if hello.locators.is_empty() {
                     tracing::warn!("Received Hello with no locators: {:?}", hello);
-                } else if autoconnect.should_autoconnect(hello.zid, hello.whatami) {
-                    self.connect_peer(&hello.zid, &hello.locators).await;
+                } else {
+                    let locs =
+                        c_autoconnect.should_autoconnect(hello.zid, hello.whatami, &hello.locators);
+                    if !locs.is_empty() {
+                        self.connect_peer(&hello.zid, &locs).await;
+                    }
                 }
                 Loop::Continue
-            },
-        )
+            }
+        })
         .await
     }
 

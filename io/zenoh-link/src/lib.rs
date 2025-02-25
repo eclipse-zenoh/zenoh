@@ -206,6 +206,7 @@ impl LinkConfigurator {
             None => String::new(),
         };
 
+        // Common config
         let mut insert_config = |proto: String, cfg: ZResult<String>| match cfg {
             Ok(v) => {
                 configs.insert(proto, (metadata.clone(), v));

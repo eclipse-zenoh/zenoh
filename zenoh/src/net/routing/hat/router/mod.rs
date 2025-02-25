@@ -341,7 +341,7 @@ impl HatBaseTrait for HatCode {
                 gossip,
                 gossip_multihop,
                 gossip_target,
-                autoconnect,
+                autoconnect.clone(),
             ));
         }
         if peer_full_linkstate | gossip {
