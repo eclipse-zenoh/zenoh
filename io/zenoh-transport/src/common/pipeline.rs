@@ -64,6 +64,11 @@ impl std::error::Error for TransportClosed {}
 
 /// Batch pool from which you can acquire batches and refill them after use.
 ///
+/// It is initialized with a maximum batch count; the count is decreased when
+/// batches are acquired, and increased when they are refilled.
+/// Moreover, the pull contains a single pre-allocated batch, that is taken
+/// when a batch is acquired, and refilled later.
+///
 /// The pool carries two flags that are set depending on the situation:
 /// - congestion: if there is no available batch, and a deadline has been reached,
 ///   the flag is set; it will be unset whenever a batch is refilled.
@@ -71,13 +76,18 @@ impl std::error::Error for TransportClosed {}
 ///   means the network is not sending batches quickly enough, and the pipeline
 ///   should batch messages more; the flag is unset whenever the pool is completely
 ///   refilled, or manually after reaching a batching duration limit.
+///
 struct BatchPool {
     count: u8,
     state: AtomicU8,
     refill: UnsafeCell<MaybeUninit<WBatch>>,
 }
 
+// SAFETY: `refill` cell is properly synchronized using the atomic state.
+// See `BatchPool::try_acquire`/`BatchPool::refill`.
 unsafe impl Send for BatchPool {}
+// SAFETY: `refill` cell is properly synchronized using the atomic state.
+// See `BatchPool::try_acquire`/`BatchPool::refill`.
 unsafe impl Sync for BatchPool {}
 
 impl BatchPool {
@@ -97,11 +107,18 @@ impl BatchPool {
 
     /// Tries to acquire a batch, returning it if there is one available.
     ///
-    /// The pool will enter in "batching" mode if there is more than one
-    /// in-flight batch.
+    /// It will try to reuse the refilled batch if there is one, and if it
+    /// has the requested capacity, otherwise, a new one is allocated.
     ///
+    /// The pool will enter in batching mode if there is more than one
+    /// in-flight batch.
     /// If no batch is available and `set_congested` is `true`, then
     /// the congested flag will be set.
+    ///
+    /// # Safety
+    ///
+    /// This method must not be called concurrently, as a single thread can acquire
+    /// the refilled batch at a time.
     unsafe fn try_acquire(&self, batch_config: BatchConfig, set_congested: bool) -> Option<WBatch> {
         let mut state = self.state.load(Ordering::Acquire);
         let mut batch = None;
@@ -114,7 +131,7 @@ impl BatchPool {
                     state,
                     state | Self::CONGESTED_FLAG,
                     Ordering::Relaxed,
-                    Ordering::Relaxed,
+                    Ordering::Acquire,
                 ) {
                     Ok(_) => return None,
                     Err(s) => state = s,
@@ -126,6 +143,19 @@ impl BatchPool {
             }
             if state & Self::REFILLED_FLAG != 0 {
                 if batch.is_none() {
+                    // SAFETY: State has "refilled" flag set, and has been loaded with
+                    // acquire ordering. As the flag is stored with `released` ordering
+                    // only after writing to the cell, there is happens-before relation
+                    // between this read and the previous write, so the cell is safe to
+                    // access. Also, the function contract guarantees there is no
+                    // concurrent read.
+                    // It is also not possible for the flag to change if the following
+                    // CAS fails, so there is no need to discard the read batch in this
+                    // case.
+                    // The flag must be unset with release ordering, to prevent the read
+                    // of the cell to be reordered after the CAS, ensuring the cell can
+                    // be safely modified as soon as the state is read with the flag
+                    // unset.
                     batch = Some(unsafe { (*self.refill.get()).assume_init_read() });
                 }
                 next_state &= !Self::REFILLED_FLAG;
@@ -133,7 +163,7 @@ impl BatchPool {
             match self.state.compare_exchange_weak(
                 state,
                 next_state,
-                Ordering::Relaxed,
+                Ordering::Release,
                 Ordering::Acquire,
             ) {
                 Ok(_) => break,
@@ -146,10 +176,19 @@ impl BatchPool {
         })
     }
 
-    // Releases the batch, making it available on the other side.
-    //
-    // If the pool is completely refilled, then "batching" mode is stopped.
-    unsafe fn release(&self, mut batch: WBatch) {
+    /// Refill the batch, making it available on the other side.
+    ///
+    /// The first batch to be refilled will be put in the pre-allocated slot
+    /// for later reused. If the slot is already full, then the batch is
+    /// discarded.
+    ///
+    /// The batching mode is stopped when the pool is completely refilled.
+    ///
+    /// # Safety
+    ///
+    /// This method must not be called concurrently, as a single thread can refill a batch
+    /// at a time.
+    unsafe fn refill(&self, mut batch: WBatch) {
         batch.clear();
         let mut batch = Some(batch);
         let mut state = self.state.load(Ordering::Relaxed);
@@ -160,6 +199,13 @@ impl BatchPool {
             }
             if state & Self::REFILLED_FLAG == 0 {
                 if let Some(batch) = batch.take() {
+                    // SAFETY: State has "refilled" flag unset. As the flag is only
+                    // unset after reading the cell, there should be no concurrent
+                    // read, and the cell is safe to write. Also, the function
+                    // contract guarantees there is no concurrent write.
+                    // It is also not possible for the flag to change if the
+                    // following CAS fails, so once the batch has been written, it
+                    // will stay in the cell until the CAS succeeds.
                     unsafe { (*self.refill.get()).write(batch) };
                 }
                 next_state |= Self::REFILLED_FLAG;
@@ -285,6 +331,9 @@ impl StageIn {
         loop {
             // try to acquire an available batch
             if let Some(batch) =
+                // SAFETY: there is one batch pool per stage-in/stage-out pair, and batch
+                // is acquired behind an exclusive reference to stage-in, so they cannot
+                // be concurrent calls.
                 unsafe { self.batch_pool.try_acquire(self.new_batch_config(), false) }
             {
                 return Ok(Some(batch));
@@ -594,7 +643,10 @@ impl StageOut {
 
     /// Refills a batch for the pipeline.
     fn refill(&mut self, batch: WBatch) {
-        unsafe { self.batch_pool.release(batch) };
+        // SAFETY: there is one batch pool per stage-in/stage-out pair, and it
+        // refilled behind an exclusive reference to stage-out, so they cannot
+        // be concurrent calls.
+        unsafe { self.batch_pool.refill(batch) };
         let _ = self.refill_notifier.notify();
     }
 
