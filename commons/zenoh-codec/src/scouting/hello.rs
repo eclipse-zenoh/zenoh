@@ -14,17 +14,14 @@
 use alloc::{vec, vec::Vec};
 
 use zenoh_buffers::{
-    reader::{DidntRead, HasReader, Reader},
+    reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
-    common::{iext, imsg, ZExtUnknown, ZExtZBuf},
+    common::{imsg, ZExtUnknown},
     core::{Locator, WhatAmI, ZenohIdProto},
     scouting::{
-        hello::{
-            ext::{self, GroupsType},
-            flag, HelloProto,
-        },
+        hello::{flag, HelloProto},
         id,
     },
 };
@@ -43,17 +40,12 @@ where
             whatami,
             zid,
             locators,
-            ext_groups,
         } = x;
 
         // Header
         let mut header = id::HELLO;
         if !locators.is_empty() {
             header |= flag::L;
-        }
-        let n_exts = (ext_groups != &GroupsType::default()) as u8;
-        if n_exts != 0 {
-            header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
 
@@ -75,11 +67,6 @@ where
 
         if !locators.is_empty() {
             self.write(&mut *writer, locators.as_slice())?;
-        }
-
-        // Extensions
-        if ext_groups != &GroupsType::default() {
-            self.write(&mut *writer, (ext_groups, false))?;
         }
 
         Ok(())
@@ -129,28 +116,12 @@ where
         } else {
             vec![]
         };
-        let mut ext_groups = GroupsType::default();
 
         // Extensions
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
-            let ext: u8 = self.codec.read(&mut *reader)?;
-            let eodec = Zenoh080Header::new(ext);
-            match iext::eid(ext) {
-                ext::Groups::ID => {
-                    let (b, ext): (ZExtZBuf<{ ext::Groups::ID }>, bool) =
-                        eodec.read(&mut *reader)?;
-
-                    let mut br = b.value.reader();
-                    ext_groups = self.codec.read(&mut br)?;
-
-                    has_ext = ext;
-                }
-                _ => {
-                    let (_, more): (ZExtUnknown, bool) = self.codec.read(&mut *reader)?;
-                    has_ext = more;
-                }
-            }
+            let (_, more): (ZExtUnknown, bool) = self.codec.read(&mut *reader)?;
+            has_ext = more;
         }
 
         Ok(HelloProto {
@@ -158,7 +129,6 @@ where
             zid,
             whatami,
             locators,
-            ext_groups,
         })
     }
 }

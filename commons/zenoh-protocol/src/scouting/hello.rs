@@ -104,21 +104,11 @@ pub struct HelloProto {
     pub whatami: WhatAmI,
     pub zid: ZenohIdProto,
     pub locators: Vec<Locator>,
-    pub ext_groups: ext::GroupsType,
-}
-
-// Extensions
-pub mod ext {
-    use crate::{common::ZExtZBuf, zextzbuf};
-
-    pub type Groups = zextzbuf!(0x1, false);
-    pub type GroupsType = crate::scouting::ext::GroupsType<{ Groups::ID }>;
 }
 
 impl HelloProto {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::scouting::ext::GroupsType;
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
@@ -131,17 +121,11 @@ impl HelloProto {
         } else {
             vec![]
         };
-        let ext_groups = if rng.gen_bool(0.5) {
-            GroupsType::rand()
-        } else {
-            GroupsType::default()
-        };
         Self {
             version,
             zid,
             whatami,
             locators,
-            ext_groups,
         }
     }
 }
