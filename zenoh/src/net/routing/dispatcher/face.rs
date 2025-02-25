@@ -37,10 +37,7 @@ use zenoh_transport::stats::TransportStats;
 
 use super::{
     super::router::*,
-    interests::{
-        declare_final, declare_interest, undeclare_interest,
-        PendingCurrentInterest,
-    },
+    interests::{declare_final, declare_interest, undeclare_interest, PendingCurrentInterest},
     resource::*,
     tables::TablesLock,
 };
@@ -259,7 +256,6 @@ impl Face {
             state: Arc::downgrade(&self.state),
         }
     }
-
 
     pub(crate) fn reject_interest(&self, interest_id: u32) {
         if let Some(interest) = self.state.pending_current_interests.get(&interest_id) {
