@@ -519,16 +519,35 @@ impl StageIn {
 }
 
 struct StageOut {
+    /// Batch queue.
     batch_rx: RingBufferReader<WBatch, RBLEN>,
+    /// Current batch on which the pipeline is writing.
+    /// It will be taken if no batch has been pushed.
     current: Arc<Mutex<Option<WBatch>>>,
+    /// Batch pool.
     batch_pool: Arc<BatchPool>,
+    /// Notifier for batch refilling.
     refill_notifier: Notifier,
+    /// Current backoff deadline if there is one.
     backoff: Option<Instant>,
+    /// Last successful pull instant, used to compute the next backoff deadline.
+    last_pull: Instant,
+    /// Backoff duration limit.
     batching_time_limit: Duration,
 }
 
 impl StageOut {
-    /// Pull a batch from the given priority queue, or back off if the pipeline is batching.
+    /// Pull a batch from the given priority queue, or back off if the pipeline
+    /// is batching.
+    ///
+    /// The backoff deadline is computed from the last successful pull instant.
+    /// Indeed, starting the backoff at pull could introduce unnecessary latency,
+    /// as a lot of messages could have been written between the last pull and
+    /// this one. We could add a mechanism to start backoff at the time the first
+    /// message of the current batch is written, but I don't think it's worth the
+    /// complexity, and don't even know why it would be better. The less we wait,
+    /// the better is the latency, and starting from the last pull still cover
+    /// the high throughput case.
     fn pull(&mut self) -> Result<Option<WBatch>, Instant> {
         // First, try to pull a pushed batch.
         if let Some(batch) = self.batch_rx.pull() {
@@ -544,7 +563,8 @@ impl StageOut {
             Some(backoff) => return Err(backoff),
             // If the pipeline is batching, back off with the configuration delay.
             None if self.batch_pool.is_batching() => {
-                self.backoff = Some(Instant::now() + self.batching_time_limit);
+                // Starts backoff delay from the last pull.
+                self.backoff = Some(self.last_pull + self.batching_time_limit);
                 return Err(self.backoff.unwrap());
             }
             None => {}
@@ -558,6 +578,8 @@ impl StageOut {
             // In both case, we can return with a minimal backoff delay. Batching
             // has been disabled if it was active, so the task should be notified
             // as soon as possible.
+            // Batching may be reenabled by the pipeline, but only after a batch
+            // has been pushed, so we don't care.
             self.backoff = Some(Instant::now() + Duration::from_millis(1));
             return Err(self.backoff.unwrap());
         };
@@ -568,6 +590,12 @@ impl StageOut {
         }
         // Otherwise take the current batch if there was one.
         Ok(current.take())
+    }
+
+    /// Refills a batch for the pipeline.
+    fn refill(&mut self, batch: WBatch) {
+        unsafe { self.batch_pool.release(batch) };
+        let _ = self.refill_notifier.notify();
     }
 
     fn drain(&mut self) -> Vec<WBatch> {
@@ -648,6 +676,7 @@ impl TransmissionPipeline {
                 batch_pool,
                 refill_notifier,
                 backoff: None,
+                last_pull: Instant::now(),
                 batching_time_limit: config.batching_time_limit,
             });
         }
@@ -764,9 +793,7 @@ impl TransmissionPipelineConsumer {
     }
 
     pub(crate) fn refill(&mut self, batch: WBatch, priority: Priority) {
-        let stage_out = &self.stage_out[priority as usize];
-        unsafe { stage_out.batch_pool.release(batch) };
-        let _ = stage_out.refill_notifier.notify();
+        self.stage_out[priority as usize].refill(batch);
     }
 
     pub(crate) fn drain(&mut self) -> Vec<(WBatch, usize)> {
