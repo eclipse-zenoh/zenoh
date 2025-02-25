@@ -195,6 +195,14 @@ impl BatchPool {
     }
 }
 
+impl Drop for BatchPool {
+    fn drop(&mut self) {
+        if *self.state.get_mut() & Self::REFILLED_FLAG != 0 {
+            unsafe { self.refill.get_mut().assume_init_drop() }
+        }
+    }
+}
+
 #[derive(Debug)]
 struct Deadline {
     wait_time: Duration,
