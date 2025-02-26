@@ -17,7 +17,7 @@ use std::{
         atomic::{AtomicUsize, Ordering::SeqCst},
         Arc,
     },
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
@@ -734,20 +734,13 @@ impl TransportManager {
             )?;
         };
 
-        // Create a new link associated by calling the Link Manager
-        let start = Instant::now();
-        let link = tokio::time::timeout(
-            self.config.unicast.open_timeout,
-            manager.new_link(endpoint.clone()),
-        )
-        .await
-        .map_err(|e| zerror!("{e}"))??;
-
         // Open the link
-        tokio::time::timeout(
-            self.config.unicast.open_timeout - start.elapsed(),
-            super::establishment::open::open_link(endpoint, link, self),
-        )
+        tokio::time::timeout(self.config.unicast.open_timeout, async {
+            match manager.new_link(endpoint.clone()).await {
+                Ok(link) => super::establishment::open::open_link(endpoint, link, self).await,
+                Err(e) => Err(e),
+            }
+        })
         .await
         .map_err(|e| zerror!("{e}"))?
     }
