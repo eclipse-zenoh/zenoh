@@ -36,6 +36,7 @@ use num_traits::Unsigned;
 use super::{SegmentCreateError, SegmentOpenError, ShmCreateResult, ShmOpenResult};
 
 pub struct SegmentImpl<ID: Unsigned + Display + Copy> {
+    #[cfg(target_os = "linux")]
     fd: OwnedFd,
     len: NonZeroUsize,
     data_ptr: NonNull<c_void>,
@@ -80,6 +81,7 @@ impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
         let data_ptr = Self::map(len, &fd).map_err(|e| SegmentCreateError::OsError(e as _))?;
 
         Ok(Self {
+            #[cfg(target_os = "linux")]
             fd,
             len,
             data_ptr,
@@ -123,6 +125,7 @@ impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
         let data_ptr = Self::map(len, &fd).map_err(|e| SegmentOpenError::OsError(e as _))?;
 
         Ok(Self {
+            #[cfg(target_os = "linux")]
             fd,
             len,
             data_ptr,
