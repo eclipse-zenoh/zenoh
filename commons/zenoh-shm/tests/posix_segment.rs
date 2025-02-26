@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "test")]
-use std::{fmt::Display, num::NonZeroUsize, slice};
+use std::{num::NonZeroUsize, slice};
 
 use zenoh_shm::{posix_shm::segment::Segment, shm::SegmentID};
 
@@ -25,7 +25,6 @@ fn validate_segment<ID: SegmentID>(
     expected_elem_count: NonZeroUsize,
 ) where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
-    ID: Clone + Display,
 {
     assert!(created_segment.len() == expected_elem_count);
     assert!(opened_segment.len() >= expected_elem_count);
@@ -42,7 +41,6 @@ fn validate_segment<ID: SegmentID>(
 fn test_segment<ID: SegmentID>()
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
-    ID: Copy + Clone + Display,
 {
     let elem_count = 900.try_into().unwrap();
 
