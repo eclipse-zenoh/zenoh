@@ -12,13 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{fmt::Debug, mem::size_of};
+use std::{fmt::Debug, mem::size_of, num::NonZeroUsize};
 
 use num_traits::{AsPrimitive, PrimInt, Unsigned};
 use zenoh_shm::posix_shm::array::ArrayInSHM;
 
 pub mod common;
-use common::TEST_SEGMENT_PREFIX;
 
 type TestSegmentID = u32;
 
@@ -43,7 +42,7 @@ impl TestElem {
 fn validate_array<ElemIndex>(
     created_array: &mut ArrayInSHM<TestSegmentID, TestElem, ElemIndex>,
     opened_array: &ArrayInSHM<TestSegmentID, TestElem, ElemIndex>,
-    expected_elem_count: usize,
+    expected_elem_count: NonZeroUsize,
 ) where
     ElemIndex: Unsigned + PrimInt + 'static + AsPrimitive<usize>,
     isize: AsPrimitive<ElemIndex>,
@@ -56,7 +55,7 @@ fn validate_array<ElemIndex>(
     let mut validate_ctr = 0;
 
     // first of all, fill and validate elements sequentially
-    for i in 0..expected_elem_count {
+    for i in 0..expected_elem_count.get() {
         unsafe {
             let elem1 = &mut *created_array.elem_mut(i.as_());
             let elem2 = &*opened_array.elem(i.as_());
@@ -67,7 +66,7 @@ fn validate_array<ElemIndex>(
     }
 
     // then fill all the elements...
-    for i in 0..expected_elem_count {
+    for i in 0..expected_elem_count.get() {
         unsafe {
             let elem1 = &mut *created_array.elem_mut(i.as_());
             elem1.fill(&mut fill_ctr);
@@ -75,7 +74,7 @@ fn validate_array<ElemIndex>(
     }
 
     // ...and validate all the elements
-    for i in 0..expected_elem_count {
+    for i in 0..expected_elem_count.get() {
         unsafe {
             let elem2 = &*opened_array.elem(i.as_());
             elem2.validate(&mut validate_ctr);
@@ -92,18 +91,19 @@ where
     // Estimate elem count to test
     // NOTE: for index sizes <= 16 bit we use the whole index range to test,
     // and for bigger indexes we use limited index range
-    let elem_count = {
+    let elem_count = NonZeroUsize::new({
         match size_of::<ElemIndex>() > size_of::<u16>() {
             true => 100,
             false => ElemIndex::max_value().as_() + 1,
         }
-    };
+    })
+    .unwrap();
 
     let mut new_arr: ArrayInSHM<TestSegmentID, TestElem, ElemIndex> =
-        ArrayInSHM::create(elem_count, TEST_SEGMENT_PREFIX).expect("error creating new array!");
+        ArrayInSHM::create(elem_count).expect("error creating new array!");
 
     let opened_arr: ArrayInSHM<_, TestElem, ElemIndex> =
-        ArrayInSHM::open(new_arr.id(), TEST_SEGMENT_PREFIX).expect("error opening existing array!");
+        ArrayInSHM::open(new_arr.id()).expect("error opening existing array!");
 
     validate_array(&mut new_arr, &opened_arr, elem_count);
 }
@@ -135,8 +135,7 @@ where
     let invalid_elem_count = ElemIndex::max_value().as_() + 2;
 
     let _ = ArrayInSHM::<TestSegmentID, TestElem, ElemIndex>::create(
-        invalid_elem_count,
-        TEST_SEGMENT_PREFIX,
+        invalid_elem_count.try_into().unwrap(),
     )
     .expect_err(
         format!("must fail: element count {invalid_elem_count} is out of range for ElemIndex!")

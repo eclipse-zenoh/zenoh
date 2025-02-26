@@ -15,14 +15,11 @@
 use std::{fmt::Debug, num::NonZeroUsize};
 
 use rand::Rng;
-use zenoh_result::{bail, zerror, ZResult};
+use zenoh_result::{bail, ZResult};
 
-#[cfg(target_os = "linux")]
-use super::segment_lock::unix::{ExclusiveShmLock, ShmLock};
 use crate::{cleanup::CLEANUP, shm};
 
 const SEGMENT_DEDICATE_TRIES: usize = 100;
-const ECMA: crc::Crc<u64> = crc::Crc::<u64>::new(&crc::CRC_64_ECMA_182);
 
 /// Segment of shared memory identified by an ID
 pub struct Segment<ID>
@@ -30,25 +27,7 @@ where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
     ID: shm::SegmentID,
 {
-    shmem: shm::Segment<ID>, // <--|
-    #[cfg(target_os = "linux")] // | location of these two fields matters!
-    _lock: Option<ShmLock>, // <---|
-}
-
-#[cfg(target_os = "linux")]
-impl<ID> Drop for Segment<ID>
-where
-    rand::distributions::Standard: rand::distributions::Distribution<ID>,
-    ID: shm::SegmentID,
-{
-    fn drop(&mut self) {
-        if let Some(lock) = self._lock.take() {
-            if let Ok(_exclusive) = std::convert::TryInto::<ExclusiveShmLock>::try_into(lock) {
-                // in case if we are the last holder of this segment we unlink it
-                self.shmem.unlink();
-            }
-        }
-    }
+    shmem: shm::Segment<ID>,
 }
 
 impl<ID> Debug for Segment<ID>
@@ -70,26 +49,14 @@ where
     ID: shm::SegmentID,
 {
     // Automatically generate free id and create a new segment identified by this id
-    pub fn create(len: NonZeroUsize, id_prefix: &str) -> ZResult<Self> {
+    pub fn create(len: NonZeroUsize) -> ZResult<Self> {
         for _ in 0..SEGMENT_DEDICATE_TRIES {
             // Generate random id
             let id: ID = rand::thread_rng().gen();
-            
-            #[cfg(target_os = "linux")]
-            // Create lock to indicate that segment is managed
-            let lock = {
-                let os_id = Self::os_id(id.clone(), id_prefix);
-                match ShmLock::create(&os_id) {
-                    Ok(lock) => lock,
-                    Err(_) => continue,
-                }
-            };
 
             // Register cleanup routine to make sure Segment will be unlinked on exit
             CLEANUP.read().register_cleanup(Box::new(move || {
-                if let Ok(shmem) = shm::Segment::open(id) {
-                    shmem.unlink();
-                }
+                shm::Segment::ensure_not_persistent(id);
             }));
 
             // Try to create a new segment identified by prefix and generated id.
@@ -97,51 +64,34 @@ where
             // the creation attempt will be repeated with another id
             match shm::Segment::create(id, len) {
                 Ok(shmem) => {
-                    tracing::debug!(
-                        "Created SHM segment, len: {len}, prefix: {id_prefix}, id: {id}"
-                    );
-                    return Ok(Segment {
-                        shmem,
-                        #[cfg(target_os = "linux")]
-                        _lock: Some(lock),
-                    });
+                    tracing::debug!("Created SHM segment, len: {len}, id: {id}");
+                    return Ok(Segment { shmem });
                 }
                 Err(shm::SegmentCreateError::SegmentExists) => {}
-                Err(shm::SegmentCreateError::OsError(e)) => bail!("Unable to create POSIX shm segment: {}", e),
+                Err(shm::SegmentCreateError::OsError(e)) => {
+                    bail!("Unable to create POSIX shm segment: {}", e)
+                }
             }
         }
         bail!("Unable to dedicate POSIX shm segment file after {SEGMENT_DEDICATE_TRIES} tries!");
     }
 
     // Open an existing segment identified by id
-    pub fn open(id: ID, id_prefix: &str) -> ZResult<Self> {
-        let os_id = Self::os_id(id.clone(), id_prefix);
-
-        #[cfg(target_os = "linux")]
-        // Open lock to indicate that segment is managed
-        let lock = ShmLock::open(&os_id)?;
-
+    pub fn open(id: ID) -> ZResult<Self> {
         // Open SHM segment
-        let shmem = shm::Segment::open(id).map_err(|e| {
-            zerror!(
-                "Error opening POSIX shm segment id {id}, prefix: {id_prefix}: {:?}",
-                e
-            )
-        })?;
+        let shmem = match shm::Segment::open(id) {
+            Ok(val) => val,
+            Err(shm::SegmentOpenError::InvalidatedSegment) => {
+                bail!("Unable to open POSIX shm segment: segment is invalid!");
+            }
+            Err(shm::SegmentOpenError::OsError(e)) => {
+                bail!("Unable to create POSIX shm segment: {}", e);
+            }
+        };
 
-        tracing::debug!("Opened SHM segment, prefix: {id_prefix}, id: {id}");
+        tracing::debug!("Opened SHM segment, id: {id}");
 
-        Ok(Self {
-            shmem,
-            #[cfg(target_os = "linux")]
-            _lock: Some(lock),
-        })
-    }
-
-    fn os_id(id: ID, id_prefix: &str) -> String {
-        let os_id_str = format!("{id_prefix}_{id}");
-        let crc_os_id_str = ECMA.checksum(os_id_str.as_bytes());
-        format!("{:x}.zenoh", crc_os_id_str)
+        Ok(Self { shmem })
     }
 
     pub fn as_ptr(&self) -> *mut u8 {

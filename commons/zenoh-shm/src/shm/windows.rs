@@ -11,10 +11,3 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
-pub mod array;
-#[cfg(target_os = "linux")]
-pub(crate) mod segment_lock;
-pub mod struct_in_shm;
-tested_crate_module!(segment);
-pub(crate) mod cleanup;

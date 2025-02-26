@@ -33,7 +33,6 @@ test = ["num_cpus"]
 
 [dependencies]
 async-trait = { workspace = true }
-crc = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
 zenoh-result = { workspace = true }

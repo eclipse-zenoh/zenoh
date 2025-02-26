@@ -12,19 +12,22 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-
-#[cfg(target_os="windows")]
-mod windows;
 use std::{fmt::Display, num::NonZeroUsize, ops::Deref};
 
 use num_traits::Unsigned;
-#[cfg(target_os="windows")]
+
+#[cfg(target_os = "windows")]
+mod windows;
+#[cfg(target_os = "windows")]
 use windows as platform;
-#[cfg(any(target_os="freebsd", target_os="linux", target_os="macos"))]
+#[cfg(any(target_os = "freebsd", target_os = "linux", target_os = "macos"))]
 pub mod unix;
-#[cfg(any(target_os="freebsd", target_os="linux", target_os="macos"))]
+#[cfg(any(target_os = "freebsd", target_os = "linux", target_os = "macos"))]
 pub use unix as platform;
-#[cfg(all(not(target_os="windows"), not(any(target_os="freebsd", target_os="linux", target_os="macos"))))]
+#[cfg(all(
+    not(target_os = "windows"),
+    not(any(target_os = "freebsd", target_os = "linux", target_os = "macos"))
+))]
 compile_error!("shared_memory isnt implemented for this platform...");
 
 #[derive(Debug)]
@@ -36,28 +39,32 @@ pub enum SegmentCreateError {
 #[derive(Debug)]
 pub enum SegmentOpenError {
     OsError(u32),
-    ZeroSizedSegment
+    InvalidatedSegment,
 }
 
 pub type ShmCreateResult<T> = core::result::Result<T, SegmentCreateError>;
 pub type ShmOpenResult<T> = core::result::Result<T, SegmentOpenError>;
 
 pub trait SegmentID: Unsigned + Display + Copy + Send + 'static {}
-impl<T: Unsigned + Display+ Copy + Send + 'static> SegmentID for T {}
+impl<T: Unsigned + Display + Copy + Send + 'static> SegmentID for T {}
 
 pub struct Segment<ID: SegmentID> {
-    inner: platform::SegmentImpl<ID>
+    inner: platform::SegmentImpl<ID>,
 }
 
 impl<ID: SegmentID> Segment<ID> {
     pub fn create(id: ID, len: NonZeroUsize) -> ShmCreateResult<Self> {
         let inner = platform::SegmentImpl::create(id, len)?;
-        Ok( Self { inner } )
+        Ok(Self { inner })
     }
 
     pub fn open(id: ID) -> ShmOpenResult<Self> {
         let inner = platform::SegmentImpl::open(id)?;
-        Ok( Self { inner } )
+        Ok(Self { inner })
+    }
+
+    pub fn ensure_not_persistent(id: ID) {
+        platform::SegmentImpl::ensure_not_persistent(id);
     }
 }
 

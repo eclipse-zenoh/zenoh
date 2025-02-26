@@ -16,42 +16,48 @@ use zenoh_shm::shm::Segment;
 
 #[test]
 fn create() {
-    let id = 0u32;
+    let id = line!() as u32;
     let len = 1024.try_into().unwrap();
-    let created_segment = Segment::create(id, len ).unwrap();
+    let created_segment = Segment::create(id, len).unwrap();
     assert!(created_segment.len() >= len);
-    created_segment.unlink();
+}
+
+#[test]
+fn create_concurrent() {
+    let id = line!() as u32;
+    let len = 1024.try_into().unwrap();
+    let created_segment = Segment::create(id, len).unwrap();
+    assert!(created_segment.len() >= len);
+    assert!(Segment::create(id, len).is_err());
 }
 
 #[test]
 fn create_and_open() {
-    let id = 1u32;
+    let id = line!() as u32;
     let len = 1024.try_into().unwrap();
-    let created_segment = Segment::create(id, len ).unwrap();
+    let created_segment = Segment::create(id, len).unwrap();
     let opened_segment = Segment::open(id).unwrap();
     assert!(created_segment.len() >= len);
     assert!(opened_segment.len() >= len);
-    opened_segment.unlink();
 }
 
 #[test]
 fn create_and_open_amd_reopen() {
-    let id = 2u32;
+    let id = line!() as u32;
     let len = 1024.try_into().unwrap();
-    let created_segment = Segment::create(id, len ).unwrap();
+    let created_segment = Segment::create(id, len).unwrap();
     let opened_segment = Segment::open(id).unwrap();
     let opened_segment2 = Segment::open(id).unwrap();
     assert!(created_segment.len() >= len);
     assert!(opened_segment.len() >= len);
     assert!(opened_segment2.len() >= len);
-    opened_segment.unlink();
 }
 
 #[test]
 fn create_and_open_amd_reopen_and_open_closed() {
-    let id = 3u32;
+    let id = line!() as u32;
     let len = 1024.try_into().unwrap();
-    let created_segment = Segment::create(id, len ).unwrap();
+    let created_segment = Segment::create(id, len).unwrap();
     let opened_segment = Segment::open(id).unwrap();
     assert!(created_segment.len() >= len);
     assert!(opened_segment.len() >= len);
@@ -60,29 +66,30 @@ fn create_and_open_amd_reopen_and_open_closed() {
 
     let opened_segment2 = Segment::open(id).unwrap();
     assert!(opened_segment2.len() >= len);
-    opened_segment2.unlink();
 }
 
 #[test]
-fn persistency() {
-    let id = 4u32;
+fn no_persistency() {
+    let id = line!() as u32;
     let len = 1024.try_into().unwrap();
-    let created_segment = Segment::create(id, len ).unwrap();
+    let created_segment = Segment::create(id, len).unwrap();
     assert!(created_segment.len() >= len);
     drop(created_segment);
 
-    let opened_segment = Segment::open(id).unwrap();
-    assert!(opened_segment.len() >= len);
-    opened_segment.unlink();
+    assert!(Segment::open(id).is_err());
 }
 
 #[test]
-fn unlink() {
-    let id = 5u32;
+fn recreate_many_times() {
+    let id = line!() as u32;
     let len = 1024.try_into().unwrap();
-    let created_segment = Segment::create(id, len ).unwrap();
-    assert!(created_segment.len() >= len);
-    created_segment.unlink();
+
+    for _ in 0..100 {
+        let created_segment = Segment::create(id, len).unwrap();
+        let opened_segment = Segment::open(id).unwrap();
+        assert!(created_segment.len() >= len);
+        assert!(opened_segment.len() >= len);
+    }
 
     assert!(Segment::open(id).is_err());
 }

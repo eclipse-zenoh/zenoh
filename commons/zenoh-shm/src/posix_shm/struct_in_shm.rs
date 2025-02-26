@@ -13,15 +13,17 @@
 //
 
 use std::{
-    marker::PhantomData, mem::size_of, num::NonZeroUsize, ops::{Deref, DerefMut}
+    marker::PhantomData,
+    mem::size_of,
+    num::NonZeroUsize,
+    ops::{Deref, DerefMut},
 };
 
 // use stabby::IStable;
 use zenoh_result::ZResult;
 
-use crate::shm;
-
 use super::segment::Segment;
+use crate::shm;
 
 /// An SHM segment that contains data structure
 #[derive(Debug)]
@@ -58,17 +60,17 @@ where
         panic!("Elem is a ZST. ZSTs are not allowed");
     };
 
-    pub fn create(file_prefix: &str) -> ZResult<Self> {
+    pub fn create() -> ZResult<Self> {
         let alloc_size = NonZeroUsize::try_from(size_of::<Elem>())?;
-        let inner = Segment::create(alloc_size, file_prefix)?;
+        let inner = Segment::create(alloc_size)?;
         Ok(Self {
             inner,
             _phantom: PhantomData,
         })
     }
 
-    pub fn open(id: ID, file_prefix: &str) -> ZResult<Self> {
-        let inner = Segment::open(id, file_prefix)?;
+    pub fn open(id: ID) -> ZResult<Self> {
+        let inner = Segment::open(id)?;
         Ok(Self {
             inner,
             _phantom: PhantomData,

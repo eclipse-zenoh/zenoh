@@ -20,6 +20,7 @@ use std::{
     ptr::NonNull,
 };
 
+use advisory_lock::{AdvisoryFileLock, FileLockMode};
 use nix::{
     fcntl::OFlag,
     sys::{
@@ -55,6 +56,11 @@ impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
             }
         };
 
+        // put shared advisory lock on shm fd
+        fd.as_raw_fd()
+            .try_lock(FileLockMode::Shared)
+            .map_err(|_| SegmentCreateError::SegmentExists)?;
+
         // resize shm segment to requested size
         tracing::trace!("ftruncate(fd={}, len={})", fd.as_raw_fd(), len);
         if let Err(e) = ftruncate(&fd, len.get() as _) {
@@ -85,12 +91,17 @@ impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
             }
         };
 
+        // put shared advisory lock on shm fd
+        fd.as_raw_fd()
+            .try_lock(FileLockMode::Shared)
+            .map_err(|_| SegmentOpenError::InvalidatedSegment)?;
+
         // get segment size
         let len = match fstat(fd.as_raw_fd()) {
             Ok(v) => v.st_size as usize,
             Err(e) => return Err(SegmentOpenError::OsError(e as u32)),
         };
-        let len = NonZeroUsize::new(len).ok_or(SegmentOpenError::ZeroSizedSegment)?;
+        let len = NonZeroUsize::new(len).ok_or(SegmentOpenError::InvalidatedSegment)?;
 
         // map segment into our address space
         let data_ptr = Self::map(len, &fd).map_err(|e| SegmentOpenError::OsError(e as _))?;
@@ -103,10 +114,19 @@ impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
         })
     }
 
-    pub fn unlink(&self) {
-        let id = Self::id_str(self.id);
-        tracing::trace!("shm_unlink(name={})", id);
-        let _ = shm_unlink(id.as_str());
+    pub fn ensure_not_persistent(id: ID) {
+        // open shm fd
+        let fd = {
+            let id = Self::id_str(id);
+            let flags = OFlag::O_RDWR;
+            let mode = Mode::S_IRUSR;
+            tracing::trace!("shm_open(name={}, flag={:?}, mode={:?})", id, flags, mode);
+            shm_open(id.as_str(), flags, mode)
+        };
+
+        if let Ok(fd) = fd {
+            Self::unlink_if_unique(id, &fd);
+        }
     }
 
     pub fn id(&self) -> ID {
@@ -142,6 +162,14 @@ impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
 
         unsafe { mmap(None, len, prot, flags, fd, 0) }
     }
+
+    fn unlink_if_unique(id: ID, fd: &OwnedFd) {
+        if fd.as_raw_fd().try_lock(FileLockMode::Exclusive).is_ok() {
+            let id = Self::id_str(id);
+            tracing::trace!("shm_unlink(name={})", id);
+            let _ = shm_unlink(id.as_str());
+        }
+    }
 }
 
 impl<ID: Unsigned + Display + Copy> Drop for SegmentImpl<ID> {
@@ -150,5 +178,7 @@ impl<ID: Unsigned + Display + Copy> Drop for SegmentImpl<ID> {
         if let Err(_e) = unsafe { munmap(self.data_ptr, self.len.get()) } {
             tracing::debug!("munmap() failed : {}", _e);
         };
+
+        Self::unlink_if_unique(self.id, &self.fd);
     }
 }
