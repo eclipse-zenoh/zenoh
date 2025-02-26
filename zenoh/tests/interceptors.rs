@@ -156,14 +156,13 @@ fn downsampling_by_keyexpr_impl(flow: InterceptorFlow) {
         id: None,
         flows: Some(vec![flow]),
         interfaces: None,
+        messages: vec![DownsamplingMessage::Push],
         rules: vec![
             DownsamplingRuleConf {
-                messages: vec![DownsamplingMessage::Push],
                 key_expr: ke_10hz.clone().into(),
                 freq: 10.0,
             },
             DownsamplingRuleConf {
-                messages: vec![DownsamplingMessage::Push],
                 key_expr: ke_20hz.clone().into(),
                 freq: 20.0,
             },
@@ -214,8 +213,8 @@ fn downsampling_by_interface_impl(flow: InterceptorFlow) {
             id: Some("someid".to_string()),
             flows: Some(vec![flow]),
             interfaces: Some(vec!["lo".to_string(), "lo0".to_string()]),
+            messages: vec![DownsamplingMessage::Push],
             rules: vec![DownsamplingRuleConf {
-                messages: vec![DownsamplingMessage::Push],
                 key_expr: ke_10hz.clone().into(),
                 freq: 10.0,
             }],
@@ -224,8 +223,8 @@ fn downsampling_by_interface_impl(flow: InterceptorFlow) {
             id: None,
             flows: Some(vec![flow]),
             interfaces: Some(vec!["some_unknown_interface".to_string()]),
+            messages: vec![DownsamplingMessage::Push],
             rules: vec![DownsamplingRuleConf {
-                messages: vec![DownsamplingMessage::Push],
                 key_expr: ke_no_effect.clone().into(),
                 freq: 10.0,
             }],

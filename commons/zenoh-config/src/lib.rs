@@ -95,8 +95,6 @@ pub enum DownsamplingMessage {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct DownsamplingRuleConf {
-    // list of message types on which the downsampling will be applied
-    pub messages: Vec<DownsamplingMessage>,
     /// A list of key-expressions to which the downsampling will be applied.
     /// Downsampling will be applied for all key extensions if the parameter is None
     pub key_expr: OwnedKeyExpr,
@@ -111,6 +109,8 @@ pub struct DownsamplingItemConf {
     /// A list of interfaces to which the downsampling will be applied
     /// Downsampling will be applied for all interfaces if the parameter is None
     pub interfaces: Option<Vec<String>>,
+    // list of message types on which the downsampling will be applied
+    pub messages: Vec<DownsamplingMessage>,
     /// A list of interfaces to which the downsampling will be applied.
     pub rules: Vec<DownsamplingRuleConf>,
     /// Downsampling flow directions: egress and/or ingress

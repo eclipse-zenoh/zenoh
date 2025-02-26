@@ -53,11 +53,9 @@ pub(crate) fn downsampling_interceptor_factories(
         // check for undefined flows and initialize them
         ds.flows
             .get_or_insert(vec![InterceptorFlow::Ingress, InterceptorFlow::Egress]);
-        // validate rules
-        for rule in &ds.rules {
-            if rule.messages.is_empty() {
-                bail!("Invalid Downsampling config: messages list in rules must not be empty");
-            }
+        // check for empty messages list
+        if ds.messages.is_empty() {
+            bail!("Invalid Downsampling config: messages list must not be empty");
         }
         res.push(Box::new(DownsamplingInterceptorFactory::new(ds)));
     }
@@ -69,6 +67,7 @@ pub struct DownsamplingInterceptorFactory {
     interfaces: Option<Vec<String>>,
     rules: Vec<DownsamplingRuleConf>,
     flows: InterfaceEnabled,
+    messages: Arc<DownsamplingFilters>,
 }
 
 impl DownsamplingInterceptorFactory {
@@ -81,6 +80,7 @@ impl DownsamplingInterceptorFactory {
                 .expect("config flows should be set")
                 .as_slice()
                 .into(),
+            messages: Arc::new(conf.messages.as_slice().into()),
         }
     }
 }
@@ -110,10 +110,10 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
         };
         (
             self.flows.ingress.then_some(Box::new(ComputeOnMiss::new(
-                DownsamplingInterceptor::new(self.rules.clone()),
+                DownsamplingInterceptor::new(self.messages.clone(), self.rules.clone()),
             ))),
             self.flows.egress.then_some(Box::new(ComputeOnMiss::new(
-                DownsamplingInterceptor::new(self.rules.clone()),
+                DownsamplingInterceptor::new(self.messages.clone(), self.rules.clone()),
             ))),
         )
     }
@@ -131,7 +131,7 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
 }
 
 #[derive(Default, Clone)]
-struct DownsamplingFilters {
+pub(crate) struct DownsamplingFilters {
     push: bool,
     query: bool,
     reply: bool,
@@ -167,29 +167,17 @@ struct Timestate {
 }
 
 pub(crate) struct DownsamplingInterceptor {
-    filtered_messages: Arc<HashMap<usize, DownsamplingFilters>>,
+    filtered_messages: Arc<DownsamplingFilters>,
     ke_id: Arc<Mutex<KeBoxTree<usize, UnknownWildness, KeyedSetProvider>>>,
     ke_state: Arc<Mutex<HashMap<usize, Timestate>>>,
 }
 
 impl DownsamplingInterceptor {
-    fn is_msg_filtered(&self, id: &usize, ctx: &RoutingContext<NetworkMessage>) -> bool {
+    fn is_msg_filtered(&self, ctx: &RoutingContext<NetworkMessage>) -> bool {
         match ctx.msg.body {
-            NetworkBody::Push(_) => self
-                .filtered_messages
-                .get(id)
-                .map(|filters| filters.push)
-                .unwrap_or(false),
-            NetworkBody::Request(_) => self
-                .filtered_messages
-                .get(id)
-                .map(|filters| filters.query)
-                .unwrap_or(false),
-            NetworkBody::Response(_) => self
-                .filtered_messages
-                .get(id)
-                .map(|filters| filters.reply)
-                .unwrap_or(false),
+            NetworkBody::Push(_) => self.filtered_messages.push,
+            NetworkBody::Request(_) => self.filtered_messages.query,
+            NetworkBody::Response(_) => self.filtered_messages.reply,
             NetworkBody::ResponseFinal(_) => false,
             NetworkBody::Interest(_) => false,
             NetworkBody::Declare(_) => false,
@@ -214,10 +202,10 @@ impl InterceptorTrait for DownsamplingInterceptor {
         ctx: RoutingContext<NetworkMessage>,
         cache: Option<&Box<dyn Any + Send + Sync>>,
     ) -> Option<RoutingContext<NetworkMessage>> {
-        if let Some(cache) = cache {
-            if let Some(id) = cache.downcast_ref::<Option<usize>>() {
-                if let Some(id) = id {
-                    if self.is_msg_filtered(id, &ctx) {
+        if self.is_msg_filtered(&ctx) {
+            if let Some(cache) = cache {
+                if let Some(id) = cache.downcast_ref::<Option<usize>>() {
+                    if let Some(id) = id {
                         let mut ke_state = zlock!(self.ke_state);
                         if let Some(state) = ke_state.get_mut(id) {
                             let timestamp = tokio::time::Instant::now();
@@ -232,9 +220,9 @@ impl InterceptorTrait for DownsamplingInterceptor {
                             tracing::debug!("unexpected cache ID {}", id);
                         }
                     }
+                } else {
+                    tracing::debug!("unexpected cache type {:?}", ctx.full_expr());
                 }
-            } else {
-                tracing::debug!("unexpected cache type {:?}", ctx.full_expr());
             }
         }
 
@@ -245,10 +233,9 @@ impl InterceptorTrait for DownsamplingInterceptor {
 const NANOS_PER_SEC: f64 = 1_000_000_000.0;
 
 impl DownsamplingInterceptor {
-    pub fn new(rules: Vec<DownsamplingRuleConf>) -> Self {
+    pub fn new(messages: Arc<DownsamplingFilters>, rules: Vec<DownsamplingRuleConf>) -> Self {
         let mut ke_id = KeBoxTree::default();
         let mut ke_state = HashMap::default();
-        let mut filtered_messages = HashMap::default();
         for (id, rule) in rules.into_iter().enumerate() {
             let mut threshold = tokio::time::Duration::MAX;
             let mut latest_message_timestamp = tokio::time::Instant::now();
@@ -265,17 +252,15 @@ impl DownsamplingInterceptor {
                     latest_message_timestamp,
                 },
             );
-            let rule_messages = DownsamplingFilters::from(rule.messages.as_slice());
-            filtered_messages.insert(id, rule_messages.clone());
             tracing::debug!(
                 "New downsampler rule enabled: key_expr={:?}, threshold={:?}, messages={}",
                 rule.key_expr,
                 threshold,
-                rule_messages,
+                messages,
             );
         }
         Self {
-            filtered_messages: Arc::new(filtered_messages),
+            filtered_messages: messages,
             ke_id: Arc::new(Mutex::new(ke_id)),
             ke_state: Arc::new(Mutex::new(ke_state)),
         }
