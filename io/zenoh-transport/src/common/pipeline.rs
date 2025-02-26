@@ -283,29 +283,50 @@ impl Deadline {
     }
 }
 
+/// Shared structures of the stage-in, where we put all the mutexes.
+/// It allows not messing with the borrow checker when we use a mutable
+/// reference on the `StageIn` struct.
 struct StageInShared {
+    /// Mutex protected stage-in, only one message can be written at a time.
     queue: Mutex<StageIn>,
+    /// Current batch on which the pipeline is writing.
+    /// It will be taken by the tx task if no batch has been pushed.
     current: Arc<Mutex<Option<WBatch>>>,
+    /// Sequence number generator.
     chan_tx: TransportPriorityTx,
+    /// Batch pool, used to check congestion.
     batch_pool: Arc<BatchPool>,
 }
 
 // This is the initial stage of the pipeline where messages are serialized on
 struct StageIn {
+    /// Batch queue.
     batch_tx: RingBufferWriter<WBatch, RBLEN>,
-    push_notifier: Notifier,
+    /// Notifier used when batched are pushed, or when current batch has been written.
+    batch_notifier: Notifier,
+    /// Batch pool, to acquire available batches.
     batch_pool: Arc<BatchPool>,
+    /// Waiter for batch refilling.
     refill_waiter: Waiter,
+    /// Indicates if small batches can be used. Everytime a batch is pushed with a smaller
+    /// length than the configured small capacity, the next batch will be allocated with
+    /// the small capacity. It reduces the memory overhead compared to always using maximum
+    /// size batches.
     use_small_batch: bool,
-    current_notified: bool,
+    /// Fragmentation buffer.
     fragbuf: ZBuf,
+    /// If batching is enabled.
     batching: bool,
+    /// Batch config, used to allocate new batches.
     batch_config: BatchConfig,
 }
 
 impl StageIn {
+    /// Small size used when full batch size is not needed. Just a constant for now.
     const SMALL_BATCH_SIZE: BatchSize = 1 << 11;
 
+    /// Generate a config to allocate a new batch, using the configured small size
+    /// when previous batch didn't need more.
     fn new_batch_config(&self) -> BatchConfig {
         BatchConfig {
             mtu: if self.use_small_batch {
@@ -366,7 +387,7 @@ impl StageIn {
     /// Pushes a batches to the tx task, notifying it.
     fn push_batch(&mut self, batch: WBatch) {
         self.batch_tx.push(batch);
-        let _ = self.push_notifier.notify();
+        let _ = self.batch_notifier.notify();
     }
 
     /// Pushes a batch to the TX task if batching is disabled or ignored
@@ -390,8 +411,7 @@ impl StageIn {
             drop(current);
             // Notify the tx task only if not in batching mode, to not disturb the backoff.
             if !self.batch_pool.is_batching() {
-                self.current_notified = true;
-                let _ = self.push_notifier.notify();
+                let _ = self.batch_notifier.notify();
             }
         }
     }
@@ -573,7 +593,7 @@ struct StageOut {
     /// Current batch on which the pipeline is writing.
     /// It will be taken if no batch has been pushed.
     current: Arc<Mutex<Option<WBatch>>>,
-    /// Batch pool.
+    /// Batch pool, to refill pulled batches, and check the pipeline batching mode.
     batch_pool: Arc<BatchPool>,
     /// Notifier for batch refilling.
     refill_notifier: Notifier,
@@ -693,7 +713,7 @@ impl TransmissionPipeline {
         };
 
         let (disable_notifier, disable_waiter) = event::new();
-        let (push_notifier, push_waiter) = event::new();
+        let (batch_notifier, batch_waiter) = event::new();
 
         for (prio, &num) in size_iter.enumerate() {
             assert!(num != 0 && num <= RBLEN);
@@ -707,11 +727,10 @@ impl TransmissionPipeline {
             stage_in.push(StageInShared {
                 queue: Mutex::new(StageIn {
                     batch_tx,
-                    push_notifier: push_notifier.clone(),
+                    batch_notifier: batch_notifier.clone(),
                     batch_pool: batch_pool.clone(),
                     refill_waiter,
                     use_small_batch: true,
-                    current_notified: false,
                     fragbuf: ZBuf::empty(),
                     batching: config.batching_enabled,
                     batch_config: config.batch,
@@ -741,7 +760,7 @@ impl TransmissionPipeline {
         };
         let consumer = TransmissionPipelineConsumer {
             stage_out: stage_out.into_boxed_slice(),
-            push_waiter,
+            batch_waiter,
             disable_waiter,
         };
 
@@ -816,7 +835,7 @@ impl TransmissionPipelineProducer {
 pub(crate) struct TransmissionPipelineConsumer {
     // A single Mutex for all the priority queues
     stage_out: Box<[StageOut]>,
-    push_waiter: Waiter,
+    batch_waiter: Waiter,
     disable_waiter: Waiter,
 }
 
@@ -838,7 +857,7 @@ impl TransmissionPipelineConsumer {
             tokio::select! {
                 biased;
                 _ = self.disable_waiter.wait_async() => return None,
-                _ = self.push_waiter.wait_async() => {},
+                _ = self.batch_waiter.wait_async() => {},
                 Some(_) = sleep => {}
             }
         }
