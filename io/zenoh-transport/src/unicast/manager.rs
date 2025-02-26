@@ -744,24 +744,12 @@ impl TransportManager {
         .map_err(|e| zerror!("{e}"))??;
 
         // Open the link
-        match tokio::time::timeout(
+        tokio::time::timeout(
             self.config.unicast.open_timeout - start.elapsed(),
             super::establishment::open::open_link(endpoint, link, self),
         )
         .await
-        {
-            Ok(Ok(t)) => Ok(t),
-            Ok(Err(e)) => {
-                // Handshake error
-                link.close().await;
-                zerror!("{e}")
-            }
-            Err(e) => {
-                // Timeout error
-                link.close().await;
-                zerror!("{e}")
-            }
-        }
+        .map_err(|e| zerror!("{e}"))?
     }
 
     pub async fn get_transport_unicast(&self, peer: &ZenohIdProto) -> Option<TransportUnicast> {
