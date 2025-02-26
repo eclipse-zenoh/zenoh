@@ -467,22 +467,35 @@ impl StageIn {
         }
 
         // Attempt a second serialization on fully empty batch (do not use small batch)
-        self.push_batch(batch);
         self.use_small_batch = false;
-        match self.get_batch(&mut current, Some(deadline))? {
-            Some(b) => batch = b,
-            None => {
-                tch.sn.set(sn).unwrap();
-                return Ok(false);
+        let mut try_serialize_on_empty_batch = true;
+        if !batch.is_empty() {
+            self.push_batch(batch);
+            match self.get_batch(&mut current, Some(deadline))? {
+                Some(b) => batch = b,
+                None => {
+                    tch.sn.set(sn).unwrap();
+                    return Ok(false);
+                }
             }
+        // If the batch was already empty, and it was a small batch, then we
+        // replace it with a full-capacity batch.
+        // We may be tempted to simply push the batch and get a new one, to reuse
+        // the same workflow as above, but empty batches mess up unix pipes.
+        } else if batch.buffer.capacity() < self.batch_config.mtu as usize {
+            batch = WBatch::new(self.new_batch_config());
+        // Otherwise, it means that the message doesn't fit into a full-capacity
+        // batch and must be fragmented directly.
+        } else {
+            try_serialize_on_empty_batch = false;
         }
-        if batch.encode((msg, &frame)).is_ok() {
+        if try_serialize_on_empty_batch && batch.encode((msg, &frame)).is_ok() {
             self.push_or_reuse_batch(current, batch, msg.is_express());
             return Ok(true);
         }
 
-        // The second serialization attempt has failed. This means that the message is
-        // too large for the current batch size: we need to fragment.
+        // Attempt to serialize on empty batch has failed. This means that the message
+        // is too large for the current batch size: we need to fragment.
         // Reinsert the current batch for fragmentation.
         *current = Some(batch);
 
@@ -512,7 +525,6 @@ impl StageIn {
                         tch.sn.set(sn).unwrap()
                     // Otherwise, an ephemeral batch is created to send the stop fragment
                     } else {
-                        self.use_small_batch = true;
                         let mut batch = WBatch::new(self.new_batch_config());
                         fragment.ext_drop = Some(fragment::ext::Drop::new());
                         let _ = batch.encode((&mut self.fragbuf.reader(), &mut fragment));
