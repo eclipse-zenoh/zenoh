@@ -268,7 +268,8 @@ fn downsampling_config_error_wrong_strategy() {
             r#"
               [
                 {
-                  flow: "down",
+                  flows: ["down"],
+                  messages: ["push"],
                   rules: [
                     { key_expr: "test/downsamples_by_keyexp/r100", freq: 10, },
                     { key_expr: "test/downsamples_by_keyexp/r50", freq: 20, }
@@ -295,14 +296,16 @@ fn downsampling_config_error_repeated_id() {
               [
                 {
                   id: "REPEATED",
-                  flow: "egress",
+                  flows: ["egress"],
+                  messages: ["push"],
                   rules: [
                     { key_expr: "test/downsamples_by_keyexp/r100", freq: 10, },
                   ],
                 },
                 {
                   id: "REPEATED",
-                  flow: "ingress",
+                  flows: ["ingress"],
+                  messages: ["push"],
                   rules: [
                     { key_expr: "test/downsamples_by_keyexp/r50", freq: 20, }
                   ],
