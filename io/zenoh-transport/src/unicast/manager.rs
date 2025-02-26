@@ -17,7 +17,7 @@ use std::{
         atomic::{AtomicUsize, Ordering::SeqCst},
         Arc,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
@@ -735,14 +735,33 @@ impl TransportManager {
         };
 
         // Create a new link associated by calling the Link Manager
-        let link = manager.new_link(endpoint.clone()).await?;
-        // Open the link
-        tokio::time::timeout(
+        let start = Instant::now();
+        let link = tokio::time::timeout(
             self.config.unicast.open_timeout,
+            manager.new_link(endpoint.clone()),
+        )
+        .await
+        .map_err(|e| zerror!("{e}"))??;
+
+        // Open the link
+        match tokio::time::timeout(
+            self.config.unicast.open_timeout - start.elapsed(),
             super::establishment::open::open_link(endpoint, link, self),
         )
         .await
-        .map_err(|e| zerror!("{e}"))?
+        {
+            Ok(Ok(t)) => Ok(t),
+            Ok(Err(e)) => {
+                // Handshake error
+                link.close().await;
+                zerror!("{e}")
+            }
+            Err(e) => {
+                // Timeout error
+                link.close().await;
+                zerror!("{e}")
+            }
+        }
     }
 
     pub async fn get_transport_unicast(&self, peer: &ZenohIdProto) -> Option<TransportUnicast> {
