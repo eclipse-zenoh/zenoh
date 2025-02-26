@@ -263,6 +263,16 @@
   //      ],
   //  },
 
+  // /// Namespace prefix.
+  // /// If specified, all outgoing key expressions will be automatically prefixed with specified string,
+  // /// and all incoming key expressions will be stripped of specified prefix.
+  // /// The namespace prefix should satisfy all key expression constraints
+  // /// and additionally it can not contain wild characters ('*').
+  // /// Namespace is applied to the session.
+  // /// E. g. if session has a namespace of "1" then session.put("my/keyexpr", my_message), 
+  // /// will put a message into 1/my/keyexpr. Same applies to all other operations within this session.
+  // namespace: "my/namespace",
+
   //  /// The downsampling declaration.
   //  downsampling: [
   //    {

@@ -635,11 +635,14 @@ validated_struct::validator! {
 
         },
 
-        /// Namespace prefix
+        /// Namespace prefix.
         /// If not None, all outgoing key expressions will be
         /// automatically prefixed with specified string,
         /// and all incoming key expressions will be stripped
-        /// of specified prefix
+        /// of specified prefix.
+        /// Namespace is applied to the session.
+        /// E. g. if session has a namespace of "1" then session.put("my/keyexpr", message),
+        /// will put a message into "1/my/keyexpr". Same applies to all other operations within this session.
         pub namespace: Option<OwnedNonWildKeyExpr>,
 
         /// Configuration of the downsampling.
