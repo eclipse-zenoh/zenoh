@@ -348,7 +348,6 @@ impl StageIn {
         if let Some(batch) = current.take() {
             return Ok(Some(batch));
         }
-        self.current_notified = false;
         loop {
             // try to acquire an available batch
             if let Some(batch) =
