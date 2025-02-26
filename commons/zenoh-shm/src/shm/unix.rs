@@ -59,7 +59,12 @@ impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
         // put shared advisory lock on shm fd
         fd.as_raw_fd()
             .try_lock(FileLockMode::Shared)
-            .map_err(|_| SegmentCreateError::SegmentExists)?;
+            .map_err(|e| match e {
+                advisory_lock::FileLockError::AlreadyLocked => SegmentCreateError::SegmentExists,
+                advisory_lock::FileLockError::Io(e) => {
+                    SegmentCreateError::OsError(e.raw_os_error().unwrap_or(0) as _)
+                }
+            })?;
 
         // resize shm segment to requested size
         tracing::trace!("ftruncate(fd={}, len={})", fd.as_raw_fd(), len);
@@ -94,7 +99,12 @@ impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
         // put shared advisory lock on shm fd
         fd.as_raw_fd()
             .try_lock(FileLockMode::Shared)
-            .map_err(|_| SegmentOpenError::InvalidatedSegment)?;
+            .map_err(|e| match e {
+                advisory_lock::FileLockError::AlreadyLocked => SegmentOpenError::InvalidatedSegment,
+                advisory_lock::FileLockError::Io(e) => {
+                    SegmentOpenError::OsError(e.raw_os_error().unwrap_or(0) as _)
+                }
+            })?;
 
         // get segment size
         let len = match fstat(fd.as_raw_fd()) {
