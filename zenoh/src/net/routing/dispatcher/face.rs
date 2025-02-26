@@ -221,16 +221,15 @@ impl FaceState {
                 .expect("face in_interceptors should not be None when primitives are Mux")
                 .store(ingress.into());
         } else if let Some(mux) = self.primitives.as_any().downcast_ref::<McastMux>() {
-            let interceptor = interceptors_from_factories(
+            let (_, interceptor) = interceptors_from_factories(
                 factories,
                 NewTransport::TransportMulticast(&mux.handler),
-            )
-            .1;
+            );
             mux.interceptor.store(Arc::new(interceptor));
             debug_assert!(self.in_interceptors.is_none());
         } else if let Some(transport) = &self.mcast_group {
-            let interceptor =
-                interceptors_from_factories(factories, NewTransport::PeerMulticast(transport)).0;
+            let (interceptor, _) =
+                interceptors_from_factories(factories, NewTransport::PeerMulticast(transport));
             self.in_interceptors
                 .as_ref()
                 .expect("face in_interceptors should not be None when mcast_group is set")
