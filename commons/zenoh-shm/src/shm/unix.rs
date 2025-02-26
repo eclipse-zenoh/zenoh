@@ -20,6 +20,8 @@ use std::{
     ptr::NonNull,
 };
 
+// todo: flock() doesn't work on Mac in some cases, but we can fix it
+#[cfg(target_os = "linux")]
 use advisory_lock::{AdvisoryFileLock, FileLockMode};
 use nix::{
     fcntl::OFlag,
@@ -56,6 +58,8 @@ impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
             }
         };
 
+        // todo: flock() doesn't work on Mac in some cases, but we can fix it
+        #[cfg(target_os = "linux")]
         // put shared advisory lock on shm fd
         fd.as_raw_fd()
             .try_lock(FileLockMode::Shared)
@@ -96,6 +100,8 @@ impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
             }
         };
 
+        // todo: flock() doesn't work on Mac in some cases, but we can fix it
+        #[cfg(target_os = "linux")]
         // put shared advisory lock on shm fd
         fd.as_raw_fd()
             .try_lock(FileLockMode::Shared)
@@ -174,6 +180,8 @@ impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
     }
 
     fn unlink_if_unique(id: ID, fd: &OwnedFd) {
+        // todo: flock() doesn't work on Mac in some cases, but we can fix it
+        #[cfg(target_os = "linux")]
         if fd.as_raw_fd().try_lock(FileLockMode::Exclusive).is_ok() {
             let id = Self::id_str(id);
             tracing::trace!("shm_unlink(name={})", id);
