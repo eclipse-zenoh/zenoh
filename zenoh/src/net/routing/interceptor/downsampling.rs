@@ -19,7 +19,7 @@
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
 };
 
@@ -38,7 +38,14 @@ pub(crate) fn downsampling_interceptor_factories(
 ) -> ZResult<Vec<InterceptorFactory>> {
     let mut res: Vec<InterceptorFactory> = vec![];
 
+    let mut id_set = HashSet::new();
     for ds in config {
+        // check unicity of rule id
+        if let Some(id) = &ds.id {
+            if !id_set.insert(id.clone()) {
+                bail!("Invalid Downsampling config: id '{id}' is repeated");
+            }
+        }
         res.push(Box::new(DownsamplingInterceptorFactory::new(ds.clone())));
     }
 

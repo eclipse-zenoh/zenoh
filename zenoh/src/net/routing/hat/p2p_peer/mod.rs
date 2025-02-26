@@ -436,3 +436,8 @@ const INITIAL_INTEREST_ID: u32 = 0;
 fn initial_interest(face: &FaceState) -> Option<&InterestState> {
     face.local_interests.get(&INITIAL_INTEREST_ID)
 }
+
+#[inline]
+pub(super) fn push_declaration_profile(face: &FaceState) -> bool {
+    face.whatami != WhatAmI::Client
+}
