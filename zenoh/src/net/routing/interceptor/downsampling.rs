@@ -113,12 +113,18 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
             }
         };
         (
-            self.flows.ingress.then_some(Box::new(ComputeOnMiss::new(
-                DownsamplingInterceptor::new(self.messages.clone(), self.rules.clone()),
-            ))),
-            self.flows.egress.then_some(Box::new(ComputeOnMiss::new(
-                DownsamplingInterceptor::new(self.messages.clone(), self.rules.clone()),
-            ))),
+            self.flows.ingress.then(|| {
+                Box::new(ComputeOnMiss::new(DownsamplingInterceptor::new(
+                    self.messages.clone(),
+                    self.rules.clone(),
+                ))) as IngressInterceptor
+            }),
+            self.flows.egress.then(|| {
+                Box::new(ComputeOnMiss::new(DownsamplingInterceptor::new(
+                    self.messages.clone(),
+                    self.rules.clone(),
+                ))) as EgressInterceptor
+            }),
         )
     }
 
