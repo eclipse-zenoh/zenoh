@@ -51,8 +51,12 @@ pub(crate) fn downsampling_interceptor_factories(
         }
         let mut ds = ds.clone();
         // check for undefined flows and initialize them
-        ds.flows
+        let flows = ds
+            .flows
             .get_or_insert(vec![InterceptorFlow::Ingress, InterceptorFlow::Egress]);
+        if flows.is_empty() {
+            bail!("Invalid Downsampling config: flows list must not be empty");
+        }
         // check for empty messages list
         if ds.messages.is_empty() {
             bail!("Invalid Downsampling config: messages list must not be empty");
