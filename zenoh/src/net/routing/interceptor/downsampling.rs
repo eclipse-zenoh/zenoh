@@ -20,10 +20,13 @@
 
 use std::{
     collections::{HashMap, HashSet},
+    fmt::Display,
     sync::{Arc, Mutex},
 };
 
-use zenoh_config::{DownsamplingItemConf, DownsamplingRuleConf, InterceptorFlow};
+use zenoh_config::{
+    DownsamplingItemConf, DownsamplingMessage, DownsamplingRuleConf, InterceptorFlow,
+};
 use zenoh_core::zlock;
 use zenoh_keyexpr::keyexpr_tree::{
     impls::KeyedSetProvider, support::UnknownWildness, IKeyExprTree, IKeyExprTreeMut, KeBoxTree,
@@ -127,14 +130,72 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
     }
 }
 
+#[derive(Default, Clone)]
+struct DownsamplingFilters {
+    push: bool,
+    query: bool,
+    reply: bool,
+}
+
+impl Display for DownsamplingFilters {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "[ push={}, query={}, reply={} ]",
+            self.push, self.query, self.reply
+        )
+    }
+}
+
+impl From<&[DownsamplingMessage]> for DownsamplingFilters {
+    fn from(value: &[DownsamplingMessage]) -> Self {
+        let mut res = Self::default();
+        for v in value {
+            match v {
+                DownsamplingMessage::Push => res.push = true,
+                DownsamplingMessage::Query => res.query = true,
+                DownsamplingMessage::Reply => res.reply = true,
+            }
+        }
+        res
+    }
+}
+
 struct Timestate {
     pub threshold: tokio::time::Duration,
     pub latest_message_timestamp: tokio::time::Instant,
 }
 
 pub(crate) struct DownsamplingInterceptor {
+    filtered_messages: Arc<HashMap<usize, DownsamplingFilters>>,
     ke_id: Arc<Mutex<KeBoxTree<usize, UnknownWildness, KeyedSetProvider>>>,
     ke_state: Arc<Mutex<HashMap<usize, Timestate>>>,
+}
+
+impl DownsamplingInterceptor {
+    fn is_msg_filtered(&self, id: &usize, ctx: &RoutingContext<NetworkMessage>) -> bool {
+        match ctx.msg.body {
+            NetworkBody::Push(_) => self
+                .filtered_messages
+                .get(id)
+                .map(|filters| filters.push)
+                .unwrap_or(false),
+            NetworkBody::Request(_) => self
+                .filtered_messages
+                .get(id)
+                .map(|filters| filters.query)
+                .unwrap_or(false),
+            NetworkBody::Response(_) => self
+                .filtered_messages
+                .get(id)
+                .map(|filters| filters.reply)
+                .unwrap_or(false),
+            NetworkBody::ResponseFinal(_) => false,
+            NetworkBody::Interest(_) => false,
+            NetworkBody::Declare(_) => false,
+            NetworkBody::OAM(_) => false,
+        }
+    }
 }
 
 impl InterceptorTrait for DownsamplingInterceptor {
@@ -153,10 +214,10 @@ impl InterceptorTrait for DownsamplingInterceptor {
         ctx: RoutingContext<NetworkMessage>,
         cache: Option<&Box<dyn Any + Send + Sync>>,
     ) -> Option<RoutingContext<NetworkMessage>> {
-        if matches!(ctx.msg.body, NetworkBody::Push(_)) {
-            if let Some(cache) = cache {
-                if let Some(id) = cache.downcast_ref::<Option<usize>>() {
-                    if let Some(id) = id {
+        if let Some(cache) = cache {
+            if let Some(id) = cache.downcast_ref::<Option<usize>>() {
+                if let Some(id) = id {
+                    if self.is_msg_filtered(id, &ctx) {
                         let mut ke_state = zlock!(self.ke_state);
                         if let Some(state) = ke_state.get_mut(id) {
                             let timestamp = tokio::time::Instant::now();
@@ -171,9 +232,9 @@ impl InterceptorTrait for DownsamplingInterceptor {
                             tracing::debug!("unexpected cache ID {}", id);
                         }
                     }
-                } else {
-                    tracing::debug!("unexpected cache type {:?}", ctx.full_expr());
                 }
+            } else {
+                tracing::debug!("unexpected cache type {:?}", ctx.full_expr());
             }
         }
 
@@ -187,6 +248,7 @@ impl DownsamplingInterceptor {
     pub fn new(rules: Vec<DownsamplingRuleConf>) -> Self {
         let mut ke_id = KeBoxTree::default();
         let mut ke_state = HashMap::default();
+        let mut filtered_messages = HashMap::default();
         for (id, rule) in rules.into_iter().enumerate() {
             let mut threshold = tokio::time::Duration::MAX;
             let mut latest_message_timestamp = tokio::time::Instant::now();
@@ -203,13 +265,17 @@ impl DownsamplingInterceptor {
                     latest_message_timestamp,
                 },
             );
+            let rule_messages = DownsamplingFilters::from(rule.messages.as_slice());
+            filtered_messages.insert(id, rule_messages.clone());
             tracing::debug!(
-                "New downsampler rule enabled: key_expr={:?}, threshold={:?}",
+                "New downsampler rule enabled: key_expr={:?}, threshold={:?}, messages={}",
                 rule.key_expr,
-                threshold
+                threshold,
+                rule_messages,
             );
         }
         Self {
+            filtered_messages: Arc::new(filtered_messages),
             ke_id: Arc::new(Mutex::new(ke_id)),
             ke_state: Arc::new(Mutex::new(ke_state)),
         }
