@@ -22,6 +22,7 @@ categories = ["network-programming"]
 description = "Internal crate for zenoh."
 
 [dependencies]
+base64ct = "~1.6.0"
 tokio = { version = "1.35.1", features = ["rt-multi-thread", "time", "io-std"] }
 zenoh = { path = "../../zenoh/" }
 zenoh-runtime = { path = "../../commons/zenoh-runtime/" }
