@@ -203,7 +203,7 @@ impl<ID: Unsigned + Display + Copy> Drop for SegmentImpl<ID> {
 
         #[cfg(not(target_os = "linux"))]
         {
-            let id = Self::id_str(id);
+            let id = Self::id_str(self.id);
             tracing::trace!("shm_unlink(name={})", id);
             let _ = shm_unlink(id.as_str());
         }
