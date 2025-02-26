@@ -179,6 +179,7 @@ impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
         unsafe { mmap(None, len, prot, flags, fd, 0) }
     }
 
+    #[allow(unused_variables)]
     fn unlink_if_unique(id: ID, fd: &OwnedFd) {
         // todo: flock() doesn't work on Mac in some cases, but we can fix it
         #[cfg(target_os = "linux")]
@@ -197,6 +198,14 @@ impl<ID: Unsigned + Display + Copy> Drop for SegmentImpl<ID> {
             tracing::debug!("munmap() failed : {}", _e);
         };
 
+        #[cfg(target_os = "linux")]
         Self::unlink_if_unique(self.id, &self.fd);
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            let id = Self::id_str(id);
+            tracing::trace!("shm_unlink(name={})", id);
+            let _ = shm_unlink(id.as_str());
+        }
     }
 }
