@@ -69,6 +69,52 @@ pub(crate) fn interceptor_factories(config: &Config) -> ZResult<Vec<InterceptorF
     Ok(res)
 }
 
+/// Helper enum to wrap transport ref when generating interceptors
+pub(crate) enum NewTransport<'a> {
+    TransportUnicast(&'a TransportUnicast),
+    TransportMulticast(&'a TransportMulticast),
+    PeerMulticast(&'a TransportMulticast),
+}
+
+/// Generates interceptors for transport from InterceptorFactory slice.
+/// Returns a pair of interceptors (ingress, egress).
+pub(crate) fn interceptors_from_factories(
+    factories: &[InterceptorFactory],
+    transport: NewTransport,
+) -> (InterceptorsChain, InterceptorsChain) {
+    match transport {
+        NewTransport::TransportUnicast(transport) => {
+            let (ingress, egress): (Vec<_>, Vec<_>) = factories
+                .iter()
+                .map(|itor| itor.new_transport_unicast(transport))
+                .unzip();
+            let (ingress, egress) = (
+                InterceptorsChain::from(ingress.into_iter().flatten().collect::<Vec<_>>()),
+                InterceptorsChain::from(egress.into_iter().flatten().collect::<Vec<_>>()),
+            );
+            (ingress, egress)
+        }
+        NewTransport::TransportMulticast(transport) => {
+            let egress = InterceptorsChain::from(
+                factories
+                    .iter()
+                    .filter_map(|itor| itor.new_transport_multicast(transport))
+                    .collect::<Vec<EgressInterceptor>>(),
+            );
+            (InterceptorsChain::empty(), egress)
+        }
+        NewTransport::PeerMulticast(transport) => {
+            let ingress = InterceptorsChain::from(
+                factories
+                    .iter()
+                    .filter_map(|itor| itor.new_peer_multicast(transport))
+                    .collect::<Vec<IngressInterceptor>>(),
+            );
+            (ingress, InterceptorsChain::empty())
+        }
+    }
+}
+
 pub(crate) struct InterceptorsChain {
     pub(crate) interceptors: Vec<Interceptor>,
 }

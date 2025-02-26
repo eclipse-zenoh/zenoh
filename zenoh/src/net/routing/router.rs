@@ -32,12 +32,11 @@ use super::{
         tables::{Tables, TablesLock},
     },
     hat,
-    interceptor::{EgressInterceptor, InterceptorsChain},
     runtime::Runtime,
 };
 use crate::net::{
     primitives::{DeMux, DummyPrimitives, EPrimitives, McastMux, Mux},
-    routing::interceptor::IngressInterceptor,
+    routing::interceptor::{interceptors_from_factories, NewTransport},
 };
 
 pub struct Router {
@@ -127,14 +126,9 @@ impl Router {
         let zid = transport.get_zid()?;
         #[cfg(feature = "stats")]
         let stats = transport.get_stats()?;
-        let (ingress, egress): (Vec<_>, Vec<_>) = tables
-            .interceptors
-            .iter()
-            .map(|itor| itor.new_transport_unicast(&transport))
-            .unzip();
-        let (ingress, egress) = (
-            InterceptorsChain::from(ingress.into_iter().flatten().collect::<Vec<_>>()),
-            InterceptorsChain::from(egress.into_iter().flatten().collect::<Vec<_>>()),
+        let (ingress, egress) = interceptors_from_factories(
+            tables.interceptors.as_ref(),
+            NewTransport::TransportUnicast(&transport),
         );
         let ingress = Arc::new(ArcSwap::new(ingress.into()));
         let mux = Arc::new(Mux::new(transport.clone(), egress));
@@ -187,12 +181,9 @@ impl Router {
         let mut tables = zwrite!(self.tables.tables);
         let fid = tables.face_counter;
         tables.face_counter += 1;
-        let interceptor = InterceptorsChain::from(
-            tables
-                .interceptors
-                .iter()
-                .filter_map(|itor| itor.new_transport_multicast(&transport))
-                .collect::<Vec<EgressInterceptor>>(),
+        let (_, interceptor) = interceptors_from_factories(
+            tables.interceptors.as_ref(),
+            NewTransport::TransportMulticast(&transport),
         );
         let mux = Arc::new(McastMux::new(transport.clone(), interceptor.into()));
         let face = FaceState::new(
@@ -226,12 +217,9 @@ impl Router {
         let mut tables = zwrite!(self.tables.tables);
         let fid = tables.face_counter;
         tables.face_counter += 1;
-        let interceptor = InterceptorsChain::from(
-            tables
-                .interceptors
-                .iter()
-                .filter_map(|itor| itor.new_peer_multicast(&transport))
-                .collect::<Vec<IngressInterceptor>>(),
+        let (interceptor, _) = interceptors_from_factories(
+            tables.interceptors.as_ref(),
+            NewTransport::PeerMulticast(&transport),
         );
         let interceptor = Arc::new(ArcSwap::new(interceptor.into()));
         let face_state = FaceState::new(
