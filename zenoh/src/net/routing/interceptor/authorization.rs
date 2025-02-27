@@ -30,6 +30,8 @@ use zenoh_keyexpr::{
     keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, KeBoxTree},
 };
 use zenoh_result::ZResult;
+
+use super::InterfaceEnabled;
 type PolicyForSubject = FlowPolicy;
 
 type PolicyMap = HashMap<usize, PolicyForSubject, RandomState>;
@@ -241,12 +243,6 @@ impl FlowPolicy {
             InterceptorFlow::Egress => &mut self.egress,
         }
     }
-}
-
-#[derive(Default, Debug)]
-pub struct InterfaceEnabled {
-    pub ingress: bool,
-    pub egress: bool,
 }
 
 pub struct PolicyEnforcer {
