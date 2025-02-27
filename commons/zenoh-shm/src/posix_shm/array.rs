@@ -85,7 +85,9 @@ where
     }
 
     pub fn elem_count(&self) -> NonZeroUsize {
-        unsafe { NonZeroUsize::new_unchecked(self.inner.len().get() / size_of::<Elem>()) }
+        let max: usize = ElemIndex::max_value().as_() + 1;
+        let actual = self.inner.len().get() / size_of::<Elem>();
+        unsafe { NonZeroUsize::new_unchecked(std::cmp::min(max, actual)) }
     }
 
     /// # Safety

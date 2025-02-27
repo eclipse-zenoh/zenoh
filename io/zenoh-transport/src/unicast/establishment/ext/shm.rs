@@ -57,6 +57,7 @@ impl AuthSegment {
             // SHM implementation and the old one
             (*array.elem_mut(CHALLENGE_INDEX)) = !challenge;
             (*array.elem_mut(VERSION_INDEX)) = SHM_VERSION;
+            #[allow(clippy::needless_range_loop)]
             for elem_index in 0..shm_protocols.len() {
                 (*array.elem_mut(ID_START_INDEX + elem_index)) = shm_protocols[elem_index] as u64;
             }
