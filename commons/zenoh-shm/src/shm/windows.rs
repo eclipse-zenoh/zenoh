@@ -15,14 +15,15 @@
 use std::{
     ffi::c_void,
     fmt::Display,
+    io::ErrorKind,
     num::NonZeroUsize,
-    os::fd::{AsRawFd, OwnedFd},
+    os::{
+        fd::{AsRawFd, OwnedFd},
+        windows::{fs::OpenOptionsExt, io::AsRawHandle},
+    },
+    path::PathBuf,
     ptr::NonNull,
 };
-
-use std::io::ErrorKind;
-use std::os::windows::{fs::OpenOptionsExt, io::AsRawHandle};
-use std::path::PathBuf;
 
 use win_sys::*;
 

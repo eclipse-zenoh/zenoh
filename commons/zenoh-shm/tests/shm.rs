@@ -54,7 +54,7 @@ fn create_and_open_amd_reopen() {
 }
 
 // todo: flock() doesn't work on Mac in some cases, but we can fix it
-#[cfg(target_os = "linux")]
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn create_and_open_amd_reopen_and_open_closed() {
     let id = line!();
@@ -71,7 +71,7 @@ fn create_and_open_amd_reopen_and_open_closed() {
 }
 
 // todo: flock() doesn't work on Mac in some cases, but we can fix it
-#[cfg(target_os = "linux")]
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn no_persistency() {
     let id = line!();
