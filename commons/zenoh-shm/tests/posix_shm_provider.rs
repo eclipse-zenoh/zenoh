@@ -25,15 +25,17 @@ use zenoh_shm::api::{
 };
 
 static BUFFER_NUM: usize = 100;
-static BUFFER_SIZE: usize = 1024;
+static BUFFER_SIZE: usize = 1000;
 
 #[test]
 fn posix_shm_provider_create() {
-    let _backend = PosixShmProviderBackend::builder()
-        .with_size(1024)
+    let size = 1024;
+    let backend = PosixShmProviderBackend::builder()
+        .with_size(size)
         .expect("Error creating Layout!")
         .wait()
         .expect("Error creating PosixShmProviderBackend!");
+    assert!(backend.available() >= size);
 }
 
 #[test]
@@ -74,11 +76,18 @@ fn posix_shm_provider_open() {
 
 #[test]
 fn posix_shm_provider_allocator() {
+    // size to allocate in the provider
+    let size_to_alloc = BUFFER_SIZE * BUFFER_NUM;
+
     let backend = PosixShmProviderBackend::builder()
-        .with_size(BUFFER_SIZE * BUFFER_NUM)
+        .with_size(size_to_alloc)
         .expect("Error creating Layout!")
         .wait()
         .expect("Error creating PosixShmProviderBackend!");
+
+    // the real size of memory available in the provider
+    let real_size = backend.available();
+    assert!(real_size >= size_to_alloc);
 
     let layout = MemoryLayout::new(BUFFER_SIZE, AllocAlignment::default()).unwrap();
 
@@ -89,6 +98,13 @@ fn posix_shm_provider_allocator() {
             .alloc(&layout)
             .expect("PosixShmProviderBackend: error allocating buffer");
         buffers.push(buf);
+    }
+
+    // as long as provider might have more memory than we requested (platform-specific),
+    // we need to exaust the remainder, if any
+    let mut remainder = vec![];
+    while let Ok(buf) = backend.alloc(&layout) {
+        remainder.push(buf);
     }
 
     for _ in 0..BUFFER_NUM {
@@ -107,11 +123,17 @@ fn posix_shm_provider_allocator() {
         buffers.push(buf);
     }
 
-    // free everything
+    // free buffers
     while let Some(buffer) = buffers.pop() {
+        backend.free(&buffer.descriptor);
+    }
+    assert_eq!(backend.available(), size_to_alloc);
+
+    // free remainder
+    while let Some(buffer) = remainder.pop() {
         backend.free(&buffer.descriptor);
     }
 
     // confirm that allocator is free
-    assert_eq!(backend.available(), BUFFER_NUM * BUFFER_SIZE);
+    assert_eq!(backend.available(), real_size);
 }
