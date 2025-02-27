@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    borrow::Cow,
     collections::{HashMap, HashSet},
     sync::{atomic::Ordering, Arc},
 };
@@ -367,10 +366,10 @@ fn simple_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 }
 
 #[inline]
-fn remote_simple_subs(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
+fn remote_simple_subs(res: &Arc<Resource>, face_id: usize) -> bool {
     res.session_ctxs
         .values()
-        .any(|ctx| ctx.face.id != face.id && ctx.subs.is_some())
+        .any(|ctx| ctx.face.id != face_id && ctx.subs.is_some())
 }
 
 #[inline]
@@ -440,23 +439,19 @@ fn propagate_forget_simple_subscription(
                 ),
             );
         }
-        for res in face_hat!(&mut face)
-            .local_subs
-            .keys()
-            .cloned()
-            .collect::<Vec<Arc<Resource>>>()
-        {
-            if !res.context().matches.iter().any(|m| {
-                m.upgrade().is_some_and(|m| {
+        let root = tables.root_res.clone();
+        let primitives = face.primitives.clone();
+        let face_id = face.id;
+        face_hat_mut!(&mut face).local_subs.retain(|res, &mut id| {
+            if let Some(key_expr) = res.key_expr() {
+                if !Resource::any_matches(&root, key_expr, |m| {
                     m.context.is_some()
-                        && (remote_simple_subs(&m, &face)
-                            || remote_linkstatepeer_subs(tables, &m)
-                            || remote_router_subs(tables, &m))
-                })
-            }) {
-                if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
+                        && (remote_simple_subs(m, face_id)
+                            || remote_linkstatepeer_subs(tables, m)
+                            || remote_router_subs(tables, m))
+                }) {
                     send_declare(
-                        &face.primitives,
+                        &primitives,
                         RoutingContext::with_expr(
                             Declare {
                                 interest_id: None,
@@ -471,9 +466,11 @@ fn propagate_forget_simple_subscription(
                             res.expr().to_string(),
                         ),
                     );
+                    return false;
                 }
             }
-        }
+            true
+        });
     }
 }
 
@@ -686,23 +683,19 @@ pub(super) fn undeclare_simple_subscription(
                     ),
                 );
             }
-            for res in face_hat!(face)
-                .local_subs
-                .keys()
-                .cloned()
-                .collect::<Vec<Arc<Resource>>>()
-            {
-                if !res.context().matches.iter().any(|m| {
-                    m.upgrade().is_some_and(|m| {
+            let root = tables.root_res.clone();
+            let primitives = face.primitives.clone();
+            let face_id = face.id;
+            face_hat_mut!(&mut face).local_subs.retain(|res, &mut id| {
+                if let Some(key_expr) = res.key_expr() {
+                    if !Resource::any_matches(&root, key_expr, |m| {
                         m.context.is_some()
-                            && (remote_simple_subs(&m, face)
-                                || remote_linkstatepeer_subs(tables, &m)
-                                || remote_router_subs(tables, &m))
-                    })
-                }) {
-                    if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
+                            && (remote_simple_subs(m, face_id)
+                                || remote_linkstatepeer_subs(tables, m)
+                                || remote_router_subs(tables, m))
+                    }) {
                         send_declare(
-                            &face.primitives,
+                            &primitives,
                             RoutingContext::with_expr(
                                 Declare {
                                     interest_id: None,
@@ -717,9 +710,11 @@ pub(super) fn undeclare_simple_subscription(
                                 res.expr().to_string(),
                             ),
                         );
+                        return false;
                     }
                 }
-            }
+                true
+            });
         }
     }
 }
@@ -952,7 +947,7 @@ pub(crate) fn declare_sub_interest(
                 if hat!(tables).router_subs.iter().any(|sub| {
                     sub.context.is_some()
                         && sub.matches(res)
-                        && (remote_simple_subs(sub, face)
+                        && (remote_simple_subs(sub, face.id)
                             || remote_linkstatepeer_subs(tables, sub)
                             || remote_router_subs(tables, sub))
                 }) {
@@ -1260,20 +1255,12 @@ impl HatPubSubTrait for HatCode {
                 return Arc::new(route);
             }
         };
-        let res = Resource::get_resource(expr.prefix, expr.suffix);
-        let matches = res
-            .as_ref()
-            .and_then(|res| res.context.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
 
         let master = !hat!(tables).full_net(WhatAmI::Peer)
             || *hat!(tables).elect_router(&tables.zid, &key_expr, hat!(tables).shared_nodes.iter())
                 == tables.zid;
 
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
-
+        for mres in Resource::get_matches(&tables.root_res, &key_expr).iter() {
             if master || source_type == WhatAmI::Router {
                 let net = hat!(tables).routers_net.as_ref().unwrap();
                 let router_source = match source_type {
@@ -1369,20 +1356,11 @@ impl HatPubSubTrait for HatCode {
         }
         tracing::trace!("get_matching_subscriptions({})", key_expr,);
 
-        let res = Resource::get_resource(&tables.root_res, key_expr);
-        let matches = res
-            .as_ref()
-            .and_then(|res| res.context.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
-
         let master = !hat!(tables).full_net(WhatAmI::Peer)
             || *hat!(tables).elect_router(&tables.zid, key_expr, hat!(tables).shared_nodes.iter())
                 == tables.zid;
 
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
-
+        for mres in Resource::get_matches(&tables.root_res, key_expr).iter() {
             if master {
                 let net = hat!(tables).routers_net.as_ref().unwrap();
                 insert_faces_for_subs(
