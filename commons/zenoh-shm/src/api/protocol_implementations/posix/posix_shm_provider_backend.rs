@@ -133,26 +133,28 @@ impl PosixShmProviderBackend {
     fn new(layout: &MemoryLayout) -> ZResult<Self> {
         let segment = PosixShmSegment::create(layout.size())?;
 
+        // because of platform specific, our shm segment is >= requested size, so in order to utilize
+        // additional memory we re-layout the size
+        let real_size = segment.segment.elem_count().get();
+        let aligned_size = (real_size
+            - (real_size % layout.alignment().get_alignment_value().get()))
+        .try_into()?;
+
         let mut free_list = BinaryHeap::new();
         let root_chunk = Chunk {
             offset: 0,
-            size: layout.size(),
+            size: aligned_size,
         };
         free_list.push(root_chunk);
 
         tracing::trace!(
-            "Created PosixShmProviderBackend id {}, layout {:?}",
+            "Created PosixShmProviderBackend id {}, layout {:?}, aligned size {aligned_size}",
             segment.segment.id(),
             layout
         );
 
-        // because of platform specific, our shm segment is >= requested size, so in order to utilize
-        // additional memory we re-layout the size
-        let real_size = segment.segment.elem_count().get();
-        let aligned_size = real_size - (real_size % layout.alignment().get_alignment_value().get());
-
         Ok(Self {
-            available: AtomicUsize::new(aligned_size),
+            available: AtomicUsize::new(aligned_size.get()),
             segment,
             free_list: Mutex::new(free_list),
             alignment: layout.alignment(),

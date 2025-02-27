@@ -101,7 +101,7 @@ fn posix_shm_provider_allocator() {
     }
 
     // as long as provider might have more memory than we requested (platform-specific),
-    // we need to exaust the remainder, if any
+    // we need to exhaust the remainder, if any
     let mut remainder = vec![];
     while let Ok(buf) = backend.alloc(&layout) {
         remainder.push(buf);

@@ -58,7 +58,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
             })?;
 
             // check error
-            if GetLastError() == ERROR_ALREADY_EXISTS.0 {
+            if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS.0 {
                 return Err(SegmentCreateError::SegmentExists);
             }
 
