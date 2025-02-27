@@ -632,6 +632,7 @@ impl StageOut {
         // First, try to pull a pushed batch.
         if let Some(batch) = self.batch_rx.pull() {
             self.backoff = None;
+            self.latest_pull = Instant::now();
             return Ok(Some(batch));
         }
         match self.backoff {
@@ -664,6 +665,7 @@ impl StageOut {
             return Err(self.backoff.unwrap());
         };
         self.backoff = None;
+        self.latest_pull = Instant::now();
         // Try to pull with the lock held to not miss a batch pushed in between.
         if let Some(batch) = self.batch_rx.pull() {
             return Ok(Some(batch));
