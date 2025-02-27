@@ -89,27 +89,28 @@ fn posix_shm_provider_allocator() {
     let real_size = backend.available();
     assert!(real_size >= size_to_alloc);
 
+    // the real number of buffers allocatable in the provider
+    let real_num = real_size / BUFFER_SIZE;
+    assert!(real_num >= BUFFER_NUM);
+
+    // the remainder in the provider
+    let remainder = real_size - real_num * BUFFER_SIZE;
+    assert!(remainder < BUFFER_SIZE);
+
     let layout = MemoryLayout::new(BUFFER_SIZE, AllocAlignment::default()).unwrap();
 
     // exhaust memory by allocating it all
     let mut buffers = vec![];
-    for _ in 0..BUFFER_NUM {
+    for _ in 0..real_num {
         let buf = backend
             .alloc(&layout)
             .expect("PosixShmProviderBackend: error allocating buffer");
         buffers.push(buf);
     }
 
-    // as long as provider might have more memory than we requested (platform-specific),
-    // we need to exhaust the remainder, if any
-    let mut remainder = vec![];
-    while let Ok(buf) = backend.alloc(&layout) {
-        remainder.push(buf);
-    }
-
-    for _ in 0..BUFFER_NUM {
+    for _ in 0..real_num {
         // there is nothing to allocate at this point
-        assert_eq!(backend.available(), 0);
+        assert_eq!(backend.available(), remainder);
         assert!(backend.alloc(&layout).is_err());
 
         // free buffer
@@ -125,12 +126,6 @@ fn posix_shm_provider_allocator() {
 
     // free buffers
     while let Some(buffer) = buffers.pop() {
-        backend.free(&buffer.descriptor);
-    }
-    assert_eq!(backend.available(), size_to_alloc);
-
-    // free remainder
-    while let Some(buffer) = remainder.pop() {
         backend.free(&buffer.descriptor);
     }
 
