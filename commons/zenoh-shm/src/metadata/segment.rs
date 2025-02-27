@@ -19,8 +19,6 @@ use zenoh_result::ZResult;
 use super::descriptor::{MetadataIndex, MetadataSegmentID};
 use crate::{header::chunk_header::ChunkHeaderType, posix_shm::struct_in_shm::StructInSHM};
 
-const METADATA_SEGMENT_PREFIX: &str = "metadata";
-
 #[stabby::stabby]
 pub struct Metadata<const S: usize> {
     headers: [ChunkHeaderType; S],
@@ -59,12 +57,12 @@ pub struct MetadataSegment<const S: usize = 32768> {
 
 impl<const S: usize> MetadataSegment<S> {
     pub fn create() -> ZResult<Self> {
-        let data = StructInSHM::create(METADATA_SEGMENT_PREFIX)?;
+        let data = StructInSHM::create()?;
         Ok(Self { data })
     }
 
     pub fn open(id: MetadataSegmentID) -> ZResult<Self> {
-        let data = StructInSHM::open(id, METADATA_SEGMENT_PREFIX)?;
+        let data = StructInSHM::open(id)?;
         Ok(Self { data })
     }
 }
