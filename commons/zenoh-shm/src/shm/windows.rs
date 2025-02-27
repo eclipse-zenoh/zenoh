@@ -12,14 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{fmt::Display, num::NonZeroUsize};
+use std::num::NonZeroUsize;
 
-use num_traits::Unsigned;
 use win_sys::*;
 
-use super::{SegmentCreateError, SegmentOpenError, ShmCreateResult, ShmOpenResult};
+use super::{SegmentCreateError, SegmentID, SegmentOpenError, ShmCreateResult, ShmOpenResult};
 
-pub struct SegmentImpl<ID: Unsigned + Display + Copy> {
+pub struct SegmentImpl<ID: SegmentID> {
     _fd: FileMapping,
     len: NonZeroUsize,
     data_ptr: ViewOfFile,
@@ -27,7 +26,7 @@ pub struct SegmentImpl<ID: Unsigned + Display + Copy> {
 }
 
 // PUBLIC
-impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
+impl<ID: SegmentID> SegmentImpl<ID> {
     pub fn create(id: ID, len: NonZeroUsize) -> ShmCreateResult<Self> {
         let fd = {
             let id = Self::id_str(id);
@@ -59,6 +58,8 @@ impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
         let (data_ptr, len) =
             Self::map(&fd).map_err(|e| SegmentCreateError::OsError(e.win32_error().unwrap().0))?;
 
+        let len = len.try_into().unwrap();
+
         Ok(Self {
             _fd: fd,
             len,
@@ -84,6 +85,10 @@ impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
         let (data_ptr, len) =
             Self::map(&fd).map_err(|e| SegmentOpenError::OsError(e.win32_error().unwrap().0))?;
 
+        let len = len
+            .try_into()
+            .map_err(|_| SegmentOpenError::InvalidatedSegment)?;
+
         Ok(Self {
             _fd: fd,
             len,
@@ -92,7 +97,7 @@ impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
         })
     }
 
-    pub fn ensure_not_persistent(id: ID) {}
+    pub fn ensure_not_persistent(_id: ID) {}
 
     pub fn id(&self) -> ID {
         self.id
@@ -108,12 +113,12 @@ impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
 }
 
 // PRIVATE
-impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
+impl<ID: SegmentID> SegmentImpl<ID> {
     fn id_str(id: ID) -> String {
         format!("/{}.zenoh", id)
     }
 
-    fn map(fd: &FileMapping) -> Result<(ViewOfFile, NonZeroUsize), Error> {
+    fn map(fd: &FileMapping) -> Result<(ViewOfFile, usize), Error> {
         let data_ptr = {
             tracing::trace!(
                 "MapViewOfFile(0x{:X}, {:X}, 0, 0, 0)",
@@ -126,7 +131,7 @@ impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
         let len = {
             let mut info = MEMORY_BASIC_INFORMATION::default();
             VirtualQuery(data_ptr.as_mut_ptr(), &mut info)?;
-            info.RegionSize.try_into().unwrap()
+            info.RegionSize.into()
         };
 
         Ok((data_ptr, len))

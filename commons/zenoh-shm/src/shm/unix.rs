@@ -14,7 +14,6 @@
 
 use std::{
     ffi::c_void,
-    fmt::Display,
     num::NonZeroUsize,
     os::fd::{AsRawFd, OwnedFd},
     ptr::NonNull,
@@ -31,11 +30,10 @@ use nix::{
     },
     unistd::ftruncate,
 };
-use num_traits::Unsigned;
 
-use super::{SegmentCreateError, SegmentOpenError, ShmCreateResult, ShmOpenResult};
+use super::{SegmentCreateError, SegmentID, SegmentOpenError, ShmCreateResult, ShmOpenResult};
 
-pub struct SegmentImpl<ID: Unsigned + Display + Copy> {
+pub struct SegmentImpl<ID: SegmentID> {
     #[cfg(target_os = "linux")]
     fd: OwnedFd,
     len: NonZeroUsize,
@@ -44,7 +42,7 @@ pub struct SegmentImpl<ID: Unsigned + Display + Copy> {
 }
 
 // PUBLIC
-impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
+impl<ID: SegmentID> SegmentImpl<ID> {
     pub fn create(id: ID, len: NonZeroUsize) -> ShmCreateResult<Self> {
         // create unique shm fd
         let fd = {
@@ -162,7 +160,7 @@ impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
 }
 
 // PRIVATE
-impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
+impl<ID: SegmentID> SegmentImpl<ID> {
     fn id_str(id: ID) -> String {
         format!("/{}.zenoh", id)
     }
@@ -194,7 +192,7 @@ impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
     }
 }
 
-impl<ID: Unsigned + Display + Copy> Drop for SegmentImpl<ID> {
+impl<ID: SegmentID> Drop for SegmentImpl<ID> {
     fn drop(&mut self) {
         tracing::trace!("munmap(addr={:p},len={})", self.data_ptr, self.len);
         if let Err(_e) = unsafe { munmap(self.data_ptr, self.len.get()) } {
