@@ -17,14 +17,12 @@ use std::{
     fmt::Display,
     io::ErrorKind,
     num::NonZeroUsize,
-    os::{
-        fd::{AsRawFd, OwnedFd},
-        windows::{fs::OpenOptionsExt, io::AsRawHandle},
-    },
+    os::windows::{fs::OpenOptionsExt, io::AsRawHandle},
     path::PathBuf,
     ptr::NonNull,
 };
 
+use num_traits::Unsigned;
 use win_sys::*;
 
 use super::{SegmentCreateError, SegmentOpenError, ShmCreateResult, ShmOpenResult};
@@ -43,7 +41,7 @@ impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
             let id = Self::id_str(id);
             let high_size = ((len.get() as u64 & 0xFFFF_FFFF_0000_0000_u64) >> 32) as _;
             let low_size = (len.get() as u64 & 0xFFFF_FFFF_u64) as _;
-            trace!(
+            tracing::trace!(
                 "CreateFileMapping({:?}, NULL, {:X}, {}, {}, '{}')",
                 INVALID_HANDLE_VALUE,
                 PAGE_READWRITE.0,
@@ -80,7 +78,7 @@ impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
     pub fn open(id: ID) -> ShmOpenResult<Self> {
         let fd = {
             let id = Self::id_str(id);
-            trace!(
+            tracing::trace!(
                 "OpenFileMappingW({:?}, {}, '{}')",
                 FILE_MAP_ALL_ACCESS,
                 false,
@@ -125,7 +123,7 @@ impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
 
     fn map(fd: &FileMapping) -> Result<(ViewOfFile, NonZeroUsize), Error> {
         let data_ptr = {
-            trace!(
+            tracing::trace!(
                 "MapViewOfFile(0x{:X}, {:X}, 0, 0, 0)",
                 fd,
                 (FILE_MAP_READ | FILE_MAP_WRITE).0,

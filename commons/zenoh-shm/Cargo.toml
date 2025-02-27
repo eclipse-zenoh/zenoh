@@ -51,5 +51,8 @@ crossbeam-queue = { workspace = true }
 advisory-lock = { workspace = true }
 nix = { workspace = true, default-features = false, features = ["fs", "mman"] }
 
+[target.'cfg(windows)'.dependencies]
+win-sys = { workspace = true }
+
 [dev-dependencies]
 libc = { workspace = true }
