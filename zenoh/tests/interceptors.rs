@@ -353,7 +353,7 @@ fn downsampling_query_reply_test(
                 .wait()
                 .unwrap();
             while let Ok(reply) = query.recv() {
-                if let Ok(_) = reply.into_result() {
+                if reply.into_result().is_ok() {
                     reply_counter.fetch_add(1, Ordering::SeqCst);
                 }
             }
