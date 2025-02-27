@@ -26,14 +26,15 @@ fn validate_segment<ID: SegmentID>(
 ) where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
 {
-    assert!(created_segment.len() == expected_elem_count);
+    assert!(created_segment.len() >= expected_elem_count);
     assert!(opened_segment.len() >= expected_elem_count);
+    assert!(opened_segment.len() == created_segment.len());
 
     let ptr1 = created_segment.as_ptr();
     let ptr2 = opened_segment.as_ptr();
 
-    let slice1 = unsafe { slice::from_raw_parts_mut(ptr1, expected_elem_count.get()) };
-    let slice2 = unsafe { slice::from_raw_parts(ptr2, expected_elem_count.get()) };
+    let slice1 = unsafe { slice::from_raw_parts_mut(ptr1, created_segment.len().get()) };
+    let slice2 = unsafe { slice::from_raw_parts(ptr2, opened_segment.len().get()) };
 
     validate_memory(slice1, slice2);
 }
