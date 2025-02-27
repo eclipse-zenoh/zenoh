@@ -71,8 +71,12 @@ impl<ID: SegmentID> SegmentImpl<ID> {
 
         // resize shm segment to requested size
         tracing::trace!("ftruncate(fd={}, len={})", fd.as_raw_fd(), len);
-        if let Err(e) = ftruncate(&fd, len.get() as _) {
-            return Err(SegmentCreateError::OsError(e as u32));
+        ftruncate(&fd, len.get() as _).map_err(|e| SegmentCreateError::OsError(e as u32))?;
+
+        // get real segment size
+        let len = {
+            let stat = fstat(fd.as_raw_fd()).map_err(|e| SegmentCreateError::OsError(e as u32))?;
+            NonZeroUsize::new(stat.st_size as usize).ok_or(SegmentCreateError::OsError(0))?
         };
 
         // map segment into our address space
@@ -94,10 +98,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
             let flags = OFlag::O_RDWR;
             let mode = Mode::S_IRUSR;
             tracing::trace!("shm_open(name={}, flag={:?}, mode={:?})", id, flags, mode);
-            match shm_open(id.as_str(), flags, mode) {
-                Ok(v) => v,
-                Err(e) => return Err(SegmentOpenError::OsError(e as u32)),
-            }
+            shm_open(id.as_str(), flags, mode).map_err(|e| SegmentOpenError::OsError(e as u32))?
         };
 
         // todo: flock() doesn't work on Mac in some cases, but we can fix it
@@ -112,12 +113,11 @@ impl<ID: SegmentID> SegmentImpl<ID> {
                 }
             })?;
 
-        // get segment size
-        let len = match fstat(fd.as_raw_fd()) {
-            Ok(v) => v.st_size as usize,
-            Err(e) => return Err(SegmentOpenError::OsError(e as u32)),
+        // get real segment size
+        let len = {
+            let stat = fstat(fd.as_raw_fd()).map_err(|e| SegmentOpenError::OsError(e as u32))?;
+            NonZeroUsize::new(stat.st_size as usize).ok_or(SegmentOpenError::OsError(0))?
         };
-        let len = NonZeroUsize::new(len).ok_or(SegmentOpenError::InvalidatedSegment)?;
 
         // map segment into our address space
         let data_ptr = Self::map(len, &fd).map_err(|e| SegmentOpenError::OsError(e as _))?;
