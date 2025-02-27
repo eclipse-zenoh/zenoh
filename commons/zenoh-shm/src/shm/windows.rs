@@ -58,7 +58,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
         let (data_ptr, len) =
             Self::map(&fd).map_err(|e| SegmentCreateError::OsError(e.win32_error().unwrap().0))?;
 
-        let len = len.try_into().unwrap();
+        let len = len.try_into().map_err(|e| SegmentCreateError::OsError(0))?;
 
         Ok(Self {
             _fd: fd,
@@ -131,7 +131,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
         let len = {
             let mut info = MEMORY_BASIC_INFORMATION::default();
             VirtualQuery(data_ptr.as_mut_ptr(), &mut info)?;
-            info.RegionSize.into()
+            info.RegionSize
         };
 
         Ok((data_ptr, len))

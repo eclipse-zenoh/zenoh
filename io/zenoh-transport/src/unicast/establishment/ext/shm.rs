@@ -57,8 +57,8 @@ impl AuthSegment {
             // SHM implementation and the old one
             (*array.elem_mut(CHALLENGE_INDEX)) = !challenge;
             (*array.elem_mut(VERSION_INDEX)) = SHM_VERSION;
-            for elem in ID_START_INDEX..array.elem_count().get() {
-                (*array.elem_mut(elem)) = shm_protocols[elem - ID_START_INDEX] as u64;
+            for elem_index in 0..shm_protocols.len() {
+                (*array.elem_mut(ID_START_INDEX + elem_index)) = shm_protocols[elem_index] as u64;
             }
         };
         Ok(Self { array })
@@ -109,8 +109,8 @@ impl AuthSegment {
 
     pub fn protocols(&self) -> Vec<ProtocolID> {
         let mut result = vec![];
-        for elem in ID_START_INDEX..self.array.elem_count().get() {
-            result.push(unsafe { *self.array.elem(elem) as u32 });
+        for elem in ID_START_INDEX..*self.array.elem(LEN_INDEX) {
+            result.push(unsafe { *self.array.elem(elem) as ProtocolID });
         }
         result
     }

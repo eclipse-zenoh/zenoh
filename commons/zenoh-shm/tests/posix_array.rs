@@ -48,14 +48,15 @@ fn validate_array<ElemIndex>(
     isize: AsPrimitive<ElemIndex>,
     usize: AsPrimitive<ElemIndex>,
 {
-    assert!(created_array.elem_count() == expected_elem_count);
+    assert!(created_array.elem_count() >= expected_elem_count);
     assert!(opened_array.elem_count() >= expected_elem_count);
+    assert!(opened_array.elem_count() == created_array.elem_count());
 
     let mut fill_ctr = 0;
     let mut validate_ctr = 0;
 
     // first of all, fill and validate elements sequentially
-    for i in 0..expected_elem_count.get() {
+    for i in 0..created_array.elem_count().get() {
         unsafe {
             let elem1 = &mut *created_array.elem_mut(i.as_());
             let elem2 = &*opened_array.elem(i.as_());
@@ -66,7 +67,7 @@ fn validate_array<ElemIndex>(
     }
 
     // then fill all the elements...
-    for i in 0..expected_elem_count.get() {
+    for i in 0..created_array.elem_count().get() {
         unsafe {
             let elem1 = &mut *created_array.elem_mut(i.as_());
             elem1.fill(&mut fill_ctr);
@@ -74,7 +75,7 @@ fn validate_array<ElemIndex>(
     }
 
     // ...and validate all the elements
-    for i in 0..expected_elem_count.get() {
+    for i in 0..opened_array.elem_count().get() {
         unsafe {
             let elem2 = &*opened_array.elem(i.as_());
             elem2.validate(&mut validate_ctr);
