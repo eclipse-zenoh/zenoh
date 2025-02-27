@@ -116,7 +116,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
         // get real segment size
         let len = {
             let stat = fstat(fd.as_raw_fd()).map_err(|e| SegmentOpenError::OsError(e as u32))?;
-            NonZeroUsize::new(stat.st_size as usize).ok_or(SegmentOpenError::OsError(0))?
+            NonZeroUsize::new(stat.st_size as usize).ok_or(SegmentOpenError::InvalidatedSegment)?
         };
 
         // map segment into our address space
