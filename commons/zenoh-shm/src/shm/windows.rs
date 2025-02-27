@@ -12,15 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{
-    ffi::c_void,
-    fmt::Display,
-    io::ErrorKind,
-    num::NonZeroUsize,
-    os::windows::{fs::OpenOptionsExt, io::AsRawHandle},
-    path::PathBuf,
-    ptr::NonNull,
-};
+use std::{fmt::Display, num::NonZeroUsize};
 
 use num_traits::Unsigned;
 use win_sys::*;
@@ -133,7 +125,7 @@ impl<ID: Unsigned + Display + Copy> SegmentImpl<ID> {
 
         let len = {
             let mut info = MEMORY_BASIC_INFORMATION::default();
-            VirtualQuery(map_ptr.as_mut_ptr(), &mut info)?;
+            VirtualQuery(data_ptr.as_mut_ptr(), &mut info)?;
             info.RegionSize.try_into().unwrap()
         };
 
