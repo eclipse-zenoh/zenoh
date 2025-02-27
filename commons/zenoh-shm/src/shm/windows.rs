@@ -15,6 +15,7 @@
 use std::num::NonZeroUsize;
 
 use win_sys::*;
+use winapi::um::errhandlingapi::GetLastError;
 
 use super::{SegmentCreateError, SegmentID, SegmentOpenError, ShmCreateResult, ShmOpenResult};
 
@@ -41,7 +42,9 @@ impl<ID: SegmentID> SegmentImpl<ID> {
                 id,
             );
 
-            CreateFileMapping(
+            // If the mapping already exists, GetLastError() will return ERROR_ALREADY_EXISTS,
+            // and you'll receive a handle to the existing mapping instead of creating a new one.
+            let fd = CreateFileMapping(
                 INVALID_HANDLE_VALUE,
                 None,
                 PAGE_READWRITE,
@@ -52,8 +55,16 @@ impl<ID: SegmentID> SegmentImpl<ID> {
             .map_err(|e| match e.win32_error().unwrap() {
                 ERROR_ALREADY_EXISTS => SegmentCreateError::SegmentExists,
                 err_code => SegmentCreateError::OsError(err_code.0 as _),
-            })
-        }?;
+            })?;
+
+            // check error
+            let error_code = GetLastError();
+            if error_code == ERROR_ALREADY_EXISTS {
+                return SegmentCreateError::SegmentExists;
+            }
+
+            fd
+        };
 
         let (data_ptr, len) =
             Self::map(&fd).map_err(|e| SegmentCreateError::OsError(e.win32_error().unwrap().0))?;
