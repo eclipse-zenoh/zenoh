@@ -109,7 +109,7 @@ impl AuthSegment {
 
     pub fn protocols(&self) -> Vec<ProtocolID> {
         let mut result = vec![];
-        for elem in ID_START_INDEX..*self.array.elem(LEN_INDEX) {
+        for elem in ID_START_INDEX..((*self.array.elem(LEN_INDEX)) as usize) {
             result.push(unsafe { *self.array.elem(elem) as ProtocolID });
         }
         result
