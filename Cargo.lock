@@ -5518,6 +5518,7 @@ name = "zenoh-link-udp"
 version = "1.2.1"
 dependencies = [
  "async-trait",
+ "flume",
  "socket2 0.5.7",
  "tokio",
  "tokio-util",
@@ -5527,7 +5528,6 @@ dependencies = [
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
- "zenoh-sync",
  "zenoh-util",
 ]
 
@@ -5762,10 +5762,6 @@ dependencies = [
  "event-listener 5.3.1",
  "futures",
  "tokio",
- "zenoh-buffers",
- "zenoh-collections",
- "zenoh-core",
- "zenoh-result",
 ]
 
 [[package]]
