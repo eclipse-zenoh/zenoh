@@ -947,6 +947,13 @@ fn test_keyexpr_strip_nonwild_prefix() {
         (("demo/example/test/**", "demo/example/test"), Some("**")),
         (("demo/example/**", "demo/example/test"), Some("**")),
         (("**", "demo/example/test"), Some("**")),
+        (("*/example/test/1", "demo/example/test"), Some("1")),
+        (("demo/*/test/1", "demo/example/test"), Some("1")),
+        (("*/*/test/1", "demo/example/test"), Some("1")),
+        (("*/*/*/1", "demo/example/test"), Some("1")),
+        (("*/test/1", "demo/example/test"), None),
+        (("*/*/1", "demo/example/test"), None),
+        (("*/*/**", "demo/example/test"), Some("**")),
         (
             ("demo/example/test/**/x$*/**", "demo/example/test"),
             Some("**/x$*/**"),
