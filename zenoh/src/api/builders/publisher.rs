@@ -385,19 +385,18 @@ impl PublisherBuilder<'_, '_> {
                 .nodes_including(key_expr)
                 .filter(|n| n.weight().is_some())
                 .collect_vec();
-            for node in &nodes_including {
-                // Take the first one yielded by the iterator that has overwrites
-                if let Some(overwrites) = node.weight() {
-                    qos_overwrites = overwrites.clone();
-                    // log warning if multiple keyexprs include it
-                    if nodes_including.len() > 1 {
-                        tracing::warn!(
-                            "Publisher declared on `{}` which is included by multiple key_exprs in qos config. Using qos config for `{}`",
-                            key_expr,
-                            node.keyexpr(),
-                        );
-                    }
-                    break;
+            if let Some(node) = nodes_including.first() {
+                qos_overwrites = node
+                    .weight()
+                    .expect("first node weight should not be None")
+                    .clone();
+                if nodes_including.len() > 1 {
+                    tracing::warn!(
+                        "Publisher declared on `{}` which is included by multiple key_exprs in qos config ({}). Using qos config for `{}`",
+                        key_expr,
+                        nodes_including.iter().map(|n| n.keyexpr().to_string()).join(", "),
+                        node.keyexpr(),
+                    );
                 }
             }
         }
