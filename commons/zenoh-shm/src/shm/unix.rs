@@ -95,6 +95,10 @@ impl<ID: SegmentID> SegmentImpl<ID> {
         // map segment into our address space
         let data_ptr = Self::map(len, &fd).map_err(|e| SegmentCreateError::OsError(e as _))?;
 
+        // be careful!!!
+        #[cfg(any(bsd, target_os = "redox"))]
+        let fd = ManuallyDrop::new(fd);
+
         Ok(Self {
             fd,
             len,
@@ -108,11 +112,15 @@ impl<ID: SegmentID> SegmentImpl<ID> {
         let fd = {
             let id = Self::id_str(id);
             let flags = OFlag::O_RDWR;
+
+            // open shm file with shared lock (BSD feature)
             #[cfg(any(bsd, target_os = "redox"))]
             let flags = flags | OFlag::O_SHLOCK | OFlag::O_NONBLOCK;
-            let mode = Mode::S_IRUSR;
-            tracing::trace!("shm_open(name={}, flag={:?}, mode={:?})", id, flags, mode);
 
+            // todo: these flags probably can be exposed to the config
+            let mode = Mode::S_IRUSR;
+
+            tracing::trace!("shm_open(name={}, flag={:?}, mode={:?})", id, flags, mode);
             match shm_open(id.as_str(), flags, mode) {
                 Ok(v) => v,
                 #[cfg(any(bsd, target_os = "redox"))]
@@ -142,6 +150,10 @@ impl<ID: SegmentID> SegmentImpl<ID> {
         // map segment into our address space
         let data_ptr = Self::map(len, &fd).map_err(|e| SegmentOpenError::OsError(e as _))?;
 
+        // be careful!!!
+        #[cfg(any(bsd, target_os = "redox"))]
+        let fd = ManuallyDrop::new(fd);
+
         Ok(Self {
             fd,
             len,
@@ -155,8 +167,11 @@ impl<ID: SegmentID> SegmentImpl<ID> {
         let fd = {
             let id = Self::id_str(id);
             let flags = OFlag::O_RDWR;
+
+            // open shm file with exclusive lock (BSD feature)
             #[cfg(any(bsd, target_os = "redox"))]
             let flags = flags | OFlag::O_EXLOCK | OFlag::O_NONBLOCK;
+
             let mode = Mode::S_IRUSR;
             tracing::trace!("shm_open(name={}, flag={:?}, mode={:?})", id, flags, mode);
             shm_open(id.as_str(), flags, mode)
@@ -238,7 +253,7 @@ impl<ID: SegmentID> Drop for SegmentImpl<ID> {
             drop(fd);
 
             // generate shm id string
-            let id = Self::id_str(id);
+            let id = Self::id_str(self.id);
 
             // try to open shm fd with O_EXLOCK
             let fd = {
