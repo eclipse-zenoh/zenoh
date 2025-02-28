@@ -244,6 +244,7 @@ impl BatchPool {
 impl Drop for BatchPool {
     fn drop(&mut self) {
         if *self.state.get_mut() & Self::REFILLED_FLAG != 0 {
+            // SAFETY: The flag has been set, so the batch has been set.
             unsafe { self.refill.get_mut().assume_init_drop() }
         }
     }
@@ -525,9 +526,21 @@ impl StageIn {
                         tch.sn.set(sn).unwrap()
                     // Otherwise, an ephemeral batch is created to send the stop fragment
                     } else {
-                        let mut batch = WBatch::new(self.new_batch_config());
                         fragment.ext_drop = Some(fragment::ext::Drop::new());
-                        let _ = batch.encode((&mut self.fragbuf.reader(), &mut fragment));
+                        // Arbitrary constant that should be enough; in reality, only 10B
+                        // are needed. If the protocol change, and the size is no longer
+                        // correct, fragmentation tests should fail with the `unwrap` below.
+                        const DROP_FRAGMENT_SIZE: BatchSize = 64;
+                        let mut batch = WBatch::new_ephemeral(BatchConfig {
+                            mtu: DROP_FRAGMENT_SIZE,
+                            ..self.batch_config
+                        });
+                        // Serialization fails if there is no payload, so add a dummy one.
+                        let dummy_payload = ZBuf::from(vec![0u8]);
+                        batch
+                            .encode((&mut dummy_payload.reader(), &mut fragment))
+                            .unwrap();
+                        debug_assert!(!fragment.more);
                         self.push_batch(batch);
                     }
                     return Ok(false);
@@ -676,11 +689,13 @@ impl StageOut {
 
     /// Refills a batch for the pipeline.
     fn refill(&mut self, batch: WBatch) {
-        // SAFETY: there is one batch pool per stage-in/stage-out pair, and it
-        // refilled behind an exclusive reference to stage-out, so they cannot
-        // be concurrent calls.
-        unsafe { self.batch_pool.refill(batch) };
-        let _ = self.refill_notifier.notify();
+        if !batch.is_ephemeral() {
+            // SAFETY: there is one batch pool per stage-in/stage-out pair, and it
+            // refilled behind an exclusive reference to stage-out, so they cannot
+            // be concurrent calls.
+            unsafe { self.batch_pool.refill(batch) };
+            let _ = self.refill_notifier.notify();
+        }
     }
 
     fn drain(&mut self) -> Vec<WBatch> {
@@ -901,6 +916,7 @@ mod tests {
         time::{Duration, Instant},
     };
 
+    use futures::FutureExt;
     use tokio::{task, time::timeout};
     use zenoh_buffers::{
         reader::{DidntRead, HasReader},
@@ -1283,5 +1299,76 @@ mod tests {
         assert!(producer.push_network_message(message.clone()).is_err());
 
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn fragmentation_first_drop() {
+        zenoh_util::init_log_from_env_or("error");
+        let config = TransmissionPipelineConf {
+            batch: BatchConfig {
+                mtu: 100,
+                is_streamed: true,
+                #[cfg(feature = "transport_compression")]
+                is_compression: false,
+            },
+            queue_size: [2; Priority::NUM],
+            batching_enabled: true,
+            wait_before_drop: (Duration::from_millis(1), Duration::from_millis(10)),
+            wait_before_close: Duration::from_millis(1),
+            batching_time_limit: Duration::from_millis(1),
+        };
+        let priorities = vec![TransportPriorityTx::make(Bits::from(u64::MAX)).unwrap()];
+        // set max sequence number to use maximal serialization size
+        {
+            let mut tch = priorities[0].reliable.lock().unwrap();
+            tch.sn.set(TransportSn::MAX - 10).unwrap();
+        }
+        let (producer, mut consumer) = TransmissionPipeline::make(config, &priorities);
+        let message: NetworkMessage = Push {
+            wire_expr: "test".into(),
+            ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Drop, false),
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::DEFAULT,
+            payload: PushBody::Put(Put {
+                timestamp: None,
+                encoding: Encoding::empty(),
+                ext_sinfo: None,
+                #[cfg(feature = "shared-memory")]
+                ext_shm: None,
+                ext_attachment: None,
+                ext_unknown: vec![],
+                payload: vec![0u8; 200].into(),
+            }),
+        }
+        .into();
+        let producer = task::spawn_blocking(move || {
+            assert!(!producer.push_network_message(message.clone()).unwrap());
+            producer
+        })
+        .await
+        .unwrap();
+
+        async fn pull_fragment(consumer: &mut TransmissionPipelineConsumer) -> Fragment {
+            let (batch, _) = consumer.pull().await.unwrap();
+            let codec = Zenoh080::new();
+            let msg: TransportMessage = codec.read(&mut &batch.as_slice()[2..]).unwrap();
+            match msg.body {
+                TransportBody::Fragment(fragment) => fragment,
+                _ => unreachable!(),
+            }
+        }
+        // first fragment
+        let fragment = pull_fragment(&mut consumer).await;
+        assert!(fragment.ext_first.is_some() && fragment.ext_drop.is_none());
+        // second fragment
+        let fragment = pull_fragment(&mut consumer).await;
+        assert!(fragment.ext_first.is_none() && fragment.ext_drop.is_none());
+        // last fragment (should be the drop one)
+        let fragment = pull_fragment(&mut consumer).await;
+        assert!(fragment.ext_first.is_none() && fragment.ext_drop.is_some());
+        // no more fragment
+        assert!(pull_fragment(&mut consumer).now_or_never().is_none());
+        // drop producer at the end to not disable the pipeline
+        drop(producer);
     }
 }
