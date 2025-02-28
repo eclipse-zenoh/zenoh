@@ -123,6 +123,11 @@ impl BatchPool {
         let mut state = self.state.load(Ordering::Acquire);
         let mut batch = None;
         loop {
+            // If there is no batch available (the count is 0), if `set_congested` is true,
+            // try setting the congested flag and return `None` after; otherwise, return
+            // `None` directly.
+            // It may be tempting to use a `fetch_and_or` to set the flag, but it could
+            // happen concurrently with a batch refill, so a CAS is more correct.
             while state & Self::COUNT_MASK == 0 {
                 if !set_congested {
                     return None;
@@ -188,17 +193,21 @@ impl BatchPool {
     ///
     /// This method must not be called concurrently, as a single thread can refill a batch
     /// at a time.
-    unsafe fn refill(&self, mut batch: WBatch) {
-        batch.clear();
+    unsafe fn refill(&self, batch: WBatch) {
         let mut batch = Some(batch);
         let mut state = self.state.load(Ordering::Relaxed);
         loop {
+            // Increment the count by one and unset the congestion flag.
             let mut next_state = (state + 1) & !Self::CONGESTED_FLAG;
+            // If the batch count is back to the maximum, unset the batching flag.
             if next_state & Self::COUNT_MASK == self.count {
                 next_state &= !Self::BATCHING_FLAG;
             }
+            // If there is no batch in the refill cell, put the refilled batch in.
             if state & Self::REFILLED_FLAG == 0 {
-                if let Some(batch) = batch.take() {
+                if let Some(mut batch) = batch.take() {
+                    // Clear the batch before reusing it.
+                    batch.clear();
                     // SAFETY: State has "refilled" flag unset. As the flag is only
                     // unset after reading the cell, there should be no concurrent
                     // read, and the cell is safe to write. Also, the function
@@ -917,7 +926,7 @@ mod tests {
     };
 
     use futures::FutureExt;
-    use tokio::{task, time::timeout};
+    use tokio::{task, task::JoinHandle, time::timeout};
     use zenoh_buffers::{
         reader::{DidntRead, HasReader},
         ZBuf,
@@ -1370,5 +1379,70 @@ mod tests {
         assert!(pull_fragment(&mut consumer).now_or_never().is_none());
         // drop producer at the end to not disable the pipeline
         drop(producer);
+    }
+
+    #[tokio::test]
+    async fn deterministic_batching_on_load() {
+        zenoh_util::init_log_from_env_or("error");
+        let config = TransmissionPipelineConf {
+            batch: BatchConfig {
+                mtu: BatchSize::MAX,
+                is_streamed: true,
+                #[cfg(feature = "transport_compression")]
+                is_compression: false,
+            },
+            queue_size: [4; Priority::NUM],
+            batching_enabled: true,
+            wait_before_drop: (Duration::from_millis(1000), Duration::from_millis(50000)),
+            wait_before_close: Duration::from_millis(5000000),
+            batching_time_limit: Duration::from_millis(10000),
+        };
+        let priorities = vec![TransportPriorityTx::make(Bits::from(TransportSn::MAX)).unwrap()];
+        let (producer, mut consumer) = TransmissionPipeline::make(config, &priorities);
+        let message: NetworkMessage = Push {
+            wire_expr: "test".into(),
+            ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, false),
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::DEFAULT,
+            payload: PushBody::Put(Put {
+                timestamp: None,
+                encoding: Encoding::empty(),
+                ext_sinfo: None,
+                #[cfg(feature = "shared-memory")]
+                ext_shm: None,
+                ext_attachment: None,
+                ext_unknown: vec![],
+                payload: vec![0u8; 8].into(),
+            }),
+        }
+        .into();
+        let producer_task: JoinHandle<Result<(), _>> = task::spawn_blocking(move || loop {
+            producer.push_network_message(message.clone())?;
+        });
+
+        // wait until the producer task has started and pull the first batch;
+        // it can have arbirary size, should be quite small if we wake up in
+        // time
+        loop {
+            if let Some((batch, prio)) = consumer.pull().await {
+                consumer.refill(batch, prio);
+                break;
+            }
+        }
+        // following batch may still use small buffer size
+        let (batch, _) = consumer.pull().await.unwrap();
+        // keep a batch not refilled to simulate network delay
+        let _batch_being_sent = batch;
+        // next batches should all have the maximum size
+        // don't pull more than 100 batches, because after, the
+        // sequence number size increase and the max size change
+        for _ in 0..100 {
+            let (batch, prio) = consumer.pull().await.unwrap();
+            assert_eq!(batch.len(), 65533);
+            consumer.refill(batch, prio);
+        }
+        // drop the consumer, so it will make the producer fails and stop
+        drop(consumer);
+        assert!(matches!(producer_task.await.unwrap(), Err(TransportClosed)));
     }
 }
