@@ -118,7 +118,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
             let flags = flags | OFlag::O_SHLOCK | OFlag::O_NONBLOCK;
 
             // todo: these flags probably can be exposed to the config
-            let mode = Mode::S_IRUSR;
+            let mode = Mode::S_IRUSR | Mode::S_IWUSR;
 
             tracing::trace!("shm_open(name={}, flag={:?}, mode={:?})", id, flags, mode);
             match shm_open(id.as_str(), flags, mode) {
@@ -172,7 +172,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
             #[cfg(any(bsd, target_os = "redox"))]
             let flags = flags | OFlag::O_EXLOCK | OFlag::O_NONBLOCK;
 
-            let mode = Mode::S_IRUSR;
+            let mode = Mode::S_IRUSR | Mode::S_IWUSR;
             tracing::trace!("shm_open(name={}, flag={:?}, mode={:?})", id, flags, mode);
             shm_open(id.as_str(), flags, mode)
         };
@@ -239,8 +239,8 @@ impl<ID: SegmentID> SegmentImpl<ID> {
 impl<ID: SegmentID> Drop for SegmentImpl<ID> {
     fn drop(&mut self) {
         tracing::trace!("munmap(addr={:p},len={})", self.data_ptr, self.len);
-        if let Err(_e) = unsafe { munmap(self.data_ptr, self.len.get()) } {
-            tracing::debug!("munmap() failed : {}", _e);
+        if let Err(e) = unsafe { munmap(self.data_ptr, self.len.get()) } {
+            tracing::debug!("munmap() failed : {}", e);
         };
 
         #[cfg(not(any(bsd, target_os = "redox")))]
@@ -258,7 +258,7 @@ impl<ID: SegmentID> Drop for SegmentImpl<ID> {
             // try to open shm fd with O_EXLOCK
             let fd = {
                 let flags = OFlag::O_RDWR | OFlag::O_EXLOCK | OFlag::O_NONBLOCK;
-                let mode = Mode::S_IRUSR;
+                let mode = Mode::S_IRUSR | Mode::S_IWUSR;
                 tracing::trace!("shm_open(name={}, flag={:?}, mode={:?})", id, flags, mode);
                 shm_open(id.as_str(), flags, mode)
             };
