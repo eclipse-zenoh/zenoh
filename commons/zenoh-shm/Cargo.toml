@@ -57,3 +57,6 @@ winapi = { workspace = true }
 
 [dev-dependencies]
 libc = { workspace = true }
+
+[build-dependencies]
+cfg_aliases = "0.2.1"
