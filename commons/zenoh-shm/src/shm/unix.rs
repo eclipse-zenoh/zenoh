@@ -48,7 +48,12 @@ impl<ID: SegmentID> SegmentImpl<ID> {
         let fd = {
             let id = Self::id_str(id);
             let flags = OFlag::O_CREAT | OFlag::O_EXCL | OFlag::O_RDWR;
+            #[cfg(any(bsd, target_os = "redox"))]
+            let flags = flags | OFlag::O_SHLOCK;
+            
+            // todo: these flags probably can be exposed to the config
             let mode = Mode::S_IRUSR | Mode::S_IWUSR;
+
             tracing::trace!("shm_open(name={}, flag={:?}, mode={:?})", id, flags, mode);
             match shm_open(id.as_str(), flags, mode) {
                 Ok(v) => v,
@@ -201,6 +206,11 @@ impl<ID: SegmentID> Drop for SegmentImpl<ID> {
 
         #[cfg(target_os = "linux")]
         Self::unlink_if_unique(self.id, &self.fd);
+
+        //{
+        //    let id = Self::id_str(self.id);
+        //    let fd = open("myfile.txt", O_RDWR | O_CREAT | O_EXLOCK | O_NONBLOCK, 0666);
+        //}
 
         #[cfg(not(target_os = "linux"))]
         {
