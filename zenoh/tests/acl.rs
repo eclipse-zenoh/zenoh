@@ -1753,7 +1753,7 @@ async fn test_acl_query_ingress_deny() {
                 {
                     "id": "deny query ingress",
                     "permission": "deny",
-                    "messages": ["query", "liveliness_query"],
+                    "messages": ["query"],
                     "flows": ["ingress"],
                     "key_exprs": ["**"],
                 }
@@ -1797,7 +1797,7 @@ async fn test_acl_query_egress_deny() {
                 {
                     "id": "deny query egress",
                     "permission": "deny",
-                    "messages": ["query", "liveliness_query"],
+                    "messages": ["query"],
                     "flows": ["egress"],
                     "key_exprs": ["**"],
                 }
@@ -1840,7 +1840,7 @@ async fn test_acl_liveliness_query_ingress_deny() {
                 {
                     "id": "deny query ingress",
                     "permission": "deny",
-                    "messages": ["query", "liveliness_token", "liveliness_query"],
+                    "messages": ["liveliness_query"],
                     "flows": ["ingress"],
                     "key_exprs": ["**"],
                 }
@@ -1896,7 +1896,7 @@ async fn test_acl_liveliness_query_egress_deny() {
                 {
                     "id": "deny query egress",
                     "permission": "deny",
-                    "messages": ["query", "liveliness_token", "liveliness_query"],
+                    "messages": ["liveliness_query"],
                     "flows": ["egress"],
                     "key_exprs": ["**"],
                 }
