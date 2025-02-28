@@ -383,6 +383,7 @@ impl PublisherBuilder<'_, '_> {
             let nodes_including = state
                 .publisher_qos_tree
                 .nodes_including(key_expr)
+                .filter(|n| n.weight().is_some())
                 .collect_vec();
             for node in &nodes_including {
                 // Take the first one yielded by the iterator that has overwrites
