@@ -15,7 +15,9 @@ use std::{any::Any, sync::Arc};
 
 use arc_swap::ArcSwap;
 use zenoh_link::Link;
-use zenoh_protocol::network::{NetworkBody, NetworkMessage};
+use zenoh_protocol::network::{
+    ext, response, Declare, DeclareBody, DeclareFinal, NetworkBody, NetworkMessage, ResponseFinal,
+};
 use zenoh_result::ZResult;
 use zenoh_transport::{unicast::TransportUnicast, TransportPeerEventHandler};
 
@@ -60,10 +62,55 @@ impl TransportPeerEventHandler for DeMux {
             let cache = prefix
                 .as_ref()
                 .and_then(|p| p.get_ingress_cache(&self.face));
-            let ctx = match interceptor.intercept(ctx, cache) {
-                Some(ctx) => ctx,
-                None => return Ok(()),
+
+            let ctx = match &ctx.msg.body {
+                NetworkBody::Request(request) => {
+                    let request_id = request.id;
+                    match interceptor.intercept(ctx, cache) {
+                        Some(ctx) => ctx,
+                        None => {
+                            // request was blocked by an interceptor, we need to send response final to avoid timeout error
+                            self.face
+                                .state
+                                .primitives
+                                .send_response_final(ResponseFinal {
+                                    rid: request_id,
+                                    ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+                                    ext_tstamp: None,
+                                });
+                            return Ok(());
+                        }
+                    }
+                }
+                NetworkBody::Interest(interest) => {
+                    let interest_id = interest.id;
+                    match interceptor.intercept(ctx, cache) {
+                        Some(ctx) => ctx,
+                        None => {
+                            // request was blocked by an interceptor, we need to send declare final to avoid timeout error
+                            self.face
+                                .state
+                                .primitives
+                                .send_declare(RoutingContext::new_in(
+                                    Declare {
+                                        interest_id: Some(interest_id),
+                                        ext_qos: ext::QoSType::DECLARE,
+                                        ext_tstamp: None,
+                                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                                        body: DeclareBody::DeclareFinal(DeclareFinal),
+                                    },
+                                    self.face.clone(),
+                                ));
+                            return Ok(());
+                        }
+                    }
+                }
+                _ => match interceptor.intercept(ctx, cache) {
+                    Some(ctx) => ctx,
+                    None => return Ok(()),
+                },
             };
+
             msg = ctx.msg;
         }
 

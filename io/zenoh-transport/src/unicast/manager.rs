@@ -734,13 +734,13 @@ impl TransportManager {
             )?;
         };
 
-        // Create a new link associated by calling the Link Manager
-        let link = manager.new_link(endpoint.clone()).await?;
         // Open the link
-        tokio::time::timeout(
-            self.config.unicast.open_timeout,
-            super::establishment::open::open_link(endpoint, link, self),
-        )
+        tokio::time::timeout(self.config.unicast.open_timeout, async {
+            match manager.new_link(endpoint.clone()).await {
+                Ok(link) => super::establishment::open::open_link(endpoint, link, self).await,
+                Err(e) => Err(e),
+            }
+        })
         .await
         .map_err(|e| zerror!("{e}"))?
     }

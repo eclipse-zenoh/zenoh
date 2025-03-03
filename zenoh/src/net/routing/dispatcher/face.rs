@@ -38,7 +38,7 @@ use zenoh_transport::stats::TransportStats;
 
 use super::{
     super::router::*,
-    interests::{declare_final, declare_interest, undeclare_interest, CurrentInterest},
+    interests::{declare_final, declare_interest, undeclare_interest, PendingCurrentInterest},
     resource::*,
     tables::TablesLock,
 };
@@ -71,8 +71,7 @@ pub struct FaceState {
     pub(crate) primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
     pub(crate) local_interests: HashMap<InterestId, InterestState>,
     pub(crate) remote_key_interests: HashMap<InterestId, Option<Arc<Resource>>>,
-    pub(crate) pending_current_interests:
-        HashMap<InterestId, (Arc<CurrentInterest>, CancellationToken)>,
+    pub(crate) pending_current_interests: HashMap<InterestId, PendingCurrentInterest>,
     pub(crate) local_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) remote_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) next_qid: RequestId,
@@ -291,6 +290,12 @@ impl Face {
         WeakFace {
             tables: Arc::downgrade(&self.tables),
             state: Arc::downgrade(&self.state),
+        }
+    }
+
+    pub(crate) fn reject_interest(&self, interest_id: u32) {
+        if let Some(interest) = self.state.pending_current_interests.get(&interest_id) {
+            interest.rejection_token.cancel();
         }
     }
 }
