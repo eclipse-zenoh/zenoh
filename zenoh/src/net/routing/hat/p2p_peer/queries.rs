@@ -130,7 +130,7 @@ fn propagate_simple_queryable_to(
                         ext_info: info,
                     }),
                 },
-                res.expr().to_string(),
+                res.expr(),
             ),
         );
     }
@@ -225,7 +225,7 @@ fn propagate_forget_simple_queryable(
                             ext_wire_expr: WireExprType::null(),
                         }),
                     },
-                    res.expr().to_string(),
+                    res.expr(),
                 ),
             );
         }
@@ -253,7 +253,7 @@ fn propagate_forget_simple_queryable(
                                     ext_wire_expr: WireExprType::null(),
                                 }),
                             },
-                            res.expr().to_string(),
+                            res.expr(),
                         ),
                     );
                 }
@@ -299,7 +299,7 @@ pub(super) fn undeclare_simple_queryable(
                                 ext_wire_expr: WireExprType::null(),
                             }),
                         },
-                        res.expr().to_string(),
+                        res.expr(),
                     ),
                 );
             }
@@ -327,7 +327,7 @@ pub(super) fn undeclare_simple_queryable(
                                         ext_wire_expr: WireExprType::null(),
                                     }),
                                 },
-                                res.expr().to_string(),
+                                res.expr(),
                             ),
                         );
                     }
@@ -440,7 +440,7 @@ pub(super) fn declare_qabl_interest(
                                     ext_info: info,
                                 }),
                             },
-                            res.expr().to_string(),
+                            res.expr(),
                         ),
                     );
                 }
@@ -475,7 +475,7 @@ pub(super) fn declare_qabl_interest(
                                                 ext_info: info,
                                             }),
                                         },
-                                        qabl.expr().to_string(),
+                                        qabl.expr(),
                                     ),
                                 );
                             }
@@ -514,7 +514,7 @@ pub(super) fn declare_qabl_interest(
                                             ext_info: info,
                                         }),
                                     },
-                                    qabl.expr().to_string(),
+                                    qabl.expr(),
                                 ),
                             );
                         }

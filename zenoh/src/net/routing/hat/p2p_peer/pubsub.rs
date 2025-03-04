@@ -78,7 +78,7 @@ fn propagate_simple_subscription_to(
                             wire_expr: key_expr,
                         }),
                     },
-                    res.expr().to_string(),
+                    res.expr(),
                 ),
             );
         } else {
@@ -121,7 +121,7 @@ fn propagate_simple_subscription_to(
                                     wire_expr: key_expr,
                                 }),
                             },
-                            res.expr().to_string(),
+                            res.expr(),
                         ),
                     );
                 }
@@ -209,10 +209,10 @@ fn declare_simple_subscription(
                             ext_nodeid: ext::NodeIdType::DEFAULT,
                             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                 id: 0, // @TODO use proper SubscriberId
-                                wire_expr: res.expr().to_string().into(),
+                                wire_expr: res.expr().into(),
                             }),
                         },
-                        res.expr().to_string(),
+                        res.expr(),
                     ))
             }
         }
@@ -260,7 +260,7 @@ fn propagate_forget_simple_subscription(
                             ext_wire_expr: WireExprType::null(),
                         }),
                     },
-                    res.expr().to_string(),
+                    res.expr(),
                 ),
             );
         }
@@ -288,7 +288,7 @@ fn propagate_forget_simple_subscription(
                                     ext_wire_expr: WireExprType::null(),
                                 }),
                             },
-                            res.expr().to_string(),
+                            res.expr(),
                         ),
                     );
                 }
@@ -329,7 +329,7 @@ pub(super) fn undeclare_simple_subscription(
                                 ext_wire_expr: WireExprType::null(),
                             }),
                         },
-                        res.expr().to_string(),
+                        res.expr(),
                     ),
                 );
             }
@@ -357,7 +357,7 @@ pub(super) fn undeclare_simple_subscription(
                                         ext_wire_expr: WireExprType::null(),
                                     }),
                                 },
-                                res.expr().to_string(),
+                                res.expr(),
                             ),
                         );
                     }
@@ -459,7 +459,7 @@ pub(super) fn declare_sub_interest(
                                     wire_expr,
                                 }),
                             },
-                            res.expr().to_string(),
+                            res.expr(),
                         ),
                     );
                 }
@@ -491,7 +491,7 @@ pub(super) fn declare_sub_interest(
                                                 DeclareSubscriber { id, wire_expr },
                                             ),
                                         },
-                                        sub.expr().to_string(),
+                                        sub.expr(),
                                     ),
                                 );
                             }
@@ -524,7 +524,7 @@ pub(super) fn declare_sub_interest(
                                         wire_expr,
                                     }),
                                 },
-                                sub.expr().to_string(),
+                                sub.expr(),
                             ),
                         );
                     }

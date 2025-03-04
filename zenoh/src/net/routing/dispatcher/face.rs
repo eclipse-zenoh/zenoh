@@ -152,7 +152,7 @@ impl FaceState {
             .as_ref()
             .and_then(|is| is.is_empty().not().then_some(is))
         {
-            if let Ok(expr) = KeyExpr::try_from(res.expr().to_string()) {
+            if let Ok(expr) = KeyExpr::try_from(res.expr()) {
                 let cache = interceptor.compute_keyexpr_cache(&expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
@@ -170,7 +170,7 @@ impl FaceState {
             .downcast_ref::<Mux>()
             .and_then(|mux| mux.interceptor.is_empty().not().then_some(mux))
         {
-            if let Ok(expr) = KeyExpr::try_from(res.expr().to_string()) {
+            if let Ok(expr) = KeyExpr::try_from(res.expr()) {
                 let cache = mux.interceptor.compute_keyexpr_cache(&expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
@@ -187,7 +187,7 @@ impl FaceState {
             .downcast_ref::<McastMux>()
             .and_then(|mux| mux.interceptor.is_empty().not().then_some(mux))
         {
-            if let Ok(expr) = KeyExpr::try_from(res.expr().to_string()) {
+            if let Ok(expr) = KeyExpr::try_from(res.expr()) {
                 let cache = mux.interceptor.compute_keyexpr_cache(&expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)

@@ -155,7 +155,7 @@ fn send_sourced_queryable_to_net_children(
                                     ext_info: *qabl_info,
                                 }),
                             },
-                            res.expr().to_string(),
+                            res.expr(),
                         ));
                     }
                 }
@@ -208,7 +208,7 @@ fn propagate_simple_queryable(
                             ext_info: info,
                         }),
                     },
-                    res.expr().to_string(),
+                    res.expr(),
                 ),
             );
         }
@@ -387,7 +387,7 @@ fn send_forget_sourced_queryable_to_net_children(
                                     ext_wire_expr: WireExprType { wire_expr },
                                 }),
                             },
-                            res.expr().to_string(),
+                            res.expr(),
                         ));
                     }
                 }
@@ -417,7 +417,7 @@ fn propagate_forget_simple_queryable(
                             ext_wire_expr: WireExprType::null(),
                         }),
                     },
-                    res.expr().to_string(),
+                    res.expr(),
                 ),
             );
         }
@@ -448,7 +448,7 @@ fn propagate_forget_simple_queryable(
                                     ext_wire_expr: WireExprType::null(),
                                 }),
                             },
-                            res.expr().to_string(),
+                            res.expr(),
                         ),
                     );
                 }
@@ -580,7 +580,7 @@ pub(super) fn undeclare_simple_queryable(
                                 ext_wire_expr: WireExprType::null(),
                             }),
                         },
-                        res.expr().to_string(),
+                        res.expr(),
                     ),
                 );
             }
@@ -611,7 +611,7 @@ pub(super) fn undeclare_simple_queryable(
                                         ext_wire_expr: WireExprType::null(),
                                     }),
                                 },
-                                res.expr().to_string(),
+                                res.expr(),
                             ),
                         );
                     }
@@ -794,7 +794,7 @@ pub(super) fn declare_qabl_interest(
                                     ext_info: info,
                                 }),
                             },
-                            res.expr().to_string(),
+                            res.expr(),
                         ),
                     );
                 }
@@ -823,7 +823,7 @@ pub(super) fn declare_qabl_interest(
                                         ext_info: info,
                                     }),
                                 },
-                                qabl.expr().to_string(),
+                                qabl.expr(),
                             ),
                         );
                     }
@@ -851,7 +851,7 @@ pub(super) fn declare_qabl_interest(
                                     ext_info: info,
                                 }),
                             },
-                            qabl.expr().to_string(),
+                            qabl.expr(),
                         ),
                     );
                 }

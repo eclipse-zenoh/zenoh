@@ -80,7 +80,7 @@ fn propagate_simple_token_to(
                             wire_expr: key_expr,
                         }),
                     },
-                    res.expr().to_string(),
+                    res.expr(),
                 ),
             );
         } else {
@@ -127,7 +127,7 @@ fn propagate_simple_token_to(
                                     wire_expr: key_expr,
                                 }),
                             },
-                            res.expr().to_string(),
+                            res.expr(),
                         ),
                     );
                 }
@@ -217,7 +217,7 @@ fn declare_simple_token(
                         ext_nodeid: ext::NodeIdType::default(),
                         body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
                     },
-                    res.expr().to_string(),
+                    res.expr(),
                 ),
             );
             return;
@@ -277,7 +277,7 @@ fn propagate_forget_simple_token(
                             ext_wire_expr: WireExprType::null(),
                         }),
                     },
-                    res.expr().to_string(),
+                    res.expr(),
                 ),
             );
         } else if src_face.id != face.id
@@ -303,7 +303,7 @@ fn propagate_forget_simple_token(
                             },
                         }),
                     },
-                    res.expr().to_string(),
+                    res.expr(),
                 ),
             );
         }
@@ -331,7 +331,7 @@ fn propagate_forget_simple_token(
                                     ext_wire_expr: WireExprType::null(),
                                 }),
                             },
-                            res.expr().to_string(),
+                            res.expr(),
                         ),
                     );
                 } else if face_hat!(face)
@@ -356,7 +356,7 @@ fn propagate_forget_simple_token(
                                     },
                                 }),
                             },
-                            res.expr().to_string(),
+                            res.expr(),
                         ),
                     );
                 }
@@ -402,7 +402,7 @@ pub(super) fn undeclare_simple_token(
                                     ext_wire_expr: WireExprType::null(),
                                 }),
                             },
-                            res.expr().to_string(),
+                            res.expr(),
                         ),
                     );
                 }
@@ -431,7 +431,7 @@ pub(super) fn undeclare_simple_token(
                                             ext_wire_expr: WireExprType::null(),
                                         }),
                                     },
-                                    res.expr().to_string(),
+                                    res.expr(),
                                 ),
                             );
                         }
@@ -534,7 +534,7 @@ pub(crate) fn declare_token_interest(
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
                                 body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
                             },
-                            res.expr().to_string(),
+                            res.expr(),
                         ),
                     );
                 }
@@ -567,7 +567,7 @@ pub(crate) fn declare_token_interest(
                                             wire_expr,
                                         }),
                                     },
-                                    token.expr().to_string(),
+                                    token.expr(),
                                 ),
                             );
                         }
@@ -596,7 +596,7 @@ pub(crate) fn declare_token_interest(
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
                                 body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
                             },
-                            token.expr().to_string(),
+                            token.expr(),
                         ),
                     );
                 }

@@ -232,7 +232,7 @@ pub(crate) fn declare_interest(
                     let wtables = zwrite!(tables_ref.tables);
                     (res.unwrap(), wtables)
                 } else {
-                    let mut fullexpr = prefix.expr().to_string();
+                    let mut fullexpr = prefix.expr();
                     fullexpr.push_str(expr.suffix.as_ref());
                     let mut matches = keyexpr::new(fullexpr.as_str())
                         .map(|ke| Resource::get_matches(&rtables, ke))
