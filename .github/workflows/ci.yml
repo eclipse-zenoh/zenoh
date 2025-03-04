@@ -249,7 +249,7 @@ jobs:
             run: cargo +${{ matrix.rust }} llvm-cov test --features unstable --features test --features shared-memory ${{ matrix.rust == 'nightly' && '--doctests' || '' }} --lcov --output-path lcov.info --no-cfg-coverage --no-cfg-coverage-nightly --ignore-run-fail -- --skip test_default_features --skip router_linkstate --skip three_node_combination  --skip three_node_combination_multicast
 
           - name: Upload coverage to Codecov
-            uses: codecov/codecov-action@v4
+            uses: codecov/codecov-action@v5
             with:
               token: ${{ secrets.CODECOV_TOKEN }}
               files: lcov.info
