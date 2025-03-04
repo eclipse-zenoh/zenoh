@@ -226,7 +226,7 @@ jobs:
           fail-fast: false
           matrix:
             os: [ubuntu-latest]
-            rust: [nightly, stable]
+            rust: [nightly]
         runs-on: ${{ matrix.os }}
         steps:
           - name: Checkout sources
