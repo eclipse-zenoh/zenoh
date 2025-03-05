@@ -13,6 +13,7 @@
 //
 use std::{any::Any, sync::Arc};
 
+use arc_swap::ArcSwap;
 use zenoh_link::Link;
 use zenoh_protocol::network::{
     ext, response, Declare, DeclareBody, DeclareFinal, NetworkBody, NetworkMessage, ResponseFinal,
@@ -30,14 +31,14 @@ use crate::net::routing::{
 pub struct DeMux {
     face: Face,
     pub(crate) transport: Option<TransportUnicast>,
-    pub(crate) interceptor: Arc<InterceptorsChain>,
+    pub(crate) interceptor: Arc<ArcSwap<InterceptorsChain>>,
 }
 
 impl DeMux {
     pub(crate) fn new(
         face: Face,
         transport: Option<TransportUnicast>,
-        interceptor: Arc<InterceptorsChain>,
+        interceptor: Arc<ArcSwap<InterceptorsChain>>,
     ) -> Self {
         Self {
             face,
@@ -50,7 +51,8 @@ impl DeMux {
 impl TransportPeerEventHandler for DeMux {
     #[inline]
     fn handle_message(&self, mut msg: NetworkMessage) -> ZResult<()> {
-        if !self.interceptor.interceptors.is_empty() {
+        let interceptor = self.interceptor.load();
+        if !interceptor.interceptors.is_empty() {
             let ctx = RoutingContext::new_in(msg, self.face.clone());
             let prefix = ctx
                 .wire_expr()
@@ -64,7 +66,7 @@ impl TransportPeerEventHandler for DeMux {
             let ctx = match &ctx.msg.body {
                 NetworkBody::Request(request) => {
                     let request_id = request.id;
-                    match self.interceptor.intercept(ctx, cache) {
+                    match interceptor.intercept(ctx, cache) {
                         Some(ctx) => ctx,
                         None => {
                             // request was blocked by an interceptor, we need to send response final to avoid timeout error
@@ -82,7 +84,7 @@ impl TransportPeerEventHandler for DeMux {
                 }
                 NetworkBody::Interest(interest) => {
                     let interest_id = interest.id;
-                    match self.interceptor.intercept(ctx, cache) {
+                    match interceptor.intercept(ctx, cache) {
                         Some(ctx) => ctx,
                         None => {
                             // request was blocked by an interceptor, we need to send declare final to avoid timeout error
@@ -103,7 +105,7 @@ impl TransportPeerEventHandler for DeMux {
                         }
                     }
                 }
-                _ => match self.interceptor.intercept(ctx, cache) {
+                _ => match interceptor.intercept(ctx, cache) {
                     Some(ctx) => ctx,
                     None => return Ok(()),
                 },
