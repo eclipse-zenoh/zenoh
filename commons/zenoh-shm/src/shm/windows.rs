@@ -109,8 +109,6 @@ impl<ID: SegmentID> SegmentImpl<ID> {
         })
     }
 
-    pub fn ensure_not_persistent(_id: ID) {}
-
     pub fn id(&self) -> ID {
         self.id
     }
