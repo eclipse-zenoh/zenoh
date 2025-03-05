@@ -294,6 +294,10 @@ impl keyexpr {
             let mut target_idx: usize = 0;
             let mut prefix_idx: usize = 0;
             let mut target_prev: u8 = b'/';
+            if prefix.first() == Some(&b'@') && target.first() != Some(&b'@') {
+                // verbatim chunk can only be matched by verbatim chunk
+                return false;
+            }
 
             while target_idx < target.len() && prefix_idx < prefix.len() {
                 if target[target_idx] == b'*' {
@@ -324,44 +328,87 @@ impl keyexpr {
                 || (target_idx + 2 == target.len() && target[target_idx] == b'$')
         }
 
+        fn strip_nonwild_prefix_inner<'a, 'b>(
+            target_bytes: &'a [u8],
+            prefix_bytes: &'b [u8],
+        ) -> Option<&'a keyexpr> {
+            let mut target_idx = 0;
+            let mut prefix_idx = 0;
+
+            while target_idx < target_bytes.len() && prefix_idx < prefix_bytes.len() {
+                let target_end = target_idx
+                    + target_bytes[target_idx..]
+                        .iter()
+                        .position(|&i| i == b'/')
+                        .unwrap_or(target_bytes.len() - target_idx);
+                let prefix_end = prefix_idx
+                    + prefix_bytes[prefix_idx..]
+                        .iter()
+                        .position(|&i| i == b'/')
+                        .unwrap_or(prefix_bytes.len() - prefix_idx);
+                let target_chunk = &target_bytes[target_idx..target_end];
+                if target_chunk.len() == 2 && target_chunk[0] == b'*' {
+                    let remaining_prefix = &prefix_bytes[prefix_idx..];
+                    return match *&remaining_prefix.iter().position(|&x| x == b'@') {
+                        Some(mut p) => {
+                            if target_end + 1 >= target_bytes.len() {
+                                // "**" is the last chunk, and it is not allowed to match @verbatim chunks, so we stop here
+                                return None;
+                            } else {
+                                loop {
+                                    // try to use "**" to match as many non-verbatim chunks as possible
+                                    if let Some(ke) = strip_nonwild_prefix_inner(
+                                        &target_bytes[(target_end + 1)..],
+                                        &remaining_prefix[p..],
+                                    ) {
+                                        return Some(ke);
+                                    } else if p == 0 {
+                                        // "**" is not allowed to match @verbatim chunks
+                                        return None;
+                                    } else {
+                                        // search for the beginning of the next chunk from the end
+                                        p -= 2;
+                                        while p > 0 && remaining_prefix[p - 1] != b'/' {
+                                            p -= 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        None => unsafe {
+                            // "**" can match all remaining non-verbatim chunks
+                            Some(keyexpr::from_str_unchecked(str::from_utf8_unchecked(
+                                &target_bytes[target_idx..],
+                            )))
+                        },
+                    };
+                }
+                if target_end == target_bytes.len() {
+                    // target contains no more chunks than prefix and the last one is non double-wild - so it can not match
+                    return None;
+                }
+                let prefix_chunk = &prefix_bytes[prefix_idx..prefix_end];
+                if !is_chunk_matching(target_chunk, prefix_chunk) {
+                    return None;
+                }
+                if prefix_end == prefix_bytes.len() {
+                    // Safety: every chunk of keyexpr is also a valid keyexpr
+                    return unsafe {
+                        Some(keyexpr::from_str_unchecked(str::from_utf8_unchecked(
+                            &target_bytes[(target_end + 1)..],
+                        )))
+                    };
+                }
+                target_idx = target_end + 1;
+                prefix_idx = prefix_end + 1;
+            }
+            None
+        }
+
         let target_bytes = self.0.as_bytes();
         let prefix_bytes = prefix.0.as_bytes();
 
-        let mut target_idx = 0;
-        let mut prefix_idx = 0;
-
-        while target_idx < target_bytes.len() && prefix_idx < prefix_bytes.len() {
-            let target_end = target_idx
-                + target_bytes[target_idx..]
-                    .iter()
-                    .position(|&i| i == b'/')
-                    .unwrap_or(target_bytes.len() - target_idx);
-            let prefix_end = prefix_idx
-                + prefix_bytes[prefix_idx..]
-                    .iter()
-                    .position(|&i| i == b'/')
-                    .unwrap_or(prefix_bytes.len() - prefix_idx);
-            let target_chunk = &target_bytes[target_idx..target_end];
-            let prefix_chunk = &prefix_bytes[prefix_idx..prefix_end];
-            if target_chunk.len() == 2 && target_chunk[0] == b'*' {
-                // Safety: every chunk of keyexpr is also a valid keyexpr
-                return unsafe { Some(keyexpr::from_str_unchecked(&self.0[target_idx..])) };
-            }
-            if target_end == target_bytes.len() {
-                // target contains no more chunks than prefix and the last one is non double-wild - so it can not match
-                return None;
-            }
-            if !is_chunk_matching(target_chunk, prefix_chunk) {
-                return None;
-            }
-            if prefix_end == prefix_bytes.len() {
-                // Safety: every chunk of keyexpr is also a valid keyexpr
-                return unsafe { Some(keyexpr::from_str_unchecked(&self.0[(target_end + 1)..])) };
-            }
-            target_idx = target_end + 1;
-            prefix_idx = prefix_end + 1;
-        }
-        None
+        strip_nonwild_prefix_inner(target_bytes, prefix_bytes)
     }
 
     pub const fn as_str(&self) -> &str {
@@ -976,6 +1023,20 @@ fn test_keyexpr_strip_nonwild_prefix() {
         (("demo/example/test1/something", "demo/example/test"), None),
         (
             ("demo/example/test$*/something", "demo/example/test"),
+            Some("something"),
+        ),
+        (("*/example/test/something", "@demo/example/test"), None),
+        (("**/test/something", "@demo/example/test"), None),
+        (("**/test/something", "demo/example/@test"), None),
+        (
+            ("@demo/*/test/something", "@demo/example/test"),
+            Some("something"),
+        ),
+        (("@demo/*/test/something", "@demo/@example/test"), None),
+        (("**/@demo/test/something", "@demo/test"), Some("something")),
+        (("**/@test/something", "demo/@test"), Some("something")),
+        (
+            ("@demo/**/@test/something", "@demo/example/@test"),
             Some("something"),
         ),
     ]
