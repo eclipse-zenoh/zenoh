@@ -328,9 +328,9 @@ impl keyexpr {
                 || (target_idx + 2 == target.len() && target[target_idx] == b'$')
         }
 
-        fn strip_nonwild_prefix_inner<'a, 'b>(
+        fn strip_nonwild_prefix_inner<'a>(
             target_bytes: &'a [u8],
-            prefix_bytes: &'b [u8],
+            prefix_bytes: &[u8],
         ) -> Option<&'a keyexpr> {
             let mut target_idx = 0;
             let mut prefix_idx = 0;
@@ -349,7 +349,7 @@ impl keyexpr {
                 let target_chunk = &target_bytes[target_idx..target_end];
                 if target_chunk.len() == 2 && target_chunk[0] == b'*' {
                     let remaining_prefix = &prefix_bytes[prefix_idx..];
-                    return match *&remaining_prefix.iter().position(|&x| x == b'@') {
+                    return match remaining_prefix.iter().position(|&x| x == b'@') {
                         Some(mut p) => {
                             if target_end + 1 >= target_bytes.len() {
                                 // "**" is the last chunk, and it is not allowed to match @verbatim chunks, so we stop here
@@ -377,7 +377,7 @@ impl keyexpr {
                         }
                         None => unsafe {
                             // "**" can match all remaining non-verbatim chunks
-                            Some(keyexpr::from_str_unchecked(str::from_utf8_unchecked(
+                            Some(keyexpr::from_str_unchecked(std::str::from_utf8_unchecked(
                                 &target_bytes[target_idx..],
                             )))
                         },
@@ -394,7 +394,7 @@ impl keyexpr {
                 if prefix_end == prefix_bytes.len() {
                     // Safety: every chunk of keyexpr is also a valid keyexpr
                     return unsafe {
-                        Some(keyexpr::from_str_unchecked(str::from_utf8_unchecked(
+                        Some(keyexpr::from_str_unchecked(std::str::from_utf8_unchecked(
                             &target_bytes[(target_end + 1)..],
                         )))
                     };
