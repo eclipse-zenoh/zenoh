@@ -125,7 +125,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
 // PRIVATE
 impl<ID: SegmentID> SegmentImpl<ID> {
     fn id_str(id: ID) -> String {
-        format!("/{}.zenoh", id)
+        format!("{}.zenoh", id)
     }
 
     fn map(fd: &FileMapping) -> Result<(ViewOfFile, usize), Error> {

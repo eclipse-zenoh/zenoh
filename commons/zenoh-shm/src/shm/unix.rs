@@ -52,7 +52,10 @@ impl<ID: SegmentID> SegmentImpl<ID> {
                 let lockpath = std::env::temp_dir().join(Self::id_str(id));
                 let flags = OFlag::O_CREAT | OFlag::O_EXCL | OFlag::O_RDWR;
                 let mode = Mode::S_IRUSR | Mode::S_IWUSR;
-                open(&lockpath, flags, mode).map_err(|_| SegmentCreateError::SegmentExists)
+                open(&lockpath, flags, mode).map_err(|e| match e {
+                    nix::Error::EEXIST => SegmentCreateError::SegmentExists,
+                    e => SegmentCreateError::OsError(e as u32),
+                })
             }?)
         };
 
@@ -121,7 +124,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
                 let lockpath = std::env::temp_dir().join(Self::id_str(id));
                 let flags = OFlag::O_RDWR;
                 let mode = Mode::S_IRUSR | Mode::S_IWUSR;
-                open(&lockpath, flags, mode).map_err(|_| SegmentOpenError::InvalidatedSegment)
+                open(&lockpath, flags, mode).map_err(|e| SegmentOpenError::OsError(e as _))
             }?)
         };
 
@@ -193,7 +196,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
 // PRIVATE
 impl<ID: SegmentID> SegmentImpl<ID> {
     fn id_str(id: ID) -> String {
-        format!("/{}.zenoh", id)
+        format!("{id}.zenoh")
     }
 
     fn map(len: NonZeroUsize, fd: &OwnedFd) -> nix::Result<NonNull<c_void>> {
