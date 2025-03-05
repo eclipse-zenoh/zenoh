@@ -12,8 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#[cfg(any(bsd, target_os = "redox"))]
-use std::mem::ManuallyDrop;
 use std::{
     ffi::c_void,
     num::NonZeroUsize,
@@ -21,8 +19,6 @@ use std::{
     ptr::NonNull,
 };
 
-// we use flock() on non-BSD systems
-#[cfg(not(any(bsd, target_os = "redox")))]
 use advisory_lock::{AdvisoryFileLock, FileLockMode};
 #[cfg(any(bsd, target_os = "redox"))]
 use nix::fcntl::open;
@@ -78,6 +74,9 @@ impl<ID: SegmentID> SegmentImpl<ID> {
         #[cfg(not(any(bsd, target_os = "redox")))]
         let fd = &lock_fd;
 
+        #[cfg(any(bsd, target_os = "redox"))]
+        let fd = &fd;
+
         // put shared advisory lock on lock_fd
         lock_fd
             .as_raw_fd()
@@ -91,7 +90,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
 
         // resize shm segment to requested size
         tracing::trace!("ftruncate(fd={}, len={})", fd.as_raw_fd(), len);
-        ftruncate(&fd, len.get() as _).map_err(|e| SegmentCreateError::OsError(e as u32))?;
+        ftruncate(fd, len.get() as _).map_err(|e| SegmentCreateError::OsError(e as u32))?;
 
         // get real segment size
         let len = {
@@ -100,7 +99,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
         };
 
         // map segment into our address space
-        let data_ptr = Self::map(len, &fd).map_err(|e| SegmentCreateError::OsError(e as _))?;
+        let data_ptr = Self::map(len, fd).map_err(|e| SegmentCreateError::OsError(e as _))?;
 
         Ok(Self {
             lock_fd,
@@ -141,6 +140,9 @@ impl<ID: SegmentID> SegmentImpl<ID> {
         #[cfg(not(any(bsd, target_os = "redox")))]
         let fd = &lock_fd;
 
+        #[cfg(any(bsd, target_os = "redox"))]
+        let fd = &fd;
+
         // put shared advisory lock on lock_fd
         lock_fd
             .as_raw_fd()
@@ -159,7 +161,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
         };
 
         // map segment into our address space
-        let data_ptr = Self::map(len, &fd).map_err(|e| SegmentOpenError::OsError(e as _))?;
+        let data_ptr = Self::map(len, fd).map_err(|e| SegmentOpenError::OsError(e as _))?;
 
         Ok(Self {
             lock_fd,
