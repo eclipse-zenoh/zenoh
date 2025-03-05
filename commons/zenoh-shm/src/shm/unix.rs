@@ -64,7 +64,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
             let id = Self::id_str(id);
             let flags = OFlag::O_CREAT | OFlag::O_EXCL | OFlag::O_RDWR;
 
-            // todo: these flags probably can be exposed to the config
+            // TODO: these flags probably can be exposed to the config
             let mode = Mode::S_IRUSR | Mode::S_IWUSR;
 
             tracing::trace!("shm_open(name={}, flag={:?}, mode={:?})", id, flags, mode);
@@ -133,7 +133,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
             let id = Self::id_str(id);
             let flags = OFlag::O_RDWR;
 
-            // todo: these flags probably can be exposed to the config
+            // TODO: these flags probably can be exposed to the config
             let mode = Mode::S_IRUSR | Mode::S_IWUSR;
 
             tracing::trace!("shm_open(name={}, flag={:?}, mode={:?})", id, flags, mode);

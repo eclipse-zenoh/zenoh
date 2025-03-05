@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023 ZettaScale Technology
+// Copyright (c) 2025 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -16,7 +16,7 @@ use zenoh_shm::shm::Segment;
 
 #[test]
 fn create() {
-    let id = line!();
+    let id = line!() + (std::process::id() as u64) << 32;
     let len = 1024.try_into().unwrap();
     let created_segment = Segment::create(id, len).unwrap();
     assert!(created_segment.len() >= len);
@@ -24,7 +24,7 @@ fn create() {
 
 #[test]
 fn create_concurrent() {
-    let id = line!();
+    let id = line!() + (std::process::id() as u64) << 32;
     let len = 1024.try_into().unwrap();
     let created_segment = Segment::create(id, len).unwrap();
     assert!(created_segment.len() >= len);
@@ -33,7 +33,7 @@ fn create_concurrent() {
 
 #[test]
 fn create_and_open() {
-    let id = line!();
+    let id = line!() + (std::process::id() as u64) << 32;
     let len = 1024.try_into().unwrap();
     let created_segment = Segment::create(id, len).unwrap();
     let opened_segment = Segment::open(id).unwrap();
@@ -42,8 +42,8 @@ fn create_and_open() {
 }
 
 #[test]
-fn create_and_open_amd_reopen() {
-    let id = line!();
+fn create_and_open_and_reopen() {
+    let id = line!() + (std::process::id() as u64) << 32;
     let len = 1024.try_into().unwrap();
     let created_segment = Segment::create(id, len).unwrap();
     let opened_segment = Segment::open(id).unwrap();
@@ -54,8 +54,8 @@ fn create_and_open_amd_reopen() {
 }
 
 #[test]
-fn create_and_open_amd_reopen_and_open_closed() {
-    let id = line!();
+fn create_and_open_and_reopen_and_open_closed() {
+    let id = line!() + (std::process::id() as u64) << 32;
     let len = 1024.try_into().unwrap();
     let created_segment = Segment::create(id, len).unwrap();
     let opened_segment = Segment::open(id).unwrap();
@@ -70,7 +70,7 @@ fn create_and_open_amd_reopen_and_open_closed() {
 
 #[test]
 fn no_persistency() {
-    let id = line!();
+    let id = line!() + (std::process::id() as u64) << 32;
     let len = 1024.try_into().unwrap();
     let created_segment = Segment::create(id, len).unwrap();
     assert!(created_segment.len() >= len);
@@ -81,7 +81,7 @@ fn no_persistency() {
 
 #[test]
 fn recreate_many_times() {
-    let id = line!();
+    let id = line!() + (std::process::id() as u64) << 32;
     let len = 1024.try_into().unwrap();
 
     for _ in 0..100 {

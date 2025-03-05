@@ -22,7 +22,7 @@ use crate::{header::chunk_header::ChunkHeaderType, posix_shm::struct_in_shm::Str
 #[stabby::stabby]
 pub struct Metadata<const S: usize> {
     headers: [ChunkHeaderType; S],
-    watchdogs: [AtomicU64; S], // todo: replace with (S + 63) / 64 when Rust supports it
+    watchdogs: [AtomicU64; S], // TODO: replace with (S + 63) / 64 when Rust supports it
 }
 
 impl<const S: usize> Metadata<S> {

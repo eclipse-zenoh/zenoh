@@ -52,7 +52,7 @@ where
 impl<ID, Elem> StructInSHM<ID, Elem>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
-    // Elem: IStable<ContainsIndirections = stabby::abi::B0>, // todo: stabby does not support IStable for big arrays
+    // Elem: IStable<ContainsIndirections = stabby::abi::B0>, // TODO: stabby does not support IStable for big arrays
     ID: shm::SegmentID,
 {
     // Perform compile time check that Elem is not a ZST
@@ -90,7 +90,7 @@ where
 impl<ID, Elem> Deref for StructInSHM<ID, Elem>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
-    // Elem: IStable<ContainsIndirections = stabby::abi::B0>, // todo: stabby does not support IStable for big arrays
+    // Elem: IStable<ContainsIndirections = stabby::abi::B0>, // TODO: stabby does not support IStable for big arrays
     ID: shm::SegmentID,
 {
     type Target = Elem;
@@ -103,7 +103,7 @@ where
 impl<ID, Elem> DerefMut for StructInSHM<ID, Elem>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
-    // Elem: IStable<ContainsIndirections = stabby::abi::B0>, // todo: stabby does not support IStable for big arrays
+    // Elem: IStable<ContainsIndirections = stabby::abi::B0>, // TODO: stabby does not support IStable for big arrays
     ID: shm::SegmentID,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
