@@ -16,13 +16,13 @@ use std::sync::OnceLock;
 use zenoh_protocol::{
     core::Reliability,
     network::{
-        interest::Interest, Declare, NetworkBody, NetworkMessage, Push, Request, Response,
-        ResponseFinal,
+        interest::Interest, response, Declare, NetworkBody, NetworkMessage, Push, Request,
+        Response, ResponseFinal,
     },
 };
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
-use super::EPrimitives;
+use super::{EPrimitives, Primitives};
 use crate::net::routing::{
     dispatcher::face::{Face, WeakFace},
     interceptor::{InterceptorTrait, InterceptorsChain},
@@ -47,6 +47,7 @@ impl Mux {
 
 impl EPrimitives for Mux {
     fn send_interest(&self, ctx: RoutingContext<Interest>) {
+        let interest_id = ctx.msg.id;
         let ctx = RoutingContext {
             msg: NetworkMessage {
                 body: NetworkBody::Interest(ctx.msg),
@@ -67,9 +68,18 @@ impl EPrimitives for Mux {
         let cache = prefix
             .as_ref()
             .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap()));
-        if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
-            let _ = self.handler.schedule(ctx.msg);
-        }
+
+        match self.interceptor.intercept(ctx, cache) {
+            Some(ctx) => {
+                let _ = self.handler.schedule(ctx.msg);
+            }
+            None => {
+                // send declare final to avoid timeout on blocked interest
+                if let Some(face) = self.face.get().and_then(|f| f.upgrade()) {
+                    face.reject_interest(interest_id);
+                }
+            }
+        };
     }
 
     fn send_declare(&self, ctx: RoutingContext<Declare>) {
@@ -124,6 +134,7 @@ impl EPrimitives for Mux {
     }
 
     fn send_request(&self, msg: Request) {
+        let request_id = msg.id;
         let msg = NetworkMessage {
             body: NetworkBody::Request(msg),
             reliability: Reliability::Reliable,
@@ -140,8 +151,19 @@ impl EPrimitives for Mux {
                 .flatten()
                 .cloned();
             let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(&face));
-            if let Some(ctx) = self.interceptor.intercept(ctx, cache) {
-                let _ = self.handler.schedule(ctx.msg);
+
+            match self.interceptor.intercept(ctx, cache) {
+                Some(ctx) => {
+                    let _ = self.handler.schedule(ctx.msg);
+                }
+                None => {
+                    // request was blocked by an interceptor, we need to send response final to avoid timeout error
+                    face.send_response_final(ResponseFinal {
+                        rid: request_id,
+                        ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+                        ext_tstamp: None,
+                    })
+                }
             }
         } else {
             tracing::error!("Uninitialized multiplexer!");

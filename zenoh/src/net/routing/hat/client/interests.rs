@@ -27,7 +27,9 @@ use super::{face_hat, face_hat_mut, token::declare_token_interest, HatCode, HatF
 use crate::net::routing::{
     dispatcher::{
         face::{FaceState, InterestState},
-        interests::{CurrentInterest, CurrentInterestCleanup, RemoteInterest},
+        interests::{
+            CurrentInterest, CurrentInterestCleanup, PendingCurrentInterest, RemoteInterest,
+        },
         resource::Resource,
         tables::{Tables, TablesLock},
     },
@@ -130,9 +132,15 @@ impl HatInterestTrait for HatCode {
             if mode.current() && options.tokens() {
                 let dst_face_mut = get_mut_unchecked(dst_face);
                 let cancellation_token = dst_face_mut.task_controller.get_cancellation_token();
-                dst_face_mut
-                    .pending_current_interests
-                    .insert(id, (interest.clone(), cancellation_token));
+                let rejection_token = dst_face_mut.task_controller.get_cancellation_token();
+                dst_face_mut.pending_current_interests.insert(
+                    id,
+                    PendingCurrentInterest {
+                        interest: interest.clone(),
+                        cancellation_token,
+                        rejection_token,
+                    },
+                );
                 CurrentInterestCleanup::spawn_interest_clean_up_task(
                     dst_face,
                     tables_ref,

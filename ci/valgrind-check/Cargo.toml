@@ -22,7 +22,9 @@ categories = ["network-programming"]
 description = "Internal crate for zenoh."
 
 [dependencies]
-base64ct = "~1.6.0"
+base64ct = "=1.6.0"
+zerofrom = "=0.1.5"
+litemap = "=0.7.4"
 tokio = { version = "1.35.1", features = ["rt-multi-thread", "time", "io-std"] }
 zenoh = { path = "../../zenoh/" }
 zenoh-runtime = { path = "../../commons/zenoh-runtime/" }
@@ -35,3 +37,6 @@ path = "src/pub_sub/bin/z_pub_sub.rs"
 [[bin]]
 name = "queryable_get"
 path = "src/queryable_get/bin/z_queryable_get.rs"
+
+[package.metadata.cargo-machete]
+ignored = ["base64ct", "zerofrom", "litemap"]

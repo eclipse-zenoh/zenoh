@@ -48,6 +48,12 @@ pub(crate) struct CurrentInterest {
     pub(crate) mode: InterestMode,
 }
 
+pub(crate) struct PendingCurrentInterest {
+    pub(crate) interest: Arc<CurrentInterest>,
+    pub(crate) cancellation_token: CancellationToken,
+    pub(crate) rejection_token: CancellationToken,
+}
+
 #[derive(PartialEq, Clone)]
 pub(crate) struct RemoteInterest {
     pub(crate) res: Option<Arc<Resource>>,
@@ -98,11 +104,11 @@ pub(crate) fn finalize_pending_interests(
 }
 
 pub(crate) fn finalize_pending_interest(
-    interest: (Arc<CurrentInterest>, CancellationToken),
+    pending_interest: PendingCurrentInterest,
     send_declare: &mut SendDeclare,
 ) {
-    let (interest, cancellation_token) = interest;
-    cancellation_token.cancel();
+    let interest = pending_interest.interest;
+    pending_interest.cancellation_token.cancel();
     if let Some(interest) = Arc::into_inner(interest) {
         tracing::debug!(
             "Propagate DeclareFinal {}:{}",
@@ -143,22 +149,21 @@ impl CurrentInterestCleanup {
             id,
             interests_timeout,
         };
-        if let Some((_, cancellation_token)) = face.pending_current_interests.get(&id) {
-            let c_cancellation_token = cancellation_token.clone();
+        if let Some(pending_interest) = face.pending_current_interests.get(&id) {
+            let cancellation_token = pending_interest.cancellation_token.clone();
+            let rejection_token = pending_interest.rejection_token.clone();
             face.task_controller
                 .spawn_with_rt(zenoh_runtime::ZRuntime::Net, async move {
                     tokio::select! {
                         _ = tokio::time::sleep(cleanup.interests_timeout) => { cleanup.run().await }
-                        _ = c_cancellation_token.cancelled() => {}
+                        _ = cancellation_token.cancelled() => {}
+                        _ = rejection_token.cancelled() => { cleanup.execute(false).await }
                     }
                 });
         }
     }
-}
 
-#[async_trait]
-impl Timed for CurrentInterestCleanup {
-    async fn run(&mut self) {
+    async fn execute(&mut self, print_warning: bool) {
         if let Some(mut face) = self.face.upgrade() {
             let ctrl_lock = zlock!(self.tables.ctrl_lock);
             if let Some(interest) = get_mut_unchecked(&mut face)
@@ -166,16 +171,25 @@ impl Timed for CurrentInterestCleanup {
                 .remove(&self.id)
             {
                 drop(ctrl_lock);
-                tracing::warn!(
-                    "Didn't receive DeclareFinal {}:{} from {} for interests: Timeout({:#?})!",
-                    interest.0.src_face,
-                    self.id,
-                    face,
-                    self.interests_timeout,
-                );
+                if print_warning {
+                    tracing::warn!(
+                        "Didn't receive DeclareFinal {}:{} from {} for interests: Timeout({:#?})!",
+                        interest.interest.src_face,
+                        self.id,
+                        face,
+                        self.interests_timeout,
+                    );
+                }
                 finalize_pending_interest(interest, &mut |p, m| p.send_declare(m));
             }
         }
+    }
+}
+
+#[async_trait]
+impl Timed for CurrentInterestCleanup {
+    async fn run(&mut self) {
+        self.execute(true).await;
     }
 }
 
