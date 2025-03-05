@@ -5687,6 +5687,7 @@ version = "1.2.1"
 dependencies = [
  "advisory-lock",
  "async-trait",
+ "cfg_aliases 0.2.1",
  "crossbeam-queue",
  "libc",
  "nix 0.29.0",

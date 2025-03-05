@@ -64,7 +64,7 @@ impl<ID: SegmentID> Segment<ID> {
     }
 
     pub fn ensure_not_persistent(id: ID) {
-        platform::SegmentImpl::ensure_not_persistent(id);
+        let _ = platform::SegmentImpl::open(id);
     }
 }
 

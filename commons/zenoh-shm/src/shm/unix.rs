@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#[cfg(any(bsd, target_os = "redox"))]
+use std::os::fd::FromRawFd;
 use std::{
     ffi::c_void,
     num::NonZeroUsize,
@@ -19,9 +21,9 @@ use std::{
     ptr::NonNull,
 };
 
-// todo: flock() doesn't work on Mac in some cases, but we can fix it
-#[cfg(target_os = "linux")]
 use advisory_lock::{AdvisoryFileLock, FileLockMode};
+#[cfg(any(bsd, target_os = "redox"))]
+use nix::fcntl::open;
 use nix::{
     fcntl::OFlag,
     sys::{
@@ -34,8 +36,7 @@ use nix::{
 use super::{SegmentCreateError, SegmentID, SegmentOpenError, ShmCreateResult, ShmOpenResult};
 
 pub struct SegmentImpl<ID: SegmentID> {
-    #[cfg(target_os = "linux")]
-    fd: OwnedFd,
+    lock_fd: OwnedFd,
     len: NonZeroUsize,
     data_ptr: NonNull<c_void>,
     id: ID,
@@ -44,11 +45,28 @@ pub struct SegmentImpl<ID: SegmentID> {
 // PUBLIC
 impl<ID: SegmentID> SegmentImpl<ID> {
     pub fn create(id: ID, len: NonZeroUsize) -> ShmCreateResult<Self> {
+        // we use separate lockfile on non-tmpfs for bsd
+        #[cfg(any(bsd, target_os = "redox"))]
+        let lock_fd = unsafe {
+            OwnedFd::from_raw_fd({
+                let lockpath = std::env::temp_dir().join(Self::id_str(id));
+                let flags = OFlag::O_CREAT | OFlag::O_EXCL | OFlag::O_RDWR;
+                let mode = Mode::S_IRUSR | Mode::S_IWUSR;
+                open(&lockpath, flags, mode).map_err(|e| match e {
+                    nix::Error::EEXIST => SegmentCreateError::SegmentExists,
+                    e => SegmentCreateError::OsError(e as u32),
+                })
+            }?)
+        };
+
         // create unique shm fd
         let fd = {
             let id = Self::id_str(id);
             let flags = OFlag::O_CREAT | OFlag::O_EXCL | OFlag::O_RDWR;
+
+            // todo: these flags probably can be exposed to the config
             let mode = Mode::S_IRUSR | Mode::S_IWUSR;
+
             tracing::trace!("shm_open(name={}, flag={:?}, mode={:?})", id, flags, mode);
             match shm_open(id.as_str(), flags, mode) {
                 Ok(v) => v,
@@ -57,10 +75,18 @@ impl<ID: SegmentID> SegmentImpl<ID> {
             }
         };
 
-        // todo: flock() doesn't work on Mac in some cases, but we can fix it
-        #[cfg(target_os = "linux")]
-        // put shared advisory lock on shm fd
-        fd.as_raw_fd()
+        // on non-bsd we use our SHM file also for locking
+        #[cfg(not(any(bsd, target_os = "redox")))]
+        let lock_fd = fd;
+        #[cfg(not(any(bsd, target_os = "redox")))]
+        let fd = &lock_fd;
+
+        #[cfg(any(bsd, target_os = "redox"))]
+        let fd = &fd;
+
+        // put shared advisory lock on lock_fd
+        lock_fd
+            .as_raw_fd()
             .try_lock(FileLockMode::Shared)
             .map_err(|e| match e {
                 advisory_lock::FileLockError::AlreadyLocked => SegmentCreateError::SegmentExists,
@@ -71,7 +97,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
 
         // resize shm segment to requested size
         tracing::trace!("ftruncate(fd={}, len={})", fd.as_raw_fd(), len);
-        ftruncate(&fd, len.get() as _).map_err(|e| SegmentCreateError::OsError(e as u32))?;
+        ftruncate(fd, len.get() as _).map_err(|e| SegmentCreateError::OsError(e as u32))?;
 
         // get real segment size
         let len = {
@@ -80,11 +106,10 @@ impl<ID: SegmentID> SegmentImpl<ID> {
         };
 
         // map segment into our address space
-        let data_ptr = Self::map(len, &fd).map_err(|e| SegmentCreateError::OsError(e as _))?;
+        let data_ptr = Self::map(len, fd).map_err(|e| SegmentCreateError::OsError(e as _))?;
 
         Ok(Self {
-            #[cfg(target_os = "linux")]
-            fd,
+            lock_fd,
             len,
             data_ptr,
             id,
@@ -92,19 +117,44 @@ impl<ID: SegmentID> SegmentImpl<ID> {
     }
 
     pub fn open(id: ID) -> ShmOpenResult<Self> {
+        // we use separate lockfile on non-tmpfs for bsd
+        #[cfg(any(bsd, target_os = "redox"))]
+        let lock_fd = unsafe {
+            OwnedFd::from_raw_fd({
+                let lockpath = std::env::temp_dir().join(Self::id_str(id));
+                let flags = OFlag::O_RDWR;
+                let mode = Mode::S_IRUSR | Mode::S_IWUSR;
+                open(&lockpath, flags, mode).map_err(|e| SegmentOpenError::OsError(e as _))
+            }?)
+        };
+
         // open shm fd
         let fd = {
             let id = Self::id_str(id);
             let flags = OFlag::O_RDWR;
-            let mode = Mode::S_IRUSR;
+
+            // todo: these flags probably can be exposed to the config
+            let mode = Mode::S_IRUSR | Mode::S_IWUSR;
+
             tracing::trace!("shm_open(name={}, flag={:?}, mode={:?})", id, flags, mode);
-            shm_open(id.as_str(), flags, mode).map_err(|e| SegmentOpenError::OsError(e as u32))?
+            match shm_open(id.as_str(), flags, mode) {
+                Ok(v) => v,
+                Err(e) => return Err(SegmentOpenError::OsError(e as u32)),
+            }
         };
 
-        // todo: flock() doesn't work on Mac in some cases, but we can fix it
-        #[cfg(target_os = "linux")]
-        // put shared advisory lock on shm fd
-        fd.as_raw_fd()
+        // on non-bsd we use our SHM file also for locking
+        #[cfg(not(any(bsd, target_os = "redox")))]
+        let lock_fd = fd;
+        #[cfg(not(any(bsd, target_os = "redox")))]
+        let fd = &lock_fd;
+
+        #[cfg(any(bsd, target_os = "redox"))]
+        let fd = &fd;
+
+        // put shared advisory lock on lock_fd
+        lock_fd
+            .as_raw_fd()
             .try_lock(FileLockMode::Shared)
             .map_err(|e| match e {
                 advisory_lock::FileLockError::AlreadyLocked => SegmentOpenError::InvalidatedSegment,
@@ -120,30 +170,14 @@ impl<ID: SegmentID> SegmentImpl<ID> {
         };
 
         // map segment into our address space
-        let data_ptr = Self::map(len, &fd).map_err(|e| SegmentOpenError::OsError(e as _))?;
+        let data_ptr = Self::map(len, fd).map_err(|e| SegmentOpenError::OsError(e as _))?;
 
         Ok(Self {
-            #[cfg(target_os = "linux")]
-            fd,
+            lock_fd,
             len,
             data_ptr,
             id,
         })
-    }
-
-    pub fn ensure_not_persistent(id: ID) {
-        // open shm fd
-        let fd = {
-            let id = Self::id_str(id);
-            let flags = OFlag::O_RDWR;
-            let mode = Mode::S_IRUSR;
-            tracing::trace!("shm_open(name={}, flag={:?}, mode={:?})", id, flags, mode);
-            shm_open(id.as_str(), flags, mode)
-        };
-
-        if let Ok(fd) = fd {
-            Self::unlink_if_unique(id, &fd);
-        }
     }
 
     pub fn id(&self) -> ID {
@@ -162,7 +196,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
 // PRIVATE
 impl<ID: SegmentID> SegmentImpl<ID> {
     fn id_str(id: ID) -> String {
-        format!("/{}.zenoh", id)
+        format!("{id}.zenoh")
     }
 
     fn map(len: NonZeroUsize, fd: &OwnedFd) -> nix::Result<NonNull<c_void>> {
@@ -179,34 +213,29 @@ impl<ID: SegmentID> SegmentImpl<ID> {
 
         unsafe { mmap(None, len, prot, flags, fd, 0) }
     }
-
-    #[allow(unused_variables)]
-    fn unlink_if_unique(id: ID, fd: &OwnedFd) {
-        // todo: flock() doesn't work on Mac in some cases, but we can fix it
-        #[cfg(target_os = "linux")]
-        if fd.as_raw_fd().try_lock(FileLockMode::Exclusive).is_ok() {
-            let id = Self::id_str(id);
-            tracing::trace!("shm_unlink(name={})", id);
-            let _ = shm_unlink(id.as_str());
-        }
-    }
 }
 
 impl<ID: SegmentID> Drop for SegmentImpl<ID> {
     fn drop(&mut self) {
         tracing::trace!("munmap(addr={:p},len={})", self.data_ptr, self.len);
-        if let Err(_e) = unsafe { munmap(self.data_ptr, self.len.get()) } {
-            tracing::debug!("munmap() failed : {}", _e);
+        if let Err(e) = unsafe { munmap(self.data_ptr, self.len.get()) } {
+            tracing::debug!("munmap() failed : {}", e);
         };
 
-        #[cfg(target_os = "linux")]
-        Self::unlink_if_unique(self.id, &self.fd);
-
-        #[cfg(not(target_os = "linux"))]
+        if self
+            .lock_fd
+            .as_raw_fd()
+            .try_lock(FileLockMode::Exclusive)
+            .is_ok()
         {
             let id = Self::id_str(self.id);
             tracing::trace!("shm_unlink(name={})", id);
             let _ = shm_unlink(id.as_str());
+            #[cfg(any(bsd, target_os = "redox"))]
+            {
+                let lockpath = std::env::temp_dir().join(id);
+                let _ = std::fs::remove_file(lockpath);
+            }
         }
     }
 }
