@@ -12,20 +12,21 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{fmt::Display, marker::PhantomData, mem::size_of};
+use std::{marker::PhantomData, mem::size_of, num::NonZeroUsize};
 
 use num_traits::{AsPrimitive, PrimInt, Unsigned};
 use stabby::IStable;
 use zenoh_result::{bail, ZResult};
 
 use super::segment::Segment;
+use crate::shm;
 
 /// An SHM segment that is intended to be an array of elements of some certain type
 #[derive(Debug)]
 pub struct ArrayInSHM<ID, Elem, ElemIndex>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
-    ID: Clone + Display,
+    ID: shm::SegmentID,
 {
     inner: Segment<ID>,
     _phantom: PhantomData<(Elem, ElemIndex)>,
@@ -34,20 +35,20 @@ where
 unsafe impl<ID, Elem: Sync, ElemIndex> Sync for ArrayInSHM<ID, Elem, ElemIndex>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
-    ID: Clone + Display,
+    ID: shm::SegmentID,
 {
 }
 unsafe impl<ID, Elem: Send, ElemIndex> Send for ArrayInSHM<ID, Elem, ElemIndex>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
-    ID: Clone + Display,
+    ID: shm::SegmentID,
 {
 }
 
 impl<ID, Elem, ElemIndex> ArrayInSHM<ID, Elem, ElemIndex>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
-    ID: Clone + Display,
+    ID: shm::SegmentID,
     ElemIndex: Unsigned + PrimInt + 'static + AsPrimitive<usize>,
     Elem: IStable<ContainsIndirections = stabby::abi::B0>,
     isize: AsPrimitive<ElemIndex>,
@@ -57,26 +58,22 @@ where
         panic!("Elem is a ZST. ZSTs are not allowed as ArrayInSHM generic");
     };
 
-    pub fn create(elem_count: usize, file_prefix: &str) -> ZResult<Self> {
-        if elem_count == 0 {
-            bail!("Unable to create SHM array segment of 0 elements")
-        }
-
+    pub fn create(elem_count: NonZeroUsize) -> ZResult<Self> {
         let max: usize = ElemIndex::max_value().as_();
-        if elem_count - 1 > max {
+        if elem_count.get() - 1 > max {
             bail!("Unable to create SHM array segment of {elem_count} elements: out of range for ElemIndex!")
         }
 
-        let alloc_size = elem_count * size_of::<Elem>();
-        let inner = Segment::create(alloc_size, file_prefix)?;
+        let alloc_size = NonZeroUsize::try_from(elem_count.get() * size_of::<Elem>())?;
+        let inner = Segment::create(alloc_size)?;
         Ok(Self {
             inner,
             _phantom: PhantomData,
         })
     }
 
-    pub fn open(id: ID, file_prefix: &str) -> ZResult<Self> {
-        let inner = Segment::open(id, file_prefix)?;
+    pub fn open(id: ID) -> ZResult<Self> {
+        let inner = Segment::open(id)?;
         Ok(Self {
             inner,
             _phantom: PhantomData,
@@ -87,8 +84,10 @@ where
         self.inner.id()
     }
 
-    pub fn elem_count(&self) -> usize {
-        self.inner.len() / size_of::<Elem>()
+    pub fn elem_count(&self) -> NonZeroUsize {
+        let max: usize = ElemIndex::max_value().as_();
+        let actual = self.inner.len().get() / size_of::<Elem>();
+        unsafe { NonZeroUsize::new_unchecked(std::cmp::min(max.saturating_add(1), actual)) }
     }
 
     /// # Safety
@@ -96,7 +95,7 @@ where
     /// Additional assert to check the index validity is added for "test" feature
     pub unsafe fn elem(&self, index: ElemIndex) -> *const Elem {
         #[cfg(feature = "test")]
-        assert!(self.inner.len() > index.as_() * size_of::<Elem>());
+        assert!(self.inner.len().get() > index.as_() * size_of::<Elem>());
         (self.inner.as_ptr() as *const Elem).add(index.as_())
     }
 
@@ -105,7 +104,7 @@ where
     /// Additional assert to check the index validity is added for "test" feature
     pub unsafe fn elem_mut(&self, index: ElemIndex) -> *mut Elem {
         #[cfg(feature = "test")]
-        assert!(self.inner.len() > index.as_() * size_of::<Elem>());
+        assert!(self.inner.len().get() > index.as_() * size_of::<Elem>());
         (self.inner.as_ptr() as *mut Elem).add(index.as_())
     }
 
@@ -117,7 +116,7 @@ where
         #[cfg(feature = "test")]
         {
             assert!(index >= 0);
-            assert!(self.inner.len() > index as usize * size_of::<Elem>());
+            assert!(self.inner.len().get() > index as usize * size_of::<Elem>());
         }
         index.as_()
     }
