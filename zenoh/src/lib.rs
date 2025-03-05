@@ -180,7 +180,9 @@ pub mod key_expr {
     }
     #[zenoh_macros::unstable]
     pub use zenoh_keyexpr::SetIntersectionLevel;
-    pub use zenoh_keyexpr::{canon::Canonize, keyexpr, OwnedKeyExpr};
+    pub use zenoh_keyexpr::{
+        canon::Canonize, keyexpr, nonwild_keyexpr, OwnedKeyExpr, OwnedNonWildKeyExpr,
+    };
 
     pub use crate::api::key_expr::{KeyExpr, KeyExprUndeclaration};
     // keyexpr format macro support
