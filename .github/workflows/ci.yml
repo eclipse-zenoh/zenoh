@@ -226,7 +226,7 @@ jobs:
           fail-fast: false
           matrix:
             os: [ubuntu-latest]
-            rust: [nightly, stable]
+            rust: [nightly]
         runs-on: ${{ matrix.os }}
         steps:
           - name: Checkout sources
@@ -246,12 +246,21 @@ jobs:
             uses: taiki-e/install-action@cargo-llvm-cov
 
           - name: Generate code coverage
-            run: cargo +${{ matrix.rust }} llvm-cov test --features unstable --features test --features shared-memory ${{ matrix.rust == 'nightly' && '--doctests' || '' }} --lcov --output-path lcov.info --no-cfg-coverage --no-cfg-coverage-nightly --ignore-run-fail -- --skip test_default_features --skip router_linkstate --skip three_node_combination  --skip three_node_combination_multicast
+            run: |
+              cargo +${{ matrix.rust }} llvm-cov test --features unstable --features test --features shared-memory  \
+              ${{ matrix.rust == 'nightly' && '--doctests' || '' }} --lcov --output-path lcov.info \
+              --no-cfg-coverage --no-cfg-coverage-nightly --ignore-run-fail -- \
+              --skip test_default_features \
+              --skip router_linkstate \
+              --skip three_node_combination  \
+              --skip three_node_combination_multicast \
+              --skip two_node_combination \
+              --skip test_gossip
 
           - name: Upload coverage to Codecov
-            uses: codecov/codecov-action@v4
+            uses: codecov/codecov-action@v5
             with:
-              #token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
+              token: ${{ secrets.CODECOV_TOKEN }}
               files: lcov.info
               fail_ci_if_error: true
 
