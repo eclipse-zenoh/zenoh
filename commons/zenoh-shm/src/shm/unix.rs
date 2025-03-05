@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#[cfg(any(bsd, target_os = "redox"))]
+use std::os::fd::FromRawFd;
 use std::{
     ffi::c_void,
     num::NonZeroUsize,
@@ -45,14 +47,13 @@ impl<ID: SegmentID> SegmentImpl<ID> {
     pub fn create(id: ID, len: NonZeroUsize) -> ShmCreateResult<Self> {
         // we use separate lockfile on non-tmpfs for bsd
         #[cfg(any(bsd, target_os = "redox"))]
-        let lock_fd: OwnedFd = unsafe {
-            {
+        let lock_fd = unsafe {
+            OwnedFd::from_raw_fd({
                 let lockpath = std::env::temp_dir().join(Self::id_str(id));
                 let flags = OFlag::O_CREAT | OFlag::O_EXCL | OFlag::O_RDWR;
                 let mode = Mode::S_IRUSR | Mode::S_IWUSR;
                 open(&lockpath, flags, mode).map_err(|_| SegmentCreateError::SegmentExists)
-            }?
-            .into()
+            }?)
         };
 
         // create unique shm fd
@@ -115,13 +116,13 @@ impl<ID: SegmentID> SegmentImpl<ID> {
     pub fn open(id: ID) -> ShmOpenResult<Self> {
         // we use separate lockfile on non-tmpfs for bsd
         #[cfg(any(bsd, target_os = "redox"))]
-        let lock_fd: OwnedFd = unsafe {
-            {
+        let lock_fd = unsafe {
+            OwnedFd::from_raw_fd({
                 let lockpath = std::env::temp_dir().join(Self::id_str(id));
                 let flags = OFlag::O_RDWR;
                 let mode = Mode::S_IRUSR | Mode::S_IWUSR;
                 open(&lockpath, flags, mode).map_err(|_| SegmentOpenError::InvalidatedSegment)
-            }?
+            }?)
         };
 
         // open shm fd
