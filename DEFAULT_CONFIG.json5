@@ -10,13 +10,11 @@
 
   /// The node's mode (router, peer or client)
   mode: "peer",
-
   /// The node's metadata (name, location, DNS name, etc.) Arbitrary JSON data not interpreted by zenoh and available in admin space @/<zid>/router, @/<zid>/peer or @/<zid>/client
   metadata: {
     name: "strawberry",
     location: "Penny Lane",
   },
-
   /// Which endpoints to connect to. E.g. tcp/localhost:7447.
   /// By configuring the endpoints, it is possible to tell zenoh which router/peer to connect to at startup.
   ///
@@ -32,8 +30,11 @@
     /// timeout waiting for all endpoints connected (0: no retry, -1: infinite timeout)
     /// Accepts a single value (e.g. timeout_ms: 0)
     /// or different values for router, peer and client (e.g. timeout_ms: { router: -1, peer: -1, client: 0 }).
-    timeout_ms: { router: -1, peer: -1, client: 0 },
-
+    timeout_ms: {
+      router: -1,
+      peer: -1,
+      client: 0
+    },
     /// The list of endpoints to connect to.
     /// Accepts a single list (e.g. endpoints: ["tcp/10.10.10.10:7447", "tcp/11.11.11.11:7447"])
     /// or different lists for router, peer and client (e.g. endpoints: { router: ["tcp/10.10.10.10:7447"], peer: ["tcp/11.11.11.11:7447"] }).
@@ -42,7 +43,6 @@
     endpoints: [
       // "<proto>/<address>"
     ],
-
     /// Global connect configuration,
     /// Accepts a single value or different values for router, peer and client.
     /// The configuration can also be specified for the separate endpoint
@@ -50,7 +50,11 @@
     /// E.g. tcp/192.168.0.1:7447#retry_period_init_ms=20000;retry_period_max_ms=10000"
 
     /// exit from application, if timeout exceed
-    exit_on_failure: { router: false, peer: false, client: true },
+    exit_on_failure: {
+      router: false,
+      peer: false,
+      client: true
+    },
     /// connect establishing retry configuration
     retry: {
       /// initial wait timeout until next connect try
@@ -61,7 +65,6 @@
       period_increase_factor: 2,
     },
   },
-
   /// Which endpoints to listen on. E.g. tcp/0.0.0.0:7447.
   /// By configuring the endpoints, it is possible to tell zenoh which are the endpoints that other routers,
   /// peers, or client can use to establish a zenoh session.
@@ -79,14 +82,19 @@
     /// Accepts a single value (e.g. timeout_ms: 0)
     /// or different values for router, peer and client (e.g. timeout_ms: { router: -1, peer: -1, client: 0 }).
     timeout_ms: 0,
-
     /// The list of endpoints to listen on.
     /// Accepts a single list (e.g. endpoints: ["tcp/[::]:7447", "udp/[::]:7447"])
     /// or different lists for router, peer and client (e.g. endpoints: { router: ["tcp/[::]:7447"], peer: ["tcp/[::]:0"] }).
     ///
     /// See https://docs.rs/zenoh/latest/zenoh/config/struct.EndPoint.html
-    endpoints: { router: ["tcp/[::]:7447"], peer: ["tcp/[::]:0"] },
-
+    endpoints: {
+      router: [
+        "tcp/[::]:7447"
+      ],
+      peer: [
+        "tcp/[::]:0"
+      ]
+    },
     /// Global listen configuration,
     /// Accepts a single value or different values for router, peer and client.
     /// The configuration can also be specified for the separate endpoint
@@ -130,14 +138,24 @@
       /// The socket which should be used for multicast scouting
       address: "224.0.0.224:7446",
       /// The network interface which should be used for multicast scouting
-      interface: "auto", // If not set or set to "auto" the interface if picked automatically
+      interface: "auto",
+      // If not set or set to "auto" the interface if picked automatically
       /// The time-to-live on multicast scouting packets
       ttl: 1,
       /// Which type of Zenoh instances to automatically establish sessions with upon discovery on UDP multicast.
       /// Accepts a single value (e.g. autoconnect: ["router", "peer"]) which applies whatever the configured "mode" is,
       /// or different values for router, peer or client mode (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
       /// Each value is a list of: "peer", "router" and/or "client".
-      autoconnect: { router: [], peer: ["router", "peer"], client: ["router"] },
+      autoconnect: {
+        router: [],
+        peer: [
+          "router",
+          "peer"
+        ],
+        client: [
+          "router"
+        ]
+      },
       /// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
       /// Possible options are:
       /// - "always": always attempt to autoconnect, may result in redundant connections.
@@ -150,7 +168,12 @@
       /// (e.g. autoconnect_strategy : { to_router:  "always", to_peer: "greater-zid" }),
       /// or different values for router or peer mode
       /// (e.g. autoconnect_strategy : { peer: { to_router:  "always", to_peer: "greater-zid" } }).
-      autoconnect_strategy: { peer: { to_router: "always", to_peer: "always" } },
+      autoconnect_strategy: {
+        peer: {
+          to_router: "always",
+          to_peer: "always"
+        }
+      },
       /// Whether or not to listen for scout messages on UDP multicast and reply to them.
       listen: true,
     },
@@ -168,12 +191,27 @@
       /// Accepts a single value (e.g. target: ["router", "peer"]) which applies whatever the configured "mode" is,
       /// or different values for router or peer mode (e.g. target: { router: ["router", "peer"], peer: ["router"] }).
       /// Each value is a list of "peer" and/or "router".
-      target: { router: ["router", "peer"], peer: ["router", "peer"]},
+      target: {
+        router: [
+          "router",
+          "peer"
+        ],
+        peer: [
+          "router",
+          "peer"
+        ]
+      },
       /// Which type of Zenoh instances to automatically establish sessions with upon discovery on gossip.
       /// Accepts a single value (e.g. autoconnect: ["router", "peer"]) which applies whatever the configured "mode" is,
       /// or different values for router or peer mode (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
       /// Each value is a list of: "peer" and/or "router".
-      autoconnect: { router: [], peer: ["router", "peer"] },
+      autoconnect: {
+        router: [],
+        peer: [
+          "router",
+          "peer"
+        ]
+      },
       /// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
       /// Possible options are:
       /// - "always": always attempt to autoconnect, may result in redundant connection which will then be closed.
@@ -186,24 +224,30 @@
       /// (e.g. autoconnect_strategy : { "to-router":  "always", "to-peer": "greater-zid" }),
       /// or different values for router or peer mode
       /// (e.g. autoconnect_strategy : { peer: { "to-router":  "always", "to-peer": "greater-zid" } }).
-      autoconnect_strategy: { peer: { "to-router": "always", "to-peer": "always" } },
+      autoconnect_strategy: {
+        peer: {
+          "to-router": "always",
+          "to-peer": "always"
+        }
+      },
     },
   },
-
   /// Configuration of data messages timestamps management.
   timestamping: {
     /// Whether data messages should be timestamped if not already.
     /// Accepts a single boolean value or different values for router, peer and client.
-    enabled: { router: true, peer: false, client: false },
+    enabled: {
+      router: true,
+      peer: false,
+      client: false
+    },
     /// Whether data messages with timestamps in the future should be dropped or not.
     /// If set to false (default), messages with timestamps in the future are retimestamped.
     /// Timestamps are ignored if timestamping is disabled.
     drop_future_timestamp: false,
   },
-
   /// The default timeout to apply to queries in milliseconds.
   queries_default_timeout: 10000,
-
   /// The routing strategy to use and it's configuration.
   routing: {
     /// The routing strategy to use in routers and it's configuration.
@@ -229,7 +273,6 @@
       timeout: 10000,
     },
   },
-
   //  /// Overwrite QoS options for Zenoh messages by key expression (ignores Zenoh API QoS config for overwritten values)
   //  qos: {
   //    /// Overwrite QoS options for PUT and DELETE messages
@@ -477,8 +520,8 @@
             interactive_low: 1,
             data_high: 2,
             data: 4,
-            data_low: 4,
-            background: 4,
+            data_low: 2,
+            background: 1,
           },
           /// Congestion occurs when the queue is empty (no available batch).
           congestion_control: {
@@ -554,15 +597,15 @@
         /// Configure TCP write buffer size (bytes)
         // so_sndbuf: 123456,
       },
-    // // Configure optional TCP link specific parameters
-    // tcp: {
-    //   /// Optional configuration for TCP system buffers sizes for TCP links
-    //   ///
-    //   /// Configure TCP read buffer size (bytes)
-    //   // so_rcvbuf: 123456,
-    //   /// Configure TCP write buffer size (bytes)
-    //   // so_sndbuf: 123456,
-    // }
+      // // Configure optional TCP link specific parameters
+      // tcp: {
+      //   /// Optional configuration for TCP system buffers sizes for TCP links
+      //   ///
+      //   /// Configure TCP read buffer size (bytes)
+      //   // so_rcvbuf: 123456,
+      //   /// Configure TCP write buffer size (bytes)
+      //   // so_sndbuf: 123456,
+      // }
     },
     /// Shared memory configuration.
     /// NOTE: shared memory can be used only if zenoh is compiled with "shared-memory" feature, otherwise
@@ -602,7 +645,6 @@
       },
     },
   },
-
   /// Configure the Admin Space
   /// Unstable: this configuration part works as advertised, but may change in a future release
   adminspace: {
@@ -614,7 +656,6 @@
       write: false,
     },
   },
-
   ///
   /// Plugins configurations
   ///
