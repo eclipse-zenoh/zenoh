@@ -34,9 +34,9 @@ mod platform {
     }
 
     fn cleanup_orphaned_segments_inner() -> ZResult<()> {
-        #[cfg(any(bsd, target_os = "redox"))]
+        #[cfg(shm_external_lockfile)]
         let shm_files = fs::read_dir(std::env::temp_dir())?;
-        #[cfg(not(any(bsd, target_os = "redox")))]
+        #[cfg(not(shm_external_lockfile))]
         let shm_files = fs::read_dir("/dev/shm")?;
 
         for segment_file in shm_files.filter_map(Result::ok).filter(|f| {

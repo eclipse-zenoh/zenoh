@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#[cfg(any(bsd, target_os = "redox"))]
+#[cfg(shm_external_lockfile)]
 use std::os::fd::FromRawFd;
 use std::{
     ffi::c_void,
@@ -22,7 +22,7 @@ use std::{
 };
 
 use advisory_lock::{AdvisoryFileLock, FileLockMode};
-#[cfg(any(bsd, target_os = "redox"))]
+#[cfg(shm_external_lockfile)]
 use nix::fcntl::open;
 use nix::{
     fcntl::OFlag,
@@ -46,7 +46,7 @@ pub struct SegmentImpl<ID: SegmentID> {
 impl<ID: SegmentID> SegmentImpl<ID> {
     pub fn create(id: ID, len: NonZeroUsize) -> ShmCreateResult<Self> {
         // we use separate lockfile on non-tmpfs for bsd
-        #[cfg(any(bsd, target_os = "redox"))]
+        #[cfg(shm_external_lockfile)]
         let lock_fd = unsafe {
             OwnedFd::from_raw_fd({
                 let lockpath = std::env::temp_dir().join(Self::id_str(id));
@@ -76,12 +76,12 @@ impl<ID: SegmentID> SegmentImpl<ID> {
         };
 
         // on non-bsd we use our SHM file also for locking
-        #[cfg(not(any(bsd, target_os = "redox")))]
+        #[cfg(not(shm_external_lockfile))]
         let lock_fd = fd;
-        #[cfg(not(any(bsd, target_os = "redox")))]
+        #[cfg(not(shm_external_lockfile))]
         let fd = &lock_fd;
 
-        #[cfg(any(bsd, target_os = "redox"))]
+        #[cfg(shm_external_lockfile)]
         let fd = &fd;
 
         // put shared advisory lock on lock_fd
@@ -118,7 +118,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
 
     pub fn open(id: ID) -> ShmOpenResult<Self> {
         // we use separate lockfile on non-tmpfs for bsd
-        #[cfg(any(bsd, target_os = "redox"))]
+        #[cfg(shm_external_lockfile)]
         let lock_fd = unsafe {
             OwnedFd::from_raw_fd({
                 let lockpath = std::env::temp_dir().join(Self::id_str(id));
@@ -144,12 +144,12 @@ impl<ID: SegmentID> SegmentImpl<ID> {
         };
 
         // on non-bsd we use our SHM file also for locking
-        #[cfg(not(any(bsd, target_os = "redox")))]
+        #[cfg(not(shm_external_lockfile))]
         let lock_fd = fd;
-        #[cfg(not(any(bsd, target_os = "redox")))]
+        #[cfg(not(shm_external_lockfile))]
         let fd = &lock_fd;
 
-        #[cfg(any(bsd, target_os = "redox"))]
+        #[cfg(shm_external_lockfile)]
         let fd = &fd;
 
         // put shared advisory lock on lock_fd
@@ -231,7 +231,7 @@ impl<ID: SegmentID> Drop for SegmentImpl<ID> {
             let id = Self::id_str(self.id);
             tracing::trace!("shm_unlink(name={})", id);
             let _ = shm_unlink(id.as_str());
-            #[cfg(any(bsd, target_os = "redox"))]
+            #[cfg(shm_external_lockfile)]
             {
                 let lockpath = std::env::temp_dir().join(id);
                 let _ = std::fs::remove_file(lockpath);

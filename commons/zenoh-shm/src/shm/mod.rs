@@ -64,7 +64,9 @@ impl<ID: SegmentID> Segment<ID> {
     }
 
     pub fn ensure_not_persistent(id: ID) {
-        let _ = platform::SegmentImpl::open(id);
+        if let Err(err) = platform::SegmentImpl::open(id) {
+            tracing::trace!("Error cleaning up segment: {:?}", err);
+        }
     }
 }
 
