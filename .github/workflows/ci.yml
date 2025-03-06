@@ -159,7 +159,7 @@ jobs:
         if: ${{ matrix.os == 'windows-latest' }}
         shell: bash
         run: |
-            echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV
+          echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV
 
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
@@ -217,43 +217,67 @@ jobs:
       - uses: actions/checkout@v4
       - uses: DavidAnson/markdownlint-cli2-action@v18
         with:
-          config: '.markdownlint.yaml'
-          globs: '**/README.md'
+          config: ".markdownlint.yaml"
+          globs: "**/README.md"
 
   coverage:
-        name: Coverage
-        strategy:
-          fail-fast: false
-          matrix:
-            os: [ubuntu-latest]
-            rust: [nightly, stable]
-        runs-on: ${{ matrix.os }}
-        steps:
-          - name: Checkout sources
-            uses: actions/checkout@v4
+    name: Coverage
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        rust: [nightly, stable]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
 
-          - name: Install ${{ matrix.rust }} Rust toolchain
-            run: |
-              rustup override set ${{ matrix.rust }}
-              rustup update ${{ matrix.rust }}
-              rustup component add llvm-tools-preview
+      - name: Install ${{ matrix.rust }} Rust toolchain
+        run: |
+          rustup override set ${{ matrix.rust }}
+          rustup update ${{ matrix.rust }}
+          rustup component add llvm-tools-preview
 
-          - uses: Swatinem/rust-cache@v2
-            with:
-              cache-bin: false
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
 
-          - name: Install cargo-llvm-cov
-            uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
 
-          - name: Generate code coverage
-            run: cargo +${{ matrix.rust }} llvm-cov test --features unstable --features test --features shared-memory ${{ matrix.rust == 'nightly' && '--doctests' || '' }} --lcov --output-path lcov.info --no-cfg-coverage --no-cfg-coverage-nightly --ignore-run-fail -- --skip test_default_features --skip router_linkstate --skip three_node_combination  --skip three_node_combination_multicast
+      - name: Generate code coverage
+        run: cargo +${{ matrix.rust }} llvm-cov test --features unstable --features test --features shared-memory ${{ matrix.rust == 'nightly' && '--doctests' || '' }} --lcov --output-path lcov.info --no-cfg-coverage --no-cfg-coverage-nightly --ignore-run-fail -- --skip test_default_features --skip router_linkstate --skip three_node_combination  --skip three_node_combination_multicast
 
-          - name: Upload coverage to Codecov
-            uses: codecov/codecov-action@v4
-            with:
-              #token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
-              files: lcov.info
-              fail_ci_if_error: true
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          #token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
+          files: lcov.info
+          fail_ci_if_error: true
+
+  msrvs:
+    name: MSRV checks on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    # NOTE: It is necessary to run the check-msrv action on platforms since a crate's MSRV
+    # depends on the target it's compiled for.
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-13
+          - macos-14
+          - windows-latest
+    steps:
+      - name: Clone this repository
+        uses: actions/checkout@v4
+
+      - uses: ZettaScaleLabs/ci/check-msrv@develop
+        with:
+          repo: ${{ github.repository }}
+          # NOTE: As of commit 25f06bd, the minimum MSRV found in the workspace is 1.68.
+          # This value should be as high as possible to avoid needlessly checking older versions.
+          min: 1.68.2
 
   # NOTE: In GitHub repository settings, the "Require status checks to pass
   # before merging" branch protection rule ensures that commits are only merged
