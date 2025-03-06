@@ -895,16 +895,14 @@ impl TransmissionPipelineConsumer {
 mod tests {
     use std::{
         convert::TryFrom,
-        future::poll_fn,
         sync::{
             atomic::{AtomicUsize, Ordering},
             Arc,
         },
-        task::Poll,
         time::{Duration, Instant},
     };
 
-    use futures::{task::AtomicWaker, FutureExt};
+    use futures::FutureExt;
     use tokio::{task, task::JoinHandle, time::timeout};
     use zenoh_buffers::{
         reader::{DidntRead, HasReader},
@@ -1374,6 +1372,7 @@ mod tests {
             batching_enabled: true,
             wait_before_drop: (Duration::from_millis(1000), Duration::from_millis(50000)),
             wait_before_close: Duration::from_millis(5000000),
+            // use a high time limit to never leave backoff mode
             batching_time_limit: Duration::from_millis(10000),
         };
         let priorities = vec![TransportPriorityTx::make(Bits::from(TransportSn::MAX)).unwrap()];
@@ -1395,33 +1394,16 @@ mod tests {
             }),
         }
         .into();
-        let waker = Arc::new(AtomicWaker::new());
-        let waker2 = waker.clone();
+        // push a first message and pull it to activate backoff
+        producer.push_network_message(message.clone()).unwrap();
+        let (batch, prio) = consumer.pull().await.unwrap();
+        // push a second message before refilling to keep backoff activated
+        producer.push_network_message(message.clone()).unwrap();
+        // start producer task
         let producer_task: JoinHandle<Result<(), _>> = task::spawn_blocking(move || loop {
             producer.push_network_message(message.clone())?;
-            waker2.wake();
         });
-
-        // wait until the producer task has started and pull the first batch;
-        // it can have arbitrary size, should be quite small if we wake up in
-        // time
-        loop {
-            if let Some((batch, prio)) = consumer.pull().await {
-                // activate backoff by waiting for a message to be written before refilling
-                let mut polled = false;
-                poll_fn(|cx| {
-                    if polled {
-                        return Poll::Ready(());
-                    }
-                    polled = true;
-                    waker.register(cx.waker());
-                    Poll::Pending
-                })
-                .await;
-                consumer.refill(batch, prio);
-                break;
-            }
-        }
+        consumer.refill(batch, prio);
         // following batch may still use small buffer size
         let (batch, prio) = consumer.pull().await.unwrap();
         consumer.refill(batch, prio);
