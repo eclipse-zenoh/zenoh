@@ -17,7 +17,7 @@ use std::{
     fmt, mem,
     mem::MaybeUninit,
     sync::{
-        atomic::{AtomicU8, Ordering},
+        atomic::{AtomicBool, AtomicU8, Ordering},
         Arc, Mutex, MutexGuard,
     },
     time::{Duration, Instant},
@@ -64,19 +64,14 @@ impl std::error::Error for TransportClosed {}
 
 /// Batch pool from which you can acquire batches and refill them after use.
 ///
-/// It is initialized with a maximum batch count; the count is decreased when
-/// batches are acquired, and increased when they are refilled.
+/// It is initialized with a batch count, which is decreased when batches are
+/// acquired, and increased when they are refilled.
 /// Moreover, the pull contains a single pre-allocated batch, that is taken
 /// when a batch is acquired, and refilled later.
 ///
-/// The pool carries two flags that are set depending on the situation:
-/// - congestion: if there is no available batch, and a deadline has been reached,
-///   the flag is set; it will be unset whenever a batch is refilled.
-/// - batching: if there is more than one in-flight batch, the flag is set as it
-///   means the network is not sending batches quickly enough, and the pipeline
-///   should batch messages more; the flag is unset whenever the pool is completely
-///   refilled, or manually after reaching a batching duration limit.
-///
+/// The pool also carries a congestion flag, that can be set if there is no
+/// available batch (for example after reaching a deadline); the flag is unset
+/// whenever a batch is refilled.
 struct BatchPool {
     count: u8,
     state: AtomicU8,
@@ -93,14 +88,13 @@ unsafe impl Sync for BatchPool {}
 impl BatchPool {
     const COUNT_MASK: u8 = (1 << 5) - 1;
     const REFILLED_FLAG: u8 = 1 << 5;
-    const BATCHING_FLAG: u8 = 1 << 6;
-    const CONGESTED_FLAG: u8 = 1 << 7;
+    const CONGESTED_FLAG: u8 = 1 << 6;
 
-    /// Initializes the batch pool with a given maximum count of batches.
-    fn new(max_count: usize) -> Self {
+    /// Initializes the batch pool with a given count of batches.
+    fn new(count: usize) -> Self {
         Self {
-            count: max_count as u8,
-            state: AtomicU8::new(max_count as u8),
+            count: count as u8,
+            state: AtomicU8::new(count as u8),
             refill: UnsafeCell::new(MaybeUninit::uninit()),
         }
     }
@@ -143,9 +137,6 @@ impl BatchPool {
                 }
             }
             let mut next_state = state - 1;
-            if state & Self::COUNT_MASK < self.count {
-                next_state |= Self::BATCHING_FLAG;
-            }
             if state & Self::REFILLED_FLAG != 0 {
                 if batch.is_none() {
                     // SAFETY: State has "refilled" flag set, and has been loaded with
@@ -181,28 +172,23 @@ impl BatchPool {
         })
     }
 
-    /// Refill the batch, making it available on the other side.
+    /// Refills the batch, making it available on the other side, and returns
+    /// if the pool is full.
     ///
     /// The first batch to be refilled will be put in the pre-allocated slot
     /// for later reused. If the slot is already full, then the batch is
     /// discarded.
     ///
-    /// The batching mode is stopped when the pool is completely refilled.
-    ///
     /// # Safety
     ///
     /// This method must not be called concurrently, as a single thread can refill a batch
     /// at a time.
-    unsafe fn refill(&self, batch: WBatch) {
+    unsafe fn refill(&self, batch: WBatch) -> bool {
         let mut batch = Some(batch);
         let mut state = self.state.load(Ordering::Relaxed);
         loop {
             // Increment the count by one and unset the congestion flag.
             let mut next_state = (state + 1) & !Self::CONGESTED_FLAG;
-            // If the batch count is back to the maximum, unset the batching flag.
-            if next_state & Self::COUNT_MASK == self.count {
-                next_state &= !Self::BATCHING_FLAG;
-            }
             // If there is no batch in the refill cell, put the refilled batch in.
             if state & Self::REFILLED_FLAG == 0 {
                 if let Some(mut batch) = batch.take() {
@@ -225,7 +211,7 @@ impl BatchPool {
                 Ordering::Release,
                 Ordering::Relaxed,
             ) {
-                Ok(_) => break,
+                Ok(_) => return next_state & Self::COUNT_MASK == self.count,
                 Err(s) => state = s,
             }
         }
@@ -235,18 +221,6 @@ impl BatchPool {
     /// The congested flag should usually be set after waiting a bit.
     fn is_congested(&self) -> bool {
         self.state.load(Ordering::Relaxed) & Self::CONGESTED_FLAG != 0
-    }
-
-    /// Returns if the pool is in batching mode, meaning the network is not sending batches
-    /// quickly enough, and the pipeline should batch messages more.
-    fn is_batching(&self) -> bool {
-        self.state.load(Ordering::Relaxed) & Self::BATCHING_FLAG != 0
-    }
-
-    /// Force stopping the batching mode, usually because a batching limit has been reached.
-    fn stop_batching(&self) {
-        self.state
-            .fetch_and(!Self::BATCHING_FLAG, Ordering::Relaxed);
     }
 }
 
@@ -316,6 +290,8 @@ struct StageIn {
     batch_notifier: Notifier,
     /// Batch pool, to acquire available batches.
     batch_pool: Arc<BatchPool>,
+    /// If TX task backoff is active.
+    backoff_active: Arc<AtomicBool>,
     /// Waiter for batch refilling.
     refill_waiter: Waiter,
     /// Indicates if small batches can be used. Everytime a batch is pushed with a smaller
@@ -418,8 +394,8 @@ impl StageIn {
         } else {
             *current = Some(batch);
             drop(current);
-            // Notify the tx task only if not in batching mode, to not disturb the backoff.
-            if !self.batch_pool.is_batching() {
+            // Notify the tx task only if backoff is not active.
+            if !self.backoff_active.load(Ordering::Relaxed) {
                 let _ = self.batch_notifier.notify();
             }
         }
@@ -630,17 +606,17 @@ struct StageOut {
     batch_pool: Arc<BatchPool>,
     /// Notifier for batch refilling.
     refill_notifier: Notifier,
+    /// If TX task backoff is active.
+    backoff_active: Arc<AtomicBool>,
     /// Current backoff deadline if there is one.
-    backoff: Option<Instant>,
-    /// Latest successful pull instant, used to compute the next backoff deadline.
-    latest_pull: Instant,
+    backoff_deadline: Option<Instant>,
     /// Backoff duration limit.
     batching_time_limit: Duration,
 }
 
 impl StageOut {
-    /// Pull a batch from the given priority queue, or back off if the pipeline
-    /// is batching.
+    /// Pull a batch from the given priority queue, or return a deadline if the
+    /// backoff is activated.
     ///
     /// The backoff deadline is computed from the latest successful pull instant.
     /// Indeed, starting the backoff at pull could introduce unnecessary latency,
@@ -653,47 +629,41 @@ impl StageOut {
     fn pull(&mut self) -> Result<Option<WBatch>, Instant> {
         // First, try to pull a pushed batch.
         if let Some(batch) = self.batch_rx.pull() {
-            self.backoff = None;
-            self.latest_pull = Instant::now();
+            // If the backoff is active, renew the deadline for the next pull.
+            if self.backoff_deadline.is_some() {
+                self.backoff_deadline = Some(Instant::now() + self.batching_time_limit);
+            }
             return Ok(Some(batch));
         }
-        match self.backoff {
-            // If the backoff delay is reached, force stop the batching.
-            Some(backoff) if Instant::now() > backoff => {
-                self.batch_pool.stop_batching();
+        // If backoff is active, and the deadline has been reached, the backoff
+        // is deactivated; otherwise, we keep waiting for the deadline.
+        if let Some(deadline) = self.backoff_deadline {
+            if Instant::now() < deadline {
+                return Err(deadline);
             }
-            // If the backoff delay is not reached, continue waiting.
-            Some(backoff) => return Err(backoff),
-            // If the pipeline is batching, back off with the configuration delay.
-            None if self.batch_pool.is_batching() => {
-                // Starts backoff delay from the latest pull.
-                self.backoff = Some(self.latest_pull + self.batching_time_limit);
-                return Err(self.backoff.unwrap());
-            }
-            None => {}
+            self.backoff_deadline = None;
+            self.backoff_active.store(false, Ordering::Relaxed);
         }
         // Try to retrieve current batch.
         let Ok(mut current) = self.current.try_lock() else {
-            // If the pipeline is currently writing, there are two possibilities:
-            // - either the pipeline is already batching, then we are here because
-            //   backoff delay was reached
-            // - we are simply pulling at the right moment, it happens
-            // In both case, we can return with a minimal backoff delay. Batching
-            // has been disabled if it was active, so the task should be notified
-            // as soon as possible.
-            // Batching may be reenabled by the pipeline, but only after a batch
-            // has been pushed, so we don't care.
-            self.backoff = Some(Instant::now() + Duration::from_millis(1));
-            return Err(self.backoff.unwrap());
+            // The pipeline is currently writing, so we wait a minimal delay.
+            // In any case, backoff is not active at this point, so the task
+            // should be notified as soon as possible.
+            return Err(Instant::now() + Duration::from_millis(1));
         };
-        self.backoff = None;
-        self.latest_pull = Instant::now();
         // Try to pull with the lock held to not miss a batch pushed in between.
         if let Some(batch) = self.batch_rx.pull() {
             return Ok(Some(batch));
         }
-        // Otherwise take the current batch if there was one.
-        Ok(current.take())
+        // If the current batch is pulled, activate preemptively the backoff.
+        // It will be deactivated by the refill if there is no concurrent writing.
+        if let Some(batch) = current.take() {
+            drop(current);
+            self.backoff_active.store(true, Ordering::Relaxed);
+            self.backoff_deadline = Some(Instant::now() + self.batching_time_limit);
+            return Ok(Some(batch));
+        }
+        Ok(None)
     }
 
     /// Refills a batch for the pipeline.
@@ -702,7 +672,12 @@ impl StageOut {
             // SAFETY: there is one batch pool per stage-in/stage-out pair, and it
             // refilled behind an exclusive reference to stage-out, so they cannot
             // be concurrent calls.
-            unsafe { self.batch_pool.refill(batch) };
+            let fully_refilled = unsafe { self.batch_pool.refill(batch) };
+            // If the pool is fully refilled, deactivate the backoff.
+            if fully_refilled {
+                self.backoff_active.store(false, Ordering::Relaxed);
+                self.backoff_deadline = None;
+            }
             let _ = self.refill_notifier.notify();
         }
     }
@@ -760,12 +735,14 @@ impl TransmissionPipeline {
             let (batch_tx, batch_rx) = RingBuffer::<WBatch, RBLEN>::init();
 
             let current = Arc::new(Mutex::new(None));
+            let backoff_active = Arc::new(AtomicBool::new(false));
 
             stage_in.push(StageInShared {
                 queue: Mutex::new(StageIn {
                     batch_tx,
                     batch_notifier: batch_notifier.clone(),
                     batch_pool: batch_pool.clone(),
+                    backoff_active: backoff_active.clone(),
                     refill_waiter,
                     use_small_batch: true,
                     fragbuf: ZBuf::empty(),
@@ -783,8 +760,8 @@ impl TransmissionPipeline {
                 current,
                 batch_pool,
                 refill_notifier,
-                backoff: None,
-                latest_pull: Instant::now(),
+                backoff_active,
+                backoff_deadline: None,
                 batching_time_limit: config.batching_time_limit,
             });
         }
@@ -918,14 +895,16 @@ impl TransmissionPipelineConsumer {
 mod tests {
     use std::{
         convert::TryFrom,
+        future::poll_fn,
         sync::{
             atomic::{AtomicUsize, Ordering},
             Arc,
         },
+        task::Poll,
         time::{Duration, Instant},
     };
 
-    use futures::FutureExt;
+    use futures::{task::AtomicWaker, FutureExt};
     use tokio::{task, task::JoinHandle, time::timeout};
     use zenoh_buffers::{
         reader::{DidntRead, HasReader},
@@ -1416,8 +1395,11 @@ mod tests {
             }),
         }
         .into();
+        let waker = Arc::new(AtomicWaker::new());
+        let waker2 = waker.clone();
         let producer_task: JoinHandle<Result<(), _>> = task::spawn_blocking(move || loop {
             producer.push_network_message(message.clone())?;
+            waker2.wake();
         });
 
         // wait until the producer task has started and pull the first batch;
@@ -1425,14 +1407,24 @@ mod tests {
         // time
         loop {
             if let Some((batch, prio)) = consumer.pull().await {
+                // activate backoff by waiting for a message to be written before refilling
+                let mut polled = false;
+                poll_fn(|cx| {
+                    if polled {
+                        return Poll::Ready(());
+                    }
+                    polled = true;
+                    waker.register(cx.waker());
+                    Poll::Pending
+                })
+                .await;
                 consumer.refill(batch, prio);
                 break;
             }
         }
         // following batch may still use small buffer size
-        let (batch, _) = consumer.pull().await.unwrap();
-        // keep a batch not refilled to simulate network delay
-        let _batch_being_sent = batch;
+        let (batch, prio) = consumer.pull().await.unwrap();
+        consumer.refill(batch, prio);
         // next batches should all have the maximum size
         // don't pull more than 100 batches, because after, the
         // sequence number size increase and the max size change
