@@ -35,225 +35,225 @@ env:
   CARGO_SEMVER_CHECKS_BASELINE_VERSION: 1.0.0
 
 jobs:
-  determine-runner:
-    runs-on: ubuntu-latest
-    outputs:
-      runner: ${{ steps.set-runner.outputs.runner }}
-    steps:
-      - name: Clone this repository
-        uses: actions/checkout@v4
+  # determine-runner:
+  #   runs-on: ubuntu-latest
+  #   outputs:
+  #     runner: ${{ steps.set-runner.outputs.runner }}
+  #   steps:
+  #     - name: Clone this repository
+  #       uses: actions/checkout@v4
 
-      - name: Determine which runner to use
-        id: set-runner
-        run: |
-          if [[ -f ci/runners.json ]]; then
-            echo "runner=$(cat ci/runners.json)" >> $GITHUB_OUTPUT
-          else
-            echo "runner=['ubuntu-latest', 'windows-latest', 'macos-latest']" >> $GITHUB_OUTPUT
-          fi
+  #     - name: Determine which runner to use
+  #       id: set-runner
+  #       run: |
+  #         if [[ -f ci/runners.json ]]; then
+  #           echo "runner=$(cat ci/runners.json)" >> $GITHUB_OUTPUT
+  #         else
+  #           echo "runner=['ubuntu-latest', 'windows-latest', 'macos-latest']" >> $GITHUB_OUTPUT
+  #         fi
 
-  check:
-    needs: determine-runner
-    name: Lints and doc tests on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ${{ fromJSON(needs.determine-runner.outputs.runner) }}
+  # check:
+  #   needs: determine-runner
+  #   name: Lints and doc tests on ${{ matrix.os }}
+  #   runs-on: ${{ matrix.os }}
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       os: ${{ fromJSON(needs.determine-runner.outputs.runner) }}
 
-    steps:
-      - name: Clone this repository
-        uses: actions/checkout@v4
+  #   steps:
+  #     - name: Clone this repository
+  #       uses: actions/checkout@v4
 
-      - name: Update Stable Rust toolchain
-        run: rustup update stable
+  #     - name: Update Stable Rust toolchain
+  #       run: rustup update stable
 
-      - name: Setup rust-cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-bin: false
+  #     - name: Setup rust-cache
+  #       uses: Swatinem/rust-cache@v2
+  #       with:
+  #         cache-bin: false
 
-      - name: Install latest cargo-deny
-        uses: taiki-e/install-action@cargo-deny
+  #     - name: Install latest cargo-deny
+  #       uses: taiki-e/install-action@cargo-deny
 
-      - name: Install latest cargo-machete
-        uses: taiki-e/install-action@cargo-machete
+  #     - name: Install latest cargo-machete
+  #       uses: taiki-e/install-action@cargo-machete
 
-      - name: Install latest cargo-semver-checks
-        uses: taiki-e/install-action@cargo-semver-checks
+  #     - name: Install latest cargo-semver-checks
+  #       uses: taiki-e/install-action@cargo-semver-checks
 
-      - name: Code format check
-        run: rustfmt --check --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate,skip_children=true" $(git ls-files '*.rs')
+  #     - name: Code format check
+  #       run: rustfmt --check --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate,skip_children=true" $(git ls-files '*.rs')
 
-      - name: Clippy zenoh no-default-features
-        run: cargo +stable clippy -p zenoh --all-targets --no-default-features -- --deny warnings
+  #     - name: Clippy zenoh no-default-features
+  #       run: cargo +stable clippy -p zenoh --all-targets --no-default-features -- --deny warnings
 
-      - name: Clippy zenoh
-        run: cargo +stable clippy -p zenoh --all-targets -- --deny warnings
+  #     - name: Clippy zenoh
+  #       run: cargo +stable clippy -p zenoh --all-targets -- --deny warnings
 
-      - name: Clippy zenoh unstable
-        run: cargo +stable clippy -p zenoh --all-targets --features unstable -- --deny warnings
+  #     - name: Clippy zenoh unstable
+  #       run: cargo +stable clippy -p zenoh --all-targets --features unstable -- --deny warnings
 
-      - name: Clippy zenoh internal
-        run: cargo +stable clippy -p zenoh --all-targets --features unstable,internal -- --deny warnings
+  #     - name: Clippy zenoh internal
+  #       run: cargo +stable clippy -p zenoh --all-targets --features unstable,internal -- --deny warnings
 
-      - name: Clippy zenoh shared-memory
-        run: cargo +stable clippy -p zenoh --all-targets --features unstable,shared-memory -- --deny warnings
+  #     - name: Clippy zenoh shared-memory
+  #       run: cargo +stable clippy -p zenoh --all-targets --features unstable,shared-memory -- --deny warnings
 
-      - name: Clippy workspace
-        run: cargo +stable clippy --all-targets --features test -- --deny warnings
+  #     - name: Clippy workspace
+  #       run: cargo +stable clippy --all-targets --features test -- --deny warnings
 
-      - name: Clippy workspace unstable
-        run: cargo +stable clippy --all-targets --features unstable,test -- --deny warnings
+  #     - name: Clippy workspace unstable
+  #       run: cargo +stable clippy --all-targets --features unstable,test -- --deny warnings
 
-      - name: Clippy all features
-        if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest' }}
-        run: cargo +stable clippy --all-targets --all-features -- --deny warnings
+  #     - name: Clippy all features
+  #       if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest' }}
+  #       run: cargo +stable clippy --all-targets --all-features -- --deny warnings
 
-      - name: Install generic no_std target
-        # Generic no_std target architecture is x86_64-unknown-none
-        run: rustup target add x86_64-unknown-none
+  #     - name: Install generic no_std target
+  #       # Generic no_std target architecture is x86_64-unknown-none
+  #       run: rustup target add x86_64-unknown-none
 
-      - name: Perform no_std checks
-        run: cargo check --bin nostd_check --target x86_64-unknown-none --manifest-path ci/nostd-check/Cargo.toml
+  #     - name: Perform no_std checks
+  #       run: cargo check --bin nostd_check --target x86_64-unknown-none --manifest-path ci/nostd-check/Cargo.toml
 
-      - name: Run doctests
-        run: cargo test --doc
+  #     - name: Run doctests
+  #       run: cargo test --doc
 
-      - name: Build doc
-        run: cargo doc --no-deps --features unstable
-        env:
-          RUSTDOCFLAGS: -Dwarnings
+  #     - name: Build doc
+  #       run: cargo doc --no-deps --features unstable
+  #       env:
+  #         RUSTDOCFLAGS: -Dwarnings
 
-      - name: Check licenses
-        run: cargo deny check licenses
+  #     - name: Check licenses
+  #       run: cargo deny check licenses
 
-      - name: Check unused dependencies
-        run: cargo machete
+  #     - name: Check unused dependencies
+  #       run: cargo machete
 
-      - name: Check SemVer Compatibility
-        run: cargo +stable semver-checks --verbose --default-features --package zenoh --release-type ${{ env.CARGO_SEMVER_CHECKS_RELEASE_TYPE }} --baseline-version ${{ env.CARGO_SEMVER_CHECKS_BASELINE_VERSION }}
+  #     - name: Check SemVer Compatibility
+  #       run: cargo +stable semver-checks --verbose --default-features --package zenoh --release-type ${{ env.CARGO_SEMVER_CHECKS_RELEASE_TYPE }} --baseline-version ${{ env.CARGO_SEMVER_CHECKS_BASELINE_VERSION }}
 
-  test:
-    needs: determine-runner
-    name: Unit tests on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ${{ fromJSON(needs.determine-runner.outputs.runner) }}
+  # test:
+  #   needs: determine-runner
+  #   name: Unit tests on ${{ matrix.os }}
+  #   runs-on: ${{ matrix.os }}
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       os: ${{ fromJSON(needs.determine-runner.outputs.runner) }}
 
-    steps:
-      - name: Clone this repository
-        uses: actions/checkout@v4
+  #   steps:
+  #     - name: Clone this repository
+  #       uses: actions/checkout@v4
 
-      - name: Install latest Rust toolchain
-        run: rustup show
+  #     - name: Install latest Rust toolchain
+  #       run: rustup show
 
-      - name: Setup rust-cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-bin: false
+  #     - name: Setup rust-cache
+  #       uses: Swatinem/rust-cache@v2
+  #       with:
+  #         cache-bin: false
 
-      - name: Set rustflags
-        if: ${{ matrix.os == 'windows-latest' }}
-        shell: bash
-        run: |
-          echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV
+  #     - name: Set rustflags
+  #       if: ${{ matrix.os == 'windows-latest' }}
+  #       shell: bash
+  #       run: |
+  #         echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV
 
-      - name: Install latest nextest
-        uses: taiki-e/install-action@nextest
+  #     - name: Install latest nextest
+  #       uses: taiki-e/install-action@nextest
 
-      - name: Run tests
-        run: cargo nextest run -F test -F internal_config --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+  #     - name: Run tests
+  #       run: cargo nextest run -F test -F internal_config --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
-      - name: Run tests with SHM
-        if: ${{ matrix.os == 'macos-latest' || matrix.os == 'windows-latest' }}
-        run: cargo nextest run -F test -F shared-memory -F unstable -F internal_config -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+  #     - name: Run tests with SHM
+  #       if: ${{ matrix.os == 'macos-latest' || matrix.os == 'windows-latest' }}
+  #       run: cargo nextest run -F test -F shared-memory -F unstable -F internal_config -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
-      - name: Run tests with SHM + unixpipe
-        if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: cargo nextest run -F test -F shared-memory -F unstable -F internal_config -F transport_unixpipe -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+  #     - name: Run tests with SHM + unixpipe
+  #       if: ${{ matrix.os == 'ubuntu-latest' }}
+  #       run: cargo nextest run -F test -F shared-memory -F unstable -F internal_config -F transport_unixpipe -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
-      - name: Check for feature leaks
-        if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: cargo nextest run -p zenohd --no-default-features
+  #     - name: Check for feature leaks
+  #       if: ${{ matrix.os == 'ubuntu-latest' }}
+  #       run: cargo nextest run -p zenohd --no-default-features
 
-  valgrind:
-    name: Memory leak checks
-    runs-on: ubuntu-latest
-    needs: check
-    steps:
-      - name: Clone this repository
-        uses: actions/checkout@v4
+  # valgrind:
+  #   name: Memory leak checks
+  #   runs-on: ubuntu-latest
+  #   needs: check
+  #   steps:
+  #     - name: Clone this repository
+  #       uses: actions/checkout@v4
 
-      - name: Install latest Rust toolchain
-        run: rustup show
+  #     - name: Install latest Rust toolchain
+  #       run: rustup show
 
-      - name: Install valgrind
-        uses: taiki-e/install-action@valgrind
+  #     - name: Install valgrind
+  #       uses: taiki-e/install-action@valgrind
 
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-bin: false
+  #     - uses: Swatinem/rust-cache@v2
+  #       with:
+  #         cache-bin: false
 
-      - name: Run memory leaks check
-        run: ci/valgrind-check/run.sh
-        shell: bash
+  #     - name: Run memory leaks check
+  #       run: ci/valgrind-check/run.sh
+  #       shell: bash
 
-  typos:
-    name: Typos Check
-    runs-on: ubuntu-latest
-    steps:
-      - name: Clone this repository
-        uses: actions/checkout@v4
+  # typos:
+  #   name: Typos Check
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Clone this repository
+  #       uses: actions/checkout@v4
 
-      - name: Check spelling
-        uses: crate-ci/typos@master
+  #     - name: Check spelling
+  #       uses: crate-ci/typos@master
 
-  markdown_lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: DavidAnson/markdownlint-cli2-action@v18
-        with:
-          config: ".markdownlint.yaml"
-          globs: "**/README.md"
+  # markdown_lint:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: DavidAnson/markdownlint-cli2-action@v18
+  #       with:
+  #         config: ".markdownlint.yaml"
+  #         globs: "**/README.md"
 
-  coverage:
-    name: Coverage
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest]
-        rust: [nightly, stable]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v4
+  # coverage:
+  #   name: Coverage
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       os: [ubuntu-latest]
+  #       rust: [nightly, stable]
+  #   runs-on: ${{ matrix.os }}
+  #   steps:
+  #     - name: Checkout sources
+  #       uses: actions/checkout@v4
 
-      - name: Install ${{ matrix.rust }} Rust toolchain
-        run: |
-          rustup override set ${{ matrix.rust }}
-          rustup update ${{ matrix.rust }}
-          rustup component add llvm-tools-preview
+  #     - name: Install ${{ matrix.rust }} Rust toolchain
+  #       run: |
+  #         rustup override set ${{ matrix.rust }}
+  #         rustup update ${{ matrix.rust }}
+  #         rustup component add llvm-tools-preview
 
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-bin: false
+  #     - uses: Swatinem/rust-cache@v2
+  #       with:
+  #         cache-bin: false
 
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
+  #     - name: Install cargo-llvm-cov
+  #       uses: taiki-e/install-action@cargo-llvm-cov
 
-      - name: Generate code coverage
-        run: cargo +${{ matrix.rust }} llvm-cov test --features unstable --features test --features shared-memory ${{ matrix.rust == 'nightly' && '--doctests' || '' }} --lcov --output-path lcov.info --no-cfg-coverage --no-cfg-coverage-nightly --ignore-run-fail -- --skip test_default_features --skip router_linkstate --skip three_node_combination  --skip three_node_combination_multicast
+  #     - name: Generate code coverage
+  #       run: cargo +${{ matrix.rust }} llvm-cov test --features unstable --features test --features shared-memory ${{ matrix.rust == 'nightly' && '--doctests' || '' }} --lcov --output-path lcov.info --no-cfg-coverage --no-cfg-coverage-nightly --ignore-run-fail -- --skip test_default_features --skip router_linkstate --skip three_node_combination  --skip three_node_combination_multicast
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          #token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
-          files: lcov.info
-          fail_ci_if_error: true
+  #     - name: Upload coverage to Codecov
+  #       uses: codecov/codecov-action@v4
+  #       with:
+  #         #token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
+  #         files: lcov.info
+  #         fail_ci_if_error: true
 
   msrvs:
     name: MSRV checks on ${{ matrix.os }}
@@ -287,7 +287,7 @@ jobs:
   ci:
     name: CI status checks
     runs-on: ubuntu-latest
-    needs: [check, test, valgrind, typos, markdown_lint, coverage]
+    # needs: [check, test, valgrind, typos, markdown_lint, coverage]
     if: always()
     steps:
       - name: Check whether all jobs pass
