@@ -12,7 +12,6 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
 name = "zenoh-link-unixsock_stream"
 version = { workspace = true }
 repository = { workspace = true }
@@ -23,7 +22,7 @@ authors = [
   "Olivier Hécart <olivier.hecart@zettascale.tech>",
   "Luca Cominardi <luca.cominardi@zettascale.tech>",
   "Pierre Avital <pierre.avital@zettascale.tech>",
-  "Gabriele Baldoni <gabriele.baldoni@zettascale.tech>"
+  "Gabriele Baldoni <gabriele.baldoni@zettascale.tech>",
 ]
 edition = { workspace = true }
 license = { workspace = true }
@@ -33,9 +32,15 @@ description = "Internal crate for zenoh."
 
 [dependencies]
 async-trait = { workspace = true }
-tracing = {workspace = true}
+tracing = { workspace = true }
 nix = { workspace = true }
-tokio = { workspace = true, features = ["io-std", "macros", "net", "rt-multi-thread", "time"] }
+tokio = { workspace = true, features = [
+  "io-std",
+  "macros",
+  "net",
+  "rt-multi-thread",
+  "time",
+] }
 tokio-util = { workspace = true, features = ["rt"] }
 uuid = { workspace = true, features = ["default"] }
 zenoh-core = { workspace = true }

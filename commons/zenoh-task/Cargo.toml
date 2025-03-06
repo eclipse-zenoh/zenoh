@@ -12,12 +12,11 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
 name = "zenoh-task"
 version = { workspace = true }
 repository = { workspace = true }
 homepage = { workspace = true }
-authors = {workspace = true }
+authors = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
 categories = { workspace = true }
@@ -30,7 +29,7 @@ tracing-instrument = ["zenoh-runtime/tracing-instrument"]
 [dependencies]
 tokio = { workspace = true, features = ["default", "sync"] }
 futures = { workspace = true }
-tracing = {workspace = true}
+tracing = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-runtime = { workspace = true }
 tokio-util = { workspace = true, features = ["rt"] }

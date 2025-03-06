@@ -12,7 +12,6 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
 name = "zenoh-link-unixpipe"
 version = { workspace = true }
 repository = { workspace = true }
@@ -29,7 +28,7 @@ transport_unixpipe = []
 
 [dependencies]
 async-trait = { workspace = true }
-tracing = {workspace = true}
+tracing = { workspace = true }
 rand = { workspace = true, features = ["default"] }
 zenoh-core = { workspace = true }
 zenoh-config = { workspace = true }

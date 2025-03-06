@@ -12,7 +12,6 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
 name = "zenoh-examples"
 version = { workspace = true }
 repository = { workspace = true }
@@ -38,7 +37,9 @@ prost = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "time", "io-std"] }
 zenoh = { workspace = true, default-features = false }
-zenoh-ext = { workspace = true, default-features = false, features = ["unstable"] }
+zenoh-ext = { workspace = true, default-features = false, features = [
+    "unstable",
+] }
 
 [dev-dependencies]
 rand = { workspace = true, features = ["default"] }

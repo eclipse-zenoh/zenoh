@@ -12,7 +12,6 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
 name = "zenoh-plugin-rest"
 version = { workspace = true }
 repository = { workspace = true }
@@ -33,7 +32,7 @@ name = "zenoh_plugin_rest"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-async-std = { workspace = true, features = ["tokio1"], optional = true}
+async-std = { workspace = true, features = ["tokio1"], optional = true }
 anyhow = { workspace = true, features = ["default"] }
 base64 = { workspace = true }
 flume = { workspace = true }

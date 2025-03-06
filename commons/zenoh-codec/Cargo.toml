@@ -12,15 +12,14 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
 name = "zenoh-codec"
 version = { workspace = true }
 repository = { workspace = true }
 homepage = { workspace = true }
 authors = [
-	"kydos <angelo@icorsaro.net>",
-	"Luca Cominardi <luca.cominardi@zettascale.tech>",
-	"Pierre Avital <pierre.avital@zettascale.tech>",
+    "kydos <angelo@icorsaro.net>",
+    "Luca Cominardi <luca.cominardi@zettascale.tech>",
+    "Pierre Avital <pierre.avital@zettascale.tech>",
 ]
 edition = { workspace = true }
 license = { workspace = true }
@@ -30,20 +29,16 @@ description = "Internal crate for zenoh."
 
 [features]
 default = ["std"]
-std = [
-    "tracing",
-    "uhlc/std",
-    "zenoh-protocol/std"
-]
+std = ["tracing", "uhlc/std", "zenoh-protocol/std"]
 shared-memory = [
     "std",
     "zenoh-shm",
     "zenoh-protocol/shared-memory",
-    "zenoh-buffers/shared-memory"
+    "zenoh-buffers/shared-memory",
 ]
 
 [dependencies]
-tracing = {workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
 uhlc = { workspace = true }
 zenoh-buffers = { workspace = true, default-features = false }
 zenoh-protocol = { workspace = true }
@@ -55,7 +50,7 @@ criterion = { workspace = true }
 
 rand = { workspace = true, features = ["default"] }
 zenoh-protocol = { workspace = true, features = ["test"] }
-zenoh-util = {workspace = true }
+zenoh-util = { workspace = true }
 
 [[bench]]
 name = "codec"

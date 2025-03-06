@@ -12,7 +12,6 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
 name = "zenoh_backend_traits"
 version = { workspace = true }
 repository = { workspace = true }
@@ -33,7 +32,10 @@ default = ["zenoh/default"]
 async-trait = { workspace = true }
 derive_more = { workspace = true }
 serde_json = { workspace = true }
-zenoh = { workspace = true, default-features = false, features = ["unstable", "internal"] }
+zenoh = { workspace = true, default-features = false, features = [
+    "unstable",
+    "internal",
+] }
 zenoh-result = { workspace = true }
 zenoh-util = { workspace = true }
 schemars = { workspace = true }

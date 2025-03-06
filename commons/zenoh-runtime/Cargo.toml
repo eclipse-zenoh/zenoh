@@ -1,6 +1,5 @@
 [package]
 name = "zenoh-runtime"
-rust-version = { workspace = true }
 version = { workspace = true }
 repository = { workspace = true }
 homepage = { workspace = true }
@@ -20,7 +19,15 @@ tracing = { workspace = true }
 ron = { workspace = true }
 serde = { workspace = true }
 lazy_static = { workspace = true }
-tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
+tokio = { workspace = true, features = [
+    "fs",
+    "io-util",
+    "macros",
+    "net",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
 zenoh-result = { workspace = true, features = ["std"] }
 zenoh-macros = { workspace = true }
 

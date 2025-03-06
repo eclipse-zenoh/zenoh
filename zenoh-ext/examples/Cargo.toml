@@ -12,7 +12,6 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
 name = "zenoh-ext-examples"
 version = { workspace = true }
 repository = { workspace = true }
@@ -42,7 +41,9 @@ tokio = { workspace = true, features = [
     "io-std",
 ] }
 zenoh = { workspace = true, default-features = false }
-zenoh-ext = { workspace = true, default-features = false, features = ["unstable"]}
+zenoh-ext = { workspace = true, default-features = false, features = [
+    "unstable",
+] }
 zenoh-examples = { workspace = true, default-features = false }
 
 [dev-dependencies]

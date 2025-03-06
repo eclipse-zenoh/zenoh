@@ -12,7 +12,6 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
 name = "zenoh-link-vsock"
 version = { workspace = true }
 repository = { workspace = true }
@@ -28,7 +27,7 @@ description = "Internal crate for zenoh."
 async-trait = { workspace = true }
 tokio = { workspace = true, features = ["net", "io-util", "rt", "time"] }
 tokio-util = { workspace = true, features = ["rt"] }
-tracing = {workspace = true}
+tracing = { workspace = true }
 libc = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-link-commons = { workspace = true }
@@ -39,4 +38,4 @@ zenoh-runtime = { workspace = true }
 # Workspaces does not support platform dependent dependencies, and 
 # tokio-vsock not compiled on other platforms, so we put it there
 [target.'cfg(target_os = "linux")'.dependencies]
-tokio-vsock = "0.5.0" 
+tokio-vsock = "0.5.0"

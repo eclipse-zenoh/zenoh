@@ -12,7 +12,6 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
 name = "zenoh-sync"
 version = { workspace = true }
 repository = { workspace = true }
@@ -37,5 +36,10 @@ zenoh-collections = { workspace = true, features = ["default"] }
 zenoh-core = { workspace = true }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["macros", "sync", "rt-multi-thread", "time"] }
+tokio = { workspace = true, features = [
+  "macros",
+  "sync",
+  "rt-multi-thread",
+  "time",
+] }
 zenoh-result = { workspace = true }
