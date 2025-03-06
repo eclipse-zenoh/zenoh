@@ -1403,7 +1403,7 @@ mod tests {
         });
 
         // wait until the producer task has started and pull the first batch;
-        // it can have arbirary size, should be quite small if we wake up in
+        // it can have arbitrary size, should be quite small if we wake up in
         // time
         loop {
             if let Some((batch, prio)) = consumer.pull().await {
