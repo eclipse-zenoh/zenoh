@@ -25,7 +25,7 @@ mod platform {
 
     use zenoh_result::ZResult;
 
-    use crate::posix_shm::segment_lock::unix::ExclusiveShmLock;
+    use crate::shm;
 
     pub(crate) fn cleanup_orphaned_segments() {
         if let Err(e) = cleanup_orphaned_segments_inner() {
@@ -34,6 +34,9 @@ mod platform {
     }
 
     fn cleanup_orphaned_segments_inner() -> ZResult<()> {
+        #[cfg(shm_external_lockfile)]
+        let shm_files = fs::read_dir(std::env::temp_dir())?;
+        #[cfg(not(shm_external_lockfile))]
         let shm_files = fs::read_dir("/dev/shm")?;
 
         for segment_file in shm_files.filter_map(Result::ok).filter(|f| {
@@ -42,10 +45,14 @@ mod platform {
             }
             false
         }) {
-            let os_id = segment_file.file_name();
-            if let Ok(lock) = ExclusiveShmLock::open_exclusive(&os_id) {
-                let _ = std::fs::remove_file(segment_file.path());
-                drop(lock);
+            if let Some(Some(id_str)) = segment_file
+                .path()
+                .file_stem()
+                .map(|os_str| os_str.to_str())
+            {
+                if let Ok(id) = id_str.parse::<u64>() {
+                    shm::Segment::ensure_not_persistent(id);
+                }
             }
         }
 
