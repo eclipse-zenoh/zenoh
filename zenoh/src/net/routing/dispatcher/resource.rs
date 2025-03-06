@@ -39,7 +39,7 @@ use super::{
     tables::{Tables, TablesLock},
 };
 use crate::net::routing::{
-    dispatcher::{face::Face, small_string::SmallString},
+    dispatcher::{face::Face, suffix::Suffix},
     router::{disable_matches_data_routes, disable_matches_query_routes},
     RoutingContext,
 };
@@ -201,7 +201,7 @@ impl ResourceContext {
 
 pub struct Resource {
     pub(crate) parent: Option<Arc<Resource>>,
-    pub(crate) suffix: SmallString,
+    pub(crate) suffix: Suffix,
     pub(crate) nonwild_prefix: Option<Arc<Resource>>,
     pub(crate) children: SingleOrBoxHashSet<Child>,
     pub(crate) context: Option<Box<ResourceContext>>,
@@ -279,7 +279,7 @@ impl Resource {
 
         Resource {
             parent: Some(parent.clone()),
-            suffix: SmallString::from(suffix),
+            suffix: Suffix::new(suffix),
             nonwild_prefix,
             children: SingleOrBoxHashSet::new(),
             context: context.map(Box::new),
@@ -347,7 +347,7 @@ impl Resource {
     pub fn root() -> Arc<Resource> {
         Arc::new(Resource {
             parent: None,
-            suffix: SmallString::from(""),
+            suffix: Suffix::new(""),
             nonwild_prefix: None,
             children: SingleOrBoxHashSet::new(),
             context: None,
