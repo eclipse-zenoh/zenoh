@@ -74,6 +74,7 @@ unstable = [
   "zenoh-config/unstable",
 ]
 internal_config = []
+lower_latency = ["zenoh-runtime/lower_latency"]
 tracing-instrument = [
   "zenoh-task/tracing-instrument",
   "zenoh-runtime/tracing-instrument",

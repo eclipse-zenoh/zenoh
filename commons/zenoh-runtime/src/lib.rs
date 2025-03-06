@@ -79,6 +79,15 @@ impl RuntimeParam {
                 format!("{}-{}", zrt, id)
             })
             .build()?;
+        #[cfg(feature = "lower_latency")]
+        if zrt == ZRuntime::RX {
+            tracing::debug!("Spawning RX runtime polling task...");
+            let _ = rt.spawn(async {
+                loop {
+                    tokio::time::sleep(tokio::time::Duration::from_micros(100)).await;
+                }
+            });
+        }
         Ok(rt)
     }
 }
