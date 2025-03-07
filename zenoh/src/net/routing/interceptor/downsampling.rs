@@ -20,7 +20,6 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    fmt::Display,
     sync::{Arc, Mutex},
 };
 
@@ -140,21 +139,11 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub(crate) struct DownsamplingFilters {
     push: bool,
     query: bool,
     reply: bool,
-}
-
-impl Display for DownsamplingFilters {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "[ push={}, query={}, reply={} ]",
-            self.push, self.query, self.reply
-        )
-    }
 }
 
 impl From<&[DownsamplingMessage]> for DownsamplingFilters {
@@ -263,7 +252,7 @@ impl DownsamplingInterceptor {
                 },
             );
             tracing::debug!(
-                "New downsampler rule enabled: key_expr={:?}, threshold={:?}, messages={}",
+                "New downsampler rule enabled: key_expr={:?}, threshold={:?}, messages={:?}",
                 rule.key_expr,
                 threshold,
                 messages,
