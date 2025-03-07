@@ -79,6 +79,8 @@ impl RuntimeParam {
                 format!("{}-{}", zrt, id)
             })
             .build()?;
+        // run special task that produces spurious wakeups on RX executor and fixes
+        // latency issue on low publication rates
         #[cfg(feature = "lower_latency")]
         if zrt == ZRuntime::RX {
             tracing::debug!("Spawning RX runtime polling task...");
