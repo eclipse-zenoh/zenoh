@@ -13,6 +13,7 @@
 #
 [package]
 name = "zenoh-config"
+rust-version = "1.70.0"
 version = { workspace = true }
 repository = { workspace = true }
 homepage = { workspace = true }

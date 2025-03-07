@@ -13,6 +13,7 @@
 #
 [package]
 name = "zenohd"
+rust-version = "1.74.1"
 version = { workspace = true }
 repository = { workspace = true }
 homepage = { workspace = true }

@@ -19,6 +19,7 @@ edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
 name = "zenoh-link-commons"
+rust-version = "1.70.0"
 repository = { workspace = true }
 version = { workspace = true }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

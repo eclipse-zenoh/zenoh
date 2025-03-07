@@ -13,6 +13,7 @@
 #
 [package]
 name = "zenoh-backend-example"
+rust-version = "1.75.0"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
