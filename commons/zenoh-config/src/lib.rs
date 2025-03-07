@@ -88,6 +88,14 @@ pub enum InterceptorFlow {
     Ingress,
 }
 
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum DownsamplingMessage {
+    Push,
+    Query,
+    Reply,
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct DownsamplingRuleConf {
     /// A list of key-expressions to which the downsampling will be applied.
@@ -104,10 +112,12 @@ pub struct DownsamplingItemConf {
     /// A list of interfaces to which the downsampling will be applied
     /// Downsampling will be applied for all interfaces if the parameter is None
     pub interfaces: Option<Vec<String>>,
+    // list of message types on which the downsampling will be applied
+    pub messages: Vec<DownsamplingMessage>,
     /// A list of interfaces to which the downsampling will be applied.
     pub rules: Vec<DownsamplingRuleConf>,
-    /// Downsampling flow direction: egress, ingress
-    pub flow: InterceptorFlow,
+    /// Downsampling flow directions: egress and/or ingress
+    pub flows: Option<Vec<InterceptorFlow>>,
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
