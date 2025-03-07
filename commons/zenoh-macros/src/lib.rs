@@ -28,7 +28,11 @@ use zenoh_keyexpr::{
     key_expr::keyexpr,
 };
 
-const RUSTC_VERSION: &str = include_str!(concat!(env!("OUT_DIR"), "/version.rs"));
+#[cfg(not(windows))]
+const RUSTC_VERSION: &str = include_str!(concat!(env!("OUT_DIR"), "/", "version.rs"));
+
+#[cfg(windows)]
+const RUSTC_VERSION: &str = include_str!(concat!(env!("OUT_DIR"), "\\", "version.rs"));
 
 #[proc_macro]
 pub fn rustc_version_release(_tokens: TokenStream) -> TokenStream {
