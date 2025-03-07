@@ -520,6 +520,17 @@ pub fn ke(tokens: TokenStream) -> TokenStream {
     }
 }
 
+/// Equivalent to [`nonwild_keyexpr::new`](zenoh_keyexpr::nonwild_keyexpr::new), but the check is run at compile-time and will throw a compile error in case of failure.
+#[proc_macro]
+pub fn nonwild_ke(tokens: TokenStream) -> TokenStream {
+    let value: LitStr = syn::parse(tokens).unwrap();
+    let ke = value.value();
+    match zenoh_keyexpr::nonwild_keyexpr::new(&ke) {
+        Ok(_) => quote!(unsafe { zenoh::key_expr::nonwild_keyexpr::from_str_unchecked(#ke)}).into(),
+        Err(e) => panic!("{}", e),
+    }
+}
+
 mod zenoh_runtime_derive;
 use syn::DeriveInput;
 use zenoh_runtime_derive::{derive_generic_runtime_param, derive_register_param};
