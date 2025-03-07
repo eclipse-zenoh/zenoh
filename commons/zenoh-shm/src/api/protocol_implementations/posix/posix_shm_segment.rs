@@ -24,8 +24,6 @@ use crate::{
     posix_shm::array::ArrayInSHM,
 };
 
-const POSIX_SHM_SEGMENT_PREFIX: &str = "posix_shm_provider_segment";
-
 #[derive(Debug)]
 pub(crate) struct PosixShmSegment {
     pub(crate) segment: ArrayInSHM<SegmentID, u8, ChunkID>,
@@ -33,12 +31,12 @@ pub(crate) struct PosixShmSegment {
 
 impl PosixShmSegment {
     pub(crate) fn create(alloc_size: NonZeroUsize) -> ZResult<Self> {
-        let segment = ArrayInSHM::create(alloc_size.get(), POSIX_SHM_SEGMENT_PREFIX)?;
+        let segment = ArrayInSHM::create(alloc_size)?;
         Ok(Self { segment })
     }
 
     pub(crate) fn open(id: SegmentID) -> ZResult<Self> {
-        let segment = ArrayInSHM::open(id, POSIX_SHM_SEGMENT_PREFIX)?;
+        let segment = ArrayInSHM::open(id)?;
         Ok(Self { segment })
     }
 }
