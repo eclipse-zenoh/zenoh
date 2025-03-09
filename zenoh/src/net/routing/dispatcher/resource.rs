@@ -246,7 +246,7 @@ impl DerefMut for Child {
 
 impl PartialEq for Child {
     fn eq(&self, other: &Self) -> bool {
-        *self.0.suffix == *other.0.suffix
+        self.0.suffix == other.0.suffix
     }
 }
 

@@ -8,7 +8,7 @@ use std::{
     mem::{ManuallyDrop, MaybeUninit},
     ops::Deref,
     ptr,
-    ptr::{addr_of_mut, NonNull},
+    ptr::NonNull,
     slice,
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -18,8 +18,7 @@ use std::{
 
 static SUFFIX_CACHE: OnceLock<Mutex<HashSet<ArcSuffix>>> = OnceLock::new();
 
-// Use repr C to be able to use bytes as a DST field,
-// and align(2) for pointer tagging
+// use repr C to be able to use bytes as a DST field, and align(2) for pointer tagging
 #[repr(C, align(2))]
 struct ArcSuffixInner {
     rc: AtomicUsize,
@@ -49,7 +48,7 @@ impl ArcSuffix {
         }
         let layout = ArcSuffixInner::layout(s.len());
         // SAFETY: layout is not zero-sized.
-        let Some(inner_ptr): Option<NonNull<ArcSuffixInner>> =
+        let Some(mut inner_ptr): Option<NonNull<ArcSuffixInner>> =
             NonNull::new(unsafe { alloc::alloc(layout) }.cast())
         else {
             handle_alloc_error(layout);
@@ -59,9 +58,10 @@ impl ArcSuffix {
             len: s.len(),
             bytes: [],
         };
+        // SAFETY: inner_ptr is valid for write with the correct layout
         unsafe {
             ptr::write(inner_ptr.as_ptr(), inner);
-            let bytes = addr_of_mut!((*inner_ptr.as_ptr()).bytes).cast();
+            let bytes = inner_ptr.as_mut().bytes.as_mut_ptr();
             ptr::copy_nonoverlapping(s.as_ptr(), bytes, s.len());
         };
         let suffix = ArcSuffix(inner_ptr);
@@ -71,11 +71,10 @@ impl ArcSuffix {
     }
 
     fn as_str(&self) -> &str {
-        let inner = self.0.as_ptr();
         // SAFETY: bytes have been initialized with a valid string
         unsafe {
-            let bytes = addr_of_mut!((*inner).bytes).cast();
-            std::str::from_utf8_unchecked(slice::from_raw_parts(bytes, (*inner).len))
+            let inner = self.0.as_ref();
+            std::str::from_utf8_unchecked(slice::from_raw_parts(inner.bytes.as_ptr(), inner.len))
         }
     }
 }
@@ -85,15 +84,23 @@ impl Drop for ArcSuffix {
         // SAFETY: the inner pointer is guaranteed to be valid as long as
         // the arc is valid, and there is no concurrent mutation as we are
         // using a shared reference.
-        let inner = unsafe { self.0.as_mut() };
-        // When there is only the cached instance left, remove it from the cache
+        let inner = unsafe { self.0.as_ref() };
+        // when there is only the cached instance left, remove it from the cache
         if inner.rc.fetch_sub(1, Ordering::Release) != 2 {
             return;
         }
         let mut cache = SUFFIX_CACHE.get().unwrap().lock().unwrap();
-        // See `Arc::drop` documentation for the ordering
+        // with the lock acquired check if it is still the last instance and remove it
+        // see `Arc::drop` documentation for the ordering
         if inner.rc.load(Ordering::Acquire) == 1 {
+            // remove will trigger an additional drop, but fetch_sub will return 1
+            // so drop will return directly
             assert!(cache.remove(self));
+            // Prevent memory leak by deallocating the cache when it is empty
+            if cache.is_empty() {
+                *cache = HashSet::new();
+            }
+            drop(cache);
             // SAFETY: the arc was allocated with this layout
             unsafe { alloc::dealloc(self.0.as_ptr().cast(), ArcSuffixInner::layout(inner.len)) };
         }
@@ -106,7 +113,7 @@ impl Clone for ArcSuffix {
         // the arc is valid, and there is no concurrent mutation as we are
         // using a shared reference.
         let inner = unsafe { self.0.as_ref() };
-        // See `Arc::clone` documentation
+        // see `Arc::clone` documentation
         let old_size = inner.rc.fetch_add(1, Ordering::Relaxed);
         const MAX_REFCOUNT: usize = isize::MAX as usize;
         if old_size > MAX_REFCOUNT {
@@ -197,6 +204,16 @@ impl Suffix {
     }
 }
 
+impl Drop for Suffix {
+    fn drop(&mut self) {
+        unsafe {
+            if !self.inlined.is_inlined() {
+                ManuallyDrop::drop(&mut self.arc);
+            }
+        }
+    }
+}
+
 impl Deref for Suffix {
     type Target = str;
     fn deref(&self) -> &Self::Target {
@@ -207,6 +224,26 @@ impl Deref for Suffix {
                 self.arc.as_str()
             }
         }
+    }
+}
+
+impl PartialEq for Suffix {
+    fn eq(&self, other: &Self) -> bool {
+        **self == **other
+    }
+}
+
+impl Eq for Suffix {}
+
+impl PartialEq<str> for Suffix {
+    fn eq(&self, other: &str) -> bool {
+        **self == *other
+    }
+}
+
+impl PartialEq<Suffix> for str {
+    fn eq(&self, other: &Suffix) -> bool {
+        *self == **other
     }
 }
 
