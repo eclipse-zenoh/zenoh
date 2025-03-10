@@ -169,11 +169,11 @@ jobs:
 
       - name: Run tests with SHM + lowlatency
         if: ${{ matrix.os == 'macos-latest' || matrix.os == 'windows-latest' }}
-        run: cargo nextest run -F test -F lower_latency -F shared-memory -F unstable -F internal_config -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+        run: cargo nextest run -F test -F fix_tokio_latency -F shared-memory -F unstable -F internal_config -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Run tests with SHM + lowlatency + unixpipe
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: cargo nextest run -F test -F lower_latency -F shared-memory -F unstable -F internal_config -F transport_unixpipe -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+        run: cargo nextest run -F test -F fix_tokio_latency -F shared-memory -F unstable -F internal_config -F transport_unixpipe -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Check for feature leaks
         if: ${{ matrix.os == 'ubuntu-latest' }}

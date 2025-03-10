@@ -81,7 +81,7 @@ impl RuntimeParam {
             .build()?;
         // run special task that produces spurious wakeups on RX executor and fixes
         // latency issue on low publication rates
-        #[cfg(feature = "lower_latency")]
+        #[cfg(feature = "fix_tokio_latency")]
         if zrt == ZRuntime::RX {
             tracing::debug!("Spawning RX runtime polling task...");
             #[allow(clippy::let_underscore_future)]
