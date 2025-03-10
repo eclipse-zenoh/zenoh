@@ -19,8 +19,6 @@ use std::{
 
 use zenoh_result::ZResult;
 
-pub const TEST_SEGMENT_PREFIX: &str = "test";
-
 pub fn validate_memory(mem1: &mut [u8], mem2: &[u8]) {
     assert!(mem1.len() == mem2.len());
     for cycle in 0..255u8 {

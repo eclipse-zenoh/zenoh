@@ -25,15 +25,17 @@ use zenoh_shm::api::{
 };
 
 static BUFFER_NUM: usize = 100;
-static BUFFER_SIZE: usize = 1024;
+static BUFFER_SIZE: usize = 1000;
 
 #[test]
 fn posix_shm_provider_create() {
-    let _backend = PosixShmProviderBackend::builder()
-        .with_size(1024)
+    let size = 1024;
+    let backend = PosixShmProviderBackend::builder()
+        .with_size(size)
         .expect("Error creating Layout!")
         .wait()
         .expect("Error creating PosixShmProviderBackend!");
+    assert!(backend.available() >= size);
 }
 
 #[test]
@@ -74,26 +76,41 @@ fn posix_shm_provider_open() {
 
 #[test]
 fn posix_shm_provider_allocator() {
+    // size to allocate in the provider
+    let size_to_alloc = BUFFER_SIZE * BUFFER_NUM;
+
     let backend = PosixShmProviderBackend::builder()
-        .with_size(BUFFER_SIZE * BUFFER_NUM)
+        .with_size(size_to_alloc)
         .expect("Error creating Layout!")
         .wait()
         .expect("Error creating PosixShmProviderBackend!");
+
+    // the real size of memory available in the provider
+    let real_size = backend.available();
+    assert!(real_size >= size_to_alloc);
+
+    // the real number of buffers allocatable in the provider
+    let real_num = real_size / BUFFER_SIZE;
+    assert!(real_num >= BUFFER_NUM);
+
+    // the remainder in the provider
+    let remainder = real_size - real_num * BUFFER_SIZE;
+    assert!(remainder < BUFFER_SIZE);
 
     let layout = MemoryLayout::new(BUFFER_SIZE, AllocAlignment::default()).unwrap();
 
     // exhaust memory by allocating it all
     let mut buffers = vec![];
-    for _ in 0..BUFFER_NUM {
+    for _ in 0..real_num {
         let buf = backend
             .alloc(&layout)
             .expect("PosixShmProviderBackend: error allocating buffer");
         buffers.push(buf);
     }
 
-    for _ in 0..BUFFER_NUM {
+    for _ in 0..real_num {
         // there is nothing to allocate at this point
-        assert_eq!(backend.available(), 0);
+        assert_eq!(backend.available(), remainder);
         assert!(backend.alloc(&layout).is_err());
 
         // free buffer
@@ -107,11 +124,11 @@ fn posix_shm_provider_allocator() {
         buffers.push(buf);
     }
 
-    // free everything
+    // free buffers
     while let Some(buffer) = buffers.pop() {
         backend.free(&buffer.descriptor);
     }
 
     // confirm that allocator is free
-    assert_eq!(backend.available(), BUFFER_NUM * BUFFER_SIZE);
+    assert_eq!(backend.available(), real_size);
 }
