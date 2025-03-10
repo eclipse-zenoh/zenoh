@@ -39,8 +39,8 @@ use zenoh_transport::{
 };
 
 use super::{
-    authorization::PolicyEnforcer, EgressInterceptor, IngressInterceptor, InterceptorFactory,
-    InterceptorFactoryTrait, InterceptorTrait,
+    authorization::PolicyEnforcer, ComputeOnMiss, EgressInterceptor, IngressInterceptor,
+    InterceptorFactory, InterceptorFactoryTrait, InterceptorTrait,
 };
 use crate::{
     api::key_expr::KeyExpr,
@@ -181,16 +181,16 @@ impl InterceptorFactoryTrait for AclEnforcer {
                 self.enforcer.default_permission
             );
         }
-        let ingress_interceptor = Box::new(IngressAclEnforcer {
+        let ingress_interceptor = Box::new(ComputeOnMiss::new(IngressAclEnforcer {
             policy_enforcer: self.enforcer.clone(),
             zid,
             subject: auth_subjects.clone(),
-        });
-        let egress_interceptor = Box::new(EgressAclEnforcer {
+        }));
+        let egress_interceptor = Box::new(ComputeOnMiss::new(EgressAclEnforcer {
             policy_enforcer: self.enforcer.clone(),
             zid,
             subject: auth_subjects,
-        });
+        }));
         (
             self.enforcer
                 .interface_enabled
@@ -216,10 +216,76 @@ impl InterceptorFactoryTrait for AclEnforcer {
         None
     }
 }
+struct Cache {
+    key_expr: String,
+    query: Permission,
+    reply: Permission,
+    put: Permission,
+    delete: Permission,
+    declare_subscriber: Permission,
+    undeclare_subscriber: Permission,
+    declare_queryable: Permission,
+    undeclare_queryable: Permission,
+    declare_token: Permission,
+    undeclare_token: Permission,
+    query_token: Permission,
+    declare_liveliness_subscriber: Permission,
+}
 
 impl InterceptorTrait for IngressAclEnforcer {
     fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
-        Some(Box::new(key_expr.to_string()))
+        let key_expr = key_expr.to_string();
+        if key_expr.is_empty() {
+            return None;
+        }
+        tracing::trace!("Caching ...");
+        Some(Box::new(Cache {
+            query: self.action(AclMessage::Query, "Query (ingress)", &key_expr),
+            reply: self.action(AclMessage::Reply, "Reply (ingress)", &key_expr),
+            put: self.action(AclMessage::Put, "Put (ingress)", &key_expr),
+            delete: self.action(AclMessage::Delete, "Delete (ingress)", &key_expr),
+            declare_subscriber: self.action(
+                AclMessage::DeclareSubscriber,
+                "Declare Subscriber (ingress)",
+                &key_expr,
+            ),
+            undeclare_subscriber: self.action(
+                AclMessage::DeclareSubscriber,
+                "Undeclare Subscriber (ingress)",
+                &key_expr,
+            ),
+            declare_queryable: self.action(
+                AclMessage::DeclareQueryable,
+                "Declare Queryable (ingress)",
+                &key_expr,
+            ),
+            undeclare_queryable: self.action(
+                AclMessage::DeclareQueryable,
+                "Undeclare Queryable (ingress)",
+                &key_expr,
+            ),
+            declare_token: self.action(
+                AclMessage::LivelinessToken,
+                "Liveliness Token (ingress)",
+                &key_expr,
+            ),
+            undeclare_token: self.action(
+                AclMessage::LivelinessToken,
+                "Undeclare Liveliness Token (ingress)",
+                &key_expr,
+            ),
+            query_token: self.action(
+                AclMessage::LivelinessQuery,
+                "Liveliness Query (ingress)",
+                &key_expr,
+            ),
+            declare_liveliness_subscriber: self.action(
+                AclMessage::DeclareLivelinessSubscriber,
+                "Declare Liveliness Subscriber (ingress)",
+                &key_expr,
+            ),
+            key_expr,
+        }))
     }
 
     fn intercept<'a>(
@@ -227,28 +293,36 @@ impl InterceptorTrait for IngressAclEnforcer {
         ctx: RoutingContext<NetworkMessage>,
         cache: Option<&Box<dyn Any + Send + Sync>>,
     ) -> Option<RoutingContext<NetworkMessage>> {
-        let key_expr = cache
-            .and_then(|i| match i.downcast_ref::<String>() {
-                Some(e) => Some(e.as_str()),
-                None => {
-                    tracing::debug!("Cache content was not of type String");
-                    None
-                }
-            })
-            .or_else(|| ctx.full_expr());
+        let cache = cache.and_then(|i| match i.downcast_ref::<Cache>() {
+            Some(c) => Some(c),
+            None => {
+                tracing::debug!("Cache content type is incorrect");
+                None
+            }
+        });
 
+        let key_expr = cache.map(|c| c.key_expr.as_str()).or(ctx.full_expr());
+        let ke = key_expr.unwrap_or("");
         match &ctx.msg.body {
             NetworkBody::Request(Request {
                 payload: RequestBody::Query(_),
                 ..
             }) => {
-                if self.action(AclMessage::Query, "Query (ingress)", key_expr?) == Permission::Deny
+                if ke.is_empty()
+                    || cache
+                        .map(|c| c.query)
+                        .unwrap_or_else(|| self.action(AclMessage::Query, "Query (ingress)", ke))
+                        == Permission::Deny
                 {
                     return None;
                 }
             }
             NetworkBody::Response(Response { .. }) => {
-                if self.action(AclMessage::Reply, "Reply (ingress)", key_expr?) == Permission::Deny
+                if ke.is_empty()
+                    || cache
+                        .map(|c| c.reply)
+                        .unwrap_or_else(|| self.action(AclMessage::Reply, "Reply (ingress)", ke))
+                        == Permission::Deny
                 {
                     return None;
                 }
@@ -257,7 +331,12 @@ impl InterceptorTrait for IngressAclEnforcer {
                 payload: PushBody::Put(_),
                 ..
             }) => {
-                if self.action(AclMessage::Put, "Put (ingress)", key_expr?) == Permission::Deny {
+                if ke.is_empty()
+                    || cache
+                        .map(|c| c.put)
+                        .unwrap_or_else(|| self.action(AclMessage::Put, "Put (ingress)", ke))
+                        == Permission::Deny
+                {
                     return None;
                 }
             }
@@ -265,8 +344,11 @@ impl InterceptorTrait for IngressAclEnforcer {
                 payload: PushBody::Del(_),
                 ..
             }) => {
-                if self.action(AclMessage::Delete, "Delete (ingress)", key_expr?)
-                    == Permission::Deny
+                if ke.is_empty()
+                    || cache
+                        .map(|c| c.delete)
+                        .unwrap_or_else(|| self.action(AclMessage::Delete, "Delete (ingress)", ke))
+                        == Permission::Deny
                 {
                     return None;
                 }
@@ -275,11 +357,14 @@ impl InterceptorTrait for IngressAclEnforcer {
                 body: DeclareBody::DeclareSubscriber(_),
                 ..
             }) => {
-                if self.action(
-                    AclMessage::DeclareSubscriber,
-                    "Declare Subscriber (ingress)",
-                    key_expr?,
-                ) == Permission::Deny
+                if ke.is_empty()
+                    || cache.map(|c| c.declare_subscriber).unwrap_or_else(|| {
+                        self.action(
+                            AclMessage::DeclareSubscriber,
+                            "Declare Subscriber (ingress)",
+                            ke,
+                        )
+                    }) == Permission::Deny
                 {
                     return None;
                 }
@@ -292,27 +377,30 @@ impl InterceptorTrait for IngressAclEnforcer {
                 // Undeclarations in ingress are only filtered if the ext_wire_expr is set.
                 // If it's not set, we let the undeclaration pass, it will be rejected by the routing logic
                 // if its associated declaration was denied.
-                if let Some(key_expr) = key_expr {
-                    if !key_expr.is_empty()
-                        && self.action(
+                if !ke.is_empty()
+                    && cache.map(|c| c.undeclare_subscriber).unwrap_or_else(|| {
+                        self.action(
                             AclMessage::DeclareSubscriber,
                             "Undeclare Subscriber (ingress)",
-                            key_expr,
-                        ) == Permission::Deny
-                    {
-                        return None;
-                    }
+                            ke,
+                        )
+                    }) == Permission::Deny
+                {
+                    return None;
                 }
             }
             NetworkBody::Declare(Declare {
                 body: DeclareBody::DeclareQueryable(_),
                 ..
             }) => {
-                if self.action(
-                    AclMessage::DeclareQueryable,
-                    "Declare Queryable (ingress)",
-                    key_expr?,
-                ) == Permission::Deny
+                if ke.is_empty()
+                    || cache.map(|c| c.declare_queryable).unwrap_or_else(|| {
+                        self.action(
+                            AclMessage::DeclareQueryable,
+                            "Declare Queryable (ingress)",
+                            ke,
+                        )
+                    }) == Permission::Deny
                 {
                     return None;
                 }
@@ -325,27 +413,30 @@ impl InterceptorTrait for IngressAclEnforcer {
                 // Undeclarations in ingress are only filtered if the ext_wire_expr is set.
                 // If it's not set, we let the undeclaration pass, it will be rejected by the routing logic
                 // if its associated declaration was denied.
-                if let Some(key_expr) = key_expr {
-                    if !key_expr.is_empty()
-                        && self.action(
+                if !ke.is_empty()
+                    && cache.map(|c| c.undeclare_queryable).unwrap_or_else(|| {
+                        self.action(
                             AclMessage::DeclareQueryable,
                             "Undeclare Queryable (ingress)",
-                            key_expr,
-                        ) == Permission::Deny
-                    {
-                        return None;
-                    }
+                            ke,
+                        )
+                    }) == Permission::Deny
+                {
+                    return None;
                 }
             }
             NetworkBody::Declare(Declare {
                 body: DeclareBody::DeclareToken(_),
                 ..
             }) => {
-                if self.action(
-                    AclMessage::LivelinessToken,
-                    "Liveliness Token (ingress)",
-                    key_expr?,
-                ) == Permission::Deny
+                if ke.is_empty()
+                    || cache.map(|c| c.declare_token).unwrap_or_else(|| {
+                        self.action(
+                            AclMessage::LivelinessToken,
+                            "Liveliness Token (ingress)",
+                            ke,
+                        )
+                    }) == Permission::Deny
                 {
                     return None;
                 }
@@ -359,16 +450,16 @@ impl InterceptorTrait for IngressAclEnforcer {
                 // Undeclarations in ingress are only filtered if the ext_wire_expr is set.
                 // If it's not set, we let the undeclaration pass, it will be rejected by the routing logic
                 // if its associated declaration was denied.
-                if let Some(key_expr) = key_expr {
-                    if !key_expr.is_empty()
-                        && self.action(
+                if !ke.is_empty()
+                    && cache.map(|c| c.undeclare_token).unwrap_or_else(|| {
+                        self.action(
                             AclMessage::LivelinessToken,
                             "Undeclare Liveliness Token (ingress)",
-                            key_expr,
-                        ) == Permission::Deny
-                    {
-                        return None;
-                    }
+                            ke,
+                        )
+                    }) == Permission::Deny
+                {
+                    return None;
                 }
             }
             NetworkBody::Interest(Interest {
@@ -376,11 +467,14 @@ impl InterceptorTrait for IngressAclEnforcer {
                 options,
                 ..
             }) if options.tokens() => {
-                if self.action(
-                    AclMessage::LivelinessQuery,
-                    "Liveliness Query (ingress)",
-                    key_expr?,
-                ) == Permission::Deny
+                if ke.is_empty()
+                    || cache.map(|c| c.query_token).unwrap_or_else(|| {
+                        self.action(
+                            AclMessage::LivelinessQuery,
+                            "Liveliness Query (ingress)",
+                            ke,
+                        )
+                    }) == Permission::Deny
                 {
                     return None;
                 }
@@ -390,11 +484,17 @@ impl InterceptorTrait for IngressAclEnforcer {
                 options,
                 ..
             }) if options.tokens() => {
-                if self.action(
-                    AclMessage::DeclareLivelinessSubscriber,
-                    "Declare Liveliness Subscriber (ingress)",
-                    key_expr?,
-                ) == Permission::Deny
+                if ke.is_empty()
+                    || cache
+                        .map(|c| c.declare_liveliness_subscriber)
+                        .unwrap_or_else(|| {
+                            self.action(
+                                AclMessage::DeclareLivelinessSubscriber,
+                                "Declare Liveliness Subscriber (ingress)",
+                                ke,
+                            )
+                        })
+                        == Permission::Deny
                 {
                     return None;
                 }
