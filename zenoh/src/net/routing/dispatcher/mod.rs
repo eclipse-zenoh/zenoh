@@ -22,5 +22,6 @@ pub mod interests;
 pub mod pubsub;
 pub mod queries;
 pub mod resource;
+pub(crate) mod suffix;
 pub mod tables;
 pub mod token;

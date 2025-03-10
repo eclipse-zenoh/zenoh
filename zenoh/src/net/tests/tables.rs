@@ -889,3 +889,31 @@ fn get_best_key_test() {
     assert_wire_expr!(get_best_key("a", "/d", &face2), { scope: 0, suffix: "a/d" });
     assert_wire_expr!(get_best_key("a/b", "", &face2), { scope: 2, suffix: "" });
 }
+
+#[test]
+fn expr_test() {
+    let config = Config::default();
+    let router = Router::new(
+        ZenohIdProto::try_from([1]).unwrap(),
+        WhatAmI::Client,
+        None,
+        &config,
+    )
+    .unwrap();
+
+    let primitives = Arc::new(DummyPrimitives {});
+    let face = router.new_primitives(primitives.clone());
+
+    let root = zread!(router.tables.tables)._get_root().clone();
+    let key = "a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/z";
+    register_expr(&router.tables, &mut face.state.clone(), 1, &key.into());
+
+    let get_res = |key| Resource::get_resource(&root, key).unwrap();
+    assert_eq!(get_res("a/b/c").expr(), "a/b/c");
+    assert_eq!(get_res(key).expr(), key);
+    assert_eq!(get_res("a/b/c/d").expr_after(Some(&get_res("a/b"))), "/c/d");
+    assert_eq!(
+        get_res(key).expr_after(Some(&get_res(&key[..3]))),
+        &key[3..]
+    );
+}

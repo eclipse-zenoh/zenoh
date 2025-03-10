@@ -48,7 +48,7 @@ fn propagate_simple_token_to(
         let key_expr = Resource::decl_key(res, dst_face, true);
         send_declare(
             &dst_face.primitives,
-            RoutingContext::with_expr(
+            RoutingContext::with_resource(
                 Declare {
                     interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
@@ -59,7 +59,7 @@ fn propagate_simple_token_to(
                         wire_expr: key_expr,
                     }),
                 },
-                res.expr().to_string(),
+                res.clone(),
             ),
         );
     }
@@ -129,7 +129,7 @@ fn declare_simple_token(
             let wire_expr = Resource::get_best_key(res, "", interest.src_face.id);
             send_declare(
                 &interest.src_face.primitives,
-                RoutingContext::with_expr(
+                RoutingContext::with_resource(
                     Declare {
                         interest_id: Some(interest.src_interest_id),
                         ext_qos: ext::QoSType::default(),
@@ -137,7 +137,7 @@ fn declare_simple_token(
                         ext_nodeid: ext::NodeIdType::default(),
                         body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
                     },
-                    res.expr().to_string(),
+                    res.clone(),
                 ),
             );
             return;
@@ -178,7 +178,7 @@ fn propagate_forget_simple_token(
         if let Some(id) = face_hat_mut!(face).local_tokens.remove(res) {
             send_declare(
                 &face.primitives,
-                RoutingContext::with_expr(
+                RoutingContext::with_resource(
                     Declare {
                         interest_id: None,
                         ext_qos: ext::QoSType::DECLARE,
@@ -189,7 +189,7 @@ fn propagate_forget_simple_token(
                             ext_wire_expr: WireExprType::null(),
                         }),
                     },
-                    res.expr().to_string(),
+                    res.clone(),
                 ),
             );
         } else if face_hat!(face)
@@ -201,7 +201,7 @@ fn propagate_forget_simple_token(
             // Send an Undeclare with a one shot generated id and a WireExpr ext.
             send_declare(
                 &face.primitives,
-                RoutingContext::with_expr(
+                RoutingContext::with_resource(
                     Declare {
                         interest_id: None,
                         ext_qos: ext::QoSType::DECLARE,
@@ -214,7 +214,7 @@ fn propagate_forget_simple_token(
                             },
                         }),
                     },
-                    res.expr().to_string(),
+                    res.clone(),
                 ),
             );
         }
@@ -246,7 +246,7 @@ pub(super) fn undeclare_simple_token(
                 if let Some(id) = face_hat_mut!(face).local_tokens.remove(res) {
                     send_declare(
                         &face.primitives,
-                        RoutingContext::with_expr(
+                        RoutingContext::with_resource(
                             Declare {
                                 interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
@@ -257,7 +257,7 @@ pub(super) fn undeclare_simple_token(
                                     ext_wire_expr: WireExprType::null(),
                                 }),
                             },
-                            res.expr().to_string(),
+                            res.clone(),
                         ),
                     );
                 }
@@ -339,7 +339,7 @@ pub(crate) fn declare_token_interest(
                     let wire_expr = Resource::decl_key(res, face, true);
                     send_declare(
                         &face.primitives,
-                        RoutingContext::with_expr(
+                        RoutingContext::with_resource(
                             Declare {
                                 interest_id,
                                 ext_qos: ext::QoSType::DECLARE,
@@ -347,7 +347,7 @@ pub(crate) fn declare_token_interest(
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
                                 body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
                             },
-                            res.expr().to_string(),
+                            (*res).clone(),
                         ),
                     );
                 }
@@ -365,7 +365,7 @@ pub(crate) fn declare_token_interest(
                             let wire_expr = Resource::decl_key(token, face, true);
                             send_declare(
                                 &face.primitives,
-                                RoutingContext::with_expr(
+                                RoutingContext::with_resource(
                                     Declare {
                                         interest_id,
                                         ext_qos: ext::QoSType::default(),
@@ -376,7 +376,7 @@ pub(crate) fn declare_token_interest(
                                             wire_expr,
                                         }),
                                     },
-                                    res.expr().to_string(),
+                                    (*res).clone(),
                                 ),
                             )
                         }
@@ -396,7 +396,7 @@ pub(crate) fn declare_token_interest(
                     let wire_expr = Resource::decl_key(token, face, true);
                     send_declare(
                         &face.primitives,
-                        RoutingContext::with_expr(
+                        RoutingContext::with_resource(
                             Declare {
                                 interest_id,
                                 ext_qos: ext::QoSType::DECLARE,
@@ -404,7 +404,7 @@ pub(crate) fn declare_token_interest(
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
                                 body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
                             },
-                            token.expr().to_string(),
+                            token.clone(),
                         ),
                     );
                 }

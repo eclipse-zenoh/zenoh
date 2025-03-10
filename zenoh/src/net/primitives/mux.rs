@@ -48,18 +48,12 @@ impl Mux {
 impl EPrimitives for Mux {
     fn send_interest(&self, ctx: RoutingContext<Interest>) {
         let interest_id = ctx.msg.id;
-        let ctx = RoutingContext {
-            msg: NetworkMessage {
-                body: NetworkBody::Interest(ctx.msg),
-                reliability: Reliability::Reliable,
-                #[cfg(feature = "stats")]
-                size: None,
-            },
-            inface: ctx.inface,
-            outface: ctx.outface,
-            prefix: ctx.prefix,
-            full_expr: ctx.full_expr,
-        };
+        let ctx = ctx.map_msg(|msg| NetworkMessage {
+            body: NetworkBody::Interest(msg),
+            reliability: Reliability::Reliable,
+            #[cfg(feature = "stats")]
+            size: None,
+        });
         let prefix = ctx
             .wire_expr()
             .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
@@ -83,18 +77,12 @@ impl EPrimitives for Mux {
     }
 
     fn send_declare(&self, ctx: RoutingContext<Declare>) {
-        let ctx = RoutingContext {
-            msg: NetworkMessage {
-                body: NetworkBody::Declare(ctx.msg),
-                reliability: Reliability::Reliable,
-                #[cfg(feature = "stats")]
-                size: None,
-            },
-            inface: ctx.inface,
-            outface: ctx.outface,
-            prefix: ctx.prefix,
-            full_expr: ctx.full_expr,
-        };
+        let ctx = ctx.map_msg(|msg| NetworkMessage {
+            body: NetworkBody::Declare(msg),
+            reliability: Reliability::Reliable,
+            #[cfg(feature = "stats")]
+            size: None,
+        });
         let prefix = ctx
             .wire_expr()
             .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
@@ -243,18 +231,12 @@ impl McastMux {
 
 impl EPrimitives for McastMux {
     fn send_interest(&self, ctx: RoutingContext<Interest>) {
-        let ctx = RoutingContext {
-            msg: NetworkMessage {
-                body: NetworkBody::Interest(ctx.msg),
-                reliability: Reliability::Reliable,
-                #[cfg(feature = "stats")]
-                size: None,
-            },
-            inface: ctx.inface,
-            outface: ctx.outface,
-            prefix: ctx.prefix,
-            full_expr: ctx.full_expr,
-        };
+        let ctx = ctx.map_msg(|msg| NetworkMessage {
+            body: NetworkBody::Interest(msg),
+            reliability: Reliability::Reliable,
+            #[cfg(feature = "stats")]
+            size: None,
+        });
         let prefix = ctx
             .wire_expr()
             .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
@@ -269,18 +251,12 @@ impl EPrimitives for McastMux {
     }
 
     fn send_declare(&self, ctx: RoutingContext<Declare>) {
-        let ctx = RoutingContext {
-            msg: NetworkMessage {
-                body: NetworkBody::Declare(ctx.msg),
-                reliability: Reliability::Reliable,
-                #[cfg(feature = "stats")]
-                size: None,
-            },
-            inface: ctx.inface,
-            outface: ctx.outface,
-            prefix: ctx.prefix,
-            full_expr: ctx.full_expr,
-        };
+        let ctx = ctx.map_msg(|msg| NetworkMessage {
+            body: NetworkBody::Declare(msg),
+            reliability: Reliability::Reliable,
+            #[cfg(feature = "stats")]
+            size: None,
+        });
         let prefix = ctx
             .wire_expr()
             .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))

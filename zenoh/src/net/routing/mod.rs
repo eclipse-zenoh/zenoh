@@ -25,16 +25,15 @@ pub mod router;
 
 use std::{cell::OnceCell, sync::Arc};
 
-use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, WireExpr},
-    network::NetworkMessage,
-};
+use zenoh_keyexpr::keyexpr;
+use zenoh_protocol::{core::WireExpr, network::NetworkMessage};
 
 use self::{dispatcher::face::Face, router::Resource};
 use super::runtime;
 
 pub(crate) struct RoutingContext<Msg> {
     pub(crate) msg: Msg,
+    pub(crate) resource: Option<Arc<Resource>>,
     pub(crate) inface: OnceCell<Face>,
     pub(crate) outface: OnceCell<Face>,
     pub(crate) prefix: OnceCell<Arc<Resource>>,
@@ -46,6 +45,7 @@ impl<Msg> RoutingContext<Msg> {
     pub(crate) fn new(msg: Msg) -> Self {
         Self {
             msg,
+            resource: None,
             inface: OnceCell::new(),
             outface: OnceCell::new(),
             prefix: OnceCell::new(),
@@ -53,10 +53,22 @@ impl<Msg> RoutingContext<Msg> {
         }
     }
 
+    pub(crate) fn map_msg<Msg2>(self, f: impl FnOnce(Msg) -> Msg2) -> RoutingContext<Msg2> {
+        RoutingContext {
+            msg: f(self.msg),
+            resource: self.resource,
+            inface: self.inface,
+            outface: self.outface,
+            prefix: self.prefix,
+            full_expr: self.full_expr,
+        }
+    }
+
     #[allow(dead_code)]
     pub(crate) fn new_in(msg: Msg, inface: Face) -> Self {
         Self {
             msg,
+            resource: None,
             inface: OnceCell::from(inface),
             outface: OnceCell::new(),
             prefix: OnceCell::new(),
@@ -68,6 +80,7 @@ impl<Msg> RoutingContext<Msg> {
     pub(crate) fn new_out(msg: Msg, outface: Face) -> Self {
         Self {
             msg,
+            resource: None,
             inface: OnceCell::new(),
             outface: OnceCell::from(outface),
             prefix: OnceCell::new(),
@@ -76,13 +89,14 @@ impl<Msg> RoutingContext<Msg> {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn with_expr(msg: Msg, expr: String) -> Self {
+    pub(crate) fn with_resource(msg: Msg, resource: impl Into<Option<Arc<Resource>>>) -> Self {
         Self {
             msg,
+            resource: resource.into(),
             inface: OnceCell::new(),
             outface: OnceCell::new(),
             prefix: OnceCell::new(),
-            full_expr: OnceCell::from(expr),
+            full_expr: OnceCell::new(),
         }
     }
 
@@ -158,21 +172,19 @@ impl RoutingContext<NetworkMessage> {
     #[inline]
     #[allow(dead_code)]
     pub(crate) fn full_expr(&self) -> Option<&str> {
-        if self.full_expr.get().is_some() {
-            return Some(self.full_expr.get().as_ref().unwrap());
+        if self.full_expr.get().is_none() {
+            if let Some(resource) = &self.resource {
+                let _ = self.full_expr.set(resource.expr());
+            } else if let Some(prefix) = self.prefix() {
+                let expr = prefix.expr() + self.wire_expr().unwrap().suffix.as_ref();
+                let _ = self.full_expr.set(expr);
+            }
         }
-        if let Some(prefix) = self.prefix() {
-            let _ = self
-                .full_expr
-                .set(prefix.expr().to_string() + self.wire_expr().unwrap().suffix.as_ref());
-            return Some(self.full_expr.get().as_ref().unwrap());
-        }
-        None
+        self.full_expr.get().map(String::as_str)
     }
 
     #[inline]
-    pub(crate) fn full_key_expr(&self) -> Option<OwnedKeyExpr> {
-        let full_expr = self.full_expr()?;
-        OwnedKeyExpr::new(full_expr).ok()
+    pub(crate) fn full_key_expr(&self) -> Option<&keyexpr> {
+        keyexpr::new(self.full_expr()?).ok()
     }
 }
