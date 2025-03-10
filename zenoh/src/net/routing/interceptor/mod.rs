@@ -24,7 +24,7 @@ use access_control::acl_interceptor_factories;
 mod authorization;
 use std::any::Any;
 
-use zenoh_config::Config;
+use zenoh_config::{Config, InterceptorFlow};
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
@@ -34,6 +34,28 @@ use crate::api::key_expr::KeyExpr;
 
 pub mod downsampling;
 use crate::net::routing::interceptor::downsampling::downsampling_interceptor_factories;
+
+#[derive(Default, Debug)]
+pub struct InterfaceEnabled {
+    pub ingress: bool,
+    pub egress: bool,
+}
+
+impl From<&[InterceptorFlow]> for InterfaceEnabled {
+    fn from(value: &[InterceptorFlow]) -> Self {
+        let mut res = Self {
+            ingress: false,
+            egress: false,
+        };
+        for v in value {
+            match v {
+                InterceptorFlow::Egress => res.egress = true,
+                InterceptorFlow::Ingress => res.ingress = true,
+            }
+        }
+        res
+    }
+}
 
 pub(crate) trait InterceptorTrait {
     fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>>;

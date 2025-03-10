@@ -35,7 +35,7 @@ use zenoh::{
 pub struct PublicationCacheBuilder<'a, 'b, 'c, const BACKGROUND: bool = false> {
     session: &'a Session,
     pub_key_expr: ZResult<KeyExpr<'b>>,
-    queryable_prefix: Option<ZResult<KeyExpr<'c>>>,
+    queryable_suffix: Option<ZResult<KeyExpr<'c>>>,
     queryable_origin: Option<Locality>,
     complete: Option<bool>,
     history: usize,
@@ -52,7 +52,7 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
         PublicationCacheBuilder {
             session,
             pub_key_expr,
-            queryable_prefix: None,
+            queryable_suffix: None,
             queryable_origin: None,
             complete: None,
             history: 1,
@@ -60,15 +60,15 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
         }
     }
 
-    /// Change the prefix used for queryable.
+    /// Change the suffix used for queryable.
     #[zenoh_macros::unstable]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
-    pub fn queryable_prefix<TryIntoKeyExpr>(mut self, queryable_prefix: TryIntoKeyExpr) -> Self
+    pub fn queryable_suffix<TryIntoKeyExpr>(mut self, queryable_suffix: TryIntoKeyExpr) -> Self
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'c>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'c>>>::Error: Into<Error>,
     {
-        self.queryable_prefix = Some(queryable_prefix.try_into().map_err(Into::into));
+        self.queryable_suffix = Some(queryable_suffix.try_into().map_err(Into::into));
         self
     }
 
@@ -112,7 +112,7 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
         PublicationCacheBuilder {
             session: self.session,
             pub_key_expr: self.pub_key_expr,
-            queryable_prefix: self.queryable_prefix,
+            queryable_suffix: self.queryable_suffix,
             queryable_origin: self.queryable_origin,
             complete: self.complete,
             history: self.history,
@@ -192,15 +192,15 @@ impl PublicationCache {
         conf: PublicationCacheBuilder<'_, '_, '_, BACKGROUND>,
     ) -> ZResult<PublicationCache> {
         let key_expr = conf.pub_key_expr?;
-        // the queryable_prefix (optional), and the key_expr for PublicationCache's queryable ("[<queryable_prefix>]/<pub_key_expr>")
-        let (queryable_prefix, queryable_key_expr): (Option<OwnedKeyExpr>, KeyExpr) =
-            match conf.queryable_prefix {
+        // the queryable_suffix (optional), and the key_expr for PublicationCache's queryable ("<pub_key_expr>/[<queryable_suffix>]")
+        let (queryable_suffix, queryable_key_expr): (Option<OwnedKeyExpr>, KeyExpr) =
+            match conf.queryable_suffix {
                 None => (None, key_expr.clone()),
                 Some(Ok(ke)) => {
-                    let queryable_key_expr = (&ke) / &key_expr;
+                    let queryable_key_expr = &key_expr / &ke;
                     (Some(ke.into()), queryable_key_expr)
                 }
-                Some(Err(e)) => bail!("Invalid key expression for queryable_prefix: {}", e),
+                Some(Err(e)) => bail!("Invalid key expression for queryable_suffix: {}", e),
             };
         tracing::debug!(
             "Create PublicationCache on {} with history={} resource_limit={:?}",
@@ -261,8 +261,8 @@ impl PublicationCache {
                         // on publication received by the local subscriber, store it
                         sample = sub_recv.recv_async() => {
                             if let Ok(sample) = sample {
-                                let queryable_key_expr: KeyExpr<'_> = if let Some(prefix) = &queryable_prefix {
-                                    prefix.join(&sample.key_expr()).unwrap().into()
+                                let queryable_key_expr: KeyExpr<'_> = if let Some(suffix) = &queryable_suffix {
+                                    sample.key_expr() / suffix
                                 } else {
                                     sample.key_expr().clone()
                                 };

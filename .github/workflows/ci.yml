@@ -167,17 +167,32 @@ jobs:
       - name: Run tests
         run: cargo nextest run -F test -F internal_config --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
+      - name: Rename junit test report
+        run: mv target/nextest/default/junit.xml target/nextest/default/tests.junit.xml
+
       - name: Run tests with SHM + lowlatency
         if: ${{ matrix.os == 'macos-latest' || matrix.os == 'windows-latest' }}
         run: cargo nextest run -F test -F fix_tokio_latency -F shared-memory -F unstable -F internal_config -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+
+      - name: Rename junit test report
+        if: ${{ matrix.os == 'macos-latest' || matrix.os == 'windows-latest' }}
+        run: mv target/nextest/default/junit.xml target/nextest/default/tests-shm.junit.xml
 
       - name: Run tests with SHM + lowlatency + unixpipe
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: cargo nextest run -F test -F fix_tokio_latency -F shared-memory -F unstable -F internal_config -F transport_unixpipe -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
+      - name: Rename junit test report
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: mv target/nextest/default/junit.xml target/nextest/default/tests-shm-unixpipe.junit.xml
+
       - name: Check for feature leaks
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: cargo nextest run -p zenohd --no-default-features
+
+      - name: Rename junit test report
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: mv target/nextest/default/junit.xml target/nextest/default/tests-feature-leaks.junit.xml
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}

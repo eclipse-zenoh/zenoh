@@ -537,6 +537,10 @@ impl Primitives for ClientPrimitives {
     fn send_response_final(&self, _msg: zenoh_protocol::network::ResponseFinal) {}
 
     fn send_close(&self) {}
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 impl EPrimitives for ClientPrimitives {

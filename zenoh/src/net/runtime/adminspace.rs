@@ -503,6 +503,10 @@ impl Primitives for AdminSpace {
     fn send_close(&self) {
         trace!("recv Close");
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 impl crate::net::primitives::EPrimitives for AdminSpace {
