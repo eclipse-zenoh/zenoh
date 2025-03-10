@@ -508,7 +508,7 @@ impl Resource {
                     get_mut_unchecked(face)
                         .local_mappings
                         .insert(expr_id, nonwild_prefix.clone());
-                    face.primitives.send_declare(RoutingContext::with_expr(
+                    face.primitives.send_declare(RoutingContext::with_resource(
                         Declare {
                             interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
@@ -519,7 +519,7 @@ impl Resource {
                                 wire_expr: nonwild_prefix.expr().into(),
                             }),
                         },
-                        nonwild_prefix.expr(),
+                        nonwild_prefix.clone(),
                     ));
                     face.update_interceptors_caches(&mut nonwild_prefix);
                     WireExpr {

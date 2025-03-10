@@ -108,7 +108,7 @@ fn propagate_simple_queryable(
             let key_expr = Resource::decl_key(res, &mut dst_face, true);
             send_declare(
                 &dst_face.primitives,
-                RoutingContext::with_expr(
+                RoutingContext::with_resource(
                     Declare {
                         interest_id: None,
                         ext_qos: ext::QoSType::DECLARE,
@@ -120,7 +120,7 @@ fn propagate_simple_queryable(
                             ext_info: info,
                         }),
                     },
-                    res.expr(),
+                    res.clone(),
                 ),
             );
         }
@@ -182,7 +182,7 @@ fn propagate_forget_simple_queryable(
         if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
             send_declare(
                 &face.primitives,
-                RoutingContext::with_expr(
+                RoutingContext::with_resource(
                     Declare {
                         interest_id: None,
                         ext_qos: ext::QoSType::DECLARE,
@@ -193,7 +193,7 @@ fn propagate_forget_simple_queryable(
                             ext_wire_expr: WireExprType::null(),
                         }),
                     },
-                    res.expr(),
+                    res.clone(),
                 ),
             );
         }
@@ -226,7 +226,7 @@ pub(super) fn undeclare_simple_queryable(
             if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
                 send_declare(
                     &face.primitives,
-                    RoutingContext::with_expr(
+                    RoutingContext::with_resource(
                         Declare {
                             interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
@@ -237,7 +237,7 @@ pub(super) fn undeclare_simple_queryable(
                                 ext_wire_expr: WireExprType::null(),
                             }),
                         },
-                        res.expr(),
+                        res.clone(),
                     ),
                 );
             }

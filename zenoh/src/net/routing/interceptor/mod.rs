@@ -151,12 +151,8 @@ impl<T: InterceptorTrait> InterceptorTrait for ComputeOnMiss<T> {
         if cache.is_some() {
             self.interceptor.intercept(ctx, cache)
         } else if let Some(key_expr) = ctx.full_key_expr() {
-            self.interceptor.intercept(
-                ctx,
-                self.interceptor
-                    .compute_keyexpr_cache(&key_expr.into())
-                    .as_ref(),
-            )
+            let cache = self.compute_keyexpr_cache(&key_expr.into());
+            self.interceptor.intercept(ctx, cache.as_ref())
         } else {
             self.interceptor.intercept(ctx, cache)
         }

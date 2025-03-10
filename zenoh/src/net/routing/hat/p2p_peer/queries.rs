@@ -118,7 +118,7 @@ fn propagate_simple_queryable_to(
         let key_expr = Resource::decl_key(res, dst_face, super::push_declaration_profile(dst_face));
         send_declare(
             &dst_face.primitives,
-            RoutingContext::with_expr(
+            RoutingContext::with_resource(
                 Declare {
                     interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
@@ -130,7 +130,7 @@ fn propagate_simple_queryable_to(
                         ext_info: info,
                     }),
                 },
-                res.expr(),
+                res.clone(),
             ),
         );
     }
@@ -214,7 +214,7 @@ fn propagate_forget_simple_queryable(
         if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
             send_declare(
                 &face.primitives,
-                RoutingContext::with_expr(
+                RoutingContext::with_resource(
                     Declare {
                         interest_id: None,
                         ext_qos: ext::QoSType::DECLARE,
@@ -225,7 +225,7 @@ fn propagate_forget_simple_queryable(
                             ext_wire_expr: WireExprType::null(),
                         }),
                     },
-                    res.expr(),
+                    res.clone(),
                 ),
             );
         }
@@ -242,7 +242,7 @@ fn propagate_forget_simple_queryable(
                 if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(&res) {
                     send_declare(
                         &face.primitives,
-                        RoutingContext::with_expr(
+                        RoutingContext::with_resource(
                             Declare {
                                 interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
@@ -253,7 +253,7 @@ fn propagate_forget_simple_queryable(
                                     ext_wire_expr: WireExprType::null(),
                                 }),
                             },
-                            res.expr(),
+                            res.clone(),
                         ),
                     );
                 }
@@ -288,7 +288,7 @@ pub(super) fn undeclare_simple_queryable(
             if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
                 send_declare(
                     &face.primitives,
-                    RoutingContext::with_expr(
+                    RoutingContext::with_resource(
                         Declare {
                             interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
@@ -299,7 +299,7 @@ pub(super) fn undeclare_simple_queryable(
                                 ext_wire_expr: WireExprType::null(),
                             }),
                         },
-                        res.expr(),
+                        res.clone(),
                     ),
                 );
             }
@@ -316,7 +316,7 @@ pub(super) fn undeclare_simple_queryable(
                     if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
                         send_declare(
                             &face.primitives,
-                            RoutingContext::with_expr(
+                            RoutingContext::with_resource(
                                 Declare {
                                     interest_id: None,
                                     ext_qos: ext::QoSType::DECLARE,
@@ -327,7 +327,7 @@ pub(super) fn undeclare_simple_queryable(
                                         ext_wire_expr: WireExprType::null(),
                                     }),
                                 },
-                                res.expr(),
+                                res.clone(),
                             ),
                         );
                     }
@@ -428,7 +428,7 @@ pub(super) fn declare_qabl_interest(
                         Resource::decl_key(res, face, super::push_declaration_profile(face));
                     send_declare(
                         &face.primitives,
-                        RoutingContext::with_expr(
+                        RoutingContext::with_resource(
                             Declare {
                                 interest_id,
                                 ext_qos: ext::QoSType::DECLARE,
@@ -440,7 +440,7 @@ pub(super) fn declare_qabl_interest(
                                     ext_info: info,
                                 }),
                             },
-                            res.expr(),
+                            (*res).clone(),
                         ),
                     );
                 }
@@ -463,7 +463,7 @@ pub(super) fn declare_qabl_interest(
                                 );
                                 send_declare(
                                     &face.primitives,
-                                    RoutingContext::with_expr(
+                                    RoutingContext::with_resource(
                                         Declare {
                                             interest_id,
                                             ext_qos: ext::QoSType::DECLARE,
@@ -475,7 +475,7 @@ pub(super) fn declare_qabl_interest(
                                                 ext_info: info,
                                             }),
                                         },
-                                        qabl.expr(),
+                                        qabl.clone(),
                                     ),
                                 );
                             }
@@ -502,7 +502,7 @@ pub(super) fn declare_qabl_interest(
                             );
                             send_declare(
                                 &face.primitives,
-                                RoutingContext::with_expr(
+                                RoutingContext::with_resource(
                                     Declare {
                                         interest_id,
                                         ext_qos: ext::QoSType::DECLARE,
@@ -514,7 +514,7 @@ pub(super) fn declare_qabl_interest(
                                             ext_info: info,
                                         }),
                                     },
-                                    qabl.expr(),
+                                    qabl.clone(),
                                 ),
                             );
                         }

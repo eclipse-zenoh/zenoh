@@ -67,7 +67,7 @@ fn propagate_simple_subscription_to(
                 Resource::decl_key(res, dst_face, super::push_declaration_profile(dst_face));
             send_declare(
                 &dst_face.primitives,
-                RoutingContext::with_expr(
+                RoutingContext::with_resource(
                     Declare {
                         interest_id: None,
                         ext_qos: ext::QoSType::DECLARE,
@@ -78,7 +78,7 @@ fn propagate_simple_subscription_to(
                             wire_expr: key_expr,
                         }),
                     },
-                    res.expr(),
+                    res.clone(),
                 ),
             );
         } else {
@@ -110,7 +110,7 @@ fn propagate_simple_subscription_to(
                     );
                     send_declare(
                         &dst_face.primitives,
-                        RoutingContext::with_expr(
+                        RoutingContext::with_resource(
                             Declare {
                                 interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
@@ -121,7 +121,7 @@ fn propagate_simple_subscription_to(
                                     wire_expr: key_expr,
                                 }),
                             },
-                            res.expr(),
+                            res.clone(),
                         ),
                     );
                 }
@@ -201,7 +201,7 @@ fn declare_simple_subscription(
             if mcast_group.mcast_group != face.mcast_group {
                 mcast_group
                     .primitives
-                    .send_declare(RoutingContext::with_expr(
+                    .send_declare(RoutingContext::with_resource(
                         Declare {
                             interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
@@ -212,7 +212,7 @@ fn declare_simple_subscription(
                                 wire_expr: res.expr().into(),
                             }),
                         },
-                        res.expr(),
+                        res.clone(),
                     ))
             }
         }
@@ -249,7 +249,7 @@ fn propagate_forget_simple_subscription(
         if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(res) {
             send_declare(
                 &face.primitives,
-                RoutingContext::with_expr(
+                RoutingContext::with_resource(
                     Declare {
                         interest_id: None,
                         ext_qos: ext::QoSType::DECLARE,
@@ -260,7 +260,7 @@ fn propagate_forget_simple_subscription(
                             ext_wire_expr: WireExprType::null(),
                         }),
                     },
-                    res.expr(),
+                    res.clone(),
                 ),
             );
         }
@@ -277,7 +277,7 @@ fn propagate_forget_simple_subscription(
                 if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
                     send_declare(
                         &face.primitives,
-                        RoutingContext::with_expr(
+                        RoutingContext::with_resource(
                             Declare {
                                 interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
@@ -288,7 +288,7 @@ fn propagate_forget_simple_subscription(
                                     ext_wire_expr: WireExprType::null(),
                                 }),
                             },
-                            res.expr(),
+                            res.clone(),
                         ),
                     );
                 }
@@ -318,7 +318,7 @@ pub(super) fn undeclare_simple_subscription(
             if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
                 send_declare(
                     &face.primitives,
-                    RoutingContext::with_expr(
+                    RoutingContext::with_resource(
                         Declare {
                             interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
@@ -329,7 +329,7 @@ pub(super) fn undeclare_simple_subscription(
                                 ext_wire_expr: WireExprType::null(),
                             }),
                         },
-                        res.expr(),
+                        res.clone(),
                     ),
                 );
             }
@@ -346,7 +346,7 @@ pub(super) fn undeclare_simple_subscription(
                     if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
                         send_declare(
                             &face.primitives,
-                            RoutingContext::with_expr(
+                            RoutingContext::with_resource(
                                 Declare {
                                     interest_id: None,
                                     ext_qos: ext::QoSType::DECLARE,
@@ -357,7 +357,7 @@ pub(super) fn undeclare_simple_subscription(
                                         ext_wire_expr: WireExprType::null(),
                                     }),
                                 },
-                                res.expr(),
+                                res.clone(),
                             ),
                         );
                     }
@@ -448,7 +448,7 @@ pub(super) fn declare_sub_interest(
                         Resource::decl_key(res, face, super::push_declaration_profile(face));
                     send_declare(
                         &face.primitives,
-                        RoutingContext::with_expr(
+                        RoutingContext::with_resource(
                             Declare {
                                 interest_id,
                                 ext_qos: ext::QoSType::DECLARE,
@@ -459,7 +459,7 @@ pub(super) fn declare_sub_interest(
                                     wire_expr,
                                 }),
                             },
-                            res.expr(),
+                            (*res).clone(),
                         ),
                     );
                 }
@@ -481,7 +481,7 @@ pub(super) fn declare_sub_interest(
                                 );
                                 send_declare(
                                     &face.primitives,
-                                    RoutingContext::with_expr(
+                                    RoutingContext::with_resource(
                                         Declare {
                                             interest_id,
                                             ext_qos: ext::QoSType::DECLARE,
@@ -491,7 +491,7 @@ pub(super) fn declare_sub_interest(
                                                 DeclareSubscriber { id, wire_expr },
                                             ),
                                         },
-                                        sub.expr(),
+                                        sub.clone(),
                                     ),
                                 );
                             }
@@ -513,7 +513,7 @@ pub(super) fn declare_sub_interest(
                             Resource::decl_key(sub, face, super::push_declaration_profile(face));
                         send_declare(
                             &face.primitives,
-                            RoutingContext::with_expr(
+                            RoutingContext::with_resource(
                                 Declare {
                                     interest_id,
                                     ext_qos: ext::QoSType::DECLARE,
@@ -524,7 +524,7 @@ pub(super) fn declare_sub_interest(
                                         wire_expr,
                                     }),
                                 },
-                                sub.expr(),
+                                sub.clone(),
                             ),
                         );
                     }

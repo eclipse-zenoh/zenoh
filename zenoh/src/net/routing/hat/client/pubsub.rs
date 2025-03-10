@@ -59,7 +59,7 @@ fn propagate_simple_subscription_to(
         let key_expr = Resource::decl_key(res, dst_face, true);
         send_declare(
             &dst_face.primitives,
-            RoutingContext::with_expr(
+            RoutingContext::with_resource(
                 Declare {
                     interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
@@ -70,7 +70,7 @@ fn propagate_simple_subscription_to(
                         wire_expr: key_expr,
                     }),
                 },
-                res.expr(),
+                res.clone(),
             ),
         );
     }
@@ -164,7 +164,7 @@ fn propagate_forget_simple_subscription(
         if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
             send_declare(
                 &face.primitives,
-                RoutingContext::with_expr(
+                RoutingContext::with_resource(
                     Declare {
                         interest_id: None,
                         ext_qos: ext::QoSType::DECLARE,
@@ -175,7 +175,7 @@ fn propagate_forget_simple_subscription(
                             ext_wire_expr: WireExprType::null(),
                         }),
                     },
-                    res.expr(),
+                    res.clone(),
                 ),
             );
         }
@@ -202,7 +202,7 @@ pub(super) fn undeclare_simple_subscription(
             if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
                 send_declare(
                     &face.primitives,
-                    RoutingContext::with_expr(
+                    RoutingContext::with_resource(
                         Declare {
                             interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
@@ -213,7 +213,7 @@ pub(super) fn undeclare_simple_subscription(
                                 ext_wire_expr: WireExprType::null(),
                             }),
                         },
-                        res.expr(),
+                        res.clone(),
                     ),
                 );
             }
