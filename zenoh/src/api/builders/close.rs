@@ -73,7 +73,25 @@ impl<TCloseable: Closeable> Resolvable for CloseBuilder<TCloseable> {
 
 impl<TCloseable: Closeable> Wait for CloseBuilder<TCloseable> {
     fn wait(self) -> Self::To {
-        ZRuntime::Application.block_in_place(self.into_future())
+        let future = self.into_future();
+        match tokio::runtime::Handle::try_current().is_ok() {
+            true => {
+                tracing::trace!("tokio TLS available, closing closeable directly");
+                ZRuntime::Net.block_in_place(future)
+            }
+            false => {
+                let evaluate = move || {
+                    // NOTE: tracing logger also panics if used inside atexit() handler!!!
+                    tracing::trace!(
+                        "tokio TLS NOT available, closing closeable in separate thread"
+                    );
+                    ZRuntime::Net.block_in_place(future)
+                };
+                std::thread::spawn(evaluate)
+                    .join()
+                    .expect("Error spawning atexit-safe thread")
+            }
+        }
     }
 }
 
@@ -99,19 +117,13 @@ impl<TCloseable: Closeable> IntoFuture for CloseBuilder<TCloseable> {
 
 #[cfg(all(feature = "unstable", feature = "internal"))]
 /// A builder for close operations running in background
-// NOTE: `Closeable` is only pub(crate) because it is zenoh-internal trait, so we don't
-// care about the `private_bounds` lint in this particular case.
 #[doc(hidden)]
-#[allow(private_bounds)]
 pub struct BackgroundCloseBuilder<TOutput: Send + 'static> {
     inner: Pin<Box<dyn Future<Output = TOutput> + Send>>,
 }
 
 #[cfg(all(feature = "unstable", feature = "internal"))]
 #[doc(hidden)]
-// NOTE: `Closeable` is only pub(crate) because it is zenoh-internal trait, so we don't
-// care about the `private_bounds` lint in this particular case.
-#[allow(private_bounds)]
 impl<TOutput: Send + 'static> BackgroundCloseBuilder<TOutput> {
     fn new(inner: Pin<Box<dyn Future<Output = TOutput> + Send>>) -> Self {
         Self { inner }
@@ -120,13 +132,13 @@ impl<TOutput: Send + 'static> BackgroundCloseBuilder<TOutput> {
 
 #[cfg(all(feature = "unstable", feature = "internal"))]
 impl<TOutput: Send + 'static> Resolvable for BackgroundCloseBuilder<TOutput> {
-    type To = tokio::task::JoinHandle<TOutput>;
+    type To = NolocalJoinHandle<TOutput>;
 }
 
 #[cfg(all(feature = "unstable", feature = "internal"))]
 impl<TOutput: Send + 'static> Wait for BackgroundCloseBuilder<TOutput> {
     fn wait(self) -> Self::To {
-        ZRuntime::Application.block_in_place(self.into_future())
+        ZRuntime::Net.block_in_place(self.into_future())
     }
 }
 
@@ -135,10 +147,65 @@ impl<TOutput: Send + 'static> IntoFuture for BackgroundCloseBuilder<TOutput> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Pin<Box<dyn Future<Output = <Self as IntoFuture>::Output> + Send>>;
 
-    // NOTE: yes, we need to return a future that returns JoinHandle
-    #[allow(clippy::async_yields_async)]
     fn into_future(self) -> Self::IntoFuture {
-        Box::pin(async move { ZRuntime::Application.spawn(self.inner) }.into_future())
+        Box::pin(
+            async move {
+                let (tx, rx) = async_channel::bounded::<TOutput>(1);
+
+                ZRuntime::Net.spawn(async move {
+                    tx.send(self.inner.await)
+                        .await
+                        .expect("BackgroundCloseBuilder: critical error sending the result")
+                });
+                NolocalJoinHandle::new(rx)
+            }
+            .into_future(),
+        )
+    }
+}
+
+#[cfg(all(feature = "unstable", feature = "internal"))]
+#[doc(hidden)]
+pub struct NolocalJoinHandle<TOutput: Send + 'static> {
+    rx: async_channel::Receiver<TOutput>,
+}
+
+#[cfg(all(feature = "unstable", feature = "internal"))]
+impl<TOutput: Send + 'static> NolocalJoinHandle<TOutput> {
+    fn new(rx: async_channel::Receiver<TOutput>) -> Self {
+        Self { rx }
+    }
+}
+
+#[cfg(all(feature = "unstable", feature = "internal"))]
+impl<TOutput: Send + 'static> Resolvable for NolocalJoinHandle<TOutput> {
+    type To = TOutput;
+}
+
+#[cfg(all(feature = "unstable", feature = "internal"))]
+impl<TOutput: Send + 'static> Wait for NolocalJoinHandle<TOutput> {
+    fn wait(self) -> Self::To {
+        self.rx
+            .recv_blocking()
+            .expect("NolocalJoinHandle: critical error receiving the result")
+    }
+}
+
+#[cfg(all(feature = "unstable", feature = "internal"))]
+impl<TOutput: Send + 'static> IntoFuture for NolocalJoinHandle<TOutput> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Pin<Box<dyn Future<Output = <Self as IntoFuture>::Output> + Send>>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        Box::pin(
+            async move {
+                self.rx
+                    .recv()
+                    .await
+                    .expect("NolocalJoinHandle: critical error receiving the result")
+            }
+            .into_future(),
+        )
     }
 }
 
