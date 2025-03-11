@@ -18,6 +18,7 @@ use std::{
     time::Duration,
 };
 
+use arc_swap::ArcSwap;
 use uhlc::HLC;
 use zenoh_config::{unwrap_or_default, Config};
 use zenoh_protocol::{
@@ -75,7 +76,7 @@ pub struct Tables {
     pub(crate) faces: HashMap<usize, Arc<FaceState>>,
     pub(crate) mcast_groups: Vec<Arc<FaceState>>,
     pub(crate) mcast_faces: Vec<Arc<FaceState>>,
-    pub(crate) interceptors: Vec<InterceptorFactory>,
+    pub(crate) interceptors: ArcSwap<Vec<InterceptorFactory>>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) hat_code: Arc<dyn HatTrait + Send + Sync>, // @TODO make this a Box
     pub(crate) routes_version: RoutesVersion,
@@ -110,7 +111,7 @@ impl Tables {
             faces: HashMap::new(),
             mcast_groups: vec![],
             mcast_faces: vec![],
-            interceptors: interceptor_factories(config)?,
+            interceptors: ArcSwap::new(interceptor_factories(config)?.into()),
             hat: hat_code.new_tables(router_peers_failover_brokering),
             hat_code: hat_code.into(),
             routes_version: 0,
@@ -163,11 +164,12 @@ impl Tables {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn regen_interceptors(&mut self, config: &Config) -> ZResult<()> {
-        self.interceptors = interceptor_factories(config)?;
+    pub(crate) fn regen_interceptors(&self, config: &Config) -> ZResult<()> {
+        self.interceptors
+            .store(interceptor_factories(config)?.into());
         self.faces
             .values()
-            .for_each(|face| face.interceptors_from_factories(&self.interceptors));
+            .for_each(|face| face.interceptors_from_factories(&self.interceptors.load()));
         Ok(())
     }
 }

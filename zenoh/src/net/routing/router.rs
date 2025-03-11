@@ -145,7 +145,7 @@ impl Router {
                 )
             })
             .clone();
-        newface.interceptors_from_factories(&tables.interceptors);
+        newface.interceptors_from_factories(&tables.interceptors.load());
         tracing::debug!("New {}", newface);
 
         let mut face = Face {
@@ -193,7 +193,7 @@ impl Router {
             ctrl_lock.new_face(),
             false,
         );
-        face.interceptors_from_factories(&tables.interceptors);
+        face.interceptors_from_factories(&tables.interceptors.load());
         let _ = mux.face.set(Face {
             state: face.clone(),
             tables: self.tables.clone(),
@@ -226,7 +226,7 @@ impl Router {
             ctrl_lock.new_face(),
             false,
         );
-        face_state.interceptors_from_factories(&tables.interceptors);
+        face_state.interceptors_from_factories(&tables.interceptors.load());
         tables.mcast_faces.push(face_state.clone());
 
         tables.disable_all_routes();
