@@ -73,7 +73,24 @@ impl<TCloseable: Closeable> Resolvable for CloseBuilder<TCloseable> {
 
 impl<TCloseable: Closeable> Wait for CloseBuilder<TCloseable> {
     fn wait(self) -> Self::To {
-        ZRuntime::Net.block_in_place(self.into_future())
+        let future = self.into_future();
+        match tokio::runtime::Handle::try_current().is_ok() {
+            true => {
+                tracing::trace!("tokio TLS available, closing closeable directly");
+                ZRuntime::Net.block_in_place(future)
+            }
+            false => {
+                let evaluate = move || {
+                    tracing::trace!(
+                        "tokio TLS NOT available, closing closeable in separate thread"
+                    );
+                    ZRuntime::Net.block_in_place(future)
+                };
+                std::thread::spawn(evaluate)
+                    .join()
+                    .expect("Error spawning atexit-safe thread")
+            }
+        }
     }
 }
 
