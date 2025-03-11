@@ -167,7 +167,7 @@ impl Tables {
         self.interceptors = interceptor_factories(config)?;
         self.faces
             .values()
-            .for_each(|face| face.regen_interceptors(&self.interceptors));
+            .for_each(|face| face.interceptors_from_factories(&self.interceptors));
         Ok(())
     }
 }

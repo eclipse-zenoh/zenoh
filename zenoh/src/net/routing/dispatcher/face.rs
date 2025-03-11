@@ -49,8 +49,8 @@ use crate::{
         routing::{
             dispatcher::interests::finalize_pending_interests,
             interceptor::{
-                interceptors_from_factories, InterceptorFactory, InterceptorTrait,
-                InterceptorsChain, NewTransport,
+                EgressInterceptor, IngressInterceptor, InterceptorFactory, InterceptorTrait,
+                InterceptorsChain,
             },
         },
     },
@@ -208,11 +208,15 @@ impl FaceState {
         }
     }
 
-    pub(crate) fn regen_interceptors(&self, factories: &[InterceptorFactory]) {
+    pub(crate) fn interceptors_from_factories(&self, factories: &[InterceptorFactory]) {
         if let Some(mux) = self.primitives.as_any().downcast_ref::<Mux>() {
-            let (ingress, egress) = interceptors_from_factories(
-                factories,
-                NewTransport::TransportUnicast(&mux.handler),
+            let (ingress, egress): (Vec<_>, Vec<_>) = factories
+                .iter()
+                .map(|itor| itor.new_transport_unicast(&mux.handler))
+                .unzip();
+            let (ingress, egress) = (
+                InterceptorsChain::from(ingress.into_iter().flatten().collect::<Vec<_>>()),
+                InterceptorsChain::from(egress.into_iter().flatten().collect::<Vec<_>>()),
             );
             mux.interceptor.store(egress.into());
             self.in_interceptors
@@ -220,15 +224,21 @@ impl FaceState {
                 .expect("face in_interceptors should not be None when primitives are Mux")
                 .store(ingress.into());
         } else if let Some(mux) = self.primitives.as_any().downcast_ref::<McastMux>() {
-            let (_, interceptor) = interceptors_from_factories(
-                factories,
-                NewTransport::TransportMulticast(&mux.handler),
+            let interceptor = InterceptorsChain::from(
+                factories
+                    .iter()
+                    .filter_map(|itor| itor.new_transport_multicast(&mux.handler))
+                    .collect::<Vec<EgressInterceptor>>(),
             );
             mux.interceptor.store(Arc::new(interceptor));
             debug_assert!(self.in_interceptors.is_none());
         } else if let Some(transport) = &self.mcast_group {
-            let (interceptor, _) =
-                interceptors_from_factories(factories, NewTransport::PeerMulticast(transport));
+            let interceptor = InterceptorsChain::from(
+                factories
+                    .iter()
+                    .filter_map(|itor| itor.new_peer_multicast(transport))
+                    .collect::<Vec<IngressInterceptor>>(),
+            );
             self.in_interceptors
                 .as_ref()
                 .expect("face in_interceptors should not be None when mcast_group is set")
