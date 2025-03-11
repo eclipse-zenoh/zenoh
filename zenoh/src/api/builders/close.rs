@@ -73,7 +73,7 @@ impl<TCloseable: Closeable> Resolvable for CloseBuilder<TCloseable> {
 
 impl<TCloseable: Closeable> Wait for CloseBuilder<TCloseable> {
     fn wait(self) -> Self::To {
-        ZRuntime::Application.block_in_place(self.into_future())
+        ZRuntime::Net.block_in_place(self.into_future())
     }
 }
 
@@ -120,7 +120,7 @@ impl<TOutput: Send + 'static> Resolvable for BackgroundCloseBuilder<TOutput> {
 #[cfg(all(feature = "unstable", feature = "internal"))]
 impl<TOutput: Send + 'static> Wait for BackgroundCloseBuilder<TOutput> {
     fn wait(self) -> Self::To {
-        ZRuntime::Application.block_in_place(self.into_future())
+        ZRuntime::Net.block_in_place(self.into_future())
     }
 }
 
@@ -134,7 +134,7 @@ impl<TOutput: Send + 'static> IntoFuture for BackgroundCloseBuilder<TOutput> {
             async move {
                 let (tx, rx) = async_channel::bounded::<TOutput>(1);
 
-                ZRuntime::Application.spawn(async move {
+                ZRuntime::Net.spawn(async move {
                     tx.send(self.inner.await)
                         .await
                         .expect("BackgroundCloseBuilder: critical error sending the result")
