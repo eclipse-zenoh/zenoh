@@ -81,6 +81,7 @@ impl<TCloseable: Closeable> Wait for CloseBuilder<TCloseable> {
             }
             false => {
                 let evaluate = move || {
+                    // NOTE: tracing logger also panics if used inside atexit() handler!!!
                     tracing::trace!(
                         "tokio TLS NOT available, closing closeable in separate thread"
                     );
