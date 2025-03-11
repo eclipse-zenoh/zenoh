@@ -179,7 +179,7 @@ impl TablesLock {
         tables
             .faces
             .values()
-            .for_each(|face| face.interceptors_from_factories(&tables.interceptors));
+            .for_each(|face| face.set_interceptors_from_factories(&tables.interceptors));
         Ok(())
     }
 }

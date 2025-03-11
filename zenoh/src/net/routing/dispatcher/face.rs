@@ -208,7 +208,7 @@ impl FaceState {
         }
     }
 
-    pub(crate) fn interceptors_from_factories(&self, factories: &[InterceptorFactory]) {
+    pub(crate) fn set_interceptors_from_factories(&self, factories: &[InterceptorFactory]) {
         if let Some(mux) = self.primitives.as_any().downcast_ref::<Mux>() {
             let (ingress, egress): (Vec<_>, Vec<_>) = factories
                 .iter()
