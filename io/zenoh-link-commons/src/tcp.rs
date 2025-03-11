@@ -20,6 +20,7 @@ pub struct TcpSocketConfig<'a> {
     tx_buffer_size: Option<u32>,
     rx_buffer_size: Option<u32>,
     iface: Option<&'a str>,
+    bind_socket: Option<SocketAddr>,
 }
 
 impl<'a> TcpSocketConfig<'a> {
@@ -27,11 +28,13 @@ impl<'a> TcpSocketConfig<'a> {
         tx_buffer_size: Option<u32>,
         rx_buffer_size: Option<u32>,
         iface: Option<&'a str>,
+        bind_socket: Option<SocketAddr>,
     ) -> Self {
         Self {
             tx_buffer_size,
             rx_buffer_size,
             iface,
+            bind_socket,
         }
     }
 
@@ -60,6 +63,9 @@ impl<'a> TcpSocketConfig<'a> {
         dst_addr: &SocketAddr,
     ) -> ZResult<(TcpStream, SocketAddr, SocketAddr)> {
         let socket = self.socket_with_config(dst_addr)?;
+        if let Some(addr) = self.bind_socket {
+            socket.bind(addr).map_err(|e| zerror!("{}: {}", addr, e))?;
+        }
         // Build a TcpStream from TcpSocket
         // https://docs.rs/tokio/latest/tokio/net/struct.TcpSocket.html
         let stream = socket
@@ -84,6 +90,10 @@ impl<'a> TcpSocketConfig<'a> {
             SocketAddr::V4(_) => TcpSocket::new_v4(),
             SocketAddr::V6(_) => TcpSocket::new_v6(),
         }?;
+
+        if let Some(bind_socket) = self.bind_socket {
+            socket.bind(bind_socket)?;
+        };
 
         if let Some(iface) = self.iface {
             zenoh_util::net::set_bind_to_device_tcp_socket(&socket, iface)?;

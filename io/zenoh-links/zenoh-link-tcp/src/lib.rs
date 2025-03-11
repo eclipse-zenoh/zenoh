@@ -85,6 +85,7 @@ zconfigurable! {
 }
 
 pub async fn get_tcp_addrs(address: Address<'_>) -> ZResult<impl Iterator<Item = SocketAddr>> {
+    println!("get_tcp_addrs {:?}", address);
     let iter = tokio::net::lookup_host(address.as_str().to_string())
         .await
         .map_err(|e| zerror!("{}", e))?
