@@ -24,6 +24,8 @@ use std::{
 };
 
 use async_trait::async_trait;
+#[cfg(feature = "unstable")]
+use once_cell::sync::OnceCell;
 #[zenoh_macros::internal]
 use ref_cast::ref_cast_custom;
 use ref_cast::RefCastCustom;
@@ -35,7 +37,7 @@ use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::{qos::PublisherQoSConfig, unwrap_or_default, wrappers::ZenohId};
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Wait};
-use zenoh_keyexpr::keyexpr_tree::KeBoxTree;
+use zenoh_keyexpr::{keyexpr_tree::KeBoxTree, OwnedNonWildKeyExpr};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::network::declare::SubscriberId;
 use zenoh_protocol::{
@@ -110,7 +112,10 @@ use crate::{
     },
     net::{
         primitives::Primitives,
-        routing::dispatcher::face::Face,
+        routing::{
+            dispatcher::face::Face,
+            namespace::{ENamespace, Namespace},
+        },
         runtime::{Runtime, RuntimeBuilder},
     },
     query::ReplyError,
@@ -125,8 +130,8 @@ zconfigurable! {
 }
 
 pub(crate) struct SessionState {
-    pub(crate) primitives: Option<Arc<Face>>, // @TODO replace with MaybeUninit ??
-    pub(crate) expr_id_counter: AtomicExprId, // @TODO: manage rollover and uniqueness
+    pub(crate) primitives: Option<Arc<dyn Primitives>>, // @TODO replace with MaybeUninit ??
+    pub(crate) expr_id_counter: AtomicExprId,           // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicRequestId,
     pub(crate) liveliness_qid_counter: AtomicRequestId,
     pub(crate) local_resources: HashMap<ExprId, Resource>,
@@ -190,7 +195,7 @@ impl SessionState {
 
 impl SessionState {
     #[inline]
-    pub(crate) fn primitives(&self) -> ZResult<Arc<Face>> {
+    pub(crate) fn primitives(&self) -> ZResult<Arc<dyn Primitives>> {
         self.primitives
             .as_ref()
             .cloned()
@@ -528,6 +533,9 @@ pub(crate) struct SessionInner {
     pub(crate) id: u16,
     owns_runtime: bool,
     task_controller: TaskController,
+    namespace: Option<OwnedNonWildKeyExpr>,
+    #[cfg(feature = "unstable")]
+    face_id: OnceCell<usize>,
 }
 
 impl fmt::Debug for SessionInner {
@@ -676,6 +684,7 @@ impl Session {
             let router = runtime.router();
             let config = runtime.config().lock();
             let publisher_qos = config.0.qos().publication().clone();
+            let namespace = config.0.namespace().clone();
             drop(config);
             let state = RwLock::new(SessionState::new(
                 aggregated_subscribers,
@@ -689,12 +698,32 @@ impl Session {
                 id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
                 owns_runtime,
                 task_controller: TaskController::default(),
+                namespace: namespace.clone(),
+                #[cfg(feature = "unstable")]
+                face_id: OnceCell::new(),
             }));
 
             runtime.new_handler(Arc::new(admin::Handler::new(session.downgrade())));
 
-            let primitives = Some(router.new_primitives(Arc::new(session.downgrade())));
-            zwrite!(session.0.state).primitives = primitives;
+            let primitives: Arc<dyn Primitives> = match namespace {
+                Some(ns) => {
+                    let face = router.new_primitives(Arc::new(ENamespace::new(
+                        ns.clone(),
+                        Arc::new(session.downgrade()),
+                    )));
+                    #[cfg(feature = "unstable")]
+                    session.0.face_id.set(face.state.id).unwrap(); // this is the only attempt to set value
+                    Arc::new(Namespace::new(ns, face))
+                }
+                None => {
+                    let face = router.new_primitives(Arc::new(session.downgrade()));
+                    #[cfg(feature = "unstable")]
+                    session.0.face_id.set(face.state.id).unwrap(); // this is the only attempt to set value
+                    face
+                }
+            };
+
+            zwrite!(session.0.state).primitives = Some(primitives);
 
             admin::init(session.downgrade());
 
@@ -1466,6 +1495,19 @@ impl SessionInner {
         }
     }
 
+    pub(crate) fn optimize_nonwild_prefix(&self, key_expr: &KeyExpr) -> ZResult<WireExpr<'static>> {
+        let ke = key_expr.as_keyexpr();
+        if let Some(prefix) = ke.get_nonwild_prefix() {
+            let expr_id = self.declare_prefix(prefix.as_str()).wait()?;
+            return Ok(WireExpr {
+                scope: expr_id,
+                suffix: key_expr.as_str()[prefix.len()..].to_string().into(),
+                mapping: Mapping::Sender,
+            });
+        }
+        Ok(key_expr.to_wire(self).to_owned())
+    }
+
     pub(crate) fn declare_subscriber_inner(
         self: &Arc<Self>,
         key_expr: &KeyExpr,
@@ -1479,38 +1521,14 @@ impl SessionInner {
         if let Some(key_expr) = declared_sub {
             let primitives = state.primitives()?;
             drop(state);
-            // If key_expr is a pure Expr, remap it to optimal Rid or RidWithSuffix
-            // let key_expr = if !key_expr.is_optimized(self) {
-            //     match key_expr.as_str().find('*') {
-            //         Some(0) => key_expr.to_wire(self),
-            //         Some(pos) => {
-            //             let expr_id = self.declare_prefix(&key_expr.as_str()[..pos]).wait();
-            //             WireExpr {
-            //                 scope: expr_id,
-            //                 suffix: std::borrow::Cow::Borrowed(&key_expr.as_str()[pos..]),
-            //             }
-            //         }
-            //         None => {
-            //             let expr_id = self.declare_prefix(key_expr.as_str()).wait();
-            //             WireExpr {
-            //                 scope: expr_id,
-            //                 suffix: std::borrow::Cow::Borrowed(""),
-            //             }
-            //         }
-            //     }
-            // } else {
-            //     key_expr.to_wire(self)
-            // };
+            let wire_expr = self.optimize_nonwild_prefix(&key_expr)?;
 
             primitives.send_declare(Declare {
                 interest_id: None,
                 ext_qos: declare::ext::QoSType::DECLARE,
                 ext_tstamp: None,
                 ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                    id,
-                    wire_expr: key_expr.to_wire(self).to_owned(),
-                }),
+                body: DeclareBody::DeclareSubscriber(DeclareSubscriber { id, wire_expr }),
             });
             #[cfg(feature = "unstable")]
             {
@@ -1589,6 +1607,8 @@ impl SessionInner {
                                     false,
                                 )
                             }
+                        } else {
+                            drop(state);
                         }
                     } else {
                         drop(state);
@@ -1657,6 +1677,7 @@ impl SessionInner {
                 complete,
                 distance: 0,
             };
+            let wire_expr = self.optimize_nonwild_prefix(key_expr)?;
             primitives.send_declare(Declare {
                 interest_id: None,
                 ext_qos: declare::ext::QoSType::DECLARE,
@@ -1664,7 +1685,7 @@ impl SessionInner {
                 ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                 body: DeclareBody::DeclareQueryable(DeclareQueryable {
                     id,
-                    wire_expr: wire_expr.to_owned(),
+                    wire_expr,
                     ext_info: qabl_info,
                 }),
             });
@@ -1914,13 +1935,13 @@ impl SessionInner {
             MatchingStatusType::Queryables(false) => state.queryables.values().any(|q| {
                 state
                     .local_wireexpr_to_expr(&q.key_expr)
-                    .map_or(false, |ke| ke.intersects(key_expr))
+                    .is_ok_and(|ke| ke.intersects(key_expr))
             }),
             MatchingStatusType::Queryables(true) => state.queryables.values().any(|q| {
                 q.complete
                     && state
                         .local_wireexpr_to_expr(&q.key_expr)
-                        .map_or(false, |ke| ke.includes(key_expr))
+                        .is_ok_and(|ke| ke.includes(key_expr))
             }),
         };
         MatchingStatus { matching }
@@ -1928,6 +1949,24 @@ impl SessionInner {
 
     #[zenoh_macros::unstable]
     fn matching_status_remote(
+        &self,
+        key_expr: &KeyExpr,
+        destination: Locality,
+        matching_type: MatchingStatusType,
+    ) -> ZResult<MatchingStatus> {
+        if let Some(ns) = &self.namespace {
+            self.matching_status_remote_inner(
+                &(ns / key_expr.deref()).into(),
+                destination,
+                matching_type,
+            )
+        } else {
+            self.matching_status_remote_inner(key_expr, destination, matching_type)
+        }
+    }
+
+    #[zenoh_macros::unstable]
+    fn matching_status_remote_inner(
         &self,
         key_expr: &KeyExpr,
         destination: Locality,
@@ -1952,20 +1991,12 @@ impl SessionInner {
         drop(tables);
         let matching = match destination {
             Locality::Any => !matches.is_empty(),
-            Locality::Remote => {
-                if let Some(face) = zread!(self.state).primitives.as_ref() {
-                    matches.values().any(|dir| !Arc::ptr_eq(dir, &face.state))
-                } else {
-                    !matches.is_empty()
-                }
-            }
-            Locality::SessionLocal => {
-                if let Some(face) = zread!(self.state).primitives.as_ref() {
-                    matches.values().any(|dir| Arc::ptr_eq(dir, &face.state))
-                } else {
-                    false
-                }
-            }
+            Locality::Remote => matches
+                .values()
+                .any(|dir| dir.id != *self.face_id.get().unwrap()),
+            Locality::SessionLocal => matches
+                .values()
+                .any(|dir| dir.id == *self.face_id.get().unwrap()),
         };
         Ok(MatchingStatus { matching })
     }
@@ -2111,7 +2142,7 @@ impl SessionInner {
         drop(state);
         let mut sample = info.clone().into_sample(
             // SAFETY: the keyexpr is valid
-            unsafe { KeyExpr::from_str_unchecked("dummy") },
+            KeyExpr::dummy(),
             payload,
             #[cfg(feature = "unstable")]
             reliability,
@@ -2149,46 +2180,60 @@ impl SessionInner {
         let timestamp = timestamp.or_else(|| self.runtime.new_timestamp());
         let wire_expr = key_expr.to_wire(self);
         if destination != Locality::SessionLocal {
-            primitives.send_push(
-                Push {
-                    wire_expr: wire_expr.to_owned(),
-                    ext_qos: push::ext::QoSType::new(
-                        priority.into(),
-                        congestion_control,
-                        is_express,
-                    ),
-                    ext_tstamp: None,
-                    ext_nodeid: push::ext::NodeIdType::DEFAULT,
-                    payload: match kind {
-                        SampleKind::Put => PushBody::Put(Put {
-                            timestamp,
-                            encoding: encoding.clone().into(),
-                            #[cfg(feature = "unstable")]
-                            ext_sinfo: source_info.clone().into(),
-                            #[cfg(not(feature = "unstable"))]
-                            ext_sinfo: None,
-                            #[cfg(feature = "shared-memory")]
-                            ext_shm: None,
-                            ext_attachment: attachment.clone().map(|a| a.into()),
-                            ext_unknown: vec![],
-                            payload: payload.clone().into(),
-                        }),
-                        SampleKind::Delete => PushBody::Del(Del {
-                            timestamp,
-                            #[cfg(feature = "unstable")]
-                            ext_sinfo: source_info.clone().into(),
-                            #[cfg(not(feature = "unstable"))]
-                            ext_sinfo: None,
-                            ext_attachment: attachment.clone().map(|a| a.into()),
-                            ext_unknown: vec![],
-                        }),
-                    },
-                },
-                #[cfg(feature = "unstable")]
-                reliability,
-                #[cfg(not(feature = "unstable"))]
-                Reliability::DEFAULT,
-            );
+            let body = || match kind {
+                SampleKind::Put => PushBody::Put(Put {
+                    timestamp,
+                    encoding: encoding.clone().into(),
+                    #[cfg(feature = "unstable")]
+                    ext_sinfo: source_info.clone().into(),
+                    #[cfg(not(feature = "unstable"))]
+                    ext_sinfo: None,
+                    #[cfg(feature = "shared-memory")]
+                    ext_shm: None,
+                    ext_attachment: attachment.clone().map(|a| a.into()),
+                    ext_unknown: vec![],
+                    payload: payload.clone().into(),
+                }),
+                SampleKind::Delete => PushBody::Del(Del {
+                    timestamp,
+                    #[cfg(feature = "unstable")]
+                    ext_sinfo: source_info.clone().into(),
+                    #[cfg(not(feature = "unstable"))]
+                    ext_sinfo: None,
+                    ext_attachment: attachment.clone().map(|a| a.into()),
+                    ext_unknown: vec![],
+                }),
+            };
+            match &self.namespace {
+                Some(_) => {
+                    let face = primitives.as_any().downcast_ref::<Namespace>().unwrap();
+                    face.send_push_lazy(
+                        wire_expr.to_owned(),
+                        push::ext::QoSType::new(priority.into(), congestion_control, is_express),
+                        None,
+                        push::ext::NodeIdType::DEFAULT,
+                        body,
+                        #[cfg(feature = "unstable")]
+                        reliability,
+                        #[cfg(not(feature = "unstable"))]
+                        Reliability::DEFAULT,
+                    );
+                }
+                None => {
+                    let face = primitives.as_any().downcast_ref::<Face>().unwrap();
+                    face.send_push_lazy(
+                        wire_expr.to_owned(),
+                        push::ext::QoSType::new(priority.into(), congestion_control, is_express),
+                        None,
+                        push::ext::NodeIdType::DEFAULT,
+                        body,
+                        #[cfg(feature = "unstable")]
+                        reliability,
+                        #[cfg(not(feature = "unstable"))]
+                        Reliability::DEFAULT,
+                    );
+                }
+            }
         }
         if destination != Locality::Remote {
             let data_info = DataInfo {
@@ -3045,6 +3090,10 @@ impl Primitives for WeakSession {
 
     fn send_close(&self) {
         trace!("recv Close");
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 

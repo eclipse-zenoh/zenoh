@@ -47,10 +47,7 @@ use super::{
     HatBaseTrait, HatTrait, SendDeclare,
 };
 use crate::net::{
-    routing::{
-        dispatcher::{face::Face, interests::RemoteInterest},
-        router::{compute_data_routes, compute_query_routes, RoutesIndexes},
-    },
+    routing::dispatcher::{face::Face, interests::RemoteInterest},
     runtime::Runtime,
 };
 
@@ -84,7 +81,9 @@ impl HatTables {
 pub(crate) struct HatCode {}
 
 impl HatBaseTrait for HatCode {
-    fn init(&self, _tables: &mut Tables, _runtime: Runtime) {}
+    fn init(&self, _tables: &mut Tables, _runtime: Runtime) -> ZResult<()> {
+        Ok(())
+    }
 
     fn new_tables(&self, _router_peers_failover_brokering: bool) -> Box<dyn Any + Send + Sync> {
         Box::new(HatTables::new())
@@ -109,6 +108,7 @@ impl HatBaseTrait for HatCode {
         pubsub_new_face(tables, &mut face.state, send_declare);
         queries_new_face(tables, &mut face.state, send_declare);
         token_new_face(tables, &mut face.state, send_declare);
+        tables.disable_all_routes();
         Ok(())
     }
 
@@ -124,6 +124,7 @@ impl HatBaseTrait for HatCode {
         pubsub_new_face(tables, &mut face.state, send_declare);
         queries_new_face(tables, &mut face.state, send_declare);
         token_new_face(tables, &mut face.state, send_declare);
+        tables.disable_all_routes();
         Ok(())
     }
 
@@ -209,31 +210,17 @@ impl HatBaseTrait for HatCode {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
             undeclare_simple_token(&mut wtables, &mut face_clone, &mut res, send_declare);
         }
-        drop(wtables);
 
-        let mut matches_data_routes = vec![];
-        let mut matches_query_routes = vec![];
-        let rtables = zread!(tables.tables);
-        for _match in subs_matches.drain(..) {
-            let mut expr = RoutingExpr::new(&_match, "");
-            matches_data_routes.push((_match.clone(), compute_data_routes(&rtables, &mut expr)));
-        }
-        for _match in qabls_matches.drain(..) {
-            matches_query_routes.push((_match.clone(), compute_query_routes(&rtables, &_match)));
-        }
-        drop(rtables);
-
-        let mut wtables = zwrite!(tables.tables);
-        for (mut res, data_routes) in matches_data_routes {
+        for mut res in subs_matches {
             get_mut_unchecked(&mut res)
                 .context_mut()
-                .update_data_routes(data_routes);
+                .disable_data_routes();
             Resource::clean(&mut res);
         }
-        for (mut res, query_routes) in matches_query_routes {
+        for mut res in qabls_matches {
             get_mut_unchecked(&mut res)
                 .context_mut()
-                .update_query_routes(query_routes);
+                .disable_query_routes();
             Resource::clean(&mut res);
         }
         wtables.faces.remove(&face.id);
@@ -319,12 +306,3 @@ impl HatFace {
 }
 
 impl HatTrait for HatCode {}
-
-#[inline]
-fn get_routes_entries() -> RoutesIndexes {
-    RoutesIndexes {
-        routers: vec![0],
-        peers: vec![0],
-        clients: vec![0],
-    }
-}

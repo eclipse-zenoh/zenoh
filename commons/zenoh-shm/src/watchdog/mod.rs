@@ -12,13 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-pub mod descriptor;
-
 tested_crate_module!(periodic_task);
-tested_crate_module!(storage);
 tested_crate_module!(validator);
 tested_crate_module!(confirmator);
-
-pub(crate) mod allocated_watchdog;
-
-mod segment;

@@ -34,7 +34,7 @@ pub type SourceSn = u32;
 
 /// The locality of samples to be received by subscribers or targeted by publishers.
 #[zenoh_macros::unstable]
-#[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Locality {
     SessionLocal,
     Remote,
@@ -428,6 +428,24 @@ impl Sample {
     #[inline]
     pub fn attachment_mut(&mut self) -> Option<&mut ZBytes> {
         self.attachment.as_mut()
+    }
+
+    /// Constructs an uninitialized empty Sample.
+    #[zenoh_macros::internal]
+    pub fn empty() -> Self {
+        Sample {
+            key_expr: KeyExpr::dummy(),
+            payload: ZBytes::new(),
+            kind: SampleKind::Put,
+            encoding: Encoding::default(),
+            timestamp: None,
+            qos: QoS::default(),
+            #[cfg(feature = "unstable")]
+            reliability: Reliability::default(),
+            #[cfg(feature = "unstable")]
+            source_info: SourceInfo::empty(),
+            attachment: None,
+        }
     }
 }
 

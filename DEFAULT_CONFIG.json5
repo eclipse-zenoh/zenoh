@@ -137,11 +137,24 @@
       /// Accepts a single value (e.g. autoconnect: ["router", "peer"]) which applies whatever the configured "mode" is,
       /// or different values for router, peer or client mode (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
       /// Each value is a list of: "peer", "router" and/or "client".
-      autoconnect: { router: [], peer: ["router", "peer"], client: ["router", "peer"] },
+      autoconnect: { router: [], peer: ["router", "peer"], client: ["router"] },
+      /// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
+      /// Possible options are:
+      /// - "always": always attempt to autoconnect, may result in redundant connections.
+      /// - "greater-zid": attempt to connect to another node only if its own zid is greater than the other's.
+      ///   If both nodes use this strategy, only one will attempt the connection.
+      ///   This strategy may not be suited if one of the nodes is not reachable by the other one, for example
+      ///   because of a private IP.
+      /// Accepts a single value (e.g. autoconnect: "always") which applies whatever node would be auto-connected to,
+      /// or different values for router and/or peer depending on the type of node detected
+      /// (e.g. autoconnect_strategy : { to_router:  "always", to_peer: "greater-zid" }),
+      /// or different values for router or peer mode
+      /// (e.g. autoconnect_strategy : { peer: { to_router:  "always", to_peer: "greater-zid" } }).
+      autoconnect_strategy: { peer: { to_router: "always", to_peer: "always" } },
       /// Whether or not to listen for scout messages on UDP multicast and reply to them.
       listen: true,
     },
-    /// The gossip scouting configuration.
+    /// The gossip scouting configuration. Note that instances in "client" mode do not participate in gossip.
     gossip: {
       /// Whether gossip scouting is enabled or not
       enabled: true,
@@ -151,11 +164,29 @@
       /// It mostly makes sense when using "linkstate" routing mode where all nodes in the subsystem don't have
       /// direct connectivity with each other.
       multihop: false,
+      /// Which type of Zenoh instances to send gossip messages to.
+      /// Accepts a single value (e.g. target: ["router", "peer"]) which applies whatever the configured "mode" is,
+      /// or different values for router or peer mode (e.g. target: { router: ["router", "peer"], peer: ["router"] }).
+      /// Each value is a list of "peer" and/or "router".
+      target: { router: ["router", "peer"], peer: ["router", "peer"]},
       /// Which type of Zenoh instances to automatically establish sessions with upon discovery on gossip.
       /// Accepts a single value (e.g. autoconnect: ["router", "peer"]) which applies whatever the configured "mode" is,
-      /// or different values for router, peer or client mode (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
-      /// Each value is a list of: "peer", "router" and/or "client".
-      autoconnect: { router: [], peer: ["router", "peer"], client: ["router", "peer"] },
+      /// or different values for router or peer mode (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
+      /// Each value is a list of: "peer" and/or "router".
+      autoconnect: { router: [], peer: ["router", "peer"] },
+      /// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
+      /// Possible options are:
+      /// - "always": always attempt to autoconnect, may result in redundant connection which will then be closed.
+      /// - "greater-zid": attempt to connect to another node only if its own zid is greater than the other's.
+      ///   If both nodes use this strategy, only one will attempt the connection.
+      ///   This strategy may not be suited if one of the nodes is not reachable by the other one, for example
+      ///   because of a private IP.
+      /// Accepts a single value (e.g. autoconnect: "always") which applies whatever node would be auto-connected to,
+      /// or different values for router and/or peer depending on the type of node detected
+      /// (e.g. autoconnect_strategy : { "to-router":  "always", "to-peer": "greater-zid" }),
+      /// or different values for router or peer mode
+      /// (e.g. autoconnect_strategy : { peer: { "to-router":  "always", "to-peer": "greater-zid" } }).
+      autoconnect_strategy: { peer: { "to-router": "always", "to-peer": "always" } },
     },
   },
 
@@ -180,13 +211,22 @@
       /// When set to true a router will forward data between two peers
       /// directly connected to it if it detects that those peers are not
       /// connected to each other.
-      /// The failover brokering only works if gossip discovery is enabled.
+      /// The failover brokering only works if gossip discovery is enabled
+      /// and peers are configured with gossip target "router".
       peers_failover_brokering: true,
     },
     /// The routing strategy to use in peers and it's configuration.
     peer: {
       /// The routing strategy to use in peers. ("peer_to_peer" or "linkstate").
       mode: "peer_to_peer",
+    },
+    /// The interests-based routing configuration.
+    /// This configuration applies regardless of the mode (router, peer or client).
+    interests: {
+      /// The timeout to wait for incoming interests declarations in milliseconds.
+      /// The expiration of this timeout implies that the discovery protocol might be incomplete,
+      /// leading to potential loss of messages, queries or liveliness tokens.
+      timeout: 10000,
     },
   },
 
@@ -223,13 +263,36 @@
   //      ],
   //  },
 
+  // /// Namespace prefix.
+  // /// If specified, all outgoing key expressions will be automatically prefixed with specified string,
+  // /// and all incoming key expressions will be stripped of specified prefix.
+  // /// The namespace prefix should satisfy all key expression constraints
+  // /// and additionally it can not contain wild characters ('*').
+  // /// Namespace is applied to the session.
+  // /// E. g. if session has a namespace of "1" then session.put("my/keyexpr", my_message), 
+  // /// will put a message into 1/my/keyexpr. Same applies to all other operations within this session.
+  // namespace: "my/namespace",
+
   //  /// The downsampling declaration.
   //  downsampling: [
   //    {
-  //      /// A list of network interfaces messages will be processed on, the rest will be passed as is.
+  //      /// Optional Id, has to be unique
+  //      "id": "wlan0egress",
+  //      /// Optional list of network interfaces messages will be processed on, the rest will be passed as is.
+  //      /// If absent, the rules will be applied to all interfaces, in case of an empty list it means that they will not be applied to any.
   //      interfaces: [ "wlan0" ],
-  //      /// Data flow messages will be processed on. ("egress" or "ingress")
-  //      flow: "egress",
+  //      /// Optional list of data flows messages will be processed on ("egress" and/or "ingress").
+  //      /// If absent, the rules will be applied to both flows.
+  //      flow: ["ingress", "egress"],
+  //      /// List of message type on which downsampling will be applied. Must not be empty.
+  //      messages: [
+  //        /// Publication (Put and Delete)
+  //        "push",
+  //        /// Get
+  //        "query",
+  //        /// Queryable Reply to a Query
+  //        "reply"
+  //      ],
   //      /// A list of downsampling rules: key_expression and the maximum frequency in Hertz
   //      rules: [
   //        { key_expr: "demo/example/zenoh-rs-pub", freq: 0.1 },
@@ -322,6 +385,8 @@
   //   [
   //      /// Each policy associates one or multiple rules to one or multiple subject combinations
   //      {
+  //         /// Id is optional. If provided, it has to be unique within the policies list
+  //         "id": "policy1",
   //         /// Rules and Subjects are identified with their unique IDs declared above
   //         "rules": ["rule1"],
   //         "subjects": ["subject1", "subject2"],
@@ -340,11 +405,11 @@
       open_timeout: 10000,
       /// Timeout in milliseconds when accepting a link
       accept_timeout: 10000,
-      /// Maximum number of zenoh session in pending state while accepting
+      /// Maximum number of links in pending state while performing the handshake for accepting it
       accept_pending: 100,
-      /// Maximum number of sessions that can be simultaneously alive
+      /// Maximum number of transports that can be simultaneously alive for a single zenoh sessions
       max_sessions: 1000,
-      /// Maximum number of incoming links that are admitted per session
+      /// Maximum number of incoming links that are admitted per transport
       max_links: 1,
       /// Enables the LowLatency transport
       /// This option does not make LowLatency transport mandatory, the actual implementation of transport
@@ -426,14 +491,14 @@
           /// then amount of memory being allocated for each queue is SIZE_XXX * LINK_MTU.
           /// If qos is false, then only the DATA priority will be allocated.
           size: {
-            control: 1,
-            real_time: 1,
-            interactive_high: 1,
-            interactive_low: 1,
+            control: 2,
+            real_time: 2,
+            interactive_high: 2,
+            interactive_low: 2,
             data_high: 2,
-            data: 4,
-            data_low: 4,
-            background: 4,
+            data: 2,
+            data_low: 2,
+            background: 2,
           },
           /// Congestion occurs when the queue is empty (no available batch).
           congestion_control: {
@@ -460,6 +525,12 @@
             enabled: true,
             /// The maximum time limit (in ms) a message should be retained for batching when back-pressure happens.
             time_limit: 1,
+          },
+          allocation: {
+            /// Mode for memory allocation of batches in the priority queues. 
+            /// - "init": batches are allocated at queue initialization time. 
+            /// - "lazy": batches are allocated when needed up to the maximum number of batches configured in the size configuration parameter.
+            mode: "lazy",
           },
         },
       },
@@ -523,10 +594,20 @@
     /// NOTE: shared memory can be used only if zenoh is compiled with "shared-memory" feature, otherwise
     /// settings in this section have no effect.
     shared_memory: {
+      /// Whether shared memory is enabled or not.
+      /// If set to `true`, the SHM buffer optimization support will be announced to other parties. (default `true`).
+      /// This option doesn't make SHM buffer optimization mandatory, the real support depends on other party setting.
       /// A probing procedure for shared memory is performed upon session opening. To enable zenoh to operate
       /// over shared memory (and to not fallback on network mode), shared memory needs to be enabled also on the
       /// subscriber side. By doing so, the probing procedure will succeed and shared memory will operate as expected.
       enabled: true,
+      /// SHM resources initialization mode (default "lazy").
+      /// - "lazy": SHM subsystem internals will be initialized lazily upon the first SHM buffer
+      /// allocation or reception. This setting provides better startup time and optimizes resource usage,
+      /// but produces extra latency at the first SHM buffer interaction.
+      /// - "init": SHM subsystem internals will be initialized upon Session opening. This setting sacrifices
+      /// startup time, but guarantees no latency impact when first SHM buffer is processed.
+      mode: "lazy",
     },
     auth: {
       /// The configuration of authentication.

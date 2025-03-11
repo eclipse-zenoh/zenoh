@@ -26,9 +26,9 @@ use std::{
     },
 };
 
-use api::{common::types::ProtocolID, provider::chunk::ChunkDescriptor};
-use header::descriptor::{HeaderDescriptor, OwnedHeaderDescriptor};
-use watchdog::{confirmator::ConfirmedDescriptor, descriptor::Descriptor};
+use api::common::types::ProtocolID;
+use metadata::descriptor::MetadataDescriptor;
+use watchdog::confirmator::ConfirmedDescriptor;
 use zenoh_buffers::ZSliceBuffer;
 
 #[macro_export]
@@ -54,59 +54,49 @@ macro_rules! tested_crate_module {
 pub mod api;
 mod cleanup;
 pub mod header;
+pub mod init;
+pub mod metadata;
 pub mod posix_shm;
 pub mod reader;
+pub mod version;
 pub mod watchdog;
+tested_crate_module!(shm);
 
 /// Information about a [`ShmBufInner`].
 ///
 /// This that can be serialized and can be used to retrieve the [`ShmBufInner`] in a remote process.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ShmBufInfo {
-    /// The data chunk descriptor
-    pub data_descriptor: ChunkDescriptor,
-    /// Protocol identifier for particular SHM implementation
-    pub shm_protocol: ProtocolID,
     /// Actual data length
     /// NOTE: data_descriptor's len is >= of this len and describes the actual memory length
     /// dedicated in shared memory segment for this particular buffer.
     pub data_len: NonZeroUsize,
 
-    /// The watchdog descriptor
-    pub watchdog_descriptor: Descriptor,
-    /// The header descriptor
-    pub header_descriptor: HeaderDescriptor,
-    /// The generation of the buffer
+    /// Metadata descriptor
+    pub metadata: MetadataDescriptor,
+    /// Generation of the buffer
     pub generation: u32,
 }
 
 impl ShmBufInfo {
     pub fn new(
-        data_descriptor: ChunkDescriptor,
-        shm_protocol: ProtocolID,
         data_len: NonZeroUsize,
-        watchdog_descriptor: Descriptor,
-        header_descriptor: HeaderDescriptor,
+        metadata: MetadataDescriptor,
         generation: u32,
     ) -> ShmBufInfo {
         ShmBufInfo {
-            data_descriptor,
-            shm_protocol,
             data_len,
-            watchdog_descriptor,
-            header_descriptor,
+            metadata,
             generation,
         }
     }
 }
 
 /// A zenoh buffer in shared memory.
-#[non_exhaustive]
 pub struct ShmBufInner {
-    pub(crate) header: OwnedHeaderDescriptor,
+    pub(crate) metadata: Arc<ConfirmedDescriptor>,
     pub(crate) buf: AtomicPtr<u8>,
     pub info: ShmBufInfo,
-    pub(crate) watchdog: Arc<ConfirmedDescriptor>,
 }
 
 impl PartialEq for ShmBufInner {
@@ -122,7 +112,7 @@ impl Eq for ShmBufInner {}
 impl std::fmt::Debug for ShmBufInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ShmBufInner")
-            .field("header", &self.header)
+            .field("metadata", &self.metadata)
             .field("buf", &self.buf)
             .field("info", &self.info)
             .finish()
@@ -130,12 +120,23 @@ impl std::fmt::Debug for ShmBufInner {
 }
 
 impl ShmBufInner {
+    pub fn protocol(&self) -> ProtocolID {
+        self.metadata
+            .owned
+            .header()
+            .protocol
+            .load(Ordering::Relaxed)
+    }
+
     pub fn len(&self) -> NonZeroUsize {
         self.info.data_len
     }
 
     fn is_valid(&self) -> bool {
-        self.header.header().generation.load(Ordering::SeqCst) == self.info.generation
+        let header = self.metadata.owned.header();
+
+        !header.watchdog_invalidated.load(Ordering::SeqCst)
+            && header.generation.load(Ordering::SeqCst) == self.info.generation
     }
 
     fn is_unique(&self) -> bool {
@@ -143,7 +144,7 @@ impl ShmBufInner {
     }
 
     pub fn ref_count(&self) -> u32 {
-        self.header.header().refcount.load(Ordering::SeqCst)
+        self.metadata.owned.header().refcount.load(Ordering::SeqCst)
     }
 
     /// Increments buffer's reference count
@@ -153,7 +154,11 @@ impl ShmBufInner {
     /// of the reference counter can lead to memory being stalled until
     /// recovered by watchdog subsystem or forcibly deallocated
     pub unsafe fn inc_ref_count(&self) {
-        self.header.header().refcount.fetch_add(1, Ordering::SeqCst);
+        self.metadata
+            .owned
+            .header()
+            .refcount
+            .fetch_add(1, Ordering::SeqCst);
     }
 
     // PRIVATE:
@@ -164,7 +169,11 @@ impl ShmBufInner {
     }
 
     unsafe fn dec_ref_count(&self) {
-        self.header.header().refcount.fetch_sub(1, Ordering::SeqCst);
+        self.metadata
+            .owned
+            .header()
+            .refcount
+            .fetch_sub(1, Ordering::SeqCst);
     }
 
     /// Gets a mutable slice.
@@ -197,10 +206,9 @@ impl Clone for ShmBufInner {
         unsafe { self.inc_ref_count() };
         let bp = self.buf.load(Ordering::SeqCst);
         ShmBufInner {
-            header: self.header.clone(),
+            metadata: self.metadata.clone(),
             buf: AtomicPtr::new(bp),
             info: self.info.clone(),
-            watchdog: self.watchdog.clone(),
         }
     }
 }

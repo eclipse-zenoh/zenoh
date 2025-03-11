@@ -16,6 +16,6 @@ repos:
     hooks:
       - id: fmt
         name: fmt
-        entry: cargo fmt -- --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate"
+        entry: bash -c 'rustfmt --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate,skip_children=true" $(git ls-files '*.rs')'
         language: system
         types: [rust]

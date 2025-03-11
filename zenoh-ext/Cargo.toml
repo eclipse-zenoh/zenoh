@@ -27,6 +27,7 @@ description = "Zenoh: extensions to the client API."
 maintenance = { status = "actively-developed" }
 
 [features]
+default = ["zenoh/default"]
 internal = []
 unstable = ["zenoh/unstable", "zenoh/internal"]
 

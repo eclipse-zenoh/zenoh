@@ -12,45 +12,45 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{collections::BTreeMap, sync::Arc, time::Duration};
+use std::{collections::BTreeSet, sync::Arc, time::Duration};
 
 use static_init::dynamic;
 
-use super::{descriptor::OwnedDescriptor, periodic_task::PeriodicTask};
-
-pub(super) type InvalidateCallback = Box<dyn Fn() + Send>;
+use super::periodic_task::PeriodicTask;
+use crate::metadata::descriptor::OwnedMetadataDescriptor;
 
 #[dynamic(lazy, drop)]
 pub static mut GLOBAL_VALIDATOR: WatchdogValidator =
     WatchdogValidator::new(Duration::from_millis(100));
 
 enum Transaction {
-    Add(InvalidateCallback),
+    Add,
     Remove,
 }
 
 #[derive(Default)]
 struct ValidatedStorage {
-    transactions: lockfree::queue::Queue<(Transaction, OwnedDescriptor)>,
+    transactions: crossbeam_queue::SegQueue<(Transaction, OwnedMetadataDescriptor)>,
 }
 
 impl ValidatedStorage {
-    fn add(&self, descriptor: OwnedDescriptor, on_invalidated: InvalidateCallback) {
-        self.transactions
-            .push((Transaction::Add(on_invalidated), descriptor));
+    fn add(&self, descriptor: OwnedMetadataDescriptor) {
+        self.transactions.push((Transaction::Add, descriptor));
     }
 
-    fn remove(&self, descriptor: OwnedDescriptor) {
+    fn remove(&self, descriptor: OwnedMetadataDescriptor) {
         self.transactions.push((Transaction::Remove, descriptor));
     }
 
-    fn collect_transactions(&self, storage: &mut BTreeMap<OwnedDescriptor, InvalidateCallback>) {
+    // See ordering implementation for OwnedMetadataDescriptor
+    #[allow(clippy::mutable_key_type)]
+    fn collect_transactions(&self, storage: &mut BTreeSet<OwnedMetadataDescriptor>) {
         while let Some((transaction, descriptor)) = self.transactions.pop() {
             match transaction {
-                Transaction::Add(on_invalidated) => {
-                    let _old = storage.insert(descriptor, on_invalidated);
+                Transaction::Add => {
+                    let _old = storage.insert(descriptor);
                     #[cfg(feature = "test")]
-                    assert!(_old.is_none());
+                    assert!(_old);
                 }
                 Transaction::Remove => {
                     let _ = storage.remove(&descriptor);
@@ -71,14 +71,19 @@ impl WatchdogValidator {
         let storage = Arc::new(ValidatedStorage::default());
 
         let c_storage = storage.clone();
-        let mut watchdogs = BTreeMap::default();
+        // See ordering implementation for OwnedMetadataDescriptor
+        #[allow(clippy::mutable_key_type)]
+        let mut watchdogs = BTreeSet::default();
         let task = PeriodicTask::new("Watchdog Validator".to_owned(), interval, move || {
             c_storage.collect_transactions(&mut watchdogs);
 
-            watchdogs.retain(|watchdog, on_invalidated| {
+            watchdogs.retain(|watchdog| {
                 let old_val = watchdog.validate();
                 if old_val == 0 {
-                    on_invalidated();
+                    watchdog
+                        .header()
+                        .watchdog_invalidated
+                        .store(true, std::sync::atomic::Ordering::Relaxed);
                     return false;
                 }
                 true
@@ -91,11 +96,11 @@ impl WatchdogValidator {
         }
     }
 
-    pub fn add(&self, watchdog: OwnedDescriptor, on_invalidated: InvalidateCallback) {
-        self.storage.add(watchdog, on_invalidated);
+    pub fn add(&self, watchdog: OwnedMetadataDescriptor) {
+        self.storage.add(watchdog);
     }
 
-    pub fn remove(&self, watchdog: OwnedDescriptor) {
+    pub fn remove(&self, watchdog: OwnedMetadataDescriptor) {
         self.storage.remove(watchdog);
     }
 }

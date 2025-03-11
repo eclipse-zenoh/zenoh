@@ -15,6 +15,7 @@ use alloc::string::String;
 use core::{convert::TryFrom, fmt, num::NonZeroU8, ops::BitOr, str::FromStr};
 
 use const_format::formatcp;
+use serde::ser::SerializeSeq;
 use zenoh_result::{bail, ZError};
 
 #[repr(u8)]
@@ -320,7 +321,14 @@ impl serde::Serialize for WhatAmIMatcher {
     where
         S: serde::Serializer,
     {
-        serializer.serialize_str(self.to_str())
+        let values = [WhatAmI::Router, WhatAmI::Peer, WhatAmI::Client]
+            .iter()
+            .filter(|v| self.matches(**v));
+        let mut seq = serializer.serialize_seq(Some(values.clone().count()))?;
+        for v in values {
+            seq.serialize_element(v)?;
+        }
+        seq.end()
     }
 }
 

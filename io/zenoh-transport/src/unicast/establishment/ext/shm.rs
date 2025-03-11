@@ -24,21 +24,22 @@ use zenoh_core::bail;
 use zenoh_crypto::PseudoRng;
 use zenoh_protocol::transport::{init, open};
 use zenoh_result::{zerror, Error as ZError, ZResult};
-use zenoh_shm::{api::common::types::ProtocolID, posix_shm::array::ArrayInSHM};
+use zenoh_shm::{
+    api::common::types::ProtocolID, posix_shm::array::ArrayInSHM, version::SHM_VERSION,
+};
 
 use crate::unicast::establishment::{AcceptFsm, OpenFsm};
 
 /*************************************/
 /*             Segment               */
 /*************************************/
-const AUTH_SEGMENT_PREFIX: &str = "auth";
-
 pub(crate) type AuthSegmentID = u32;
 pub(crate) type AuthChallenge = u64;
 
 const LEN_INDEX: usize = 0;
 const CHALLENGE_INDEX: usize = 1;
-const ID_START_INDEX: usize = 2;
+const VERSION_INDEX: usize = 2;
+const ID_START_INDEX: usize = 3;
 
 #[derive(Debug)]
 pub struct AuthSegment {
@@ -48,32 +49,70 @@ pub struct AuthSegment {
 impl AuthSegment {
     pub fn create(challenge: AuthChallenge, shm_protocols: &[ProtocolID]) -> ZResult<Self> {
         let array = ArrayInSHM::<AuthSegmentID, AuthChallenge, usize>::create(
-            ID_START_INDEX + shm_protocols.len(),
-            AUTH_SEGMENT_PREFIX,
+            (ID_START_INDEX + shm_protocols.len()).try_into()?,
         )?;
         unsafe {
             (*array.elem_mut(LEN_INDEX)) = shm_protocols.len() as AuthChallenge;
-            (*array.elem_mut(CHALLENGE_INDEX)) = challenge;
-            for elem in ID_START_INDEX..array.elem_count() {
-                (*array.elem_mut(elem)) = shm_protocols[elem - ID_START_INDEX] as u64;
+            // challenge field is inverted to prevent SHM probing between new versioned
+            // SHM implementation and the old one
+            (*array.elem_mut(CHALLENGE_INDEX)) = !challenge;
+            (*array.elem_mut(VERSION_INDEX)) = SHM_VERSION;
+            #[allow(clippy::needless_range_loop)]
+            for elem_index in 0..shm_protocols.len() {
+                (*array.elem_mut(ID_START_INDEX + elem_index)) = shm_protocols[elem_index] as u64;
             }
         };
         Ok(Self { array })
     }
 
     pub fn open(id: AuthSegmentID) -> ZResult<Self> {
-        let array = ArrayInSHM::open(id, AUTH_SEGMENT_PREFIX)?;
+        let array = ArrayInSHM::open(id)?;
+
+        // validate minimal array length
+        if array.elem_count().get() < ID_START_INDEX {
+            bail!("SHM auth segment is too small, maybe the other side is using an incompatible SHM version?")
+        }
+
         Ok(Self { array })
     }
 
     pub fn challenge(&self) -> AuthChallenge {
-        unsafe { *self.array.elem(CHALLENGE_INDEX) }
+        // challenge field is inverted to prevent SHM probing between new versioned
+        // SHM implementation and the old one
+        unsafe { !(*self.array.elem(CHALLENGE_INDEX)) }
+    }
+
+    pub fn validate_challenge(&self, expected_challenge: AuthChallenge, s: &str) -> bool {
+        let challnge_in_shm = self.challenge();
+        if challnge_in_shm != expected_challenge {
+            tracing::debug!(
+                "{} Challenge mismatch: expected: {}, found in shm: {}.",
+                s,
+                expected_challenge,
+                challnge_in_shm
+            );
+            return false;
+        }
+
+        let version_in_shm = unsafe { *self.array.elem(VERSION_INDEX) };
+        if version_in_shm != SHM_VERSION {
+            tracing::debug!(
+                "{} Version mismatch: ours: {}, theirs: {}.",
+                s,
+                SHM_VERSION,
+                version_in_shm
+            );
+            return false;
+        }
+
+        true
     }
 
     pub fn protocols(&self) -> Vec<ProtocolID> {
         let mut result = vec![];
-        for elem in ID_START_INDEX..self.array.elem_count() {
-            result.push(unsafe { *self.array.elem(elem) as u32 });
+        let len = unsafe { (*self.array.elem(LEN_INDEX)) as usize };
+        for elem in ID_START_INDEX..ID_START_INDEX + len {
+            result.push(unsafe { *self.array.elem(elem) as ProtocolID });
         }
         result
     }
@@ -280,17 +319,8 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
             return Ok(None);
         };
 
-        // Alice challenge as seen by Alice
-        let challenge = self.inner.challenge();
-
         // Verify that Bob has correctly read Alice challenge
-        if challenge != init_ack.alice_challenge {
-            tracing::trace!(
-                "{} Challenge mismatch: {} != {}.",
-                S,
-                init_ack.alice_challenge,
-                challenge
-            );
+        if !self.inner.validate_challenge(init_ack.alice_challenge, S) {
             return Ok(None);
         }
 
@@ -455,18 +485,9 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
             return Ok(());
         };
 
-        // Bob challenge as seen by Bob
-        let challenge = self.inner.challenge();
-
         // Verify that Alice has correctly read Bob challenge
         let bob_challnge = ext.value;
-        if challenge != bob_challnge {
-            tracing::trace!(
-                "{} Challenge mismatch: {} != {}.",
-                S,
-                bob_challnge,
-                challenge
-            );
+        if !self.inner.validate_challenge(bob_challnge, S) {
             return Ok(());
         }
 

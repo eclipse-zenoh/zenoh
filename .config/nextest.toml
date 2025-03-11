@@ -1,7 +1,10 @@
 # By default, retry a few times until pass the test within the specified timeout
 [profile.default]
-retries = 1
+retries = 2
 slow-timeout = { period = "60s", terminate-after = 2 }
+
+[profile.default.junit]
+path = "junit.xml"
 
 # Run the following tests exclusively with longer timeout
 [[profile.default.overrides]]

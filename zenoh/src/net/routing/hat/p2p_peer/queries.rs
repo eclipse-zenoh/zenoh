@@ -35,7 +35,7 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{face_hat, face_hat_mut, get_routes_entries, HatCode, HatFace};
+use super::{face_hat, face_hat_mut, HatCode, HatFace};
 use crate::{
     key_expr::KeyExpr,
     net::routing::{
@@ -47,7 +47,6 @@ use crate::{
         hat::{
             p2p_peer::initial_interest, CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources,
         },
-        router::{update_query_routes_from, RoutesIndexes},
         RoutingContext,
     },
 };
@@ -116,7 +115,7 @@ fn propagate_simple_queryable_to(
         face_hat_mut!(dst_face)
             .local_qabls
             .insert(res.clone(), (id, info));
-        let key_expr = Resource::decl_key(res, dst_face, dst_face.whatami != WhatAmI::Client);
+        let key_expr = Resource::decl_key(res, dst_face, super::push_declaration_profile(dst_face));
         send_declare(
             &dst_face.primitives,
             RoutingContext::with_expr(
@@ -131,7 +130,7 @@ fn propagate_simple_queryable_to(
                         ext_info: info,
                     }),
                 },
-                res.expr(),
+                res.expr().to_string(),
             ),
         );
     }
@@ -226,7 +225,7 @@ fn propagate_forget_simple_queryable(
                             ext_wire_expr: WireExprType::null(),
                         }),
                     },
-                    res.expr(),
+                    res.expr().to_string(),
                 ),
             );
         }
@@ -254,7 +253,7 @@ fn propagate_forget_simple_queryable(
                                     ext_wire_expr: WireExprType::null(),
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ),
                     );
                 }
@@ -300,7 +299,7 @@ pub(super) fn undeclare_simple_queryable(
                                 ext_wire_expr: WireExprType::null(),
                             }),
                         },
-                        res.expr(),
+                        res.expr().to_string(),
                     ),
                 );
             }
@@ -328,7 +327,7 @@ pub(super) fn undeclare_simple_queryable(
                                         ext_wire_expr: WireExprType::null(),
                                     }),
                                 },
-                                res.expr(),
+                                res.expr().to_string(),
                             ),
                         );
                     }
@@ -375,10 +374,6 @@ pub(super) fn queries_new_face(
             }
         }
     }
-    // recompute routes
-    // TODO: disable query routes and recompute them in parallel to avoid holding
-    // tables write lock for a long time on peer connection.
-    update_query_routes_from(tables, &mut tables.root_res.clone());
 }
 
 lazy_static::lazy_static! {
@@ -429,7 +424,8 @@ pub(super) fn declare_qabl_interest(
                 }) {
                     let info = local_qabl_info(tables, res, face);
                     let id = make_qabl_id(res, face, mode, info);
-                    let wire_expr = Resource::decl_key(res, face, face.whatami != WhatAmI::Client);
+                    let wire_expr =
+                        Resource::decl_key(res, face, super::push_declaration_profile(face));
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -444,7 +440,7 @@ pub(super) fn declare_qabl_interest(
                                     ext_info: info,
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ),
                     );
                 }
@@ -460,8 +456,11 @@ pub(super) fn declare_qabl_interest(
                             if qabl.context.is_some() && qabl.matches(res) {
                                 let info = local_qabl_info(tables, qabl, face);
                                 let id = make_qabl_id(qabl, face, mode, info);
-                                let key_expr =
-                                    Resource::decl_key(qabl, face, face.whatami != WhatAmI::Client);
+                                let key_expr = Resource::decl_key(
+                                    qabl,
+                                    face,
+                                    super::push_declaration_profile(face),
+                                );
                                 send_declare(
                                     &face.primitives,
                                     RoutingContext::with_expr(
@@ -476,7 +475,7 @@ pub(super) fn declare_qabl_interest(
                                                 ext_info: info,
                                             }),
                                         },
-                                        qabl.expr(),
+                                        qabl.expr().to_string(),
                                     ),
                                 );
                             }
@@ -496,8 +495,11 @@ pub(super) fn declare_qabl_interest(
                         if qabl.context.is_some() {
                             let info = local_qabl_info(tables, qabl, face);
                             let id = make_qabl_id(qabl, face, mode, info);
-                            let key_expr =
-                                Resource::decl_key(qabl, face, face.whatami != WhatAmI::Client);
+                            let key_expr = Resource::decl_key(
+                                qabl,
+                                face,
+                                super::push_declaration_profile(face),
+                            );
                             send_declare(
                                 &face.primitives,
                                 RoutingContext::with_expr(
@@ -512,7 +514,7 @@ pub(super) fn declare_qabl_interest(
                                             ext_info: info,
                                         }),
                                     },
-                                    qabl.expr(),
+                                    qabl.expr().to_string(),
                                 ),
                             );
                         }
@@ -565,6 +567,25 @@ impl HatQueriesTrait for HatCode {
             }
         }
         Vec::from_iter(qabls)
+    }
+
+    fn get_queriers(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+        let mut result = HashMap::new();
+        for face in tables.faces.values() {
+            for interest in face_hat!(face).remote_interests.values() {
+                if interest.options.queryables() {
+                    if let Some(res) = interest.res.as_ref() {
+                        let sources = result.entry(res.clone()).or_insert_with(Sources::default);
+                        match face.whatami {
+                            WhatAmI::Router => sources.routers.push(face.zid),
+                            WhatAmI::Peer => sources.peers.push(face.zid),
+                            WhatAmI::Client => sources.clients.push(face.zid),
+                        }
+                    }
+                }
+            }
+        }
+        result.into_iter().collect()
     }
 
     fn compute_query_route(
@@ -666,10 +687,6 @@ impl HatQueriesTrait for HatCode {
         Arc::new(route)
     }
 
-    fn get_query_routes_entries(&self, _tables: &Tables) -> RoutesIndexes {
-        get_routes_entries()
-    }
-
     #[cfg(feature = "unstable")]
     fn get_matching_queryables(
         &self,
@@ -700,7 +717,7 @@ impl HatQueriesTrait for HatCode {
             }
             for (sid, context) in &mres.session_ctxs {
                 if match complete {
-                    true => context.qabl.map_or(false, |q| q.complete),
+                    true => context.qabl.is_some_and(|q| q.complete),
                     false => context.qabl.is_some(),
                 } {
                     matching_queryables

@@ -44,13 +44,23 @@ use crate::replication::{
 ///
 /// A divergence in the Hot era, will directly let the Replica assess which [SubInterval]s it needs,
 /// hence directly skipping to the `SubIntervals` variant.
+///
+/// The `Discovery` and `All` variants are used to perform the initial alignment. After receiving a
+/// `Discovery` Query, a Replica will reply with its Zenoh ID. The Replica that replied first will
+/// then receive an `All` Query to transfer all its content.
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) enum AlignmentQuery {
+    /// Ask Replica for their Zenoh ID to perform an initial alignment.
     Discovery,
+    /// Retrieve all the content of a Replica.
     All,
+    /// First alignment Query after detecting a potential misalignment.
     Diff(DigestDiff),
+    /// Request the Fingerprint(s) of the Sub-Interval(s) contained in the provided Interval(s).
     Intervals(HashSet<IntervalIdx>),
+    /// Request the EventMetadata contained in the provided Sub-Interval(s).
     SubIntervals(HashMap<IntervalIdx, HashSet<SubIntervalIdx>>),
+    /// Request the Payload associated with the provided EventMetadata.
     Events(Vec<EventMetadata>),
 }
 
@@ -161,20 +171,19 @@ impl Replication {
         }
     }
 
-    /// Replies to the provided [Query] with a hash map containing the index of the [Interval] in
-    /// the Cold era and their [Fingerprint].
+    /// Replies to the provided [Query] with a hash map containing the index of the [Interval]s in
+    /// the Cold Era and their [Fingerprint]s.
     ///
     /// The Replica will use this response to assess which [Interval]s differ.
     ///
     /// # Temporality
     ///
-    /// There is no guarantee that the Replica indicating a difference in the Cold era is "aligned":
-    /// it is possible that its Cold era is either ahead or late (i.e. it has more or less
-    /// Interval(s) in its Replication Log in the Cold era).
+    /// There is no guarantee that the Replica indicating a difference in the Cold Era is aligned:
+    /// it is possible that its Cold Era contains a different number of Intervals.
     ///
     /// We believe this is not important: the Replication Log does not separate the Intervals based
-    /// on their era so performing this comparison will still be relevant — even if an Interval is
-    /// in the Cold era on one end and in the Warm era in the other.
+    /// on their Era so performing this comparison will still be relevant — even if an Interval is
+    /// in the Cold Era on one end and in the Warm Era in the other.
     pub(crate) async fn reply_cold_era(&self, query: &Query) {
         let log = self.replication_log.read().await;
         let configuration = log.configuration();
@@ -200,7 +209,7 @@ impl Replication {
         reply_to_query(query, reply, None).await;
     }
 
-    /// Replies to the [Query] with a structure containing, for each interval index present in the
+    /// Replies to the [Query] with a structure containing, for each Interval index present in the
     /// `different_intervals`, all the [SubInterval]s [Fingerprint].
     ///
     /// The Replica will use this structure to assess which [SubInterval]s differ.
@@ -230,24 +239,6 @@ impl Replication {
     ///
     /// The Replica will use this structure to assess which [Event] (and its associated payload) are
     /// missing in its Replication Log and connected Storage.
-    ///
-    /// # TODO Performance improvement
-    ///
-    /// Although the Replica we are answering has to find if, for each provided [EventMetadata],
-    /// there is a more recent one, it does not need to go through all its Replication Log. It only
-    /// needs, for each [EventMetadata], to go through the Intervals that are greater than the one
-    /// it is contained in.
-    ///
-    /// The rationale is that the Intervals are already sorted in increasing order, so if no Event,
-    /// for the same key expression, can be found in any greater Interval, then by definition the
-    /// Replication Log does not contain a more recent Event.
-    ///
-    /// That would require the following changes:
-    /// - Change the `sub_intervals` field of the `Interval` structure to a BTreeMap.
-    /// - In the `reply_events_metadata` method (just below), send out a `HashMap<IntervalIdx,
-    ///   HashMap<SubIntervalIdx, HashSet<EventMetadata>>>` instead of a `Vec<EventMetadata>`.
-    /// - In the `process_alignment_reply` method, implement the searching algorithm described
-    ///   above.
     pub(crate) async fn reply_events_metadata(
         &self,
         query: &Query,

@@ -22,8 +22,9 @@ use crate::{
         client::shm_segment::ShmSegment,
         client_storage::ShmClientStorage,
         common::types::{ProtocolID, SegmentID},
+        provider::chunk::ChunkDescriptor,
     },
-    header::subscription::GLOBAL_HEADER_SUBSCRIPTION,
+    metadata::subscription::GLOBAL_METADATA_SUBSCRIPTION,
     watchdog::confirmator::GLOBAL_CONFIRMATOR,
     ShmBufInfo, ShmBufInner,
 };
@@ -46,21 +47,30 @@ impl ShmReader {
         Self { client_storage }
     }
 
-    pub fn read_shmbuf(&self, info: &ShmBufInfo) -> ZResult<ShmBufInner> {
+    pub fn read_shmbuf(&self, info: ShmBufInfo) -> ZResult<ShmBufInner> {
         // Read does not increment the reference count as it is assumed
         // that the sender of this buffer has incremented it for us.
 
+        let metadata = GLOBAL_METADATA_SUBSCRIPTION.read().link(&info.metadata)?;
         // attach to the watchdog before doing other things
-        let watchdog = Arc::new(GLOBAL_CONFIRMATOR.read().add(&info.watchdog_descriptor)?);
+        let confirmed_metadata = Arc::new(GLOBAL_CONFIRMATOR.read().add(metadata));
 
-        let segment = self.ensure_segment(info)?;
+        // retrieve data descriptor from metadata
+        let data_descriptor = confirmed_metadata.owned.header().data_descriptor();
+
+        let segment = self.ensure_data_segment(
+            confirmed_metadata
+                .owned
+                .header()
+                .protocol
+                .load(std::sync::atomic::Ordering::Relaxed),
+            &data_descriptor,
+        )?;
+        let buf = segment.map(data_descriptor.chunk)?;
         let shmb = ShmBufInner {
-            header: GLOBAL_HEADER_SUBSCRIPTION
-                .read()
-                .link(&info.header_descriptor)?,
-            buf: segment.map(info.data_descriptor.chunk)?,
+            metadata: confirmed_metadata,
+            buf,
             info: info.clone(),
-            watchdog,
         };
 
         // Validate buffer
@@ -70,8 +80,12 @@ impl ShmReader {
         }
     }
 
-    fn ensure_segment(&self, info: &ShmBufInfo) -> ZResult<Arc<dyn ShmSegment>> {
-        let id = GlobalDataSegmentID::new(info.shm_protocol, info.data_descriptor.segment);
+    fn ensure_data_segment(
+        &self,
+        protocol_id: ProtocolID,
+        descriptor: &ChunkDescriptor,
+    ) -> ZResult<Arc<dyn ShmSegment>> {
+        let id = GlobalDataSegmentID::new(protocol_id, descriptor.segment);
 
         // fastest path: try to get access to already mounted SHM segment
         // read lock allows concurrent execution of multiple requests
@@ -101,7 +115,7 @@ impl ShmReader {
 
             // (common case) mount a new segment and add it to the map
             std::collections::hash_map::Entry::Vacant(vacant) => {
-                let new_segment = client.attach(info.data_descriptor.segment)?;
+                let new_segment = client.attach(descriptor.segment)?;
                 Ok(vacant.insert(new_segment).clone())
             }
         }

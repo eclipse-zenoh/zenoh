@@ -31,9 +31,8 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 use super::{
-    face_hat, face_hat_mut, get_peer, get_router, get_routes_entries, hat, hat_mut,
-    interests::push_declaration_profile, network::Network, res_hat, res_hat_mut, HatCode,
-    HatContext, HatFace, HatTables,
+    face_hat, face_hat_mut, get_peer, get_router, hat, hat_mut, network::Network,
+    push_declaration_profile, res_hat, res_hat_mut, HatCode, HatContext, HatFace, HatTables,
 };
 #[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
@@ -41,12 +40,12 @@ use crate::net::routing::{
     dispatcher::{
         face::FaceState,
         interests::RemoteInterest,
-        pubsub::{update_data_routes_from, update_matches_data_routes, SubscriberInfo},
+        pubsub::SubscriberInfo,
         resource::{NodeId, Resource, SessionContext},
         tables::{Route, RoutingExpr, Tables},
     },
     hat::{CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources},
-    router::RoutesIndexes,
+    router::disable_matches_data_routes,
     RoutingContext,
 };
 
@@ -84,7 +83,7 @@ fn send_sourced_subscription_to_net_children(
                                     wire_expr: key_expr,
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ));
                     }
                 }
@@ -151,7 +150,7 @@ fn propagate_simple_subscription_to(
                                 wire_expr: key_expr,
                             }),
                         },
-                        res.expr(),
+                        res.expr().to_string(),
                     ),
                 );
             }
@@ -407,7 +406,7 @@ fn send_forget_sourced_subscription_to_net_children(
                                     ext_wire_expr: WireExprType { wire_expr },
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ));
                     }
                 }
@@ -437,7 +436,7 @@ fn propagate_forget_simple_subscription(
                             ext_wire_expr: WireExprType::null(),
                         }),
                     },
-                    res.expr(),
+                    res.expr().to_string(),
                 ),
             );
         }
@@ -469,7 +468,7 @@ fn propagate_forget_simple_subscription(
                                     ext_wire_expr: WireExprType::null(),
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ),
                     );
                 }
@@ -517,7 +516,7 @@ fn propagate_forget_simple_subscription_to_peers(
                                     ext_wire_expr: WireExprType::null(),
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ),
                     );
                 }
@@ -683,7 +682,7 @@ pub(super) fn undeclare_simple_subscription(
                                 ext_wire_expr: WireExprType::null(),
                             }),
                         },
-                        res.expr(),
+                        res.expr().to_string(),
                     ),
                 );
             }
@@ -715,7 +714,7 @@ pub(super) fn undeclare_simple_subscription(
                                         ext_wire_expr: WireExprType::null(),
                                     }),
                                 },
-                                res.expr(),
+                                res.expr().to_string(),
                             ),
                         );
                     }
@@ -756,7 +755,7 @@ pub(super) fn pubsub_remove_node(
             {
                 unregister_router_subscription(tables, &mut res, node, send_declare);
 
-                update_matches_data_routes(tables, &mut res);
+                disable_matches_data_routes(tables, &mut res);
                 Resource::clean(&mut res)
             }
         }
@@ -781,7 +780,7 @@ pub(super) fn pubsub_remove_node(
                     );
                 }
 
-                update_matches_data_routes(tables, &mut res);
+                disable_matches_data_routes(tables, &mut res);
                 Resource::clean(&mut res)
             }
         }
@@ -836,9 +835,6 @@ pub(super) fn pubsub_tree_change(
             }
         }
     }
-
-    // recompute routes
-    update_data_routes_from(tables, &mut tables.root_res.clone());
 }
 
 pub(super) fn pubsub_linkstate_change(
@@ -883,7 +879,7 @@ pub(super) fn pubsub_linkstate_change(
                                     ext_wire_expr: WireExprType { wire_expr },
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ),
                     );
                 }
@@ -914,7 +910,7 @@ pub(super) fn pubsub_linkstate_change(
                                             wire_expr: key_expr,
                                         }),
                                     },
-                                    res.expr(),
+                                    res.expr().to_string(),
                                 ),
                             );
                         }
@@ -976,7 +972,7 @@ pub(crate) fn declare_sub_interest(
                                     wire_expr,
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ),
                     );
                 }
@@ -1015,7 +1011,7 @@ pub(crate) fn declare_sub_interest(
                                         wire_expr,
                                     }),
                                 },
-                                sub.expr(),
+                                sub.expr().to_string(),
                             ),
                         );
                     }
@@ -1052,7 +1048,7 @@ pub(crate) fn declare_sub_interest(
                                     wire_expr,
                                 }),
                             },
-                            sub.expr(),
+                            sub.expr().to_string(),
                         ),
                     );
                 }
@@ -1181,6 +1177,25 @@ impl HatPubSubTrait for HatCode {
                 )
             })
             .collect()
+    }
+
+    fn get_publications(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+        let mut result = HashMap::new();
+        for face in tables.faces.values() {
+            for interest in face_hat!(face).remote_interests.values() {
+                if interest.options.subscribers() {
+                    if let Some(res) = interest.res.as_ref() {
+                        let sources = result.entry(res.clone()).or_insert_with(Sources::default);
+                        match face.whatami {
+                            WhatAmI::Router => sources.routers.push(face.zid),
+                            WhatAmI::Peer => sources.peers.push(face.zid),
+                            WhatAmI::Client => sources.clients.push(face.zid),
+                        }
+                    }
+                }
+            }
+        }
+        result.into_iter().collect()
     }
 
     fn compute_data_route(
@@ -1313,10 +1328,6 @@ impl HatPubSubTrait for HatCode {
             );
         }
         Arc::new(route)
-    }
-
-    fn get_data_routes_entries(&self, tables: &Tables) -> RoutesIndexes {
-        get_routes_entries(tables)
     }
 
     #[zenoh_macros::unstable]

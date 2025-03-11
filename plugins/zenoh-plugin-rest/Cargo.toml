@@ -24,7 +24,7 @@ categories = ["network-programming", "web-programming::http-server"]
 description = "The zenoh REST plugin"
 
 [features]
-default = ["dynamic_plugin"]
+default = ["dynamic_plugin", "zenoh/default"]
 dynamic_plugin = []
 static_plugin = ['async-std']
 
@@ -47,9 +47,8 @@ serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 tide = { workspace = true }
 tokio = { workspace = true }
-zenoh = { workspace = true, features = [
+zenoh = { workspace = true, default-features = false, features = [
     "plugins",
-    "default",
     "internal",
     "unstable",
 ] }
@@ -75,7 +74,7 @@ maintainer = "zenoh-dev@eclipse.org"
 copyright = "2024 ZettaScale Technology"
 section = "net"
 license-file = ["../../LICENSE", "0"]
-depends = "zenohd (=1.0.0~dev-1)"
+depends = "zenohd (=1.2.1)"
 
 [package.metadata.cargo-machete]
 ignored = ["async-std"]

@@ -29,7 +29,7 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{face_hat, face_hat_mut, get_routes_entries, HatCode, HatFace};
+use super::{face_hat, face_hat_mut, HatCode, HatFace};
 use crate::{
     key_expr::KeyExpr,
     net::routing::{
@@ -43,7 +43,6 @@ use crate::{
         hat::{
             p2p_peer::initial_interest, CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources,
         },
-        router::{update_data_routes_from, RoutesIndexes},
         RoutingContext,
     },
 };
@@ -64,7 +63,8 @@ fn propagate_simple_subscription_to(
         if dst_face.whatami != WhatAmI::Client {
             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
             face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
-            let key_expr = Resource::decl_key(res, dst_face, dst_face.whatami != WhatAmI::Client);
+            let key_expr =
+                Resource::decl_key(res, dst_face, super::push_declaration_profile(dst_face));
             send_declare(
                 &dst_face.primitives,
                 RoutingContext::with_expr(
@@ -78,7 +78,7 @@ fn propagate_simple_subscription_to(
                             wire_expr: key_expr,
                         }),
                     },
-                    res.expr(),
+                    res.expr().to_string(),
                 ),
             );
         } else {
@@ -103,8 +103,11 @@ fn propagate_simple_subscription_to(
                 if !face_hat!(dst_face).local_subs.contains_key(res) {
                     let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
                     face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
-                    let key_expr =
-                        Resource::decl_key(res, dst_face, dst_face.whatami != WhatAmI::Client);
+                    let key_expr = Resource::decl_key(
+                        res,
+                        dst_face,
+                        super::push_declaration_profile(dst_face),
+                    );
                     send_declare(
                         &dst_face.primitives,
                         RoutingContext::with_expr(
@@ -118,7 +121,7 @@ fn propagate_simple_subscription_to(
                                     wire_expr: key_expr,
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ),
                     );
                 }
@@ -206,10 +209,10 @@ fn declare_simple_subscription(
                             ext_nodeid: ext::NodeIdType::DEFAULT,
                             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                 id: 0, // @TODO use proper SubscriberId
-                                wire_expr: res.expr().into(),
+                                wire_expr: res.expr().to_string().into(),
                             }),
                         },
-                        res.expr(),
+                        res.expr().to_string(),
                     ))
             }
         }
@@ -257,7 +260,7 @@ fn propagate_forget_simple_subscription(
                             ext_wire_expr: WireExprType::null(),
                         }),
                     },
-                    res.expr(),
+                    res.expr().to_string(),
                 ),
             );
         }
@@ -285,7 +288,7 @@ fn propagate_forget_simple_subscription(
                                     ext_wire_expr: WireExprType::null(),
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ),
                     );
                 }
@@ -326,7 +329,7 @@ pub(super) fn undeclare_simple_subscription(
                                 ext_wire_expr: WireExprType::null(),
                             }),
                         },
-                        res.expr(),
+                        res.expr().to_string(),
                     ),
                 );
             }
@@ -354,7 +357,7 @@ pub(super) fn undeclare_simple_subscription(
                                         ext_wire_expr: WireExprType::null(),
                                     }),
                                 },
-                                res.expr(),
+                                res.expr().to_string(),
                             ),
                         );
                     }
@@ -403,10 +406,6 @@ pub(super) fn pubsub_new_face(
             }
         }
     }
-    // recompute routes
-    // TODO: disable data routes and recompute them in parallel to avoid holding
-    // tables write lock for a long time on peer connection.
-    update_data_routes_from(tables, &mut tables.root_res.clone());
 }
 
 #[inline]
@@ -445,7 +444,8 @@ pub(super) fn declare_sub_interest(
                             .any(|sub| sub.context.is_some() && sub.matches(res))
                 }) {
                     let id = make_sub_id(res, face, mode);
-                    let wire_expr = Resource::decl_key(res, face, face.whatami != WhatAmI::Client);
+                    let wire_expr =
+                        Resource::decl_key(res, face, super::push_declaration_profile(face));
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -459,7 +459,7 @@ pub(super) fn declare_sub_interest(
                                     wire_expr,
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ),
                     );
                 }
@@ -474,8 +474,11 @@ pub(super) fn declare_sub_interest(
                         for sub in face_hat!(src_face).remote_subs.values() {
                             if sub.context.is_some() && sub.matches(res) {
                                 let id = make_sub_id(sub, face, mode);
-                                let wire_expr =
-                                    Resource::decl_key(sub, face, face.whatami != WhatAmI::Client);
+                                let wire_expr = Resource::decl_key(
+                                    sub,
+                                    face,
+                                    super::push_declaration_profile(face),
+                                );
                                 send_declare(
                                     &face.primitives,
                                     RoutingContext::with_expr(
@@ -488,7 +491,7 @@ pub(super) fn declare_sub_interest(
                                                 DeclareSubscriber { id, wire_expr },
                                             ),
                                         },
-                                        sub.expr(),
+                                        sub.expr().to_string(),
                                     ),
                                 );
                             }
@@ -507,7 +510,7 @@ pub(super) fn declare_sub_interest(
                     for sub in face_hat!(src_face).remote_subs.values() {
                         let id = make_sub_id(sub, face, mode);
                         let wire_expr =
-                            Resource::decl_key(sub, face, face.whatami != WhatAmI::Client);
+                            Resource::decl_key(sub, face, super::push_declaration_profile(face));
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(
@@ -521,7 +524,7 @@ pub(super) fn declare_sub_interest(
                                         wire_expr,
                                     }),
                                 },
-                                sub.expr(),
+                                sub.expr().to_string(),
                             ),
                         );
                     }
@@ -573,6 +576,25 @@ impl HatPubSubTrait for HatCode {
             }
         }
         Vec::from_iter(subs)
+    }
+
+    fn get_publications(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+        let mut result = HashMap::new();
+        for face in tables.faces.values() {
+            for interest in face_hat!(face).remote_interests.values() {
+                if interest.options.subscribers() {
+                    if let Some(res) = interest.res.as_ref() {
+                        let sources = result.entry(res.clone()).or_insert_with(Sources::default);
+                        match face.whatami {
+                            WhatAmI::Router => sources.routers.push(face.zid),
+                            WhatAmI::Peer => sources.peers.push(face.zid),
+                            WhatAmI::Client => sources.clients.push(face.zid),
+                        }
+                    }
+                }
+            }
+        }
+        result.into_iter().collect()
     }
 
     fn compute_data_route(
@@ -671,10 +693,6 @@ impl HatPubSubTrait for HatCode {
             );
         }
         Arc::new(route)
-    }
-
-    fn get_data_routes_entries(&self, _tables: &Tables) -> RoutesIndexes {
-        get_routes_entries()
     }
 
     #[zenoh_macros::unstable]

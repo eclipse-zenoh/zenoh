@@ -15,18 +15,19 @@ use std::{
     any::Any,
     collections::HashMap,
     fmt,
+    ops::Not,
     sync::{Arc, Weak},
     time::Duration,
 };
 
 use tokio_util::sync::CancellationToken;
 use zenoh_protocol::{
-    core::{ExprId, Reliability, WhatAmI, ZenohIdProto},
+    core::{ExprId, Reliability, WhatAmI, WireExpr, ZenohIdProto},
     network::{
         interest::{InterestId, InterestMode, InterestOptions},
-        Mapping, Push, Request, RequestId, Response, ResponseFinal,
+        push, Mapping, Push, Request, RequestId, Response, ResponseFinal,
     },
-    zenoh::RequestBody,
+    zenoh::{PushBody, RequestBody},
 };
 use zenoh_sync::get_mut_unchecked;
 use zenoh_task::TaskController;
@@ -36,7 +37,7 @@ use zenoh_transport::stats::TransportStats;
 
 use super::{
     super::router::*,
-    interests::{declare_final, declare_interest, undeclare_interest, CurrentInterest},
+    interests::{declare_final, declare_interest, undeclare_interest, PendingCurrentInterest},
     resource::*,
     tables::TablesLock,
 };
@@ -66,8 +67,7 @@ pub struct FaceState {
     pub(crate) primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
     pub(crate) local_interests: HashMap<InterestId, InterestState>,
     pub(crate) remote_key_interests: HashMap<InterestId, Option<Arc<Resource>>>,
-    pub(crate) pending_current_interests:
-        HashMap<InterestId, (Arc<CurrentInterest>, CancellationToken)>,
+    pub(crate) pending_current_interests: HashMap<InterestId, PendingCurrentInterest>,
     pub(crate) local_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) remote_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) next_qid: RequestId,
@@ -76,6 +76,7 @@ pub struct FaceState {
     pub(crate) in_interceptors: Option<Arc<InterceptorsChain>>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) task_controller: TaskController,
+    pub(crate) is_local: bool,
 }
 
 impl FaceState {
@@ -89,6 +90,7 @@ impl FaceState {
         mcast_group: Option<TransportMulticast>,
         in_interceptors: Option<Arc<InterceptorsChain>>,
         hat: Box<dyn Any + Send + Sync>,
+        is_local: bool,
     ) -> Arc<FaceState> {
         Arc::new(FaceState {
             id,
@@ -108,6 +110,7 @@ impl FaceState {
             in_interceptors,
             hat,
             task_controller: TaskController::default(),
+            is_local,
         })
     }
 
@@ -144,8 +147,12 @@ impl FaceState {
     }
 
     pub(crate) fn update_interceptors_caches(&self, res: &mut Arc<Resource>) {
-        if let Ok(expr) = KeyExpr::try_from(res.expr()) {
-            if let Some(interceptor) = self.in_interceptors.as_ref() {
+        if let Some(interceptor) = self
+            .in_interceptors
+            .as_ref()
+            .and_then(|is| is.is_empty().not().then_some(is))
+        {
+            if let Ok(expr) = KeyExpr::try_from(res.expr().to_string()) {
                 let cache = interceptor.compute_keyexpr_cache(&expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
@@ -155,7 +162,15 @@ impl FaceState {
                 )
                 .in_interceptor_cache = cache;
             }
-            if let Some(mux) = self.primitives.as_any().downcast_ref::<Mux>() {
+        }
+
+        if let Some(mux) = self
+            .primitives
+            .as_any()
+            .downcast_ref::<Mux>()
+            .and_then(|mux| mux.interceptor.is_empty().not().then_some(mux))
+        {
+            if let Ok(expr) = KeyExpr::try_from(res.expr().to_string()) {
                 let cache = mux.interceptor.compute_keyexpr_cache(&expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
@@ -165,7 +180,14 @@ impl FaceState {
                 )
                 .e_interceptor_cache = cache;
             }
-            if let Some(mux) = self.primitives.as_any().downcast_ref::<McastMux>() {
+        }
+        if let Some(mux) = self
+            .primitives
+            .as_any()
+            .downcast_ref::<McastMux>()
+            .and_then(|mux| mux.interceptor.is_empty().not().then_some(mux))
+        {
+            if let Ok(expr) = KeyExpr::try_from(res.expr().to_string()) {
                 let cache = mux.interceptor.compute_keyexpr_cache(&expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
@@ -207,10 +229,37 @@ pub struct Face {
 }
 
 impl Face {
+    pub(crate) fn send_push_lazy(
+        &self,
+        wire_expr: WireExpr,
+        qos: push::ext::QoSType,
+        ext_tstamp: Option<push::ext::TimestampType>,
+        ext_nodeid: push::ext::NodeIdType,
+        body: impl FnOnce() -> PushBody,
+        reliability: Reliability,
+    ) {
+        route_data(
+            &self.tables,
+            &self.state,
+            wire_expr,
+            qos,
+            ext_tstamp,
+            ext_nodeid,
+            body,
+            reliability,
+        );
+    }
+
     pub fn downgrade(&self) -> WeakFace {
         WeakFace {
             tables: Arc::downgrade(&self.tables),
             state: Arc::downgrade(&self.state),
+        }
+    }
+
+    pub(crate) fn reject_interest(&self, interest_id: u32) {
+        if let Some(interest) = self.state.pending_current_interests.get(&interest_id) {
+            interest.rejection_token.cancel();
         }
     }
 }
@@ -369,12 +418,7 @@ impl Primitives for Face {
                         &mut |p, m| declares.push((p.clone(), m)),
                     );
 
-                    // recompute routes
-                    // TODO: disable  routes and recompute them in parallel to avoid holding
-                    // tables write lock for a long time.
-                    let mut root_res = wtables.root_res.clone();
-                    update_data_routes_from(&mut wtables, &mut root_res);
-                    update_query_routes_from(&mut wtables, &mut root_res);
+                    wtables.disable_all_routes();
 
                     drop(wtables);
                     drop(ctrl_lock);
@@ -388,7 +432,16 @@ impl Primitives for Face {
 
     #[inline]
     fn send_push(&self, msg: Push, reliability: Reliability) {
-        route_data(&self.tables, &self.state, msg, reliability);
+        route_data(
+            &self.tables,
+            &self.state,
+            msg.wire_expr,
+            msg.ext_qos,
+            msg.ext_tstamp,
+            msg.ext_nodeid,
+            move || msg.payload,
+            reliability,
+        );
     }
 
     fn send_request(&self, msg: Request) {
@@ -448,6 +501,10 @@ impl Primitives for Face {
         for (p, m) in declares {
             p.send_declare(m);
         }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 

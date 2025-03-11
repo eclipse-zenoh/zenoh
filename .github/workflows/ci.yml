@@ -35,13 +35,31 @@ env:
   CARGO_SEMVER_CHECKS_BASELINE_VERSION: 1.0.0
 
 jobs:
+  determine-runner:
+    runs-on: ubuntu-latest
+    outputs:
+      runner: ${{ steps.set-runner.outputs.runner }}
+    steps:
+      - name: Clone this repository
+        uses: actions/checkout@v4
+
+      - name: Determine which runner to use
+        id: set-runner
+        run: |
+          if [[ -f ci/runners.json ]]; then
+            echo "runner=$(cat ci/runners.json)" >> $GITHUB_OUTPUT
+          else
+            echo "runner=['ubuntu-latest', 'windows-latest', 'macos-latest']" >> $GITHUB_OUTPUT
+          fi
+
   check:
+    needs: determine-runner
     name: Lints and doc tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-13, macos-14]
+        os: ${{ fromJSON(needs.determine-runner.outputs.runner) }}
 
     steps:
       - name: Clone this repository
@@ -52,6 +70,8 @@ jobs:
 
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
 
       - name: Install latest cargo-deny
         uses: taiki-e/install-action@cargo-deny
@@ -63,7 +83,7 @@ jobs:
         uses: taiki-e/install-action@cargo-semver-checks
 
       - name: Code format check
-        run: cargo fmt --check -- --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate"
+        run: rustfmt --check --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate,skip_children=true" $(git ls-files '*.rs')
 
       - name: Clippy zenoh no-default-features
         run: cargo +stable clippy -p zenoh --all-targets --no-default-features -- --deny warnings
@@ -87,7 +107,7 @@ jobs:
         run: cargo +stable clippy --all-targets --features unstable,test -- --deny warnings
 
       - name: Clippy all features
-        if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest' }}
+        if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest' }}
         run: cargo +stable clippy --all-targets --all-features -- --deny warnings
 
       - name: Install generic no_std target
@@ -115,12 +135,13 @@ jobs:
         run: cargo +stable semver-checks --verbose --default-features --package zenoh --release-type ${{ env.CARGO_SEMVER_CHECKS_RELEASE_TYPE }} --baseline-version ${{ env.CARGO_SEMVER_CHECKS_BASELINE_VERSION }}
 
   test:
+    needs: determine-runner
     name: Unit tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-13, macos-14]
+        os: ${{ fromJSON(needs.determine-runner.outputs.runner) }}
 
     steps:
       - name: Clone this repository
@@ -131,13 +152,14 @@ jobs:
 
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
 
       - name: Set rustflags
+        if: ${{ matrix.os == 'windows-latest' }}
         shell: bash
         run: |
-          case ${{ matrix.os }} in
-            *windows*) echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV ;;
-          esac
+            echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV
 
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
@@ -145,17 +167,38 @@ jobs:
       - name: Run tests
         run: cargo nextest run -F test -F internal_config --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
+      - name: Rename junit test report
+        run: mv target/nextest/default/junit.xml target/nextest/default/tests.junit.xml
+
       - name: Run tests with SHM
-        if: ${{ matrix.os == 'macOS-latest' || matrix.os == 'windows-latest' }}
+        if: ${{ matrix.os == 'macos-latest' || matrix.os == 'windows-latest' }}
         run: cargo nextest run -F test -F shared-memory -F unstable -F internal_config -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+
+      - name: Rename junit test report
+        if: ${{ matrix.os == 'macos-latest' || matrix.os == 'windows-latest' }}
+        run: mv target/nextest/default/junit.xml target/nextest/default/tests-shm.junit.xml
 
       - name: Run tests with SHM + unixpipe
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: cargo nextest run -F test -F shared-memory -F unstable -F internal_config -F transport_unixpipe -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
+      - name: Rename junit test report
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: mv target/nextest/default/junit.xml target/nextest/default/tests-shm-unixpipe.junit.xml
+
       - name: Check for feature leaks
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: cargo nextest run -p zenohd --no-default-features
+
+      - name: Rename junit test report
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: mv target/nextest/default/junit.xml target/nextest/default/tests-feature-leaks.junit.xml
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   valgrind:
     name: Memory leak checks
@@ -172,6 +215,8 @@ jobs:
         uses: taiki-e/install-action@valgrind
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
 
       - name: Run memory leaks check
         run: ci/valgrind-check/run.sh
@@ -186,7 +231,7 @@ jobs:
 
       - name: Check spelling
         uses: crate-ci/typos@master
-  
+
   markdown_lint:
     runs-on: ubuntu-latest
     steps:
@@ -196,6 +241,50 @@ jobs:
           config: '.markdownlint.yaml'
           globs: '**/README.md'
 
+  coverage:
+        name: Coverage
+        strategy:
+          fail-fast: false
+          matrix:
+            os: [ubuntu-latest]
+            rust: [nightly]
+        runs-on: ${{ matrix.os }}
+        steps:
+          - name: Checkout sources
+            uses: actions/checkout@v4
+
+          - name: Install ${{ matrix.rust }} Rust toolchain
+            run: |
+              rustup override set ${{ matrix.rust }}
+              rustup update ${{ matrix.rust }}
+              rustup component add llvm-tools-preview
+
+          - uses: Swatinem/rust-cache@v2
+            with:
+              cache-bin: false
+
+          - name: Install cargo-llvm-cov
+            uses: taiki-e/install-action@cargo-llvm-cov
+
+          - name: Generate code coverage
+            run: |
+              cargo +${{ matrix.rust }} llvm-cov test --features unstable --features test --features shared-memory  \
+              ${{ matrix.rust == 'nightly' && '--doctests' || '' }} --lcov --output-path lcov.info \
+              --no-cfg-coverage --no-cfg-coverage-nightly --ignore-run-fail -- \
+              --skip test_default_features \
+              --skip router_linkstate \
+              --skip three_node_combination  \
+              --skip three_node_combination_multicast \
+              --skip two_node_combination \
+              --skip test_gossip
+
+          - name: Upload coverage to Codecov
+            uses: codecov/codecov-action@v5
+            with:
+              token: ${{ secrets.CODECOV_TOKEN }}
+              files: lcov.info
+              fail_ci_if_error: true
+
   # NOTE: In GitHub repository settings, the "Require status checks to pass
   # before merging" branch protection rule ensures that commits are only merged
   # from branches where specific status checks have passed. These checks are
@@ -204,7 +293,7 @@ jobs:
   ci:
     name: CI status checks
     runs-on: ubuntu-latest
-    needs: [check, test, valgrind, typos, markdown_lint]
+    needs: [check, test, valgrind, typos, markdown_lint, coverage]
     if: always()
     steps:
       - name: Check whether all jobs pass

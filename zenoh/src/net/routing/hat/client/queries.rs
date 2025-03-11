@@ -32,7 +32,7 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{face_hat, face_hat_mut, get_routes_entries, HatCode, HatFace};
+use super::{face_hat, face_hat_mut, HatCode, HatFace};
 use crate::{
     key_expr::KeyExpr,
     net::routing::{
@@ -42,7 +42,6 @@ use crate::{
             tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
         },
         hat::{HatQueriesTrait, SendDeclare, Sources},
-        router::{update_query_routes_from, RoutesIndexes},
         RoutingContext,
     },
 };
@@ -121,7 +120,7 @@ fn propagate_simple_queryable(
                             ext_info: info,
                         }),
                     },
-                    res.expr(),
+                    res.expr().to_string(),
                 ),
             );
         }
@@ -194,7 +193,7 @@ fn propagate_forget_simple_queryable(
                             ext_wire_expr: WireExprType::null(),
                         }),
                     },
-                    res.expr(),
+                    res.expr().to_string(),
                 ),
             );
         }
@@ -238,7 +237,7 @@ pub(super) fn undeclare_simple_queryable(
                                 ext_wire_expr: WireExprType::null(),
                             }),
                         },
-                        res.expr(),
+                        res.expr().to_string(),
                     ),
                 );
             }
@@ -275,8 +274,6 @@ pub(super) fn queries_new_face(
             propagate_simple_queryable(tables, qabl, Some(&mut face.clone()), send_declare);
         }
     }
-    // recompute routes
-    update_query_routes_from(tables, &mut tables.root_res.clone());
 }
 
 lazy_static::lazy_static! {
@@ -325,6 +322,25 @@ impl HatQueriesTrait for HatCode {
             }
         }
         Vec::from_iter(qabls)
+    }
+
+    fn get_queriers(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+        let mut result = HashMap::new();
+        for face in tables.faces.values() {
+            for interest in face_hat!(face).remote_interests.values() {
+                if interest.options.queryables() {
+                    if let Some(res) = interest.res.as_ref() {
+                        let sources = result.entry(res.clone()).or_insert_with(Sources::default);
+                        match face.whatami {
+                            WhatAmI::Router => sources.routers.push(face.zid),
+                            WhatAmI::Peer => sources.peers.push(face.zid),
+                            WhatAmI::Client => sources.clients.push(face.zid),
+                        }
+                    }
+                }
+            }
+        }
+        result.into_iter().collect()
     }
 
     fn compute_query_route(
@@ -408,10 +424,6 @@ impl HatQueriesTrait for HatCode {
         Arc::new(route)
     }
 
-    fn get_query_routes_entries(&self, _tables: &Tables) -> RoutesIndexes {
-        get_routes_entries()
-    }
-
     #[cfg(feature = "unstable")]
     fn get_matching_queryables(
         &self,
@@ -449,7 +461,7 @@ impl HatQueriesTrait for HatCode {
                         qbl.session_ctxs
                             .get(&face.id)
                             .and_then(|sc| sc.qabl)
-                            .map_or(false, |q| q.complete)
+                            .is_some_and(|q| q.complete)
                             && KeyExpr::keyexpr_include(qbl.expr(), key_expr)
                     }
                     false => KeyExpr::keyexpr_intersect(qbl.expr(), key_expr),
@@ -474,7 +486,7 @@ impl HatQueriesTrait for HatCode {
             for (sid, context) in &mres.session_ctxs {
                 if context.face.whatami == WhatAmI::Client
                     && match complete {
-                        true => context.qabl.map_or(false, |q| q.complete),
+                        true => context.qabl.is_some_and(|q| q.complete),
                         false => context.qabl.is_some(),
                     }
                 {

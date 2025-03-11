@@ -25,7 +25,7 @@ use core::{
     str::FromStr,
 };
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 pub use uhlc::{Timestamp, NTP64};
 use zenoh_keyexpr::OwnedKeyExpr;
 use zenoh_result::{bail, zerror};
@@ -357,7 +357,7 @@ impl Display for PriorityRange {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum InvalidPriorityRange {
     InvalidSyntax { found: String },
     InvalidBound { message: String },
@@ -366,8 +366,8 @@ pub enum InvalidPriorityRange {
 impl Display for InvalidPriorityRange {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            InvalidPriorityRange::InvalidSyntax { found } => write!(f, "invalid PriorityRange string, expected an range of the form `start-end` but found {found}"),
-            InvalidPriorityRange::InvalidBound { message } => write!(f, "invalid PriorityRange bound: {message}"),
+            InvalidPriorityRange::InvalidSyntax { found } => write!(f, "invalid priority range string, expected an range of the form `start-end` but found {found}"),
+            InvalidPriorityRange::InvalidBound { message } => write!(f, "invalid priority range bound: {message}"),
         }
     }
 }
@@ -396,27 +396,28 @@ impl FromStr for PriorityRange {
                 message: err.to_string(),
             })?;
 
-        let end = metadata
-            .next()
-            .ok_or_else(|| InvalidPriorityRange::InvalidSyntax {
-                found: s.to_string(),
-            })?
-            .parse::<u8>()
-            .map(Priority::try_from)
-            .map_err(|err| InvalidPriorityRange::InvalidBound {
-                message: err.to_string(),
-            })?
-            .map_err(|err| InvalidPriorityRange::InvalidBound {
-                message: err.to_string(),
-            })?;
+        match metadata.next() {
+            Some(slice) => {
+                let end = slice
+                    .parse::<u8>()
+                    .map(Priority::try_from)
+                    .map_err(|err| InvalidPriorityRange::InvalidBound {
+                        message: err.to_string(),
+                    })?
+                    .map_err(|err| InvalidPriorityRange::InvalidBound {
+                        message: err.to_string(),
+                    })?;
 
-        if metadata.next().is_some() {
-            return Err(InvalidPriorityRange::InvalidSyntax {
-                found: s.to_string(),
-            });
-        };
+                if metadata.next().is_some() {
+                    return Err(InvalidPriorityRange::InvalidSyntax {
+                        found: s.to_string(),
+                    });
+                };
 
-        Ok(PriorityRange::new(start..=end))
+                Ok(PriorityRange::new(start..=end))
+            }
+            None => Ok(PriorityRange::new(start..=start)),
+        }
     }
 }
 
@@ -454,7 +455,7 @@ impl TryFrom<u8> for Priority {
     }
 }
 
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Reliability {
     BestEffort = 0,
@@ -560,7 +561,7 @@ impl Channel {
 }
 
 /// Congestion control strategy.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Deserialize)]
 #[repr(u8)]
 pub enum CongestionControl {
     #[default]
@@ -573,4 +574,56 @@ pub enum CongestionControl {
 
 impl CongestionControl {
     pub const DEFAULT: Self = Self::Drop;
+
+    #[cfg(feature = "internal")]
+    pub const DEFAULT_PUSH: Self = Self::Drop;
+    #[cfg(not(feature = "internal"))]
+    pub(crate) const DEFAULT_PUSH: Self = Self::Drop;
+
+    #[cfg(feature = "internal")]
+    pub const DEFAULT_REQUEST: Self = Self::Block;
+    #[cfg(not(feature = "internal"))]
+    pub(crate) const DEFAULT_REQUEST: Self = Self::Block;
+
+    #[cfg(feature = "internal")]
+    pub const DEFAULT_RESPONSE: Self = Self::Block;
+    #[cfg(not(feature = "internal"))]
+    pub(crate) const DEFAULT_RESPONSE: Self = Self::Block;
+
+    #[cfg(feature = "internal")]
+    pub const DEFAULT_DECLARE: Self = Self::Block;
+    #[cfg(not(feature = "internal"))]
+    pub(crate) const DEFAULT_DECLARE: Self = Self::Block;
+
+    #[cfg(feature = "internal")]
+    pub const DEFAULT_OAM: Self = Self::Block;
+    #[cfg(not(feature = "internal"))]
+    pub(crate) const DEFAULT_OAM: Self = Self::Block;
+}
+
+#[cfg(test)]
+mod tests {
+    use core::str::FromStr;
+
+    use crate::core::{Priority, PriorityRange};
+
+    #[test]
+    fn test_priority_range() {
+        assert_eq!(
+            PriorityRange::from_str("2-3"),
+            Ok(PriorityRange::new(
+                Priority::InteractiveHigh..=Priority::InteractiveLow
+            ))
+        );
+
+        assert_eq!(
+            PriorityRange::from_str("7"),
+            Ok(PriorityRange::new(
+                Priority::Background..=Priority::Background
+            ))
+        );
+
+        assert!(PriorityRange::from_str("1-").is_err());
+        assert!(PriorityRange::from_str("-5").is_err());
+    }
 }

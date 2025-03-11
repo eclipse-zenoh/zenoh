@@ -36,15 +36,12 @@ use super::{
 };
 use crate::{
     api::{buffer::zshmmut::ZShmMut, common::types::ProtocolID},
-    header::{
-        allocated_descriptor::AllocatedHeaderDescriptor, descriptor::HeaderDescriptor,
-        storage::GLOBAL_HEADER_STORAGE,
+    metadata::{
+        allocated_descriptor::AllocatedMetadataDescriptor, descriptor::MetadataDescriptor,
+        storage::GLOBAL_METADATA_STORAGE,
     },
     watchdog::{
-        allocated_watchdog::AllocatedWatchdog,
         confirmator::{ConfirmedDescriptor, GLOBAL_CONFIRMATOR},
-        descriptor::Descriptor,
-        storage::GLOBAL_STORAGE,
         validator::GLOBAL_VALIDATOR,
     },
     ShmBufInfo, ShmBufInner,
@@ -52,22 +49,16 @@ use crate::{
 
 #[derive(Debug)]
 struct BusyChunk {
-    descriptor: ChunkDescriptor,
-    header: AllocatedHeaderDescriptor,
-    _watchdog: AllocatedWatchdog,
+    metadata: AllocatedMetadataDescriptor,
 }
 
 impl BusyChunk {
-    fn new(
-        descriptor: ChunkDescriptor,
-        header: AllocatedHeaderDescriptor,
-        watchdog: AllocatedWatchdog,
-    ) -> Self {
-        Self {
-            descriptor,
-            header,
-            _watchdog: watchdog,
-        }
+    fn new(metadata: AllocatedMetadataDescriptor) -> Self {
+        Self { metadata }
+    }
+
+    fn descriptor(&self) -> ChunkDescriptor {
+        self.metadata.header().data_descriptor()
     }
 }
 
@@ -228,7 +219,7 @@ impl ForceDeallocPolicy for DeallocOptimal {
         };
         drop(guard);
 
-        provider.backend.free(&chunk_to_dealloc.descriptor);
+        provider.backend.free(&chunk_to_dealloc.descriptor());
         true
     }
 }
@@ -242,7 +233,7 @@ impl ForceDeallocPolicy for DeallocYoungest {
     ) -> bool {
         match provider.busy_list.lock().unwrap().pop_back() {
             Some(val) => {
-                provider.backend.free(&val.descriptor);
+                provider.backend.free(&val.descriptor());
                 true
             }
             None => false,
@@ -259,7 +250,7 @@ impl ForceDeallocPolicy for DeallocEldest {
     ) -> bool {
         match provider.busy_list.lock().unwrap().pop_front() {
             Some(val) => {
-                provider.backend.free(&val.descriptor);
+                provider.backend.free(&val.descriptor());
                 true
             }
             None => false,
@@ -320,7 +311,7 @@ where
         provider: &ShmProvider<IDSource, Backend>,
     ) -> ChunkAllocResult {
         let result = InnerPolicy::alloc(layout, provider);
-        if let Err(ZAllocError::OutOfMemory) = result {
+        if result.is_err() {
             // try to alloc again only if GC managed to reclaim big enough chunk
             if provider.garbage_collect() >= layout.size().get() {
                 return AltPolicy::alloc(layout, provider);
@@ -822,16 +813,10 @@ where
         let len = len.try_into()?;
 
         // allocate resources for SHM buffer
-        let (allocated_header, allocated_watchdog, confirmed_watchdog) = Self::alloc_resources()?;
+        let (allocated_metadata, confirmed_metadata) = Self::alloc_resources()?;
 
         // wrap everything to ShmBufInner
-        let wrapped = self.wrap(
-            chunk,
-            len,
-            allocated_header,
-            allocated_watchdog,
-            confirmed_watchdog,
-        );
+        let wrapped = self.wrap(chunk, len, allocated_metadata, confirmed_metadata);
         Ok(unsafe { ZShmMut::new_unchecked(wrapped) })
     }
 
@@ -840,7 +825,7 @@ where
     #[zenoh_macros::unstable_doc]
     pub fn garbage_collect(&self) -> usize {
         fn is_free_chunk(chunk: &BusyChunk) -> bool {
-            let header = chunk.header.descriptor.header();
+            let header = chunk.metadata.header();
             if header.refcount.load(Ordering::SeqCst) != 0 {
                 return header.watchdog_invalidated.load(Ordering::SeqCst);
             }
@@ -854,8 +839,9 @@ where
         guard.retain(|maybe_free| {
             if is_free_chunk(maybe_free) {
                 tracing::trace!("Garbage Collecting Chunk: {:?}", maybe_free);
-                self.backend.free(&maybe_free.descriptor);
-                largest = largest.max(maybe_free.descriptor.len.get());
+                let descriptor_to_free = maybe_free.descriptor();
+                self.backend.free(&descriptor_to_free);
+                largest = largest.max(descriptor_to_free.len.get());
                 return false;
             }
             true
@@ -891,7 +877,7 @@ where
         Policy: AllocPolicy,
     {
         // allocate resources for SHM buffer
-        let (allocated_header, allocated_watchdog, confirmed_watchdog) = Self::alloc_resources()?;
+        let (allocated_metadata, confirmed_metadata) = Self::alloc_resources()?;
 
         // allocate data chunk
         // Perform actions depending on the Policy
@@ -902,82 +888,65 @@ where
         let chunk = Policy::alloc(layout, self)?;
 
         // wrap allocated chunk to ShmBufInner
-        let wrapped = self.wrap(
-            chunk,
-            size,
-            allocated_header,
-            allocated_watchdog,
-            confirmed_watchdog,
-        );
+        let wrapped = self.wrap(chunk, size, allocated_metadata, confirmed_metadata);
         Ok(unsafe { ZShmMut::new_unchecked(wrapped) })
     }
 
-    fn alloc_resources() -> ZResult<(
-        AllocatedHeaderDescriptor,
-        AllocatedWatchdog,
-        ConfirmedDescriptor,
-    )> {
-        // allocate shared header
-        let allocated_header = GLOBAL_HEADER_STORAGE.read().allocate_header()?;
-
-        // allocate watchdog
-        let allocated_watchdog = GLOBAL_STORAGE.read().allocate_watchdog()?;
+    fn alloc_resources() -> ZResult<(AllocatedMetadataDescriptor, ConfirmedDescriptor)> {
+        // allocate metadata
+        let allocated_metadata = GLOBAL_METADATA_STORAGE.read().allocate()?;
 
         // add watchdog to confirmator
-        let confirmed_watchdog = GLOBAL_CONFIRMATOR
-            .read()
-            .add_owned(&allocated_watchdog.descriptor)?;
+        let confirmed_metadata = GLOBAL_CONFIRMATOR.read().add(allocated_metadata.clone());
 
-        Ok((allocated_header, allocated_watchdog, confirmed_watchdog))
+        Ok((allocated_metadata, confirmed_metadata))
     }
 
     fn wrap(
         &self,
         chunk: AllocatedChunk,
         len: NonZeroUsize,
-        allocated_header: AllocatedHeaderDescriptor,
-        allocated_watchdog: AllocatedWatchdog,
-        confirmed_watchdog: ConfirmedDescriptor,
+        allocated_metadata: AllocatedMetadataDescriptor,
+        confirmed_metadata: ConfirmedDescriptor,
     ) -> ShmBufInner {
-        let header = allocated_header.descriptor.clone();
-        let descriptor = Descriptor::from(&allocated_watchdog.descriptor);
+        // write additional metadata
+        // chunk descriptor
+        allocated_metadata
+            .header()
+            .set_data_descriptor(&chunk.descriptor);
+        // protocol
+        allocated_metadata
+            .header()
+            .protocol
+            .store(self.id.id(), Ordering::Relaxed);
 
         // add watchdog to validator
-        let c_header = header.clone();
-        GLOBAL_VALIDATOR.read().add(
-            allocated_watchdog.descriptor.clone(),
-            Box::new(move || {
-                c_header
-                    .header()
-                    .watchdog_invalidated
-                    .store(true, Ordering::SeqCst);
-            }),
-        );
+        GLOBAL_VALIDATOR
+            .read()
+            .add(confirmed_metadata.owned.clone());
 
         // Create buffer's info
         let info = ShmBufInfo::new(
-            chunk.descriptor.clone(),
-            self.id.id(),
             len,
-            descriptor,
-            HeaderDescriptor::from(&header),
-            header.header().generation.load(Ordering::SeqCst),
+            MetadataDescriptor::from(&confirmed_metadata.owned),
+            allocated_metadata
+                .header()
+                .generation
+                .load(Ordering::SeqCst),
         );
 
         // Create buffer
         let shmb = ShmBufInner {
-            header,
+            metadata: Arc::new(confirmed_metadata),
             buf: chunk.data,
             info,
-            watchdog: Arc::new(confirmed_watchdog),
         };
 
         // Create and store busy chunk
-        self.busy_list.lock().unwrap().push_back(BusyChunk::new(
-            chunk.descriptor,
-            allocated_header,
-            allocated_watchdog,
-        ));
+        self.busy_list
+            .lock()
+            .unwrap()
+            .push_back(BusyChunk::new(allocated_metadata));
 
         shmb
     }
@@ -998,7 +967,7 @@ where
         Policy: AsyncAllocPolicy,
     {
         // allocate resources for SHM buffer
-        let (allocated_header, allocated_watchdog, confirmed_watchdog) = Self::alloc_resources()?;
+        let (allocated_metadata, confirmed_metadata) = Self::alloc_resources()?;
 
         // allocate data chunk
         // Perform actions depending on the Policy
@@ -1009,13 +978,7 @@ where
         let chunk = Policy::alloc_async(backend_layout, self).await?;
 
         // wrap allocated chunk to ShmBufInner
-        let wrapped = self.wrap(
-            chunk,
-            size,
-            allocated_header,
-            allocated_watchdog,
-            confirmed_watchdog,
-        );
+        let wrapped = self.wrap(chunk, size, allocated_metadata, confirmed_metadata);
         Ok(unsafe { ZShmMut::new_unchecked(wrapped) })
     }
 }

@@ -13,7 +13,7 @@
 //
 use std::{
     convert::{TryFrom, TryInto},
-    sync::Arc,
+    sync::{Arc, Weak},
 };
 
 use uhlc::HLC;
@@ -25,14 +25,18 @@ use zenoh_protocol::{
         key_expr::keyexpr, Encoding, ExprId, Reliability, WhatAmI, WireExpr, ZenohIdProto,
         EMPTY_EXPR_ID,
     },
-    network::{ext, Declare, DeclareBody, DeclareKeyExpr, Push},
+    network::{ext, Declare, DeclareBody, DeclareKeyExpr},
     zenoh::{PushBody, Put},
 };
 
 use crate::net::{
     primitives::{DummyPrimitives, EPrimitives, Primitives},
     routing::{
-        dispatcher::{pubsub::SubscriberInfo, tables::Tables},
+        dispatcher::{
+            face::{Face, FaceState},
+            pubsub::SubscriberInfo,
+            tables::Tables,
+        },
         router::*,
         RoutingContext,
     },
@@ -162,8 +166,7 @@ fn match_test() {
         for key_expr2 in key_exprs.iter() {
             if res_matches
                 .iter()
-                .map(|m| m.upgrade().unwrap().expr())
-                .any(|x| x.as_str() == key_expr2.as_str())
+                .any(|m| m.upgrade().unwrap().expr() == key_expr2.as_str())
             {
                 assert!(dbg!(dbg!(key_expr1).intersects(dbg!(key_expr2))));
             } else {
@@ -534,6 +537,10 @@ impl Primitives for ClientPrimitives {
     fn send_response_final(&self, _msg: zenoh_protocol::network::ResponseFinal) {}
 
     fn send_close(&self) {}
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 impl EPrimitives for ClientPrimitives {
@@ -723,27 +730,31 @@ fn client_test() {
     primitives1.clear_data();
     primitives2.clear_data();
 
-    route_data(
-        &tables,
-        &face0.upgrade().unwrap(),
-        Push {
-            wire_expr: "test/client/z1_wr1".into(),
-            ext_qos: ext::QoSType::DEFAULT,
-            ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType { node_id: 0 },
-            payload: PushBody::Put(Put {
-                timestamp: None,
-                encoding: Encoding::empty(),
-                ext_sinfo: None,
-                #[cfg(feature = "shared-memory")]
-                ext_shm: None,
-                ext_unknown: vec![],
-                payload: ZBuf::empty(),
-                ext_attachment: None,
-            }),
-        },
-        Reliability::Reliable,
-    );
+    let route_dummy_data = |face: &Weak<FaceState>, wire_expr| {
+        route_data(
+            &tables,
+            &face.upgrade().unwrap(),
+            wire_expr,
+            ext::QoSType::DEFAULT,
+            None,
+            ext::NodeIdType { node_id: 0 },
+            || {
+                PushBody::Put(Put {
+                    timestamp: None,
+                    encoding: Encoding::empty(),
+                    ext_sinfo: None,
+                    #[cfg(feature = "shared-memory")]
+                    ext_shm: None,
+                    ext_unknown: vec![],
+                    payload: ZBuf::empty(),
+                    ext_attachment: None,
+                })
+            },
+            Reliability::Reliable,
+        );
+    };
+
+    route_dummy_data(&face0, "test/client/z1_wr1".into());
 
     // functional check
     assert!(primitives1.get_last_name().is_some());
@@ -760,27 +771,7 @@ fn client_test() {
     primitives0.clear_data();
     primitives1.clear_data();
     primitives2.clear_data();
-    route_data(
-        &router.tables,
-        &face0.upgrade().unwrap(),
-        Push {
-            wire_expr: WireExpr::from(11).with_suffix("/z1_wr2"),
-            ext_qos: ext::QoSType::DEFAULT,
-            ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType { node_id: 0 },
-            payload: PushBody::Put(Put {
-                timestamp: None,
-                encoding: Encoding::empty(),
-                ext_sinfo: None,
-                #[cfg(feature = "shared-memory")]
-                ext_shm: None,
-                ext_unknown: vec![],
-                payload: ZBuf::empty(),
-                ext_attachment: None,
-            }),
-        },
-        Reliability::Reliable,
-    );
+    route_dummy_data(&face0, WireExpr::from(11).with_suffix("/z1_wr2"));
 
     // functional check
     assert!(primitives1.get_last_name().is_some());
@@ -797,27 +788,7 @@ fn client_test() {
     primitives0.clear_data();
     primitives1.clear_data();
     primitives2.clear_data();
-    route_data(
-        &router.tables,
-        &face1.upgrade().unwrap(),
-        Push {
-            wire_expr: "test/client/**".into(),
-            ext_qos: ext::QoSType::DEFAULT,
-            ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType { node_id: 0 },
-            payload: PushBody::Put(Put {
-                timestamp: None,
-                encoding: Encoding::empty(),
-                ext_sinfo: None,
-                #[cfg(feature = "shared-memory")]
-                ext_shm: None,
-                ext_unknown: vec![],
-                payload: ZBuf::empty(),
-                ext_attachment: None,
-            }),
-        },
-        Reliability::Reliable,
-    );
+    route_dummy_data(&face1, "test/client/**".into());
 
     // functional check
     assert!(primitives0.get_last_name().is_some());
@@ -834,27 +805,7 @@ fn client_test() {
     primitives0.clear_data();
     primitives1.clear_data();
     primitives2.clear_data();
-    route_data(
-        &router.tables,
-        &face0.upgrade().unwrap(),
-        Push {
-            wire_expr: 12.into(),
-            ext_qos: ext::QoSType::DEFAULT,
-            ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType { node_id: 0 },
-            payload: PushBody::Put(Put {
-                timestamp: None,
-                encoding: Encoding::empty(),
-                ext_sinfo: None,
-                #[cfg(feature = "shared-memory")]
-                ext_shm: None,
-                ext_unknown: vec![],
-                payload: ZBuf::empty(),
-                ext_attachment: None,
-            }),
-        },
-        Reliability::Reliable,
-    );
+    route_dummy_data(&face0, 12.into());
 
     // functional check
     assert!(primitives1.get_last_name().is_some());
@@ -871,27 +822,7 @@ fn client_test() {
     primitives0.clear_data();
     primitives1.clear_data();
     primitives2.clear_data();
-    route_data(
-        &router.tables,
-        &face1.upgrade().unwrap(),
-        Push {
-            wire_expr: 22.into(),
-            ext_qos: ext::QoSType::DEFAULT,
-            ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType { node_id: 0 },
-            payload: PushBody::Put(Put {
-                timestamp: None,
-                encoding: Encoding::empty(),
-                ext_sinfo: None,
-                #[cfg(feature = "shared-memory")]
-                ext_shm: None,
-                ext_unknown: vec![],
-                payload: ZBuf::empty(),
-                ext_attachment: None,
-            }),
-        },
-        Reliability::Reliable,
-    );
+    route_dummy_data(&face1, 22.into());
 
     // functional check
     assert!(primitives0.get_last_name().is_some());
@@ -904,4 +835,57 @@ fn client_test() {
     assert_eq!(primitives2.get_last_name().unwrap(), "test/client/z2_pub1");
     // mapping strategy check
     // assert_eq!(primitives2.get_last_key().unwrap(), KeyExpr::IdWithSuffix(31, "/z2_pub1".to_string()));
+}
+
+#[test]
+fn get_best_key_test() {
+    let config = Config::default();
+    let router = Router::new(
+        ZenohIdProto::try_from([1]).unwrap(),
+        WhatAmI::Client,
+        None,
+        &config,
+    )
+    .unwrap();
+
+    let primitives = Arc::new(DummyPrimitives {});
+    let face1 = router.new_primitives(primitives.clone());
+    let face2 = router.new_primitives(primitives.clone());
+    let face3 = router.new_primitives(primitives);
+
+    let root = zread!(router.tables.tables)._get_root().clone();
+    let register_expr = |face: &Face, id: ExprId, expr: &str| {
+        register_expr(&router.tables, &mut face.state.clone(), id, &expr.into());
+    };
+    let get_best_key = |resource, suffix, face: &Face| {
+        Resource::get_resource(&root, resource)
+            .unwrap()
+            .get_best_key(suffix, face.state.id)
+    };
+
+    register_expr(&face1, 1, "a");
+    register_expr(&face2, 2, "a/b");
+    register_expr(&face2, 3, "a/b/c");
+    register_expr(&face3, 4, "a/d");
+
+    macro_rules! assert_wire_expr {
+        ($key:expr, {scope: $scope:expr, suffix: $suffix:expr}) => {
+            assert_eq!($key.scope, $scope);
+            assert_eq!($key.suffix, $suffix);
+        };
+    }
+    assert_wire_expr!(get_best_key("", "a", &face1), { scope: 1, suffix: "" });
+    assert_wire_expr!(get_best_key("", "a/b", &face1), { scope: 1, suffix: "/b" });
+    assert_wire_expr!(get_best_key("a", "", &face1), { scope: 1, suffix: "" });
+    assert_wire_expr!(get_best_key("a", "/b", &face1), { scope: 1, suffix: "/b" });
+    assert_wire_expr!(get_best_key("a/b", "", &face1), { scope: 1, suffix: "/b" });
+    assert_wire_expr!(get_best_key("", "e", &face1), { scope: 0, suffix: "e" });
+    assert_wire_expr!(get_best_key("", "a", &face2), { scope: 0, suffix: "a" });
+    assert_wire_expr!(get_best_key("", "a/b", &face2), { scope: 2, suffix: "" });
+    assert_wire_expr!(get_best_key("", "a/b/c", &face2), { scope: 3, suffix: "" });
+    assert_wire_expr!(get_best_key("", "a/b/c/d", &face2), { scope: 3, suffix: "/d" });
+    assert_wire_expr!(get_best_key("a", "", &face2), { scope: 0, suffix: "a" });
+    assert_wire_expr!(get_best_key("a", "/b", &face2), { scope: 2, suffix: "" });
+    assert_wire_expr!(get_best_key("a", "/d", &face2), { scope: 0, suffix: "a/d" });
+    assert_wire_expr!(get_best_key("a/b", "", &face2), { scope: 2, suffix: "" });
 }

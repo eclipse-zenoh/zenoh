@@ -81,9 +81,18 @@ pub mod scouting {
                 &crate::WhatAmIMatcher::empty();
             pub const peer: &crate::WhatAmIMatcher = // "router|peer"
                 &crate::WhatAmIMatcher::empty().router().peer();
-            pub const client: &crate::WhatAmIMatcher = // "router|peer"
-                &crate::WhatAmIMatcher::empty().router().peer();
+            pub const client: &crate::WhatAmIMatcher = // "router"
+                &crate::WhatAmIMatcher::empty().router();
             mode_accessor!(crate::WhatAmIMatcher);
+        }
+        pub mod autoconnect_strategy {
+            pub const router: &crate::TargetDependentValue<crate::AutoConnectStrategy> =
+                &crate::TargetDependentValue::Unique(crate::AutoConnectStrategy::Always);
+            pub const peer: &crate::TargetDependentValue<crate::AutoConnectStrategy> =
+                &crate::TargetDependentValue::Unique(crate::AutoConnectStrategy::Always);
+            pub const client: &crate::TargetDependentValue<crate::AutoConnectStrategy> =
+                &crate::TargetDependentValue::Unique(crate::AutoConnectStrategy::Always);
+            mode_accessor!(crate::TargetDependentValue<crate::AutoConnectStrategy>);
         }
         pub mod listen {
             pub const router: &bool = &true;
@@ -95,14 +104,32 @@ pub mod scouting {
     pub mod gossip {
         pub const enabled: bool = true;
         pub const multihop: bool = false;
+        pub mod target {
+            pub const router: &crate::WhatAmIMatcher = // "router|peer"
+                &crate::WhatAmIMatcher::empty().router().peer();
+            pub const peer: &crate::WhatAmIMatcher = // "router|peer"
+                &crate::WhatAmIMatcher::empty().router().peer();
+            pub const client: &crate::WhatAmIMatcher = // ""
+                &crate::WhatAmIMatcher::empty();
+            mode_accessor!(crate::WhatAmIMatcher);
+        }
         pub mod autoconnect {
             pub const router: &crate::WhatAmIMatcher = // ""
                 &crate::WhatAmIMatcher::empty();
             pub const peer: &crate::WhatAmIMatcher = // "router|peer"
                 &crate::WhatAmIMatcher::empty().router().peer();
-            pub const client: &crate::WhatAmIMatcher = // "router|peer"
-                &crate::WhatAmIMatcher::empty().router().peer();
+            pub const client: &crate::WhatAmIMatcher = // ""
+                &crate::WhatAmIMatcher::empty();
             mode_accessor!(crate::WhatAmIMatcher);
+        }
+        pub mod autoconnect_strategy {
+            pub const router: &crate::TargetDependentValue<crate::AutoConnectStrategy> =
+                &crate::TargetDependentValue::Unique(crate::AutoConnectStrategy::Always);
+            pub const peer: &crate::TargetDependentValue<crate::AutoConnectStrategy> =
+                &crate::TargetDependentValue::Unique(crate::AutoConnectStrategy::Always);
+            pub const client: &crate::TargetDependentValue<crate::AutoConnectStrategy> =
+                &crate::TargetDependentValue::Unique(crate::AutoConnectStrategy::Always);
+            mode_accessor!(crate::TargetDependentValue<crate::AutoConnectStrategy>);
         }
     }
 }
@@ -131,6 +158,9 @@ pub mod routing {
     }
     pub mod peer {
         pub const mode: &str = "peer_to_peer";
+    }
+    pub mod interests {
+        pub const timeout: u64 = 10000;
     }
 }
 
@@ -244,14 +274,14 @@ impl QueueSizeConf {
 impl Default for QueueSizeConf {
     fn default() -> Self {
         Self {
-            control: 1,
-            real_time: 1,
-            interactive_low: 1,
-            interactive_high: 1,
+            control: 2,
+            real_time: 2,
+            interactive_low: 2,
+            interactive_high: 2,
             data_high: 2,
-            data: 4,
+            data: 2,
             data_low: 2,
-            background: 1,
+            background: 2,
         }
     }
 }
@@ -295,7 +325,10 @@ impl Default for LinkRxConf {
 #[allow(clippy::derivable_impls)]
 impl Default for ShmConf {
     fn default() -> Self {
-        Self { enabled: true }
+        Self {
+            enabled: true,
+            mode: ShmInitMode::default(),
+        }
     }
 }
 

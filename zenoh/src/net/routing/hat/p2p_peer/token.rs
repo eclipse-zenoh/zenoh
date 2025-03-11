@@ -65,7 +65,8 @@ fn propagate_simple_token_to(
         if dst_face.whatami != WhatAmI::Client {
             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
             face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
-            let key_expr = Resource::decl_key(res, dst_face, dst_face.whatami != WhatAmI::Client);
+            let key_expr =
+                Resource::decl_key(res, dst_face, super::push_declaration_profile(dst_face));
             send_declare(
                 &dst_face.primitives,
                 RoutingContext::with_expr(
@@ -79,7 +80,7 @@ fn propagate_simple_token_to(
                             wire_expr: key_expr,
                         }),
                     },
-                    res.expr(),
+                    res.expr().to_string(),
                 ),
             );
         } else {
@@ -108,8 +109,11 @@ fn propagate_simple_token_to(
                 if !face_hat!(dst_face).local_tokens.contains_key(res) {
                     let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
                     face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
-                    let key_expr =
-                        Resource::decl_key(res, dst_face, dst_face.whatami != WhatAmI::Client);
+                    let key_expr = Resource::decl_key(
+                        res,
+                        dst_face,
+                        super::push_declaration_profile(dst_face),
+                    );
                     send_declare(
                         &dst_face.primitives,
                         RoutingContext::with_expr(
@@ -123,7 +127,7 @@ fn propagate_simple_token_to(
                                     wire_expr: key_expr,
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ),
                     );
                 }
@@ -193,7 +197,11 @@ fn declare_simple_token(
     send_declare: &mut SendDeclare,
 ) {
     if let Some(interest_id) = interest_id {
-        if let Some((interest, _)) = face.pending_current_interests.get(&interest_id) {
+        if let Some(interest) = face
+            .pending_current_interests
+            .get(&interest_id)
+            .map(|p| &p.interest)
+        {
             if interest.mode == InterestMode::CurrentFuture {
                 register_simple_token(tables, &mut face.clone(), id, res);
             }
@@ -209,7 +217,7 @@ fn declare_simple_token(
                         ext_nodeid: ext::NodeIdType::default(),
                         body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
                     },
-                    res.expr(),
+                    res.expr().to_string(),
                 ),
             );
             return;
@@ -269,7 +277,7 @@ fn propagate_forget_simple_token(
                             ext_wire_expr: WireExprType::null(),
                         }),
                     },
-                    res.expr(),
+                    res.expr().to_string(),
                 ),
             );
         } else if src_face.id != face.id
@@ -295,7 +303,7 @@ fn propagate_forget_simple_token(
                             },
                         }),
                     },
-                    res.expr(),
+                    res.expr().to_string(),
                 ),
             );
         }
@@ -323,7 +331,7 @@ fn propagate_forget_simple_token(
                                     ext_wire_expr: WireExprType::null(),
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ),
                     );
                 } else if face_hat!(face)
@@ -348,7 +356,7 @@ fn propagate_forget_simple_token(
                                     },
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ),
                     );
                 }
@@ -394,7 +402,7 @@ pub(super) fn undeclare_simple_token(
                                     ext_wire_expr: WireExprType::null(),
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ),
                     );
                 }
@@ -423,7 +431,7 @@ pub(super) fn undeclare_simple_token(
                                             ext_wire_expr: WireExprType::null(),
                                         }),
                                     },
-                                    res.expr(),
+                                    res.expr().to_string(),
                                 ),
                             );
                         }
@@ -514,7 +522,8 @@ pub(crate) fn declare_token_interest(
                         .any(|token| token.context.is_some() && token.matches(res))
                 }) {
                     let id = make_token_id(res, face, mode);
-                    let wire_expr = Resource::decl_key(res, face, face.whatami != WhatAmI::Client);
+                    let wire_expr =
+                        Resource::decl_key(res, face, super::push_declaration_profile(face));
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -525,7 +534,7 @@ pub(crate) fn declare_token_interest(
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
                                 body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ),
                     );
                 }
@@ -540,8 +549,11 @@ pub(crate) fn declare_token_interest(
                     for token in face_hat!(src_face).remote_tokens.values() {
                         if token.context.is_some() && token.matches(res) {
                             let id = make_token_id(token, face, mode);
-                            let wire_expr =
-                                Resource::decl_key(token, face, face.whatami != WhatAmI::Client);
+                            let wire_expr = Resource::decl_key(
+                                token,
+                                face,
+                                super::push_declaration_profile(face),
+                            );
                             send_declare(
                                 &face.primitives,
                                 RoutingContext::with_expr(
@@ -555,7 +567,7 @@ pub(crate) fn declare_token_interest(
                                             wire_expr,
                                         }),
                                     },
-                                    token.expr(),
+                                    token.expr().to_string(),
                                 ),
                             );
                         }
@@ -573,7 +585,7 @@ pub(crate) fn declare_token_interest(
                 for token in face_hat!(src_face).remote_tokens.values() {
                     let id = make_token_id(token, face, mode);
                     let wire_expr =
-                        Resource::decl_key(token, face, face.whatami != WhatAmI::Client);
+                        Resource::decl_key(token, face, super::push_declaration_profile(face));
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -584,7 +596,7 @@ pub(crate) fn declare_token_interest(
                                 ext_nodeid: ext::NodeIdType::DEFAULT,
                                 body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
                             },
-                            token.expr(),
+                            token.expr().to_string(),
                         ),
                     );
                 }

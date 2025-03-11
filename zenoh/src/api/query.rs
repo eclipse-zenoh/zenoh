@@ -15,6 +15,8 @@
 use std::{collections::HashMap, error::Error, fmt::Display};
 
 #[cfg(feature = "unstable")]
+use serde::Deserialize;
+#[cfg(feature = "unstable")]
 use zenoh_config::ZenohId;
 use zenoh_keyexpr::OwnedKeyExpr;
 use zenoh_protocol::core::Parameters;
@@ -97,6 +99,15 @@ impl ReplyError {
     pub fn encoding(&self) -> &Encoding {
         &self.encoding
     }
+
+    /// Constructs an uninitialized empty ReplyError.
+    #[zenoh_macros::internal]
+    pub fn empty() -> Self {
+        ReplyError {
+            payload: ZBytes::new(),
+            encoding: Encoding::default(),
+        }
+    }
 }
 
 impl Display for ReplyError {
@@ -144,6 +155,16 @@ impl Reply {
     pub fn replier_id(&self) -> Option<ZenohId> {
         self.replier_id.map(Into::into)
     }
+
+    /// Constructs an uninitialized empty Reply.
+    #[zenoh_macros::internal]
+    pub fn empty() -> Self {
+        Reply {
+            result: Ok(Sample::empty()),
+            #[cfg(feature = "unstable")]
+            replier_id: None,
+        }
+    }
 }
 
 impl From<Reply> for Result<Sample, ReplyError> {
@@ -172,7 +193,7 @@ impl QueryState {
 }
 /// The kind of accepted query replies.
 #[zenoh_macros::unstable]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Deserialize)]
 pub enum ReplyKeyExpr {
     /// Accept replies whose key expressions may not match the query key expression.
     Any,

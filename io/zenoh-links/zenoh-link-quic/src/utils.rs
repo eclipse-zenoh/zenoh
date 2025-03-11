@@ -506,6 +506,14 @@ pub async fn get_quic_addr(address: &Address<'_>) -> ZResult<SocketAddr> {
     }
 }
 
+pub fn get_quic_host<'a>(address: &'a Address<'a>) -> ZResult<&'a str> {
+    address
+        .as_str()
+        .split(':')
+        .next()
+        .ok_or_else(|| zerror!("Invalid QUIC address").into())
+}
+
 pub fn base64_decode(data: &str) -> ZResult<Vec<u8>> {
     use base64::{engine::general_purpose, Engine};
     Ok(general_purpose::STANDARD

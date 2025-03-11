@@ -29,7 +29,7 @@ use zenoh_buffers::{
     ZBuf,
 };
 use zenoh_codec::{transport::batch::BatchError, WCodec, Zenoh080};
-use zenoh_config::QueueSizeConf;
+use zenoh_config::{QueueAllocConf, QueueAllocMode, QueueSizeConf};
 use zenoh_core::zlock;
 use zenoh_protocol::{
     core::Priority,
@@ -55,6 +55,8 @@ const RBLEN: usize = QueueSizeConf::MAX;
 struct StageInRefill {
     n_ref_r: Waiter,
     s_ref_r: RingBufferReader<WBatch, RBLEN>,
+    batch_config: (usize, BatchConfig),
+    batch_allocs: usize,
 }
 
 #[derive(Debug)]
@@ -68,7 +70,14 @@ impl std::error::Error for TransportClosed {}
 
 impl StageInRefill {
     fn pull(&mut self) -> Option<WBatch> {
-        self.s_ref_r.pull()
+        match self.s_ref_r.pull() {
+            Some(b) => Some(b),
+            None if self.batch_allocs < self.batch_config.0 => {
+                self.batch_allocs += 1;
+                Some(WBatch::new(self.batch_config.1))
+            }
+            None => None,
+        }
     }
 
     fn wait(&self) -> bool {
@@ -254,7 +263,7 @@ struct StageIn {
 impl StageIn {
     fn push_network_message(
         &mut self,
-        msg: &mut NetworkMessage,
+        msg: &NetworkMessage,
         priority: Priority,
         deadline: &mut Deadline,
     ) -> Result<bool, TransportClosed> {
@@ -276,7 +285,6 @@ impl StageIn {
                                 break batch;
                             }
                             None => {
-                                drop(c_guard);
                                 // Wait for an available batch until deadline
                                 if !deadline.wait(&self.s_ref)? {
                                     // Still no available batch.
@@ -288,7 +296,6 @@ impl StageIn {
                                     );
                                     return Ok(false);
                                 }
-                                c_guard = self.mutex.current();
                             }
                         },
                     }
@@ -315,7 +322,7 @@ impl StageIn {
         // Get the current serialization batch.
         let mut batch = zgetbatch_rets!();
         // Attempt the serialization on the current batch
-        let e = match batch.encode(&*msg) {
+        let e = match batch.encode(msg) {
             Ok(_) => zretok!(batch, msg),
             Err(e) => e,
         };
@@ -335,7 +342,7 @@ impl StageIn {
 
         if let BatchError::NewFrame = e {
             // Attempt a serialization with a new frame
-            if batch.encode((&*msg, &frame)).is_ok() {
+            if batch.encode((msg, &frame)).is_ok() {
                 zretok!(batch, msg);
             }
         }
@@ -347,7 +354,7 @@ impl StageIn {
         }
 
         // Attempt a second serialization on fully empty batch
-        if batch.encode((&*msg, &frame)).is_ok() {
+        if batch.encode((msg, &frame)).is_ok() {
             zretok!(batch, msg);
         }
 
@@ -361,7 +368,7 @@ impl StageIn {
 
         let mut writer = self.fragbuf.writer();
         let codec = Zenoh080::new();
-        codec.write(&mut writer, &*msg).unwrap();
+        codec.write(&mut writer, msg).unwrap();
 
         // Fragment the whole message
         let mut fragment = FragmentHeader {
@@ -441,11 +448,9 @@ impl StageIn {
                                 break batch;
                             }
                             None => {
-                                drop(c_guard);
                                 if !self.s_ref.wait() {
                                     return false;
                                 }
-                                c_guard = self.mutex.current();
                             }
                         },
                     }
@@ -641,6 +646,7 @@ pub(crate) struct TransmissionPipelineConf {
     pub(crate) wait_before_close: Duration,
     pub(crate) batching_enabled: bool,
     pub(crate) batching_time_limit: Duration,
+    pub(crate) queue_alloc: QueueAllocConf,
 }
 
 // A 2-stage transmission pipeline
@@ -671,10 +677,14 @@ impl TransmissionPipeline {
             // Create the refill ring buffer
             // This is a SPSC ring buffer
             let (mut s_ref_w, s_ref_r) = RingBuffer::<WBatch, RBLEN>::init();
-            // Fill the refill ring buffer with batches
-            for _ in 0..*num {
-                let batch = WBatch::new(config.batch);
-                assert!(s_ref_w.push(batch).is_none());
+            let mut batch_allocs = 0;
+            if *config.queue_alloc.mode() == QueueAllocMode::Init {
+                // Fill the refill ring buffer with batches
+                for _ in 0..*num {
+                    let batch = WBatch::new(config.batch);
+                    batch_allocs += 1;
+                    assert!(s_ref_w.push(batch).is_none());
+                }
             }
             // Create the channel for notifying that new batches are in the refill ring buffer
             // This is a SPSC channel
@@ -693,7 +703,12 @@ impl TransmissionPipeline {
             });
 
             stage_in.push(Mutex::new(StageIn {
-                s_ref: StageInRefill { n_ref_r, s_ref_r },
+                s_ref: StageInRefill {
+                    n_ref_r,
+                    s_ref_r,
+                    batch_config: (*num, config.batch),
+                    batch_allocs,
+                },
                 s_out: StageInOut {
                     n_out_w: n_out_w.clone(),
                     s_out_w,
@@ -783,7 +798,7 @@ impl TransmissionPipelineProducer {
     #[inline]
     pub(crate) fn push_network_message(
         &self,
-        mut msg: NetworkMessage,
+        msg: NetworkMessage,
     ) -> Result<bool, TransportClosed> {
         // If the queue is not QoS, it means that we only have one priority with index 0.
         let (idx, priority) = if self.stage_in.len() > 1 {
@@ -806,9 +821,31 @@ impl TransmissionPipelineProducer {
         let mut deadline = Deadline::new(wait_time, max_wait_time);
         // Lock the channel. We are the only one that will be writing on it.
         let mut queue = zlock!(self.stage_in[idx]);
-        let sent = queue.push_network_message(&mut msg, priority, &mut deadline)?;
+        // Check again for congestion in case it happens when blocking on the mutex.
+        if self.status.is_congested(priority) {
+            return Ok(false);
+        }
+        let mut sent = queue.push_network_message(&msg, priority, &mut deadline)?;
+        // If the message cannot be sent, mark the pipeline as congested.
         if !sent {
             self.status.set_congested(priority, true);
+            // During the time between deadline wakeup and setting the congested flag,
+            // all batches could have been refilled (especially if there is a single one),
+            // so try again with the same already expired deadline.
+            sent = queue.push_network_message(&msg, priority, &mut deadline)?;
+            // If the message is sent in the end, reset the status.
+            // Setting the status to `true` is only done with the stage_in mutex acquired,
+            // so it is not possible that further messages see the congestion flag set
+            // after this point.
+            if sent {
+                self.status.set_congested(priority, false);
+            }
+            // There is one edge case that is fortunately supported: if the message that
+            // has been pushed again is fragmented, we might have some batches actually
+            // refilled, but still end with dropping the message, not resetting the
+            // congested flag in that case. However, if some batches were available,
+            // that means that they would have still been pushed, so we can expect them to
+            // be refilled, and they will eventually unset the congested flag.
         }
         Ok(sent)
     }
@@ -945,6 +982,7 @@ mod tests {
         ZBuf,
     };
     use zenoh_codec::{RCodec, Zenoh080};
+    use zenoh_config::{QueueAllocConf, QueueAllocMode};
     use zenoh_protocol::{
         core::{Bits, CongestionControl, Encoding, Priority},
         network::{ext, Push},
@@ -970,6 +1008,9 @@ mod tests {
         wait_before_drop: (Duration::from_millis(1), Duration::from_millis(1024)),
         wait_before_close: Duration::from_secs(5),
         batching_time_limit: Duration::from_micros(1),
+        queue_alloc: QueueAllocConf {
+            mode: QueueAllocMode::Init,
+        },
     };
 
     const CONFIG_NOT_STREAMED: TransmissionPipelineConf = TransmissionPipelineConf {
@@ -984,6 +1025,9 @@ mod tests {
         wait_before_drop: (Duration::from_millis(1), Duration::from_millis(1024)),
         wait_before_close: Duration::from_secs(5),
         batching_time_limit: Duration::from_micros(1),
+        queue_alloc: QueueAllocConf {
+            mode: QueueAllocMode::Init,
+        },
     };
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

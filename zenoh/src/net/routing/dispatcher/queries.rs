@@ -20,7 +20,6 @@ use std::{
 use async_trait::async_trait;
 use tokio_util::sync::CancellationToken;
 use zenoh_buffers::ZBuf;
-use zenoh_config::WhatAmI;
 #[cfg(feature = "stats")]
 use zenoh_protocol::zenoh::reply::ReplyBody;
 use zenoh_protocol::{
@@ -40,12 +39,15 @@ use zenoh_util::Timed;
 
 use super::{
     face::FaceState,
-    resource::{QueryRoute, QueryRoutes, QueryTargetQablSet, Resource},
+    resource::{QueryRoute, QueryTargetQablSet, Resource},
     tables::{NodeId, RoutingExpr, Tables, TablesLock},
 };
 #[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
-use crate::net::routing::hat::{HatTrait, SendDeclare};
+use crate::net::routing::{
+    hat::{HatTrait, SendDeclare},
+    router::get_or_set_route,
+};
 
 pub(crate) struct Query {
     src_face: Arc<FaceState>,
@@ -95,7 +97,7 @@ pub(crate) fn declare_queryable(
                     let wtables = zwrite!(tables.tables);
                     (res.unwrap(), wtables)
                 } else {
-                    let mut fullexpr = prefix.expr();
+                    let mut fullexpr = prefix.expr().to_string();
                     fullexpr.push_str(expr.suffix.as_ref());
                     let mut matches = keyexpr::new(fullexpr.as_str())
                         .map(|ke| Resource::get_matches(&rtables, ke))
@@ -120,18 +122,6 @@ pub(crate) fn declare_queryable(
             );
 
             disable_matches_query_routes(&mut wtables, &mut res);
-            drop(wtables);
-
-            let rtables = zread!(tables.tables);
-            let matches_query_routes = compute_matches_query_routes(&rtables, &res);
-            drop(rtables);
-
-            let wtables = zwrite!(tables.tables);
-            for (mut res, query_routes) in matches_query_routes {
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .update_query_routes(query_routes);
-            }
             drop(wtables);
         }
         None => tracing::error!(
@@ -185,18 +175,6 @@ pub(crate) fn undeclare_queryable(
     {
         tracing::debug!("{} Undeclare queryable {} ({})", face, id, res.expr());
         disable_matches_query_routes(&mut wtables, &mut res);
-        drop(wtables);
-
-        let rtables = zread!(tables.tables);
-        let matches_query_routes = compute_matches_query_routes(&rtables, &res);
-        drop(rtables);
-
-        let wtables = zwrite!(tables.tables);
-        for (mut res, query_routes) in matches_query_routes {
-            get_mut_unchecked(&mut res)
-                .context_mut()
-                .update_query_routes(query_routes);
-        }
         Resource::clean(&mut res);
         drop(wtables);
     } else {
@@ -205,106 +183,14 @@ pub(crate) fn undeclare_queryable(
     }
 }
 
-fn compute_query_routes_(tables: &Tables, routes: &mut QueryRoutes, expr: &mut RoutingExpr) {
-    let indexes = tables.hat_code.get_query_routes_entries(tables);
-
-    let max_idx = indexes.routers.iter().max().unwrap();
-    routes.routers.resize_with((*max_idx as usize) + 1, || {
-        Arc::new(QueryTargetQablSet::new())
-    });
-
-    for idx in indexes.routers {
-        routes.routers[idx as usize] =
-            tables
-                .hat_code
-                .compute_query_route(tables, expr, idx, WhatAmI::Router);
-    }
-
-    let max_idx = indexes.peers.iter().max().unwrap();
-    routes.peers.resize_with((*max_idx as usize) + 1, || {
-        Arc::new(QueryTargetQablSet::new())
-    });
-
-    for idx in indexes.peers {
-        routes.peers[idx as usize] =
-            tables
-                .hat_code
-                .compute_query_route(tables, expr, idx, WhatAmI::Peer);
-    }
-
-    let max_idx = indexes.clients.iter().max().unwrap();
-    routes.clients.resize_with((*max_idx as usize) + 1, || {
-        Arc::new(QueryTargetQablSet::new())
-    });
-
-    for idx in indexes.clients {
-        routes.clients[idx as usize] =
-            tables
-                .hat_code
-                .compute_query_route(tables, expr, idx, WhatAmI::Client);
-    }
-}
-
-pub(crate) fn compute_query_routes(tables: &Tables, res: &Arc<Resource>) -> QueryRoutes {
-    let mut routes = QueryRoutes::default();
-    compute_query_routes_(tables, &mut routes, &mut RoutingExpr::new(res, ""));
-    routes
-}
-
-pub(crate) fn update_query_routes(tables: &Tables, res: &Arc<Resource>) {
-    if res.context.is_some() {
-        let mut res_mut = res.clone();
-        let res_mut = get_mut_unchecked(&mut res_mut);
-        compute_query_routes_(
-            tables,
-            &mut res_mut.context_mut().query_routes,
-            &mut RoutingExpr::new(res, ""),
-        );
-    }
-}
-
-pub(crate) fn update_query_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
-    update_query_routes(tables, res);
-    let res = get_mut_unchecked(res);
-    for child in res.children.values_mut() {
-        update_query_routes_from(tables, child);
-    }
-}
-
-pub(crate) fn compute_matches_query_routes(
-    tables: &Tables,
-    res: &Arc<Resource>,
-) -> Vec<(Arc<Resource>, QueryRoutes)> {
-    let mut routes = vec![];
-    if res.context.is_some() {
-        routes.push((res.clone(), compute_query_routes(tables, res)));
-        for match_ in &res.context().matches {
-            let match_ = match_.upgrade().unwrap();
-            if !Arc::ptr_eq(&match_, res) {
-                let match_routes = compute_query_routes(tables, &match_);
-                routes.push((match_, match_routes));
-            }
-        }
-    }
-    routes
-}
-
-pub(crate) fn update_matches_query_routes(tables: &Tables, res: &Arc<Resource>) {
-    if res.context.is_some() {
-        update_query_routes(tables, res);
-        for match_ in &res.context().matches {
-            let match_ = match_.upgrade().unwrap();
-            if !Arc::ptr_eq(&match_, res) {
-                update_query_routes(tables, &match_);
-            }
-        }
-    }
-}
-
 #[inline]
 fn insert_pending_query(outface: &mut Arc<FaceState>, query: Arc<Query>) -> RequestId {
     let outface_mut = get_mut_unchecked(outface);
-    outface_mut.next_qid += 1;
+    // This `wrapping_add` is kind of "safe" because it would require an incredible amount
+    // of parallel running queries to conflict a currently used id.
+    // However, query ids are encoded with varint algorithm, so an incremental id isn't a
+    // good match, and there is still room for optimization.
+    outface_mut.next_qid = outface_mut.next_qid.wrapping_add(1);
     let qid = outface_mut.next_qid;
     outface_mut.pending_queries.insert(
         qid,
@@ -475,16 +361,23 @@ fn get_query_route(
     expr: &mut RoutingExpr,
     routing_context: NodeId,
 ) -> Arc<QueryTargetQablSet> {
-    let local_context = tables
-        .hat_code
-        .map_routing_context(tables, face, routing_context);
-    res.as_ref()
-        .and_then(|res| res.query_route(face.whatami, local_context))
-        .unwrap_or_else(|| {
-            tables
-                .hat_code
-                .compute_query_route(tables, expr, local_context, face.whatami)
-        })
+    let hat = &tables.hat_code;
+    let local_context = hat.map_routing_context(tables, face, routing_context);
+    let mut compute_route = || hat.compute_query_route(tables, expr, local_context, face.whatami);
+    if let Some(query_routes) = res
+        .as_ref()
+        .and_then(|res| res.context.as_ref())
+        .map(|ctx| &ctx.query_routes)
+    {
+        return get_or_set_route(
+            query_routes,
+            tables.routes_version,
+            face.whatami,
+            local_context,
+            compute_route,
+        );
+    }
+    compute_route()
 }
 
 #[cfg(feature = "stats")]

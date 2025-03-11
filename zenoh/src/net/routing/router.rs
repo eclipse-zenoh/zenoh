@@ -61,7 +61,7 @@ impl Router {
         })
     }
 
-    pub fn init_link_state(&mut self, runtime: Runtime) {
+    pub fn init_link_state(&mut self, runtime: Runtime) -> ZResult<()> {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut tables = zwrite!(self.tables.tables);
         tables.runtime = Some(Runtime::downgrade(&runtime));
@@ -92,6 +92,7 @@ impl Router {
                     None,
                     None,
                     ctrl_lock.new_face(),
+                    true,
                 )
             })
             .clone();
@@ -151,6 +152,7 @@ impl Router {
                     None,
                     Some(ingress.clone()),
                     ctrl_lock.new_face(),
+                    false,
                 )
             })
             .clone();
@@ -203,6 +205,7 @@ impl Router {
             Some(transport),
             None,
             ctrl_lock.new_face(),
+            false,
         );
         let _ = mux.face.set(Face {
             state: face.clone(),
@@ -210,9 +213,7 @@ impl Router {
         });
         tables.mcast_groups.push(face);
 
-        // recompute routes
-        let mut root_res = tables.root_res.clone();
-        update_data_routes_from(&mut tables, &mut root_res);
+        tables.disable_all_routes();
         Ok(())
     }
 
@@ -242,12 +243,11 @@ impl Router {
             Some(transport),
             Some(interceptor.clone()),
             ctrl_lock.new_face(),
+            false,
         );
         tables.mcast_faces.push(face_state.clone());
 
-        // recompute routes
-        let mut root_res = tables.root_res.clone();
-        update_data_routes_from(&mut tables, &mut root_res);
+        tables.disable_all_routes();
         Ok(Arc::new(DeMux::new(
             Face {
                 tables: self.tables.clone(),

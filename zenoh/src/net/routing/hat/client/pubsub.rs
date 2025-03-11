@@ -26,7 +26,7 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{face_hat, face_hat_mut, get_routes_entries, HatCode, HatFace};
+use super::{face_hat, face_hat_mut, HatCode, HatFace};
 use crate::{
     key_expr::KeyExpr,
     net::routing::{
@@ -37,7 +37,6 @@ use crate::{
             tables::{Route, RoutingExpr, Tables},
         },
         hat::{HatPubSubTrait, SendDeclare, Sources},
-        router::{update_data_routes_from, RoutesIndexes},
         RoutingContext,
     },
 };
@@ -71,7 +70,7 @@ fn propagate_simple_subscription_to(
                         wire_expr: key_expr,
                     }),
                 },
-                res.expr(),
+                res.expr().to_string(),
             ),
         );
     }
@@ -176,7 +175,7 @@ fn propagate_forget_simple_subscription(
                             ext_wire_expr: WireExprType::null(),
                         }),
                     },
-                    res.expr(),
+                    res.expr().to_string(),
                 ),
             );
         }
@@ -214,7 +213,7 @@ pub(super) fn undeclare_simple_subscription(
                                 ext_wire_expr: WireExprType::null(),
                             }),
                         },
-                        res.expr(),
+                        res.expr().to_string(),
                     ),
                 );
             }
@@ -259,8 +258,6 @@ pub(super) fn pubsub_new_face(
             );
         }
     }
-    // recompute routes
-    update_data_routes_from(tables, &mut tables.root_res.clone());
 }
 
 impl HatPubSubTrait for HatCode {
@@ -305,6 +302,25 @@ impl HatPubSubTrait for HatCode {
             }
         }
         Vec::from_iter(subs)
+    }
+
+    fn get_publications(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+        let mut result = HashMap::new();
+        for face in tables.faces.values() {
+            for interest in face_hat!(face).remote_interests.values() {
+                if interest.options.subscribers() {
+                    if let Some(res) = interest.res.as_ref() {
+                        let sources = result.entry(res.clone()).or_insert_with(Sources::default);
+                        match face.whatami {
+                            WhatAmI::Router => sources.routers.push(face.zid),
+                            WhatAmI::Peer => sources.peers.push(face.zid),
+                            WhatAmI::Client => sources.clients.push(face.zid),
+                        }
+                    }
+                }
+            }
+        }
+        result.into_iter().collect()
     }
 
     fn compute_data_route(
@@ -381,10 +397,6 @@ impl HatPubSubTrait for HatCode {
             }
         }
         Arc::new(route)
-    }
-
-    fn get_data_routes_entries(&self, _tables: &Tables) -> RoutesIndexes {
-        get_routes_entries()
     }
 
     #[zenoh_macros::unstable]

@@ -28,6 +28,7 @@ default = ["std"]
 std = ["zenoh-result/std", "dep:schemars"]
 internal = []
 unstable = []
+js = ["getrandom/js"]
 
 [dependencies]
 keyed-set = { workspace = true }
@@ -36,6 +37,9 @@ schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["alloc"] }
 token-cell = { workspace = true }
 zenoh-result = { workspace = true }
+# NOTE: getrandom needs to be explicitly added here in order to enable the `js` feature when compiling the rand crate to WASM
+# more information: https://docs.rs/getrandom/latest/getrandom/#webassembly-support 
+getrandom = { workspace = true }
 
 [target.'cfg(not(features = "std"))'.dependencies]
 hashbrown = { workspace = true }
@@ -50,3 +54,7 @@ rand = { workspace = true, features = ["default"] }
 [[bench]]
 name = "keyexpr_tree"
 harness = false
+
+# NOTE: for the above reason, we need to explicitly ignore getrandom in the CI because it's an indirect dependency which is not used directly by zenoh.
+[package.metadata.cargo-machete]
+ignored = ["getrandom"]

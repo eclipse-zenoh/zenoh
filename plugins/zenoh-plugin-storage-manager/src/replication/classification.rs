@@ -156,6 +156,8 @@ impl Interval {
 
     /// Returns an [HashMap] of the index and [Fingerprint] of all the [SubInterval]s contained in
     /// this [Interval].
+    //
+    // This is a convenience method used to compute the Digest and an AlignmentReply.
     pub(crate) fn sub_intervals_fingerprints(&self) -> HashMap<SubIntervalIdx, Fingerprint> {
         self.sub_intervals
             .iter()
@@ -174,7 +176,7 @@ impl Interval {
     /// As its name indicates, this method DOES NOT CHECK if there is another [Event] associated to
     /// the same key expression (regardless of its [Timestamp]).
     ///
-    /// This uniqueness property (i.e. there should only be a single [Event] in the replication Log
+    /// This uniqueness property (i.e. there should only be a single [Event] in the Replication Log
     /// for a given key expression) cannot be enforced at the [Interval] level. Hence, this method
     /// assumes the check has already been performed and thus does not do redundant work.
     pub(crate) fn insert_unchecked(&mut self, sub_interval_idx: SubIntervalIdx, event: Event) {
@@ -220,6 +222,9 @@ impl Interval {
         result
     }
 
+    /// Removes and returns, if found, the [Event] having the provided [EventMetadata].
+    ///
+    /// The fingerprint of the Interval will be updated accordingly.
     pub(crate) fn remove_event(
         &mut self,
         sub_interval_idx: &SubIntervalIdx,
@@ -422,6 +427,9 @@ impl SubInterval {
         }
     }
 
+    /// Removes and returns, if found, the [Event] having the same [EventMetadata].
+    ///
+    /// The Fingerprint of the SubInterval is updated accordingly.
     fn remove_event(&mut self, event_to_remove: &EventMetadata) -> Option<Event> {
         let removed_event = self.events.remove(&event_to_remove.log_key());
         if let Some(event) = &removed_event {
@@ -438,6 +446,8 @@ impl SubInterval {
     /// is where the Wildcard Update should be recorded.
     /// It is only in that specific scenario that we are not sure that all [Event]s have a lower
     /// timestamp.
+    ///
+    /// The Fingerprint of the [SubInterval] is updated accordingly.
     fn remove_events_overridden_by_wildcard_update(
         &mut self,
         prefix: Option<&OwnedKeyExpr>,

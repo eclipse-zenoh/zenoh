@@ -34,6 +34,7 @@ json5 = { workspace = true }
 num_cpus = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
+serde_with = { workspace = true }
 serde_yaml = { workspace = true }
 validated_struct = { workspace = true, features = ["json5", "json_get"] }
 zenoh-core = { workspace = true }

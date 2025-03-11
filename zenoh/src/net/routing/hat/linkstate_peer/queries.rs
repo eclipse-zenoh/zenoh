@@ -37,20 +37,19 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 use super::{
-    face_hat, face_hat_mut, get_peer, get_routes_entries, hat, hat_mut, network::Network, res_hat,
-    res_hat_mut, HatCode, HatContext, HatFace, HatTables,
+    face_hat, face_hat_mut, get_peer, hat, hat_mut, network::Network, push_declaration_profile,
+    res_hat, res_hat_mut, HatCode, HatContext, HatFace, HatTables,
 };
 #[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
 use crate::net::routing::{
     dispatcher::{
         face::FaceState,
-        queries::*,
         resource::{NodeId, Resource, SessionContext},
         tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
     },
     hat::{CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
-    router::RoutesIndexes,
+    router::disable_matches_query_routes,
     RoutingContext,
 };
 
@@ -139,7 +138,7 @@ fn send_sourced_queryable_to_net_children(
                         .map(|src_face| someface.id != src_face.id)
                         .unwrap_or(true)
                     {
-                        let push_declaration = someface.whatami != WhatAmI::Client;
+                        let push_declaration = push_declaration_profile(&someface);
                         let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
@@ -156,7 +155,7 @@ fn send_sourced_queryable_to_net_children(
                                     ext_info: *qabl_info,
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ));
                     }
                 }
@@ -193,7 +192,7 @@ fn propagate_simple_queryable(
             face_hat_mut!(&mut dst_face)
                 .local_qabls
                 .insert(res.clone(), (id, info));
-            let push_declaration = dst_face.whatami != WhatAmI::Client;
+            let push_declaration = push_declaration_profile(&dst_face);
             let key_expr = Resource::decl_key(res, &mut dst_face, push_declaration);
             send_declare(
                 &dst_face.primitives,
@@ -209,7 +208,7 @@ fn propagate_simple_queryable(
                             ext_info: info,
                         }),
                     },
-                    res.expr(),
+                    res.expr().to_string(),
                 ),
             );
         }
@@ -372,7 +371,7 @@ fn send_forget_sourced_queryable_to_net_children(
                         .map(|src_face| someface.id != src_face.id)
                         .unwrap_or(true)
                     {
-                        let push_declaration = someface.whatami != WhatAmI::Client;
+                        let push_declaration = push_declaration_profile(&someface);
                         let wire_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
@@ -388,7 +387,7 @@ fn send_forget_sourced_queryable_to_net_children(
                                     ext_wire_expr: WireExprType { wire_expr },
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ));
                     }
                 }
@@ -418,7 +417,7 @@ fn propagate_forget_simple_queryable(
                             ext_wire_expr: WireExprType::null(),
                         }),
                     },
-                    res.expr(),
+                    res.expr().to_string(),
                 ),
             );
         }
@@ -449,7 +448,7 @@ fn propagate_forget_simple_queryable(
                                     ext_wire_expr: WireExprType::null(),
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ),
                     );
                 }
@@ -581,7 +580,7 @@ pub(super) fn undeclare_simple_queryable(
                                 ext_wire_expr: WireExprType::null(),
                             }),
                         },
-                        res.expr(),
+                        res.expr().to_string(),
                     ),
                 );
             }
@@ -612,7 +611,7 @@ pub(super) fn undeclare_simple_queryable(
                                         ext_wire_expr: WireExprType::null(),
                                     }),
                                 },
-                                res.expr(),
+                                res.expr().to_string(),
                             ),
                         );
                     }
@@ -652,7 +651,7 @@ pub(super) fn queries_remove_node(
     for mut res in qabls {
         unregister_linkstatepeer_queryable(tables, &mut res, node, send_declare);
 
-        update_matches_query_routes(tables, &res);
+        disable_matches_query_routes(tables, &mut res);
         Resource::clean(&mut res)
     }
 }
@@ -691,9 +690,6 @@ pub(super) fn queries_tree_change(tables: &mut Tables, new_children: &[Vec<NodeI
             }
         }
     }
-
-    // recompute routes
-    update_query_routes_from(tables, &mut tables.root_res.clone());
 }
 
 #[inline]
@@ -783,7 +779,7 @@ pub(super) fn declare_qabl_interest(
                 }) {
                     let info = local_qabl_info(tables, res, face);
                     let id = make_qabl_id(res, face, mode, info);
-                    let wire_expr = Resource::decl_key(res, face, face.whatami != WhatAmI::Client);
+                    let wire_expr = Resource::decl_key(res, face, push_declaration_profile(face));
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -798,7 +794,7 @@ pub(super) fn declare_qabl_interest(
                                     ext_info: info,
                                 }),
                             },
-                            res.expr(),
+                            res.expr().to_string(),
                         ),
                     );
                 }
@@ -812,7 +808,7 @@ pub(super) fn declare_qabl_interest(
                         let info = local_qabl_info(tables, qabl, face);
                         let id = make_qabl_id(qabl, face, mode, info);
                         let key_expr =
-                            Resource::decl_key(qabl, face, face.whatami != WhatAmI::Client);
+                            Resource::decl_key(qabl, face, push_declaration_profile(face));
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(
@@ -827,7 +823,7 @@ pub(super) fn declare_qabl_interest(
                                         ext_info: info,
                                     }),
                                 },
-                                qabl.expr(),
+                                qabl.expr().to_string(),
                             ),
                         );
                     }
@@ -840,7 +836,7 @@ pub(super) fn declare_qabl_interest(
                 {
                     let info = local_qabl_info(tables, qabl, face);
                     let id = make_qabl_id(qabl, face, mode, info);
-                    let key_expr = Resource::decl_key(qabl, face, face.whatami != WhatAmI::Client);
+                    let key_expr = Resource::decl_key(qabl, face, push_declaration_profile(face));
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -855,7 +851,7 @@ pub(super) fn declare_qabl_interest(
                                     ext_info: info,
                                 }),
                             },
-                            qabl.expr(),
+                            qabl.expr().to_string(),
                         ),
                     );
                 }
@@ -936,6 +932,25 @@ impl HatQueriesTrait for HatCode {
             .collect()
     }
 
+    fn get_queriers(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+        let mut result = HashMap::new();
+        for face in tables.faces.values() {
+            for interest in face_hat!(face).remote_interests.values() {
+                if interest.options.queryables() {
+                    if let Some(res) = interest.res.as_ref() {
+                        let sources = result.entry(res.clone()).or_insert_with(Sources::default);
+                        match face.whatami {
+                            WhatAmI::Router => sources.routers.push(face.zid),
+                            WhatAmI::Peer => sources.peers.push(face.zid),
+                            WhatAmI::Client => sources.clients.push(face.zid),
+                        }
+                    }
+                }
+            }
+        }
+        result.into_iter().collect()
+    }
+
     fn compute_query_route(
         &self,
         tables: &Tables,
@@ -1010,10 +1025,6 @@ impl HatQueriesTrait for HatCode {
         Arc::new(route)
     }
 
-    fn get_query_routes_entries(&self, tables: &Tables) -> RoutesIndexes {
-        get_routes_entries(tables)
-    }
-
     #[cfg(feature = "unstable")]
     fn get_matching_queryables(
         &self,
@@ -1055,7 +1066,7 @@ impl HatQueriesTrait for HatCode {
 
             for (sid, context) in &mres.session_ctxs {
                 if match complete {
-                    true => context.qabl.map_or(false, |q| q.complete),
+                    true => context.qabl.is_some_and(|q| q.complete),
                     false => context.qabl.is_some(),
                 } {
                     matching_queryables

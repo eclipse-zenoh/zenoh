@@ -13,7 +13,7 @@
 //
 
 use std::{
-    fmt,
+    fmt::{self, Debug},
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::Arc,
     time::Duration,
@@ -42,7 +42,7 @@ use zenoh_protocol::{
 use zenoh_result::{bail, zerror, ZResult};
 
 use crate::{
-    utils::{get_quic_addr, TlsClientConfig, TlsServerConfig},
+    utils::{get_quic_addr, get_quic_host, TlsClientConfig, TlsServerConfig},
     ALPN_QUIC_HTTP, QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX,
 };
 
@@ -251,11 +251,7 @@ impl LinkManagerUnicastQuic {
 impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
         let epaddr = endpoint.address();
-        let host = epaddr
-            .as_str()
-            .split(':')
-            .next()
-            .ok_or("Endpoints must be of the form quic/<address>:<port>")?;
+        let host = get_quic_host(&epaddr)?;
         let epconf = endpoint.config();
 
         let dst_addr = get_quic_addr(&epaddr).await?;
@@ -358,6 +354,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         };
 
         let addr = get_quic_addr(&epaddr).await?;
+        let host = get_quic_host(&epaddr)?;
 
         // Server config
         let mut server_crypto = TlsServerConfig::new(&epconf)
@@ -418,12 +415,18 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let local_addr = quic_endpoint
             .local_addr()
             .map_err(|e| zerror!("Can not create a new QUIC listener on {}: {}", addr, e))?;
+        let local_port = local_addr.port();
 
         // Update the endpoint locator address
-        let endpoint = EndPoint::new(
+        let locator = Locator::new(
             endpoint.protocol(),
-            local_addr.to_string(),
+            format!("{host}:{local_port}"),
             endpoint.metadata(),
+        )?;
+        let endpoint = EndPoint::new(
+            locator.protocol(),
+            locator.address(),
+            locator.metadata(),
             endpoint.config(),
         )?;
 
@@ -446,8 +449,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         };
 
         // Initialize the QuicAcceptor
-        let locator = endpoint.to_locator();
-
         self.listeners
             .add_listener(endpoint, local_addr, task, token)
             .await?;
@@ -539,7 +540,7 @@ async fn accept_task(
                             }
                         }
 
-                        tracing::debug!("Accepted QUIC connection on {:?}: {:?}", src_addr, dst_addr);
+                        tracing::debug!("Accepted QUIC connection on {:?}: {:?}. {:?}.", src_addr, dst_addr, auth_id);
                         // Create the new link object
                         let link = Arc::<LinkUnicastQuic>::new_cyclic(|weak_link| {
                             let mut expiration_manager = None;
@@ -627,9 +628,19 @@ fn get_cert_chain_expiration(conn: &quinn::Connection) -> ZResult<Option<OffsetD
     Ok(link_expiration)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct QuicAuthId {
     auth_value: Option<String>,
+}
+
+impl Debug for QuicAuthId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Common Name: {}",
+            self.auth_value.as_deref().unwrap_or("None")
+        )
+    }
 }
 
 impl From<QuicAuthId> for LinkAuthId {
