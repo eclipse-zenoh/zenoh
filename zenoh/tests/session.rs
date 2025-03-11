@@ -28,6 +28,8 @@ use zenoh::internal::runtime::{Runtime, RuntimeBuilder};
 use zenoh::qos::Reliability;
 #[cfg(feature = "unstable")]
 use zenoh::query::Querier;
+#[cfg(all(feature = "internal", feature = "unstable"))]
+use zenoh::Wait;
 use zenoh::{key_expr::KeyExpr, qos::CongestionControl, sample::SampleKind, Session};
 use zenoh_core::ztimeout;
 #[cfg(not(feature = "unstable"))]
@@ -417,7 +419,7 @@ async fn zenoh_session_close() {
 
 #[cfg(all(feature = "internal", feature = "unstable"))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn zenoh_session_close_in_background() {
+async fn zenoh_session_close_in_background_async() {
     zenoh::init_log_from_env_or("error");
 
     let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:17467"]).await;
@@ -429,6 +431,19 @@ async fn zenoh_session_close_in_background() {
         close_task_2.await.unwrap();
     };
     ztimeout!(close_all);
+}
+
+#[cfg(all(feature = "internal", feature = "unstable"))]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn zenoh_session_close_in_background_sync() {
+    zenoh::init_log_from_env_or("error");
+
+    let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:17477"]).await;
+    let close_task_1 = peer01.close().in_background().await;
+    let close_task_2 = peer02.close().in_background().await;
+
+    close_task_1.wait().unwrap();
+    close_task_2.wait().unwrap();
 }
 
 #[cfg(feature = "unstable")]
