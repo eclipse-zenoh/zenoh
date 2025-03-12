@@ -19,6 +19,8 @@
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 mod adminspace;
 pub mod orchestrator;
+#[cfg(unix)]
+mod netlink;
 
 #[cfg(feature = "plugins")]
 use std::sync::{Mutex, MutexGuard};
@@ -34,6 +36,7 @@ use std::{
 pub use adminspace::AdminSpace;
 use async_trait::async_trait;
 use futures::{stream::StreamExt, Future};
+use rtnetlink::packet_route::{AddressFamily, RouteNetlinkMessage};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
@@ -55,7 +58,7 @@ use zenoh_transport::{
     multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
-
+use zenoh_util::net::update_iface_cache;
 use self::orchestrator::StartConditions;
 use super::{primitives::DeMux, routing, routing::router::Router};
 #[cfg(feature = "plugins")]
@@ -87,6 +90,7 @@ pub(crate) struct RuntimeState {
     plugins_manager: Mutex<PluginsManager>,
     start_conditions: Arc<StartConditions>,
     pending_connections: tokio::sync::Mutex<HashSet<ZenohIdProto>>,
+    scouting_cancellation_token: tokio::sync::Mutex<CancellationToken>,
 }
 
 pub struct WeakRuntime {
@@ -193,6 +197,7 @@ impl RuntimeBuilder {
                 plugins_manager: Mutex::new(plugins_manager),
                 start_conditions: Arc::new(StartConditions::default()),
                 pending_connections: tokio::sync::Mutex::new(HashSet::new()),
+                scouting_cancellation_token: tokio::sync::Mutex::new(CancellationToken::new()),
             }),
         };
         *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);
@@ -239,6 +244,38 @@ impl RuntimeBuilder {
             zenoh_config::ShmInitMode::Init => zenoh_shm::init::init(),
             zenoh_config::ShmInitMode::Lazy => {}
         };
+
+        #[cfg(unix)]
+        runtime.spawn({
+            let mut netlink_monitor = netlink::NetlinkMonitor::new()?;
+            let runtime2 = runtime.clone();
+            let token = runtime2.get_cancellation_token();
+            async move {
+                loop {
+                    tokio::select! {
+                        message = netlink_monitor.next() => {
+                            match &message {
+                                Some(RouteNetlinkMessage::NewAddress(addr))
+                                | Some(RouteNetlinkMessage::DelAddress(addr)) => {
+                                    tracing::debug!("NETLINK message: {:?}", message);
+                                    // TODO Find how to handle IPv6 addresses changes without renewing too often.
+                                    if addr.header.family == AddressFamily::Inet {
+                                        update_iface_cache();
+                                        runtime2.print_locators();
+                                        if let Err(e) = runtime2.restart_scout_if_needed().await {
+                                            tracing::error!("Error starting scout: {}", e);
+                                        }
+                                    }
+                                },
+                                Some(_) => {},
+                                None => { break; }
+                            }
+                        },
+                        _ = token.cancelled() => { break; }
+                    }
+                }
+            }
+        });
 
         Ok(runtime)
     }
@@ -353,6 +390,10 @@ impl Runtime {
 
     pub fn get_cancellation_token(&self) -> CancellationToken {
         self.state.task_controller.get_cancellation_token()
+    }
+
+    pub async fn get_scouting_cancellation_token(&self) -> CancellationToken {
+        self.state.scouting_cancellation_token.lock().await.child_token()
     }
 
     pub(crate) fn start_conditions(&self) -> &Arc<StartConditions> {
