@@ -24,6 +24,7 @@ use tokio::{
     net::UdpSocket,
     sync::{futures::Notified, Mutex, Notify},
 };
+use tokio_util::sync::CancellationToken;
 use zenoh_buffers::{
     reader::{DidntRead, HasReader},
     writer::HasWriter,
@@ -315,6 +316,35 @@ impl Runtime {
         Ok(())
     }
 
+    pub async fn restart_scout_if_needed(&self) -> ZResult<()> {
+        let (
+            scouting,
+            listen,
+            autoconnect,
+            addr,
+            ifaces,
+        ) = {
+            let guard = &self.state.config.lock().0;
+            (
+                unwrap_or_default!(guard.scouting().multicast().enabled()),
+                *unwrap_or_default!(guard.scouting().multicast().listen().peer()),
+                AutoConnect::multicast(guard, WhatAmI::Peer),
+                unwrap_or_default!(guard.scouting().multicast().address()),
+                unwrap_or_default!(guard.scouting().multicast().interface()),
+            )
+        };
+
+        let mut cancelation_token = self.state.scouting_cancellation_token.lock().await;
+        cancelation_token.cancel();
+        if scouting {
+            *cancelation_token = CancellationToken::new();
+            drop(cancelation_token);
+            self.start_scout(listen, autoconnect, addr, ifaces).await?;
+        }
+
+        Ok(())
+    }
+
     async fn connect_peers(&self, peers: &[EndPoint], single_link: bool) -> ZResult<()> {
         let timeout = self.get_global_connect_timeout();
         if timeout.is_zero() {
@@ -579,7 +609,7 @@ impl Runtime {
         Ok(())
     }
 
-    fn print_locators(&self) {
+    pub fn print_locators(&self) {
         let mut locators = self.state.locators.write().unwrap();
         *locators = self.manager().get_locators();
         for locator in &*locators {
@@ -1093,20 +1123,23 @@ impl Runtime {
         autoconnect: AutoConnect,
         addr: &SocketAddr,
     ) {
-        Runtime::scout(
-            ucast_sockets,
-            autoconnect.matcher(),
-            addr,
-            move |hello| async move {
-                if hello.locators.is_empty() {
-                    tracing::warn!("Received Hello with no locators: {:?}", hello);
-                } else if autoconnect.should_autoconnect(hello.zid, hello.whatami) {
-                    self.connect_peer(&hello.zid, &hello.locators).await;
-                }
-                Loop::Continue
+        let token = self.get_scouting_cancellation_token().await;
+        tokio::select! {
+            _ = Runtime::scout(
+                ucast_sockets,
+                autoconnect.matcher(),
+                addr,
+                move |hello| async move {
+                    if hello.locators.is_empty() {
+                        tracing::warn!("Received Hello with no locators: {:?}", hello);
+                    } else if autoconnect.should_autoconnect(hello.zid, hello.whatami) {
+                        self.connect_peer(&hello.zid, &hello.locators).await;
+                    }
+                    Loop::Continue
             },
-        )
-        .await
+            ) => {},
+            _ = token.cancelled() => {},
+        }
     }
 
     async fn responder(&self, mcast_socket: &UdpSocket, ucast_sockets: &[UdpSocket]) {
@@ -1139,8 +1172,12 @@ impl Runtime {
             .filter_map(|sock| sock.local_addr().ok())
             .collect();
         tracing::debug!("Waiting for UDP datagram...");
+        let token = self.get_scouting_cancellation_token().await;
         loop {
-            let (n, peer) = mcast_socket.recv_from(&mut buf).await.unwrap();
+            let (n, peer) = tokio::select! {
+                res = mcast_socket.recv_from(&mut buf) => { res.unwrap() },
+                _ = token.cancelled() => { break; }
+            };
             if local_addrs.iter().any(|addr| *addr == peer) {
                 tracing::trace!("Ignore UDP datagram from own socket");
                 continue;
