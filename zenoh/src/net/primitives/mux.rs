@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
 
 use arc_swap::ArcSwap;
 use zenoh_protocol::{
@@ -237,14 +237,11 @@ pub struct McastMux {
 }
 
 impl McastMux {
-    pub(crate) fn new(
-        handler: TransportMulticast,
-        interceptor: Arc<InterceptorsChain>,
-    ) -> McastMux {
+    pub(crate) fn new(handler: TransportMulticast, interceptor: InterceptorsChain) -> McastMux {
         McastMux {
             handler,
             face: OnceLock::new(),
-            interceptor: ArcSwap::new(interceptor),
+            interceptor: ArcSwap::new(interceptor.into()),
         }
     }
 }
