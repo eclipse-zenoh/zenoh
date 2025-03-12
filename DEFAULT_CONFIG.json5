@@ -398,6 +398,39 @@
   //   ]
   //},
 
+  //  /// Configure QoS overwrite rules.
+  //  qos_overwrite: [
+  //     {
+  //       /// Id has to be unique within the rule set.
+  //       id: "rule1",
+  //       // Optional list of interfaces, if not specified, will be applied to all interfaces.
+  //       interfaces: [
+  //         "lo0",
+  //         "en0",
+  //       ],
+  //       messages: ["put", "delete"],
+  //       flows: ["egress"],
+  //       key_exprs: ["test/demo"],
+  //       overwrite: {
+  //          /// Optional new priority value, if not specified priority of the messages will stay unchanged.
+  //          priority: "real_time",
+  //          /// Optional new congestion control value, if not specified congestion control of the messages will stay unchanged.
+  //          congestion_control: "block",
+  //          /// Optional new priority value, if not specified priority of the messages will stay unchanged.
+  //          express: true
+  //        },
+  //     },
+  //     {
+  //        id: "rule2",
+  //        messages: ["query", "reply"],
+  //        flows: ["ingress"],
+  //        key_exprs: ["**"],
+  //        overwrite: {
+  //          priority: "interactive_high",
+  //        },
+  //     },
+  //   ],
+
   /// Configure internal transport parameters
   transport: {
     unicast: {
