@@ -503,7 +503,7 @@ impl Runtime {
                 self.spawn_add_listener(endpoint, retry_config).await
             }
         }
-        self.print_locators();
+        self.update_locators();
         Ok(())
     }
 
@@ -515,7 +515,7 @@ impl Runtime {
         let this = self.clone();
         self.spawn(async move {
             this.add_listener_retry(listener, retry_config).await;
-            this.print_locators();
+            this.update_locators();
         });
     }
 
@@ -545,12 +545,22 @@ impl Runtime {
         Ok(())
     }
 
-    pub fn print_locators(&self) {
+    pub fn update_locators(&self) {
         let mut locators = self.state.locators.write().unwrap();
-        *locators = self.manager().get_locators();
-        for locator in &*locators {
-            tracing::info!("Zenoh can be reached at: {}", locator);
+        let new_locators = self.manager().get_locators();
+        if tracing::enabled!(tracing::Level::INFO) {
+            for locator in &new_locators {
+                if !locators.contains(locator) {
+                    tracing::info!("Zenoh can be reached at: {}", locator);
+                }
+            }
+            for old_locator in &*locators {
+                if !new_locators.contains(old_locator) {
+                    tracing::info!("Zenoh can no longer be reached at: {}", old_locator);
+                }
+            }
         }
+        *locators = new_locators;
     }
 
     pub fn get_interfaces(names: &str) -> Vec<IpAddr> {

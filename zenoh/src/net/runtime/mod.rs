@@ -23,6 +23,28 @@ mod netlink;
 pub mod orchestrator;
 mod scouting;
 
+use self::orchestrator::StartConditions;
+use super::{primitives::DeMux, routing, routing::router::Router};
+#[cfg(feature = "plugins")]
+use crate::api::loader::{load_plugins, start_plugins};
+#[cfg(feature = "plugins")]
+use crate::api::plugins::PluginsManager;
+#[cfg(feature = "internal")]
+use crate::session::CloseBuilder;
+use crate::{
+    api::{
+        builders::close::{Closeable, Closee},
+        config::{Config, Notifier},
+    },
+    GIT_VERSION, LONG_VERSION,
+};
+pub use adminspace::AdminSpace;
+use async_trait::async_trait;
+use futures::{stream::StreamExt, Future};
+use rtnetlink::packet_route::address::{AddressAttribute, AddressMessage};
+use rtnetlink::packet_route::RouteNetlinkMessage;
+pub use scouting::Scouting;
+use std::net::IpAddr;
 #[cfg(feature = "plugins")]
 use std::sync::{Mutex, MutexGuard};
 use std::{
@@ -33,12 +55,6 @@ use std::{
         Arc, Weak,
     },
 };
-
-pub use adminspace::AdminSpace;
-use async_trait::async_trait;
-use futures::{stream::StreamExt, Future};
-use rtnetlink::packet_route::{AddressFamily, RouteNetlinkMessage};
-pub use scouting::Scouting;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
@@ -61,21 +77,6 @@ use zenoh_transport::{
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
 use zenoh_util::net::update_iface_cache;
-use self::orchestrator::StartConditions;
-use super::{primitives::DeMux, routing, routing::router::Router};
-#[cfg(feature = "plugins")]
-use crate::api::loader::{load_plugins, start_plugins};
-#[cfg(feature = "plugins")]
-use crate::api::plugins::PluginsManager;
-#[cfg(feature = "internal")]
-use crate::session::CloseBuilder;
-use crate::{
-    api::{
-        builders::close::{Closeable, Closee},
-        config::{Config, Notifier},
-    },
-    GIT_VERSION, LONG_VERSION,
-};
 
 pub(crate) struct RuntimeState {
     zid: ZenohId,
@@ -257,17 +258,7 @@ impl RuntimeBuilder {
                     tokio::select! {
                         message = netlink_monitor.next() => {
                             match &message {
-                                Some(RouteNetlinkMessage::NewAddress(addr))
-                                | Some(RouteNetlinkMessage::DelAddress(addr)) => {
-                                    tracing::debug!("NETLINK message: {:?}", message);
-                                    // TODO Find how to handle IPv6 addresses changes without renewing too often.
-                                    if addr.header.family == AddressFamily::Inet {
-                                        update_iface_cache();
-                                        runtime2.print_locators();
-                                        // TODO Update scout if it exists.
-                                    }
-                                },
-                                Some(_) => {},
+                                Some(msg) => { runtime2.on_netlink_addresses_changed(msg).await },
                                 None => { break; }
                             }
                         },
@@ -402,6 +393,44 @@ impl Runtime {
 
     pub(crate) async fn remove_pending_connection(&self, zid: &ZenohIdProto) -> bool {
         self.state.pending_connections.lock().await.remove(zid)
+    }
+
+    #[cfg(unix)]
+    async fn on_netlink_addresses_changed(&self, message: &RouteNetlinkMessage) {
+        tracing::trace!("NETLINK message: {:?}", message);
+        let (addr_message, is_new) = match message {
+            RouteNetlinkMessage::NewAddress(addr) => (addr, true),
+            RouteNetlinkMessage::DelAddress(addr) => (addr, false),
+            _ => return,
+        };
+
+        if let Some(relevant_addr) = get_relevant_address(addr_message) {
+            // TODO Find how to handle IPv6 addresses changes without renewing too often.
+            if relevant_addr.is_ipv4() {
+                update_iface_cache();
+                self.update_locators();
+                let scouting = self.state.scouting.lock().await;
+                if let Some(scouting) = scouting.as_ref() {
+                    let res = if is_new {
+                        scouting
+                            .update_addresses(&[relevant_addr.clone()], &[])
+                            .await
+                    } else {
+                        scouting
+                            .update_addresses(&[], &[relevant_addr.clone()])
+                            .await
+                    };
+                    if let Err(e) = res {
+                        tracing::error!(
+                            "Could not {} address {}: {}",
+                            if is_new { "add" } else { "remove" },
+                            relevant_addr,
+                            e
+                        );
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -601,4 +630,19 @@ impl Closeable for Runtime {
     fn get_closee(&self) -> Self::TClosee {
         self.state.clone()
     }
+}
+
+/// Find the relevant IpAddr in the attributes.
+/// Prefer the IFA_LOCAL address, or else use the IFA_ADDRESS address
+/// TODO: Prove why this choice
+fn get_relevant_address(address_message: &AddressMessage) -> Option<&IpAddr> {
+    let mut res = None;
+    for attribute in &address_message.attributes {
+        match attribute {
+            AddressAttribute::Address(addr) => res = Some(addr),
+            AddressAttribute::Local(addr) => return Some(addr),
+            _ => (),
+        }
+    }
+    res
 }
