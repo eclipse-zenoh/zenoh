@@ -47,6 +47,7 @@ pub use scouting::Scouting;
 use std::net::IpAddr;
 #[cfg(feature = "plugins")]
 use std::sync::{Mutex, MutexGuard};
+use std::time::Duration;
 use std::{
     any::Any,
     collections::HashSet,
@@ -77,6 +78,9 @@ use zenoh_transport::{
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
 use zenoh_util::net::update_iface_cache;
+
+#[cfg(unix)]
+const NETLINK_TIMEOUT: Duration = Duration::from_millis(500);
 
 pub(crate) struct RuntimeState {
     zid: ZenohId,
@@ -250,22 +254,9 @@ impl RuntimeBuilder {
 
         #[cfg(unix)]
         runtime.spawn({
-            let mut netlink_monitor = netlink::NetlinkMonitor::new()?;
+            let netlink_monitor = netlink::NetlinkMonitor::new()?;
             let runtime2 = runtime.clone();
-            let token = runtime2.get_cancellation_token();
-            async move {
-                loop {
-                    tokio::select! {
-                        message = netlink_monitor.next() => {
-                            match &message {
-                                Some(msg) => { runtime2.on_netlink_addresses_changed(msg).await },
-                                None => { break; }
-                            }
-                        },
-                        _ = token.cancelled() => { break; }
-                    }
-                }
-            }
+            async move { runtime2.monitor_netlink_socket(netlink_monitor).await }
         });
 
         Ok(runtime)
@@ -396,38 +387,81 @@ impl Runtime {
     }
 
     #[cfg(unix)]
-    async fn on_netlink_addresses_changed(&self, message: &RouteNetlinkMessage) {
-        tracing::trace!("NETLINK message: {:?}", message);
-        let (addr_message, is_new) = match message {
-            RouteNetlinkMessage::NewAddress(addr) => (addr, true),
-            RouteNetlinkMessage::DelAddress(addr) => (addr, false),
-            _ => return,
-        };
+    async fn monitor_netlink_socket(&self, mut netlink: netlink::NetlinkMonitor) {
+        fn add_addr_to_set(
+            message: &AddressMessage,
+            new: bool,
+            new_addresses: &mut HashSet<IpAddr>,
+            del_addresses: &mut HashSet<IpAddr>,
+        ) {
+            if let Some(addr) = get_relevant_address(message) {
+                if new {
+                    new_addresses.insert(addr.clone());
+                    del_addresses.remove(addr);
+                } else {
+                    del_addresses.insert(addr.clone());
+                    new_addresses.remove(addr);
+                }
+            }
+        }
 
-        if let Some(relevant_addr) = get_relevant_address(addr_message) {
-            // TODO Find how to handle IPv6 addresses changes without renewing too often.
-            if relevant_addr.is_ipv4() {
-                update_iface_cache();
-                self.update_locators();
-                let scouting = self.state.scouting.lock().await;
-                if let Some(scouting) = scouting.as_ref() {
-                    let res = if is_new {
-                        scouting
-                            .update_addresses(&[relevant_addr.clone()], &[])
-                            .await
-                    } else {
-                        scouting
-                            .update_addresses(&[], &[relevant_addr.clone()])
-                            .await
-                    };
-                    if let Err(e) = res {
-                        tracing::error!(
-                            "Could not {} address {}: {}",
-                            if is_new { "add" } else { "remove" },
-                            relevant_addr,
-                            e
-                        );
+        let token = self.get_cancellation_token();
+        loop {
+            let mut new_addresses = HashSet::<IpAddr>::new();
+            let mut old_addresses = HashSet::<IpAddr>::new();
+            tokio::select! {
+                message = netlink.next() => {
+                    tracing::trace!("NETLINK message: {:?}", message);
+                    match &message {
+                        Some(RouteNetlinkMessage::NewAddress(msg)) => add_addr_to_set(&msg, true, &mut new_addresses, &mut old_addresses),
+                        Some(RouteNetlinkMessage::DelAddress(msg)) => add_addr_to_set(&msg, false, &mut new_addresses, &mut old_addresses),
+                        Some(_) => (),
+                        None => { break; }
                     }
+                },
+                _ = token.cancelled() => { return }
+            }
+
+            // Same, but with a timeout so we collect multiple netlink messages
+            // and restart the scouting routine only one time.
+            loop {
+                tokio::select! {
+                    message = netlink.next() => {
+                        tracing::trace!("NETLINK message: {:?}", message);
+                        match &message {
+                            Some(RouteNetlinkMessage::NewAddress(msg)) => add_addr_to_set(&msg, true, &mut new_addresses, &mut old_addresses),
+                            Some(RouteNetlinkMessage::DelAddress(msg)) => add_addr_to_set(&msg, false, &mut new_addresses, &mut old_addresses),
+                            Some(_) => (),
+                            None => { break; }
+                        }
+                    },
+                    _ = tokio::time::sleep(NETLINK_TIMEOUT) => { break; }
+                    _ = token.cancelled() => { return }
+                }
+            }
+
+            update_iface_cache();
+            self.update_locators();
+
+            let scouting = self.state.scouting.lock().await;
+            if let Some(scouting) = scouting.as_ref() {
+                let new_addresses = new_addresses.drain().collect::<Vec<_>>();
+                let old_addresses = old_addresses.drain().collect::<Vec<_>>();
+                tracing::debug!(
+                    "Update scouting addresses with +{:?}, -{:?}",
+                    new_addresses,
+                    old_addresses
+                );
+                let res = scouting
+                    .update_addresses(&new_addresses, &old_addresses)
+                    .await;
+                if let Err(e) = res {
+                    tracing::error!(
+                        "Could not update scouting addresses with +{:?}, -{:?}: {}",
+                        new_addresses,
+                        old_addresses,
+                        e
+                    );
                 }
             }
         }

@@ -120,6 +120,7 @@ impl Scouting {
 
         if should_restart {
             tracing::debug!("Restarting scout routine");
+            // TODO: This may interrupt something important, as a connection establishment... fix that.
             zasynclock!(self.state.cancellation_token).cancel();
 
             {

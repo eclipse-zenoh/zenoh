@@ -7,7 +7,6 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 const RTNLGRP_IPV4_IFADDR: u32 = 5;
-const RTNLGRP_IPV6_IFADDR: u32 = 9;
 
 pub struct NetlinkMonitor {
     messages: UnboundedReceiver<(NetlinkMessage<RouteNetlinkMessage>, SocketAddr)>,
@@ -17,7 +16,8 @@ impl NetlinkMonitor {
     pub fn new() -> io::Result<Self> {
         let (mut conn, _handle, messages) = rtnetlink::new_connection()?;
 
-        let groups = nl_mgrp(RTNLGRP_IPV4_IFADDR) | nl_mgrp(RTNLGRP_IPV6_IFADDR);
+        // TODO Also handle IPv6 changes.
+        let groups = nl_mgrp(RTNLGRP_IPV4_IFADDR);
 
         let addr = SocketAddr::new(0, groups);
         conn.socket_mut().socket_mut().bind(&addr)?;
