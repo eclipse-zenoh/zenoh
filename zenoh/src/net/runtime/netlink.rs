@@ -1,10 +1,15 @@
+use std::{
+    io,
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 use futures::{channel::mpsc::UnboundedReceiver, Stream, StreamExt};
-use rtnetlink::packet_core::NetlinkPayload;
-use rtnetlink::sys::AsyncSocket;
-use rtnetlink::{packet_core::NetlinkMessage, packet_route::RouteNetlinkMessage, sys::SocketAddr};
-use std::io;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use rtnetlink::{
+    packet_core::{NetlinkMessage, NetlinkPayload},
+    packet_route::RouteNetlinkMessage,
+    sys::{AsyncSocket, SocketAddr},
+};
 
 const RTNLGRP_IPV4_IFADDR: u32 = 5;
 
