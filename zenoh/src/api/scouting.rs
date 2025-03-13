@@ -19,6 +19,7 @@ use zenoh_protocol::core::WhatAmIMatcher;
 use zenoh_result::ZResult;
 use zenoh_task::TerminatableTask;
 
+use crate::net::runtime::Scouting;
 use crate::{
     api::{
         builders::scouting::ScoutBuilder,
@@ -27,6 +28,7 @@ use crate::{
     net::runtime::{orchestrator::Loop, Runtime},
     Config,
 };
+
 /// A scout that returns [`Hello`] messages through a callback.
 ///
 /// # Examples
@@ -172,7 +174,7 @@ pub(crate) fn _scout(
             let task = TerminatableTask::spawn(
                 zenoh_runtime::ZRuntime::Acceptor,
                 async move {
-                    let scout = Runtime::scout(&sockets, what, &addr, move |hello| {
+                    let scout = Scouting::scout(&sockets, what, &addr, move |hello| {
                         let callback = callback.clone();
                         async move {
                             callback.call(hello.into());

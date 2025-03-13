@@ -18,35 +18,23 @@ use std::{
     time::Duration,
 };
 
-use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
 use tokio::{
     net::UdpSocket,
     sync::{futures::Notified, Mutex, Notify},
 };
-use zenoh_buffers::{
-    reader::{DidntRead, HasReader},
-    writer::HasWriter,
-};
-use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_config::{
     get_global_connect_timeout, get_global_listener_timeout, unwrap_or_default, ModeDependent,
 };
 use zenoh_link::{Locator, LocatorInspector};
-use zenoh_protocol::{
-    core::{whatami::WhatAmIMatcher, EndPoint, Metadata, PriorityRange, WhatAmI, ZenohIdProto},
-    scouting::{HelloProto, Scout, ScoutingBody, ScoutingMessage},
+use zenoh_protocol::core::{
+    whatami::WhatAmIMatcher, EndPoint, Metadata, PriorityRange, WhatAmI, ZenohIdProto,
 };
 use zenoh_result::{bail, zerror, ZResult};
 
 use super::{Runtime, RuntimeSession};
 use crate::net::common::AutoConnect;
 use crate::net::runtime::scouting::Scouting;
-
-const RCV_BUF_SIZE: usize = u16::MAX as usize;
-const SCOUT_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
-const SCOUT_MAX_PERIOD: Duration = Duration::from_millis(8_000);
-const SCOUT_PERIOD_INCREASE_FACTOR: u32 = 2;
 
 pub enum Loop {
     Continue,
@@ -799,102 +787,6 @@ impl Runtime {
         }
     }
 
-    pub async fn scout<Fut, F>(
-        sockets: &[UdpSocket],
-        matcher: WhatAmIMatcher,
-        mcast_addr: &SocketAddr,
-        f: F,
-    ) where
-        F: Fn(HelloProto) -> Fut + std::marker::Send + std::marker::Sync + Clone,
-        Fut: Future<Output = Loop> + std::marker::Send,
-        Self: Sized,
-    {
-        let send = async {
-            let mut delay = SCOUT_INITIAL_PERIOD;
-
-            let scout: ScoutingMessage = Scout {
-                version: zenoh_protocol::VERSION,
-                what: matcher,
-                zid: None,
-            }
-            .into();
-            let mut wbuf = vec![];
-            let mut writer = wbuf.writer();
-            let codec = Zenoh080::new();
-            codec.write(&mut writer, &scout).unwrap();
-
-            loop {
-                for socket in sockets {
-                    tracing::trace!(
-                        "Send {:?} to {} on interface {}",
-                        scout.body,
-                        mcast_addr,
-                        socket
-                            .local_addr()
-                            .map_or("unknown".to_string(), |addr| addr.ip().to_string())
-                    );
-                    if let Err(err) = socket
-                        .send_to(wbuf.as_slice(), mcast_addr.to_string())
-                        .await
-                    {
-                        tracing::debug!(
-                            "Unable to send {:?} to {} on interface {}: {}",
-                            scout.body,
-                            mcast_addr,
-                            socket
-                                .local_addr()
-                                .map_or("unknown".to_string(), |addr| addr.ip().to_string()),
-                            err
-                        );
-                    }
-                }
-                tokio::time::sleep(delay).await;
-                if delay * SCOUT_PERIOD_INCREASE_FACTOR <= SCOUT_MAX_PERIOD {
-                    delay *= SCOUT_PERIOD_INCREASE_FACTOR;
-                }
-            }
-        };
-        let recvs = futures::future::select_all(sockets.iter().map(move |socket| {
-            let f = f.clone();
-            async move {
-                let mut buf = vec![0; RCV_BUF_SIZE];
-                loop {
-                    match socket.recv_from(&mut buf).await {
-                        Ok((n, peer)) => {
-                            let mut reader = buf.as_slice()[..n].reader();
-                            let codec = Zenoh080::new();
-                            let res: Result<ScoutingMessage, DidntRead> = codec.read(&mut reader);
-                            if let Ok(msg) = res {
-                                tracing::trace!("Received {:?} from {}", msg.body, peer);
-                                if let ScoutingBody::Hello(hello) = &msg.body {
-                                    if matcher.matches(hello.whatami) {
-                                        if let Loop::Break = f(hello.clone()).await {
-                                            break;
-                                        }
-                                    } else {
-                                        tracing::warn!("Received unexpected Hello: {:?}", msg.body);
-                                    }
-                                }
-                            } else {
-                                tracing::trace!(
-                                    "Received unexpected UDP datagram from {}: {:?}",
-                                    peer,
-                                    &buf.as_slice()[..n]
-                                );
-                            }
-                        }
-                        Err(e) => tracing::debug!("Error receiving UDP datagram: {}", e),
-                    }
-                }
-            }
-            .boxed()
-        }));
-        tokio::select! {
-            _ = send => {},
-            _ = recvs => {},
-        }
-    }
-
     /// Returns `true` if a new Transport instance is established with `zid` or had already been established.
     #[must_use]
     async fn connect(&self, zid: &ZenohIdProto, scouted_locators: &[Locator]) -> bool {
@@ -1041,7 +933,7 @@ impl Runtime {
         timeout: std::time::Duration,
     ) -> ZResult<()> {
         let scout = async {
-            Runtime::scout(sockets, what, addr, move |hello| async move {
+            Scouting::scout(sockets, what, addr, move |hello| async move {
                 tracing::info!("Found {:?}", hello);
                 if !hello.locators.is_empty() {
                     if self.connect(&hello.zid, &hello.locators).await {

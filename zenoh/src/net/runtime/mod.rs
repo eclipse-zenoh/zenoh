@@ -38,6 +38,7 @@ pub use adminspace::AdminSpace;
 use async_trait::async_trait;
 use futures::{stream::StreamExt, Future};
 use rtnetlink::packet_route::{AddressFamily, RouteNetlinkMessage};
+pub use scouting::Scouting;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
@@ -75,7 +76,6 @@ use crate::{
     },
     GIT_VERSION, LONG_VERSION,
 };
-use crate::net::runtime::scouting::Scouting;
 
 pub(crate) struct RuntimeState {
     zid: ZenohId,
