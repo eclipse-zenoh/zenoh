@@ -1,10 +1,14 @@
+use futures::lock::Mutex;
 use futures::FutureExt;
 use std::future::Future;
+use std::io::ErrorKind;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::UdpSocket;
+use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use zenoh_buffers::{
     reader::{DidntRead, HasReader},
     writer::HasWriter,
@@ -31,10 +35,19 @@ pub struct Scouting {
 struct ScoutState {
     listen: bool,
     autoconnect: AutoConnect,
+    /// The multicast address to send scout messages to.
     addr: SocketAddr,
+    /// Interface constraints, "auto" or a comma-separated IP address list..
+    ifaces: String,
+    multicast_ttl: u32,
+    runtime: Runtime,
+    sockets: RwLock<ScoutSockets>,
+    cancellation_token: Mutex<CancellationToken>,
+}
+
+struct ScoutSockets {
     mcast_socket: UdpSocket,
     ucast_sockets: Vec<UdpSocket>,
-    runtime: Runtime,
 }
 
 impl Scouting {
@@ -46,23 +59,121 @@ impl Scouting {
         multicast_ttl: u32,
         runtime: Runtime,
     ) -> ZResult<Self> {
-        let ifaces = Runtime::get_interfaces(&ifaces);
-        let mcast_socket = Runtime::bind_mcast_port(&addr, &ifaces, multicast_ttl).await?;
-        let ucast_sockets = ifaces
+        let ifaces_ips = Runtime::get_interfaces(&ifaces);
+        let mcast_socket = Runtime::bind_mcast_port(&addr, &ifaces_ips, multicast_ttl).await?;
+        let ucast_sockets = ifaces_ips
             .into_iter()
             .filter_map(|iface| Runtime::bind_ucast_port(iface, multicast_ttl).ok())
             .collect();
+
+        let sockets = RwLock::new(ScoutSockets {
+            mcast_socket,
+            ucast_sockets,
+        });
+        let cancellation_token = Mutex::new(CancellationToken::new());
 
         let state = Arc::new(ScoutState {
             listen,
             autoconnect,
             addr,
-            mcast_socket,
-            ucast_sockets,
+            ifaces,
+            multicast_ttl,
             runtime,
+            sockets,
+            cancellation_token,
         });
 
         Ok(Scouting { state })
+    }
+
+    pub async fn update_addresses(
+        &self,
+        addrs_to_add: &[IpAddr],
+        addrs_to_remove: &[IpAddr],
+    ) -> ZResult<()> {
+        let ifaces = Runtime::get_interfaces(&self.state.ifaces);
+
+        let addrs_to_add = addrs_to_add
+            .iter()
+            .filter(|i| ifaces.contains(*i))
+            .collect::<Vec<_>>();
+        for addr_to_add in &addrs_to_add {
+            self.join_multicast_group(addr_to_add).await;
+        }
+
+        let should_restart = {
+            let sockets = zasyncread!(self.state.sockets);
+            addrs_to_add.iter().any(|&to_add| {
+                !sockets
+                    .ucast_sockets
+                    .iter()
+                    .filter_map(|s| s.local_addr().ok())
+                    .any(|a| &a.ip() == to_add)
+            }) || addrs_to_remove.iter().any(|to_remove| {
+                sockets
+                    .ucast_sockets
+                    .iter()
+                    .filter_map(|s| s.local_addr().ok())
+                    .any(|a| &a.ip() == to_remove)
+            })
+        };
+
+        if should_restart {
+            tracing::debug!("Restarting scout routine");
+            zasynclock!(self.state.cancellation_token).cancel();
+
+            {
+                let mut sockets = zasyncwrite!(self.state.sockets);
+                addrs_to_remove.iter().for_each(|to_remove| {
+                    sockets.ucast_sockets.retain(|s| {
+                        s.local_addr().map_or(true, |a| {
+                            if &a.ip() == to_remove {
+                                tracing::debug!("Removing socket udp/{}", a.ip());
+                            }
+                            &a.ip() != to_remove
+                        })
+                    });
+                });
+                sockets
+                    .ucast_sockets
+                    .extend(addrs_to_add.iter().filter_map(|&i| {
+                        Runtime::bind_ucast_port(i.clone(), self.state.multicast_ttl).ok()
+                    }));
+            }
+
+            *zasynclock!(self.state.cancellation_token) = CancellationToken::new();
+
+            self.start().await?;
+            tracing::debug!("Scout routine restarted");
+        }
+
+        Ok(())
+    }
+
+    async fn join_multicast_group(&self, interface_addr: &IpAddr) {
+        let sockets = zasyncread!(self.state.sockets);
+        if let (IpAddr::V4(new_addr), IpAddr::V4(mcast_addr)) =
+            (interface_addr, self.state.addr.ip())
+        {
+            match sockets
+                .mcast_socket
+                .join_multicast_v4(mcast_addr, *new_addr)
+            {
+                Ok(()) => tracing::debug!(
+                    "Joined multicast group {} on interface {}",
+                    mcast_addr,
+                    new_addr,
+                ),
+                // We already joined the multicast group
+                Err(err) if err.kind() == ErrorKind::AddrInUse => (),
+                Err(err) => tracing::warn!(
+                    "Unable to join multicast group {} on interface {}: {}",
+                    mcast_addr,
+                    new_addr,
+                    err,
+                ),
+            };
+        }
     }
 
     pub async fn scout<Fut, F>(
@@ -75,6 +186,8 @@ impl Scouting {
         Fut: Future<Output = Loop> + std::marker::Send,
         Self: Sized,
     {
+        // This can be interrupted anytime: we cannot send "half" beacons,
+        // and there's no repercusion if we miss one send.
         let send = async {
             let mut delay = SCOUT_INITIAL_PERIOD;
 
@@ -162,35 +275,44 @@ impl Scouting {
     }
 
     pub async fn start(&self) -> ZResult<()> {
-        if !self.state.ucast_sockets.is_empty() {
+        if !zasyncread!(self.state.sockets).ucast_sockets.is_empty() {
             let this = self.clone();
+            let token = this.get_cancellation_token().await;
             match (self.state.listen, self.state.autoconnect.is_enabled()) {
                 (true, true) => {
                     self.spawn_abortable(async move {
+                        let sockets = zasyncread!(this.state.sockets);
                         tokio::select! {
-                            _ = this.responder(&this.state.mcast_socket, &this.state.ucast_sockets) => {},
+                            _ = this.responder(&sockets.mcast_socket, &sockets.ucast_sockets) => {},
                             _ = this.autoconnect_all(
-                                &this.state.ucast_sockets,
+                                &sockets.ucast_sockets,
                                 this.state.autoconnect,
                                 &this.state.addr
                             ) => {},
+                            _ = token.cancelled() => (),
                         }
                     });
                 }
                 (true, false) => {
                     self.spawn_abortable(async move {
-                        this.responder(&this.state.mcast_socket, &this.state.ucast_sockets)
-                            .await;
+                        let sockets = zasyncread!(this.state.sockets);
+                        tokio::select! {
+                            _ = this.responder(&sockets.mcast_socket, &sockets.ucast_sockets) => (),
+                            _ = token.cancelled() => (),
+                        }
                     });
                 }
                 (false, true) => {
                     self.spawn_abortable(async move {
-                        this.autoconnect_all(
-                            &this.state.ucast_sockets,
-                            this.state.autoconnect,
-                            &this.state.addr,
-                        )
-                        .await
+                        let sockets = zasyncread!(this.state.sockets);
+                        tokio::select! {
+                            _ = this.autoconnect_all(
+                                &sockets.ucast_sockets,
+                                this.state.autoconnect,
+                                &this.state.addr,
+                            ) => (),
+                            _ = token.cancelled() => (),
+                        }
                     });
                 }
                 _ => {}
@@ -286,6 +408,10 @@ impl Scouting {
 
     fn get_locators(&self) -> Vec<Locator> {
         self.state.runtime.get_locators()
+    }
+
+    async fn get_cancellation_token(&self) -> CancellationToken {
+        zasynclock!(self.state.cancellation_token).child_token()
     }
 
     fn zid(&self) -> ZenohIdProto {
