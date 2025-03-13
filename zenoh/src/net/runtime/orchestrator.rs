@@ -24,7 +24,6 @@ use tokio::{
     net::UdpSocket,
     sync::{futures::Notified, Mutex, Notify},
 };
-use tokio_util::sync::CancellationToken;
 use zenoh_buffers::{
     reader::{DidntRead, HasReader},
     writer::HasWriter,
@@ -42,6 +41,7 @@ use zenoh_result::{bail, zerror, ZResult};
 
 use super::{Runtime, RuntimeSession};
 use crate::net::common::AutoConnect;
+use crate::net::runtime::scouting::Scouting;
 
 const RCV_BUF_SIZE: usize = u16::MAX as usize;
 const SCOUT_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
@@ -277,70 +277,18 @@ impl Runtime {
             let config = &config_guard.0;
             unwrap_or_default!(config.scouting().multicast().ttl())
         };
-        let ifaces = Runtime::get_interfaces(&ifaces);
-        let mcast_socket = Runtime::bind_mcast_port(&addr, &ifaces, multicast_ttl).await?;
-        if !ifaces.is_empty() {
-            let sockets: Vec<UdpSocket> = ifaces
-                .into_iter()
-                .filter_map(|iface| Runtime::bind_ucast_port(iface, multicast_ttl).ok())
-                .collect();
-            if !sockets.is_empty() {
-                let this = self.clone();
-                match (listen, autoconnect.is_enabled()) {
-                    (true, true) => {
-                        self.spawn_abortable(async move {
-                            tokio::select! {
-                                _ = this.responder(&mcast_socket, &sockets) => {},
-                                _ = this.autoconnect_all(
-                                    &sockets,
-                                    autoconnect,
-                                    &addr
-                                ) => {},
-                            }
-                        });
-                    }
-                    (true, false) => {
-                        self.spawn_abortable(async move {
-                            this.responder(&mcast_socket, &sockets).await;
-                        });
-                    }
-                    (false, true) => {
-                        self.spawn_abortable(async move {
-                            this.autoconnect_all(&sockets, autoconnect, &addr).await
-                        });
-                    }
-                    _ => {}
-                }
-            }
-        }
-        Ok(())
-    }
 
-    pub async fn restart_scout_if_needed(&self) -> ZResult<()> {
-        let (
-            scouting,
+        let scouting = Scouting::new(
             listen,
             autoconnect,
             addr,
             ifaces,
-        ) = {
-            let guard = &self.state.config.lock().0;
-            (
-                unwrap_or_default!(guard.scouting().multicast().enabled()),
-                *unwrap_or_default!(guard.scouting().multicast().listen().peer()),
-                AutoConnect::multicast(guard, WhatAmI::Peer),
-                unwrap_or_default!(guard.scouting().multicast().address()),
-                unwrap_or_default!(guard.scouting().multicast().interface()),
-            )
-        };
-
-        let mut cancelation_token = self.state.scouting_cancellation_token.lock().await;
-        cancelation_token.cancel();
-        if scouting {
-            *cancelation_token = CancellationToken::new();
-            drop(cancelation_token);
-            self.start_scout(listen, autoconnect, addr, ifaces).await?;
-        }
+            multicast_ttl,
+            self.clone(),
+        )
+        .await?;
+        scouting.start().await?;
+        *self.state.scouting.lock().await = Some(scouting.clone());
 
         Ok(())
     }
@@ -1114,117 +1062,6 @@ impl Runtime {
         tokio::select! {
             res = scout => { res },
             res = timeout => { res }
-        }
-    }
-
-    async fn autoconnect_all(
-        &self,
-        ucast_sockets: &[UdpSocket],
-        autoconnect: AutoConnect,
-        addr: &SocketAddr,
-    ) {
-        let token = self.get_scouting_cancellation_token().await;
-        tokio::select! {
-            _ = Runtime::scout(
-                ucast_sockets,
-                autoconnect.matcher(),
-                addr,
-                move |hello| async move {
-                    if hello.locators.is_empty() {
-                        tracing::warn!("Received Hello with no locators: {:?}", hello);
-                    } else if autoconnect.should_autoconnect(hello.zid, hello.whatami) {
-                        self.connect_peer(&hello.zid, &hello.locators).await;
-                    }
-                    Loop::Continue
-            },
-            ) => {},
-            _ = token.cancelled() => {},
-        }
-    }
-
-    async fn responder(&self, mcast_socket: &UdpSocket, ucast_sockets: &[UdpSocket]) {
-        fn get_best_match<'a>(addr: &IpAddr, sockets: &'a [UdpSocket]) -> Option<&'a UdpSocket> {
-            fn octets(addr: &IpAddr) -> Vec<u8> {
-                match addr {
-                    IpAddr::V4(addr) => addr.octets().to_vec(),
-                    IpAddr::V6(addr) => addr.octets().to_vec(),
-                }
-            }
-            fn matching_octets(addr: &IpAddr, sock: &UdpSocket) -> usize {
-                octets(addr)
-                    .iter()
-                    .zip(octets(&sock.local_addr().unwrap().ip()))
-                    .map(|(x, y)| x.cmp(&y))
-                    .position(|ord| ord != std::cmp::Ordering::Equal)
-                    .unwrap_or_else(|| octets(addr).len())
-            }
-            sockets
-                .iter()
-                .filter(|sock| sock.local_addr().is_ok())
-                .max_by(|sock1, sock2| {
-                    matching_octets(addr, sock1).cmp(&matching_octets(addr, sock2))
-                })
-        }
-
-        let mut buf = vec![0; RCV_BUF_SIZE];
-        let local_addrs: Vec<SocketAddr> = ucast_sockets
-            .iter()
-            .filter_map(|sock| sock.local_addr().ok())
-            .collect();
-        tracing::debug!("Waiting for UDP datagram...");
-        let token = self.get_scouting_cancellation_token().await;
-        loop {
-            let (n, peer) = tokio::select! {
-                res = mcast_socket.recv_from(&mut buf) => { res.unwrap() },
-                _ = token.cancelled() => { break; }
-            };
-            if local_addrs.iter().any(|addr| *addr == peer) {
-                tracing::trace!("Ignore UDP datagram from own socket");
-                continue;
-            }
-
-            let mut reader = buf.as_slice()[..n].reader();
-            let codec = Zenoh080::new();
-            let res: Result<ScoutingMessage, DidntRead> = codec.read(&mut reader);
-            if let Ok(msg) = res {
-                tracing::trace!("Received {:?} from {}", msg.body, peer);
-                if let ScoutingBody::Scout(Scout { what, .. }) = &msg.body {
-                    if what.matches(self.whatami()) {
-                        let mut wbuf = vec![];
-                        let mut writer = wbuf.writer();
-                        let codec = Zenoh080::new();
-
-                        let zid = self.manager().zid();
-                        let hello: ScoutingMessage = HelloProto {
-                            version: zenoh_protocol::VERSION,
-                            whatami: self.whatami(),
-                            zid,
-                            locators: self.get_locators(),
-                        }
-                        .into();
-                        let socket = get_best_match(&peer.ip(), ucast_sockets).unwrap();
-                        tracing::trace!(
-                            "Send {:?} to {} on interface {}",
-                            hello.body,
-                            peer,
-                            socket
-                                .local_addr()
-                                .map_or("unknown".to_string(), |addr| addr.ip().to_string())
-                        );
-                        codec.write(&mut writer, &hello).unwrap();
-
-                        if let Err(err) = socket.send_to(wbuf.as_slice(), peer).await {
-                            tracing::error!("Unable to send {:?} to {}: {}", hello.body, peer, err);
-                        }
-                    }
-                }
-            } else {
-                tracing::trace!(
-                    "Received unexpected UDP datagram from {}: {:?}",
-                    peer,
-                    &buf.as_slice()[..n]
-                );
-            }
         }
     }
 
