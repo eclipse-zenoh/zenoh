@@ -67,14 +67,16 @@ impl<'a> TcpSocketConfig<'a> {
         if let Some(bind_addr) = self.bind_socket {
             match (bind_addr, dst_addr) {
                 (SocketAddr::V6(local), SocketAddr::V4(dest)) => {
-                    return zerror!(
-                    "Protocols must match: Cannot bind to IPv6 {local} and connect to IPv4 {dest}"
-                )
+                    return Err(Box::from(format!(
+                        "Protocols must match: Cannot bind to IPv6 {} and connect to IPv4 {}",
+                        local, dest
+                    )));
                 }
                 (SocketAddr::V4(local), SocketAddr::V6(dest)) => {
-                    return zerror!(
-                    "Protocols must match: Cannot bind to IPv4 {local} and connect to IPv6 {dest}"
-                )
+                    return Err(Box::from(format!(
+                        "Protocols must match: Cannot bind to IPv4 {} and connect to IPv6 {}",
+                        local, dest
+                    )));
                 }
                 _ => (), // No issue here
             }
