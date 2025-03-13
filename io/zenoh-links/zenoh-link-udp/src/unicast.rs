@@ -285,7 +285,11 @@ impl LinkManagerUnicastUdp {
 
         // Establish a UDP socket
         let socket = UdpSocket::bind(src_socket_addr).await.map_err(|e| {
-            let e = zerror!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
+            let e = zerror!(
+                "Can not create a new UDP link bound to {}: {}",
+                src_socket_addr,
+                e
+            );
             tracing::warn!("{}", e);
             e
         })?;
@@ -296,20 +300,30 @@ impl LinkManagerUnicastUdp {
 
         // Connect the socket to the remote address
         socket.connect(dst_addr).await.map_err(|e| {
-            let e = zerror!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
+            let e = zerror!("Can not connect a new UDP link to {}: {}", dst_addr, e);
             tracing::warn!("{}", e);
             e
         })?;
 
         // Get source and destination UDP addresses
         let src_addr = socket.local_addr().map_err(|e| {
-            let e = zerror!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
+            let e = zerror!(
+                "Can not get local_addr for UDP link bound src {}: to :{} : {}",
+                src_socket_addr,
+                dst_addr,
+                e
+            );
             tracing::warn!("{}", e);
             e
         })?;
 
         let dst_addr = socket.peer_addr().map_err(|e| {
-            let e = zerror!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
+            let e = zerror!(
+                "Can not get peer_addr for UDP link bound src {}: to :{} : {}",
+                src_socket_addr,
+                dst_addr,
+                e
+            );
             tracing::warn!("{}", e);
             e
         })?;
