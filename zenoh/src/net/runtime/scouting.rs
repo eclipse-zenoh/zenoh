@@ -136,11 +136,11 @@ impl Scouting {
                         })
                     });
                 });
-                sockets
-                    .ucast_sockets
-                    .extend(addrs_to_add.iter().filter_map(|&i| {
-                        Runtime::bind_ucast_port(i.clone(), self.state.multicast_ttl).ok()
-                    }));
+                sockets.ucast_sockets.extend(
+                    addrs_to_add.iter().filter_map(|&i| {
+                        Runtime::bind_ucast_port(*i, self.state.multicast_ttl).ok()
+                    }),
+                );
             }
 
             *zasynclock!(self.state.cancellation_token) = CancellationToken::new();
