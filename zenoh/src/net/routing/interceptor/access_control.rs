@@ -235,7 +235,7 @@ impl InterceptorTrait for IngressAclEnforcer {
         if key_expr.is_empty() {
             return None;
         }
-        tracing::trace!("Caching ...");
+        tracing::debug!("ACL (ingress): caching permissions for `{}` ...", &key_expr);
         Some(Box::new(Cache {
             query: self.action(AclMessage::Query, "Query (ingress)", &key_expr),
             reply: self.action(AclMessage::Reply, "Reply (ingress)", &key_expr),
@@ -507,7 +507,7 @@ impl InterceptorTrait for EgressAclEnforcer {
         if key_expr.is_empty() {
             return None;
         }
-        tracing::trace!("Caching ...");
+        tracing::debug!("ACL (egress): caching permissions for `{}` ...", &key_expr);
         Some(Box::new(Cache {
             query: self.action(AclMessage::Query, "Query (egress)", &key_expr),
             reply: self.action(AclMessage::Reply, "Reply (egress)", &key_expr),
