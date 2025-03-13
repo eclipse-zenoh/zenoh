@@ -408,7 +408,7 @@ impl Resource {
             if let Some(child) = get_mut_unchecked(&mut from).children.get(chunk) {
                 from = child.0.clone();
             } else {
-                let new = Arc::new(Resource::new(&mut from, chunk, None));
+                let new = Arc::new(Resource::new(&from, chunk, None));
                 if rest.is_empty() {
                     tracing::debug!("Register resource {}", new.expr());
                 }
