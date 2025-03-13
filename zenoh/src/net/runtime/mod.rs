@@ -18,13 +18,15 @@
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 mod adminspace;
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 mod netlink;
 pub mod orchestrator;
 mod scouting;
 
 #[cfg(feature = "plugins")]
 use std::sync::{Mutex, MutexGuard};
+#[cfg(target_os = "linux")]
+use std::time::Duration;
 use std::{
     any::Any,
     collections::HashSet,
@@ -33,12 +35,12 @@ use std::{
         atomic::{AtomicU32, Ordering},
         Arc, Weak,
     },
-    time::Duration,
 };
 
 pub use adminspace::AdminSpace;
 use async_trait::async_trait;
 use futures::{stream::StreamExt, Future};
+#[cfg(target_os = "linux")]
 use rtnetlink::packet_route::{
     address::{AddressAttribute, AddressMessage},
     RouteNetlinkMessage,
@@ -65,6 +67,7 @@ use zenoh_transport::{
     multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
+#[cfg(target_os = "linux")]
 use zenoh_util::net::update_iface_cache;
 
 use self::orchestrator::StartConditions;
@@ -83,7 +86,7 @@ use crate::{
     GIT_VERSION, LONG_VERSION,
 };
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 const NETLINK_TIMEOUT: Duration = Duration::from_millis(500);
 
 pub(crate) struct RuntimeState {
@@ -256,7 +259,7 @@ impl RuntimeBuilder {
             zenoh_config::ShmInitMode::Lazy => {}
         };
 
-        #[cfg(unix)]
+        #[cfg(target_os = "linux")]
         runtime.spawn({
             let netlink_monitor = netlink::NetlinkMonitor::new()?;
             let runtime2 = runtime.clone();
@@ -390,7 +393,7 @@ impl Runtime {
         self.state.pending_connections.lock().await.remove(zid)
     }
 
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     async fn monitor_netlink_socket(&self, mut netlink: netlink::NetlinkMonitor) {
         fn add_addr_to_set(
             message: &AddressMessage,
