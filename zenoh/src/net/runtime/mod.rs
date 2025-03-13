@@ -18,9 +18,10 @@
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 mod adminspace;
-pub mod orchestrator;
 #[cfg(unix)]
 mod netlink;
+pub mod orchestrator;
+mod scouting;
 
 #[cfg(feature = "plugins")]
 use std::sync::{Mutex, MutexGuard};
@@ -74,6 +75,7 @@ use crate::{
     },
     GIT_VERSION, LONG_VERSION,
 };
+use crate::net::runtime::scouting::Scouting;
 
 pub(crate) struct RuntimeState {
     zid: ZenohId,
@@ -90,7 +92,7 @@ pub(crate) struct RuntimeState {
     plugins_manager: Mutex<PluginsManager>,
     start_conditions: Arc<StartConditions>,
     pending_connections: tokio::sync::Mutex<HashSet<ZenohIdProto>>,
-    scouting_cancellation_token: tokio::sync::Mutex<CancellationToken>,
+    scouting: tokio::sync::Mutex<Option<Scouting>>,
 }
 
 pub struct WeakRuntime {
@@ -197,7 +199,7 @@ impl RuntimeBuilder {
                 plugins_manager: Mutex::new(plugins_manager),
                 start_conditions: Arc::new(StartConditions::default()),
                 pending_connections: tokio::sync::Mutex::new(HashSet::new()),
-                scouting_cancellation_token: tokio::sync::Mutex::new(CancellationToken::new()),
+                scouting: tokio::sync::Mutex::new(None),
             }),
         };
         *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);
@@ -262,9 +264,7 @@ impl RuntimeBuilder {
                                     if addr.header.family == AddressFamily::Inet {
                                         update_iface_cache();
                                         runtime2.print_locators();
-                                        if let Err(e) = runtime2.restart_scout_if_needed().await {
-                                            tracing::error!("Error starting scout: {}", e);
-                                        }
+                                        // TODO Update scout if it exists.
                                     }
                                 },
                                 Some(_) => {},
@@ -390,10 +390,6 @@ impl Runtime {
 
     pub fn get_cancellation_token(&self) -> CancellationToken {
         self.state.task_controller.get_cancellation_token()
-    }
-
-    pub async fn get_scouting_cancellation_token(&self) -> CancellationToken {
-        self.state.scouting_cancellation_token.lock().await.child_token()
     }
 
     pub(crate) fn start_conditions(&self) -> &Arc<StartConditions> {

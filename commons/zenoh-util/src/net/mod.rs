@@ -11,12 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::net::{IpAddr, Ipv6Addr};
-use std::sync::RwLock;
 #[cfg(unix)]
 use lazy_static::lazy_static;
 #[cfg(unix)]
 use pnet_datalink::NetworkInterface;
+use std::net::{IpAddr, Ipv6Addr};
+use std::sync::RwLock;
 use tokio::net::{TcpSocket, UdpSocket};
 use zenoh_core::{zconfigurable, zread, zwrite};
 #[cfg(unix)]
