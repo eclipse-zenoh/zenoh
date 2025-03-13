@@ -33,8 +33,7 @@ use zenoh_protocol::core::{
 use zenoh_result::{bail, zerror, ZResult};
 
 use super::{Runtime, RuntimeSession};
-use crate::net::common::AutoConnect;
-use crate::net::runtime::scouting::Scouting;
+use crate::net::{common::AutoConnect, runtime::scouting::Scouting};
 
 pub enum Loop {
     Continue,

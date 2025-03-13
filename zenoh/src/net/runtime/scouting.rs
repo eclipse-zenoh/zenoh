@@ -1,26 +1,27 @@
-use futures::lock::Mutex;
-use futures::FutureExt;
-use std::future::Future;
-use std::io::ErrorKind;
-use std::net::{IpAddr, SocketAddr};
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::net::UdpSocket;
-use tokio::sync::RwLock;
-use tokio::task::JoinHandle;
+use std::{
+    future::Future,
+    io::ErrorKind,
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+    time::Duration,
+};
+
+use futures::{lock::Mutex, FutureExt};
+use tokio::{net::UdpSocket, sync::RwLock, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 use zenoh_buffers::{
     reader::{DidntRead, HasReader},
     writer::HasWriter,
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_protocol::core::{Locator, WhatAmI, WhatAmIMatcher, ZenohIdProto};
-use zenoh_protocol::scouting::{HelloProto, Scout, ScoutingBody, ScoutingMessage};
+use zenoh_protocol::{
+    core::{Locator, WhatAmI, WhatAmIMatcher, ZenohIdProto},
+    scouting::{HelloProto, Scout, ScoutingBody, ScoutingMessage},
+};
 use zenoh_result::ZResult;
 
 use super::Runtime;
-use crate::net::common::AutoConnect;
-use crate::net::runtime::orchestrator::Loop;
+use crate::net::{common::AutoConnect, runtime::orchestrator::Loop};
 
 const RCV_BUF_SIZE: usize = u16::MAX as usize;
 const SCOUT_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);

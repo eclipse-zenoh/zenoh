@@ -19,13 +19,12 @@ use zenoh_protocol::core::WhatAmIMatcher;
 use zenoh_result::ZResult;
 use zenoh_task::TerminatableTask;
 
-use crate::net::runtime::Scouting;
 use crate::{
     api::{
         builders::scouting::ScoutBuilder,
         handlers::{Callback, DefaultHandler},
     },
-    net::runtime::{orchestrator::Loop, Runtime},
+    net::runtime::{orchestrator::Loop, Runtime, Scouting},
     Config,
 };
 
