@@ -23,39 +23,27 @@ mod netlink;
 pub mod orchestrator;
 mod scouting;
 
-use self::orchestrator::StartConditions;
-use super::{primitives::DeMux, routing, routing::router::Router};
-#[cfg(feature = "plugins")]
-use crate::api::loader::{load_plugins, start_plugins};
-#[cfg(feature = "plugins")]
-use crate::api::plugins::PluginsManager;
-#[cfg(feature = "internal")]
-use crate::session::CloseBuilder;
-use crate::{
-    api::{
-        builders::close::{Closeable, Closee},
-        config::{Config, Notifier},
-    },
-    GIT_VERSION, LONG_VERSION,
-};
-pub use adminspace::AdminSpace;
-use async_trait::async_trait;
-use futures::{stream::StreamExt, Future};
-use rtnetlink::packet_route::address::{AddressAttribute, AddressMessage};
-use rtnetlink::packet_route::RouteNetlinkMessage;
-pub use scouting::Scouting;
-use std::net::IpAddr;
 #[cfg(feature = "plugins")]
 use std::sync::{Mutex, MutexGuard};
-use std::time::Duration;
 use std::{
     any::Any,
     collections::HashSet,
+    net::IpAddr,
     sync::{
         atomic::{AtomicU32, Ordering},
         Arc, Weak,
     },
+    time::Duration,
 };
+
+pub use adminspace::AdminSpace;
+use async_trait::async_trait;
+use futures::{stream::StreamExt, Future};
+use rtnetlink::packet_route::{
+    address::{AddressAttribute, AddressMessage},
+    RouteNetlinkMessage,
+};
+pub use scouting::Scouting;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
@@ -78,6 +66,22 @@ use zenoh_transport::{
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
 use zenoh_util::net::update_iface_cache;
+
+use self::orchestrator::StartConditions;
+use super::{primitives::DeMux, routing, routing::router::Router};
+#[cfg(feature = "plugins")]
+use crate::api::loader::{load_plugins, start_plugins};
+#[cfg(feature = "plugins")]
+use crate::api::plugins::PluginsManager;
+#[cfg(feature = "internal")]
+use crate::session::CloseBuilder;
+use crate::{
+    api::{
+        builders::close::{Closeable, Closee},
+        config::{Config, Notifier},
+    },
+    GIT_VERSION, LONG_VERSION,
+};
 
 #[cfg(unix)]
 const NETLINK_TIMEOUT: Duration = Duration::from_millis(500);
