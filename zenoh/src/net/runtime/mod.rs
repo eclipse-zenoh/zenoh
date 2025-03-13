@@ -400,10 +400,10 @@ impl Runtime {
         ) {
             if let Some(addr) = get_relevant_address(message) {
                 if new {
-                    new_addresses.insert(addr.clone());
+                    new_addresses.insert(*addr);
                     del_addresses.remove(addr);
                 } else {
-                    del_addresses.insert(addr.clone());
+                    del_addresses.insert(*addr);
                     new_addresses.remove(addr);
                 }
             }
@@ -417,8 +417,8 @@ impl Runtime {
                 message = netlink.next() => {
                     tracing::trace!("NETLINK message: {:?}", message);
                     match &message {
-                        Some(RouteNetlinkMessage::NewAddress(msg)) => add_addr_to_set(&msg, true, &mut new_addresses, &mut old_addresses),
-                        Some(RouteNetlinkMessage::DelAddress(msg)) => add_addr_to_set(&msg, false, &mut new_addresses, &mut old_addresses),
+                        Some(RouteNetlinkMessage::NewAddress(msg)) => add_addr_to_set(msg, true, &mut new_addresses, &mut old_addresses),
+                        Some(RouteNetlinkMessage::DelAddress(msg)) => add_addr_to_set(msg, false, &mut new_addresses, &mut old_addresses),
                         Some(_) => (),
                         None => { break; }
                     }
@@ -433,8 +433,8 @@ impl Runtime {
                     message = netlink.next() => {
                         tracing::trace!("NETLINK message: {:?}", message);
                         match &message {
-                            Some(RouteNetlinkMessage::NewAddress(msg)) => add_addr_to_set(&msg, true, &mut new_addresses, &mut old_addresses),
-                            Some(RouteNetlinkMessage::DelAddress(msg)) => add_addr_to_set(&msg, false, &mut new_addresses, &mut old_addresses),
+                            Some(RouteNetlinkMessage::NewAddress(msg)) => add_addr_to_set(msg, true, &mut new_addresses, &mut old_addresses),
+                            Some(RouteNetlinkMessage::DelAddress(msg)) => add_addr_to_set(msg, false, &mut new_addresses, &mut old_addresses),
                             Some(_) => (),
                             None => { break; }
                         }
