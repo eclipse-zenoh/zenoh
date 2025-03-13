@@ -272,7 +272,7 @@ impl LinkManagerMulticastUdp {
                 .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
         }
 
-        // Bind the socket: let's bing to the unspecified address so we can join and read
+        // Bind the socket: let's bind to the unspecified address so we can join and read
         // from multiple multicast groups.
         let bind_mcast_addr = match mcast_addr.ip() {
             IpAddr::V4(_) => IpAddr::V4(Ipv4Addr::UNSPECIFIED),
