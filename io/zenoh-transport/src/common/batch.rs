@@ -190,6 +190,7 @@ pub enum Finalize {
 ///
 /// | Keep Alive | Frame Reliable\<Zenoh Message, Zenoh Message\> | Frame Best Effort\<Zenoh Message Fragment\> |
 ///
+/// [`NetworkMessage`]: zenoh_protocol::network::NetworkMessage
 #[derive(Clone, Debug)]
 pub struct WBatch {
     // The buffer to perform the batching on
