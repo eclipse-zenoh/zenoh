@@ -401,34 +401,33 @@
   //  /// Configure QoS overwrite rules.
   //  qos_overwrite: [
   //     {
-  //       /// Id has to be unique within the rule set.
-  //       id: "rule1",
+  //       /// Optional Id, has to be unique.
+  //       id: "lo0_en0_qos_overwrite",
   //       // Optional list of interfaces, if not specified, will be applied to all interfaces.
   //       interfaces: [
   //         "lo0",
   //         "en0",
   //       ],
-  //       messages: ["put", "delete"],
-  //       flows: ["egress"],
+  //       /// List of message types to apply to.
+  //       messages: [
+  //          "put", // put publicaitons
+  //          "delete" // delete publications
+  //          "query", // get queries
+  //          "reply", // replies to to queries
+  //       ],
+  //       /// Optional list of data flows messages will be processed on ("egress" and/or "ingress").
+  //       /// If absent, the rules will be applied to both flows.
+  //       flows: ["egress", "ingress"],
   //       key_exprs: ["test/demo"],
   //       overwrite: {
   //          /// Optional new priority value, if not specified priority of the messages will stay unchanged.
   //          priority: "real_time",
   //          /// Optional new congestion control value, if not specified congestion control of the messages will stay unchanged.
   //          congestion_control: "block",
-  //          /// Optional new priority value, if not specified priority of the messages will stay unchanged.
+  //          /// Optional new express value, if not specified express flag of the messages will stay unchanged.
   //          express: true
   //        },
-  //     },
-  //     {
-  //        id: "rule2",
-  //        messages: ["query", "reply"],
-  //        flows: ["ingress"],
-  //        key_exprs: ["**"],
-  //        overwrite: {
-  //          priority: "interactive_high",
-  //        },
-  //     },
+  //     }
   //   ],
 
   /// Configure internal transport parameters

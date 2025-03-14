@@ -43,14 +43,20 @@ pub(crate) fn qos_overwrite_interceptor_factories(
         // check unicity of rule id
         if let Some(id) = &q.id {
             if !id_set.insert(id.clone()) {
-                bail!("Invalid QosOverwrite config: id '{id}' is repeated");
+                bail!("Invalid Qos Overwrite config: id '{id}' is repeated");
             }
         }
-        let q = q.clone();
+        let mut q = q.clone();
         // check for undefined flows and initialize them
+        let flows = q
+            .flows
+            .get_or_insert(vec![InterceptorFlow::Ingress, InterceptorFlow::Egress]);
+        if flows.is_empty() {
+            bail!("Invalid Qos Overwrite config: flows list must not be empty");
+        }
         // check for empty messages list
         if q.messages.is_empty() {
-            bail!("Invalid QosOverwrite config: messages list must not be empty");
+            bail!("Invalid Qos Overwrite config: messages list must not be empty");
         }
         res.push(Box::new(QosOverwriteFactory::new(q)));
     }

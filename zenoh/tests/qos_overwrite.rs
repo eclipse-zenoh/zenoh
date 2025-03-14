@@ -19,7 +19,7 @@ use std::time::Duration;
 use zenoh::{
     config::WhatAmI,
     qos::{CongestionControl, Priority},
-    Config,
+    Config, Wait,
 };
 use zenoh_core::ztimeout;
 
@@ -61,8 +61,8 @@ async fn test_qos_overwrite_pub_sub() {
             "qos_overwrite",
             r#"[
                 {
-                    "messages": ["put"],
-                    "key_exprs" : ["a/**"],
+                    messages: ["put"],
+                    key_exprs: ["a/**"],
                     overwrite: {
                         priority: "real_time",
                         congestion_control: "block",
@@ -71,8 +71,8 @@ async fn test_qos_overwrite_pub_sub() {
                     flows: ["ingress"]
                 },
                 {
-                    "messages": ["delete"],
-                    "key_exprs" : ["b/**"],
+                    messages: ["delete"],
+                    key_exprs: ["b/**"],
                     overwrite: {
                         priority: "interactive_high",
                     },
@@ -141,8 +141,8 @@ async fn test_qos_overwrite_get_reply() {
             "qos_overwrite",
             r#"[
                 {
-                    "messages": ["query"],
-                    "key_exprs" : ["a/**"],
+                    messages: ["query"],
+                    key_exprs: ["a/**"],
                     overwrite: {
                         priority: "real_time",
                         congestion_control: "block",
@@ -151,8 +151,8 @@ async fn test_qos_overwrite_get_reply() {
                     flows: ["egress"]
                 },
                 {
-                    "messages": ["reply"],
-                    "key_exprs" : ["a/b/**"],
+                    messages: ["reply"],
+                    key_exprs: ["a/b/**"],
                     overwrite: {
                         priority: "interactive_high",
                     },
@@ -230,4 +230,147 @@ async fn test_qos_overwrite_get_reply() {
         CongestionControl::Drop
     );
     assert!(!reply.result().unwrap().express());
+}
+
+#[test]
+#[should_panic(expected = "Invalid Qos Overwrite config: id 'REPEATED' is repeated")]
+fn qos_overwrite_config_error_repeated_id() {
+    zenoh::init_log_from_env_or("error");
+
+    let mut config = Config::default();
+    config
+        .insert_json5(
+            "qos_overwrite",
+            r#"[
+                {
+                    id: "REPEATED",
+                    messages: ["query"],
+                    key_exprs: ["a/**"],
+                    overwrite: {
+                        priority: "real_time",
+                        congestion_control: "block",
+                        express: true
+                    },
+                    flows: ["egress"]
+                },
+                {
+                    id: "REPEATED",
+                    messages: ["reply"],
+                    key_exprs: ["a/b/**"],
+                    overwrite: {
+                        priority: "interactive_high",
+                    },
+                    flows: ["egress"]
+                }
+            ]"#,
+        )
+        .unwrap();
+
+    zenoh::open(config).wait().unwrap();
+}
+
+#[test]
+#[should_panic(expected = "unknown variant `down`")]
+fn qos_overwrite_config_error_wrong_flow() {
+    zenoh::init_log_from_env_or("error");
+
+    let mut config = Config::default();
+    config
+        .insert_json5(
+            "qos_overwrite",
+            r#"
+              [
+                {
+                    messages: ["reply"],
+                    key_exprs: ["a/b/**"],
+                    overwrite: {
+                        priority: "interactive_high",
+                    },
+                    flows: ["down"]
+                }
+              ]
+            "#,
+        )
+        .unwrap();
+
+    zenoh::open(config).wait().unwrap();
+}
+
+#[test]
+#[should_panic(expected = "Invalid Qos Overwrite config: flows list must not be empty")]
+fn qos_overwrite_config_error_empty_flow() {
+    zenoh::init_log_from_env_or("error");
+
+    let mut config = Config::default();
+    config
+        .insert_json5(
+            "qos_overwrite",
+            r#"
+              [
+                {
+                    messages: ["reply"],
+                    key_exprs: ["a/b/**"],
+                    overwrite: {
+                        priority: "interactive_high",
+                    },
+                    flows: []
+                }
+              ]
+            "#,
+        )
+        .unwrap();
+
+    zenoh::open(config).wait().unwrap();
+}
+
+#[test]
+#[should_panic(expected = "Invalid Qos Overwrite config: messages list must not be empty")]
+fn qos_overwrite_config_error_empty_message() {
+    zenoh::init_log_from_env_or("error");
+
+    let mut config = Config::default();
+    config
+        .insert_json5(
+            "qos_overwrite",
+            r#"
+              [
+                {
+                    messages: [],
+                    key_exprs: ["a/b/**"],
+                    overwrite: {
+                        priority: "interactive_high",
+                    },
+                    flows: ["ingress"]
+                }
+              ]
+            "#,
+        )
+        .unwrap();
+
+    zenoh::open(config).wait().unwrap();
+}
+
+#[test]
+fn qos_overwrite_config_ok_no_flow() {
+    zenoh::init_log_from_env_or("error");
+
+    let mut config = Config::default();
+    config
+        .insert_json5(
+            "qos_overwrite",
+            r#"
+              [
+                {
+                    messages: ["reply"],
+                    key_exprs: ["a/b/**"],
+                    overwrite: {
+                        priority: "interactive_high",
+                    }
+                }
+              ]
+            "#,
+        )
+        .unwrap();
+
+    zenoh::open(config).wait().unwrap();
 }
