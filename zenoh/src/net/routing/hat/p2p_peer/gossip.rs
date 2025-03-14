@@ -239,9 +239,9 @@ impl Network {
             .get_whatami()
             .is_ok_and(|w| self.gossip_target.matches(w))
         {
-            if let Ok(msg) = self.make_msg(idxs) {
+            if let Ok(mut msg) = self.make_msg(idxs) {
                 tracing::trace!("{} Send to {:?} {:?}", self.name, transport.get_zid(), msg);
-                if let Err(e) = transport.schedule(msg) {
+                if let Err(e) = transport.schedule(msg.as_mut()) {
                     tracing::debug!("{} Error sending LinkStateList: {}", self.name, e);
                 }
             } else {
@@ -263,7 +263,7 @@ impl Network {
                     && parameters(link)
                 {
                     tracing::trace!("{} Send to {} {:?}", self.name, link.zid, msg);
-                    if let Err(e) = link.transport.schedule(msg.clone()) {
+                    if let Err(e) = link.transport.schedule(msg.clone().as_mut()) {
                         tracing::debug!("{} Error sending LinkStateList: {}", self.name, e);
                     }
                 }
