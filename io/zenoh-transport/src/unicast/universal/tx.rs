@@ -13,7 +13,7 @@
 //
 use zenoh_protocol::{
     core::{Priority, PriorityRange, Reliability},
-    network::NetworkMessage,
+    network::{NetworkMessageExt, NetworkMessageMut, NetworkMessageRef},
     transport::close,
 };
 use zenoh_result::ZResult;
@@ -69,7 +69,7 @@ impl TransportUnicastUniversal {
         match_.full.or(match_.partial).or(match_.any)
     }
 
-    fn schedule_on_link(&self, msg: NetworkMessage) -> ZResult<bool> {
+    fn schedule_on_link(&self, msg: NetworkMessageRef) -> ZResult<bool> {
         let transport_links = self
             .links
             .read()
@@ -138,7 +138,7 @@ impl TransportUnicastUniversal {
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled
     #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
     #[inline(always)]
-    pub(crate) fn internal_schedule(&self, mut msg: NetworkMessage) -> ZResult<bool> {
+    pub(crate) fn internal_schedule(&self, mut msg: NetworkMessageMut) -> ZResult<bool> {
         #[cfg(feature = "shared-memory")]
         {
             if let Err(e) = map_zmsg_to_partner(&mut msg, &self.config.shm) {
@@ -147,7 +147,7 @@ impl TransportUnicastUniversal {
             }
         }
 
-        let res = self.schedule_on_link(msg)?;
+        let res = self.schedule_on_link(msg.as_ref())?;
 
         #[cfg(feature = "stats")]
         if res {

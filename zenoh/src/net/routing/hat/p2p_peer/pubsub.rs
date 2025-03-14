@@ -202,7 +202,7 @@ fn declare_simple_subscription(
                 mcast_group
                     .primitives
                     .send_declare(RoutingContext::with_expr(
-                        Declare {
+                        &mut Declare {
                             interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,

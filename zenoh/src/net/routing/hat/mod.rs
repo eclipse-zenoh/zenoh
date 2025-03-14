@@ -106,7 +106,7 @@ pub(crate) trait HatBaseTrait {
         &self,
         tables: &mut Tables,
         tables_ref: &Arc<TablesLock>,
-        oam: Oam,
+        oam: &mut Oam,
         transport: &TransportUnicast,
         send_declare: &mut SendDeclare,
     ) -> ZResult<()>;
