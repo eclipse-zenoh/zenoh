@@ -30,7 +30,7 @@ use zenoh_protocol::{
             ext::{NodeIdType, QoSType},
             Push,
         },
-        NetworkMessage,
+        NetworkMessage, NetworkMessageMut,
     },
     zenoh::Put,
 };
@@ -91,7 +91,7 @@ impl MHPeer {
 }
 
 impl TransportPeerEventHandler for MHPeer {
-    fn handle_message(&self, _msg: NetworkMessage) -> ZResult<()> {
+    fn handle_message(&self, _msg: NetworkMessageMut) -> ZResult<()> {
         self.count.fetch_add(1, Ordering::AcqRel);
         Ok(())
     }
@@ -210,7 +210,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
 
         for i in 0..MSG_COUNT {
             println!("[Transport Peer 01g] Scheduling message {}", i);
-            s02.schedule(message.clone()).unwrap();
+            s02.schedule(message.clone().as_mut()).unwrap();
         }
         println!("[Transport Peer 01g] => Scheduling OK");
 
@@ -312,7 +312,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
 
         for i in 0..MSG_COUNT {
             println!("[Transport Peer 02g] Scheduling message {}", i);
-            s01.schedule(message.clone()).unwrap();
+            s01.schedule(message.clone().as_mut()).unwrap();
         }
         println!("[Transport Peer 02g] => Scheduling OK");
 
