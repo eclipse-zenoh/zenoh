@@ -697,7 +697,7 @@ impl Wait for KeyExprUndeclaration<'_> {
 
         let primitives = state.primitives()?;
         drop(state);
-        primitives.send_declare(zenoh_protocol::network::Declare {
+        primitives.send_declare(&mut zenoh_protocol::network::Declare {
             interest_id: None,
             ext_qos: declare::ext::QoSType::DECLARE,
             ext_tstamp: None,

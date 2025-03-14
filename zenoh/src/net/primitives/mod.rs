@@ -26,17 +26,17 @@ use zenoh_protocol::{
 use super::routing::RoutingContext;
 
 pub trait Primitives: Send + Sync {
-    fn send_interest(&self, msg: Interest);
+    fn send_interest(&self, msg: &mut Interest);
 
-    fn send_declare(&self, msg: Declare);
+    fn send_declare(&self, msg: &mut Declare);
 
-    fn send_push(&self, msg: Push, reliability: Reliability);
+    fn send_push(&self, msg: &mut Push, reliability: Reliability);
 
-    fn send_request(&self, msg: Request);
+    fn send_request(&self, msg: &mut Request);
 
-    fn send_response(&self, msg: Response);
+    fn send_response(&self, msg: &mut Response);
 
-    fn send_response_final(&self, msg: ResponseFinal);
+    fn send_response_final(&self, msg: &mut ResponseFinal);
 
     fn send_close(&self);
 
@@ -46,34 +46,34 @@ pub trait Primitives: Send + Sync {
 pub(crate) trait EPrimitives: Send + Sync {
     fn as_any(&self) -> &dyn Any;
 
-    fn send_interest(&self, ctx: RoutingContext<Interest>);
+    fn send_interest(&self, ctx: RoutingContext<&mut Interest>);
 
-    fn send_declare(&self, ctx: RoutingContext<Declare>);
+    fn send_declare(&self, ctx: RoutingContext<&mut Declare>);
 
-    fn send_push(&self, msg: Push, reliability: Reliability);
+    fn send_push(&self, msg: &mut Push, reliability: Reliability);
 
-    fn send_request(&self, msg: Request);
+    fn send_request(&self, msg: &mut Request);
 
-    fn send_response(&self, msg: Response);
+    fn send_response(&self, msg: &mut Response);
 
-    fn send_response_final(&self, msg: ResponseFinal);
+    fn send_response_final(&self, msg: &mut ResponseFinal);
 }
 
 #[derive(Default)]
 pub struct DummyPrimitives;
 
 impl Primitives for DummyPrimitives {
-    fn send_interest(&self, _msg: Interest) {}
+    fn send_interest(&self, _msg: &mut Interest) {}
 
-    fn send_declare(&self, _msg: Declare) {}
+    fn send_declare(&self, _msg: &mut Declare) {}
 
-    fn send_push(&self, _msg: Push, _reliability: Reliability) {}
+    fn send_push(&self, _msg: &mut Push, _reliability: Reliability) {}
 
-    fn send_request(&self, _msg: Request) {}
+    fn send_request(&self, _msg: &mut Request) {}
 
-    fn send_response(&self, _msg: Response) {}
+    fn send_response(&self, _msg: &mut Response) {}
 
-    fn send_response_final(&self, _msg: ResponseFinal) {}
+    fn send_response_final(&self, _msg: &mut ResponseFinal) {}
 
     fn send_close(&self) {}
 
@@ -83,17 +83,17 @@ impl Primitives for DummyPrimitives {
 }
 
 impl EPrimitives for DummyPrimitives {
-    fn send_interest(&self, _ctx: RoutingContext<Interest>) {}
+    fn send_interest(&self, _ctx: RoutingContext<&mut Interest>) {}
 
-    fn send_declare(&self, _ctx: RoutingContext<Declare>) {}
+    fn send_declare(&self, _ctx: RoutingContext<&mut Declare>) {}
 
-    fn send_push(&self, _msg: Push, _reliability: Reliability) {}
+    fn send_push(&self, _msg: &mut Push, _reliability: Reliability) {}
 
-    fn send_request(&self, _msg: Request) {}
+    fn send_request(&self, _msg: &mut Request) {}
 
-    fn send_response(&self, _msg: Response) {}
+    fn send_response(&self, _msg: &mut Response) {}
 
-    fn send_response_final(&self, _msg: ResponseFinal) {}
+    fn send_response_final(&self, _msg: &mut ResponseFinal) {}
 
     fn as_any(&self) -> &dyn Any {
         self

@@ -19,7 +19,7 @@ use tokio::sync::MutexGuard as AsyncMutexGuard;
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{WhatAmI, ZenohIdProto},
-    network::NetworkMessage,
+    network::NetworkMessageMut,
     transport::TransportSn,
 };
 use zenoh_result::ZResult;
@@ -84,7 +84,7 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     /*************************************/
     /*                TX                 */
     /*************************************/
-    fn schedule(&self, msg: NetworkMessage) -> ZResult<()>;
+    fn schedule(&self, msg: NetworkMessageMut) -> ZResult<()>;
 
     /*************************************/
     /*            TERMINATION            */
