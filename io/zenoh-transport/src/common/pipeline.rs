@@ -985,7 +985,7 @@ mod tests {
     use zenoh_config::{QueueAllocConf, QueueAllocMode};
     use zenoh_protocol::{
         core::{Bits, CongestionControl, Encoding, Priority},
-        network::{ext, Push},
+        network::{ext, NetworkMessage, Push},
         transport::{BatchSize, Fragment, Frame, TransportBody, TransportSn},
         zenoh::{PushBody, Put},
     };
