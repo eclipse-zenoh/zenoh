@@ -29,7 +29,7 @@ use zenoh_protocol::{
     core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohIdProto},
     network::{
         push::ext::{NodeIdType, QoSType},
-        NetworkMessage, Push,
+        NetworkMessage, NetworkMessageExt, NetworkMessageMut, Push,
     },
     zenoh::Put,
 };
@@ -119,8 +119,8 @@ impl SCRouter {
 }
 
 impl TransportPeerEventHandler for SCRouter {
-    fn handle_message(&self, message: NetworkMessage) -> ZResult<()> {
-        assert_eq!(message, *MSG);
+    fn handle_message(&self, message: NetworkMessageMut) -> ZResult<()> {
+        assert_eq!(message.as_ref(), MSG.as_ref());
         self.count.fetch_add(1, Ordering::SeqCst);
         std::thread::sleep(2 * SLEEP_SEND);
         Ok(())
@@ -161,7 +161,7 @@ impl TransportEventHandler for SHClient {
 pub struct SCClient;
 
 impl TransportPeerEventHandler for SCClient {
-    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: NetworkMessageMut) -> ZResult<()> {
         Ok(())
     }
 
@@ -290,7 +290,7 @@ async fn test_transport(router_handler: Arc<SHRouter>, client_transport: Transpo
     ztimeout!(async {
         let mut sent = 0;
         while router_handler.get_count() < MSG_COUNT {
-            if client_transport.schedule(MSG.clone()).is_ok() {
+            if client_transport.schedule(MSG.clone().as_mut()).is_ok() {
                 sent += 1;
                 println!(
                     "Sent: {sent}. Received: {}/{MSG_COUNT}",

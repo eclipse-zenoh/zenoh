@@ -17,7 +17,7 @@ use zenoh_core::ztimeout;
 use zenoh_link::{EndPoint, Link};
 use zenoh_protocol::{
     core::{WhatAmI, ZenohIdProto},
-    network::NetworkMessage,
+    network::NetworkMessageMut,
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
@@ -57,7 +57,7 @@ impl TransportEventHandler for SH {
 pub struct SC;
 
 impl TransportPeerEventHandler for SC {
-    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: NetworkMessageMut) -> ZResult<()> {
         Ok(())
     }
     fn new_link(&self, _link: Link) {}
