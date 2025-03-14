@@ -532,16 +532,14 @@ mod tests {
     use std::vec;
 
     use rand::Rng;
-    use zenoh_buffers::ZBuf;
     use zenoh_core::zcondfeat;
     use zenoh_protocol::{
-        core::{CongestionControl, Encoding, Priority, Reliability, WireExpr},
+        core::{CongestionControl, Priority, Reliability, WireExpr},
         network::{ext, NetworkMessage, NetworkMessageExt, Push},
         transport::{
             frame::{self, FrameHeader},
             Fragment, KeepAlive, TransportMessage,
         },
-        zenoh::{PushBody, Put},
     };
 
     use super::*;
@@ -607,23 +605,11 @@ mod tests {
         let mut batch = WBatch::new(config);
 
         let tmsg: TransportMessage = KeepAlive.into();
-        let mut nmsg: NetworkMessage = Push {
+        let mut nmsg = NetworkMessage::from(Push {
             wire_expr: WireExpr::empty(),
             ext_qos: ext::QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
-            ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::DEFAULT,
-            payload: PushBody::Put(Put {
-                timestamp: None,
-                encoding: Encoding::empty(),
-                ext_sinfo: None,
-                #[cfg(feature = "shared-memory")]
-                ext_shm: None,
-                ext_attachment: None,
-                ext_unknown: vec![],
-                payload: ZBuf::from(vec![0u8; 8]),
-            }),
-        }
-        .into();
+            ..Push::from(vec![0u8; 8])
+        });
 
         let mut tmsgs_in = vec![];
         let mut nmsgs_in = vec![];

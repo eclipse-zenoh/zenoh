@@ -15,7 +15,6 @@
 use std::{
     convert::TryInto,
     future::{IntoFuture, Ready},
-    sync::Arc,
     time::Duration,
 };
 
@@ -427,7 +426,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     where
         F: Fn(Sample) + Send + Sync + 'static,
     {
-        self.with(Callback::new(Arc::new(callback)))
+        self.with(Callback::from(callback))
     }
 
     /// Receive the samples for this liveliness subscription with a mutable callback.
@@ -670,7 +669,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     where
         F: Fn(Reply) + Send + Sync + 'static,
     {
-        self.with(Callback::new(Arc::new(callback)))
+        self.with(Callback::from(callback))
     }
 
     /// Receive the replies for this liveliness query with a mutable callback.
