@@ -22,7 +22,7 @@ use zenoh_collections::RingBuffer;
 use zenoh_result::ZResult;
 
 use crate::api::{
-    handlers::{callback::Callback, IntoHandler},
+    handlers::{callback::Callback, CallbackParameter, IntoHandler},
     session::API_DATA_RECEPTION_CHANNEL_SIZE,
 };
 
@@ -145,7 +145,7 @@ impl<T> RingChannelHandler<T> {
     }
 }
 
-impl<T: Send + 'static> IntoHandler<T> for RingChannel {
+impl<T: CallbackParameter + Send + 'static> IntoHandler<T> for RingChannel {
     type Handler = RingChannelHandler<T>;
 
     fn into_handler(self) -> (Callback<T>, Self::Handler) {
@@ -158,7 +158,7 @@ impl<T: Send + 'static> IntoHandler<T> for RingChannel {
             ring: Arc::downgrade(&inner),
         };
         (
-            Callback::new(Arc::new(move |t| match inner.ring.lock() {
+            Callback::from(move |t| match inner.ring.lock() {
                 Ok(mut g) => {
                     // Eventually drop the oldest element.
                     g.push_force(t);
@@ -166,7 +166,7 @@ impl<T: Send + 'static> IntoHandler<T> for RingChannel {
                     let _ = sender.try_send(());
                 }
                 Err(e) => tracing::error!("{}", e),
-            })),
+            }),
             receiver,
         )
     }
