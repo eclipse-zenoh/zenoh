@@ -23,7 +23,7 @@ use zenoh_core::{zasynclock, zcondfeat, zread, zwrite};
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Priority, WhatAmI, ZenohIdProto},
-    network::NetworkMessage,
+    network::NetworkMessageMut,
     transport::{close, Close, PrioritySn, TransportMessage, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -398,7 +398,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     /*************************************/
     /*                TX                 */
     /*************************************/
-    fn schedule(&self, msg: NetworkMessage) -> ZResult<()> {
+    fn schedule(&self, msg: NetworkMessageMut) -> ZResult<()> {
         self.internal_schedule(msg).map(|_| ())
     }
 

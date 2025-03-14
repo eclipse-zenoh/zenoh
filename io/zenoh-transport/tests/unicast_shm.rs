@@ -30,7 +30,7 @@ mod tests {
         core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohIdProto},
         network::{
             push::ext::{NodeIdType, QoSType},
-            NetworkBody, NetworkMessage, Push,
+            NetworkBodyMut, NetworkMessage, NetworkMessageMut, Push,
         },
         zenoh::{PushBody, Put},
     };
@@ -105,14 +105,14 @@ mod tests {
     }
 
     impl TransportPeerEventHandler for SCPeer {
-        fn handle_message(&self, message: NetworkMessage) -> ZResult<()> {
+        fn handle_message(&self, message: NetworkMessageMut) -> ZResult<()> {
             if self.is_shm {
                 print!("s");
             } else {
                 print!("n");
             }
             let payload = match message.body {
-                NetworkBody::Push(m) => match m.payload {
+                NetworkBodyMut::Push(m) => match &mut m.payload {
                     PushBody::Put(Put { payload, .. }) => {
                         for zs in payload.zslices() {
                             if self.is_shm && zs.downcast_ref::<ShmBufInner>().is_none() {
@@ -247,7 +247,7 @@ mod tests {
                 ztimeout!(layout.alloc().with_policy::<BlockOn<GarbageCollect>>()).unwrap();
             sbuf[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let message: NetworkMessage = Push {
+            let mut message: NetworkMessage = Push {
                 wire_expr: "test".into(),
                 ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
                 ext_tstamp: None,
@@ -265,7 +265,7 @@ mod tests {
             }
             .into();
 
-            peer_shm02_transport.schedule(message).unwrap();
+            peer_shm02_transport.schedule(message.as_mut()).unwrap();
         }
 
         // Wait a little bit
@@ -288,7 +288,7 @@ mod tests {
                 ztimeout!(layout.alloc().with_policy::<BlockOn<GarbageCollect>>()).unwrap();
             sbuf[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let message: NetworkMessage = Push {
+            let mut message: NetworkMessage = Push {
                 wire_expr: "test".into(),
                 ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
                 ext_tstamp: None,
@@ -306,7 +306,7 @@ mod tests {
             }
             .into();
 
-            peer_net01_transport.schedule(message).unwrap();
+            peer_net01_transport.schedule(message.as_mut()).unwrap();
         }
 
         // Wait a little bit
