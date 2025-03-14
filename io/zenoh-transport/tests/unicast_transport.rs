@@ -31,7 +31,7 @@ use zenoh_protocol::{
     },
     network::{
         push::ext::{NodeIdType, QoSType},
-        NetworkMessage, Push,
+        NetworkMessage, NetworkMessageMut, Push,
     },
     zenoh::Put,
 };
@@ -289,7 +289,7 @@ impl SCRouter {
 }
 
 impl TransportPeerEventHandler for SCRouter {
-    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: NetworkMessageMut) -> ZResult<()> {
         self.count.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
@@ -329,7 +329,7 @@ impl TransportEventHandler for SHClient {
 pub struct SCClient;
 
 impl TransportPeerEventHandler for SCClient {
-    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: NetworkMessageMut) -> ZResult<()> {
         Ok(())
     }
 
@@ -489,7 +489,7 @@ async fn test_transport(
     .into();
 
     for _ in 0..MSG_COUNT {
-        let _ = client_transport.schedule(message.clone());
+        let _ = client_transport.schedule(message.clone().as_mut());
     }
 
     match channel.reliability {

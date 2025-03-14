@@ -37,7 +37,7 @@ mod tests {
                 ext::{NodeIdType, QoSType},
                 Push,
             },
-            NetworkMessage,
+            NetworkMessage, NetworkMessageMut,
         },
         zenoh::Put,
     };
@@ -119,7 +119,7 @@ mod tests {
     }
 
     impl TransportPeerEventHandler for SCPeer {
-        fn handle_message(&self, _msg: NetworkMessage) -> ZResult<()> {
+        fn handle_message(&self, _msg: NetworkMessageMut) -> ZResult<()> {
             self.count.fetch_add(1, Ordering::Relaxed);
             Ok(())
         }
@@ -260,7 +260,7 @@ mod tests {
         msg_size: usize,
     ) {
         // Create the message to send
-        let message: NetworkMessage = Push {
+        let mut message: NetworkMessage = Push {
             wire_expr: "test".into(),
             ext_qos: QoSType::new(channel.priority, CongestionControl::Block, false),
             ext_tstamp: None,
@@ -281,7 +281,7 @@ mod tests {
 
         println!("Sending {MSG_COUNT} messages... {channel:?} {msg_size}");
         for _ in 0..MSG_COUNT {
-            peer01.transport.schedule(message.clone()).unwrap();
+            peer01.transport.schedule(message.as_mut()).unwrap();
         }
 
         match channel.reliability {
