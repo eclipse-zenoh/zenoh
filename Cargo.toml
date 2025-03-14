@@ -92,7 +92,6 @@ clap = { version = "4.5.17", features = ["derive"] }
 console-subscriber = "0.4.0"
 const_format = "0.2.33"
 criterion = "0.5"
-crossbeam-utils = "0.8.20"
 crossbeam-queue = "0.3.12"
 derive_more = { version = "1.0.0", features = ["as_ref"] }
 derive-new = "0.7.0"
