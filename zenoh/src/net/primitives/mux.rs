@@ -111,9 +111,9 @@ impl EPrimitives for Mux {
         }
     }
 
-    fn send_push(&self, mut msg: &mut Push, reliability: Reliability) {
+    fn send_push(&self, msg: &mut Push, reliability: Reliability) {
         let msg = NetworkMessageMut {
-            body: NetworkBodyMut::Push(&mut msg),
+            body: NetworkBodyMut::Push(msg),
             reliability,
             #[cfg(feature = "stats")]
             size: None,

@@ -29,7 +29,7 @@ mod tests {
         core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohIdProto},
         network::{
             push::ext::{NodeIdType, QoSType},
-            NetworkMessage, Push,
+            NetworkMessage, NetworkMessageMut, Push,
         },
         zenoh::Put,
     };
@@ -92,7 +92,7 @@ mod tests {
 
             println!("[Simultaneous {}] Sending {}...", self.zid, MSG_COUNT);
             for _ in 0..MSG_COUNT {
-                transport.schedule(message.clone()).unwrap();
+                transport.schedule(message.clone().as_mut()).unwrap();
             }
             println!("[Simultaneous {}] ... sent {}", self.zid, MSG_COUNT);
 
@@ -119,7 +119,7 @@ mod tests {
     }
 
     impl TransportPeerEventHandler for MHPeer {
-        fn handle_message(&self, _msg: NetworkMessage) -> ZResult<()> {
+        fn handle_message(&self, _msg: NetworkMessageMut) -> ZResult<()> {
             self.count.fetch_add(1, Ordering::AcqRel);
             Ok(())
         }
