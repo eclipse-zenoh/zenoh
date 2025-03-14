@@ -26,7 +26,7 @@ use zenoh_keyexpr::{
     keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, IKeyExprTreeNode, KeBoxTree},
 };
 use zenoh_protocol::{
-    network::{NetworkBody, Push, Request, Response},
+    network::{Declare, DeclareBody, NetworkBody, Push, Request, Response},
     zenoh::PushBody,
 };
 use zenoh_result::ZResult;
@@ -287,7 +287,44 @@ impl InterceptorTrait for QosInterceptor {
                     );
                 }
             }
-            _ => {}
+            // unaffected message types
+            NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareKeyExpr(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareToken(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareFinal(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareQueryable(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::DeclareSubscriber(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareToken(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareKeyExpr(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareQueryable(_),
+                ..
+            })
+            | NetworkBody::Declare(Declare {
+                body: DeclareBody::UndeclareSubscriber(_),
+                ..
+            }) => {}
+            NetworkBody::Interest(_) | NetworkBody::OAM(_) | NetworkBody::ResponseFinal(_) => {}
         }
         Some(ctx)
     }
