@@ -351,6 +351,34 @@ fn qos_overwrite_config_error_empty_message() {
 }
 
 #[test]
+#[should_panic(expected = "Invalid Qos Overwrite config: interfaces list must not be empty")]
+fn qos_overwrite_config_error_empty_interface() {
+    zenoh::init_log_from_env_or("error");
+
+    let mut config = Config::default();
+    config
+        .insert_json5(
+            "qos_overwrite",
+            r#"
+              [
+                {
+                    interfaces: [],
+                    messages: ["reply"],
+                    key_exprs: ["a/b/**"],
+                    overwrite: {
+                        priority: "interactive_high",
+                    },
+                    flows: ["ingress"]
+                }
+              ]
+            "#,
+        )
+        .unwrap();
+
+    zenoh::open(config).wait().unwrap();
+}
+
+#[test]
 fn qos_overwrite_config_ok_no_flow() {
     zenoh::init_log_from_env_or("error");
 

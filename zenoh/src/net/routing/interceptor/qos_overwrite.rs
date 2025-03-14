@@ -54,6 +54,10 @@ pub(crate) fn qos_overwrite_interceptor_factories(
         if flows.is_empty() {
             bail!("Invalid Qos Overwrite config: flows list must not be empty");
         }
+        // check for empty interfaces
+        if q.interfaces.as_ref().map(|i| i.is_empty()).unwrap_or(false) {
+            bail!("Invalid Qos Overwrite config: interfaces list must not be empty");
+        }
         // check for empty messages list
         if q.messages.is_empty() {
             bail!("Invalid Qos Overwrite config: messages list must not be empty");
