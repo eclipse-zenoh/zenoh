@@ -109,7 +109,7 @@ impl Router {
         drop(tables);
         drop(ctrl_lock);
         for (p, m) in declares {
-            p.send_declare(m);
+            m.with_mut(|m| p.send_declare(m));
         }
         Arc::new(face)
     }
@@ -169,7 +169,7 @@ impl Router {
         drop(tables);
         drop(ctrl_lock);
         for (p, m) in declares {
-            p.send_declare(m);
+            m.with_mut(|m| p.send_declare(m));
         }
 
         Ok(Arc::new(DeMux::new(face, Some(transport), ingress)))

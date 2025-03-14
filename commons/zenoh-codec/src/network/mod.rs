@@ -25,7 +25,10 @@ use zenoh_buffers::{
 use zenoh_protocol::{
     common::{imsg, ZExtZ64, ZExtZBufHeader},
     core::{EntityId, Reliability, ZenohIdProto},
-    network::{ext::EntityGlobalIdType, *},
+    network::{
+        ext::{self, EntityGlobalIdType},
+        id, NetworkBody, NetworkBodyRef, NetworkMessage, NetworkMessageRef,
+    },
 };
 
 use crate::{
@@ -33,23 +36,23 @@ use crate::{
 };
 
 // NetworkMessage
-impl<W> WCodec<&NetworkMessage, &mut W> for Zenoh080
+impl<W> WCodec<NetworkMessageRef<'_>, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &NetworkMessage) -> Self::Output {
-        let NetworkMessage { body, .. } = x;
+    fn write(self, writer: &mut W, x: NetworkMessageRef) -> Self::Output {
+        let NetworkMessageRef { body, .. } = x;
 
         match body {
-            NetworkBody::Push(b) => self.write(&mut *writer, b),
-            NetworkBody::Request(b) => self.write(&mut *writer, b),
-            NetworkBody::Response(b) => self.write(&mut *writer, b),
-            NetworkBody::ResponseFinal(b) => self.write(&mut *writer, b),
-            NetworkBody::Interest(b) => self.write(&mut *writer, b),
-            NetworkBody::Declare(b) => self.write(&mut *writer, b),
-            NetworkBody::OAM(b) => self.write(&mut *writer, b),
+            NetworkBodyRef::Push(b) => self.write(&mut *writer, b),
+            NetworkBodyRef::Request(b) => self.write(&mut *writer, b),
+            NetworkBodyRef::Response(b) => self.write(&mut *writer, b),
+            NetworkBodyRef::ResponseFinal(b) => self.write(&mut *writer, b),
+            NetworkBodyRef::Interest(b) => self.write(&mut *writer, b),
+            NetworkBodyRef::Declare(b) => self.write(&mut *writer, b),
+            NetworkBodyRef::OAM(b) => self.write(&mut *writer, b),
         }
     }
 }

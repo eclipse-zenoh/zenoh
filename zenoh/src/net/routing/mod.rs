@@ -26,7 +26,10 @@ pub mod router;
 use std::{cell::OnceCell, sync::Arc};
 
 use zenoh_keyexpr::keyexpr;
-use zenoh_protocol::{core::WireExpr, network::NetworkMessage};
+use zenoh_protocol::{
+    core::WireExpr,
+    network::{NetworkMessageExt, NetworkMessageMut},
+};
 
 use self::{dispatcher::face::Face, router::Resource};
 use super::runtime;
@@ -93,31 +96,22 @@ impl<Msg> RoutingContext<Msg> {
     pub(crate) fn outface(&self) -> Option<&Face> {
         self.outface.get()
     }
+
+    pub(crate) fn with_mut<R>(mut self, f: impl FnOnce(RoutingContext<&mut Msg>) -> R) -> R {
+        f(RoutingContext {
+            msg: &mut self.msg,
+            inface: self.inface,
+            outface: self.outface,
+            prefix: self.prefix,
+            full_expr: self.full_expr,
+        })
+    }
 }
 
-impl RoutingContext<NetworkMessage> {
+impl RoutingContext<NetworkMessageMut<'_>> {
     #[inline]
     pub(crate) fn wire_expr(&self) -> Option<&WireExpr> {
-        use zenoh_protocol::network::{DeclareBody, NetworkBody};
-        match &self.msg.body {
-            NetworkBody::Push(m) => Some(&m.wire_expr),
-            NetworkBody::Request(m) => Some(&m.wire_expr),
-            NetworkBody::Response(m) => Some(&m.wire_expr),
-            NetworkBody::ResponseFinal(_) => None,
-            NetworkBody::Interest(m) => m.wire_expr.as_ref(),
-            NetworkBody::Declare(m) => match &m.body {
-                DeclareBody::DeclareKeyExpr(m) => Some(&m.wire_expr),
-                DeclareBody::UndeclareKeyExpr(_) => None,
-                DeclareBody::DeclareSubscriber(m) => Some(&m.wire_expr),
-                DeclareBody::UndeclareSubscriber(m) => Some(&m.ext_wire_expr.wire_expr),
-                DeclareBody::DeclareQueryable(m) => Some(&m.wire_expr),
-                DeclareBody::UndeclareQueryable(m) => Some(&m.ext_wire_expr.wire_expr),
-                DeclareBody::DeclareToken(m) => Some(&m.wire_expr),
-                DeclareBody::UndeclareToken(m) => Some(&m.ext_wire_expr.wire_expr),
-                DeclareBody::DeclareFinal(_) => None,
-            },
-            NetworkBody::OAM(_) => None,
-        }
+        self.msg.wire_expr()
     }
 
     #[inline]

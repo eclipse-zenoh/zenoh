@@ -22,7 +22,7 @@ use zenoh_keyexpr::keyexpr;
 use zenoh_macros::ke;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Reliability;
-use zenoh_protocol::{core::WireExpr, network::NetworkMessage};
+use zenoh_protocol::{core::WireExpr, network::NetworkMessageMut};
 use zenoh_transport::{
     TransportEventHandler, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
@@ -231,7 +231,7 @@ pub(crate) struct PeerHandler {
 }
 
 impl TransportPeerEventHandler for PeerHandler {
-    fn handle_message(&self, _msg: NetworkMessage) -> ZResult<()> {
+    fn handle_message(&self, _msg: NetworkMessageMut) -> ZResult<()> {
         Ok(())
     }
 
