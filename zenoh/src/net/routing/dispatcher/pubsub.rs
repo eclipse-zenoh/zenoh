@@ -282,16 +282,12 @@ macro_rules! inc_stats {
 pub fn route_data(
     tables_ref: &Arc<TablesLock>,
     face: &FaceState,
-    wire_expr: WireExpr,
-    ext_qos: ext::QoSType,
-    ext_tstamp: Option<ext::TimestampType>,
-    ext_nodeid: ext::NodeIdType,
-    payload: impl FnOnce() -> PushBody,
+    msg: &mut Push,
     reliability: Reliability,
 ) {
     let tables = zread!(tables_ref.tables);
     match tables
-        .get_mapping(face, &wire_expr.scope, wire_expr.mapping)
+        .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
         .cloned()
     {
         Some(prefix) => {
@@ -299,30 +295,26 @@ pub fn route_data(
                 "{} Route data for res {}{}",
                 face,
                 prefix.expr(),
-                wire_expr.suffix.as_ref()
+                msg.wire_expr.suffix.as_ref()
             );
-            let mut expr = RoutingExpr::new(&prefix, wire_expr.suffix.as_ref());
+            let mut expr = RoutingExpr::new(&prefix, msg.wire_expr.suffix.as_ref());
 
             #[cfg(feature = "stats")]
             let admin = expr.full_expr().starts_with("@/");
             #[cfg(feature = "stats")]
-            let mut payload = payload();
-            #[cfg(feature = "stats")]
             if !admin {
-                inc_stats!(face, rx, user, payload);
+                inc_stats!(face, rx, user, msg.payload);
             } else {
-                inc_stats!(face, rx, admin, payload);
+                inc_stats!(face, rx, admin, msg.payload);
             }
 
             if tables.hat_code.ingress_filter(&tables, face, &mut expr) {
                 let res = Resource::get_resource(&prefix, expr.suffix);
 
-                let route = get_data_route(&tables, face, &res, &mut expr, ext_nodeid.node_id);
+                let route = get_data_route(&tables, face, &res, &mut expr, msg.ext_nodeid.node_id);
 
                 if !route.is_empty() {
-                    #[cfg(not(feature = "stats"))]
-                    let mut payload = payload();
-                    treat_timestamp!(&tables.hlc, payload, tables.drop_future_timestamp);
+                    treat_timestamp!(&tables.hlc, msg.payload, tables.drop_future_timestamp);
 
                     if route.len() == 1 {
                         let (outface, key_expr, context) = route.values().next().unwrap();
@@ -333,21 +325,13 @@ pub fn route_data(
                             drop(tables);
                             #[cfg(feature = "stats")]
                             if !admin {
-                                inc_stats!(outface, tx, user, payload);
+                                inc_stats!(outface, tx, user, msg.payload);
                             } else {
-                                inc_stats!(outface, tx, admin, payload);
+                                inc_stats!(outface, tx, admin, msg.payload);
                             }
-
-                            outface.primitives.send_push(
-                                Push {
-                                    wire_expr: key_expr.into(),
-                                    ext_qos,
-                                    ext_tstamp,
-                                    ext_nodeid: ext::NodeIdType { node_id: *context },
-                                    payload,
-                                },
-                                reliability,
-                            )
+                            msg.wire_expr = key_expr.into();
+                            msg.ext_nodeid = ext::NodeIdType { node_id: *context };
+                            outface.primitives.send_push(msg, reliability)
                         }
                     } else {
                         let route = route
@@ -364,18 +348,18 @@ pub fn route_data(
                         for (outface, key_expr, context) in route {
                             #[cfg(feature = "stats")]
                             if !admin {
-                                inc_stats!(outface, tx, user, payload)
+                                inc_stats!(outface, tx, user, msg.payload)
                             } else {
-                                inc_stats!(outface, tx, admin, payload)
+                                inc_stats!(outface, tx, admin, msg.payload)
                             }
 
                             outface.primitives.send_push(
-                                Push {
+                                &mut Push {
                                     wire_expr: key_expr,
-                                    ext_qos,
+                                    ext_qos: msg.ext_qos,
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType { node_id: context },
-                                    payload: payload.clone(),
+                                    payload: msg.payload.clone(),
                                 },
                                 reliability,
                             )
@@ -388,7 +372,7 @@ pub fn route_data(
             tracing::error!(
                 "{} Route data with unknown scope {}!",
                 face,
-                wire_expr.scope
+                msg.wire_expr.scope
             );
         }
     }

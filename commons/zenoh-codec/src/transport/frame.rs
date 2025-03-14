@@ -20,7 +20,7 @@ use zenoh_buffers::{
 use zenoh_protocol::{
     common::{iext, imsg},
     core::Reliability,
-    network::NetworkMessage,
+    network::{NetworkMessage, NetworkMessageExt},
     transport::{
         frame::{ext, flag, Frame, FrameHeader},
         id, TransportSn,
@@ -147,7 +147,7 @@ where
 
         // Body
         for m in payload.iter() {
-            self.write(&mut *writer, m)?;
+            self.write(&mut *writer, m.as_ref())?;
         }
 
         Ok(())

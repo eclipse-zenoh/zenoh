@@ -51,7 +51,7 @@ impl TransportMulticastInner {
             }
         }
 
-        peer.handler.handle_message(msg)
+        peer.handler.handle_message(msg.as_mut())
     }
 
     pub(super) fn handle_join_from_peer(

@@ -24,7 +24,7 @@ use zenoh_codec::{
     RCodec, WCodec,
 };
 use zenoh_protocol::{
-    network::NetworkMessage,
+    network::NetworkMessageRef,
     transport::{fragment::FragmentHeader, frame::FrameHeader, BatchSize, TransportMessage},
 };
 use zenoh_result::{zerror, ZResult};
@@ -374,19 +374,19 @@ impl Encode<&TransportMessage> for &mut WBatch {
     }
 }
 
-impl Encode<&NetworkMessage> for &mut WBatch {
+impl Encode<NetworkMessageRef<'_>> for &mut WBatch {
     type Output = Result<(), BatchError>;
 
-    fn encode(self, x: &NetworkMessage) -> Self::Output {
+    fn encode(self, x: NetworkMessageRef) -> Self::Output {
         let mut writer = self.buffer.writer();
         self.codec.write(&mut writer, x)
     }
 }
 
-impl Encode<(&NetworkMessage, &FrameHeader)> for &mut WBatch {
+impl Encode<(NetworkMessageRef<'_>, &FrameHeader)> for &mut WBatch {
     type Output = Result<(), BatchError>;
 
-    fn encode(self, x: (&NetworkMessage, &FrameHeader)) -> Self::Output {
+    fn encode(self, x: (NetworkMessageRef, &FrameHeader)) -> Self::Output {
         let mut writer = self.buffer.writer();
         let res = self.codec.write(&mut writer, x);
         #[cfg(feature = "stats")]
