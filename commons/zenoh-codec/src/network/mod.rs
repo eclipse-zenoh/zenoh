@@ -57,6 +57,17 @@ where
     }
 }
 
+impl<W> WCodec<&NetworkMessage, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &NetworkMessage) -> Self::Output {
+        self.write(writer, x.as_ref())
+    }
+}
+
 impl<R> RCodec<NetworkMessage, &mut R> for Zenoh080
 where
     R: Reader,
