@@ -35,7 +35,7 @@ use serde::Serialize;
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{WhatAmI, ZenohIdProto},
-    network::NetworkMessage,
+    network::NetworkMessageMut,
 };
 use zenoh_result::ZResult;
 
@@ -116,7 +116,7 @@ pub struct TransportPeer {
 }
 
 pub trait TransportPeerEventHandler: Send + Sync {
-    fn handle_message(&self, msg: NetworkMessage) -> ZResult<()>;
+    fn handle_message(&self, msg: NetworkMessageMut) -> ZResult<()>;
     fn new_link(&self, src: Link);
     fn del_link(&self, link: Link);
     fn closed(&self);
@@ -128,7 +128,7 @@ pub trait TransportPeerEventHandler: Send + Sync {
 pub struct DummyTransportPeerEventHandler;
 
 impl TransportPeerEventHandler for DummyTransportPeerEventHandler {
-    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: NetworkMessageMut) -> ZResult<()> {
         Ok(())
     }
 

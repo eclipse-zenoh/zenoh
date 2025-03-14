@@ -231,7 +231,7 @@ impl HatBaseTrait for HatCode {
         &self,
         _tables: &mut Tables,
         _tables_ref: &Arc<TablesLock>,
-        _oam: Oam,
+        _oam: &mut Oam,
         _transport: &TransportUnicast,
         _send_declare: &mut SendDeclare,
     ) -> ZResult<()> {

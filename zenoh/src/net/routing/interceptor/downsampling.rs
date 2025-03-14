@@ -32,7 +32,7 @@ use zenoh_core::zlock;
 use zenoh_keyexpr::keyexpr_tree::{
     impls::KeyedSetProvider, support::UnknownWildness, IKeyExprTree, IKeyExprTreeMut, KeBoxTree,
 };
-use zenoh_protocol::network::NetworkBody;
+use zenoh_protocol::network::NetworkBodyMut;
 use zenoh_result::ZResult;
 
 use crate::net::routing::interceptor::*;
@@ -180,15 +180,15 @@ pub(crate) struct DownsamplingInterceptor {
 }
 
 impl DownsamplingInterceptor {
-    fn is_msg_filtered(&self, ctx: &RoutingContext<NetworkMessage>) -> bool {
+    fn is_msg_filtered(&self, ctx: &RoutingContext<NetworkMessageMut>) -> bool {
         match ctx.msg.body {
-            NetworkBody::Push(_) => self.filtered_messages.push,
-            NetworkBody::Request(_) => self.filtered_messages.query,
-            NetworkBody::Response(_) => self.filtered_messages.reply,
-            NetworkBody::ResponseFinal(_) => false,
-            NetworkBody::Interest(_) => false,
-            NetworkBody::Declare(_) => false,
-            NetworkBody::OAM(_) => false,
+            NetworkBodyMut::Push(_) => self.filtered_messages.push,
+            NetworkBodyMut::Request(_) => self.filtered_messages.query,
+            NetworkBodyMut::Response(_) => self.filtered_messages.reply,
+            NetworkBodyMut::ResponseFinal(_) => false,
+            NetworkBodyMut::Interest(_) => false,
+            NetworkBodyMut::Declare(_) => false,
+            NetworkBodyMut::OAM(_) => false,
         }
     }
 }
@@ -209,10 +209,10 @@ impl InterceptorTrait for DownsamplingInterceptor {
 
     fn intercept(
         &self,
-        ctx: RoutingContext<NetworkMessage>,
+        ctx: &mut RoutingContext<NetworkMessageMut>,
         cache: Option<&Box<dyn Any + Send + Sync>>,
-    ) -> Option<RoutingContext<NetworkMessage>> {
-        if self.is_msg_filtered(&ctx) {
+    ) -> bool {
+        if self.is_msg_filtered(ctx) {
             if let Some(cache) = cache {
                 if let Some(id) = cache.downcast_ref::<Option<usize>>() {
                     if let Some(id) = id {
@@ -222,7 +222,7 @@ impl InterceptorTrait for DownsamplingInterceptor {
 
                             if timestamp - state.latest_message_timestamp >= state.threshold {
                                 state.latest_message_timestamp = timestamp;
-                                return Some(ctx);
+                                return true;
                             } else {
                                 if !INFO_FLAG.swap(true, Ordering::Relaxed) {
                                     tracing::info!("Some message(s) have been dropped by the downsampling interceptor. Enable trace level tracing for more details.");
@@ -234,7 +234,7 @@ impl InterceptorTrait for DownsamplingInterceptor {
                                     ctx.inface().map(|f| f.to_string()).unwrap_or_default(),
                                     ctx.outface().map(|f| f.to_string()).unwrap_or_default(),
                                 );
-                                return None;
+                                return false;
                             }
                         } else {
                             tracing::debug!("unexpected cache ID {}", id);
@@ -245,8 +245,7 @@ impl InterceptorTrait for DownsamplingInterceptor {
                 }
             }
         }
-
-        Some(ctx)
+        true
     }
 }
 
