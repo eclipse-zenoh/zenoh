@@ -79,6 +79,18 @@ impl RuntimeParam {
                 format!("{}-{}", zrt, id)
             })
             .build()?;
+        // run special task that produces spurious wakeups on RX executor and fixes
+        // latency issue on low publication rates
+        #[cfg(feature = "fix_tokio_latency")]
+        if zrt == ZRuntime::RX {
+            tracing::debug!("Spawning RX runtime polling task...");
+            #[allow(clippy::let_underscore_future)]
+            let _ = rt.spawn(async {
+                loop {
+                    tokio::time::sleep(tokio::time::Duration::from_micros(100)).await;
+                }
+            });
+        }
         Ok(rt)
     }
 }
