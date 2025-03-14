@@ -241,7 +241,7 @@ impl NetworkMessageExt for NetworkMessage {
     }
 }
 
-impl<'a> NetworkMessageExt for NetworkMessageRef<'a> {
+impl NetworkMessageExt for NetworkMessageRef<'_> {
     fn body(&self) -> NetworkBodyRef {
         self.body
     }
@@ -256,7 +256,7 @@ impl<'a> NetworkMessageExt for NetworkMessageRef<'a> {
     }
 }
 
-impl<'a> NetworkMessageExt for NetworkMessageMut<'a> {
+impl NetworkMessageExt for NetworkMessageMut<'_> {
     fn body(&self) -> NetworkBodyRef {
         match &self.body {
             NetworkBodyMut::Push(body) => NetworkBodyRef::Push(body),
@@ -375,6 +375,36 @@ impl From<NetworkBody> for NetworkMessage {
             #[cfg(feature = "stats")]
             size: None,
         }
+    }
+}
+
+impl From<Declare> for NetworkMessage {
+    fn from(declare: Declare) -> Self {
+        NetworkBody::Declare(declare).into()
+    }
+}
+
+impl From<Push> for NetworkMessage {
+    fn from(push: Push) -> Self {
+        NetworkBody::Push(push).into()
+    }
+}
+
+impl From<Request> for NetworkMessage {
+    fn from(request: Request) -> Self {
+        NetworkBody::Request(request).into()
+    }
+}
+
+impl From<Response> for NetworkMessage {
+    fn from(response: Response) -> Self {
+        NetworkBody::Response(response).into()
+    }
+}
+
+impl From<ResponseFinal> for NetworkMessage {
+    fn from(final_response: ResponseFinal) -> Self {
+        NetworkBody::ResponseFinal(final_response).into()
     }
 }
 

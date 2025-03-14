@@ -535,7 +535,7 @@ mod tests {
     use zenoh_core::zcondfeat;
     use zenoh_protocol::{
         core::{CongestionControl, Encoding, Priority, Reliability, WireExpr},
-        network::{ext, Push},
+        network::{ext, NetworkMessage, NetworkMessageExt, Push},
         transport::{
             frame::{self, FrameHeader},
             Fragment, KeepAlive, TransportMessage,
@@ -629,7 +629,7 @@ mod tests {
 
         // Serialize assuming there is already a frame
         batch.clear();
-        assert!(batch.encode(&nmsg).is_err());
+        assert!(batch.encode(nmsg.as_ref()).is_err());
         assert_eq!(batch.len(), 0);
 
         let mut frame = FrameHeader {
@@ -640,13 +640,13 @@ mod tests {
         nmsg.reliability = frame.reliability;
 
         // Serialize with a frame
-        batch.encode((&nmsg, &frame)).unwrap();
+        batch.encode((nmsg.as_ref(), &frame)).unwrap();
         assert_ne!(batch.len(), 0);
         nmsgs_in.push(nmsg.clone());
 
         frame.reliability = Reliability::BestEffort;
         nmsg.reliability = frame.reliability;
-        batch.encode((&nmsg, &frame)).unwrap();
+        batch.encode((nmsg.as_ref(), &frame)).unwrap();
         assert_ne!(batch.len(), 0);
         nmsgs_in.push(nmsg.clone());
 
@@ -655,12 +655,12 @@ mod tests {
         tmsgs_in.push(tmsg.clone());
 
         // Serialize assuming there is already a frame
-        assert!(batch.encode(&nmsg).is_err());
+        assert!(batch.encode(nmsg.as_ref()).is_err());
         assert_ne!(batch.len(), 0);
 
         // Serialize with a frame
         frame.sn = 1;
-        batch.encode((&nmsg, &frame)).unwrap();
+        batch.encode((nmsg.as_ref(), &frame)).unwrap();
         assert_ne!(batch.len(), 0);
         nmsgs_in.push(nmsg.clone());
     }

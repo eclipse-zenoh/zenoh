@@ -393,7 +393,7 @@ macro_rules! inc_req_stats {
             if let Some(stats) = $face.stats.as_ref() {
                 use zenoh_buffers::buffer::Buffer;
                 match &$body {
-                    RequestBody::Query(q) => {
+                    zenoh_protocol::zenoh::RequestBody::Query(q) => {
                         stats.[<$txrx _z_query_msgs>].[<inc_ $space>](1);
                         stats.[<$txrx _z_query_pl_bytes>].[<inc_ $space>](
                             q.ext_body.as_ref().map(|b| b.payload.len()).unwrap_or(0),

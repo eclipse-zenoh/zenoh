@@ -247,17 +247,14 @@ impl EPrimitives for ENamespace {
         self
     }
 
-    fn send_interest(
-        &self,
-        mut ctx: super::RoutingContext<&mut zenoh_protocol::network::Interest>,
-    ) {
-        if self.handle_interest_ingress(&mut ctx.msg) {
+    fn send_interest(&self, ctx: super::RoutingContext<&mut zenoh_protocol::network::Interest>) {
+        if self.handle_interest_ingress(ctx.msg) {
             self.primitives.send_interest(ctx);
         }
     }
 
-    fn send_declare(&self, mut ctx: super::RoutingContext<&mut zenoh_protocol::network::Declare>) {
-        if self.handle_declare_ingress(&mut ctx.msg) {
+    fn send_declare(&self, ctx: super::RoutingContext<&mut zenoh_protocol::network::Declare>) {
+        if self.handle_declare_ingress(ctx.msg) {
             self.primitives.send_declare(ctx);
         }
     }
