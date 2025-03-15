@@ -880,4 +880,8 @@ fn endpoints() {
     assert_eq!(i.next(), Some("224.0.0.2"));
     assert_eq!(i.next(), Some("224.0.0.3"));
     assert_eq!(i.next(), None);
+
+    let endpoint = EndPoint::from_str("udp/127.0.0.1:7447#bind=224.0.0.1:8080").unwrap();
+    let c = endpoint.config();
+    assert_eq!(c.get("bind"), Some("224.0.0.1:8080"));
 }
