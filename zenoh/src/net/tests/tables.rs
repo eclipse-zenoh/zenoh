@@ -29,16 +29,19 @@ use zenoh_protocol::{
     zenoh::{PushBody, Put},
 };
 
-use crate::net::{
-    primitives::{DummyPrimitives, EPrimitives, Primitives},
-    routing::{
-        dispatcher::{
-            face::{Face, FaceState},
-            pubsub::SubscriberInfo,
-            tables::Tables,
+use crate::{
+    key_expr::KeyExpr,
+    net::{
+        primitives::{DummyPrimitives, EPrimitives, Primitives},
+        routing::{
+            dispatcher::{
+                face::{Face, FaceState},
+                pubsub::SubscriberInfo,
+                tables::Tables,
+            },
+            router::*,
+            RoutingContext,
         },
-        router::*,
-        RoutingContext,
     },
 };
 
@@ -888,4 +891,28 @@ fn get_best_key_test() {
     assert_wire_expr!(get_best_key("a", "/b", &face2), { scope: 2, suffix: "" });
     assert_wire_expr!(get_best_key("a", "/d", &face2), { scope: 0, suffix: "a/d" });
     assert_wire_expr!(get_best_key("a/b", "", &face2), { scope: 2, suffix: "" });
+}
+
+#[test]
+fn big_key_expr() {
+    let config = Config::default();
+    let router = Router::new(
+        ZenohIdProto::try_from([1]).unwrap(),
+        WhatAmI::Client,
+        None,
+        &config,
+    )
+    .unwrap();
+
+    let primitives = Arc::new(DummyPrimitives {});
+    let face = router.new_primitives(primitives.clone());
+
+    let root = zread!(router.tables.tables)._get_root().clone();
+    let key_expr = KeyExpr::new(vec!["a/"; 10000].concat() + "a").unwrap();
+    let wire_expr = WireExpr::from(&**key_expr);
+    register_expr(&router.tables, &mut face.state.clone(), 1, &wire_expr);
+    let res = Resource::get_resource(&root, &key_expr).unwrap();
+    root.get_best_key(&key_expr, face.state.id);
+    res.get_best_key("/a", face.state.id + 1);
+    Resource::get_matches(&face.tables.tables.read().unwrap(), &key_expr);
 }
