@@ -27,7 +27,7 @@ use zenoh_config::{
 };
 use zenoh_keyexpr::{
     keyexpr,
-    keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, KeBoxTree},
+    keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, IKeyExprTreeNode, KeBoxTree},
 };
 use zenoh_result::ZResult;
 
@@ -598,8 +598,8 @@ impl PolicyEnforcer {
                     .action(message)
                     .deny
                     .nodes_including(keyexpr::new(&key_expr)?)
-                    .count();
-                if deny_result != 0 {
+                    .any(|n| n.weight().is_some());
+                if deny_result {
                     return Ok(Permission::Deny);
                 }
                 if self.default_permission == Permission::Allow {
@@ -610,9 +610,9 @@ impl PolicyEnforcer {
                         .action(message)
                         .allow
                         .nodes_including(keyexpr::new(&key_expr)?)
-                        .count();
+                        .any(|n| n.weight().is_some());
 
-                    if allow_result != 0 {
+                    if allow_result {
                         Ok(Permission::Allow)
                     } else {
                         Ok(Permission::Deny)
