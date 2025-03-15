@@ -168,6 +168,12 @@ impl ZSlice {
         self.len() == 0
     }
 
+    #[doc(hidden)]
+    #[inline]
+    pub fn capacity(&self) -> usize {
+        self.buf.as_slice().len()
+    }
+
     #[inline]
     #[must_use]
     pub fn as_slice(&self) -> &[u8] {
