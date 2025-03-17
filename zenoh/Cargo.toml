@@ -84,6 +84,7 @@ async-channel = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros", "time"] }
 tokio-util = { workspace = true }
 ahash = { workspace = true }
+arc-swap = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
 flume = { workspace = true }

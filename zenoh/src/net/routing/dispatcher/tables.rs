@@ -168,3 +168,18 @@ pub struct TablesLock {
     pub(crate) ctrl_lock: Mutex<Box<dyn HatTrait + Send + Sync>>,
     pub queries_lock: RwLock<()>,
 }
+
+impl TablesLock {
+    #[allow(dead_code)]
+    pub(crate) fn regen_interceptors(&self, config: &Config) -> ZResult<()> {
+        let mut tables = zwrite!(self.tables);
+        tables.interceptors = interceptor_factories(config)?;
+        drop(tables);
+        let tables = zread!(self.tables);
+        tables
+            .faces
+            .values()
+            .for_each(|face| face.set_interceptors_from_factories(&tables.interceptors));
+        Ok(())
+    }
+}
