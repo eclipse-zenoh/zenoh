@@ -442,3 +442,57 @@ async fn test_undeclare_subscribers_same_keyexpr() {
     ztimeout!(sub1.undeclare()).unwrap();
     ztimeout!(sub2.undeclare()).unwrap();
 }
+
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_subscriber_undeclare_blocks_until_callback_returns() {
+    use std::sync::atomic::AtomicBool;
+
+    let finished = Arc::new(AtomicBool::new(false));
+    let finished_sub = finished.clone();
+
+    let session1 = zenoh::open(zenoh::Config::default()).await.unwrap();
+    let ke = KeyExpr::new("test/subscriber_undeclare_blocks_until_callback_returns").unwrap();
+    let sub = session1
+        .declare_subscriber(ke.clone())
+        .callback(move |_s| {
+            std::thread::sleep(Duration::from_secs(5));
+            finished_sub.store(true, Ordering::Relaxed);
+        })
+        .await
+        .unwrap();
+
+    let session2 = zenoh::open(zenoh::Config::default()).await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+    session2.put(ke, "payload").await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+    ztimeout!(sub.undeclare()).unwrap();
+    assert!(finished.load(Ordering::Relaxed))
+}
+
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_queryable_undeclare_blocks_until_callback_returns() {
+    use std::sync::atomic::AtomicBool;
+
+    let finished = Arc::new(AtomicBool::new(false));
+    let finished_sub = finished.clone();
+
+    let session1 = zenoh::open(zenoh::Config::default()).await.unwrap();
+    let ke = KeyExpr::new("test/queryable_undeclare_blocks_until_callback_returns").unwrap();
+    let qbl = session1
+        .declare_queryable(ke.clone())
+        .callback(move |_q| {
+            std::thread::sleep(Duration::from_secs(5));
+            finished_sub.store(true, Ordering::Relaxed);
+        })
+        .await
+        .unwrap();
+
+    let session2 = zenoh::open(zenoh::Config::default()).await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+    session2.get(ke).await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+    ztimeout!(qbl.undeclare()).unwrap();
+    assert!(finished.load(Ordering::Relaxed))
+}
