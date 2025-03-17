@@ -14,6 +14,7 @@ description = { workspace = true }
 
 [features]
 tracing-instrument = []
+fix_tokio_latency = []
 
 [dependencies]
 tracing = { workspace = true }
