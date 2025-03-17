@@ -110,10 +110,6 @@ impl<'a> TcpSocketConfig<'a> {
             SocketAddr::V6(_) => TcpSocket::new_v6(),
         }?;
 
-        if let Some(bind_socket) = self.bind_socket {
-            socket.bind(bind_socket)?;
-        };
-
         if let Some(iface) = self.iface {
             zenoh_util::net::set_bind_to_device_tcp_socket(&socket, iface)?;
         }
