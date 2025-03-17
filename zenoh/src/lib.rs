@@ -352,7 +352,7 @@ pub mod handlers {
     pub use crate::api::handlers::locked;
     pub use crate::api::handlers::{
         Callback, CallbackDrop, DefaultHandler, FifoChannel, FifoChannelHandler, IntoHandler,
-        RingChannel, RingChannelHandler,
+        RingChannel, RingChannelHandler, StrongCallback, WeakCallback,
     };
     pub mod fifo {
         pub use crate::api::handlers::{

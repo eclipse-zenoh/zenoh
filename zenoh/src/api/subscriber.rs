@@ -23,8 +23,8 @@ use zenoh_result::ZResult;
 #[cfg(feature = "unstable")]
 use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
 
+use super::handlers::StrongCallback;
 use crate::api::{
-    handlers::Callback,
     key_expr::KeyExpr,
     sample::{Locality, Sample},
     session::{UndeclarableSealed, WeakSession},
@@ -36,7 +36,7 @@ pub(crate) struct SubscriberState {
     pub(crate) remote_id: Id,
     pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) origin: Locality,
-    pub(crate) callback: Callback<Sample>,
+    pub(crate) callback: StrongCallback<Sample>,
 }
 
 impl fmt::Debug for SubscriberState {
