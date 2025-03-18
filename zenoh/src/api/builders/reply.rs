@@ -132,6 +132,11 @@ impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
             ..self
         }
     }
+
+    #[cfg(feature = "unstable")]
+    fn frag_info(self, _frag_info: crate::api::sample::FragInfo) -> Self {
+        unimplemented!();
+    }
 }
 
 #[zenoh_macros::internal_trait]

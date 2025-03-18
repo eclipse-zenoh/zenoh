@@ -89,6 +89,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             timestamp: None,
             encoding: Encoding::empty(),
             ext_sinfo: None,
+            ext_finfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
             ext_attachment: None,
@@ -135,6 +136,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             timestamp: None,
             encoding: Encoding::empty(),
             ext_sinfo: None,
+            ext_finfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
             ext_attachment: None,
@@ -176,6 +178,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             timestamp: None,
             encoding: Encoding::empty(),
             ext_sinfo: None,
+            ext_finfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
             ext_attachment: None,
@@ -217,6 +220,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             timestamp: None,
             encoding: Encoding::empty(),
             ext_sinfo: None,
+            ext_finfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
             ext_attachment: None,
@@ -245,6 +249,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             timestamp: None,
             encoding: Encoding::empty(),
             ext_sinfo: None,
+            ext_finfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
             ext_attachment: None,
@@ -284,6 +289,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             timestamp: None,
             encoding: Encoding::empty(),
             ext_sinfo: None,
+            ext_finfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
             ext_attachment: None,

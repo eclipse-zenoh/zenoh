@@ -32,6 +32,12 @@ use crate::api::{
 /// The sequence number of the [`Sample`] from the source.
 pub type SourceSn = u32;
 
+/// The total number of fragments for the [`Sample`] fragment.
+pub type FragCount = u32;
+
+/// The fragment number of the [`Sample`] fragment.
+pub type FragNum = u32;
+
 /// The locality of samples to be received by subscribers or targeted by publishers.
 #[zenoh_macros::unstable]
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -77,6 +83,8 @@ pub(crate) struct DataInfo {
     pub timestamp: Option<Timestamp>,
     pub source_id: Option<EntityGlobalId>,
     pub source_sn: Option<SourceSn>,
+    pub frag_count: Option<FragCount>,
+    pub frag_num: Option<FragNum>,
     pub qos: QoS,
 }
 
@@ -124,6 +132,11 @@ impl DataInfoIntoSample for DataInfo {
                 source_id: self.source_id,
                 source_sn: self.source_sn,
             },
+            #[cfg(feature = "unstable")]
+            frag_info: FragInfo {
+                frag_count: self.frag_count,
+                frag_num: self.frag_num,
+            },
             attachment,
         }
     }
@@ -162,6 +175,8 @@ impl DataInfoIntoSample for Option<DataInfo> {
                 reliability,
                 #[cfg(feature = "unstable")]
                 source_info: SourceInfo::empty(),
+                #[cfg(feature = "unstable")]
+                frag_info: FragInfo::empty(),
                 attachment,
             }
         }
@@ -268,6 +283,102 @@ impl Default for SourceInfo {
     }
 }
 
+/// Information on the fragmentation of a zenoh [`Sample`].
+#[zenoh_macros::unstable]
+#[derive(Debug, Clone)]
+pub struct FragInfo {
+    pub(crate) frag_count: Option<FragCount>,
+    pub(crate) frag_num: Option<FragNum>,
+}
+
+#[zenoh_macros::unstable]
+impl FragInfo {
+    #[zenoh_macros::unstable]
+    /// Build a new [`SourceInfo`].
+    pub fn new(frag_count: Option<FragCount>, frag_num: Option<FragNum>) -> Self {
+        Self {
+            frag_count,
+            frag_num,
+        }
+    }
+
+    #[zenoh_macros::unstable]
+    /// The total number of fragments for the [`Sample`] fragment.
+    pub fn frag_count(&self) -> Option<FragCount> {
+        self.frag_count
+    }
+
+    #[zenoh_macros::unstable]
+    /// The fragment number of the [`Sample`] fragment.
+    pub fn frag_num(&self) -> Option<FragNum> {
+        self.frag_num
+    }
+}
+
+#[test]
+#[cfg(feature = "unstable")]
+fn frag_info_stack_size() {
+    use crate::api::sample::{FragCount, FragInfo, FragNum};
+
+    assert_eq!(std::mem::size_of::<Option<FragCount>>(), 8);
+    assert_eq!(std::mem::size_of::<Option<FragNum>>(), 8);
+    assert_eq!(std::mem::size_of::<FragInfo>(), 16);
+}
+
+#[zenoh_macros::unstable]
+impl FragInfo {
+    pub(crate) fn empty() -> Self {
+        FragInfo {
+            frag_count: None,
+            frag_num: None,
+        }
+    }
+    pub(crate) fn is_empty(&self) -> bool {
+        self.frag_count.is_none() && self.frag_num.is_none()
+    }
+}
+
+#[zenoh_macros::unstable]
+impl From<FragInfo> for Option<zenoh_protocol::zenoh::put::ext::FragInfoType> {
+    fn from(frag_info: FragInfo) -> Option<zenoh_protocol::zenoh::put::ext::FragInfoType> {
+        if frag_info.is_empty() {
+            None
+        } else {
+            Some(zenoh_protocol::zenoh::put::ext::FragInfoType {
+                fcount: frag_info.frag_count.unwrap_or_default(),
+                fnum: frag_info.frag_num.unwrap_or_default(),
+            })
+        }
+    }
+}
+
+#[zenoh_macros::unstable]
+impl From<DataInfo> for FragInfo {
+    fn from(data_info: DataInfo) -> Self {
+        FragInfo {
+            frag_count: data_info.frag_count,
+            frag_num: data_info.frag_num,
+        }
+    }
+}
+
+#[zenoh_macros::unstable]
+impl From<Option<DataInfo>> for FragInfo {
+    fn from(data_info: Option<DataInfo>) -> Self {
+        match data_info {
+            Some(data_info) => data_info.into(),
+            None => FragInfo::empty(),
+        }
+    }
+}
+
+#[zenoh_macros::unstable]
+impl Default for FragInfo {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
 /// The kind of a `Sample`.
 #[repr(u8)]
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -350,6 +461,8 @@ pub struct Sample {
     pub(crate) reliability: Reliability,
     #[cfg(feature = "unstable")]
     pub(crate) source_info: SourceInfo,
+    #[cfg(feature = "unstable")]
+    pub(crate) frag_info: FragInfo,
     pub(crate) attachment: Option<ZBytes>,
 }
 
@@ -418,6 +531,13 @@ impl Sample {
         &self.source_info
     }
 
+    /// Gets infos on the fragmentation of this Sample.
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn frag_info(&self) -> &FragInfo {
+        &self.frag_info
+    }
+
     /// Gets the sample attachment: a map of key-value pairs, where each key and value are byte-slices.
     #[inline]
     pub fn attachment(&self) -> Option<&ZBytes> {
@@ -444,6 +564,8 @@ impl Sample {
             reliability: Reliability::default(),
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
+            #[cfg(feature = "unstable")]
+            frag_info: FragInfo::empty(),
             attachment: None,
         }
     }

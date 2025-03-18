@@ -22,6 +22,8 @@ use zenoh_protocol::core::CongestionControl;
 use zenoh_protocol::core::Reliability;
 
 #[cfg(feature = "unstable")]
+use crate::api::sample::FragInfo;
+#[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
 use crate::{
     api::{
@@ -87,6 +89,8 @@ pub struct PublicationBuilder<P, T> {
     pub(crate) timestamp: Option<uhlc::Timestamp>,
     #[cfg(feature = "unstable")]
     pub(crate) source_info: SourceInfo,
+    #[cfg(feature = "unstable")]
+    pub(crate) frag_info: FragInfo,
     pub(crate) attachment: Option<ZBytes>,
 }
 
@@ -182,6 +186,10 @@ impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
             ..self
         }
     }
+    #[cfg(feature = "unstable")]
+    fn frag_info(self, frag_info: FragInfo) -> Self {
+        Self { frag_info, ..self }
+    }
     fn attachment<TA: Into<OptionZBytes>>(self, attachment: TA) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
@@ -223,6 +231,8 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
+            #[cfg(feature = "unstable")]
+            self.frag_info,
             self.attachment,
         )
     }
@@ -246,6 +256,8 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDel
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
+            #[cfg(feature = "unstable")]
+            self.frag_info,
             self.attachment,
         )
     }
@@ -509,6 +521,8 @@ impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
+            #[cfg(feature = "unstable")]
+            self.frag_info,
             self.attachment,
         )
     }
@@ -530,6 +544,8 @@ impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
+            #[cfg(feature = "unstable")]
+            self.frag_info,
             self.attachment,
         )
     }

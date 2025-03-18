@@ -238,6 +238,11 @@ impl<Handler> SampleBuilderTrait for QuerierGetBuilder<'_, '_, Handler> {
         }
     }
 
+    #[zenoh_macros::unstable]
+    fn frag_info(self, _frag_info: crate::api::sample::FragInfo) -> Self {
+        unimplemented!();
+    }
+
     fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {

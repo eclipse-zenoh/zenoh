@@ -312,6 +312,7 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
                 timestamp: None,
                 encoding: Encoding::empty(),
                 ext_sinfo: None,
+                ext_finfo: None,
                 #[cfg(feature = "shared-memory")]
                 ext_shm: None,
                 ext_attachment: None,

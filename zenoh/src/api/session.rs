@@ -78,7 +78,7 @@ use crate::api::{
     matching::{MatchingListenerState, MatchingStatus, MatchingStatusType},
     querier::QuerierState,
     query::ReplyKeyExpr,
-    sample::SourceInfo,
+    sample::{FragInfo, SourceInfo},
 };
 use crate::{
     api::{
@@ -1162,6 +1162,8 @@ impl Session {
             attachment: None,
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
+            #[cfg(feature = "unstable")]
+            frag_info: FragInfo::empty(),
         }
     }
 
@@ -1196,6 +1198,8 @@ impl Session {
             attachment: None,
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
+            #[cfg(feature = "unstable")]
+            frag_info: FragInfo::empty(),
         }
     }
     /// Query data from the matching queryables in the system.
@@ -1840,6 +1844,8 @@ impl SessionInner {
                             reliability: Reliability::Reliable,
                             #[cfg(feature = "unstable")]
                             source_info: SourceInfo::empty(),
+                            #[cfg(feature = "unstable")]
+                            frag_info: FragInfo::empty(),
                             attachment: None,
                         });
                     }
@@ -2173,6 +2179,7 @@ impl SessionInner {
         #[cfg(feature = "unstable")] reliability: Reliability,
         timestamp: Option<uhlc::Timestamp>,
         #[cfg(feature = "unstable")] source_info: SourceInfo,
+        #[cfg(feature = "unstable")] frag_info: FragInfo,
         attachment: Option<ZBytes>,
     ) -> ZResult<()> {
         trace!("write({:?}, [...])", key_expr);
@@ -2188,6 +2195,10 @@ impl SessionInner {
                     ext_sinfo: source_info.clone().into(),
                     #[cfg(not(feature = "unstable"))]
                     ext_sinfo: None,
+                    #[cfg(feature = "unstable")]
+                    ext_finfo: frag_info.clone().into(),
+                    #[cfg(not(feature = "unstable"))]
+                    ext_finfo: None,
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,
                     ext_attachment: attachment.clone().map(|a| a.into()),
@@ -2248,6 +2259,14 @@ impl SessionInner {
                 source_sn: source_info.source_sn,
                 #[cfg(not(feature = "unstable"))]
                 source_sn: None,
+                #[cfg(feature = "unstable")]
+                frag_count: frag_info.frag_count,
+                #[cfg(not(feature = "unstable"))]
+                frag_count: None,
+                #[cfg(feature = "unstable")]
+                frag_num: frag_info.frag_num,
+                #[cfg(not(feature = "unstable"))]
+                frag_num: None,
                 qos: QoS::from(push::ext::QoSType::new(
                     priority.into(),
                     congestion_control,
@@ -2696,6 +2715,8 @@ impl Primitives for WeakSession {
                                         reliability: Reliability::Reliable,
                                         #[cfg(feature = "unstable")]
                                         source_info: SourceInfo::empty(),
+                                        #[cfg(feature = "unstable")]
+                                        frag_info: FragInfo::empty(),
                                         attachment: None,
                                     }),
                                     #[cfg(feature = "unstable")]
@@ -2807,6 +2828,8 @@ impl Primitives for WeakSession {
                     qos: QoS::from(msg.ext_qos),
                     source_id: m.ext_sinfo.as_ref().map(|i| i.id.into()),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn),
+                    frag_count: m.ext_finfo.as_ref().map(|i| i.fcount),
+                    frag_num: m.ext_finfo.as_ref().map(|i| i.fnum),
                 };
                 self.execute_subscriber_callbacks(
                     false,
@@ -2827,6 +2850,8 @@ impl Primitives for WeakSession {
                     qos: QoS::from(msg.ext_qos),
                     source_id: m.ext_sinfo.as_ref().map(|i| i.id.into()),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn),
+                    frag_count: None,
+                    frag_num: None,
                 };
                 self.execute_subscriber_callbacks(
                     false,
@@ -2925,6 +2950,7 @@ impl Primitives for WeakSession {
                                 timestamp,
                                 encoding,
                                 ext_sinfo,
+                                ext_finfo,
                                 ext_attachment: _attachment,
                                 payload,
                                 ..
@@ -2937,6 +2963,8 @@ impl Primitives for WeakSession {
                                     qos: QoS::from(msg.ext_qos),
                                     source_id: ext_sinfo.as_ref().map(|i| i.id.into()),
                                     source_sn: ext_sinfo.as_ref().map(|i| i.sn),
+                                    frag_count: ext_finfo.as_ref().map(|i| i.fcount),
+                                    frag_num: ext_finfo.as_ref().map(|i| i.fnum),
                                 },
                                 attachment: _attachment.map(Into::into),
                             },
@@ -2954,6 +2982,8 @@ impl Primitives for WeakSession {
                                     qos: QoS::from(msg.ext_qos),
                                     source_id: ext_sinfo.as_ref().map(|i| i.id.into()),
                                     source_sn: ext_sinfo.as_ref().map(|i| i.sn),
+                                    frag_count: None,
+                                    frag_num: None,
                                 },
                                 attachment: _attachment.map(Into::into),
                             },

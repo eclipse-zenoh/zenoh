@@ -195,6 +195,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
                 timestamp: None,
                 encoding: Encoding::empty(),
                 ext_sinfo: None,
+                ext_finfo: None,
                 #[cfg(feature = "shared-memory")]
                 ext_shm: None,
                 ext_attachment: None,
@@ -297,6 +298,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
                 timestamp: None,
                 encoding: Encoding::empty(),
                 ext_sinfo: None,
+                ext_finfo: None,
                 #[cfg(feature = "shared-memory")]
                 ext_shm: None,
                 ext_attachment: None,

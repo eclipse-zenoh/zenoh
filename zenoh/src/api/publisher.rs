@@ -33,7 +33,7 @@ use {
         builders::matching_listener::MatchingListenerBuilder,
         handlers::DefaultHandler,
         matching::{MatchingStatus, MatchingStatusType},
-        sample::SourceInfo,
+        sample::{FragInfo, SourceInfo},
     },
     std::{collections::HashSet, sync::Arc, sync::Mutex},
     zenoh_config::wrappers::EntityGlobalId,
@@ -196,6 +196,8 @@ impl<'a> Publisher<'a> {
             timestamp: None,
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
+            #[cfg(feature = "unstable")]
+            frag_info: FragInfo::empty(),
             attachment: None,
         }
     }
@@ -219,6 +221,8 @@ impl<'a> Publisher<'a> {
             timestamp: None,
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
+            #[cfg(feature = "unstable")]
+            frag_info: FragInfo::empty(),
             attachment: None,
         }
     }
@@ -405,6 +409,8 @@ impl Sink<Sample> for Publisher<'_> {
             None,
             #[cfg(feature = "unstable")]
             SourceInfo::empty(),
+            #[cfg(feature = "unstable")]
+            FragInfo::empty(),
             attachment,
         )
     }
