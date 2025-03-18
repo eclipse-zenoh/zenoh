@@ -14,10 +14,9 @@
 
 #![cfg(feature = "internal_config")]
 
-use std::process::Command;
-use std::sync::OnceLock;
-use zenoh::Session;
-use zenoh::Wait;
+use std::{process::Command, sync::OnceLock};
+
+use zenoh::{Session, Wait};
 
 static SESSION: OnceLock<Session> = OnceLock::new();
 
