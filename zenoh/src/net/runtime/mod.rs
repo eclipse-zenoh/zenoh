@@ -541,7 +541,19 @@ impl TransportPeerEventHandler for RuntimeMulticastSession {
 impl Closee for Arc<RuntimeState> {
     async fn close_inner(&self) {
         tracing::trace!("Runtime::close())");
-        // TODO: Plugins should be stopped
+
+        #[cfg(feature = "plugins")]
+        {
+            let mut res = self
+                .plugins_manager
+                .lock()
+                .expect("Unable to lock plugins manager");
+
+            for plugin in res.started_plugins_iter_mut() {
+                plugin.stop();
+            }
+        }
+
         // TODO: Check this whether is able to terminate all spawned task by Runtime::spawn
         self.task_controller.terminate_all_async().await;
         self.manager.close().await;
