@@ -11,44 +11,43 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh_link::{LinkAuthId, LinkAuthType};
+use zenoh_link::LinkAuthId;
 
 #[cfg(feature = "auth_usrpwd")]
 use super::establishment::ext::auth::UsrPwdId;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum AuthId {
-    CertCommonName(String),
-    Username(String),
-    None,
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
+pub struct TransportAuthId {
+    username: Option<String>,
+    link_auth_ids: Vec<LinkAuthId>,
 }
 
-impl From<LinkAuthId> for AuthId {
-    fn from(lid: LinkAuthId) -> Self {
-        match (lid.get_type(), lid.get_value()) {
-            (LinkAuthType::Tls | LinkAuthType::Quic, Some(auth_value)) => {
-                AuthId::CertCommonName(auth_value.clone())
-            }
-            _ => AuthId::None,
-        }
-    }
-}
-
-#[cfg(feature = "auth_usrpwd")]
-impl From<UsrPwdId> for AuthId {
-    fn from(user_password_id: UsrPwdId) -> Self {
-        match user_password_id.0 {
-            Some(username) => {
-                // Convert username from Vec<u8> to String
-                match std::str::from_utf8(&username) {
-                    Ok(name) => AuthId::Username(name.to_owned()),
-                    Err(e) => {
-                        tracing::error!("Error in extracting username {}", e);
-                        AuthId::None
-                    }
+impl TransportAuthId {
+    #[cfg(feature = "auth_usrpwd")]
+    pub(crate) fn set_username(&mut self, user_pwd_id: &UsrPwdId) {
+        self.username = if let Some(username) = &user_pwd_id.0 {
+            // Convert username from Vec<u8> to String
+            match std::str::from_utf8(&username) {
+                Ok(name) => Some(name.to_owned()),
+                Err(e) => {
+                    tracing::error!("Error in extracting username {}", e);
+                    None
                 }
             }
-            None => AuthId::None,
+        } else {
+            None
         }
+    }
+
+    pub(crate) fn push_link_auth_id(&mut self, link_auth_id: LinkAuthId) {
+        self.link_auth_ids.push(link_auth_id);
+    }
+
+    pub fn username(&self) -> Option<&String> {
+        self.username.as_ref()
+    }
+
+    pub fn link_auth_ids(&self) -> &Vec<LinkAuthId> {
+        &self.link_auth_ids
     }
 }

@@ -24,6 +24,7 @@ use itertools::Itertools;
 use zenoh_config::{
     AclConfig, AclMessage, CertCommonName, InterceptorFlow, Interface, Permission, Username,
 };
+use zenoh_link::LinkAuthId;
 use zenoh_protocol::{
     core::ZenohIdProto,
     network::{
@@ -33,10 +34,7 @@ use zenoh_protocol::{
     zenoh::{PushBody, RequestBody},
 };
 use zenoh_result::ZResult;
-use zenoh_transport::{
-    multicast::TransportMulticast,
-    unicast::{authentication::AuthId, TransportUnicast},
-};
+use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 use super::{
     authorization::PolicyEnforcer, EgressInterceptor, IngressInterceptor, InterceptorFactory,
@@ -104,21 +102,24 @@ impl InterceptorFactoryTrait for AclEnforcer {
         };
 
         let mut cert_common_names = Vec::new();
-        let mut username = None;
+        let username = auth_ids.username().cloned().map(|v| Username(v));
 
-        for auth_id in auth_ids {
+        for auth_id in auth_ids.link_auth_ids() {
             match auth_id {
-                AuthId::CertCommonName(value) => {
-                    cert_common_names.push(Some(CertCommonName(value)));
+                LinkAuthId::Tls(value) => {
+                    cert_common_names.push(value.as_ref().map(|v| CertCommonName(v.clone())));
                 }
-                AuthId::Username(value) => {
-                    if username.is_some() {
-                        tracing::error!("Transport should not report more than one username");
-                        return (None, None);
-                    }
-                    username = Some(Username(value));
+                LinkAuthId::Quic(value) => {
+                    cert_common_names.push(value.as_ref().map(|v| CertCommonName(v.clone())));
                 }
-                AuthId::None => {}
+                LinkAuthId::Tcp => {}
+                LinkAuthId::Udp => {}
+                LinkAuthId::Serial => {}
+                LinkAuthId::UnixPipe => {}
+                LinkAuthId::UnixSockStream => {}
+                LinkAuthId::VSock => {}
+                LinkAuthId::WebSocket => {}
+                LinkAuthId::None => {}
             }
         }
         if cert_common_names.is_empty() {
