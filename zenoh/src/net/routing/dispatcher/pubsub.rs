@@ -14,18 +14,18 @@
 
 #[zenoh_macros::unstable]
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::{ops::Not, sync::Arc};
 
 use zenoh_core::zread;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, Reliability, WireExpr},
-    network::{declare::SubscriberId, push::ext, Push},
+    network::{declare::SubscriberId, push::ext, NetworkBodyMut, NetworkMessageMut, Push},
     zenoh::PushBody,
 };
 use zenoh_sync::get_mut_unchecked;
 
 use super::{
-    face::FaceState,
+    face::{Face, FaceState},
     resource::{Direction, Resource},
     tables::{NodeId, Route, RoutingExpr, Tables, TablesLock},
 };
@@ -33,7 +33,9 @@ use super::{
 use crate::key_expr::KeyExpr;
 use crate::net::routing::{
     hat::{HatTrait, SendDeclare},
+    interceptor::InterceptorTrait,
     router::get_or_set_route,
+    RoutingContext,
 };
 
 #[derive(Copy, Clone)]
@@ -281,13 +283,13 @@ macro_rules! inc_stats {
 #[allow(clippy::too_many_arguments)]
 pub fn route_data(
     tables_ref: &Arc<TablesLock>,
-    face: &FaceState,
+    face: &Face,
     msg: &mut Push,
     reliability: Reliability,
 ) {
     let tables = zread!(tables_ref.tables);
     match tables
-        .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
+        .get_mapping(&face.state, &msg.wire_expr.scope, msg.wire_expr.mapping)
         .cloned()
     {
         Some(prefix) => {
@@ -297,6 +299,25 @@ pub fn route_data(
                 prefix.expr(),
                 msg.wire_expr.suffix.as_ref()
             );
+
+            if let Some(interceptor) = face
+                .state
+                .in_interceptors
+                .as_ref()
+                .map(|i| i.load())
+                .and_then(|i| i.is_empty().not().then_some(i))
+            {
+                let cache = prefix.get_ingress_cache(&face);
+                let ctx = &mut RoutingContext::new(NetworkMessageMut {
+                    body: NetworkBodyMut::Push(msg),
+                    reliability,
+                });
+
+                if !interceptor.intercept(ctx, cache) {
+                    return;
+                }
+            };
+
             let mut expr = RoutingExpr::new(&prefix, msg.wire_expr.suffix.as_ref());
 
             #[cfg(feature = "stats")]
@@ -308,10 +329,19 @@ pub fn route_data(
                 inc_stats!(face, rx, admin, msg.payload);
             }
 
-            if tables.hat_code.ingress_filter(&tables, face, &mut expr) {
+            if tables
+                .hat_code
+                .ingress_filter(&tables, &face.state, &mut expr)
+            {
                 let res = Resource::get_resource(&prefix, expr.suffix);
 
-                let route = get_data_route(&tables, face, &res, &mut expr, msg.ext_nodeid.node_id);
+                let route = get_data_route(
+                    &tables,
+                    &face.state,
+                    &res,
+                    &mut expr,
+                    msg.ext_nodeid.node_id,
+                );
 
                 if !route.is_empty() {
                     treat_timestamp!(&tables.hlc, msg.payload, tables.drop_future_timestamp);
@@ -320,7 +350,7 @@ pub fn route_data(
                         let (outface, key_expr, context) = route.values().next().unwrap();
                         if tables
                             .hat_code
-                            .egress_filter(&tables, face, outface, &mut expr)
+                            .egress_filter(&tables, &face.state, outface, &mut expr)
                         {
                             drop(tables);
                             #[cfg(feature = "stats")]
@@ -337,9 +367,12 @@ pub fn route_data(
                         let route = route
                             .values()
                             .filter(|(outface, _key_expr, _context)| {
-                                tables
-                                    .hat_code
-                                    .egress_filter(&tables, face, outface, &mut expr)
+                                tables.hat_code.egress_filter(
+                                    &tables,
+                                    &face.state,
+                                    outface,
+                                    &mut expr,
+                                )
                             })
                             .cloned()
                             .collect::<Vec<Direction>>();
