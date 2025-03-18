@@ -435,7 +435,7 @@ pub mod session {
 /// than using getter methods.
 pub mod sample {
     #[zenoh_macros::unstable]
-    pub use crate::api::sample::{SourceInfo, SourceSn};
+    pub use crate::api::sample::{FragCount, FragInfo, FragNum, SourceInfo, SourceSn};
     pub use crate::api::{
         builders::sample::{
             SampleBuilder, SampleBuilderAny, SampleBuilderDelete, SampleBuilderPut,

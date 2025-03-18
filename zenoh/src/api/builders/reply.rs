@@ -23,7 +23,7 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 
 #[zenoh_macros::unstable]
-use crate::api::sample::SourceInfo;
+use crate::api::sample::{FragInfo, SourceInfo};
 use crate::api::{
     builders::sample::{
         EncodingBuilderTrait, QoSBuilderTrait, SampleBuilder, SampleBuilderTrait,
@@ -135,6 +135,11 @@ impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
             source_info: source_info.into(),
             ..self
         }
+    }
+
+    #[cfg(feature = "unstable")]
+    fn frag_info<TF: Into<Option<FragInfo>>>(self, _frag_info: TF) -> Self {
+        unimplemented!();
     }
 }
 

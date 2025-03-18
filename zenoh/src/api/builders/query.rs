@@ -25,7 +25,10 @@ use crate::api::cancellation::CancellationTokenBuilderTrait;
 #[cfg(feature = "unstable")]
 use crate::api::query::ReplyKeyExpr;
 #[cfg(feature = "unstable")]
-use crate::api::{sample::SourceInfo, selector::ZenohParameters};
+use crate::api::{
+    sample::{FragInfo, SourceInfo},
+    selector::ZenohParameters,
+};
 use crate::{
     api::{
         builders::sample::{EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait},
@@ -91,6 +94,11 @@ impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
             source_info: source_info.into(),
             ..self
         }
+    }
+
+    #[zenoh_macros::unstable]
+    fn frag_info<TF: Into<Option<FragInfo>>>(self, _frag_info: TF) -> Self {
+        unimplemented!();
     }
 
     fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self {

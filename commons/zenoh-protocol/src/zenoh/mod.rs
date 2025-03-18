@@ -172,6 +172,32 @@ pub mod ext {
         }
     }
 
+    /// ```text
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// %    fcount     %
+    /// +---------------+
+    /// %     fnum      %
+    /// +---------------+
+    /// ```
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    pub struct FragInfoType<const ID: u8> {
+        pub fcount: u32,
+        pub fnum: u32,
+    }
+
+    impl<const ID: u8> FragInfoType<{ ID }> {
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+
+            let fcount: u32 = rng.gen();
+            let fnum: u32 = rng.gen();
+            Self { fcount, fnum }
+        }
+    }
+
     ///  7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
     /// +-+-+-+-+-+-+-+-+

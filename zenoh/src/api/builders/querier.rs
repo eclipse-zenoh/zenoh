@@ -29,7 +29,7 @@ use crate::api::cancellation::{CancellationTokenBuilderTrait, SyncGroup};
 #[cfg(feature = "unstable")]
 use crate::api::query::ReplyKeyExpr;
 #[cfg(feature = "unstable")]
-use crate::api::sample::SourceInfo;
+use crate::api::sample::{FragInfo, SourceInfo};
 #[cfg(feature = "unstable")]
 use crate::query::ZenohParameters;
 use crate::{
@@ -297,6 +297,11 @@ impl<Handler> SampleBuilderTrait for QuerierGetBuilder<'_, '_, Handler> {
             source_info: source_info.into(),
             ..self
         }
+    }
+
+    #[zenoh_macros::unstable]
+    fn frag_info<TF: Into<Option<FragInfo>>>(self, _frag_info: TF) -> Self {
+        unimplemented!();
     }
 
     fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self {

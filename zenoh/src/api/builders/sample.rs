@@ -31,6 +31,8 @@ use crate::pubsub::{
     PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, Publisher,
 };
 #[cfg(feature = "unstable")]
+use crate::sample::FragInfo;
+#[cfg(feature = "unstable")]
 use crate::sample::SourceInfo;
 pub trait QoSBuilderTrait {
     /// Change the `congestion_control` to apply when routing the data.
@@ -52,6 +54,9 @@ pub trait SampleBuilderTrait {
     /// Attach source information
     #[zenoh_macros::unstable]
     fn source_info<T: Into<Option<SourceInfo>>>(self, source_info: T) -> Self;
+    /// Attach fragmentation information
+    #[zenoh_macros::unstable]
+    fn frag_info<T: Into<Option<FragInfo>>>(self, frag_info: T) -> Self;
     /// Attach user-provided data in key-value format
     fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self;
 }
@@ -108,6 +113,8 @@ impl SampleBuilder<SampleBuilderPut> {
                 reliability: Reliability::DEFAULT,
                 #[cfg(feature = "unstable")]
                 source_info: None,
+                #[cfg(feature = "unstable")]
+                frag_info: None,
                 attachment: None,
             },
             _t: PhantomData::<SampleBuilderPut>,
@@ -140,6 +147,8 @@ impl SampleBuilder<SampleBuilderDelete> {
                 reliability: Reliability::DEFAULT,
                 #[cfg(feature = "unstable")]
                 source_info: None,
+                #[cfg(feature = "unstable")]
+                frag_info: None,
                 attachment: None,
             },
             _t: PhantomData::<SampleBuilderDelete>,
@@ -202,6 +211,17 @@ impl<T> SampleBuilderTrait for SampleBuilder<T> {
         Self {
             sample: Sample {
                 source_info: source_info.into(),
+                ..self.sample
+            },
+            _t: PhantomData::<T>,
+        }
+    }
+
+    #[cfg(feature = "unstable")]
+    fn frag_info<F: Into<Option<FragInfo>>>(self, frag_info: F) -> Self {
+        Self {
+            sample: Sample {
+                frag_info: frag_info.into(),
                 ..self.sample
             },
             _t: PhantomData::<T>,
@@ -320,6 +340,8 @@ impl From<&PublicationBuilder<&Publisher<'_>, PublicationBuilderPut>> for Sample
             reliability: builder.publisher.reliability,
             #[cfg(feature = "unstable")]
             source_info: builder.source_info.clone(),
+            #[cfg(feature = "unstable")]
+            frag_info: builder.frag_info.clone(),
             attachment: builder.attachment.clone(),
         }
     }
@@ -343,6 +365,8 @@ impl From<&PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete>> for Sam
             reliability: builder.publisher.reliability,
             #[cfg(feature = "unstable")]
             source_info: builder.source_info.clone(),
+            #[cfg(feature = "unstable")]
+            frag_info: builder.frag_info.clone(),
             attachment: builder.attachment.clone(),
         }
     }

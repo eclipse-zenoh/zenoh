@@ -221,6 +221,50 @@ where
     }
 }
 
+// Extension: FragInfo
+impl<const ID: u8> LCodec<&ext::FragInfoType<{ ID }>> for Zenoh080 {
+    fn w_len(self, x: &ext::FragInfoType<{ ID }>) -> usize {
+        let ext::FragInfoType { fcount, fnum } = x;
+
+        1 + self.w_len(*fcount) + self.w_len(*fnum)
+    }
+}
+
+impl<W, const ID: u8> WCodec<(&ext::FragInfoType<{ ID }>, bool), &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: (&ext::FragInfoType<{ ID }>, bool)) -> Self::Output {
+        let (x, more) = x;
+        let ext::FragInfoType { fcount, fnum } = x;
+
+        let header: ZExtZBufHeader<{ ID }> = ZExtZBufHeader::new(self.w_len(x));
+        self.write(&mut *writer, (&header, more))?;
+
+        self.write(&mut *writer, fcount)?;
+        self.write(&mut *writer, fnum)?;
+        Ok(())
+    }
+}
+
+impl<R, const ID: u8> RCodec<(ext::FragInfoType<{ ID }>, bool), &mut R> for Zenoh080Header
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<(ext::FragInfoType<{ ID }>, bool), Self::Error> {
+        let (_, more): (ZExtZBufHeader<{ ID }>, bool) = self.read(&mut *reader)?;
+
+        let fcount: u32 = self.codec.read(&mut *reader)?;
+        let fnum: u32 = self.codec.read(&mut *reader)?;
+
+        Ok((ext::FragInfoType { fcount, fnum }, more))
+    }
+}
+
 // Extension: Shm
 #[cfg(feature = "shared-memory")]
 impl<W, const ID: u8> WCodec<(&ext::ShmType<{ ID }>, bool), &mut W> for Zenoh080

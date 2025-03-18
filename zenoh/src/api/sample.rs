@@ -36,6 +36,14 @@ use crate::api::{
 #[zenoh_macros::unstable]
 pub type SourceSn = u32;
 
+#[zenoh_macros::unstable]
+/// The fragment count of the [`Sample`] fragment.
+pub type FragCount = u32;
+
+/// The fragment number of the [`Sample`] fragment.
+#[zenoh_macros::unstable]
+pub type FragNum = u32;
+
 /// The locality of samples/queries to be received by subscribers/queryables or targeted by publishers/queriers.
 ///
 /// There are queryable's [`allowed_origin`](crate::query::QueryableBuilder::allowed_origin) and
@@ -43,6 +51,7 @@ pub type SourceSn = u32;
 /// publishers's [`allowed_destination`](crate::pubsub::PublisherBuilder::allowed_destination) and
 /// querier's [`allowed_destination`](crate::query::QuerierBuilder::allowed_destination) settings
 /// which allows to restrict the connection to only local or only remote entities.
+/// The total number of fragments for the [`Sample`] fragment.
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Locality {
     /// Request / serve data only to entities in the same session
@@ -122,6 +131,58 @@ impl<const ID: u8> From<SourceInfo> for zenoh_protocol::zenoh::ext::SourceInfoTy
         zenoh_protocol::zenoh::ext::SourceInfoType {
             id: value.source_id.into(),
             sn: value.source_sn,
+        }
+    }
+}
+
+/// Information on the fragmentation of a zenoh [`Sample`].
+#[zenoh_macros::unstable]
+#[derive(Debug, Clone)]
+pub struct FragInfo {
+    pub(crate) frag_count: FragCount,
+    pub(crate) frag_num: FragNum,
+}
+
+#[zenoh_macros::unstable]
+impl FragInfo {
+    #[zenoh_macros::unstable]
+    /// Build a new [`SourceInfo`].
+    pub fn new(frag_count: FragCount, frag_num: FragNum) -> Self {
+        Self {
+            frag_count,
+            frag_num,
+        }
+    }
+
+    #[zenoh_macros::unstable]
+    /// The total number of fragments for the [`Sample`] fragment.
+    pub fn frag_count(&self) -> FragCount {
+        self.frag_count
+    }
+
+    #[zenoh_macros::unstable]
+    /// The fragment number of the [`Sample`] fragment.
+    pub fn frag_num(&self) -> FragNum {
+        self.frag_num
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<const ID: u8> From<zenoh_protocol::zenoh::ext::FragInfoType<ID>> for FragInfo {
+    fn from(value: zenoh_protocol::zenoh::ext::FragInfoType<ID>) -> Self {
+        FragInfo {
+            frag_count: value.fcount,
+            frag_num: value.fnum,
+        }
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<const ID: u8> From<FragInfo> for zenoh_protocol::zenoh::ext::FragInfoType<ID> {
+    fn from(value: FragInfo) -> Self {
+        zenoh_protocol::zenoh::ext::FragInfoType {
+            fcount: value.frag_count,
+            fnum: value.frag_num,
         }
     }
 }
@@ -234,6 +295,8 @@ pub struct Sample {
     pub(crate) reliability: Reliability,
     #[cfg(feature = "unstable")]
     pub(crate) source_info: Option<SourceInfo>,
+    #[cfg(feature = "unstable")]
+    pub(crate) frag_info: Option<FragInfo>,
     pub(crate) attachment: Option<ZBytes>,
 }
 
@@ -302,6 +365,13 @@ impl Sample {
         self.source_info.as_ref()
     }
 
+    /// Gets infos on the fragmentation of this Sample.
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn frag_info(&self) -> Option<&FragInfo> {
+        self.frag_info.as_ref()
+    }
+
     /// Gets the sample attachment: a map of key-value pairs, where each key and each value is a byte-slice.
     #[inline]
     pub fn attachment(&self) -> Option<&ZBytes> {
@@ -328,6 +398,8 @@ impl Sample {
             reliability: Reliability::default(),
             #[cfg(feature = "unstable")]
             source_info: None,
+            #[cfg(feature = "unstable")]
+            frag_info: None,
             attachment: None,
         }
     }
@@ -350,6 +422,8 @@ impl Sample {
                 reliability,
                 #[cfg(feature = "unstable")]
                 source_info: put.ext_sinfo.map(Into::into),
+                #[cfg(feature = "unstable")]
+                frag_info: put.ext_finfo.map(Into::into),
                 attachment: mem::take(&mut put.ext_attachment).map(Into::into),
             },
             PushBody::Del(del) => Self {
@@ -363,6 +437,8 @@ impl Sample {
                 reliability,
                 #[cfg(feature = "unstable")]
                 source_info: del.ext_sinfo.map(Into::into),
+                #[cfg(feature = "unstable")]
+                frag_info: None,
                 attachment: mem::take(&mut del.ext_attachment).map(Into::into),
             },
         }

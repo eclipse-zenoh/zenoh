@@ -37,7 +37,7 @@ use zenoh::{
         PublisherBuilder, PublisherUndeclaration,
     },
     qos::{CongestionControl, Priority, Reliability},
-    sample::{Locality, SourceInfo},
+    sample::{FragInfo, Locality, SourceInfo},
     session::EntityGlobalId,
     Resolvable, Resolve, Result as ZResult, Session, Wait, KE_ADV_PREFIX, KE_EMPTY,
 };
@@ -702,6 +702,13 @@ impl<P> SampleBuilderTrait for AdvancedPublicationBuilder<'_, P> {
     fn source_info<TS: Into<Option<SourceInfo>>>(self, source_info: TS) -> Self {
         Self {
             builder: self.builder.source_info(source_info),
+            ..self
+        }
+    }
+    #[zenoh_macros::unstable]
+    fn frag_info<TF: Into<Option<FragInfo>>>(self, frag_info: TF) -> Self {
+        Self {
+            builder: self.builder.frag_info(frag_info),
             ..self
         }
     }

@@ -45,6 +45,7 @@ where
             timestamp,
             encoding,
             ext_sinfo,
+            ext_finfo,
             ext_attachment,
             #[cfg(feature = "shared-memory")]
             ext_shm,
@@ -84,6 +85,10 @@ where
         if let Some(sinfo) = ext_sinfo.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (sinfo, n_exts != 0))?;
+        }
+        if let Some(finfo) = ext_finfo.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (finfo, n_exts != 0))?;
         }
         #[cfg(feature = "shared-memory")]
         if let Some(eshm) = ext_shm.as_ref() {
@@ -164,6 +169,7 @@ where
 
         // Extensions
         let mut ext_sinfo: Option<ext::SourceInfoType> = None;
+        let mut ext_finfo: Option<ext::FragInfoType> = None;
         #[cfg(feature = "shared-memory")]
         let mut ext_shm: Option<ext::ShmType> = None;
         let mut ext_attachment: Option<ext::AttachmentType> = None;
@@ -175,6 +181,7 @@ where
             fn read_exts<R: Reader>(
                 reader: &mut R,
                 ext_sinfo: &mut Option<ext::SourceInfoType>,
+                ext_finfo: &mut Option<ext::FragInfoType>,
                 #[cfg(feature = "shared-memory")] ext_shm: &mut Option<ext::ShmType>,
                 ext_attachment: &mut Option<ext::AttachmentType>,
                 ext_unknown: &mut Vec<ZExtUnknown>,
@@ -186,6 +193,11 @@ where
                     ext::SourceInfo::ID => {
                         let (s, ext): (ext::SourceInfoType, bool) = eodec.read(&mut *reader)?;
                         *ext_sinfo = Some(s);
+                        ext
+                    }
+                    ext::FragInfo::ID => {
+                        let (f, ext): (ext::FragInfoType, bool) = eodec.read(&mut *reader)?;
+                        *ext_finfo = Some(f);
                         ext
                     }
                     #[cfg(feature = "shared-memory")]
@@ -209,6 +221,7 @@ where
             has_ext = read_exts(
                 reader,
                 &mut ext_sinfo,
+                &mut ext_finfo,
                 #[cfg(feature = "shared-memory")]
                 &mut ext_shm,
                 &mut ext_attachment,
@@ -235,6 +248,7 @@ where
             timestamp,
             encoding,
             ext_sinfo,
+            ext_finfo,
             #[cfg(feature = "shared-memory")]
             ext_shm,
             ext_attachment,

@@ -82,7 +82,7 @@ use crate::{
     api::{
         cancellation::{CancellationToken, SyncGroup, SyncGroupNotifier},
         query::ReplyKeyExpr,
-        sample::SourceInfo,
+        sample::{FragInfo, SourceInfo},
         selector::ZenohParameters,
     },
 };
@@ -1317,6 +1317,8 @@ impl Session {
             attachment: None,
             #[cfg(feature = "unstable")]
             source_info: None,
+            #[cfg(feature = "unstable")]
+            frag_info: None,
         }
     }
 
@@ -1352,6 +1354,8 @@ impl Session {
             attachment: None,
             #[cfg(feature = "unstable")]
             source_info: None,
+            #[cfg(feature = "unstable")]
+            frag_info: None,
         }
     }
     /// Query data from the matching queryables in the system. This is a shortcut for declaring
@@ -2034,6 +2038,8 @@ impl Session {
                             reliability: Reliability::Reliable,
                             #[cfg(feature = "unstable")]
                             source_info: None,
+                            #[cfg(feature = "unstable")]
+                            frag_info: None,
                             attachment: None,
                         });
                     }
@@ -2436,6 +2442,7 @@ impl Session {
         #[cfg(feature = "unstable")] reliability: Reliability,
         timestamp: Option<uhlc::Timestamp>,
         #[cfg(feature = "unstable")] source_info: Option<SourceInfo>,
+        #[cfg(feature = "unstable")] frag_info: Option<FragInfo>,
         attachment: Option<ZBytes>,
     ) -> ZResult<()> {
         trace!("write({:?}, [...])", key_expr);
@@ -2461,6 +2468,10 @@ impl Session {
                     ext_sinfo: source_info.map(Into::into),
                     #[cfg(not(feature = "unstable"))]
                     ext_sinfo: None,
+                    #[cfg(feature = "unstable")]
+                    ext_finfo: frag_info.map(Into::into),
+                    #[cfg(not(feature = "unstable"))]
+                    ext_finfo: None,
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,
                     ext_attachment: attachment.map(Into::into),
@@ -3055,6 +3066,8 @@ impl Primitives for WeakSession {
                                         reliability: Reliability::Reliable,
                                         #[cfg(feature = "unstable")]
                                         source_info: None,
+                                        #[cfg(feature = "unstable")]
+                                        frag_info: None,
                                         attachment: None,
                                     }),
                                     #[cfg(feature = "unstable")]

@@ -21,7 +21,7 @@ use zenoh_protocol::core::Reliability;
 #[cfg(feature = "unstable")]
 use crate::api::cancellation::SyncGroup;
 #[cfg(feature = "unstable")]
-use crate::api::sample::SourceInfo;
+use crate::api::sample::{FragInfo, SourceInfo};
 use crate::{
     api::{
         builders::sample::{
@@ -103,6 +103,8 @@ pub struct PublicationBuilder<P, T> {
     pub(crate) timestamp: Option<uhlc::Timestamp>,
     #[cfg(feature = "unstable")]
     pub(crate) source_info: Option<SourceInfo>,
+    #[cfg(feature = "unstable")]
+    pub(crate) frag_info: Option<FragInfo>,
     pub(crate) attachment: Option<ZBytes>,
 }
 
@@ -201,6 +203,14 @@ impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
             ..self
         }
     }
+    // TODO doc
+    #[cfg(feature = "unstable")]
+    fn frag_info<TF: Into<Option<FragInfo>>>(self, frag_info: TF) -> Self {
+        Self {
+            frag_info: frag_info.into(),
+            ..self
+        }
+    }
     /// Sets an optional attachment to be sent along with the publication.
     /// The method accepts both `Into<ZBytes>` and `Option<Into<ZBytes>>`.
     fn attachment<TA: Into<OptionZBytes>>(self, attachment: TA) -> Self {
@@ -245,6 +255,8 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
+            #[cfg(feature = "unstable")]
+            self.frag_info,
             self.attachment,
         )
     }
@@ -268,6 +280,8 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDel
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
+            #[cfg(feature = "unstable")]
+            self.frag_info,
             self.attachment,
         )
     }
@@ -508,6 +522,8 @@ impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
+            #[cfg(feature = "unstable")]
+            self.frag_info,
             self.attachment,
         )
     }
@@ -529,6 +545,8 @@ impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
+            #[cfg(feature = "unstable")]
+            self.frag_info,
             self.attachment,
         )
     }

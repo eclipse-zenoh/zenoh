@@ -226,6 +226,8 @@ pub(crate) fn init(session: WeakSession) {
                 None,
                 #[cfg(feature = "unstable")]
                 None,
+                #[cfg(feature = "unstable")]
+                None,
                 None,
             ) {
                 tracing::error!("Unable to publish transport event: {}", e);
@@ -281,6 +283,8 @@ pub(crate) fn init(session: WeakSession) {
                     Locality::SessionLocal,
                     #[cfg(feature = "unstable")]
                     Reliability::default(),
+                    None,
+                    #[cfg(feature = "unstable")]
                     None,
                     #[cfg(feature = "unstable")]
                     None,

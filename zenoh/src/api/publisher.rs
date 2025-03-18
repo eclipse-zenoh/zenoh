@@ -268,6 +268,8 @@ impl<'a> Publisher<'a> {
             timestamp: None,
             #[cfg(feature = "unstable")]
             source_info: None,
+            #[cfg(feature = "unstable")]
+            frag_info: None,
             attachment: None,
         }
     }
@@ -295,6 +297,8 @@ impl<'a> Publisher<'a> {
             timestamp: None,
             #[cfg(feature = "unstable")]
             source_info: None,
+            #[cfg(feature = "unstable")]
+            frag_info: None,
             attachment: None,
         }
     }
@@ -497,6 +501,8 @@ impl Sink<Sample> for Publisher<'_> {
             self.destination,
             #[cfg(feature = "unstable")]
             self.reliability,
+            None,
+            #[cfg(feature = "unstable")]
             None,
             #[cfg(feature = "unstable")]
             None,
