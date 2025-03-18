@@ -33,8 +33,6 @@ use crate::unicast::establishment::{AcceptFsm, OpenFsm};
 /*************************************/
 /*             Segment               */
 /*************************************/
-const AUTH_SEGMENT_PREFIX: &str = "auth";
-
 pub(crate) type AuthSegmentID = u32;
 pub(crate) type AuthChallenge = u64;
 
@@ -51,8 +49,7 @@ pub struct AuthSegment {
 impl AuthSegment {
     pub fn create(challenge: AuthChallenge, shm_protocols: &[ProtocolID]) -> ZResult<Self> {
         let array = ArrayInSHM::<AuthSegmentID, AuthChallenge, usize>::create(
-            ID_START_INDEX + shm_protocols.len(),
-            AUTH_SEGMENT_PREFIX,
+            (ID_START_INDEX + shm_protocols.len()).try_into()?,
         )?;
         unsafe {
             (*array.elem_mut(LEN_INDEX)) = shm_protocols.len() as AuthChallenge;
@@ -60,18 +57,19 @@ impl AuthSegment {
             // SHM implementation and the old one
             (*array.elem_mut(CHALLENGE_INDEX)) = !challenge;
             (*array.elem_mut(VERSION_INDEX)) = SHM_VERSION;
-            for elem in ID_START_INDEX..array.elem_count() {
-                (*array.elem_mut(elem)) = shm_protocols[elem - ID_START_INDEX] as u64;
+            #[allow(clippy::needless_range_loop)]
+            for elem_index in 0..shm_protocols.len() {
+                (*array.elem_mut(ID_START_INDEX + elem_index)) = shm_protocols[elem_index] as u64;
             }
         };
         Ok(Self { array })
     }
 
     pub fn open(id: AuthSegmentID) -> ZResult<Self> {
-        let array = ArrayInSHM::open(id, AUTH_SEGMENT_PREFIX)?;
+        let array = ArrayInSHM::open(id)?;
 
         // validate minimal array length
-        if array.elem_count() < ID_START_INDEX {
+        if array.elem_count().get() < ID_START_INDEX {
             bail!("SHM auth segment is too small, maybe the other side is using an incompatible SHM version?")
         }
 
@@ -112,8 +110,9 @@ impl AuthSegment {
 
     pub fn protocols(&self) -> Vec<ProtocolID> {
         let mut result = vec![];
-        for elem in ID_START_INDEX..self.array.elem_count() {
-            result.push(unsafe { *self.array.elem(elem) as u32 });
+        let len = unsafe { (*self.array.elem(LEN_INDEX)) as usize };
+        for elem in ID_START_INDEX..ID_START_INDEX + len {
+            result.push(unsafe { *self.array.elem(elem) as ProtocolID });
         }
         result
     }

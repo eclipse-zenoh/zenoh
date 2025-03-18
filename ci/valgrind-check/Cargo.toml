@@ -34,3 +34,6 @@ path = "src/pub_sub/bin/z_pub_sub.rs"
 [[bin]]
 name = "queryable_get"
 path = "src/queryable_get/bin/z_queryable_get.rs"
+
+[package.metadata.cargo-machete]
+ignored = ["base64ct", "zerofrom", "litemap"]

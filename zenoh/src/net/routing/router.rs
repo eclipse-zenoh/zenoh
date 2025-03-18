@@ -16,6 +16,7 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
+use arc_swap::ArcSwap;
 use uhlc::HLC;
 use zenoh_config::Config;
 use zenoh_protocol::core::{WhatAmI, ZenohIdProto};
@@ -31,13 +32,10 @@ use super::{
         tables::{Tables, TablesLock},
     },
     hat,
-    interceptor::{EgressInterceptor, InterceptorsChain},
+    interceptor::InterceptorsChain,
     runtime::Runtime,
 };
-use crate::net::{
-    primitives::{DeMux, DummyPrimitives, EPrimitives, McastMux, Mux},
-    routing::interceptor::IngressInterceptor,
-};
+use crate::net::primitives::{DeMux, DummyPrimitives, EPrimitives, McastMux, Mux};
 
 pub struct Router {
     // whatami: WhatAmI,
@@ -126,18 +124,9 @@ impl Router {
         let zid = transport.get_zid()?;
         #[cfg(feature = "stats")]
         let stats = transport.get_stats()?;
-        let (ingress, egress): (Vec<_>, Vec<_>) = tables
-            .interceptors
-            .iter()
-            .map(|itor| itor.new_transport_unicast(&transport))
-            .unzip();
-        let (ingress, egress) = (
-            Arc::new(InterceptorsChain::from(
-                ingress.into_iter().flatten().collect::<Vec<_>>(),
-            )),
-            InterceptorsChain::from(egress.into_iter().flatten().collect::<Vec<_>>()),
-        );
-        let mux = Arc::new(Mux::new(transport.clone(), egress));
+
+        let ingress = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
+        let mux = Arc::new(Mux::new(transport.clone(), InterceptorsChain::empty()));
         let newface = tables
             .faces
             .entry(fid)
@@ -156,6 +145,7 @@ impl Router {
                 )
             })
             .clone();
+        newface.set_interceptors_from_factories(&tables.interceptors);
         tracing::debug!("New {}", newface);
 
         let mut face = Face {
@@ -187,14 +177,7 @@ impl Router {
         let mut tables = zwrite!(self.tables.tables);
         let fid = tables.face_counter;
         tables.face_counter += 1;
-        let interceptor = InterceptorsChain::from(
-            tables
-                .interceptors
-                .iter()
-                .filter_map(|itor| itor.new_transport_multicast(&transport))
-                .collect::<Vec<EgressInterceptor>>(),
-        );
-        let mux = Arc::new(McastMux::new(transport.clone(), interceptor));
+        let mux = Arc::new(McastMux::new(transport.clone(), InterceptorsChain::empty()));
         let face = FaceState::new(
             fid,
             ZenohIdProto::from_str("1").unwrap(),
@@ -207,6 +190,7 @@ impl Router {
             ctrl_lock.new_face(),
             false,
         );
+        face.set_interceptors_from_factories(&tables.interceptors);
         let _ = mux.face.set(Face {
             state: face.clone(),
             tables: self.tables.clone(),
@@ -226,13 +210,7 @@ impl Router {
         let mut tables = zwrite!(self.tables.tables);
         let fid = tables.face_counter;
         tables.face_counter += 1;
-        let interceptor = Arc::new(InterceptorsChain::from(
-            tables
-                .interceptors
-                .iter()
-                .filter_map(|itor| itor.new_peer_multicast(&transport))
-                .collect::<Vec<IngressInterceptor>>(),
-        ));
+        let interceptor = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
         let face_state = FaceState::new(
             fid,
             peer.zid,
@@ -245,6 +223,7 @@ impl Router {
             ctrl_lock.new_face(),
             false,
         );
+        face_state.set_interceptors_from_factories(&tables.interceptors);
         tables.mcast_faces.push(face_state.clone());
 
         tables.disable_all_routes();

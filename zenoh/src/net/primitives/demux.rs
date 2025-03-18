@@ -13,8 +13,11 @@
 //
 use std::{any::Any, sync::Arc};
 
+use arc_swap::ArcSwap;
 use zenoh_link::Link;
-use zenoh_protocol::network::{NetworkBody, NetworkMessage};
+use zenoh_protocol::network::{
+    ext, response, Declare, DeclareBody, DeclareFinal, NetworkBody, NetworkMessage, ResponseFinal,
+};
 use zenoh_result::ZResult;
 use zenoh_transport::{unicast::TransportUnicast, TransportPeerEventHandler};
 
@@ -28,14 +31,14 @@ use crate::net::routing::{
 pub struct DeMux {
     face: Face,
     pub(crate) transport: Option<TransportUnicast>,
-    pub(crate) interceptor: Arc<InterceptorsChain>,
+    pub(crate) interceptor: Arc<ArcSwap<InterceptorsChain>>,
 }
 
 impl DeMux {
     pub(crate) fn new(
         face: Face,
         transport: Option<TransportUnicast>,
-        interceptor: Arc<InterceptorsChain>,
+        interceptor: Arc<ArcSwap<InterceptorsChain>>,
     ) -> Self {
         Self {
             face,
@@ -48,7 +51,8 @@ impl DeMux {
 impl TransportPeerEventHandler for DeMux {
     #[inline]
     fn handle_message(&self, mut msg: NetworkMessage) -> ZResult<()> {
-        if !self.interceptor.interceptors.is_empty() {
+        let interceptor = self.interceptor.load();
+        if !interceptor.interceptors.is_empty() {
             let ctx = RoutingContext::new_in(msg, self.face.clone());
             let prefix = ctx
                 .wire_expr()
@@ -58,10 +62,55 @@ impl TransportPeerEventHandler for DeMux {
             let cache = prefix
                 .as_ref()
                 .and_then(|p| p.get_ingress_cache(&self.face));
-            let ctx = match self.interceptor.intercept(ctx, cache) {
-                Some(ctx) => ctx,
-                None => return Ok(()),
+
+            let ctx = match &ctx.msg.body {
+                NetworkBody::Request(request) => {
+                    let request_id = request.id;
+                    match interceptor.intercept(ctx, cache) {
+                        Some(ctx) => ctx,
+                        None => {
+                            // request was blocked by an interceptor, we need to send response final to avoid timeout error
+                            self.face
+                                .state
+                                .primitives
+                                .send_response_final(ResponseFinal {
+                                    rid: request_id,
+                                    ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+                                    ext_tstamp: None,
+                                });
+                            return Ok(());
+                        }
+                    }
+                }
+                NetworkBody::Interest(interest) => {
+                    let interest_id = interest.id;
+                    match interceptor.intercept(ctx, cache) {
+                        Some(ctx) => ctx,
+                        None => {
+                            // request was blocked by an interceptor, we need to send declare final to avoid timeout error
+                            self.face
+                                .state
+                                .primitives
+                                .send_declare(RoutingContext::new_in(
+                                    Declare {
+                                        interest_id: Some(interest_id),
+                                        ext_qos: ext::QoSType::DECLARE,
+                                        ext_tstamp: None,
+                                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                                        body: DeclareBody::DeclareFinal(DeclareFinal),
+                                    },
+                                    self.face.clone(),
+                                ));
+                            return Ok(());
+                        }
+                    }
+                }
+                _ => match interceptor.intercept(ctx, cache) {
+                    Some(ctx) => ctx,
+                    None => return Ok(()),
+                },
             };
+
             msg = ctx.msg;
         }
 

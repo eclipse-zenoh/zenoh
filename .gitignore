@@ -22,3 +22,6 @@
 cargo-timing*.html
 
 ci/valgrind-check/*.log
+
+# Code coverage reports
+*.profraw
