@@ -53,7 +53,7 @@ impl TransportPeerEventHandler for DeMux {
     #[inline]
     fn handle_message(&self, mut msg: NetworkMessageMut) -> ZResult<()> {
         let interceptor = self.interceptor.load();
-        if !interceptor.interceptors.is_empty() {
+        if !interceptor.interceptors.is_empty() && !matches!(msg.body, NetworkBodyMut::Push(..)) {
             let mut ctx = RoutingContext::new_in(msg.as_mut(), self.face.clone());
             let prefix = ctx
                 .wire_expr()
@@ -101,7 +101,11 @@ impl TransportPeerEventHandler for DeMux {
                         return Ok(());
                     }
                 }
-                _ => {
+                NetworkBodyMut::Push(..) => unreachable!(),
+                NetworkBodyMut::Response(..)
+                | NetworkBodyMut::ResponseFinal(..)
+                | NetworkBodyMut::Declare(..)
+                | NetworkBodyMut::OAM(..) => {
                     if !interceptor.intercept(&mut ctx, cache) {
                         return Ok(());
                     }
