@@ -44,7 +44,7 @@ async fn session_close_in_atexit_main() {
 
 extern "C" fn close_session_in_atexit() {
     let session = SESSION.get().unwrap();
-    let _ = session.close().wait().unwrap();
+    session.close().wait().unwrap();
 }
 
 #[test]
