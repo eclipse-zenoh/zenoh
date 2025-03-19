@@ -530,25 +530,9 @@ impl<'a> AdvancedPublisher<'a> {
     where
         IntoZBytes: Into<ZBytes>,
     {
-        let mut builder = self.publisher.put(payload);
-        if let Some(seqnum) = &self.seqnum {
-            let info = Some(SourceInfo::new(
-                self.publisher.id(),
-                seqnum.fetch_add(1, Ordering::Relaxed),
-            ));
-            tracing::trace!(
-                "AdvancedPublisher{{key_expr: {}}}: Put data with {:?}",
-                self.publisher.key_expr(),
-                info
-            );
-            builder = builder.source_info(info);
-        }
-        if let Some(hlc) = self.publisher.session().hlc() {
-            builder = builder.timestamp(hlc.new_timestamp());
-        }
         AdvancedPublisherPutBuilder {
-            builder,
-            cache: self.cache.as_ref(),
+            publisher: self,
+            builder: self.publisher.put(payload),
         }
     }
 
@@ -569,19 +553,9 @@ impl<'a> AdvancedPublisher<'a> {
     /// ```
     #[zenoh_macros::unstable]
     pub fn delete(&self) -> AdvancedPublisherDeleteBuilder<'_> {
-        let mut builder = self.publisher.delete();
-        if let Some(seqnum) = &self.seqnum {
-            builder = builder.source_info(Some(SourceInfo::new(
-                self.publisher.id(),
-                seqnum.fetch_add(1, Ordering::Relaxed),
-            )));
-        }
-        if let Some(hlc) = self.publisher.session().hlc() {
-            builder = builder.timestamp(hlc.new_timestamp());
-        }
         AdvancedPublisherDeleteBuilder {
-            builder,
-            cache: self.cache.as_ref(),
+            publisher: self,
+            builder: self.publisher.delete(),
         }
     }
 
@@ -679,8 +653,8 @@ pub type AdvancedPublisherDeleteBuilder<'a> =
 #[derive(Clone)]
 #[zenoh_macros::unstable]
 pub struct AdvancedPublicationBuilder<'a, P> {
+    pub(crate) publisher: &'a AdvancedPublisher<'a>,
     pub(crate) builder: PublicationBuilder<&'a Publisher<'a>, P>,
-    pub(crate) cache: Option<&'a AdvancedCache>,
 }
 
 #[zenoh_macros::internal_trait]
@@ -743,8 +717,23 @@ impl<P> Resolvable for AdvancedPublicationBuilder<'_, P> {
 impl Wait for AdvancedPublisherPutBuilder<'_> {
     #[inline]
     #[zenoh_macros::unstable]
-    fn wait(self) -> <Self as Resolvable>::To {
-        if let Some(cache) = self.cache {
+    fn wait(mut self) -> <Self as Resolvable>::To {
+        if let Some(seqnum) = &self.publisher.seqnum {
+            let info = Some(SourceInfo::new(
+                self.publisher.id(),
+                seqnum.fetch_add(1, Ordering::Relaxed),
+            ));
+            tracing::trace!(
+                "AdvancedPublisher{{key_expr: {}}}: Put data with {:?}",
+                self.publisher.key_expr(),
+                info
+            );
+            self.builder = self.builder.source_info(info);
+        }
+        if let Some(hlc) = self.publisher.publisher.session().hlc() {
+            self.builder = self.builder.timestamp(hlc.new_timestamp());
+        }
+        if let Some(cache) = self.publisher.cache.as_ref() {
             cache.cache_sample(zenoh::sample::Sample::from(&self.builder));
         }
         self.builder.wait()
@@ -755,8 +744,23 @@ impl Wait for AdvancedPublisherPutBuilder<'_> {
 impl Wait for AdvancedPublisherDeleteBuilder<'_> {
     #[inline]
     #[zenoh_macros::unstable]
-    fn wait(self) -> <Self as Resolvable>::To {
-        if let Some(cache) = self.cache {
+    fn wait(mut self) -> <Self as Resolvable>::To {
+        if let Some(seqnum) = &self.publisher.seqnum {
+            let info = Some(SourceInfo::new(
+                self.publisher.id(),
+                seqnum.fetch_add(1, Ordering::Relaxed),
+            ));
+            tracing::trace!(
+                "AdvancedPublisher{{key_expr: {}}}: Del data with {:?}",
+                self.publisher.key_expr(),
+                info
+            );
+            self.builder = self.builder.source_info(info);
+        }
+        if let Some(hlc) = self.publisher.publisher.session().hlc() {
+            self.builder = self.builder.timestamp(hlc.new_timestamp());
+        }
+        if let Some(cache) = self.publisher.cache.as_ref() {
             cache.cache_sample(zenoh::sample::Sample::from(&self.builder));
         }
         self.builder.wait()
