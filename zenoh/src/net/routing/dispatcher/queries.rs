@@ -591,6 +591,15 @@ pub(crate) fn route_send_response(
 
     match face.pending_queries.get(&qid) {
         Some((query, _)) => {
+            tracing::debug!(
+                "Route reply {}:{} for {}:{} ({})",
+                face,
+                qid,
+                query.src_face,
+                query.src_qid,
+                key_expr.suffix.as_ref()
+            );
+
             drop(queries_lock);
 
             #[cfg(feature = "stats")]
