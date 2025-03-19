@@ -176,10 +176,9 @@ impl TablesLock {
         tables.interceptors = interceptor_factories(config)?;
         drop(tables);
         let tables = zread!(self.tables);
-        tables
-            .faces
-            .values()
-            .for_each(|face| face.set_interceptors_from_factories(&tables.interceptors));
+        tables.faces.values().for_each(|face| {
+            face.set_interceptors_from_factories(&tables.interceptors);
+        });
         Ok(())
     }
 }

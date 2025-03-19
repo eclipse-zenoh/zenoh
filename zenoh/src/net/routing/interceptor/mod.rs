@@ -93,6 +93,7 @@ pub(crate) fn interceptor_factories(config: &Config) -> ZResult<Vec<InterceptorF
 
 pub(crate) struct InterceptorsChain {
     pub(crate) interceptors: Vec<Interceptor>,
+    pub(crate) version: usize,
 }
 
 impl InterceptorsChain {
@@ -100,17 +101,19 @@ impl InterceptorsChain {
     pub(crate) fn empty() -> Self {
         Self {
             interceptors: vec![],
+            version: 0,
         }
     }
 
     pub(crate) fn is_empty(&self) -> bool {
         self.interceptors.is_empty()
     }
-}
 
-impl From<Vec<Interceptor>> for InterceptorsChain {
-    fn from(interceptors: Vec<Interceptor>) -> Self {
-        InterceptorsChain { interceptors }
+    pub(crate) fn new(interceptors: Vec<Interceptor>, version: usize) -> Self {
+        InterceptorsChain {
+            interceptors,
+            version,
+        }
     }
 }
 

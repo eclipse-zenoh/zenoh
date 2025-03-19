@@ -66,11 +66,14 @@ impl EPrimitives for Mux {
             .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
             .flatten()
             .cloned();
-        let cache = prefix
+        let interceptor = self.interceptor.load();
+        let cache_guard = prefix
             .as_ref()
-            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap()));
+            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap(), &interceptor));
 
-        match self.interceptor.load().intercept(ctx, cache) {
+        let cache = cache_guard.as_ref().map(|c| c.cache_ref()).flatten();
+
+        match interceptor.intercept(ctx, cache) {
             Some(ctx) => {
                 let _ = self.handler.schedule(ctx.msg);
             }
@@ -101,10 +104,12 @@ impl EPrimitives for Mux {
             .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
             .flatten()
             .cloned();
-        let cache = prefix
+        let interceptor = self.interceptor.load();
+        let cache_guard = prefix
             .as_ref()
-            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap()));
-        if let Some(ctx) = self.interceptor.load().intercept(ctx, cache) {
+            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap(), &interceptor));
+        let cache = cache_guard.as_ref().map(|c| c.cache_ref()).flatten();
+        if let Some(ctx) = interceptor.intercept(ctx, cache) {
             let _ = self.handler.schedule(ctx.msg);
         }
     }
@@ -126,7 +131,11 @@ impl EPrimitives for Mux {
                 .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
                 .flatten()
                 .cloned();
-            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(&face));
+            let cache_guard = prefix
+                .as_ref()
+                .and_then(|p| p.get_egress_cache(&face, &interceptor));
+            let cache = cache_guard.as_ref().map(|c| c.cache_ref()).flatten();
+
             if let Some(ctx) = interceptor.intercept(ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
             }
@@ -153,7 +162,10 @@ impl EPrimitives for Mux {
                 .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
                 .flatten()
                 .cloned();
-            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(&face));
+            let cache_guard = prefix
+                .as_ref()
+                .and_then(|p| p.get_egress_cache(&face, &interceptor));
+            let cache = cache_guard.as_ref().map(|c| c.cache_ref()).flatten();
 
             match interceptor.intercept(ctx, cache) {
                 Some(ctx) => {
@@ -190,7 +202,10 @@ impl EPrimitives for Mux {
                 .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
                 .flatten()
                 .cloned();
-            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(&face));
+            let cache_guard = prefix
+                .as_ref()
+                .and_then(|p| p.get_egress_cache(&face, &interceptor));
+            let cache = cache_guard.as_ref().map(|c| c.cache_ref()).flatten();
             if let Some(ctx) = interceptor.intercept(ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
             }
@@ -216,7 +231,10 @@ impl EPrimitives for Mux {
                 .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
                 .flatten()
                 .cloned();
-            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(&face));
+            let cache_guard = prefix
+                .as_ref()
+                .and_then(|p| p.get_egress_cache(&face, &interceptor));
+            let cache = cache_guard.as_ref().map(|c| c.cache_ref()).flatten();
             if let Some(ctx) = interceptor.intercept(ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
             }
@@ -265,10 +283,12 @@ impl EPrimitives for McastMux {
             .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
             .flatten()
             .cloned();
-        let cache = prefix
+        let interceptor = self.interceptor.load();
+        let cache_guard = prefix
             .as_ref()
-            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap()));
-        if let Some(ctx) = self.interceptor.load().intercept(ctx, cache) {
+            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap(), &interceptor));
+        let cache = cache_guard.as_ref().map(|c| c.cache_ref()).flatten();
+        if let Some(ctx) = interceptor.intercept(ctx, cache) {
             let _ = self.handler.schedule(ctx.msg);
         }
     }
@@ -291,10 +311,12 @@ impl EPrimitives for McastMux {
             .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
             .flatten()
             .cloned();
-        let cache = prefix
+        let interceptor = self.interceptor.load();
+        let cache_guard = prefix
             .as_ref()
-            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap()));
-        if let Some(ctx) = self.interceptor.load().intercept(ctx, cache) {
+            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap(), &interceptor));
+        let cache = cache_guard.as_ref().map(|c| c.cache_ref()).flatten();
+        if let Some(ctx) = interceptor.intercept(ctx, cache) {
             let _ = self.handler.schedule(ctx.msg);
         }
     }
@@ -316,7 +338,10 @@ impl EPrimitives for McastMux {
                 .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
                 .flatten()
                 .cloned();
-            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(face));
+            let cache_guard = prefix
+                .as_ref()
+                .and_then(|p| p.get_egress_cache(face, &interceptor));
+            let cache = cache_guard.as_ref().map(|c| c.cache_ref()).flatten();
             if let Some(ctx) = interceptor.intercept(ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
             }
@@ -342,7 +367,10 @@ impl EPrimitives for McastMux {
                 .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
                 .flatten()
                 .cloned();
-            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(face));
+            let cache_guard = prefix
+                .as_ref()
+                .and_then(|p| p.get_egress_cache(face, &interceptor));
+            let cache = cache_guard.as_ref().map(|c| c.cache_ref()).flatten();
             if let Some(ctx) = interceptor.intercept(ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
             }
@@ -368,7 +396,10 @@ impl EPrimitives for McastMux {
                 .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
                 .flatten()
                 .cloned();
-            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(face));
+            let cache_guard = prefix
+                .as_ref()
+                .and_then(|p| p.get_egress_cache(face, &interceptor));
+            let cache = cache_guard.as_ref().map(|c| c.cache_ref()).flatten();
             if let Some(ctx) = interceptor.intercept(ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
             }
@@ -394,7 +425,10 @@ impl EPrimitives for McastMux {
                 .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
                 .flatten()
                 .cloned();
-            let cache = prefix.as_ref().and_then(|p| p.get_egress_cache(face));
+            let cache_guard = prefix
+                .as_ref()
+                .and_then(|p| p.get_egress_cache(face, &interceptor));
+            let cache = cache_guard.as_ref().map(|c| c.cache_ref()).flatten();
             if let Some(ctx) = interceptor.intercept(ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
             }

@@ -18,9 +18,13 @@ use std::{
     convert::TryInto,
     hash::{Hash, Hasher},
     ops::{Deref, DerefMut},
-    sync::{Arc, RwLock, Weak},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, RwLock, Weak,
+    },
 };
 
+use arc_swap::{ArcSwap, Guard};
 use zenoh_collections::SingleOrBoxHashSet;
 use zenoh_config::WhatAmI;
 use zenoh_protocol::{
@@ -40,6 +44,7 @@ use super::{
 };
 use crate::net::routing::{
     dispatcher::face::Face,
+    interceptor::{InterceptorTrait, InterceptorsChain},
     router::{disable_matches_data_routes, disable_matches_query_routes},
     RoutingContext,
 };
@@ -56,6 +61,86 @@ pub(crate) struct QueryTargetQabl {
 }
 pub(crate) type QueryTargetQablSet = Vec<QueryTargetQabl>;
 
+pub(crate) struct InterceptorCacheValue {
+    version: usize,
+    value: Option<Box<dyn Any + Send + Sync>>,
+}
+
+impl InterceptorCacheValue {
+    pub(crate) fn cache_ref(&self) -> Option<&Box<dyn Any + Send + Sync>> {
+        self.value.as_ref()
+    }
+}
+
+pub(crate) struct InterceptorCache {
+    value: ArcSwap<InterceptorCacheValue>,
+    is_updating: AtomicBool,
+}
+
+pub(crate) type InterceptorCacheValueType = Guard<Arc<InterceptorCacheValue>>;
+
+impl InterceptorCache {
+    pub(crate) fn new(value: Option<Box<dyn Any + Send + Sync>>, version: usize) -> Self {
+        InterceptorCache {
+            value: ArcSwap::new(InterceptorCacheValue { version, value }.into()),
+            is_updating: AtomicBool::new(false),
+        }
+    }
+
+    fn finish_update(&self) {
+        self.is_updating.store(false, Ordering::SeqCst);
+    }
+
+    fn value(
+        &self,
+        interceptor: &InterceptorsChain,
+        resource: &Resource,
+    ) -> Option<InterceptorCacheValueType> {
+        let v = self.value.load();
+        if v.version == interceptor.version {
+            Some(v)
+        } else if v.version > interceptor.version {
+            // requesting too old version
+            None
+        } else {
+            // try to update
+            drop(v);
+            match self
+                .is_updating
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            {
+                Ok(_) => {
+                    let v = self.value.load();
+                    if v.version == interceptor.version {
+                        // already updated by someone else
+                        self.finish_update();
+                        Some(v)
+                    } else if v.version > interceptor.version {
+                        // already updated beyond current version
+                        self.finish_update();
+                        None
+                    } else {
+                        // Safety: resource expr is always a valide keyexpr
+                        let ke = unsafe { keyexpr::from_str_unchecked(resource.expr()) };
+                        let key_expr = ke.into();
+                        let new_value = interceptor.compute_keyexpr_cache(&key_expr);
+                        self.value.store(
+                            InterceptorCacheValue {
+                                value: new_value,
+                                version: interceptor.version,
+                            }
+                            .into(),
+                        );
+                        self.finish_update();
+                        self.value(interceptor, resource)
+                    }
+                }
+                Err(_) => None,
+            }
+        }
+    }
+}
+
 pub(crate) struct SessionContext {
     pub(crate) face: Arc<FaceState>,
     pub(crate) local_expr_id: Option<ExprId>,
@@ -63,8 +148,8 @@ pub(crate) struct SessionContext {
     pub(crate) subs: Option<SubscriberInfo>,
     pub(crate) qabl: Option<QueryableInfoType>,
     pub(crate) token: bool,
-    pub(crate) in_interceptor_cache: Option<Box<dyn Any + Send + Sync>>,
-    pub(crate) e_interceptor_cache: Option<Box<dyn Any + Send + Sync>>,
+    pub(crate) in_interceptor_cache: Option<InterceptorCache>,
+    pub(crate) e_interceptor_cache: Option<InterceptorCache>,
 }
 
 impl SessionContext {
@@ -694,16 +779,28 @@ impl Resource {
         }
     }
 
-    pub(crate) fn get_ingress_cache(&self, face: &Face) -> Option<&Box<dyn Any + Send + Sync>> {
+    pub(crate) fn get_ingress_cache(
+        &self,
+        face: &Face,
+        interceptor: &InterceptorsChain,
+    ) -> Option<InterceptorCacheValueType> {
         self.session_ctxs
             .get(&face.state.id)
             .and_then(|ctx| ctx.in_interceptor_cache.as_ref())
+            .map(|c| c.value(interceptor, self))
+            .flatten()
     }
 
-    pub(crate) fn get_egress_cache(&self, face: &Face) -> Option<&Box<dyn Any + Send + Sync>> {
+    pub(crate) fn get_egress_cache(
+        &self,
+        face: &Face,
+        interceptor: &InterceptorsChain,
+    ) -> Option<InterceptorCacheValueType> {
         self.session_ctxs
             .get(&face.state.id)
             .and_then(|ctx| ctx.e_interceptor_cache.as_ref())
+            .map(|c| c.value(interceptor, self))
+            .flatten()
     }
 }
 
