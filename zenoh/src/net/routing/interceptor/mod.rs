@@ -175,7 +175,7 @@ impl InterceptorTrait for InterceptorsChain {
                 .and_then(|caches| caches.get(idx).map(|k| k.as_ref()))
                 .flatten();
             if !interceptor.intercept(ctx, cache) {
-                tracing::trace!("Msg intercepted!");
+                tracing::trace!("Msg {:?} intercepted!", &ctx.msg);
                 return false;
             }
         }
