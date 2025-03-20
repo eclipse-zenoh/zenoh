@@ -206,7 +206,7 @@ impl ZSlice {
         let rem = self.len() % chunk_size;
         let n = if rem > 0 { n + 1 } else { n };
 
-        (0..n).into_iter().map(move |i| ZSlice {
+        (0..n).map(move |i| ZSlice {
             buf: self.buf.clone(),
             start: self.start + i * chunk_size,
             end: usize::min(self.end, self.start + (i + 1) * chunk_size),
