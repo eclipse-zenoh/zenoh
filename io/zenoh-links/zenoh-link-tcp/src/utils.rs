@@ -1,5 +1,3 @@
-use std::{net::SocketAddr, str::FromStr};
-
 //
 // Copyright (c) 2024 ZettaScale Technology
 //
@@ -13,6 +11,7 @@ use std::{net::SocketAddr, str::FromStr};
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{net::SocketAddr, str::FromStr};
 use zenoh_config::Config as ZenohConfig;
 use zenoh_link_commons::{
     tcp::TcpSocketConfig, ConfigurationInspector, BIND_INTERFACE, BIND_SOCKET, TCP_SO_RCV_BUF,
