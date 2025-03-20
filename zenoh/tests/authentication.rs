@@ -25,7 +25,7 @@ mod test {
     use once_cell::sync::Lazy;
     use tokio::runtime::Handle;
     use zenoh::{config::WhatAmI, Config, Session};
-    use zenoh_config::{EndPoint, ModeDependentValue};
+    use zenoh_config::{EndPoint, ModeDependentValue, ZenohId};
     use zenoh_core::{zlock, ztimeout};
 
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -89,6 +89,11 @@ mod test {
             .unwrap();
         test_deny_allow_combination(29457).await;
         test_allow_deny_combination(29458).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_authentication_link_protocols() {
+        test_pub_sub_auth_link_protocol(1234).await
     }
 
     #[allow(clippy::all)]
@@ -1975,5 +1980,112 @@ client2name:client2passwd";
             ztimeout!(subscriber.undeclare()).unwrap();
         }
         close_router_session(session).await;
+    }
+
+    async fn test_pub_sub_auth_link_protocol(port: u16) {
+        let key_expr = "acl_auth_test/pubsub/by_protocols";
+
+        let mut config_listener = zenoh::Config::default();
+        config_listener
+            .listen
+            .set_endpoints(ModeDependentValue::Unique(vec![
+                format!("tcp/127.0.0.1:{port}").parse().unwrap(),
+                format!("udp/127.0.0.1:{port}").parse().unwrap(),
+            ]))
+            .unwrap();
+        config_listener
+            .scouting
+            .gossip
+            .set_enabled(Some(false))
+            .unwrap();
+        config_listener
+            .scouting
+            .multicast
+            .set_enabled(Some(false))
+            .unwrap();
+
+        config_listener
+            .insert_json5(
+                "access_control",
+                r#"{
+                    "enabled": true,
+                    "default_permission": "allow",
+                    "rules": [
+                        {
+                            "id": "r1",
+                            "permission": "deny",
+                            "flows": ["ingress"],
+                            "messages": [
+                                "put",
+                            ],
+                            "key_exprs": [
+                                "**"
+                            ],
+                        },
+                    ],
+                    "subjects": [
+                        {
+                            "id": "s1",
+                            "link_protocols": [ "tcp" ],
+                        }
+                    ],
+                    "policies": [
+                        {
+                            "rules": ["r1"],
+                            "subjects": ["s1"],
+                        }
+                    ]
+                }"#,
+            )
+            .unwrap();
+
+        let listener_session = zenoh::open(config_listener).await.unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        let mut config_connect = zenoh::Config::default();
+        config_connect.set_mode(Some(WhatAmI::Client)).unwrap();
+        config_connect
+            .scouting
+            .multicast
+            .set_enabled(Some(false))
+            .unwrap();
+        config_connect
+            .scouting
+            .gossip
+            .set_enabled(Some(false))
+            .unwrap();
+        config_connect
+            .connect
+            .endpoints
+            .set(vec![format!("tcp/127.0.0.1:{port}").parse().unwrap()])
+            .unwrap();
+        let session_denied = zenoh::open(config_connect.clone()).await.unwrap();
+
+        config_connect
+            .connect
+            .endpoints
+            .set(vec![format!("udp/127.0.0.1:{port}").parse().unwrap()])
+            .unwrap();
+        config_connect.set_id(ZenohId::default()).unwrap();
+        let session_allowed = zenoh::open(config_connect).await.unwrap();
+
+        let sub = listener_session.declare_subscriber(key_expr).await.unwrap();
+
+        session_denied.put(key_expr, "DENIED").await.unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(sub.try_recv().unwrap().is_none());
+
+        session_allowed.put(key_expr, "ALLOWED").await.unwrap();
+        tokio::time::sleep(SLEEP).await;
+        let value = sub.recv_async().await;
+        assert!(value.is_ok());
+        let sample = value.unwrap();
+        let payload = sample.payload().try_to_string().unwrap();
+        assert!(payload.eq("ALLOWED"));
+
+        sub.undeclare().await.unwrap();
+        session_allowed.close().await.unwrap();
+        session_denied.close().await.unwrap();
+        listener_session.close().await.unwrap();
     }
 }
