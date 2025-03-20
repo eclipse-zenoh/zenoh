@@ -198,6 +198,22 @@ impl ZSlice {
             None
         }
     }
+
+    pub fn chunks(self, chunk_size: usize) -> impl Iterator<Item = Self> {
+        assert_ne!(chunk_size, 0, "cannot split ZSlice into chunks of size 0");
+
+        let n = self.len() / chunk_size;
+        let rem = self.len() % chunk_size;
+        let n = if rem > 0 { n + 1 } else { n };
+
+        (0..n).into_iter().map(move |i| ZSlice {
+            buf: self.buf.clone(),
+            start: self.start + i * chunk_size,
+            end: usize::min(self.end, self.start + (i + 1) * chunk_size),
+            #[cfg(feature = "shared-memory")]
+            kind: ZSliceKind::Raw,
+        })
+    }
 }
 
 impl Deref for ZSlice {
@@ -443,5 +459,41 @@ mod tests {
         mut_slice[..buf.len()].clone_from_slice(&buf[..]);
 
         assert_eq!(buf.as_slice(), zslice.as_slice());
+    }
+
+    #[test]
+    fn test_chunks_inexact_division() {
+        let vec = (0..15).into_iter().collect::<Vec<_>>();
+        let zslice = ZSlice::from(vec);
+
+        const EXPECTED_CHUNKS: &[&[u8]] =
+            &[&[0, 1, 2, 3], &[4, 5, 6, 7], &[8, 9, 10, 11], &[12, 13, 14]];
+        const CHUNK_SIZE: usize = 4;
+
+        for (found, expected) in zslice.chunks(CHUNK_SIZE).zip(EXPECTED_CHUNKS) {
+            assert_eq!(found.as_slice(), *expected);
+            assert!(found.len() <= CHUNK_SIZE);
+        }
+    }
+
+    #[test]
+    fn test_chunks_exact_division() {
+        let vec = (0..8).into_iter().collect::<Vec<_>>();
+        let zslice = ZSlice::from(vec);
+
+        const EXPECTED_CHUNKS: &[&[u8]] = &[&[0, 1], &[2, 3], &[4, 5], &[6, 7]];
+        const CHUNK_SIZE: usize = 2;
+
+        for (found, expected) in zslice.chunks(CHUNK_SIZE).zip(EXPECTED_CHUNKS) {
+            assert_eq!(found.as_slice(), *expected);
+            assert!(found.len() <= CHUNK_SIZE);
+        }
+    }
+
+    #[test]
+    fn test_chunks_empty() {
+        let zslice = ZSlice::empty();
+
+        assert_eq!(zslice.chunks(3).next(), None);
     }
 }
