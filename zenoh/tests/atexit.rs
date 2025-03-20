@@ -77,6 +77,7 @@ fn panic_is_seen_in_separate_process_atexit() {
 }
 
 use std::sync::OnceLock;
+
 use zenoh::{Session, Wait};
 static SESSION: OnceLock<Session> = OnceLock::new();
 
@@ -114,8 +115,8 @@ fn session_close_in_atexit() {
 }
 
 use std::sync::Mutex;
-use zenoh::internal::builders::close::NolocalJoinHandle;
-use zenoh::Result;
+
+use zenoh::{internal::builders::close::NolocalJoinHandle, Result};
 
 static BACKGROUND_SESSION: OnceLock<Session> = OnceLock::new();
 static CLOSE: OnceLock<Mutex<Option<NolocalJoinHandle<Result<()>>>>> = OnceLock::new();
