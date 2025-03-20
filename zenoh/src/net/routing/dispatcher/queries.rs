@@ -328,7 +328,7 @@ impl Timed for QueryCleanup {
             {
                 drop(queries_lock);
                 tracing::warn!(
-                    "Didn't receive final reply {}:{} for {}:{}: Timeout({:#?})!",
+                    "{}:{} Didn't receive final reply for query {}:{}: Timeout({:#?})!",
                     face,
                     self.qid,
                     query.0.src_face,
@@ -466,7 +466,7 @@ pub fn route_query(
     match rtables.get_mapping(face, &expr.scope, expr.mapping) {
         Some(prefix) => {
             tracing::debug!(
-                "Route query {}:{} for res {}{}",
+                "{}:{} Route query for res {}{}",
                 face,
                 qid,
                 prefix.expr(),
@@ -503,7 +503,7 @@ pub fn route_query(
 
                 if route.is_empty() {
                     tracing::debug!(
-                        "Send final reply {}:{} (no matching queryables or not master)",
+                        "{}:{} Send final reply (no matching queryables or not master)",
                         face,
                         qid
                     );
@@ -525,7 +525,7 @@ pub fn route_query(
                         }
 
                         tracing::trace!(
-                            "Propagate query {}:{} to {}:{}",
+                            "{}:{} Propagate query to {}:{}",
                             face,
                             qid,
                             outface,
@@ -545,7 +545,7 @@ pub fn route_query(
                     }
                 }
             } else {
-                tracing::debug!("Send final reply {}:{} (not master)", face, qid);
+                tracing::debug!("{}:{} Send final reply (not master)", face, qid);
                 drop(rtables);
                 face.primitives.clone().send_response_final(ResponseFinal {
                     rid: qid,
@@ -556,8 +556,9 @@ pub fn route_query(
         }
         None => {
             tracing::error!(
-                "{} Route query with unknown scope {}! Send final reply.",
+                "{}:{} Route query with unknown scope {}! Send final reply.",
                 face,
+                qid,
                 expr.scope,
             );
             drop(rtables);
@@ -594,7 +595,7 @@ pub(crate) fn route_send_response(
     match face.pending_queries.get(&qid) {
         Some((query, _)) => {
             tracing::debug!(
-                "Route reply {}:{} for {}:{} ({})",
+                "{}:{} Route reply for query {}:{} ({})",
                 face,
                 qid,
                 query.src_face,
@@ -620,12 +621,7 @@ pub(crate) fn route_send_response(
                 ext_respid,
             });
         }
-        None => tracing::warn!(
-            "Route reply {}:{} from {}: Query not found!",
-            face,
-            qid,
-            face
-        ),
+        None => tracing::warn!("{}:{} Route reply: Query not found!", face, qid),
     }
 }
 
@@ -639,7 +635,7 @@ pub(crate) fn route_send_response_final(
         Some(query) => {
             drop(queries_lock);
             tracing::debug!(
-                "Received final reply {}:{} for {}:{}",
+                "{}:{} Received final reply for query {}:{}",
                 face,
                 qid,
                 query.0.src_face,
@@ -647,7 +643,7 @@ pub(crate) fn route_send_response_final(
             );
             finalize_pending_query(query);
         }
-        None => tracing::warn!("Route final reply {}:{}: Query not found!", face, qid,),
+        None => tracing::warn!("{}:{} Route final reply: Query not found!", face, qid),
     }
 }
 
