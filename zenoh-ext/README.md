@@ -10,5 +10,5 @@
 
 This crate provides some useful extensions on top of [`zenoh`](https://crates.io/crates/zenoh) crate.
 
-For more information, see its documentation: https://docs.rs/zenoh-ext
-and some examples of usage in https://github.com/eclipse-zenoh/zenoh/tree/main/zenoh-ext/examples/examples
+For more information, see its documentation: <https://docs.rs/zenoh-ext>
+and some examples of usage in <https://github.com/eclipse-zenoh/zenoh/tree/main/zenoh-ext/examples/examples>
