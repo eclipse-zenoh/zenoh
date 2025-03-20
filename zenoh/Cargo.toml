@@ -125,6 +125,7 @@ once_cell = { workspace = true }
 [dev-dependencies]
 tokio = { workspace = true }
 libc = { workspace = true }
+rustversion = "1.0"
 
 [build-dependencies]
 rustc_version = { workspace = true }
