@@ -463,7 +463,7 @@ mod tests {
 
     #[test]
     fn test_chunks_inexact_division() {
-        let vec = (0..15).into_iter().collect::<Vec<_>>();
+        let vec = (0..15).collect::<Vec<_>>();
         let zslice = ZSlice::from(vec);
 
         const EXPECTED_CHUNKS: &[&[u8]] =
@@ -478,7 +478,7 @@ mod tests {
 
     #[test]
     fn test_chunks_exact_division() {
-        let vec = (0..8).into_iter().collect::<Vec<_>>();
+        let vec = (0..8).collect::<Vec<_>>();
         let zslice = ZSlice::from(vec);
 
         const EXPECTED_CHUNKS: &[&[u8]] = &[&[0, 1], &[2, 3], &[4, 5], &[6, 7]];
