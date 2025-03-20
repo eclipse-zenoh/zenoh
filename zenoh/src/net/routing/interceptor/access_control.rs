@@ -22,8 +22,7 @@ use std::{any::Any, collections::HashSet, iter, sync::Arc};
 
 use itertools::Itertools;
 use zenoh_config::{
-    AclConfig, AclMessage, CertCommonName, InterceptorFlow, InterceptorLink, Interface, Permission,
-    Username,
+    AclConfig, AclMessage, CertCommonName, InterceptorFlow, Interface, Permission, Username,
 };
 use zenoh_link::LinkAuthId;
 use zenoh_protocol::{
@@ -39,7 +38,7 @@ use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 use super::{
     authorization::PolicyEnforcer, EgressInterceptor, IngressInterceptor, InterceptorFactory,
-    InterceptorFactoryTrait, InterceptorTrait,
+    InterceptorFactoryTrait, InterceptorLinkWrapper, InterceptorTrait,
 };
 use crate::{
     api::key_expr::KeyExpr,
@@ -103,30 +102,25 @@ impl InterceptorFactoryTrait for AclEnforcer {
         };
 
         let mut cert_common_names = Vec::new();
-        let mut link_types = Vec::new();
+        let mut link_protocols = Vec::new();
         let username = auth_ids.username().cloned().map(|v| Username(v));
 
         for auth_id in auth_ids.link_auth_ids() {
             match auth_id {
                 LinkAuthId::Tls(value) => {
-                    link_types.push(Some(InterceptorLink::Tls));
                     cert_common_names.push(value.as_ref().map(|v| CertCommonName(v.clone())));
                 }
                 LinkAuthId::Quic(value) => {
-                    link_types.push(Some(InterceptorLink::Quic));
                     cert_common_names.push(value.as_ref().map(|v| CertCommonName(v.clone())));
                 }
-                LinkAuthId::Tcp => link_types.push(Some(InterceptorLink::Tcp)),
-                LinkAuthId::Udp => link_types.push(Some(InterceptorLink::Udp)),
-                LinkAuthId::Serial => link_types.push(Some(InterceptorLink::Serial)),
-                LinkAuthId::Unixpipe => link_types.push(Some(InterceptorLink::Unixpipe)),
-                LinkAuthId::UnixsockStream => {
-                    link_types.push(Some(InterceptorLink::UnixsockStream))
-                }
-                LinkAuthId::Vsock => link_types.push(Some(InterceptorLink::Vsock)),
-                LinkAuthId::Ws => link_types.push(Some(InterceptorLink::Ws)),
-                LinkAuthId::None => {}
+                LinkAuthId::None => continue,
+                _ => {}
             }
+            link_protocols.push(Some(
+                InterceptorLinkWrapper::try_from(auth_id)
+                    .expect("auth_id should not be None")
+                    .0,
+            ));
         }
         if cert_common_names.is_empty() {
             cert_common_names.push(None);
@@ -155,14 +149,16 @@ impl InterceptorFactoryTrait for AclEnforcer {
 
         let mut auth_subjects = HashSet::new();
 
-        for ((username, interface), cert_common_name) in iter::once(username)
+        for (((username, interface), cert_common_name), link_protocol) in iter::once(username)
             .cartesian_product(interfaces.into_iter())
             .cartesian_product(cert_common_names.into_iter())
+            .cartesian_product(link_protocols.into_iter())
         {
             let query = SubjectQuery {
                 interface,
                 cert_common_name,
                 username,
+                link_protocol,
             };
 
             if let Some(entry) = self.enforcer.subject_store.query(&query) {

@@ -135,6 +135,7 @@ pub struct AclConfigSubjects {
     pub interfaces: Option<Vec<Interface>>,
     pub cert_common_names: Option<Vec<CertCommonName>>,
     pub usernames: Option<Vec<Username>>,
+    pub link_protocols: Option<Vec<InterceptorLink>>,
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]

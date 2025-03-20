@@ -20,13 +20,14 @@
 //!
 mod access_control;
 use access_control::acl_interceptor_factories;
+use zenoh_link::LinkAuthId;
 
 mod authorization;
 use std::any::Any;
 
-use zenoh_config::{Config, InterceptorFlow};
+use zenoh_config::{Config, InterceptorFlow, InterceptorLink};
 use zenoh_protocol::network::NetworkMessage;
-use zenoh_result::ZResult;
+use zenoh_result::{ZError, ZResult};
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 use super::RoutingContext;
@@ -54,6 +55,29 @@ impl From<&[InterceptorFlow]> for InterfaceEnabled {
             }
         }
         res
+    }
+}
+
+/// Wrapper for InterceptorLink in order to implement From/TryFrom traits.
+pub(crate) struct InterceptorLinkWrapper(pub(crate) InterceptorLink);
+
+impl TryFrom<&LinkAuthId> for InterceptorLinkWrapper {
+    type Error = ZError;
+
+    /// fails only for LinkAuthId::None which does not map to an InterceptorLink
+    fn try_from(value: &LinkAuthId) -> Result<Self, Self::Error> {
+        match value {
+            LinkAuthId::Tls(_) => Ok(Self(InterceptorLink::Tls)),
+            LinkAuthId::Quic(_) => Ok(Self(InterceptorLink::Quic)),
+            LinkAuthId::Tcp => Ok(Self(InterceptorLink::Tcp)),
+            LinkAuthId::Udp => Ok(Self(InterceptorLink::Udp)),
+            LinkAuthId::Serial => Ok(Self(InterceptorLink::Serial)),
+            LinkAuthId::Unixpipe => Ok(Self(InterceptorLink::Unixpipe)),
+            LinkAuthId::UnixsockStream => Ok(Self(InterceptorLink::UnixsockStream)),
+            LinkAuthId::Vsock => Ok(Self(InterceptorLink::Vsock)),
+            LinkAuthId::Ws => Ok(Self(InterceptorLink::Ws)),
+            LinkAuthId::None => bail!("variant 'None' cannot be converted"),
+        }
     }
 }
 
