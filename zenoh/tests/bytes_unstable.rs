@@ -110,10 +110,8 @@ fn check_zbytes_chunks(zbytes: ZBytes, chunk_size: usize, expected_chunks: &[&[u
             if found.len() > chunk_size {
                 return false;
             }
-        } else {
-            if found.len() != chunk_size {
-                return false;
-            }
+        } else if found.len() != chunk_size {
+            return false;
         }
     }
 
