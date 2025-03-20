@@ -19,6 +19,8 @@ use std::{
 };
 
 use async_trait::async_trait;
+#[cfg(all(feature = "unstable", feature = "internal"))]
+use tokio::sync::mpsc::Receiver;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
 use zenoh_runtime::ZRuntime;
@@ -150,7 +152,7 @@ impl<TOutput: Send + 'static> IntoFuture for BackgroundCloseBuilder<TOutput> {
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(
             async move {
-                let (tx, rx) = async_channel::bounded::<TOutput>(1);
+                let (tx, rx) = tokio::sync::mpsc::channel(1);
 
                 ZRuntime::Net.spawn(async move {
                     tx.send(self.inner.await)
@@ -167,12 +169,12 @@ impl<TOutput: Send + 'static> IntoFuture for BackgroundCloseBuilder<TOutput> {
 #[cfg(all(feature = "unstable", feature = "internal"))]
 #[doc(hidden)]
 pub struct NolocalJoinHandle<TOutput: Send + 'static> {
-    rx: async_channel::Receiver<TOutput>,
+    rx: Receiver<TOutput>,
 }
 
 #[cfg(all(feature = "unstable", feature = "internal"))]
 impl<TOutput: Send + 'static> NolocalJoinHandle<TOutput> {
-    fn new(rx: async_channel::Receiver<TOutput>) -> Self {
+    fn new(rx: Receiver<TOutput>) -> Self {
         Self { rx }
     }
 }
@@ -184,9 +186,9 @@ impl<TOutput: Send + 'static> Resolvable for NolocalJoinHandle<TOutput> {
 
 #[cfg(all(feature = "unstable", feature = "internal"))]
 impl<TOutput: Send + 'static> Wait for NolocalJoinHandle<TOutput> {
-    fn wait(self) -> Self::To {
+    fn wait(mut self) -> Self::To {
         self.rx
-            .recv_blocking()
+            .blocking_recv()
             .expect("NolocalJoinHandle: critical error receiving the result")
     }
 }
@@ -196,7 +198,7 @@ impl<TOutput: Send + 'static> IntoFuture for NolocalJoinHandle<TOutput> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Pin<Box<dyn Future<Output = <Self as IntoFuture>::Output> + Send>>;
 
-    fn into_future(self) -> Self::IntoFuture {
+    fn into_future(mut self) -> Self::IntoFuture {
         Box::pin(
             async move {
                 self.rx
