@@ -125,7 +125,7 @@ pub(crate) fn declare_queryable(
             drop(wtables);
         }
         None => tracing::error!(
-            "{} Declare queryable {} for unknown scope {}!",
+            "{} Declare queryable {} for unknown scope {}",
             face,
             id,
             expr.scope
@@ -151,8 +151,9 @@ pub(crate) fn undeclare_queryable(
                 Some(res) => Some(res),
                 None => {
                     tracing::error!(
-                        "{} Undeclare unknown queryable {}{}!",
+                        "{} Undeclare unknown queryable {} ({}{})",
                         face,
+                        id,
                         prefix.expr(),
                         expr.suffix
                     );
@@ -161,8 +162,9 @@ pub(crate) fn undeclare_queryable(
             },
             None => {
                 tracing::error!(
-                    "{} Undeclare queryable with unknown scope {}",
+                    "{} Undeclare queryable {} with unknown scope {}",
                     face,
+                    id,
                     expr.scope
                 );
                 return;
