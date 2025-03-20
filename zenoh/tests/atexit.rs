@@ -114,11 +114,15 @@ fn session_close_in_atexit() {
     run_in_separate_process("session_close_in_atexit_main", false);
 }
 
+#[cfg(all(feature = "unstable", feature = "internal"))]
 use std::sync::Mutex;
 
+#[cfg(all(feature = "unstable", feature = "internal"))]
 use zenoh::{internal::builders::close::NolocalJoinHandle, Result};
 
+#[cfg(all(feature = "unstable", feature = "internal"))]
 static BACKGROUND_SESSION: OnceLock<Session> = OnceLock::new();
+#[cfg(all(feature = "unstable", feature = "internal"))]
 static CLOSE: OnceLock<Mutex<Option<NolocalJoinHandle<Result<()>>>>> = OnceLock::new();
 
 #[cfg(all(feature = "unstable", feature = "internal"))]
