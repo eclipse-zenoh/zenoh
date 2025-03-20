@@ -16,10 +16,7 @@ use std::{
     collections::HashMap,
     fmt,
     ops::Not,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc, Weak,
-    },
+    sync::{Arc, Weak},
     time::Duration,
 };
 
@@ -84,7 +81,6 @@ pub struct FaceState {
     pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) task_controller: TaskController,
     pub(crate) is_local: bool,
-    pub(crate) next_interceptor_version: AtomicUsize,
 }
 
 impl FaceState {
@@ -119,7 +115,6 @@ impl FaceState {
             hat,
             task_controller: TaskController::default(),
             is_local,
-            next_interceptor_version: AtomicUsize::new(0),
         })
     }
 
@@ -170,7 +165,7 @@ impl FaceState {
                         .get_mut(&self.id)
                         .unwrap(),
                 )
-                .in_interceptor_cache = Some(InterceptorCache::new(cache, interceptor.version));
+                .in_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
             }
         }
 
@@ -189,7 +184,7 @@ impl FaceState {
                         .get_mut(&self.id)
                         .unwrap(),
                 )
-                .e_interceptor_cache = Some(InterceptorCache::new(cache, interceptor.version));
+                .e_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
             }
         }
 
@@ -208,13 +203,16 @@ impl FaceState {
                         .get_mut(&self.id)
                         .unwrap(),
                 )
-                .e_interceptor_cache = Some(InterceptorCache::new(cache, interceptor.version));
+                .e_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
             }
         }
     }
 
-    pub(crate) fn set_interceptors_from_factories(&self, factories: &[InterceptorFactory]) {
-        let version = self.next_interceptor_version.load(Ordering::SeqCst);
+    pub(crate) fn set_interceptors_from_factories(
+        &self,
+        factories: &[InterceptorFactory],
+        version: usize,
+    ) {
         if let Some(mux) = self.primitives.as_any().downcast_ref::<Mux>() {
             let (ingress, egress): (Vec<_>, Vec<_>) = factories
                 .iter()
@@ -252,7 +250,6 @@ impl FaceState {
                 .expect("face in_interceptors should not be None when mcast_group is set")
                 .store(interceptor.into());
         }
-        self.next_interceptor_version.fetch_add(1, Ordering::SeqCst);
     }
 }
 

@@ -86,6 +86,14 @@ pub(crate) fn interceptor_factories(config: &Config) -> ZResult<Vec<InterceptorF
     let mut res: Vec<InterceptorFactory> = vec![];
     // Uncomment to log the interceptors initialisation
     // res.push(Box::new(LoggerInterceptor {}));
+    #[cfg(test)]
+    if let Some(test_interceptors) = tests::ID_TO_INTERCEPTOR_FACTORIES
+        .lock()
+        .unwrap()
+        .get(config.id())
+    {
+        res.extend((test_interceptors.as_ref())());
+    }
     res.extend(downsampling_interceptor_factories(config.downsampling())?);
     res.extend(acl_interceptor_factories(config.access_control())?);
     Ok(res)
@@ -269,4 +277,21 @@ impl InterceptorFactoryTrait for LoggerInterceptor {
         tracing::debug!("New peer multicast {:?}", transport);
         Some(Box::new(IngressMsgLogger {}))
     }
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use std::{
+        collections::HashMap,
+        sync::{Arc, Mutex},
+    };
+
+    use once_cell::sync::Lazy;
+    use zenoh_config::ZenohId;
+
+    use super::InterceptorFactory;
+
+    pub(crate) static ID_TO_INTERCEPTOR_FACTORIES: Lazy<
+        Arc<Mutex<HashMap<ZenohId, Box<dyn Fn() -> Vec<InterceptorFactory> + Sync + Send>>>>,
+    > = Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
 }

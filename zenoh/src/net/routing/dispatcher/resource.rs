@@ -87,6 +87,10 @@ impl InterceptorCache {
         }
     }
 
+    pub(crate) fn empty() -> Self {
+        InterceptorCache::new(None, 0)
+    }
+
     fn finish_update(&self) {
         self.is_updating.store(false, Ordering::SeqCst);
     }
@@ -154,8 +158,8 @@ pub(crate) struct SessionContext {
     pub(crate) subs: Option<SubscriberInfo>,
     pub(crate) qabl: Option<QueryableInfoType>,
     pub(crate) token: bool,
-    pub(crate) in_interceptor_cache: Option<InterceptorCache>,
-    pub(crate) e_interceptor_cache: Option<InterceptorCache>,
+    pub(crate) in_interceptor_cache: InterceptorCache,
+    pub(crate) e_interceptor_cache: InterceptorCache,
 }
 
 impl SessionContext {
@@ -167,8 +171,8 @@ impl SessionContext {
             subs: None,
             qabl: None,
             token: false,
-            in_interceptor_cache: None,
-            e_interceptor_cache: None,
+            in_interceptor_cache: InterceptorCache::empty(),
+            e_interceptor_cache: InterceptorCache::empty(),
         }
     }
 }
@@ -792,8 +796,7 @@ impl Resource {
     ) -> Option<InterceptorCacheValueType> {
         self.session_ctxs
             .get(&face.state.id)
-            .and_then(|ctx| ctx.in_interceptor_cache.as_ref())
-            .and_then(|c| c.value(interceptor, self))
+            .and_then(|ctx| ctx.in_interceptor_cache.value(interceptor, self))
     }
 
     pub(crate) fn get_egress_cache(
@@ -803,8 +806,7 @@ impl Resource {
     ) -> Option<InterceptorCacheValueType> {
         self.session_ctxs
             .get(&face.state.id)
-            .and_then(|ctx| ctx.e_interceptor_cache.as_ref())
-            .and_then(|c| c.value(interceptor, self))
+            .and_then(|ctx| ctx.e_interceptor_cache.value(interceptor, self))
     }
 }
 
