@@ -325,7 +325,7 @@ impl<T> IndexMut<usize> for SingleOrVec<T> {
 }
 
 pub struct Iter<'a, T> {
-    pub drain: std::slice::Iter<'a, T>,
+    pub drain: core::slice::Iter<'a, T>,
     pub last: Option<&'a T>,
 }
 
