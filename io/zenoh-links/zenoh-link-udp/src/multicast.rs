@@ -324,8 +324,8 @@ impl LinkManagerMulticastUdp {
         // If TTL is specified, add set the socket's TTL
         if let Some(ttl_str) = config.get(UDP_MULTICAST_TTL) {
             let ttl = match ttl_str.parse::<u32>() {
-                Ok(ttl)  => ttl,
-                Err(e) => bail!("Can not parse TTL '{}' to a u32: {}", ttl_str, e)
+                Ok(ttl) => ttl,
+                Err(e) => bail!("Can not parse TTL '{}' to a u32: {}", ttl_str, e),
             };
 
             match &local_addr {
@@ -336,11 +336,14 @@ impl LinkManagerMulticastUdp {
                 }
                 IpAddr::V6(_) => match zenoh_util::net::get_index_of_interface(local_addr) {
                     Ok(_) => {
-                        tracing::warn!("set_multicast_ttl_v4 on v6 socket (may have no effect): {}", mcast_addr);
+                        tracing::warn!(
+                            "set_multicast_ttl_v4 on v6 socket (may have no effect): {}",
+                            mcast_addr
+                        );
                         ucast_sock
                             .set_multicast_ttl_v4(ttl)
                             .map_err(|e| zerror!("{}: {}", mcast_addr, e))?
-                    },
+                    }
                     Err(e) => bail!("{}: {}", mcast_addr, e),
                 },
             }
