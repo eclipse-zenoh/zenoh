@@ -22,7 +22,8 @@ use std::{any::Any, collections::HashSet, iter, sync::Arc};
 
 use itertools::Itertools;
 use zenoh_config::{
-    AclConfig, AclMessage, CertCommonName, InterceptorFlow, Interface, Permission, Username,
+    AclConfig, AclMessage, CertCommonName, InterceptorFlow, InterceptorLink, Interface, Permission,
+    Username,
 };
 use zenoh_link::LinkAuthId;
 use zenoh_protocol::{
@@ -102,23 +103,28 @@ impl InterceptorFactoryTrait for AclEnforcer {
         };
 
         let mut cert_common_names = Vec::new();
+        let mut link_types = Vec::new();
         let username = auth_ids.username().cloned().map(|v| Username(v));
 
         for auth_id in auth_ids.link_auth_ids() {
             match auth_id {
                 LinkAuthId::Tls(value) => {
+                    link_types.push(Some(InterceptorLink::Tls));
                     cert_common_names.push(value.as_ref().map(|v| CertCommonName(v.clone())));
                 }
                 LinkAuthId::Quic(value) => {
+                    link_types.push(Some(InterceptorLink::Quic));
                     cert_common_names.push(value.as_ref().map(|v| CertCommonName(v.clone())));
                 }
-                LinkAuthId::Tcp => {}
-                LinkAuthId::Udp => {}
-                LinkAuthId::Serial => {}
-                LinkAuthId::UnixPipe => {}
-                LinkAuthId::UnixSockStream => {}
-                LinkAuthId::VSock => {}
-                LinkAuthId::WebSocket => {}
+                LinkAuthId::Tcp => link_types.push(Some(InterceptorLink::Tcp)),
+                LinkAuthId::Udp => link_types.push(Some(InterceptorLink::Udp)),
+                LinkAuthId::Serial => link_types.push(Some(InterceptorLink::Serial)),
+                LinkAuthId::Unixpipe => link_types.push(Some(InterceptorLink::Unixpipe)),
+                LinkAuthId::UnixsockStream => {
+                    link_types.push(Some(InterceptorLink::UnixsockStream))
+                }
+                LinkAuthId::Vsock => link_types.push(Some(InterceptorLink::Vsock)),
+                LinkAuthId::Ws => link_types.push(Some(InterceptorLink::Ws)),
                 LinkAuthId::None => {}
             }
         }

@@ -129,10 +129,10 @@ pub enum LinkAuthId {
     Tcp,
     Udp,
     Serial,
-    UnixPipe,
-    UnixSockStream,
-    VSock,
-    WebSocket,
+    Unixpipe,
+    UnixsockStream,
+    Vsock,
+    Ws,
     None,
 }
 

@@ -229,7 +229,7 @@ impl LinkUnicastTrait for LinkUnicastWs {
 
     #[inline(always)]
     fn get_auth_id(&self) -> &LinkAuthId {
-        &LinkAuthId::WebSocket
+        &LinkAuthId::Ws
     }
 }
 

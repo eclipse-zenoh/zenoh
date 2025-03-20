@@ -528,7 +528,7 @@ impl LinkUnicastTrait for UnicastPipe {
 
     #[inline(always)]
     fn get_auth_id(&self) -> &LinkAuthId {
-        &LinkAuthId::UnixPipe
+        &LinkAuthId::Unixpipe
     }
 }
 

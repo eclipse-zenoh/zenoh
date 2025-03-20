@@ -165,6 +165,26 @@ impl std::fmt::Display for Username {
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[serde(rename_all = "kebab-case")]
+pub enum InterceptorLink {
+    Tcp,
+    Udp,
+    Tls,
+    Quic,
+    Serial,
+    Unixpipe,
+    UnixsockStream,
+    Vsock,
+    Ws,
+}
+
+impl std::fmt::Display for InterceptorLink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Transport({:?})", self)
+    }
+}
+
+#[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub struct AclConfigPolicyEntry {
     pub id: Option<String>,
     pub rules: Vec<String>,
