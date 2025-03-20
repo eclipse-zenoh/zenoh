@@ -97,45 +97,51 @@ impl InterceptorCache {
         resource: &Resource,
     ) -> Option<InterceptorCacheValueType> {
         let v = self.value.load();
-        if v.version == interceptor.version {
-            Some(v)
-        } else if v.version > interceptor.version {
-            // requesting too old version
-            None
-        } else {
-            // try to update
-            drop(v);
-            match self
-                .is_updating
-                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            {
-                Ok(_) => {
-                    let v = self.value.load();
-                    if v.version == interceptor.version {
-                        // already updated by someone else
-                        self.finish_update();
-                        Some(v)
-                    } else if v.version > interceptor.version {
-                        // already updated beyond current version
-                        self.finish_update();
-                        None
-                    } else {
-                        // Safety: resource expr is always a valide keyexpr
-                        let ke = unsafe { keyexpr::from_str_unchecked(resource.expr()) };
-                        let key_expr = ke.into();
-                        let new_value = interceptor.compute_keyexpr_cache(&key_expr);
-                        self.value.store(
-                            InterceptorCacheValue {
-                                value: new_value,
-                                version: interceptor.version,
+        match v.version.cmp(&interceptor.version) {
+            std::cmp::Ordering::Equal => Some(v),
+            std::cmp::Ordering::Greater => None, //requesting too old version
+            std::cmp::Ordering::Less => {
+                // try to update
+                drop(v);
+                match self.is_updating.compare_exchange(
+                    false,
+                    true,
+                    Ordering::SeqCst,
+                    Ordering::SeqCst,
+                ) {
+                    Ok(_) => {
+                        let v = self.value.load();
+                        match v.version.cmp(&interceptor.version) {
+                            std::cmp::Ordering::Equal => {
+                                // already updated by someone else to the version we need
+                                self.finish_update();
+                                Some(v)
                             }
-                            .into(),
-                        );
-                        self.finish_update();
-                        self.value(interceptor, resource)
+                            std::cmp::Ordering::Greater => {
+                                // already updated by someone else beyond the version we need
+                                self.finish_update();
+                                None
+                            }
+                            std::cmp::Ordering::Less => {
+                                // will need to update ourselves
+                                // Safety: resource expr is always a valid keyexpr
+                                let ke = unsafe { keyexpr::from_str_unchecked(resource.expr()) };
+                                let key_expr = ke.into();
+                                let new_value = interceptor.compute_keyexpr_cache(&key_expr);
+                                self.value.store(
+                                    InterceptorCacheValue {
+                                        value: new_value,
+                                        version: interceptor.version,
+                                    }
+                                    .into(),
+                                );
+                                self.finish_update();
+                                self.value(interceptor, resource)
+                            }
+                        }
                     }
+                    Err(_) => None,
                 }
-                Err(_) => None,
             }
         }
     }
@@ -787,8 +793,7 @@ impl Resource {
         self.session_ctxs
             .get(&face.state.id)
             .and_then(|ctx| ctx.in_interceptor_cache.as_ref())
-            .map(|c| c.value(interceptor, self))
-            .flatten()
+            .and_then(|c| c.value(interceptor, self))
     }
 
     pub(crate) fn get_egress_cache(
@@ -799,8 +804,7 @@ impl Resource {
         self.session_ctxs
             .get(&face.state.id)
             .and_then(|ctx| ctx.e_interceptor_cache.as_ref())
-            .map(|c| c.value(interceptor, self))
-            .flatten()
+            .and_then(|c| c.value(interceptor, self))
     }
 }
 
