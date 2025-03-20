@@ -5718,6 +5718,7 @@ dependencies = [
 name = "zenoh-sync"
 version = "1.2.1"
 dependencies = [
+ "arc-swap",
  "event-listener 5.3.1",
  "futures",
  "tokio",

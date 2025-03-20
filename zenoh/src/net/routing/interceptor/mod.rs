@@ -291,6 +291,7 @@ pub(crate) mod tests {
 
     use super::InterceptorFactory;
 
+    #[allow(clippy::type_complexity)]
     pub(crate) static ID_TO_INTERCEPTOR_FACTORIES: Lazy<
         Arc<Mutex<HashMap<ZenohId, Box<dyn Fn() -> Vec<InterceptorFactory> + Sync + Send>>>>,
     > = Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));

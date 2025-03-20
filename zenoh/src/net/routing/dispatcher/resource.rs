@@ -18,13 +18,9 @@ use std::{
     convert::TryInto,
     hash::{Hash, Hasher},
     ops::{Deref, DerefMut},
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, RwLock, Weak,
-    },
+    sync::{Arc, RwLock, Weak},
 };
 
-use arc_swap::{ArcSwap, Guard};
 use zenoh_collections::SingleOrBoxHashSet;
 use zenoh_config::WhatAmI;
 use zenoh_protocol::{
@@ -35,7 +31,7 @@ use zenoh_protocol::{
         Mapping, RequestId,
     },
 };
-use zenoh_sync::get_mut_unchecked;
+use zenoh_sync::{get_mut_unchecked, Cache, CacheValueType};
 
 use super::{
     face::FaceState,
@@ -61,93 +57,32 @@ pub(crate) struct QueryTargetQabl {
 }
 pub(crate) type QueryTargetQablSet = Vec<QueryTargetQabl>;
 
-pub(crate) struct InterceptorCacheValue {
-    version: usize,
-    value: Option<Box<dyn Any + Send + Sync>>,
-}
-
-impl InterceptorCacheValue {
-    pub(crate) fn cache_ref(&self) -> Option<&Box<dyn Any + Send + Sync>> {
-        self.value.as_ref()
-    }
-}
-
-pub(crate) struct InterceptorCache {
-    value: ArcSwap<InterceptorCacheValue>,
-    is_updating: AtomicBool,
-}
-
-pub(crate) type InterceptorCacheValueType = Guard<Arc<InterceptorCacheValue>>;
+pub(crate) struct InterceptorCache(Cache<Option<Box<dyn Any + Send + Sync>>>);
+pub(crate) type InterceptorCacheValueType = CacheValueType<Option<Box<dyn Any + Send + Sync>>>;
 
 impl InterceptorCache {
     pub(crate) fn new(value: Option<Box<dyn Any + Send + Sync>>, version: usize) -> Self {
-        InterceptorCache {
-            value: ArcSwap::new(InterceptorCacheValue { version, value }.into()),
-            is_updating: AtomicBool::new(false),
-        }
+        Self(Cache::<Option<Box<dyn Any + Send + Sync>>>::new(
+            value, version,
+        ))
     }
 
     pub(crate) fn empty() -> Self {
         InterceptorCache::new(None, 0)
     }
 
-    fn finish_update(&self) {
-        self.is_updating.store(false, Ordering::SeqCst);
-    }
-
+    #[inline]
     fn value(
         &self,
         interceptor: &InterceptorsChain,
         resource: &Resource,
     ) -> Option<InterceptorCacheValueType> {
-        let v = self.value.load();
-        match v.version.cmp(&interceptor.version) {
-            std::cmp::Ordering::Equal => Some(v),
-            std::cmp::Ordering::Greater => None, //requesting too old version
-            std::cmp::Ordering::Less => {
-                // try to update
-                drop(v);
-                match self.is_updating.compare_exchange(
-                    false,
-                    true,
-                    Ordering::SeqCst,
-                    Ordering::SeqCst,
-                ) {
-                    Ok(_) => {
-                        let v = self.value.load();
-                        match v.version.cmp(&interceptor.version) {
-                            std::cmp::Ordering::Equal => {
-                                // already updated by someone else to the version we need
-                                self.finish_update();
-                                Some(v)
-                            }
-                            std::cmp::Ordering::Greater => {
-                                // already updated by someone else beyond the version we need
-                                self.finish_update();
-                                None
-                            }
-                            std::cmp::Ordering::Less => {
-                                // will need to update ourselves
-                                // Safety: resource expr is always a valid keyexpr
-                                let ke = unsafe { keyexpr::from_str_unchecked(resource.expr()) };
-                                let key_expr = ke.into();
-                                let new_value = interceptor.compute_keyexpr_cache(&key_expr);
-                                self.value.store(
-                                    InterceptorCacheValue {
-                                        value: new_value,
-                                        version: interceptor.version,
-                                    }
-                                    .into(),
-                                );
-                                self.finish_update();
-                                self.value(interceptor, resource)
-                            }
-                        }
-                    }
-                    Err(_) => None,
-                }
-            }
-        }
+        self.0.value(interceptor.version, || {
+            // Safety: resource expr is always a valid keyexpr
+            let ke = unsafe { keyexpr::from_str_unchecked(resource.expr()) };
+            let key_expr = ke.into();
+            interceptor.compute_keyexpr_cache(&key_expr)
+        })
     }
 }
 
