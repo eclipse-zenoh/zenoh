@@ -22,6 +22,7 @@ use std::{
 
 use arc_swap::ArcSwap;
 use tokio_util::sync::CancellationToken;
+use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
     core::{ExprId, Reliability, WhatAmI, WireExpr, ZenohIdProto},
     network::{
@@ -42,16 +43,13 @@ use super::{
     resource::*,
     tables::TablesLock,
 };
-use crate::{
-    api::key_expr::KeyExpr,
-    net::{
-        primitives::{McastMux, Mux, Primitives},
-        routing::{
-            dispatcher::interests::finalize_pending_interests,
-            interceptor::{
-                EgressInterceptor, IngressInterceptor, InterceptorFactory, InterceptorTrait,
-                InterceptorsChain,
-            },
+use crate::net::{
+    primitives::{McastMux, Mux, Primitives},
+    routing::{
+        dispatcher::interests::finalize_pending_interests,
+        interceptor::{
+            EgressInterceptor, IngressInterceptor, InterceptorFactory, InterceptorTrait,
+            InterceptorsChain,
         },
     },
 };
@@ -157,8 +155,8 @@ impl FaceState {
             .map(|itor| itor.load())
             .and_then(|is| is.is_empty().not().then_some(is))
         {
-            if let Ok(expr) = KeyExpr::try_from(res.expr().to_string()) {
-                let cache = interceptor.compute_keyexpr_cache(&expr);
+            if let Ok(expr) = keyexpr::new(res.expr()) {
+                let cache = interceptor.compute_keyexpr_cache(expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
                         .session_ctxs
@@ -176,8 +174,8 @@ impl FaceState {
             .map(|mux| mux.interceptor.load())
             .and_then(|is| is.is_empty().not().then_some(is))
         {
-            if let Ok(expr) = KeyExpr::try_from(res.expr().to_string()) {
-                let cache = interceptor.compute_keyexpr_cache(&expr);
+            if let Ok(expr) = keyexpr::new(res.expr()) {
+                let cache = interceptor.compute_keyexpr_cache(expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
                         .session_ctxs
@@ -195,8 +193,8 @@ impl FaceState {
             .map(|mux| mux.interceptor.load())
             .and_then(|is| is.is_empty().not().then_some(is))
         {
-            if let Ok(expr) = KeyExpr::try_from(res.expr().to_string()) {
-                let cache = interceptor.compute_keyexpr_cache(&expr);
+            if let Ok(expr) = keyexpr::new(res.expr()) {
+                let cache = interceptor.compute_keyexpr_cache(expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
                         .session_ctxs
