@@ -59,9 +59,10 @@ impl TransportPeerEventHandler for DeMux {
                 .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
                 .flatten()
                 .cloned();
-            let cache = prefix
+            let cache_guard = prefix
                 .as_ref()
-                .and_then(|p| p.get_ingress_cache(&self.face));
+                .and_then(|p| p.get_ingress_cache(&self.face, &interceptor));
+            let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
 
             let ctx = match &ctx.msg.body {
                 NetworkBody::Request(request) => {

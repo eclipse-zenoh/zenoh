@@ -31,7 +31,7 @@ use zenoh_protocol::{
         Mapping, RequestId,
     },
 };
-use zenoh_sync::get_mut_unchecked;
+use zenoh_sync::{get_mut_unchecked, Cache, CacheValueType};
 
 use super::{
     face::FaceState,
@@ -40,6 +40,7 @@ use super::{
 };
 use crate::net::routing::{
     dispatcher::face::Face,
+    interceptor::{InterceptorTrait, InterceptorsChain},
     router::{disable_matches_data_routes, disable_matches_query_routes},
     RoutingContext,
 };
@@ -56,6 +57,37 @@ pub(crate) struct QueryTargetQabl {
 }
 pub(crate) type QueryTargetQablSet = Vec<QueryTargetQabl>;
 
+pub(crate) struct InterceptorCache(Cache<Option<Box<dyn Any + Send + Sync>>>);
+pub(crate) type InterceptorCacheValueType = CacheValueType<Option<Box<dyn Any + Send + Sync>>>;
+
+impl InterceptorCache {
+    pub(crate) fn new(value: Option<Box<dyn Any + Send + Sync>>, version: usize) -> Self {
+        Self(Cache::<Option<Box<dyn Any + Send + Sync>>>::new(
+            value, version,
+        ))
+    }
+
+    pub(crate) fn empty() -> Self {
+        InterceptorCache::new(None, 0)
+    }
+
+    #[inline]
+    fn value(
+        &self,
+        interceptor: &InterceptorsChain,
+        resource: &Resource,
+    ) -> Option<InterceptorCacheValueType> {
+        self.0
+            .value(interceptor.version, || {
+                // Safety: resource expr is always a valid keyexpr
+                let ke = unsafe { keyexpr::from_str_unchecked(resource.expr()) };
+                let key_expr = ke.into();
+                interceptor.compute_keyexpr_cache(&key_expr)
+            })
+            .ok()
+    }
+}
+
 pub(crate) struct SessionContext {
     pub(crate) face: Arc<FaceState>,
     pub(crate) local_expr_id: Option<ExprId>,
@@ -63,8 +95,8 @@ pub(crate) struct SessionContext {
     pub(crate) subs: Option<SubscriberInfo>,
     pub(crate) qabl: Option<QueryableInfoType>,
     pub(crate) token: bool,
-    pub(crate) in_interceptor_cache: Option<Box<dyn Any + Send + Sync>>,
-    pub(crate) e_interceptor_cache: Option<Box<dyn Any + Send + Sync>>,
+    pub(crate) in_interceptor_cache: InterceptorCache,
+    pub(crate) e_interceptor_cache: InterceptorCache,
 }
 
 impl SessionContext {
@@ -76,8 +108,8 @@ impl SessionContext {
             subs: None,
             qabl: None,
             token: false,
-            in_interceptor_cache: None,
-            e_interceptor_cache: None,
+            in_interceptor_cache: InterceptorCache::empty(),
+            e_interceptor_cache: InterceptorCache::empty(),
         }
     }
 }
@@ -694,16 +726,24 @@ impl Resource {
         }
     }
 
-    pub(crate) fn get_ingress_cache(&self, face: &Face) -> Option<&Box<dyn Any + Send + Sync>> {
+    pub(crate) fn get_ingress_cache(
+        &self,
+        face: &Face,
+        interceptor: &InterceptorsChain,
+    ) -> Option<InterceptorCacheValueType> {
         self.session_ctxs
             .get(&face.state.id)
-            .and_then(|ctx| ctx.in_interceptor_cache.as_ref())
+            .and_then(|ctx| ctx.in_interceptor_cache.value(interceptor, self))
     }
 
-    pub(crate) fn get_egress_cache(&self, face: &Face) -> Option<&Box<dyn Any + Send + Sync>> {
+    pub(crate) fn get_egress_cache(
+        &self,
+        face: &Face,
+        interceptor: &InterceptorsChain,
+    ) -> Option<InterceptorCacheValueType> {
         self.session_ctxs
             .get(&face.state.id)
-            .and_then(|ctx| ctx.e_interceptor_cache.as_ref())
+            .and_then(|ctx| ctx.e_interceptor_cache.value(interceptor, self))
     }
 }
 

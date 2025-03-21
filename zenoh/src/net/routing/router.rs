@@ -13,7 +13,7 @@
 //
 use std::{
     str::FromStr,
-    sync::{Arc, Mutex, RwLock},
+    sync::{atomic::Ordering, Arc, Mutex, RwLock},
 };
 
 use arc_swap::ArcSwap;
@@ -145,7 +145,10 @@ impl Router {
                 )
             })
             .clone();
-        newface.set_interceptors_from_factories(&tables.interceptors);
+        newface.set_interceptors_from_factories(
+            &tables.interceptors,
+            tables.next_interceptor_version.load(Ordering::SeqCst),
+        );
         tracing::debug!("New {}", newface);
 
         let mut face = Face {
@@ -190,7 +193,10 @@ impl Router {
             ctrl_lock.new_face(),
             false,
         );
-        face.set_interceptors_from_factories(&tables.interceptors);
+        face.set_interceptors_from_factories(
+            &tables.interceptors,
+            tables.next_interceptor_version.load(Ordering::SeqCst),
+        );
         let _ = mux.face.set(Face {
             state: face.clone(),
             tables: self.tables.clone(),
@@ -223,7 +229,10 @@ impl Router {
             ctrl_lock.new_face(),
             false,
         );
-        face_state.set_interceptors_from_factories(&tables.interceptors);
+        face_state.set_interceptors_from_factories(
+            &tables.interceptors,
+            tables.next_interceptor_version.load(Ordering::SeqCst),
+        );
         tables.mcast_faces.push(face_state.clone());
 
         tables.disable_all_routes();
