@@ -78,6 +78,7 @@ pub struct FaceState {
     pub(crate) pending_queries: HashMap<RequestId, (Arc<Query>, CancellationToken)>,
     pub(crate) mcast_group: Option<TransportMulticast>,
     pub(crate) in_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
+    pub(crate) eg_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) task_controller: TaskController,
     pub(crate) is_local: bool,
@@ -93,6 +94,7 @@ impl FaceState {
         primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
         mcast_group: Option<TransportMulticast>,
         in_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
+        eg_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
         hat: Box<dyn Any + Send + Sync>,
         is_local: bool,
     ) -> Arc<FaceState> {
@@ -112,6 +114,7 @@ impl FaceState {
             pending_queries: HashMap::new(),
             mcast_group,
             in_interceptors,
+            eg_interceptors,
             hat,
             task_controller: TaskController::default(),
             is_local,
@@ -218,11 +221,16 @@ impl FaceState {
                 InterceptorsChain::from(ingress.into_iter().flatten().collect::<Vec<_>>()),
                 InterceptorsChain::from(egress.into_iter().flatten().collect::<Vec<_>>()),
             );
-            mux.interceptor.store(egress.into());
+            let egress = Arc::new(egress);
+            mux.interceptor.store(egress.clone());
             self.in_interceptors
                 .as_ref()
                 .expect("face in_interceptors should not be None when primitives are Mux")
-                .store(ingress.into());
+                .store(Arc::new(ingress));
+            self.in_interceptors
+                .as_ref()
+                .expect("face eg_interceptors should not be None when primitives are Mux")
+                .store(egress.clone());
         } else if let Some(mux) = self.primitives.as_any().downcast_ref::<McastMux>() {
             let interceptor = InterceptorsChain::from(
                 factories
@@ -457,7 +465,7 @@ impl Primitives for Face {
 
     #[inline]
     fn send_push(&self, msg: &mut Push, reliability: Reliability) {
-        route_data(&self.tables, &self, msg, reliability);
+        route_data(&self.tables, self, msg, reliability);
     }
 
     fn send_request(&self, msg: &mut Request) {
