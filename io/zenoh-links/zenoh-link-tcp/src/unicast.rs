@@ -245,6 +245,7 @@ impl LinkManagerUnicastTcp {
 impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
         let dst_addrs = get_tcp_addrs(endpoint.address()).await?;
+
         let config = endpoint.config();
 
         let link_config = TcpLinkConfig::new(&config)?;
@@ -252,6 +253,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
             link_config.tx_buffer_size,
             link_config.rx_buffer_size,
             link_config.bind_iface,
+            link_config.bind_socket,
         );
 
         let mut errs: Vec<ZError> = vec![];
@@ -280,6 +282,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
 
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
         let addrs = get_tcp_addrs(endpoint.address()).await?;
+
         let config = endpoint.config();
 
         let link_config = TcpLinkConfig::new(&config)?;

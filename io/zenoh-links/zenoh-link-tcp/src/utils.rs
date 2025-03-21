@@ -11,9 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{net::SocketAddr, str::FromStr};
 use zenoh_config::Config as ZenohConfig;
 use zenoh_link_commons::{
-    tcp::TcpSocketConfig, ConfigurationInspector, BIND_INTERFACE, TCP_SO_RCV_BUF, TCP_SO_SND_BUF,
+    tcp::TcpSocketConfig, ConfigurationInspector, BIND_INTERFACE, BIND_SOCKET, TCP_SO_RCV_BUF,
+    TCP_SO_SND_BUF,
 };
 use zenoh_protocol::core::{parameters, Config};
 use zenoh_result::{zerror, ZResult};
@@ -45,14 +47,21 @@ pub(crate) struct TcpLinkConfig<'a> {
     pub(crate) rx_buffer_size: Option<u32>,
     pub(crate) tx_buffer_size: Option<u32>,
     pub(crate) bind_iface: Option<&'a str>,
+    pub(crate) bind_socket: Option<SocketAddr>,
 }
 
 impl<'a> TcpLinkConfig<'a> {
     pub(crate) fn new(config: &'a Config) -> ZResult<Self> {
+        let mut bind_socket = None;
+        if let Some(bind_socket_str) = config.get(BIND_SOCKET) {
+            bind_socket = Some(SocketAddr::from_str(bind_socket_str)?)
+        };
+
         let mut tcp_config = Self {
             rx_buffer_size: None,
             tx_buffer_size: None,
             bind_iface: config.get(BIND_INTERFACE),
+            bind_socket,
         };
 
         if let Some(size) = config.get(TCP_SO_RCV_BUF) {
@@ -74,6 +83,11 @@ impl<'a> TcpLinkConfig<'a> {
 
 impl<'a> From<TcpLinkConfig<'a>> for TcpSocketConfig<'a> {
     fn from(value: TcpLinkConfig<'a>) -> Self {
-        Self::new(value.tx_buffer_size, value.rx_buffer_size, value.bind_iface)
+        Self::new(
+            value.tx_buffer_size,
+            value.rx_buffer_size,
+            value.bind_iface,
+            value.bind_socket,
+        )
     }
 }
