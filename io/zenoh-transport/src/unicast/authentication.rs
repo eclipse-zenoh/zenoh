@@ -27,7 +27,7 @@ impl TransportAuthId {
     pub(crate) fn set_username(&mut self, user_pwd_id: &UsrPwdId) {
         self.username = if let Some(username) = &user_pwd_id.0 {
             // Convert username from Vec<u8> to String
-            match std::str::from_utf8(&username) {
+            match std::str::from_utf8(username) {
                 Ok(name) => Some(name.to_owned()),
                 Err(e) => {
                     tracing::error!("Error in extracting username {}", e);
