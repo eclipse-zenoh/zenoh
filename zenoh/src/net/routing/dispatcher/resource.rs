@@ -77,12 +77,14 @@ impl InterceptorCache {
         interceptor: &InterceptorsChain,
         resource: &Resource,
     ) -> Option<InterceptorCacheValueType> {
-        self.0.value(interceptor.version, || {
-            // Safety: resource expr is always a valid keyexpr
-            let ke = unsafe { keyexpr::from_str_unchecked(resource.expr()) };
-            let key_expr = ke.into();
-            interceptor.compute_keyexpr_cache(&key_expr)
-        })
+        self.0
+            .value(interceptor.version, || {
+                // Safety: resource expr is always a valid keyexpr
+                let ke = unsafe { keyexpr::from_str_unchecked(resource.expr()) };
+                let key_expr = ke.into();
+                interceptor.compute_keyexpr_cache(&key_expr)
+            })
+            .ok()
     }
 }
 

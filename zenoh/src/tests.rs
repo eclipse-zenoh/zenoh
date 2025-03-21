@@ -99,15 +99,13 @@ impl InterceptorTrait for TestInterceptor {
         mut ctx: RoutingContext<NetworkMessage>,
         cache: Option<&Box<dyn Any + Send + Sync>>,
     ) -> Option<RoutingContext<NetworkMessage>> {
-        match &mut ctx.msg.body {
-            NetworkBody::Push(Push {
-                payload: PushBody::Put(p),
-                ..
-            }) => {
-                let out = format!("Cache hit: {}, data: {}", cache.is_some(), &self.data);
-                p.payload = ZBuf::from(out.as_bytes().to_owned());
-            }
-            _ => {}
+        if let NetworkBody::Push(Push {
+            payload: PushBody::Put(p),
+            ..
+        }) = &mut ctx.msg.body
+        {
+            let out = format!("Cache hit: {}, data: {}", cache.is_some(), &self.data);
+            p.payload = ZBuf::from(out.as_bytes().to_owned());
         }
         Some(ctx)
     }
@@ -158,11 +156,11 @@ async fn test_interceptors_cache_update_ingress() {
     let _ = super::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
         .lock()
         .unwrap()
-        .insert(router_id.clone(), Box::new(f));
+        .insert(router_id, Box::new(f));
 
     super::init_log_from_env_or("error");
     let mut config_router = get_basic_router_config(27701).await;
-    config_router.set_id(router_id.clone()).unwrap();
+    config_router.set_id(router_id).unwrap();
 
     let config_client1 = get_basic_client_config(27701).await;
     let config_client2 = get_basic_client_config(27701).await;
@@ -200,7 +198,7 @@ async fn test_interceptors_cache_update_ingress() {
     let _ = super::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
         .lock()
         .unwrap()
-        .insert(router_id.clone(), Box::new(f));
+        .insert(router_id, Box::new(f));
 
     router
         .0
@@ -248,11 +246,11 @@ async fn test_interceptors_cache_update_egress() {
     let _ = super::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
         .lock()
         .unwrap()
-        .insert(router_id.clone(), Box::new(f));
+        .insert(router_id, Box::new(f));
 
     super::init_log_from_env_or("error");
     let mut config_router = get_basic_router_config(27702).await;
-    config_router.set_id(router_id.clone()).unwrap();
+    config_router.set_id(router_id).unwrap();
 
     let config_client1 = get_basic_client_config(27702).await;
     let config_client2 = get_basic_client_config(27702).await;
@@ -290,7 +288,7 @@ async fn test_interceptors_cache_update_egress() {
     let _ = super::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
         .lock()
         .unwrap()
-        .insert(router_id.clone(), Box::new(f));
+        .insert(router_id, Box::new(f));
 
     router
         .0
@@ -338,11 +336,11 @@ async fn test_interceptors_cache_update_egress_then_ingress() {
     let _ = super::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
         .lock()
         .unwrap()
-        .insert(router_id.clone(), Box::new(f));
+        .insert(router_id, Box::new(f));
 
     super::init_log_from_env_or("error");
     let mut config_router = get_basic_router_config(27703).await;
-    config_router.set_id(router_id.clone()).unwrap();
+    config_router.set_id(router_id).unwrap();
 
     let config_client1 = get_basic_client_config(27703).await;
     let config_client2 = get_basic_client_config(27703).await;
@@ -380,7 +378,7 @@ async fn test_interceptors_cache_update_egress_then_ingress() {
     let _ = super::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
         .lock()
         .unwrap()
-        .insert(router_id.clone(), Box::new(f));
+        .insert(router_id, Box::new(f));
 
     router
         .0

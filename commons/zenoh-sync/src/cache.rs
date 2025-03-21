@@ -52,14 +52,21 @@ impl<T> Cache<T> {
     }
 
     /// Tries to retrive value for the specified version.
+    /// Returns a result either containing a cached value, or an f (which is guaranteed to be not invoked by function call in this case).
     /// If requested version corresponds to the value currently stored in cache - the value is returned.
     /// If requested version is older None will be returned.
-    /// If requested version is newer, the new value will be computed and stored by calling f, and then returned.
-    pub fn value(&self, version: usize, f: impl Fn() -> T) -> Option<CacheValueType<T>> {
+    /// If requested version is newer, the new value will be computed and stored by calling f, and then returned,
+    /// unless the value is being currently updated - in this case None will be returned.
+    /// If None is returned it is guaranteed that f was not called.
+    pub fn value(
+        &self,
+        version: usize,
+        f: impl FnOnce() -> T,
+    ) -> Result<CacheValueType<T>, impl FnOnce() -> T> {
         let v = self.value.load();
         match v.version.cmp(&version) {
-            std::cmp::Ordering::Equal => Some(v),
-            std::cmp::Ordering::Greater => None, //requesting too old version
+            std::cmp::Ordering::Equal => Ok(v),
+            std::cmp::Ordering::Greater => Err(f), //requesting too old version
             std::cmp::Ordering::Less => {
                 // try to update
                 drop(v);
@@ -70,17 +77,17 @@ impl<T> Cache<T> {
                     Ordering::SeqCst,
                 ) {
                     Ok(_) => {
-                        let v = self.value.load();
+                        let mut v = self.value.load();
                         match v.version.cmp(&version) {
                             std::cmp::Ordering::Equal => {
                                 // already updated by someone else to the version we need
                                 self.finish_update();
-                                Some(v)
+                                Ok(v)
                             }
                             std::cmp::Ordering::Greater => {
                                 // already updated by someone else beyond the version we need
                                 self.finish_update();
-                                None
+                                Err(f)
                             }
                             std::cmp::Ordering::Less => {
                                 self.value.store(
@@ -90,12 +97,13 @@ impl<T> Cache<T> {
                                     }
                                     .into(),
                                 );
+                                v = self.value.load(); // is_updating set to true guarantees that nobody else will modify the value.
                                 self.finish_update();
-                                self.value(version, f)
+                                Ok(v)
                             }
                         }
                     }
-                    Err(_) => None,
+                    Err(_) => Err(f),
                 }
             }
         }
@@ -104,30 +112,56 @@ impl<T> Cache<T> {
 
 #[cfg(test)]
 mod tests {
+    use std::{sync::Arc, time::Duration};
+
     use super::Cache;
 
     #[test]
-    fn test_cache_single_thread() {
+    fn test_cache() {
         let cache = Cache::<String>::new("0".to_string(), 0);
 
         assert_eq!(
             cache
                 .value(0, || { "1".to_string() })
-                .unwrap()
-                .get_ref()
-                .as_str(),
+                .as_ref()
+                .map(|v| v.get_ref().as_str())
+                .unwrap_or(""),
             "0"
         );
         assert_eq!(
             cache
                 .value(1, || { "1".to_string() })
-                .unwrap()
-                .get_ref()
-                .as_str(),
+                .as_ref()
+                .map(|v| v.get_ref().as_str())
+                .unwrap_or(""),
             "1"
         );
-        assert!(cache.value(0, || { "2".to_string() }).is_none());
-    }
+        assert!(cache.value(0, || { "2".to_string() }).is_err());
 
-    //TODO: add multi-threaded tests.
+        // try to get-update value from another thread
+        let cache = Arc::new(cache);
+        let cache2 = cache.clone();
+        std::thread::spawn(move || {
+            let res = cache2.value(2, || {
+                std::thread::sleep(Duration::from_secs(5));
+                "2".to_string()
+            });
+            assert_eq!(
+                res.as_ref().map(|v| v.get_ref().as_str()).unwrap_or(""),
+                "2"
+            );
+        });
+        std::thread::sleep(Duration::from_secs(1));
+        while cache.value(2, || "".to_string()).is_err() {
+            std::thread::sleep(Duration::from_secs(1));
+        }
+        assert_eq!(
+            cache
+                .value(2, || { "".to_string() })
+                .as_ref()
+                .map(|v| v.get_ref().as_str())
+                .unwrap_or(""),
+            "2"
+        );
+    }
 }
