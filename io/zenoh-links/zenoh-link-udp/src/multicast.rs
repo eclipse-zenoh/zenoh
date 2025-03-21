@@ -326,7 +326,7 @@ impl LinkManagerMulticastUdp {
             match &local_addr {
                 IpAddr::V4(_) => {
                     let ttl = match ttl_str.parse::<u32>() {
-                        Ok(ttl)  => ttl,
+                        Ok(ttl) => ttl,
                         Err(e) => bail!("Can not parse TTL '{}' to a u32: {}", ttl_str, e),
                     };
 
