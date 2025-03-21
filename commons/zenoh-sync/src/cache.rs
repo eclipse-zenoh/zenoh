@@ -77,7 +77,7 @@ impl<T> Cache<T> {
                     Ordering::SeqCst,
                 ) {
                     Ok(_) => {
-                        let mut v = self.value.load();
+                        let v = self.value.load();
                         match v.version.cmp(&version) {
                             std::cmp::Ordering::Equal => {
                                 // already updated by someone else to the version we need
@@ -90,6 +90,7 @@ impl<T> Cache<T> {
                                 Err(f)
                             }
                             std::cmp::Ordering::Less => {
+                                drop(v);
                                 self.value.store(
                                     CacheValue {
                                         value: f(),
@@ -97,7 +98,7 @@ impl<T> Cache<T> {
                                     }
                                     .into(),
                                 );
-                                v = self.value.load(); // is_updating set to true guarantees that nobody else will modify the value.
+                                let v = self.value.load(); // is_updating set to true guarantees that nobody else will modify the value.
                                 self.finish_update();
                                 Ok(v)
                             }
