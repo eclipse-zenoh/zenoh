@@ -34,8 +34,8 @@ use zenoh_core::zasynclock;
 use zenoh_link_commons::{
     get_ip_interface_names,
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
-    LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
-    ListenersUnicastIP, NewLinkChannelSender,
+    LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
+    NewLinkChannelSender,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -630,9 +630,6 @@ impl Debug for TlsAuthId {
 
 impl From<TlsAuthId> for LinkAuthId {
     fn from(value: TlsAuthId) -> Self {
-        LinkAuthId::builder()
-            .auth_type(LinkAuthType::Tls)
-            .auth_value(value.auth_value.clone())
-            .build()
+        LinkAuthId::Tls(value.auth_value.clone())
     }
 }

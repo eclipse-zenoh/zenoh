@@ -112,6 +112,9 @@ pub struct DownsamplingItemConf {
     /// A list of interfaces to which the downsampling will be applied
     /// Downsampling will be applied for all interfaces if the parameter is None
     pub interfaces: Option<Vec<String>>,
+    /// A list of link types, transports having one of those link types will have the downsampling applied
+    /// Downsampling will be applied for all link types if the parameter is None
+    pub link_protocols: Option<Vec<InterceptorLink>>,
     // list of message types on which the downsampling will be applied
     pub messages: Vec<DownsamplingMessage>,
     /// A list of interfaces to which the downsampling will be applied.
@@ -135,6 +138,7 @@ pub struct AclConfigSubjects {
     pub interfaces: Option<Vec<Interface>>,
     pub cert_common_names: Option<Vec<CertCommonName>>,
     pub usernames: Option<Vec<Username>>,
+    pub link_protocols: Option<Vec<InterceptorLink>>,
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
@@ -161,6 +165,26 @@ pub struct Username(pub String);
 impl std::fmt::Display for Username {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Username({})", self.0)
+    }
+}
+
+#[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[serde(rename_all = "kebab-case")]
+pub enum InterceptorLink {
+    Tcp,
+    Udp,
+    Tls,
+    Quic,
+    Serial,
+    Unixpipe,
+    UnixsockStream,
+    Vsock,
+    Ws,
+}
+
+impl std::fmt::Display for InterceptorLink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Transport({:?})", self)
     }
 }
 

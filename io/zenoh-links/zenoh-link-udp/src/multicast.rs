@@ -21,7 +21,9 @@ use std::{
 use async_trait::async_trait;
 use socket2::{Domain, Protocol, Socket, Type};
 use tokio::net::UdpSocket;
-use zenoh_link_commons::{LinkManagerMulticastTrait, LinkMulticast, LinkMulticastTrait};
+use zenoh_link_commons::{
+    LinkAuthId, LinkManagerMulticastTrait, LinkMulticast, LinkMulticastTrait,
+};
 use zenoh_protocol::{
     core::{Config, EndPoint, Locator},
     transport::BatchSize,
@@ -131,6 +133,10 @@ impl LinkMulticastTrait for LinkMulticastUdp {
                 break Ok((n, Cow::Owned(locator)));
             }
         }
+    }
+
+    fn get_auth_id(&self) -> &LinkAuthId {
+        &LinkAuthId::Udp
     }
 
     #[inline(always)]

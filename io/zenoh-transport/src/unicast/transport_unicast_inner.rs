@@ -63,7 +63,7 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     fn get_whatami(&self) -> WhatAmI;
     fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>>;
     fn get_links(&self) -> Vec<Link>;
-    fn get_auth_ids(&self) -> Vec<super::authentication::AuthId>;
+    fn get_auth_ids(&self) -> super::authentication::TransportAuthId;
     #[cfg(feature = "shared-memory")]
     fn is_shm(&self) -> bool;
     fn is_qos(&self) -> bool;

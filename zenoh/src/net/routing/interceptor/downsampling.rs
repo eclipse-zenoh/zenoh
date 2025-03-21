@@ -60,6 +60,25 @@ pub(crate) fn downsampling_interceptor_factories(
         if ds.messages.is_empty() {
             bail!("Invalid Downsampling config: messages list must not be empty");
         }
+        // check for empty interfaces list
+        if ds
+            .interfaces
+            .as_ref()
+            .map(|faces| faces.is_empty())
+            .is_some_and(|is_empty| is_empty)
+        {
+            bail!("Invalid Downsampling config: interfaces list must not be empty");
+        }
+        // check for empty link_protocols list
+        if ds
+            .link_protocols
+            .as_ref()
+            .map(|protocols| protocols.is_empty())
+            .is_some_and(|is_empty| is_empty)
+        {
+            bail!("Invalid Downsampling config: link_protocols list must not be empty");
+        }
+
         res.push(Box::new(DownsamplingInterceptorFactory::new(ds)));
     }
 
@@ -68,6 +87,7 @@ pub(crate) fn downsampling_interceptor_factories(
 
 pub struct DownsamplingInterceptorFactory {
     interfaces: Option<Vec<String>>,
+    link_protocols: Option<Vec<InterceptorLink>>,
     rules: Vec<DownsamplingRuleConf>,
     flows: InterfaceEnabled,
     messages: Arc<DownsamplingFilters>,
@@ -78,6 +98,7 @@ impl DownsamplingInterceptorFactory {
         Self {
             interfaces: conf.interfaces,
             rules: conf.rules,
+            link_protocols: conf.link_protocols,
             flows: conf
                 .flows
                 .expect("config flows should be set")
@@ -108,6 +129,28 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
                     if !link.interfaces.iter().any(|x| interfaces.contains(x)) {
                         return (None, None);
                     }
+                }
+            }
+        };
+        if let Some(config_protocols) = &self.link_protocols {
+            tracing::debug!(
+                "New downsampler transport unicast config link protocols: {:?}",
+                config_protocols
+            );
+            match transport.get_auth_ids() {
+                Ok(auth_ids) => {
+                    if !auth_ids
+                        .link_auth_ids()
+                        .iter()
+                        .map(|auth_id| InterceptorLinkWrapper::from(auth_id).0)
+                        .any(|v| config_protocols.contains(&v))
+                    {
+                        return (None, None);
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Error loading transport AuthIds: {e}");
+                    return (None, None);
                 }
             }
         };
