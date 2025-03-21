@@ -20,6 +20,7 @@
 //!
 mod access_control;
 use access_control::acl_interceptor_factories;
+use zenoh_keyexpr::OwnedKeyExpr;
 
 mod authorization;
 use std::any::Any;
@@ -58,7 +59,7 @@ impl From<&[InterceptorFlow]> for InterfaceEnabled {
 }
 
 pub(crate) trait InterceptorTrait {
-    fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>>;
+    fn compute_keyexpr_cache(&self, key_expr: KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>>;
 
     fn intercept(
         &self,
@@ -115,11 +116,11 @@ impl From<Vec<Interceptor>> for InterceptorsChain {
 }
 
 impl InterceptorTrait for InterceptorsChain {
-    fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
+    fn compute_keyexpr_cache(&self, key_expr: KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
         Some(Box::new(
             self.interceptors
                 .iter()
-                .map(|i| i.compute_keyexpr_cache(key_expr))
+                .map(|i| i.compute_keyexpr_cache(key_expr.clone()))
                 .collect::<Vec<Option<Box<dyn Any + Send + Sync>>>>(),
         ))
     }
@@ -160,7 +161,7 @@ impl<T: InterceptorTrait> ComputeOnMiss<T> {
 
 impl<T: InterceptorTrait> InterceptorTrait for ComputeOnMiss<T> {
     #[inline]
-    fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
+    fn compute_keyexpr_cache(&self, key_expr: KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
         self.interceptor.compute_keyexpr_cache(key_expr)
     }
 
@@ -176,7 +177,7 @@ impl<T: InterceptorTrait> InterceptorTrait for ComputeOnMiss<T> {
             self.interceptor.intercept(
                 ctx,
                 self.interceptor
-                    .compute_keyexpr_cache(&key_expr.into())
+                    .compute_keyexpr_cache(key_expr.into())
                     .as_ref(),
             )
         } else {
@@ -189,8 +190,8 @@ impl<T: InterceptorTrait> InterceptorTrait for ComputeOnMiss<T> {
 pub(crate) struct IngressMsgLogger {}
 
 impl InterceptorTrait for IngressMsgLogger {
-    fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
-        Some(Box::new(key_expr.to_string()))
+    fn compute_keyexpr_cache(&self, key_expr: KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
+        Some(Box::new(OwnedKeyExpr::from(key_expr)))
     }
 
     fn intercept(
@@ -218,8 +219,8 @@ impl InterceptorTrait for IngressMsgLogger {
 pub(crate) struct EgressMsgLogger {}
 
 impl InterceptorTrait for EgressMsgLogger {
-    fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
-        Some(Box::new(key_expr.to_string()))
+    fn compute_keyexpr_cache(&self, key_expr: KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
+        Some(Box::new(OwnedKeyExpr::from(key_expr)))
     }
 
     fn intercept(

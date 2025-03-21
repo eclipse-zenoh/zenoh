@@ -158,7 +158,7 @@ impl FaceState {
             .and_then(|is| is.is_empty().not().then_some(is))
         {
             if let Ok(expr) = KeyExpr::try_from(res.expr().to_string()) {
-                let cache = interceptor.compute_keyexpr_cache(&expr);
+                let cache = interceptor.compute_keyexpr_cache(expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
                         .session_ctxs
@@ -177,7 +177,7 @@ impl FaceState {
             .and_then(|is| is.is_empty().not().then_some(is))
         {
             if let Ok(expr) = KeyExpr::try_from(res.expr().to_string()) {
-                let cache = interceptor.compute_keyexpr_cache(&expr);
+                let cache = interceptor.compute_keyexpr_cache(expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
                         .session_ctxs
@@ -196,7 +196,7 @@ impl FaceState {
             .and_then(|is| is.is_empty().not().then_some(is))
         {
             if let Ok(expr) = KeyExpr::try_from(res.expr().to_string()) {
-                let cache = interceptor.compute_keyexpr_cache(&expr);
+                let cache = interceptor.compute_keyexpr_cache(expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
                         .session_ctxs
