@@ -89,6 +89,7 @@ impl Router {
                     primitives.clone(),
                     None,
                     None,
+                    None,
                     ctrl_lock.new_face(),
                     true,
                 )
@@ -126,6 +127,7 @@ impl Router {
         let stats = transport.get_stats()?;
 
         let ingress = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
+        let egress = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
         let mux = Arc::new(Mux::new(transport.clone(), InterceptorsChain::empty()));
         let newface = tables
             .faces
@@ -140,6 +142,7 @@ impl Router {
                     mux.clone(),
                     None,
                     Some(ingress.clone()),
+                    Some(egress),
                     ctrl_lock.new_face(),
                     false,
                 )
@@ -190,6 +193,7 @@ impl Router {
             mux.clone(),
             Some(transport),
             None,
+            None,
             ctrl_lock.new_face(),
             false,
         );
@@ -216,7 +220,8 @@ impl Router {
         let mut tables = zwrite!(self.tables.tables);
         let fid = tables.face_counter;
         tables.face_counter += 1;
-        let interceptor = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
+        let ingress = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
+        let egress = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
         let face_state = FaceState::new(
             fid,
             peer.zid,
@@ -225,7 +230,8 @@ impl Router {
             Some(transport.get_stats().unwrap()),
             Arc::new(DummyPrimitives),
             Some(transport),
-            Some(interceptor.clone()),
+            Some(ingress.clone()),
+            Some(egress),
             ctrl_lock.new_face(),
             false,
         );
@@ -242,7 +248,7 @@ impl Router {
                 state: face_state,
             },
             None,
-            interceptor,
+            ingress,
         )))
     }
 }

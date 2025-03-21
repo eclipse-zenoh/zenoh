@@ -307,7 +307,7 @@ pub fn route_data(
                 .map(|i| i.load())
                 .and_then(|i| i.is_empty().not().then_some(i))
             {
-                let cache = prefix.get_ingress_cache(&face);
+                let cache = prefix.get_ingress_cache(face);
                 let ctx = &mut RoutingContext::new(NetworkMessageMut {
                     body: NetworkBodyMut::Push(msg),
                     reliability,
@@ -361,6 +361,25 @@ pub fn route_data(
                             }
                             msg.wire_expr = key_expr.into();
                             msg.ext_nodeid = ext::NodeIdType { node_id: *context };
+
+                            if let Some(interceptor) = face
+                                .state
+                                .eg_interceptors
+                                .as_ref()
+                                .map(|i| i.load())
+                                .and_then(|i| i.is_empty().not().then_some(i))
+                            {
+                                let cache = prefix.get_egress_cache(face);
+                                let ctx = &mut RoutingContext::new(NetworkMessageMut {
+                                    body: NetworkBodyMut::Push(msg),
+                                    reliability,
+                                });
+
+                                if !interceptor.intercept(ctx, cache) {
+                                    return;
+                                }
+                            };
+
                             outface.primitives.send_push(msg, reliability)
                         }
                     } else {
@@ -386,16 +405,33 @@ pub fn route_data(
                                 inc_stats!(outface, tx, admin, msg.payload)
                             }
 
-                            outface.primitives.send_push(
-                                &mut Push {
-                                    wire_expr: key_expr,
-                                    ext_qos: msg.ext_qos,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType { node_id: context },
-                                    payload: msg.payload.clone(),
-                                },
-                                reliability,
-                            )
+                            let msg = &mut Push {
+                                wire_expr: key_expr,
+                                ext_qos: msg.ext_qos,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType { node_id: context },
+                                payload: msg.payload.clone(),
+                            };
+
+                            if let Some(interceptor) = face
+                                .state
+                                .eg_interceptors
+                                .as_ref()
+                                .map(|i| i.load())
+                                .and_then(|i| i.is_empty().not().then_some(i))
+                            {
+                                let cache = prefix.get_egress_cache(face);
+                                let ctx = &mut RoutingContext::new(NetworkMessageMut {
+                                    body: NetworkBodyMut::Push(msg),
+                                    reliability,
+                                });
+
+                                if !interceptor.intercept(ctx, cache) {
+                                    continue;
+                                }
+                            };
+
+                            outface.primitives.send_push(msg, reliability)
                         }
                     }
                 }
