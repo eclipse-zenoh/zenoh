@@ -112,6 +112,9 @@ pub struct DownsamplingItemConf {
     /// A list of interfaces to which the downsampling will be applied
     /// Downsampling will be applied for all interfaces if the parameter is None
     pub interfaces: Option<Vec<String>>,
+    /// A list of link types, transports having one of those link types will have the downsampling applied
+    /// Downsampling will be applied for all link types if the parameter is None
+    pub link_protocols: Option<Vec<InterceptorLink>>,
     // list of message types on which the downsampling will be applied
     pub messages: Vec<DownsamplingMessage>,
     /// A list of interfaces to which the downsampling will be applied.
