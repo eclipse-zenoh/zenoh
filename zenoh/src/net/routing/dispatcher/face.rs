@@ -228,7 +228,7 @@ impl FaceState {
                 .as_ref()
                 .expect("face in_interceptors should not be None when primitives are Mux")
                 .store(Arc::new(ingress));
-            self.in_interceptors
+            self.eg_interceptors
                 .as_ref()
                 .expect("face eg_interceptors should not be None when primitives are Mux")
                 .store(egress.clone());
