@@ -113,14 +113,9 @@ impl InterceptorFactoryTrait for AclEnforcer {
                 LinkAuthId::Quic(value) => {
                     cert_common_names.push(value.as_ref().map(|v| CertCommonName(v.clone())));
                 }
-                LinkAuthId::None => continue,
                 _ => {}
             }
-            link_protocols.push(Some(
-                InterceptorLinkWrapper::try_from(auth_id)
-                    .expect("auth_id should not be None")
-                    .0,
-            ));
+            link_protocols.push(Some(InterceptorLinkWrapper::from(auth_id).0));
         }
         if cert_common_names.is_empty() {
             cert_common_names.push(None);

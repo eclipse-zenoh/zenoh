@@ -27,7 +27,7 @@ use std::any::Any;
 
 use zenoh_config::{Config, InterceptorFlow, InterceptorLink};
 use zenoh_protocol::network::NetworkMessage;
-use zenoh_result::{ZError, ZResult};
+use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 use super::RoutingContext;
@@ -58,25 +58,22 @@ impl From<&[InterceptorFlow]> for InterfaceEnabled {
     }
 }
 
-/// Wrapper for InterceptorLink in order to implement From/TryFrom traits.
+/// Wrapper for InterceptorLink in order to implement From trait.
 pub(crate) struct InterceptorLinkWrapper(pub(crate) InterceptorLink);
 
-impl TryFrom<&LinkAuthId> for InterceptorLinkWrapper {
-    type Error = ZError;
-
+impl From<&LinkAuthId> for InterceptorLinkWrapper {
     /// fails only for LinkAuthId::None which does not map to an InterceptorLink
-    fn try_from(value: &LinkAuthId) -> Result<Self, Self::Error> {
+    fn from(value: &LinkAuthId) -> Self {
         match value {
-            LinkAuthId::Tls(_) => Ok(Self(InterceptorLink::Tls)),
-            LinkAuthId::Quic(_) => Ok(Self(InterceptorLink::Quic)),
-            LinkAuthId::Tcp => Ok(Self(InterceptorLink::Tcp)),
-            LinkAuthId::Udp => Ok(Self(InterceptorLink::Udp)),
-            LinkAuthId::Serial => Ok(Self(InterceptorLink::Serial)),
-            LinkAuthId::Unixpipe => Ok(Self(InterceptorLink::Unixpipe)),
-            LinkAuthId::UnixsockStream => Ok(Self(InterceptorLink::UnixsockStream)),
-            LinkAuthId::Vsock => Ok(Self(InterceptorLink::Vsock)),
-            LinkAuthId::Ws => Ok(Self(InterceptorLink::Ws)),
-            LinkAuthId::None => bail!("variant 'None' cannot be converted"),
+            LinkAuthId::Tls(_) => Self(InterceptorLink::Tls),
+            LinkAuthId::Quic(_) => Self(InterceptorLink::Quic),
+            LinkAuthId::Tcp => Self(InterceptorLink::Tcp),
+            LinkAuthId::Udp => Self(InterceptorLink::Udp),
+            LinkAuthId::Serial => Self(InterceptorLink::Serial),
+            LinkAuthId::Unixpipe => Self(InterceptorLink::Unixpipe),
+            LinkAuthId::UnixsockStream => Self(InterceptorLink::UnixsockStream),
+            LinkAuthId::Vsock => Self(InterceptorLink::Vsock),
+            LinkAuthId::Ws => Self(InterceptorLink::Ws),
         }
     }
 }

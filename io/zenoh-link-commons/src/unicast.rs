@@ -133,11 +133,4 @@ pub enum LinkAuthId {
     UnixsockStream,
     Vsock,
     Ws,
-    None,
-}
-
-impl Default for LinkAuthId {
-    fn default() -> Self {
-        LinkAuthId::None
-    }
 }
