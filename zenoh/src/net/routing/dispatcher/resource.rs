@@ -81,8 +81,7 @@ impl InterceptorCache {
             .value(interceptor.version, || {
                 // Safety: resource expr is always a valid keyexpr
                 let ke = unsafe { keyexpr::from_str_unchecked(resource.expr()) };
-                let key_expr = ke.into();
-                interceptor.compute_keyexpr_cache(&key_expr)
+                interceptor.compute_keyexpr_cache(ke)
             })
             .ok()
     }
