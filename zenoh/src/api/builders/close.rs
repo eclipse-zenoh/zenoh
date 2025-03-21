@@ -76,12 +76,16 @@ impl<TCloseable: Closeable> Resolvable for CloseBuilder<TCloseable> {
 impl<TCloseable: Closeable> Wait for CloseBuilder<TCloseable> {
     fn wait(self) -> Self::To {
         let future = self.into_future();
-        match tokio::runtime::Handle::try_current().is_ok() {
-            true => {
+        match tokio::runtime::Handle::try_current() {
+            Ok(_) => {
                 tracing::trace!("tokio TLS available, closing closeable directly");
                 ZRuntime::Net.block_in_place(future)
             }
-            false => {
+            Err(e) if e.is_missing_context() => {
+                tracing::trace!("tokio TLS is just missing, closing closeable directly");
+                ZRuntime::Net.block_in_place(future)
+            }
+            Err(_) => {
                 #[cfg(nolocal_thread_not_available)]
                 panic!("Close when thread-local storage is unavailable (typically in atexit()) does not work for this Rust 1.85..1.85.1, see https://github.com/rust-lang/rust/issues/138696");
 
