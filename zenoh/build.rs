@@ -17,4 +17,12 @@ fn main() {
         "cargo:rustc-env=RUSTC_VERSION={}",
         version_meta.short_version_string
     );
+
+    let version = rustc_version::version().unwrap();
+    if version >= rustc_version::Version::parse("1.85.0").unwrap()
+        && version <= rustc_version::Version::parse("1.85.1").unwrap()
+    {
+        // https://github.com/rust-lang/rust/issues/138696
+        println!("cargo:rustc-cfg=nolocal_thread_not_available");
+    }
 }
