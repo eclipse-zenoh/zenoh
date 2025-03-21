@@ -51,7 +51,7 @@ impl<T> Cache<T> {
         self.is_updating.store(false, Ordering::SeqCst);
     }
 
-    /// Tries to retrive value for the specified version.
+    /// Tries to retrieve value for the specified version.
     /// Returns a result either containing a cached value, or an f (which is guaranteed to be not invoked by function call in this case).
     /// If requested version corresponds to the value currently stored in cache - the value is returned.
     /// If requested version is older None will be returned.
