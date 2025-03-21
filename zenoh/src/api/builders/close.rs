@@ -83,7 +83,7 @@ impl<TCloseable: Closeable> Wait for CloseBuilder<TCloseable> {
             }
             false => {
                 #[cfg(nolocal_thread_not_available)]
-                panic!("Close when thread-local storage is unavailable (typically in atexit()) does not work for this Rust 1.85..1.85.1, plese see https://github.com/rust-lang/rust/issues/138696");
+                panic!("Close when thread-local storage is unavailable (typically in atexit()) does not work for this Rust 1.85..1.85.1, see https://github.com/rust-lang/rust/issues/138696");
 
                 #[cfg(not(nolocal_thread_not_available))]
                 {
