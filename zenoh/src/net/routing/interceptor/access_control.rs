@@ -103,7 +103,7 @@ impl InterceptorFactoryTrait for AclEnforcer {
 
         let mut cert_common_names = Vec::new();
         let mut link_protocols = Vec::new();
-        let username = auth_ids.username().cloned().map(|v| Username(v));
+        let username = auth_ids.username().cloned().map(Username);
 
         for auth_id in auth_ids.link_auth_ids() {
             match auth_id {
