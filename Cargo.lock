@@ -5166,7 +5166,6 @@ dependencies = [
  "rand 0.8.5",
  "ref-cast",
  "rustc_version 0.4.1",
- "rustversion",
  "serde",
  "serde_json",
  "socket2 0.5.7",

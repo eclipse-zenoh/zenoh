@@ -82,16 +82,22 @@ impl<TCloseable: Closeable> Wait for CloseBuilder<TCloseable> {
                 ZRuntime::Net.block_in_place(future)
             }
             false => {
-                let evaluate = move || {
-                    // NOTE: tracing logger also panics if used inside atexit() handler!!!
-                    tracing::trace!(
-                        "tokio TLS NOT available, closing closeable in separate thread"
-                    );
-                    ZRuntime::Net.block_in_place(future)
-                };
-                std::thread::spawn(evaluate)
-                    .join()
-                    .expect("Error spawning atexit-safe thread")
+                #[cfg(nolocal_thread_not_available)]
+                panic!("Close when thread-local storage is unavailable (typically in atexit()) does not work for this Rust 1.85..1.85.1, plese see https://github.com/rust-lang/rust/issues/138696");
+
+                #[cfg(not(nolocal_thread_not_available))]
+                {
+                    let evaluate = move || {
+                        // NOTE: tracing logger also panics if used inside atexit() handler!!!
+                        tracing::trace!(
+                            "tokio TLS NOT available, closing closeable in separate thread"
+                        );
+                        ZRuntime::Net.block_in_place(future)
+                    };
+                    std::thread::spawn(evaluate)
+                        .join()
+                        .expect("Error spawning atexit-safe thread")
+                }
             }
         }
     }

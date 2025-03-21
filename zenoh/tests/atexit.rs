@@ -108,7 +108,7 @@ extern "C" fn close_session_in_atexit() {
     session.close().wait().unwrap();
 }
 
-#[rustversion::before(1.85)]
+#[cfg(not(nolocal_thread_not_available))]
 #[test]
 fn session_close_in_atexit() {
     run_in_separate_process("session_close_in_atexit_main", true);
