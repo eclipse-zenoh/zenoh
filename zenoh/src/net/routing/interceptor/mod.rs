@@ -35,6 +35,9 @@ use crate::api::key_expr::KeyExpr;
 pub mod downsampling;
 use crate::net::routing::interceptor::downsampling::downsampling_interceptor_factories;
 
+pub mod qos_overwrite;
+use crate::net::routing::interceptor::qos_overwrite::qos_overwrite_interceptor_factories;
+
 #[derive(Default, Debug)]
 pub struct InterfaceEnabled {
     pub ingress: bool,
@@ -88,6 +91,7 @@ pub(crate) fn interceptor_factories(config: &Config) -> ZResult<Vec<InterceptorF
     // res.push(Box::new(LoggerInterceptor {}));
     res.extend(downsampling_interceptor_factories(config.downsampling())?);
     res.extend(acl_interceptor_factories(config.access_control())?);
+    res.extend(qos_overwrite_interceptor_factories(config.qos_overwrite())?);
     Ok(res)
 }
 

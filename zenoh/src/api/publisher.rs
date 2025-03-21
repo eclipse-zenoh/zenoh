@@ -23,7 +23,7 @@ use std::{
 use futures::Sink;
 use serde::Deserialize;
 use tracing::error;
-use zenoh_config::qos::PublisherPriorityConf;
+use zenoh_config::qos::PriorityConf;
 use zenoh_core::{Resolvable, Resolve, Wait};
 use zenoh_protocol::core::CongestionControl;
 use zenoh_result::{Error, ZResult};
@@ -484,21 +484,21 @@ impl TryFrom<u8> for Priority {
     }
 }
 
-impl From<PublisherPriorityConf> for Priority {
-    fn from(value: PublisherPriorityConf) -> Self {
+impl From<PriorityConf> for Priority {
+    fn from(value: PriorityConf) -> Self {
         match value {
-            PublisherPriorityConf::RealTime => Self::RealTime,
-            PublisherPriorityConf::InteractiveHigh => Self::InteractiveHigh,
-            PublisherPriorityConf::InteractiveLow => Self::InteractiveLow,
-            PublisherPriorityConf::DataHigh => Self::DataHigh,
-            PublisherPriorityConf::Data => Self::Data,
-            PublisherPriorityConf::DataLow => Self::DataLow,
-            PublisherPriorityConf::Background => Self::Background,
+            PriorityConf::RealTime => Self::RealTime,
+            PriorityConf::InteractiveHigh => Self::InteractiveHigh,
+            PriorityConf::InteractiveLow => Self::InteractiveLow,
+            PriorityConf::DataHigh => Self::DataHigh,
+            PriorityConf::Data => Self::Data,
+            PriorityConf::DataLow => Self::DataLow,
+            PriorityConf::Background => Self::Background,
         }
     }
 }
 
-impl From<Priority> for PublisherPriorityConf {
+impl From<Priority> for PriorityConf {
     fn from(value: Priority) -> Self {
         match value {
             Priority::RealTime => Self::RealTime,
