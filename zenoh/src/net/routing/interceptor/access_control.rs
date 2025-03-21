@@ -24,6 +24,7 @@ use itertools::Itertools;
 use zenoh_config::{
     AclConfig, AclMessage, CertCommonName, InterceptorFlow, Interface, Permission, Username,
 };
+use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
 use zenoh_protocol::{
     core::ZenohIdProto,
     network::{
@@ -218,8 +219,8 @@ impl InterceptorFactoryTrait for AclEnforcer {
 }
 
 impl InterceptorTrait for IngressAclEnforcer {
-    fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
-        Some(Box::new(key_expr.to_string()))
+    fn compute_keyexpr_cache(&self, key_expr: KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
+        Some(Box::new(OwnedKeyExpr::from(key_expr)))
     }
 
     fn intercept<'a>(
@@ -228,14 +229,17 @@ impl InterceptorTrait for IngressAclEnforcer {
         cache: Option<&Box<dyn Any + Send + Sync>>,
     ) -> Option<RoutingContext<NetworkMessage>> {
         let key_expr = cache
-            .and_then(|i| match i.downcast_ref::<String>() {
-                Some(e) => Some(e.as_str()),
+            .and_then(|i| match i.downcast_ref::<OwnedKeyExpr>() {
+                Some(e) => Some(&**e),
                 None => {
-                    tracing::debug!("Cache content was not of type String");
+                    tracing::debug!("Cache content was not of type OwnedKeyExpr");
                     None
                 }
             })
-            .or_else(|| ctx.full_expr());
+            .or_else(|| {
+                // SAFETY: cached keyexpr is always a valid keyexpr.
+                unsafe { ctx.full_expr().map(|s| keyexpr::from_str_unchecked(s)) }
+            });
 
         match &ctx.msg.body {
             NetworkBody::Request(Request {
@@ -428,24 +432,28 @@ impl InterceptorTrait for IngressAclEnforcer {
 }
 
 impl InterceptorTrait for EgressAclEnforcer {
-    fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
-        Some(Box::new(key_expr.to_string()))
+    fn compute_keyexpr_cache(&self, key_expr: KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
+        Some(Box::new(OwnedKeyExpr::from(key_expr)))
     }
 
     fn intercept(
+        // String, Arc<str>, Box<str>, etc... & -> &str
         &self,
         ctx: RoutingContext<NetworkMessage>,
         cache: Option<&Box<dyn Any + Send + Sync>>,
     ) -> Option<RoutingContext<NetworkMessage>> {
         let key_expr = cache
-            .and_then(|i| match i.downcast_ref::<String>() {
-                Some(e) => Some(e.as_str()),
+            .and_then(|i| match i.downcast_ref::<OwnedKeyExpr>() {
+                Some(e) => Some(&**e),
                 None => {
-                    tracing::debug!("Cache content was not of type String");
+                    tracing::debug!("Cache content was not of type OwnedKeyExpr");
                     None
                 }
             })
-            .or_else(|| ctx.full_expr());
+            .or_else(|| {
+                // SAFETY: cached keyexpr is always a valid keyexpr.
+                unsafe { ctx.full_expr().map(|s| keyexpr::from_str_unchecked(s)) }
+            });
 
         match &ctx.msg.body {
             NetworkBody::Request(Request {
@@ -633,7 +641,7 @@ pub trait AclActionMethods {
     fn zid(&self) -> ZenohIdProto;
     fn flow(&self) -> InterceptorFlow;
     fn authn_ids(&self) -> Vec<AuthSubject>;
-    fn action(&self, action: AclMessage, log_msg: &str, key_expr: &str) -> Permission {
+    fn action(&self, action: AclMessage, log_msg: &str, key_expr: &keyexpr) -> Permission {
         let policy_enforcer = self.policy_enforcer();
         let authn_ids: Vec<AuthSubject> = self.authn_ids();
         let zid = self.zid();

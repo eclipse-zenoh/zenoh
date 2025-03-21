@@ -186,9 +186,9 @@ impl DownsamplingInterceptor {
 }
 
 impl InterceptorTrait for DownsamplingInterceptor {
-    fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
+    fn compute_keyexpr_cache(&self, key_expr: KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
         let ke_id = zlock!(self.ke_id);
-        if let Some(node) = ke_id.intersecting_keys(key_expr).next() {
+        if let Some(node) = ke_id.intersecting_keys(&key_expr).next() {
             if let Some(id) = ke_id.weight_at(&node) {
                 return Some(Box::new(Some(*id)));
             }

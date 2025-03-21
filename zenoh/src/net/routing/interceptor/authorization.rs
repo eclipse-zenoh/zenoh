@@ -585,7 +585,7 @@ impl PolicyEnforcer {
         subject: usize,
         flow: InterceptorFlow,
         message: AclMessage,
-        key_expr: &str,
+        key_expr: &keyexpr,
     ) -> ZResult<Permission> {
         let policy_map = &self.policy_map;
         if policy_map.is_empty() {
@@ -597,7 +597,7 @@ impl PolicyEnforcer {
                     .flow(flow)
                     .action(message)
                     .deny
-                    .nodes_including(keyexpr::new(&key_expr)?)
+                    .nodes_including(key_expr)
                     .count();
                 if deny_result != 0 {
                     return Ok(Permission::Deny);
@@ -609,7 +609,7 @@ impl PolicyEnforcer {
                         .flow(flow)
                         .action(message)
                         .allow
-                        .nodes_including(keyexpr::new(&key_expr)?)
+                        .nodes_including(key_expr)
                         .count();
 
                     if allow_result != 0 {
