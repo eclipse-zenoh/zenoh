@@ -210,7 +210,26 @@ impl ZBytes {
     pub fn slices(&self) -> ZBytesSliceIterator<'_> {
         ZBytesSliceIterator(self.0.slices())
     }
+
+    /// Return an iterator of chunks in [`ZBytes`].
+    ///
+    /// This method does not entail cloning the underlying buffer unless [`ZBytes`] is not
+    /// contiguous.
+    ///
+    /// All chunks have size less then or equal to `chunk_size`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `chunk_size` is zero.
+    #[zenoh_macros::unstable]
+    pub fn chunks(&self, chunk_size: usize) -> impl Iterator<Item = ZBytes> {
+        self.0
+            .to_zslice()
+            .chunks(chunk_size)
+            .map(|zs| ZBytes::from(ZBuf::from(zs)))
+    }
 }
+
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
 const _: () = {
     use zenoh_shm::{api::buffer::zshm::zshm, ShmBufInner};
