@@ -32,6 +32,7 @@ use {
     zenoh_protocol::core::EntityGlobalIdProto,
 };
 
+use super::handlers::StrongCallback;
 #[zenoh_macros::unstable]
 use crate::api::selector::ZenohParameters;
 #[zenoh_macros::internal]
@@ -47,7 +48,6 @@ use crate::{
         session::{UndeclarableSealed, WeakSession},
         Id,
     },
-    handlers::Callback,
     net::primitives::Primitives,
 };
 
@@ -333,7 +333,7 @@ pub(crate) struct QueryableState {
     pub(crate) key_expr: WireExpr<'static>,
     pub(crate) complete: bool,
     pub(crate) origin: Locality,
-    pub(crate) callback: Callback<Query>,
+    pub(crate) callback: StrongCallback<Query>,
 }
 
 impl fmt::Debug for QueryableState {

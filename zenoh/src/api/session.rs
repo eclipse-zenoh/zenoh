@@ -69,7 +69,10 @@ use zenoh_result::ZResult;
 use zenoh_shm::api::client_storage::ShmClientStorage;
 use zenoh_task::TaskController;
 
-use super::builders::close::{CloseBuilder, Closeable, Closee};
+use super::{
+    builders::close::{CloseBuilder, Closeable, Closee},
+    handlers::WeakCallback,
+};
 #[cfg(feature = "unstable")]
 use crate::api::selector::ZenohParameters;
 #[cfg(feature = "unstable")]
@@ -95,7 +98,7 @@ use crate::{
         },
         bytes::ZBytes,
         encoding::Encoding,
-        handlers::{Callback, DefaultHandler},
+        handlers::{Callback, DefaultHandler, StrongCallback},
         info::SessionInfo,
         key_expr::{KeyExpr, KeyExprInner},
         liveliness::Liveliness,
@@ -355,7 +358,7 @@ impl SessionState {
             remote_id: id,
             key_expr: key_expr.clone().into_owned(),
             origin,
-            callback,
+            callback: callback.into(),
         };
 
         let declared_sub = origin != Locality::SessionLocal;
@@ -1666,7 +1669,7 @@ impl SessionInner {
             key_expr: wire_expr.to_owned(),
             complete,
             origin,
-            callback,
+            callback: callback.into(),
         });
 
         state.queryables.insert(id, qable_state.clone());
@@ -1774,13 +1777,14 @@ impl SessionInner {
         let mut state = zwrite!(self.state);
         trace!("declare_liveliness_subscriber({:?})", key_expr);
         let id = self.runtime.next_id();
-
+        let strong_cb: StrongCallback<Sample> = callback.into();
+        let weak_cb = strong_cb.weak().clone();
         let sub_state = SubscriberState {
             id,
             remote_id: id,
             key_expr: key_expr.clone().into_owned(),
             origin,
-            callback: callback.clone(),
+            callback: strong_cb,
         };
 
         let sub_state = Arc::new(sub_state);
@@ -1829,7 +1833,7 @@ impl SessionInner {
             self.task_controller
                 .spawn_with_rt(zenoh_runtime::ZRuntime::Net, async move {
                     for token in known_tokens {
-                        callback.call(Sample {
+                        weak_cb.call(Sample {
                             key_expr: token,
                             payload: ZBytes::new(),
                             kind: SampleKind::Put,
@@ -1898,7 +1902,7 @@ impl SessionInner {
             destination,
             key_expr: key_expr.clone().into_owned(),
             match_type,
-            callback,
+            callback: callback.into(),
         });
         state.matching_listeners.insert(id, listener_state.clone());
         drop(state);
@@ -2049,7 +2053,7 @@ impl SessionInner {
                                         ) {
                                             if status.matching() == status_value {
                                                 *current = status_value;
-                                                let callback = msub.callback.clone();
+                                                let callback = msub.callback.weak().clone();
                                                 callback.call(status)
                                             }
                                         }
@@ -2105,7 +2109,8 @@ impl SessionInner {
                         if sub.origin == Locality::Any
                             || (local == (sub.origin == Locality::SessionLocal))
                         {
-                            callbacks.push((sub.callback.clone(), res.key_expr.clone().into()));
+                            callbacks
+                                .push((sub.callback.weak().clone(), res.key_expr.clone().into()));
                         }
                     }
                 }
@@ -2129,7 +2134,8 @@ impl SessionInner {
                             || (local == (sub.origin == Locality::SessionLocal)))
                             && key_expr.intersects(&sub.key_expr)
                         {
-                            callbacks.push((sub.callback.clone(), key_expr.clone().into_owned()));
+                            callbacks
+                                .push((sub.callback.weak().clone(), key_expr.clone().into_owned()));
                         }
                     }
                 }
@@ -2341,7 +2347,7 @@ impl SessionInner {
                 parameters: parameters.clone().into_owned(),
                 reception_mode: consolidation,
                 replies: (consolidation != ConsolidationMode::None).then(HashMap::new),
-                callback,
+                callback: callback.into(),
             },
         );
 
@@ -2431,9 +2437,12 @@ impl SessionInner {
 
         tracing::trace!("Register liveliness query {}", id);
         let wexpr = key_expr.to_wire(self).to_owned();
-        state
-            .liveliness_queries
-            .insert(id, LivelinessQueryState { callback });
+        state.liveliness_queries.insert(
+            id,
+            LivelinessQueryState {
+                callback: callback.into(),
+            },
+        );
 
         let primitives = state.primitives()?;
         drop(state);
@@ -2494,8 +2503,8 @@ impl SessionInner {
                                     }
                                 }
                         )
-                        .map(|(id, qable)| (*id, qable.callback.clone()))
-                        .collect::<Vec<(u32, Callback<Query>)>>();
+                        .map(|(id, qable)| (*id, qable.callback.weak().clone()))
+                        .collect::<Vec<(u32, WeakCallback<Query>)>>();
                     (primitives, key_expr.into_owned(), queryables)
                 }
                 Err(err) => {
@@ -2868,7 +2877,7 @@ impl Primitives for WeakSession {
                 }
                 match state.queries.get_mut(&msg.rid) {
                     Some(query) => {
-                        let callback = query.callback.clone();
+                        let callback = query.callback.weak().clone();
                         std::mem::drop(state);
                         let new_reply = Reply {
                             result: Err(ReplyError {
@@ -2973,7 +2982,7 @@ impl Primitives for WeakSession {
                         let callback =
                             match query.reception_mode {
                                 ConsolidationMode::None => {
-                                    Some((query.callback.clone(), new_reply))
+                                    Some((query.callback.weak().clone(), new_reply))
                                 }
                                 ConsolidationMode::Monotonic => {
                                     match query.replies.as_ref().unwrap().get(
@@ -2993,7 +3002,7 @@ impl Primitives for WeakSession {
                                                         .into(),
                                                     new_reply.clone(),
                                                 );
-                                                Some((query.callback.clone(), new_reply))
+                                                Some((query.callback.weak().clone(), new_reply))
                                             } else {
                                                 None
                                             }
@@ -3009,7 +3018,7 @@ impl Primitives for WeakSession {
                                                     .into(),
                                                 new_reply.clone(),
                                             );
-                                            Some((query.callback.clone(), new_reply))
+                                            Some((query.callback.weak().clone(), new_reply))
                                         }
                                     }
                                 }

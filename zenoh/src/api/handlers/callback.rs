@@ -14,7 +14,7 @@
 
 //! Callback handler trait.
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use crate::api::handlers::IntoHandler;
 
@@ -124,5 +124,68 @@ where
 
     fn into_handler(self) -> (Callback<Event>, Self::Handler) {
         (move |evt| (self.callback)(evt), ()).into_handler()
+    }
+}
+
+#[doc(hidden)]
+pub struct WeakCallback<T> {
+    use_guard: Arc<()>,
+    cb: Callback<T>,
+}
+
+impl<T> Clone for WeakCallback<T> {
+    fn clone(&self) -> Self {
+        Self {
+            use_guard: self.use_guard.clone(),
+            cb: self.cb.clone(),
+        }
+    }
+}
+
+impl<T> WeakCallback<T> {
+    #[inline]
+    pub fn call(&self, arg: T) {
+        self.cb.call(arg);
+    }
+}
+
+#[doc(hidden)]
+// A Callback that blocks on Drop operation until all of its weak clones are dropped
+pub struct StrongCallback<T> {
+    cb: WeakCallback<T>,
+}
+
+impl<T> StrongCallback<T> {
+    #[allow(dead_code)]
+    #[inline]
+    pub fn call(&self, arg: T) {
+        self.cb.call(arg);
+    }
+
+    #[inline]
+    pub fn weak(&self) -> &WeakCallback<T> {
+        &self.cb
+    }
+}
+
+impl<T> From<Callback<T>> for StrongCallback<T> {
+    fn from(value: Callback<T>) -> Self {
+        StrongCallback {
+            cb: WeakCallback {
+                use_guard: Arc::new(()),
+                cb: value,
+            },
+        }
+    }
+}
+
+impl<T> Drop for StrongCallback<T> {
+    fn drop(&mut self) {
+        const SLEEP_PERIOD: Duration = Duration::from_millis(1);
+        while Arc::strong_count(&self.cb.use_guard) > 1 {
+            std::thread::sleep(SLEEP_PERIOD);
+        }
+        // we are in a drop, so strong count can no longer change, so after this point
+        // it is guaranteed that there are no more copies.
     }
 }
