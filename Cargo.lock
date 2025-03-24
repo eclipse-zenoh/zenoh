@@ -5158,6 +5158,7 @@ dependencies = [
  "itertools 0.13.0",
  "json5",
  "lazy_static",
+ "libc",
  "once_cell",
  "paste",
  "petgraph",

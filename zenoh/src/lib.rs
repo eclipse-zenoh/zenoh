@@ -477,6 +477,12 @@ compile_error!(
 
 #[zenoh_macros::internal]
 pub mod internal {
+    #[zenoh_macros::unstable]
+    pub mod builders {
+        pub mod close {
+            pub use crate::api::builders::close::{BackgroundCloseBuilder, NolocalJoinHandle};
+        }
+    }
     pub mod traits {
         pub use crate::api::builders::sample::{
             EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
