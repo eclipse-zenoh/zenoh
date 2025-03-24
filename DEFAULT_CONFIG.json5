@@ -176,17 +176,17 @@
       autoconnect: { router: [], peer: ["router", "peer"] },
       /// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
       /// Possible options are:
-      /// - "always": always attempt to autoconnect, may result in redundant connection which will then be closed.
+      /// - "always": always attempt to autoconnect, may result in redundant connections.
       /// - "greater-zid": attempt to connect to another node only if its own zid is greater than the other's.
       ///   If both nodes use this strategy, only one will attempt the connection.
       ///   This strategy may not be suited if one of the nodes is not reachable by the other one, for example
       ///   because of a private IP.
       /// Accepts a single value (e.g. autoconnect: "always") which applies whatever node would be auto-connected to,
       /// or different values for router and/or peer depending on the type of node detected
-      /// (e.g. autoconnect_strategy : { "to-router":  "always", "to-peer": "greater-zid" }),
+      /// (e.g. autoconnect_strategy : { to_router:  "always", to_peer: "greater-zid" }),
       /// or different values for router or peer mode
-      /// (e.g. autoconnect_strategy : { peer: { "to-router":  "always", "to-peer": "greater-zid" } }).
-      autoconnect_strategy: { peer: { "to-router": "always", "to-peer": "always" } },
+      /// (e.g. autoconnect_strategy : { peer: { to_router:  "always", to_peer: "greater-zid" } }).
+      autoconnect_strategy: { peer: { to_router: "always", to_peer: "always" } },
     },
   },
 
@@ -632,9 +632,9 @@
   /// Configure the Admin Space
   /// Unstable: this configuration part works as advertised, but may change in a future release
   adminspace: {
-    // Enables the admin space
+    /// Enables the admin space
     enabled: false,
-    // read and/or write permissions on the admin space
+    /// read and/or write permissions on the admin space
     permissions: {
       read: true,
       write: false,
