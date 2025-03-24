@@ -442,10 +442,8 @@ async fn zenoh_session_close_in_background_sync() {
     let close_task_1 = peer01.close().in_background().await;
     let close_task_2 = peer02.close().in_background().await;
 
-    tokio::task::block_in_place(move || {
-        close_task_1.wait().unwrap();
-        close_task_2.wait().unwrap();
-    });
+    close_task_1.wait().unwrap();
+    close_task_2.wait().unwrap();
 }
 
 #[cfg(feature = "unstable")]
