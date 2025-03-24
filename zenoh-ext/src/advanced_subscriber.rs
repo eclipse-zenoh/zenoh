@@ -11,7 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{collections::BTreeMap, future::IntoFuture, marker::PhantomData, str::FromStr};
+use std::{
+    collections::{btree_map, BTreeMap},
+    future::IntoFuture,
+    marker::PhantomData,
+    str::FromStr,
+};
 
 use zenoh::{
     config::ZenohId,
@@ -22,7 +27,7 @@ use zenoh::{
     query::{
         ConsolidationMode, Parameters, Selector, TimeBound, TimeExpr, TimeRange, ZenohParameters,
     },
-    sample::{Locality, Sample, SampleKind, SourceSn},
+    sample::{Locality, Sample, SampleKind, SourceInfo, SourceSn},
     session::{EntityGlobalId, EntityId},
     Resolvable, Resolve, Session, Wait, KE_ADV_PREFIX, KE_EMPTY, KE_PUB, KE_STAR, KE_STARSTAR,
     KE_SUB,
@@ -93,13 +98,25 @@ pub struct Unconfigured;
 #[derive(Default, Clone, Copy)]
 pub struct Configured;
 
-#[derive(Default, Clone, Copy)]
+#[derive(Clone, Copy)]
 /// Configure retransmission.
 #[zenoh_macros::unstable]
 pub struct RecoveryConfig<T> {
+    frag_recovery_delay: Duration,
     periodic_queries: Option<Duration>,
     heartbeat: Option<()>,
     phantom: PhantomData<T>,
+}
+
+impl<T> Default for RecoveryConfig<T> {
+    fn default() -> Self {
+        Self {
+            frag_recovery_delay: Duration::from_secs(1),
+            periodic_queries: None,
+            heartbeat: None,
+            phantom: PhantomData::<T>,
+        }
+    }
 }
 
 impl<T> std::fmt::Debug for RecoveryConfig<T> {
@@ -108,6 +125,19 @@ impl<T> std::fmt::Debug for RecoveryConfig<T> {
         s.field("periodic_queries", &self.periodic_queries);
         s.field("heartbeat", &self.heartbeat);
         s.finish()
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<T> RecoveryConfig<T> {
+    /// Specify maximum delay before trying to recover missing fragments.
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn fragments_recovery_delay(self, delay: Duration) -> RecoveryConfig<T> {
+        RecoveryConfig {
+            frag_recovery_delay: delay,
+            ..self
+        }
     }
 }
 
@@ -125,6 +155,7 @@ impl RecoveryConfig<Unconfigured> {
     #[inline]
     pub fn periodic_queries(self, period: Duration) -> RecoveryConfig<Configured> {
         RecoveryConfig {
+            frag_recovery_delay: self.frag_recovery_delay,
             periodic_queries: Some(period),
             heartbeat: None,
             phantom: PhantomData::<Configured>,
@@ -141,6 +172,7 @@ impl RecoveryConfig<Unconfigured> {
     #[inline]
     pub fn heartbeat(self) -> RecoveryConfig<Configured> {
         RecoveryConfig {
+            frag_recovery_delay: self.frag_recovery_delay,
             periodic_queries: None,
             heartbeat: Some(()),
             phantom: PhantomData::<Configured>,
@@ -462,7 +494,7 @@ macro_rules! spawn_periodoic_queries {
 struct SourceState<T> {
     last_delivered: Option<T>,
     pending_queries: u64,
-    pending_samples: BTreeMap<T, Sample>,
+    pending_samples: BTreeMap<T, Vec<Option<Sample>>>, // TODO use SingleOrVec
 }
 
 /// [`AdvancedSubscriber`].
@@ -491,51 +523,148 @@ impl<Receiver> std::ops::DerefMut for AdvancedSubscriber<Receiver> {
 }
 
 #[zenoh_macros::unstable]
-fn handle_sample(states: &mut State, sample: Sample) -> bool {
+fn defragment(mut fragments: Vec<Option<Sample>>) -> Option<Sample> {
+    if fragments.len() == 1 {
+        return fragments.pop().unwrap();
+    }
+    if let Some(sample) = fragments[0].clone() {
+        let mut bytes: Vec<u8> = vec![];
+        for frag in fragments.drain(..) {
+            if let Some(frag) = frag {
+                bytes.extend(frag.payload().to_bytes().iter());
+            } else {
+                return None;
+            }
+        }
+        return Some(sample.with_payload(bytes));
+    }
+    None
+}
+
+#[zenoh_macros::unstable]
+fn pop_and_defrag_first<T>(
+    pending_samples: &mut BTreeMap<T, Vec<Option<Sample>>>,
+) -> Option<(T, Sample)>
+where
+    T: Ord,
+{
+    if let Some(entry) = pending_samples.first_entry() {
+        if !entry.get().iter().any(Option::is_none) {
+            let (k, frags) = entry.remove_entry();
+            return Some((k, defragment(frags).unwrap()));
+        }
+    }
+    None
+}
+
+#[zenoh_macros::unstable]
+fn remove_and_defrag<T>(
+    pending_samples: &mut BTreeMap<T, Vec<Option<Sample>>>,
+    key: T,
+) -> Option<Sample>
+where
+    T: Ord,
+{
+    if let btree_map::Entry::Occupied(entry) = pending_samples.entry(key) {
+        if !entry.get().iter().any(Option::is_none) {
+            let frags = entry.remove();
+            return Some(defragment(frags).unwrap());
+        }
+    }
+    None
+}
+
+#[zenoh_macros::unstable]
+fn deliver_and_flush(
+    sample: Sample,
+    mut source_sn: SourceSn,
+    callback: &Callback<Sample>,
+    state: &mut SourceState<u32>,
+) {
+    callback.call(sample);
+    state.last_delivered = Some(source_sn);
+    while let Some(sample) = remove_and_defrag(&mut state.pending_samples, source_sn + 1) {
+        callback.call(sample);
+        source_sn += 1;
+        state.last_delivered = Some(source_sn);
+    }
+}
+
+#[zenoh_macros::unstable]
+fn handle_sample(states: &mut State, sample: Sample) -> (bool, bool) {
     if let (Some(source_id), Some(source_sn)) = (
         sample.source_info().source_id(),
         sample.source_info().source_sn(),
     ) {
-        #[inline]
-        fn deliver_and_flush(
-            sample: Sample,
-            mut source_sn: SourceSn,
-            callback: &Callback<Sample>,
-            state: &mut SourceState<u32>,
-        ) {
-            callback.call(sample);
-            state.last_delivered = Some(source_sn);
-            while let Some(sample) = state.pending_samples.remove(&(source_sn + 1)) {
-                callback.call(sample);
-                source_sn += 1;
-                state.last_delivered = Some(source_sn);
-            }
-        }
-
         let entry = states.sequenced_states.entry(*source_id);
-        let new = matches!(&entry, Entry::Vacant(_));
+        let new_source = matches!(&entry, Entry::Vacant(_));
+        let mut new_frag = false;
         let state = entry.or_insert(SourceState::<u32> {
             last_delivered: None,
             pending_queries: 0,
             pending_samples: BTreeMap::new(),
         });
         if state.last_delivered.is_none() && states.global_pending_queries != 0 {
-            // Avoid going through the Map if history_depth == 1
-            if states.history_depth == 1 {
-                state.last_delivered = Some(source_sn);
-                states.callback.call(sample);
-            } else {
-                state.pending_samples.insert(source_sn, sample);
+            if let (Some(frag_count), Some(frag_num)) = (
+                sample.frag_info().frag_count(),
+                sample.frag_info().frag_num(),
+            ) {
+                if frag_num >= frag_count {
+                    tracing::error!(
+                        "Received fragment with frag_count={} and frag_num={}. Ignore.",
+                        frag_count,
+                        frag_num
+                    );
+                    return (false, false);
+                }
+                let entry = state.pending_samples.entry(source_sn);
+                new_frag = matches!(&entry, btree_map::Entry::Vacant(_));
+                let frags = entry.or_default();
+                frags.resize(frag_count as usize, None);
+                frags[frag_num as usize] = Some(sample);
                 if state.pending_samples.len() >= states.history_depth {
-                    if let Some((sn, sample)) = state.pending_samples.pop_first() {
+                    if let Some((sn, sample)) = pop_and_defrag_first(&mut state.pending_samples) {
                         deliver_and_flush(sample, sn, &states.callback, state);
+                    }
+                }
+            } else {
+                // Avoid going through the Map if history_depth == 1
+                if states.history_depth == 1 {
+                    state.last_delivered = Some(source_sn);
+                    states.callback.call(sample);
+                } else {
+                    state.pending_samples.insert(source_sn, vec![Some(sample)]);
+                    if state.pending_samples.len() >= states.history_depth {
+                        if let Some((sn, sample)) = pop_and_defrag_first(&mut state.pending_samples)
+                        {
+                            deliver_and_flush(sample, sn, &states.callback, state);
+                        }
                     }
                 }
             }
         } else if state.last_delivered.is_some() && source_sn != state.last_delivered.unwrap() + 1 {
             if source_sn > state.last_delivered.unwrap() {
                 if states.retransmission {
-                    state.pending_samples.insert(source_sn, sample);
+                    if let (Some(frag_count), Some(frag_num)) = (
+                        sample.frag_info().frag_count(),
+                        sample.frag_info().frag_num(),
+                    ) {
+                        if frag_num >= frag_count {
+                            tracing::error!(
+                                "Received fragment with frag_count={} and frag_num={}. Ignore.",
+                                frag_count,
+                                frag_num
+                            );
+                            return (false, false);
+                        }
+                        let entry = state.pending_samples.entry(source_sn);
+                        new_frag = matches!(&entry, btree_map::Entry::Vacant(_));
+                        let frags = entry.or_default();
+                        frags.resize(frag_count as usize, None);
+                        frags[frag_num as usize] = Some(sample);
+                    } else {
+                        state.pending_samples.insert(source_sn, vec![Some(sample)]);
+                    }
                 } else {
                     tracing::info!(
                         "Sample missed: missed {} samples from {:?}.",
@@ -548,14 +677,57 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
                             nb: source_sn - state.last_delivered.unwrap() - 1,
                         });
                     }
-                    states.callback.call(sample);
-                    state.last_delivered = Some(source_sn);
+                    if let (Some(frag_count), Some(frag_num)) = (
+                        sample.frag_info().frag_count(),
+                        sample.frag_info().frag_num(),
+                    ) {
+                        if frag_num >= frag_count {
+                            tracing::error!(
+                                "Received fragment with frag_count={} and frag_num={}. Ignore.",
+                                frag_count,
+                                frag_num
+                            );
+                            return (false, false);
+                        }
+                        let entry = state.pending_samples.entry(source_sn);
+                        new_frag = matches!(&entry, btree_map::Entry::Vacant(_));
+                        let frags = entry.or_default();
+                        frags.resize(frag_count as usize, None);
+                        frags[frag_num as usize] = Some(sample);
+                        if let Some((sn, sample)) = pop_and_defrag_first(&mut state.pending_samples)
+                        {
+                            deliver_and_flush(sample, sn, &states.callback, state);
+                        }
+                    } else {
+                        states.callback.call(sample);
+                        state.last_delivered = Some(source_sn);
+                    }
                 }
+            }
+        } else if let (Some(frag_count), Some(frag_num)) = (
+            sample.frag_info().frag_count(),
+            sample.frag_info().frag_num(),
+        ) {
+            if frag_num >= frag_count {
+                tracing::error!(
+                    "Received fragment with frag_count={} and frag_num={}. Ignore.",
+                    frag_count,
+                    frag_num
+                );
+                return (false, false);
+            }
+            let entry = state.pending_samples.entry(source_sn);
+            new_frag = matches!(&entry, btree_map::Entry::Vacant(_));
+            let frags = entry.or_default();
+            frags.resize(frag_count as usize, None);
+            frags[frag_num as usize] = Some(sample);
+            if let Some((sn, sample)) = pop_and_defrag_first(&mut state.pending_samples) {
+                deliver_and_flush(sample, sn, &states.callback, state);
             }
         } else {
             deliver_and_flush(sample, source_sn, &states.callback, state);
         }
-        new
+        (new_source, new_frag)
     } else if let Some(timestamp) = sample.timestamp() {
         let entry = states.timestamped_states.entry(*timestamp.get_id());
         let state = entry.or_insert(SourceState::<Timestamp> {
@@ -570,26 +742,29 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
                 state.last_delivered = Some(*timestamp);
                 states.callback.call(sample);
             } else {
-                state.pending_samples.entry(*timestamp).or_insert(sample);
+                state
+                    .pending_samples
+                    .entry(*timestamp)
+                    .or_insert(vec![Some(sample)]);
                 if state.pending_samples.len() >= states.history_depth {
                     flush_timestamped_source(state, &states.callback);
                 }
             }
         }
-        false
+        (false, false)
     } else {
         states.callback.call(sample);
-        false
+        (false, false)
     }
 }
 
 #[zenoh_macros::unstable]
-fn seq_num_range(start: Option<u32>, end: Option<u32>) -> String {
+fn range(name: &str, start: Option<u32>, end: Option<u32>) -> String {
     match (start, end) {
-        (Some(start), Some(end)) => format!("_sn={}..{}", start, end),
-        (Some(start), None) => format!("_sn={}..", start),
-        (None, Some(end)) => format!("_sn=..{}", end),
-        (None, None) => "_sn=..".to_string(),
+        (Some(start), Some(end)) => format!("{}={}..{}", name, start, end),
+        (Some(start), None) => format!("{}={}..", name, start),
+        (None, Some(end)) => format!("{}=..{}", name, end),
+        (None, None) => format!("{}=..", name),
     }
 }
 
@@ -614,7 +789,7 @@ impl Timed for PeriodicQuery {
                 / &self.source_id.zid().into_keyexpr()
                 / &KeyExpr::try_from(self.source_id.eid().to_string()).unwrap()
                 / KE_STARSTAR;
-            let seq_num_range = seq_num_range(state.last_delivered.map(|s| s + 1), None);
+            let seq_num_range = range("_sn", state.last_delivered.map(|s| s + 1), None);
 
             let session = states.session.clone();
             let key_expr = states.key_expr.clone().into_owned();
@@ -643,6 +818,90 @@ impl Timed for PeriodicQuery {
                 .timeout(query_timeout)
                 .wait();
         }
+    }
+}
+
+fn missing_ranges(frags: &[Option<Sample>]) -> Vec<(Option<u32>, Option<u32>)> {
+    let mut missing_ranges: Vec<(Option<u32>, Option<u32>)> = vec![];
+    for (i, frag) in frags.iter().enumerate() {
+        if missing_ranges.is_empty() {
+            if frag.is_none() {
+                missing_ranges.push((Some(i as u32), None));
+            }
+        } else {
+            let last_index = missing_ranges.len() - 1;
+            if frag.is_none() {
+                if missing_ranges[last_index].1.is_some() {
+                    missing_ranges.push((Some(i as u32), None));
+                }
+            } else if missing_ranges[last_index].0.is_some()
+                && missing_ranges[last_index].1.is_none()
+            {
+                missing_ranges[last_index].1 = Some((i - 1) as u32);
+            }
+        }
+    }
+    missing_ranges
+}
+
+fn spawn_frag_recovery(
+    statesref: Arc<Mutex<State>>,
+    key_expr: KeyExpr<'static>,
+    info: SourceInfo,
+    delay: Duration,
+) {
+    if let (Some(source_id), Some(source_sn)) = (info.source_id().cloned(), info.source_sn()) {
+        tokio::task::spawn(async move {
+            tokio::time::sleep(delay).await;
+            let mut lock = zlock!(statesref);
+            let states = &mut *lock;
+            if let Some(state) = states.sequenced_states.get_mut(&source_id) {
+                if let Some(frags) = state.pending_samples.get(&source_sn) {
+                    let missing_ranges = missing_ranges(frags);
+                    state.pending_queries += missing_ranges.len() as u64;
+                    let session = states.session.clone();
+                    let query_target = states.query_target;
+                    let query_timeout = states.query_timeout;
+                    drop(lock);
+
+                    let query_expr = key_expr.clone()
+                        / KE_ADV_PREFIX
+                        / KE_STAR
+                        / &source_id.zid().into_keyexpr()
+                        / &KeyExpr::try_from(source_id.eid().to_string()).unwrap()
+                        / KE_STARSTAR;
+                    let seq_num_range = range("_sn", Some(source_sn), Some(source_sn));
+                    for missing_range in missing_ranges {
+                        let frags_range = range("_fn", missing_range.0, missing_range.1);
+                        let handler = SequencedRepliesHandler {
+                            source_id,
+                            statesref: statesref.clone(),
+                        };
+                        let _ = session
+                            .get(Selector::from((
+                                query_expr.clone(),
+                                seq_num_range.clone() + ";" + &frags_range,
+                            )))
+                            .callback({
+                                let key_expr = key_expr.clone().into_owned();
+                                move |r: Reply| {
+                                    if let Ok(s) = r.into_result() {
+                                        if key_expr.intersects(s.key_expr()) {
+                                            let states = &mut *zlock!(handler.statesref);
+                                            handle_sample(states, s);
+                                        }
+                                    }
+                                }
+                            })
+                            .consolidation(ConsolidationMode::None)
+                            .accept_replies(ReplyKeyExpr::Any)
+                            .target(query_target)
+                            .timeout(query_timeout)
+                            .wait();
+                    }
+                }
+            }
+        });
     }
 }
 
@@ -697,18 +956,36 @@ impl<Handler> AdvancedSubscriber<Handler> {
             move |s: Sample| {
                 let mut lock = zlock!(statesref);
                 let states = &mut *lock;
-                let source_id = s.source_info().source_id().cloned();
-                let new = handle_sample(states, s);
+                let source_info = s.source_info().clone();
+                let (new_source, new_frag) = handle_sample(states, s);
 
-                if let Some(source_id) = source_id {
-                    if new {
+                if new_frag {
+                    if let Some(retransmission) = retransmission {
+                        spawn_frag_recovery(
+                            statesref.clone(),
+                            key_expr.clone(),
+                            source_info.clone(),
+                            retransmission.frag_recovery_delay,
+                        );
+                    }
+                }
+
+                if let Some(source_id) = source_info.source_id().cloned() {
+                    if new_source {
                         spawn_periodoic_queries!(states, source_id, statesref.clone());
                     }
 
                     if let Some(state) = states.sequenced_states.get_mut(&source_id) {
                         if retransmission.is_some()
                             && state.pending_queries == 0
-                            && !state.pending_samples.is_empty()
+                            && (!state.pending_samples.is_empty()
+                                && !state
+                                    .pending_samples
+                                    .values()
+                                    .next()
+                                    .map(|fs| fs.iter().any(|f| f.is_none()))
+                                    .unwrap())
+                        // TODO
                         {
                             state.pending_queries += 1;
                             let query_expr = &key_expr
@@ -718,7 +995,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                 / &KeyExpr::try_from(source_id.eid().to_string()).unwrap()
                                 / KE_STARSTAR;
                             let seq_num_range =
-                                seq_num_range(state.last_delivered.map(|s| s + 1), None);
+                                range("_sn", state.last_delivered.map(|s| s + 1), None);
                             drop(lock);
                             let handler = SequencedRepliesHandler {
                                 source_id,
@@ -1037,7 +1314,8 @@ impl<Handler> AdvancedSubscriber<Handler> {
                         || state.last_delivered.is_some_and(|sn| heartbeat_sn > sn))
                         && state.pending_queries == 0
                     {
-                        let seq_num_range = seq_num_range(
+                        let seq_num_range = range(
+                            "_sn", 
                             state.last_delivered.map(|s| s + 1),
                             Some(heartbeat_sn),
                         );
@@ -1179,33 +1457,35 @@ fn flush_sequenced_source(
     if state.pending_queries == 0 && !state.pending_samples.is_empty() {
         let mut pending_samples = BTreeMap::new();
         std::mem::swap(&mut state.pending_samples, &mut pending_samples);
-        for (seq_num, sample) in pending_samples {
-            match state.last_delivered {
-                None => {
-                    state.last_delivered = Some(seq_num);
-                    callback.call(sample);
-                }
-                Some(last) if seq_num == last + 1 => {
-                    state.last_delivered = Some(seq_num);
-                    callback.call(sample);
-                }
-                Some(last) if seq_num > last + 1 => {
-                    tracing::warn!(
-                        "Sample missed: missed {} samples from {:?}.",
-                        seq_num - last - 1,
-                        source_id,
-                    );
-                    for miss_callback in miss_handlers.values() {
-                        miss_callback.call(Miss {
-                            source: *source_id,
-                            nb: seq_num - last - 1,
-                        })
+        for (seq_num, mut sample) in pending_samples {
+            if let Some(sample) = sample.pop().flatten() {
+                match state.last_delivered {
+                    None => {
+                        state.last_delivered = Some(seq_num);
+                        callback.call(sample);
                     }
-                    state.last_delivered = Some(seq_num);
-                    callback.call(sample);
-                }
-                _ => {
-                    // duplicate
+                    Some(last) if seq_num == last + 1 => {
+                        state.last_delivered = Some(seq_num);
+                        callback.call(sample);
+                    }
+                    Some(last) if seq_num > last + 1 => {
+                        tracing::info!(
+                            "Sample missed: missed {} samples from {:?}.",
+                            seq_num - last - 1,
+                            source_id,
+                        );
+                        for miss_callback in miss_handlers.values() {
+                            miss_callback.call(Miss {
+                                source: *source_id,
+                                nb: seq_num - last - 1,
+                            })
+                        }
+                        state.last_delivered = Some(seq_num);
+                        callback.call(sample);
+                    }
+                    _ => {
+                        // duplicate
+                    }
                 }
             }
         }
@@ -1218,14 +1498,16 @@ fn flush_timestamped_source(state: &mut SourceState<Timestamp>, callback: &Callb
     if state.pending_queries == 0 && !state.pending_samples.is_empty() {
         let mut pending_samples = BTreeMap::new();
         std::mem::swap(&mut state.pending_samples, &mut pending_samples);
-        for (timestamp, sample) in pending_samples {
-            if state
-                .last_delivered
-                .map(|last| timestamp > last)
-                .unwrap_or(true)
-            {
-                state.last_delivered = Some(timestamp);
-                callback.call(sample);
+        for (timestamp, mut sample) in pending_samples {
+            if let Some(sample) = sample.pop().flatten() {
+                if state
+                    .last_delivered
+                    .map(|last| timestamp > last)
+                    .unwrap_or(true)
+                {
+                    state.last_delivered = Some(timestamp);
+                    callback.call(sample);
+                }
             }
         }
     }
