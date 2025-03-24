@@ -15,7 +15,6 @@
 use std::{
     fmt::{self, Debug},
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
-    str::FromStr,
     sync::Arc,
     time::Duration,
 };
@@ -266,7 +265,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
         let src_addr = if let Some(bind_socket_str) = epconf.get(BIND_SOCKET) {
-            SocketAddr::from_str(bind_socket_str)?
+            let bind_endpoint = EndPoint::new("", bind_socket_str, "", "")?;
+            get_quic_addr(&bind_endpoint.address()).await?
         } else if dst_addr.is_ipv4() {
             SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0)
         } else {

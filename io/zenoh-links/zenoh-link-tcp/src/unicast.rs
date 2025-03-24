@@ -248,7 +248,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
 
         let config = endpoint.config();
 
-        let link_config = TcpLinkConfig::new(&config)?;
+        let link_config = TcpLinkConfig::new(&config).await?;
         let socket_config = TcpSocketConfig::new(
             link_config.tx_buffer_size,
             link_config.rx_buffer_size,
@@ -285,7 +285,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
 
         let config = endpoint.config();
 
-        let link_config = TcpLinkConfig::new(&config)?;
+        let link_config = TcpLinkConfig::new(&config).await?;
         let socket_config: TcpSocketConfig<'_> = link_config.into();
 
         let mut errs: Vec<ZError> = vec![];

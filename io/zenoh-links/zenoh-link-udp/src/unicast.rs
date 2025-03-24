@@ -15,7 +15,6 @@ use std::{
     collections::HashMap,
     fmt,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
-    str::FromStr,
     sync::{Arc, Mutex, Weak},
     time::Duration,
 };
@@ -276,7 +275,16 @@ impl LinkManagerUnicastUdp {
         bind_socket: Option<&str>,
     ) -> ZResult<(UdpSocket, SocketAddr, SocketAddr)> {
         let src_socket_addr = if let Some(bind_socket) = bind_socket {
-            SocketAddr::from_str(bind_socket)?
+            let endpoint = EndPoint::new("", bind_socket, "", "")?;
+            get_udp_addrs(endpoint.address())
+                .await?
+                .next()
+                .ok_or_else(|| {
+                    zerror!(
+                        "No UDP socket addr found bound to {}",
+                        endpoint.address()
+                    )
+                })?
         } else if dst_addr.is_ipv4() {
             SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0)
         } else {
