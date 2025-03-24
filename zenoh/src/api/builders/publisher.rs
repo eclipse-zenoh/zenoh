@@ -193,6 +193,31 @@ impl<P> EncodingBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
     }
 }
 
+impl<P> PublicationBuilder<P, PublicationBuilderPut> {
+    /// Changes the payload of this `put`.
+    #[zenoh_macros::internal]
+    #[inline]
+    pub fn payload<IntoZBytes>(self, payload: IntoZBytes) -> Self
+    where
+        IntoZBytes: Into<ZBytes>,
+    {
+        Self {
+            kind: PublicationBuilderPut {
+                payload: payload.into(),
+                ..self.kind
+            },
+            ..self
+        }
+    }
+
+    /// Gets a reference to the payload of this `put`.
+    #[zenoh_macros::internal]
+    #[inline]
+    pub fn payload_ref(&self) -> &ZBytes {
+        &self.kind.payload
+    }
+}
+
 #[zenoh_macros::internal_trait]
 impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
     /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the publication.

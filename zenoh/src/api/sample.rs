@@ -319,6 +319,16 @@ impl Sample {
         &mut self.payload
     }
 
+    /// Return a new sample with the given payload.
+    #[zenoh_macros::internal]
+    pub fn with_payload<IntoZBytes>(mut self, payload: IntoZBytes) -> Sample
+    where
+        IntoZBytes: Into<ZBytes>,
+    {
+        self.payload = payload.into();
+        self
+    }
+
     /// Gets the kind of this Sample.
     #[inline]
     pub fn kind(&self) -> SampleKind {

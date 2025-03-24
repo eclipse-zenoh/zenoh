@@ -122,6 +122,7 @@ pub struct AdvancedPublisherBuilder<'a, 'b, 'c> {
     liveliness: bool,
     cache: bool,
     history: CacheConfig,
+    fragmentation: Option<usize>,
 }
 
 #[zenoh_macros::unstable]
@@ -143,6 +144,7 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
             liveliness: false,
             cache: false,
             history: CacheConfig::default(),
+            fragmentation: None,
         }
     }
 
@@ -214,6 +216,16 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
     {
         self.meta_key_expr = Some(meta.try_into().map_err(Into::into));
         self
+    }
+
+    /// Fragment samples with payload larger than given size.
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn fragmentation(self, size: usize) -> Self {
+        Self {
+            fragmentation: Some(size),
+            ..self
+        }
     }
 }
 
@@ -321,6 +333,7 @@ pub struct AdvancedPublisher<'a> {
     publisher: Publisher<'a>,
     seqnum: Option<Arc<AtomicU32>>,
     cache: Option<AdvancedCache>,
+    fragmentation: Option<usize>,
     _token: Option<LivelinessToken>,
     _state_publisher: Option<TerminatableTask>,
 }
@@ -460,6 +473,7 @@ impl<'a> AdvancedPublisher<'a> {
             publisher,
             seqnum,
             cache,
+            fragmentation: conf.fragmentation,
             _token: token,
             _state_publisher: state_publisher,
         })
@@ -730,13 +744,43 @@ impl Wait for AdvancedPublisherPutBuilder<'_> {
             );
             self.builder = self.builder.source_info(info);
         }
-        if let Some(hlc) = self.publisher.publisher.session().hlc() {
-            self.builder = self.builder.timestamp(hlc.new_timestamp());
+        if self.publisher.fragmentation.is_some()
+            && self.builder.payload_ref().len() > self.publisher.fragmentation.unwrap()
+        {
+            let bytes = self.builder.payload_ref().to_bytes();
+            #[allow(clippy::unnecessary_unwrap)] // TODO
+            let chunks = bytes.chunks(self.publisher.fragmentation.unwrap());
+            let frag_count = chunks.len();
+            let mut fragments = vec![];
+            let mut builders = vec![];
+            for (i, chunk) in chunks.enumerate() {
+                let mut builder = self
+                    .builder
+                    .clone()
+                    .payload(chunk)
+                    .frag_info(FragInfo::new(frag_count as u32, i as u32));
+                if let Some(hlc) = self.publisher.publisher.session().hlc() {
+                    builder = builder.timestamp(hlc.new_timestamp());
+                }
+                fragments.push(zenoh::sample::Sample::from(&builder));
+                builders.push(builder);
+            }
+            if let Some(cache) = self.publisher.cache.as_ref() {
+                cache.cache_fragments(fragments);
+            }
+            for builder in builders {
+                let _ = builder.wait();
+            }
+            Ok(())
+        } else {
+            if let Some(hlc) = self.publisher.publisher.session().hlc() {
+                self.builder = self.builder.timestamp(hlc.new_timestamp());
+            }
+            if let Some(cache) = self.publisher.cache.as_ref() {
+                cache.cache_sample(zenoh::sample::Sample::from(&self.builder));
+            }
+            self.builder.wait()
         }
-        if let Some(cache) = self.publisher.cache.as_ref() {
-            cache.cache_sample(zenoh::sample::Sample::from(&self.builder));
-        }
-        self.builder.wait()
     }
 }
 

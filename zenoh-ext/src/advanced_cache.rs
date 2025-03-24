@@ -190,7 +190,7 @@ impl IntoFuture for AdvancedCacheBuilder<'_, '_, '_> {
 }
 
 #[zenoh_macros::unstable]
-fn decode_sn_range(range: &str) -> (Bound<WrappingSn>, Bound<WrappingSn>) {
+fn decode_range(range: &str) -> (Bound<WrappingSn>, Bound<WrappingSn>) {
     let mut split = range.split("..");
     let start = split
         .next()
@@ -211,7 +211,7 @@ fn decode_sn_range(range: &str) -> (Bound<WrappingSn>, Bound<WrappingSn>) {
 /// [`AdvancedCache`].
 #[zenoh_macros::unstable]
 pub struct AdvancedCache {
-    cache: Arc<RwLock<VecDeque<Sample>>>,
+    cache: Arc<RwLock<VecDeque<Vec<Sample>>>>, // TODO use SingleOrVec
     max_samples: usize,
     _queryable: Queryable<()>,
     _token: Option<LivelinessToken>,
@@ -233,7 +233,7 @@ impl AdvancedCache {
             &key_expr,
             conf.history,
         );
-        let cache = Arc::new(RwLock::new(VecDeque::<Sample>::new()));
+        let cache = Arc::new(RwLock::new(VecDeque::<Vec<Sample>>::new()));
 
         // declare the queryable that will answer to queries on cache
         let queryable = conf
@@ -244,10 +244,16 @@ impl AdvancedCache {
                 let cache = cache.clone();
                 move |query| {
                     tracing::trace!("AdvancedCache{{}} Handle query {}", query.selector());
-                    let range = query
+                    // println!("GET {}", query.selector());
+                    let srange = query
                         .parameters()
                         .get("_sn")
-                        .map(decode_sn_range)
+                        .map(decode_range)
+                        .unwrap_or((Bound::Unbounded, Bound::Unbounded));
+                    let frange = query
+                        .parameters()
+                        .get("_fn")
+                        .map(decode_range)
                         .unwrap_or((Bound::Unbounded, Bound::Unbounded));
                     let max = query
                         .parameters()
@@ -257,13 +263,14 @@ impl AdvancedCache {
                         if let Some(max) = max {
                             let mut samples = VecDeque::new();
                             for sample in queue.iter() {
-                                if range == (Bound::Unbounded, Bound::Unbounded)
-                                    || sample
+                                // println!("CHECK SAMPLE {:?} vs range{:?}", sample[0].source_info(), srange);
+                                if srange == (Bound::Unbounded, Bound::Unbounded)
+                                    || sample[0]
                                         .source_info()
-                                        .is_some_and(|si| range.contains(&si.source_sn()))
+                                        .is_some_and(|si| srange.contains(&si.source_sn()))
                                 {
                                     if let (Some(Ok(time_range)), Some(timestamp)) =
-                                        (query.parameters().time_range(), sample.timestamp())
+                                        (query.parameters().time_range(), sample[0].timestamp())
                                     {
                                         if !time_range
                                             .contains(timestamp.get_time().to_system_time())
@@ -271,11 +278,21 @@ impl AdvancedCache {
                                             continue;
                                         }
                                     }
-                                    samples.push_front(sample);
-                                    samples.truncate(max as usize);
+                                    for frag in sample.iter() {
+                                        // println!("CHECK FRAG {:?} vs range{:?}", frag.frag_info(), frange);
+                                        if frange == (Bound::Unbounded, Bound::Unbounded)
+                                            || frag
+                                                .frag_info()
+                                                .is_some_and(|i| frange.contains(&i.frag_num()))
+                                        {
+                                            samples.push_front(frag);
+                                        }
+                                    }
+                                    samples.truncate(max as usize); // TODO count frags as a single sample in the max count
                                 }
                             }
                             for sample in samples.drain(..).rev() {
+                                // println!("REPLY {:?} {:?}", sample.source_info(), sample.frag_info());
                                 if let Err(e) = query
                                     .reply_sample(
                                         SampleBuilder::from(sample.clone())
@@ -300,13 +317,13 @@ impl AdvancedCache {
                             }
                         } else {
                             for sample in queue.iter() {
-                                if range == (Bound::Unbounded, Bound::Unbounded)
-                                    || sample
+                                if srange == (Bound::Unbounded, Bound::Unbounded)
+                                    || sample[0]
                                         .source_info()
-                                        .is_some_and(|si| range.contains(&si.source_sn()))
+                                        .is_some_and(|si| srange.contains(&si.source_sn()))
                                 {
                                     if let (Some(Ok(time_range)), Some(timestamp)) =
-                                        (query.parameters().time_range(), sample.timestamp())
+                                        (query.parameters().time_range(), sample[0].timestamp())
                                     {
                                         if !time_range
                                             .contains(timestamp.get_time().to_system_time())
@@ -314,26 +331,35 @@ impl AdvancedCache {
                                             continue;
                                         }
                                     }
-                                    if let Err(e) = query
-                                        .reply_sample(
-                                            SampleBuilder::from(sample.clone())
-                                                .congestion_control(
-                                                    conf.history.replies_config.congestion_control,
+                                    for frag in sample.iter() {
+                                        // println!("CHECK FRAG {:?} vs range{:?}", frag.frag_info(), frange);
+                                        if frange == (Bound::Unbounded, Bound::Unbounded)
+                                            || frag
+                                                .frag_info()
+                                                .is_some_and(|i| frange.contains(&i.frag_num()))
+                                        {
+                                            // println!("REPLY {:?} {:?}", sample.source_info(), sample.frag_info());
+                                            if let Err(e) = query
+                                                .reply_sample(
+                                                    SampleBuilder::from(frag.clone())
+                                                        .congestion_control(
+                                                            conf.history
+                                                                .replies_config
+                                                                .congestion_control,
+                                                        )
+                                                        .priority(
+                                                            conf.history.replies_config.priority,
+                                                        )
+                                                        .express(
+                                                            conf.history.replies_config.is_express,
+                                                        )
+                                                        .into(),
                                                 )
-                                                .priority(conf.history.replies_config.priority)
-                                                .express(conf.history.replies_config.is_express)
-                                                .into(),
-                                        )
-                                        .wait()
-                                    {
-                                        tracing::warn!("AdvancedCache{{}} Error replying to query: {}", e);
-                                    } else {
-                                        tracing::trace!(
-                                            "AdvancedCache{{}} Replied to query {} with Sample{{info:{:?}, ts:{:?}}}",
-                                            query.selector(),
-                                            sample.source_info(),
-                                            sample.timestamp()
-                                        );
+                                                .wait()
+                                            {
+                                                tracing::warn!("Error replying to query: {}", e);
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -370,7 +396,20 @@ impl AdvancedCache {
             if queue.len() >= self.max_samples {
                 queue.pop_front();
             }
-            queue.push_back(sample);
+            queue.push_back(vec![sample]);
+        } else {
+            tracing::error!("Unable to take AdvancedPublisher cache write lock");
+        }
+    }
+
+    #[zenoh_macros::unstable]
+    pub(crate) fn cache_fragments(&self, fragments: Vec<Sample>) {
+        // println!("cache_fragments {}", fragments.len());
+        if let Ok(mut queue) = self.cache.write() {
+            if queue.len() >= self.max_samples {
+                queue.pop_front();
+            }
+            queue.push_back(fragments);
         } else {
             tracing::error!("AdvancedCache{{}} Unable to take AdvancedPublisher cache write lock");
         }
