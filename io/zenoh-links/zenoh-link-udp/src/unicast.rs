@@ -280,10 +280,7 @@ impl LinkManagerUnicastUdp {
                 .await?
                 .next()
                 .ok_or_else(|| {
-                    zerror!(
-                        "No UDP socket addr found bound to {}",
-                        endpoint.address()
-                    )
+                    zerror!("No UDP socket addr found bound to {}", endpoint.address())
                 })?
         } else if dst_addr.is_ipv4() {
             SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0)
@@ -373,6 +370,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
             .filter(|a| !a.ip().is_multicast());
         let config = endpoint.config();
         let iface = config.get(BIND_INTERFACE);
+
+        if let (Some(_), Some(_)) = (config.get(BIND_INTERFACE), config.get(BIND_SOCKET)) {
+            bail!(
+                "Using Config options `iface` and `bind` in conjunction is unsupported at this time {} {:?}",
+                BIND_INTERFACE,
+                BIND_SOCKET
+            )
+        }
+
         let bind_socket = config.get(BIND_SOCKET);
 
         let mut errs: Vec<ZError> = vec![];

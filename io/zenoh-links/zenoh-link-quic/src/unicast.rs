@@ -33,7 +33,7 @@ use zenoh_link_commons::{
     get_ip_interface_names,
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
     LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
-    ListenersUnicastIP, NewLinkChannelSender, BIND_SOCKET,
+    ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -253,8 +253,16 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let epaddr = endpoint.address();
         let host = get_quic_host(&epaddr)?;
         let epconf = endpoint.config();
-
         let dst_addr = get_quic_addr(&epaddr).await?;
+
+        // if both `iface`, and `bind` are present, return error
+        if let (Some(_), Some(_)) = (epconf.get(BIND_INTERFACE), epconf.get(BIND_SOCKET)) {
+            bail!(
+                "Using Config options `iface` and `bind` in conjunction is unsupported at this time {} {:?}",
+                BIND_INTERFACE,
+                BIND_SOCKET
+            )
+        }
 
         // Initialize the QUIC connection
         let mut client_crypto = TlsClientConfig::new(&epconf)

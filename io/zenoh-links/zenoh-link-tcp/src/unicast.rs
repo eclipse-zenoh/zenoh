@@ -21,7 +21,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use zenoh_link_commons::{
     get_ip_interface_names, tcp::TcpSocketConfig, LinkAuthId, LinkManagerUnicastTrait, LinkUnicast,
-    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender,
+    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -247,6 +247,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
         let dst_addrs = get_tcp_addrs(endpoint.address()).await?;
 
         let config = endpoint.config();
+
+        // if both `iface`, and `bind` are present, return error
+        if let (Some(_), Some(_)) = (config.get(BIND_INTERFACE), config.get(BIND_SOCKET)) {
+            bail!(
+                "Using Config options `iface` and `bind` in conjunction is unsupported at this time {} {:?}",
+                BIND_INTERFACE,
+                BIND_SOCKET
+            )
+        }
 
         let link_config = TcpLinkConfig::new(&config).await?;
         let socket_config = TcpSocketConfig::new(
