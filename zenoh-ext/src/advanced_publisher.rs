@@ -272,6 +272,7 @@ impl<'a> AdvancedPublisher<'a> {
             Some(meta) => Some(meta?),
             None => None,
         };
+        tracing::debug!("Create AdvancedPublisher on {}", &key_expr);
 
         let publisher = conf
             .session
@@ -293,7 +294,7 @@ impl<'a> AdvancedPublisher<'a> {
         };
         let suffix = match meta {
             Some(meta) => suffix / &meta,
-            // We need this empty chunk because af a routing matching bug
+            // We need this empty chunk because of a routing matching bug
             _ => suffix / KE_EMPTY,
         };
 
@@ -313,6 +314,11 @@ impl<'a> AdvancedPublisher<'a> {
         };
 
         let cache = if conf.cache {
+            tracing::debug!(
+                "AdvancedPublisher: Enable cache with history {:?} and queryable_suffix {}",
+                conf.history,
+                suffix
+            );
             Some(
                 AdvancedCacheBuilder::new(conf.session, Ok(key_expr.clone()))
                     .history(conf.history)
@@ -324,6 +330,10 @@ impl<'a> AdvancedPublisher<'a> {
         };
 
         let token = if conf.liveliness {
+            tracing::debug!(
+                "AdvancedPublisher: Declare liveliness token {}",
+                &key_expr / &suffix
+            );
             Some(
                 conf.session
                     .liveliness()
@@ -337,6 +347,11 @@ impl<'a> AdvancedPublisher<'a> {
         let state_publisher = if let Some(period) = conf.miss_config.and_then(|c| c.state_publisher)
         {
             if let Some(seqnum) = seqnum.as_ref() {
+                tracing::debug!(
+                    "AdvancedPublisher: Enable missing_cache (heartbeat) with publisher key {} and duration {:?}",
+                    &key_expr / &suffix,
+                    period
+                );
                 let seqnum = seqnum.clone();
 
                 let publisher = conf.session.declare_publisher(&key_expr / &suffix).wait()?;
