@@ -62,6 +62,7 @@ where
             header |= flag::E;
         }
         let mut n_exts = (ext_sinfo.is_some()) as u8
+            + (ext_finfo.is_some()) as u8
             + (ext_attachment.is_some()) as u8
             + (ext_unknown.len() as u8);
         #[cfg(feature = "shared-memory")]
