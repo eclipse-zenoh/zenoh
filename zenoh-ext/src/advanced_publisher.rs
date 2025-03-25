@@ -62,6 +62,7 @@ pub(crate) enum Sequencing {
 #[zenoh_macros::unstable]
 pub struct MissDetectionConfig {
     pub(crate) state_publisher: Option<Duration>,
+    pub(crate) state_update: Option<Duration>,
 }
 
 #[zenoh_macros::unstable]
@@ -69,6 +70,12 @@ impl MissDetectionConfig {
     #[zenoh_macros::unstable]
     pub fn heartbeat(mut self, period: Duration) -> Self {
         self.state_publisher = Some(period);
+        self
+    }
+
+    #[zenoh_macros::unstable]
+    pub fn heartbeat_update(mut self, period: Duration) -> Self {
+        self.state_update = Some(period);
         self
     }
 }
@@ -334,30 +341,56 @@ impl<'a> AdvancedPublisher<'a> {
             None
         };
 
-        let state_publisher = if let Some(period) = conf.miss_config.and_then(|c| c.state_publisher)
-        {
-            if let Some(seqnum) = seqnum.as_ref() {
-                let seqnum = seqnum.clone();
+        let state_publisher =
+            if let Some(period) = conf.miss_config.as_ref().and_then(|c| c.state_publisher) {
+                if let Some(seqnum) = seqnum.as_ref() {
+                    let seqnum = seqnum.clone();
 
-                let publisher = conf.session.declare_publisher(&key_expr / &suffix).wait()?;
-                Some(TerminatableTask::spawn_abortable(
-                    ZRuntime::Net,
-                    async move {
-                        loop {
-                            tokio::time::sleep(period).await;
-                            let seqnum = seqnum.load(Ordering::Relaxed);
-                            if seqnum > 0 {
-                                let _ = publisher.put(z_serialize(&(seqnum - 1))).await;
+                    let publisher = conf.session.declare_publisher(&key_expr / &suffix).wait()?;
+                    Some(TerminatableTask::spawn_abortable(
+                        ZRuntime::Net,
+                        async move {
+                            loop {
+                                tokio::time::sleep(period).await;
+                                let seqnum = seqnum.load(Ordering::Relaxed);
+                                if seqnum > 0 {
+                                    let _ = publisher.put(z_serialize(&(seqnum - 1))).await;
+                                }
                             }
-                        }
-                    },
-                ))
+                        },
+                    ))
+                } else {
+                    None
+                }
+            } else if let Some(period) = conf.miss_config.as_ref().and_then(|c| c.state_update) {
+                if let Some(seqnum) = seqnum.as_ref() {
+                    let seqnum = seqnum.clone();
+                    let mut last_seqnum = 0;
+
+                    let publisher = conf
+                        .session
+                        .declare_publisher(&key_expr / &suffix)
+                        .congestion_control(CongestionControl::Block)
+                        .wait()?;
+                    Some(TerminatableTask::spawn_abortable(
+                        ZRuntime::Net,
+                        async move {
+                            loop {
+                                tokio::time::sleep(period).await;
+                                let seqnum = seqnum.load(Ordering::Relaxed);
+                                if seqnum > last_seqnum {
+                                    let _ = publisher.put(z_serialize(&(seqnum - 1))).await;
+                                    last_seqnum = seqnum;
+                                }
+                            }
+                        },
+                    ))
+                } else {
+                    None
+                }
             } else {
                 None
-            }
-        } else {
-            None
-        };
+            };
 
         Ok(AdvancedPublisher {
             publisher,
