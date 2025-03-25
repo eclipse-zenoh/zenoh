@@ -30,7 +30,7 @@ use rustls::{
 use rustls_pki_types::ServerName;
 use secrecy::ExposeSecret;
 use webpki::anchor_from_trusted_cert;
-use zenoh_config::{Config as ZenohConfig, EndPoint};
+use zenoh_config::Config as ZenohConfig;
 use zenoh_link_commons::{
     tcp::TcpSocketConfig, tls::WebPkiVerifierAnyServerName, ConfigurationInspector, BIND_INTERFACE,
     BIND_SOCKET, TCP_SO_RCV_BUF, TCP_SO_SND_BUF,
@@ -273,8 +273,7 @@ impl<'a> TlsServerConfig<'a> {
         };
         let mut bind_socket = None;
         if let Some(bind_socket_str) = config.get(BIND_SOCKET) {
-            let bind_endpoint = EndPoint::new("", bind_socket_str, "", "")?;
-            bind_socket = Some(get_tls_addr(&bind_endpoint.address()).await?);
+            bind_socket = Some(get_tls_addr(&Address(bind_socket_str)).await?);
         };
 
         Ok(TlsServerConfig {
@@ -447,8 +446,7 @@ impl<'a> TlsClientConfig<'a> {
 
         let mut bind_socket = None;
         if let Some(bind_socket_str) = config.get(BIND_SOCKET) {
-            let bind_endpoint = EndPoint::new("", bind_socket_str, "", "")?;
-            bind_socket = Some(get_tls_addr(&bind_endpoint.address()).await?);
+            bind_socket = Some(get_tls_addr(&Address(bind_socket_str)).await?);
         };
 
         Ok(TlsClientConfig {

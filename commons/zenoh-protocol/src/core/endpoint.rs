@@ -120,7 +120,7 @@ impl fmt::Debug for ProtocolMut<'_> {
 // Address
 #[repr(transparent)]
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
-pub struct Address<'a>(pub(super) &'a str);
+pub struct Address<'a>(pub &'a str);
 
 impl<'a> Address<'a> {
     pub fn as_str(&self) -> &'a str {

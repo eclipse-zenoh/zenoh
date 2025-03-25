@@ -13,12 +13,12 @@
 //
 use std::net::SocketAddr;
 
-use zenoh_config::{Config as ZenohConfig, EndPoint};
+use zenoh_config::Config as ZenohConfig;
 use zenoh_link_commons::{
     tcp::TcpSocketConfig, ConfigurationInspector, BIND_INTERFACE, BIND_SOCKET, TCP_SO_RCV_BUF,
     TCP_SO_SND_BUF,
 };
-use zenoh_protocol::core::{parameters, Config};
+use zenoh_protocol::core::{parameters, Address, Config};
 use zenoh_result::{zerror, ZResult};
 
 use crate::get_tcp_addrs;
@@ -57,8 +57,7 @@ impl<'a> TcpLinkConfig<'a> {
     pub(crate) async fn new(config: &'a Config<'a>) -> ZResult<Self> {
         let mut bind_socket = None;
         if let Some(bind_socket_str) = config.get(BIND_SOCKET) {
-            let bind_endpoint = EndPoint::new("", bind_socket_str, "", "")?;
-            bind_socket = get_tcp_addrs(bind_endpoint.address()).await?.next();
+            bind_socket = get_tcp_addrs(Address(bind_socket_str)).await?.next();
         };
 
         let mut tcp_config = Self {

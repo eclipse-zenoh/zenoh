@@ -36,7 +36,7 @@ use zenoh_link_commons::{
     ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
-    core::{EndPoint, Locator},
+    core::{Address, EndPoint, Locator},
     transport::BatchSize,
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -273,8 +273,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
         let src_addr = if let Some(bind_socket_str) = epconf.get(BIND_SOCKET) {
-            let bind_endpoint = EndPoint::new("", bind_socket_str, "", "")?;
-            get_quic_addr(&bind_endpoint.address()).await?
+            get_quic_addr(&Address(bind_socket_str)).await?
         } else if dst_addr.is_ipv4() {
             SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0)
         } else {
