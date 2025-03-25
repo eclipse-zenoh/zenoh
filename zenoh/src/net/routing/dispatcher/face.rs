@@ -165,7 +165,7 @@ impl FaceState {
                         .get_mut(&self.id)
                         .unwrap(),
                 )
-                .in_interceptor_cache = cache;
+                .in_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
             }
         }
 
@@ -184,7 +184,7 @@ impl FaceState {
                         .get_mut(&self.id)
                         .unwrap(),
                 )
-                .e_interceptor_cache = cache;
+                .e_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
             }
         }
 
@@ -203,20 +203,24 @@ impl FaceState {
                         .get_mut(&self.id)
                         .unwrap(),
                 )
-                .e_interceptor_cache = cache;
+                .e_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
             }
         }
     }
 
-    pub(crate) fn set_interceptors_from_factories(&self, factories: &[InterceptorFactory]) {
+    pub(crate) fn set_interceptors_from_factories(
+        &self,
+        factories: &[InterceptorFactory],
+        version: usize,
+    ) {
         if let Some(mux) = self.primitives.as_any().downcast_ref::<Mux>() {
             let (ingress, egress): (Vec<_>, Vec<_>) = factories
                 .iter()
                 .map(|itor| itor.new_transport_unicast(&mux.handler))
                 .unzip();
             let (ingress, egress) = (
-                InterceptorsChain::from(ingress.into_iter().flatten().collect::<Vec<_>>()),
-                InterceptorsChain::from(egress.into_iter().flatten().collect::<Vec<_>>()),
+                InterceptorsChain::new(ingress.into_iter().flatten().collect::<Vec<_>>(), version),
+                InterceptorsChain::new(egress.into_iter().flatten().collect::<Vec<_>>(), version),
             );
             mux.interceptor.store(egress.into());
             self.in_interceptors
@@ -224,20 +228,22 @@ impl FaceState {
                 .expect("face in_interceptors should not be None when primitives are Mux")
                 .store(ingress.into());
         } else if let Some(mux) = self.primitives.as_any().downcast_ref::<McastMux>() {
-            let interceptor = InterceptorsChain::from(
+            let interceptor = InterceptorsChain::new(
                 factories
                     .iter()
                     .filter_map(|itor| itor.new_transport_multicast(&mux.handler))
                     .collect::<Vec<EgressInterceptor>>(),
+                version,
             );
             mux.interceptor.store(Arc::new(interceptor));
             debug_assert!(self.in_interceptors.is_none());
         } else if let Some(transport) = &self.mcast_group {
-            let interceptor = InterceptorsChain::from(
+            let interceptor = InterceptorsChain::new(
                 factories
                     .iter()
                     .filter_map(|itor| itor.new_peer_multicast(transport))
                     .collect::<Vec<IngressInterceptor>>(),
+                version,
             );
             self.in_interceptors
                 .as_ref()
