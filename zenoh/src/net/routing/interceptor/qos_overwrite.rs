@@ -21,10 +21,7 @@
 use std::{collections::HashSet, sync::Arc};
 
 use zenoh_config::qos::{QosOverwriteItemConf, QosOverwriteMessage, QosOverwrites};
-use zenoh_keyexpr::{
-    keyexpr,
-    keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, IKeyExprTreeNode, KeBoxTree},
-};
+use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, IKeyExprTreeNode, KeBoxTree};
 use zenoh_protocol::{
     network::{Declare, DeclareBody, NetworkBody, Push, Request, Response},
     zenoh::PushBody,
@@ -178,19 +175,12 @@ pub(crate) struct QosInterceptor {
 }
 
 struct Cache {
-    key: String,
     should_overwrite: bool,
 }
 
 impl QosInterceptor {
-    fn should_overwrite(&self, cached: Option<bool>, key: &str) -> bool {
-        if let Some(val) = cached {
-            return val;
-        }
-        match keyexpr::new(key) {
-            Ok(ke) => self.keys.nodes_including(ke).any(|n| n.weight().is_some()),
-            Err(_) => false,
-        }
+    fn should_overwrite(&self, ke: &KeyExpr) -> bool {
+        self.keys.nodes_including(ke).any(|n| n.weight().is_some())
     }
 
     fn overwrite_qos<const ID: u8>(&self, qos: &mut zenoh_protocol::network::ext::QoSType<ID>) {
@@ -209,8 +199,7 @@ impl QosInterceptor {
 impl InterceptorTrait for QosInterceptor {
     fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
         let cache = Cache {
-            key: key_expr.as_str().to_owned(),
-            should_overwrite: self.should_overwrite(None, key_expr),
+            should_overwrite: self.should_overwrite(key_expr),
         };
         Some(Box::new(cache))
     }
@@ -228,14 +217,12 @@ impl InterceptorTrait for QosInterceptor {
             }
         });
 
-        let key = cache
-            .map(|c| c.key.as_str())
-            .or_else(|| ctx.full_expr())
-            .unwrap_or("");
-        if key.is_empty() {
-            return Some(ctx);
-        }
-        let should_overwrite = self.should_overwrite(cache.map(|c| c.should_overwrite), key);
+        let should_overwrite = cache.map(|v| v.should_overwrite).unwrap_or_else(|| {
+            ctx.full_key_expr()
+                .as_ref()
+                .map(|ke| self.should_overwrite(&ke.into()))
+                .unwrap_or(false)
+        });
         if !should_overwrite {
             return Some(ctx);
         }
