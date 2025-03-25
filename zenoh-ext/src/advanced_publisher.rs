@@ -58,7 +58,6 @@ pub(crate) enum Sequencing {
     SequenceNumber,
 }
 
-#[derive(Default)]
 #[zenoh_macros::unstable]
 pub struct MissDetectionConfig {
     pub(crate) state_publisher: Option<Duration>,
@@ -77,6 +76,16 @@ impl MissDetectionConfig {
     pub fn heartbeat_update(mut self, period: Duration) -> Self {
         self.state_update = Some(period);
         self
+    }
+}
+
+#[zenoh_macros::unstable]
+impl Default for MissDetectionConfig {
+    fn default() -> Self {
+        Self {
+            state_publisher: None,
+            state_update: Some(Duration::from_millis(100)),
+        }
     }
 }
 
@@ -115,7 +124,7 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
             is_express: builder.is_express,
             meta_key_expr: None,
             sequencing: Sequencing::None,
-            miss_config: None,
+            miss_config: Some(MissDetectionConfig::default()),
             liveliness: false,
             cache: false,
             history: CacheConfig::default(),

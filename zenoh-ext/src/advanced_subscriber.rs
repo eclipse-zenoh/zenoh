@@ -93,13 +93,24 @@ pub struct Unconfigured;
 #[derive(Default, Clone, Copy)]
 pub struct Configured;
 
-#[derive(Default, Clone, Copy)]
+#[derive(Clone, Copy)]
 /// Configure retransmission.
 #[zenoh_macros::unstable]
 pub struct RecoveryConfig<T> {
     periodic_queries: Option<Duration>,
     heartbeat: Option<()>,
     phantom: PhantomData<T>,
+}
+
+#[zenoh_macros::unstable]
+impl<T> Default for RecoveryConfig<T> {
+    fn default() -> Self {
+        Self {
+            periodic_queries: None,
+            heartbeat: Some(()),
+            phantom: PhantomData::<T>,
+        }
+    }
 }
 
 impl<T> std::fmt::Debug for RecoveryConfig<T> {
