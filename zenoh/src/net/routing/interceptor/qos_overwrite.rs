@@ -20,7 +20,7 @@
 
 use std::{collections::HashSet, sync::Arc};
 
-use zenoh_config::{qos::QosOverwrites, QosOverwriteItemConf, QosOverwriteMessage};
+use zenoh_config::qos::{QosOverwriteItemConf, QosOverwriteMessage, QosOverwrites};
 use zenoh_keyexpr::{
     keyexpr,
     keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, IKeyExprTreeNode, KeBoxTree},

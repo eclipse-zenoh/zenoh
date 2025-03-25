@@ -32,7 +32,7 @@ use std::{
 };
 
 use include::recursive_include;
-use qos::{PublisherQoSConfList, QosOverwrites};
+use qos::{PublisherQoSConfList, QosOverwriteItemConf};
 use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -199,32 +199,6 @@ pub enum AclMessage {
 pub enum Permission {
     Allow,
     Deny,
-}
-
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum QosOverwriteMessage {
-    Put,
-    Delete,
-    Query,
-    Reply,
-}
-
-#[derive(Default, Debug, Deserialize, Serialize, Clone)]
-pub struct QosOverwriteItemConf {
-    /// Optional identifier for the qos modification configuration item.
-    pub id: Option<String>,
-    /// A list of interfaces to which the qos will be applied.
-    /// QosOverwrite will be applied for all interfaces if the parameter is None.
-    pub interfaces: Option<Vec<String>>,
-    /// List of message types on which the qos overwrite will be applied.
-    pub messages: Vec<QosOverwriteMessage>,
-    /// List of key expressions to apply qos overwrite.
-    pub key_exprs: Vec<OwnedKeyExpr>,
-    // The qos value to overwrite with.
-    pub overwrite: QosOverwrites,
-    /// QosOverwrite flow directions: egress and/or ingress.
-    pub flows: Option<Vec<InterceptorFlow>>,
 }
 
 /// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
@@ -439,6 +413,8 @@ validated_struct::validator! {
         QoSConfig {
             /// A list of QoS configurations for PUT and DELETE messages by key expressions
             publication: PublisherQoSConfList,
+            /// Configuration of the qos overwrite interceptor rules
+            network: Vec<QosOverwriteItemConf>,
         },
 
         pub transport: #[derive(Default)]
@@ -692,9 +668,6 @@ validated_struct::validator! {
             pub subjects: Option<Vec<AclConfigSubjects>>,
             pub policies: Option<Vec<AclConfigPolicyEntry>>,
         },
-
-        /// Configuration of the qos overwrite rules.
-        pub qos_overwrite: Vec<QosOverwriteItemConf>,
 
         /// A list of directories where plugins may be searched for if no `__path__` was specified for them.
         /// The executable's current directory will be added to the search paths.

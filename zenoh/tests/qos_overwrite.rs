@@ -58,7 +58,7 @@ async fn test_qos_overwrite_pub_sub() {
     let config_client2 = get_basic_client_config(27601).await;
     config_router
         .insert_json5(
-            "qos_overwrite",
+            "qos/network",
             r#"[
                 {
                     messages: ["put"],
@@ -138,7 +138,7 @@ async fn test_qos_overwrite_get_reply() {
     let config_client2 = get_basic_client_config(27602).await;
     config_router
         .insert_json5(
-            "qos_overwrite",
+            "qos/network",
             r#"[
                 {
                     messages: ["query"],
@@ -240,7 +240,7 @@ fn qos_overwrite_config_error_repeated_id() {
     let mut config = Config::default();
     config
         .insert_json5(
-            "qos_overwrite",
+            "qos/network",
             r#"[
                 {
                     id: "REPEATED",
@@ -277,7 +277,7 @@ fn qos_overwrite_config_error_wrong_flow() {
     let mut config = Config::default();
     config
         .insert_json5(
-            "qos_overwrite",
+            "qos/network",
             r#"
               [
                 {
@@ -304,7 +304,7 @@ fn qos_overwrite_config_error_empty_flow() {
     let mut config = Config::default();
     config
         .insert_json5(
-            "qos_overwrite",
+            "qos/network",
             r#"
               [
                 {
@@ -331,7 +331,7 @@ fn qos_overwrite_config_error_empty_message() {
     let mut config = Config::default();
     config
         .insert_json5(
-            "qos_overwrite",
+            "qos/network",
             r#"
               [
                 {
@@ -358,7 +358,7 @@ fn qos_overwrite_config_error_empty_interface() {
     let mut config = Config::default();
     config
         .insert_json5(
-            "qos_overwrite",
+            "qos/network",
             r#"
               [
                 {
@@ -385,7 +385,7 @@ fn qos_overwrite_config_ok_no_flow() {
     let mut config = Config::default();
     config
         .insert_json5(
-            "qos_overwrite",
+            "qos/network",
             r#"
               [
                 {

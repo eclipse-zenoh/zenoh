@@ -249,6 +249,39 @@
   //        },
   //      },
   //    ],
+  //    /// Overwrite QoS options for messages sent and received from/to the network
+  //    /// This allows more fine grained rules (per network card, etc...) but is
+  //    /// less performant than the publication option above.
+  //    network: [
+  //      {
+  //        /// Optional Id, has to be unique.
+  //        id: "lo0_en0_qos_overwrite",
+  //        // Optional list of interfaces, if not specified, will be applied to all interfaces.
+  //        interfaces: [
+  //          "lo0",
+  //          "en0",
+  //        ],
+  //        /// List of message types to apply to.
+  //        messages: [
+  //          "put", // put publications
+  //          "delete" // delete publications
+  //          "query", // get queries
+  //          "reply", // replies to queries
+  //        ],
+  //        /// Optional list of data flows messages will be processed on ("egress" and/or "ingress").
+  //        /// If absent, the rules will be applied to both flows.
+  //        flows: ["egress", "ingress"],
+  //        key_exprs: ["test/demo"],
+  //        overwrite: {
+  //          /// Optional new priority value, if not specified priority of the messages will stay unchanged.
+  //          priority: "real_time",
+  //          /// Optional new congestion control value, if not specified congestion control of the messages will stay unchanged.
+  //          congestion_control: "block",
+  //          /// Optional new express value, if not specified express flag of the messages will stay unchanged.
+  //          express: true
+  //        },
+  //      },
+  //    ],
   //  },
 
   //  /// The declarations aggregation strategy.
@@ -397,38 +430,6 @@
   //      },
   //   ]
   //},
-
-  //  /// Configure QoS overwrite rules.
-  //  qos_overwrite: [
-  //     {
-  //       /// Optional Id, has to be unique.
-  //       id: "lo0_en0_qos_overwrite",
-  //       // Optional list of interfaces, if not specified, will be applied to all interfaces.
-  //       interfaces: [
-  //         "lo0",
-  //         "en0",
-  //       ],
-  //       /// List of message types to apply to.
-  //       messages: [
-  //          "put", // put publications
-  //          "delete" // delete publications
-  //          "query", // get queries
-  //          "reply", // replies to queries
-  //       ],
-  //       /// Optional list of data flows messages will be processed on ("egress" and/or "ingress").
-  //       /// If absent, the rules will be applied to both flows.
-  //       flows: ["egress", "ingress"],
-  //       key_exprs: ["test/demo"],
-  //       overwrite: {
-  //          /// Optional new priority value, if not specified priority of the messages will stay unchanged.
-  //          priority: "real_time",
-  //          /// Optional new congestion control value, if not specified congestion control of the messages will stay unchanged.
-  //          congestion_control: "block",
-  //          /// Optional new express value, if not specified express flag of the messages will stay unchanged.
-  //          express: true
-  //        },
-  //     }
-  //   ],
 
   /// Configure internal transport parameters
   transport: {

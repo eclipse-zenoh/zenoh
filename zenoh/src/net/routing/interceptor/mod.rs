@@ -91,7 +91,7 @@ pub(crate) fn interceptor_factories(config: &Config) -> ZResult<Vec<InterceptorF
     // res.push(Box::new(LoggerInterceptor {}));
     res.extend(downsampling_interceptor_factories(config.downsampling())?);
     res.extend(acl_interceptor_factories(config.access_control())?);
-    res.extend(qos_overwrite_interceptor_factories(config.qos_overwrite())?);
+    res.extend(qos_overwrite_interceptor_factories(config.qos().network())?);
     Ok(res)
 }
 
