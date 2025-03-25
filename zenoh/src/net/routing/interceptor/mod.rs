@@ -62,7 +62,6 @@ impl From<&[InterceptorFlow]> for InterfaceEnabled {
 pub(crate) struct InterceptorLinkWrapper(pub(crate) InterceptorLink);
 
 impl From<&LinkAuthId> for InterceptorLinkWrapper {
-    /// fails only for LinkAuthId::None which does not map to an InterceptorLink
     fn from(value: &LinkAuthId) -> Self {
         match value {
             LinkAuthId::Tls(_) => Self(InterceptorLink::Tls),
