@@ -236,36 +236,49 @@ impl InterceptorTrait for IngressAclEnforcer {
                 }
             })
             .or_else(|| ctx.full_expr());
-        macro_rules! ret_is_allowed {
-            ($action:ident) => {
-                ret_is_allowed!($action, stringify!($action))
-            };
-            ($action:ident, $log:expr) => {
-                return key_expr.is_some_and(|ke| {
-                    self.action(AclMessage::$action, concat!($log, " (ingress)"), ke)
-                        == Permission::Allow
-                })
-            };
-        }
 
         match &ctx.msg.body {
             NetworkBodyMut::Request(Request {
                 payload: RequestBody::Query(_),
                 ..
-            }) => ret_is_allowed!(Query),
-            NetworkBodyMut::Response(Response { .. }) => ret_is_allowed!(Reply),
+            }) => {
+                return key_expr.is_some_and(|ke| {
+                    self.action(AclMessage::Query, "Query (ingress)", ke) == Permission::Allow
+                });
+            }
+            NetworkBodyMut::Response(Response { .. }) => {
+                return key_expr.is_some_and(|ke| {
+                    self.action(AclMessage::Reply, "Reply (ingress)", ke) == Permission::Allow
+                });
+            }
             NetworkBodyMut::Push(Push {
                 payload: PushBody::Put(_),
                 ..
-            }) => ret_is_allowed!(Put),
+            }) => {
+                return key_expr.is_some_and(|ke| {
+                    self.action(AclMessage::Put, "Put (ingress)", ke) == Permission::Allow
+                });
+            }
             NetworkBodyMut::Push(Push {
                 payload: PushBody::Del(_),
                 ..
-            }) => ret_is_allowed!(Delete),
+            }) => {
+                return key_expr.is_some_and(|ke| {
+                    self.action(AclMessage::Delete, "Delete (ingress)", ke) == Permission::Allow
+                });
+            }
             NetworkBodyMut::Declare(Declare {
                 body: DeclareBody::DeclareSubscriber(_),
                 ..
-            }) => ret_is_allowed!(DeclareSubscriber, "Declare Subscriber"),
+            }) => {
+                return key_expr.is_some_and(|ke| {
+                    self.action(
+                        AclMessage::DeclareSubscriber,
+                        "Declare Subscriber (ingress)",
+                        ke,
+                    ) == Permission::Allow
+                });
+            }
             NetworkBodyMut::Declare(Declare {
                 body: DeclareBody::UndeclareSubscriber(_),
                 ..
@@ -274,14 +287,27 @@ impl InterceptorTrait for IngressAclEnforcer {
                 // Undeclarations in ingress are only filtered if the ext_wire_expr is set.
                 // If it's not set, we let the undeclaration pass, it will be rejected by the routing logic
                 // if its associated declaration was denied.
-                if key_expr.is_some_and(|ke| !ke.is_empty()) {
-                    ret_is_allowed!(DeclareSubscriber, "Undeclare Subscriber");
-                }
+                return key_expr.is_some_and(|ke| {
+                    ke.is_empty()
+                        || self.action(
+                            AclMessage::DeclareSubscriber,
+                            "Undeclare Subscriber (ingress)",
+                            ke,
+                        ) == Permission::Allow
+                });
             }
             NetworkBodyMut::Declare(Declare {
                 body: DeclareBody::DeclareQueryable(_),
                 ..
-            }) => ret_is_allowed!(DeclareQueryable, "Declare Queryable"),
+            }) => {
+                return key_expr.is_some_and(|ke| {
+                    self.action(
+                        AclMessage::DeclareQueryable,
+                        "Declare Queryable (ingress)",
+                        ke,
+                    ) == Permission::Allow
+                });
+            }
             NetworkBodyMut::Declare(Declare {
                 body: DeclareBody::UndeclareQueryable(_),
                 ..
@@ -290,33 +316,65 @@ impl InterceptorTrait for IngressAclEnforcer {
                 // Undeclarations in ingress are only filtered if the ext_wire_expr is set.
                 // If it's not set, we let the undeclaration pass, it will be rejected by the routing logic
                 // if its associated declaration was denied.
-                if key_expr.is_some_and(|ke| !ke.is_empty()) {
-                    ret_is_allowed!(DeclareQueryable, "Undeclare Queryable");
-                }
+                return key_expr.is_some_and(|ke| {
+                    ke.is_empty()
+                        || self.action(
+                            AclMessage::DeclareQueryable,
+                            "Undeclare Queryable (ingress)",
+                            ke,
+                        ) == Permission::Allow
+                });
             }
             NetworkBodyMut::Declare(Declare {
                 body: DeclareBody::DeclareToken(_),
                 ..
-            }) => ret_is_allowed!(LivelinessToken, "Declare Liveliness Token"),
+            }) => {
+                return key_expr.is_some_and(|ke| {
+                    self.action(
+                        AclMessage::LivelinessToken,
+                        "Declare Liveliness Token (ingress)",
+                        ke,
+                    ) == Permission::Allow
+                });
+            }
             NetworkBodyMut::Declare(Declare {
                 body: DeclareBody::UndeclareToken(_),
                 ..
             }) => {
-                if key_expr.is_some_and(|ke| !ke.is_empty()) {
-                    ret_is_allowed!(LivelinessToken, "Undeclare Liveliness Token");
-                }
+                return key_expr.is_some_and(|ke| {
+                    ke.is_empty()
+                        || self.action(
+                            AclMessage::LivelinessToken,
+                            "Undeclare Liveliness Token (ingress)",
+                            ke,
+                        ) == Permission::Allow
+                });
             }
             NetworkBodyMut::Interest(Interest {
                 mode: InterestMode::Current,
                 options,
                 ..
-            }) if options.tokens() => ret_is_allowed!(LivelinessQuery, "Liveliness Query"),
+            }) if options.tokens() => {
+                return key_expr.is_some_and(|ke| {
+                    self.action(
+                        AclMessage::LivelinessQuery,
+                        "Liveliness Query (ingress)",
+                        ke,
+                    ) == Permission::Allow
+                });
+            }
             NetworkBodyMut::Interest(Interest {
                 mode: InterestMode::Future | InterestMode::CurrentFuture,
                 options,
                 ..
             }) if options.tokens() => {
-                ret_is_allowed!(DeclareLivelinessSubscriber, "Declare Liveliness Subscriber")
+                return key_expr.is_some_and(|ke| {
+                    self.action(
+                        AclMessage::DeclareLivelinessSubscriber,
+                        "Declare Liveliness Subscriber (ingress)",
+                        ke,
+                    ) == Permission::Allow
+                });
             }
             NetworkBodyMut::Interest(Interest {
                 mode: InterestMode::Final,
@@ -367,61 +425,100 @@ impl InterceptorTrait for EgressAclEnforcer {
                 }
             })
             .or_else(|| ctx.full_expr());
-        macro_rules! ret_is_allowed {
-            ($action:ident) => {
-                ret_is_allowed!($action, stringify!($action))
-            };
-            ($action:ident, $log:expr) => {
-                return key_expr.is_some_and(|ke| {
-                    self.action(AclMessage::$action, concat!($log, " (egress)"), ke)
-                        == Permission::Allow
-                })
-            };
-        }
 
         match &ctx.msg.body {
             NetworkBodyMut::Request(Request {
                 payload: RequestBody::Query(_),
                 ..
-            }) => ret_is_allowed!(Query),
-            NetworkBodyMut::Response(Response { .. }) => ret_is_allowed!(Reply),
+            }) => {
+                return key_expr.is_some_and(|ke| {
+                    self.action(AclMessage::Query, "Query (egress)", ke) == Permission::Allow
+                });
+            }
+            NetworkBodyMut::Response(Response { .. }) => {
+                return key_expr.is_some_and(|ke| {
+                    self.action(AclMessage::Reply, "Reply (egress)", ke) == Permission::Allow
+                });
+            }
             NetworkBodyMut::Push(Push {
                 payload: PushBody::Put(_),
                 ..
-            }) => ret_is_allowed!(Put),
+            }) => {
+                return key_expr.is_some_and(|ke| {
+                    self.action(AclMessage::Put, "Put (egress)", ke) == Permission::Allow
+                });
+            }
             NetworkBodyMut::Push(Push {
                 payload: PushBody::Del(_),
                 ..
-            }) => ret_is_allowed!(Delete),
+            }) => {
+                return key_expr.is_some_and(|ke| {
+                    self.action(AclMessage::Delete, "Delete (egress)", ke) == Permission::Allow
+                });
+            }
             NetworkBodyMut::Declare(Declare {
                 body: DeclareBody::DeclareSubscriber(_),
                 ..
-            }) => ret_is_allowed!(DeclareSubscriber, "Declare Subscriber"),
+            }) => {
+                return key_expr.is_some_and(|ke| {
+                    self.action(
+                        AclMessage::DeclareSubscriber,
+                        "Declare Subscriber (egress)",
+                        ke,
+                    ) == Permission::Allow
+                });
+            }
             NetworkBodyMut::Declare(Declare {
                 body: DeclareBody::UndeclareSubscriber(_),
                 ..
             }) => {
                 // Undeclaration filtering diverges between ingress and egress:
                 // in egress the keyexpr has to be provided in the RoutingContext
-                ret_is_allowed!(DeclareSubscriber, "Undeclare Subscriber");
+                return key_expr.is_some_and(|ke| {
+                    self.action(
+                        AclMessage::DeclareSubscriber,
+                        "Undeclare Subscriber (egress)",
+                        ke,
+                    ) == Permission::Allow
+                });
             }
             NetworkBodyMut::Declare(Declare {
                 body: DeclareBody::DeclareQueryable(_),
                 ..
-            }) => ret_is_allowed!(DeclareQueryable, "Declare Queryable"),
+            }) => {
+                return key_expr.is_some_and(|ke| {
+                    self.action(
+                        AclMessage::DeclareQueryable,
+                        "Declare Queryable (egress)",
+                        ke,
+                    ) == Permission::Allow
+                });
+            }
             NetworkBodyMut::Declare(Declare {
                 body: DeclareBody::UndeclareQueryable(_),
                 ..
             }) => {
                 // Undeclaration filtering diverges between ingress and egress:
                 // in egress the keyexpr has to be provided in the RoutingContext
-                ret_is_allowed!(DeclareQueryable, "Undeclare Queryable");
+                return key_expr.is_some_and(|ke| {
+                    self.action(
+                        AclMessage::DeclareQueryable,
+                        "Undeclare Queryable (egress)",
+                        ke,
+                    ) == Permission::Allow
+                });
             }
             NetworkBodyMut::Declare(Declare {
                 body: DeclareBody::DeclareToken(_),
                 ..
             }) => {
-                ret_is_allowed!(LivelinessToken, "Declare Liveliness Token");
+                return key_expr.is_some_and(|ke| {
+                    self.action(
+                        AclMessage::LivelinessToken,
+                        "Declare Liveliness Token (egress)",
+                        ke,
+                    ) == Permission::Allow
+                });
             }
             NetworkBodyMut::Declare(Declare {
                 body: DeclareBody::UndeclareToken(_),
@@ -429,19 +526,36 @@ impl InterceptorTrait for EgressAclEnforcer {
             }) => {
                 // Undeclaration filtering diverges between ingress and egress:
                 // in egress the keyexpr has to be provided in the RoutingContext
-                ret_is_allowed!(LivelinessToken, "Undeclare Liveliness Token");
+                return key_expr.is_some_and(|ke| {
+                    self.action(
+                        AclMessage::LivelinessToken,
+                        "Undeclare Liveliness Token (egress)",
+                        ke,
+                    ) == Permission::Allow
+                });
             }
             NetworkBodyMut::Interest(Interest {
                 mode: InterestMode::Current,
                 options,
                 ..
-            }) if options.tokens() => ret_is_allowed!(LivelinessQuery, "Liveliness Query"),
+            }) if options.tokens() => {
+                return key_expr.is_some_and(|ke| {
+                    self.action(AclMessage::LivelinessQuery, "Liveliness Query (egress)", ke)
+                        == Permission::Allow
+                })
+            }
             NetworkBodyMut::Interest(Interest {
                 mode: InterestMode::Future | InterestMode::CurrentFuture,
                 options,
                 ..
             }) if options.tokens() => {
-                ret_is_allowed!(DeclareLivelinessSubscriber, "Declare Liveliness Subscriber")
+                return key_expr.is_some_and(|ke| {
+                    self.action(
+                        AclMessage::DeclareLivelinessSubscriber,
+                        "Declare Liveliness Subscriber (egress)",
+                        ke,
+                    ) == Permission::Allow
+                });
             }
             NetworkBodyMut::Interest(Interest {
                 mode: InterestMode::Final,
@@ -452,7 +566,13 @@ impl InterceptorTrait for EgressAclEnforcer {
 
                 // InterestMode::Final filtering diverges between ingress and egress:
                 // in egress the keyexpr has to be provided in the RoutingContext
-                ret_is_allowed!(DeclareLivelinessSubscriber, "Declare Liveliness Subscriber");
+                return key_expr.is_some_and(|ke| {
+                    self.action(
+                        AclMessage::DeclareLivelinessSubscriber,
+                        "Declare Liveliness Subscriber (egress)",
+                        ke,
+                    ) == Permission::Allow
+                });
             }
             // Unfiltered Declare messages
             NetworkBodyMut::Declare(Declare {
