@@ -273,7 +273,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
         let src_addr = if let Some(bind_socket_str) = epconf.get(BIND_SOCKET) {
-            get_quic_addr(&Address(bind_socket_str)).await?
+            get_quic_addr(&Address::from(bind_socket_str)).await?
         } else if dst_addr.is_ipv4() {
             SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0)
         } else {

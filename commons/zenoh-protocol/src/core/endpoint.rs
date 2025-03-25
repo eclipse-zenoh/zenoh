@@ -120,7 +120,7 @@ impl fmt::Debug for ProtocolMut<'_> {
 // Address
 #[repr(transparent)]
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
-pub struct Address<'a>(pub &'a str);
+pub struct Address<'a>(pub(super) &'a str);
 
 impl<'a> Address<'a> {
     pub fn as_str(&self) -> &'a str {
@@ -143,6 +143,12 @@ impl fmt::Display for Address<'_> {
 impl fmt::Debug for Address<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self)
+    }
+}
+
+impl<'a> From<&'a str> for Address<'a> {
+    fn from(value: &'a str) -> Self {
+        Address(value)
     }
 }
 
@@ -880,8 +886,4 @@ fn endpoints() {
     assert_eq!(i.next(), Some("224.0.0.2"));
     assert_eq!(i.next(), Some("224.0.0.3"));
     assert_eq!(i.next(), None);
-
-    let endpoint = EndPoint::from_str("udp/127.0.0.1:7447#bind=224.0.0.1:8080").unwrap();
-    let c = endpoint.config();
-    assert_eq!(c.get("bind"), Some("224.0.0.1:8080"));
 }

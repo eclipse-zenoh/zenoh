@@ -57,7 +57,7 @@ impl<'a> TcpLinkConfig<'a> {
     pub(crate) async fn new(config: &'a Config<'a>) -> ZResult<Self> {
         let mut bind_socket = None;
         if let Some(bind_socket_str) = config.get(BIND_SOCKET) {
-            bind_socket = get_tcp_addrs(Address(bind_socket_str)).await?.next();
+            bind_socket = get_tcp_addrs(Address::from(bind_socket_str)).await?.next();
         };
 
         let mut tcp_config = Self {

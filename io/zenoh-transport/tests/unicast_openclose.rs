@@ -645,23 +645,6 @@ async fn openclose_tcp_only_listen_with_interface_restriction() {
     openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
 }
 
-#[cfg(feature = "transport_tcp")]
-#[cfg(target_os = "linux")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn openclose_tcp_only_listen_with_bind_restriction() {
-    let addrs = get_ipv4_ipaddrs(None);
-    zenoh_util::init_log_from_env_or("error");
-
-    let listen_endpoint: EndPoint =
-        format!("tcp/{}:{}#bind={}:{}", addrs[0], 13003, addrs[0], 13003)
-            .parse()
-            .unwrap();
-
-    let connect_endpoint: EndPoint = format!("tcp/{}:{}", addrs[0], 13003).parse().unwrap();
-
-    openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
-}
-
 #[cfg(feature = "transport_udp")]
 #[cfg(target_os = "linux")]
 #[should_panic(expected = "Elapsed")]

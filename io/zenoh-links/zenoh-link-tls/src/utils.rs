@@ -273,7 +273,7 @@ impl<'a> TlsServerConfig<'a> {
         };
         let mut bind_socket = None;
         if let Some(bind_socket_str) = config.get(BIND_SOCKET) {
-            bind_socket = Some(get_tls_addr(&Address(bind_socket_str)).await?);
+            bind_socket = Some(get_tls_addr(&Address::from(bind_socket_str)).await?);
         };
 
         Ok(TlsServerConfig {
@@ -446,7 +446,7 @@ impl<'a> TlsClientConfig<'a> {
 
         let mut bind_socket = None;
         if let Some(bind_socket_str) = config.get(BIND_SOCKET) {
-            bind_socket = Some(get_tls_addr(&Address(bind_socket_str)).await?);
+            bind_socket = Some(get_tls_addr(&Address::from(bind_socket_str)).await?);
         };
 
         Ok(TlsClientConfig {
