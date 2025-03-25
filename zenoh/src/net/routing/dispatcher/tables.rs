@@ -14,7 +14,10 @@
 use std::{
     any::Any,
     collections::HashMap,
-    sync::{Arc, Mutex, RwLock},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex, RwLock,
+    },
     time::Duration,
 };
 
@@ -79,6 +82,7 @@ pub struct Tables {
     pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) hat_code: Arc<dyn HatTrait + Send + Sync>, // @TODO make this a Box
     pub(crate) routes_version: RoutesVersion,
+    pub(crate) next_interceptor_version: AtomicUsize,
 }
 
 impl Tables {
@@ -114,6 +118,7 @@ impl Tables {
             hat: hat_code.new_tables(router_peers_failover_brokering),
             hat_code: hat_code.into(),
             routes_version: 0,
+            next_interceptor_version: AtomicUsize::new(0),
         })
     }
 
@@ -167,4 +172,21 @@ pub struct TablesLock {
     pub tables: RwLock<Tables>,
     pub(crate) ctrl_lock: Mutex<Box<dyn HatTrait + Send + Sync>>,
     pub queries_lock: RwLock<()>,
+}
+
+impl TablesLock {
+    #[allow(dead_code)]
+    pub(crate) fn regen_interceptors(&self, config: &Config) -> ZResult<()> {
+        let mut tables = zwrite!(self.tables);
+        tables.interceptors = interceptor_factories(config)?;
+        drop(tables);
+        let tables = zread!(self.tables);
+        let version = tables
+            .next_interceptor_version
+            .fetch_add(1, Ordering::SeqCst);
+        tables.faces.values().for_each(|face| {
+            face.set_interceptors_from_factories(&tables.interceptors, version + 1);
+        });
+        Ok(())
+    }
 }

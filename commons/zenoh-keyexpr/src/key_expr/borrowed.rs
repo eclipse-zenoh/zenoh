@@ -377,7 +377,7 @@ impl keyexpr {
                         }
                         None => unsafe {
                             // "**" can match all remaining non-verbatim chunks
-                            Some(keyexpr::from_str_unchecked(std::str::from_utf8_unchecked(
+                            Some(keyexpr::from_str_unchecked(core::str::from_utf8_unchecked(
                                 &target_bytes[target_idx..],
                             )))
                         },
@@ -394,7 +394,7 @@ impl keyexpr {
                 if prefix_end == prefix_bytes.len() {
                     // Safety: every chunk of keyexpr is also a valid keyexpr
                     return unsafe {
-                        Some(keyexpr::from_str_unchecked(std::str::from_utf8_unchecked(
+                        Some(keyexpr::from_str_unchecked(core::str::from_utf8_unchecked(
                             &target_bytes[(target_end + 1)..],
                         )))
                     };

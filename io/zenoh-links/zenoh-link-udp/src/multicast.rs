@@ -343,6 +343,28 @@ impl LinkManagerMulticastUdp {
         // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
         mcast_sock.set_nonblocking(true)?;
 
+        // If TTL is specified, add set the socket's TTL
+        if let Some(ttl_str) = config.get(UDP_MULTICAST_TTL) {
+            match &local_addr {
+                IpAddr::V4(_) => {
+                    let ttl = match ttl_str.parse::<u32>() {
+                        Ok(ttl) => ttl,
+                        Err(e) => bail!("Can not parse TTL '{}' to a u32: {}", ttl_str, e),
+                    };
+
+                    ucast_sock.set_multicast_ttl_v4(ttl).map_err(|e| {
+                        zerror!("Can not set multicast TTL {} on {}: {}", ttl, mcast_addr, e)
+                    })?;
+                }
+                IpAddr::V6(_) => {
+                    tracing::warn!(
+                            "UDP multicast hop limit not supported for v6 socket: {}. See https://github.com/rust-lang/rust/pull/138744.",
+                            mcast_addr
+                        );
+                }
+            }
+        }
+
         // Build the tokio multicast UdpSocket
         let mcast_sock = UdpSocket::from_std(mcast_sock.into())?;
 

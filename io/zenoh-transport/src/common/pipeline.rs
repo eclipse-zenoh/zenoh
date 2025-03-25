@@ -822,7 +822,7 @@ impl TransmissionPipelineProducer {
         // Lock the channel. We are the only one that will be writing on it.
         let mut queue = zlock!(self.stage_in[idx]);
         // Check again for congestion in case it happens when blocking on the mutex.
-        if self.status.is_congested(priority) {
+        if msg.is_droppable() && self.status.is_congested(priority) {
             return Ok(false);
         }
         let mut sent = queue.push_network_message(&msg, priority, &mut deadline)?;
