@@ -102,24 +102,22 @@ impl InterceptorFactoryTrait for QosOverwriteFactory {
         &self,
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
-        tracing::debug!("New qos overwriter transport unicast {:?}", transport);
         if let Some(interfaces) = &self.interfaces {
-            tracing::debug!(
-                "New qos overwriter transport unicast config interfaces: {:?}",
-                interfaces
-            );
             if let Ok(links) = transport.get_links() {
                 for link in links {
-                    tracing::debug!(
-                        "New qos overwriter transport unicast link interfaces: {:?}",
-                        link.interfaces
-                    );
                     if !link.interfaces.iter().any(|x| interfaces.contains(x)) {
                         return (None, None);
                     }
                 }
             }
         }
+
+        tracing::debug!(
+            "New{}{} qos overwriter on transport unicast {:?}",
+            self.flows.ingress.then_some(" ingress").unwrap_or_default(),
+            self.flows.egress.then_some(" egress").unwrap_or_default(),
+            transport
+        );
         (
             self.flows.ingress.then(|| {
                 Box::new(QosInterceptor {
@@ -241,7 +239,6 @@ impl InterceptorTrait for QosInterceptor {
         if !should_overwrite {
             return Some(ctx);
         }
-        tracing::trace!("Processing message on {}", key);
         match &mut ctx.msg.body {
             NetworkBody::Request(Request { ext_qos, .. }) => {
                 if self.filter.query {
