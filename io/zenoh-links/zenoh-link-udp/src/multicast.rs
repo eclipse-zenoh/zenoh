@@ -345,7 +345,7 @@ impl LinkManagerMulticastUdp {
 
         // If TTL is specified, add set the socket's TTL
         if let Some(ttl_str) = config.get(UDP_MULTICAST_TTL) {
-            match &local_addr {
+            match &local_addr.ip() {
                 IpAddr::V4(_) => {
                     let ttl = match ttl_str.parse::<u32>() {
                         Ok(ttl) => ttl,
