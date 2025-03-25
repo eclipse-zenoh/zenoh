@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::net::SocketAddr;
+
 use zenoh_config::{Config as ZenohConfig, EndPoint};
 use zenoh_link_commons::{
     tcp::TcpSocketConfig, ConfigurationInspector, BIND_INTERFACE, BIND_SOCKET, TCP_SO_RCV_BUF,
