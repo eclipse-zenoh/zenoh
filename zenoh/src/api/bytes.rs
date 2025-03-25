@@ -213,7 +213,7 @@ impl ZBytes {
 
     /// Return an iterator of chunks in [`ZBytes`].
     ///
-    /// This method does not entail cloning the underlying buffer unless [`ZBytes`] is not
+    /// This method does not entail cloning the underlying buffer even if [`ZBytes`] is not
     /// contiguous.
     ///
     /// All chunks have size less then or equal to `chunk_size`.
@@ -222,11 +222,8 @@ impl ZBytes {
     ///
     /// Panics if `chunk_size` is zero.
     #[zenoh_macros::unstable]
-    pub fn chunks(&self, chunk_size: usize) -> impl Iterator<Item = ZBytes> {
-        self.0
-            .to_zslice()
-            .chunks(chunk_size)
-            .map(|zs| ZBytes::from(ZBuf::from(zs)))
+    pub fn chunks(&self, chunk_size: usize) -> ZBytesChunkIterator {
+        ZBytesChunkIterator(self.0.chunks(chunk_size))
     }
 }
 
@@ -505,5 +502,18 @@ impl<const ID: u8> From<ZBytes> for AttachmentType<ID> {
 impl<const ID: u8> From<AttachmentType<ID>> for ZBytes {
     fn from(this: AttachmentType<ID>) -> Self {
         this.buffer.into()
+    }
+}
+
+/// An iterator of chunks in [`ZBytes`], see [`ZBytes::chunks`].
+#[zenoh_macros::unstable]
+pub struct ZBytesChunkIterator<'a>(zenoh_buffers::ZBufChunkIterator<'a>);
+
+#[zenoh_macros::unstable]
+impl Iterator for ZBytesChunkIterator<'_> {
+    type Item = ZBytes;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next().map(ZBytes::from)
     }
 }
