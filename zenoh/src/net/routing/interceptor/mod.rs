@@ -36,6 +36,9 @@ use crate::api::key_expr::KeyExpr;
 pub mod downsampling;
 use crate::net::routing::interceptor::downsampling::downsampling_interceptor_factories;
 
+pub mod qos_overwrite;
+use crate::net::routing::interceptor::qos_overwrite::qos_overwrite_interceptor_factories;
+
 #[derive(Default, Debug)]
 pub struct InterfaceEnabled {
     pub ingress: bool,
@@ -106,13 +109,23 @@ pub(crate) fn interceptor_factories(config: &Config) -> ZResult<Vec<InterceptorF
     let mut res: Vec<InterceptorFactory> = vec![];
     // Uncomment to log the interceptors initialisation
     // res.push(Box::new(LoggerInterceptor {}));
+    #[cfg(test)]
+    if let Some(test_interceptors) = tests::ID_TO_INTERCEPTOR_FACTORIES
+        .lock()
+        .unwrap()
+        .get(config.id())
+    {
+        res.extend((test_interceptors.as_ref())());
+    }
     res.extend(downsampling_interceptor_factories(config.downsampling())?);
     res.extend(acl_interceptor_factories(config.access_control())?);
+    res.extend(qos_overwrite_interceptor_factories(config.qos().network())?);
     Ok(res)
 }
 
 pub(crate) struct InterceptorsChain {
     pub(crate) interceptors: Vec<Interceptor>,
+    pub(crate) version: usize,
 }
 
 impl InterceptorsChain {
@@ -120,17 +133,19 @@ impl InterceptorsChain {
     pub(crate) fn empty() -> Self {
         Self {
             interceptors: vec![],
+            version: 0,
         }
     }
 
     pub(crate) fn is_empty(&self) -> bool {
         self.interceptors.is_empty()
     }
-}
 
-impl From<Vec<Interceptor>> for InterceptorsChain {
-    fn from(interceptors: Vec<Interceptor>) -> Self {
-        InterceptorsChain { interceptors }
+    pub(crate) fn new(interceptors: Vec<Interceptor>, version: usize) -> Self {
+        InterceptorsChain {
+            interceptors,
+            version,
+        }
     }
 }
 
@@ -286,4 +301,22 @@ impl InterceptorFactoryTrait for LoggerInterceptor {
         tracing::debug!("New peer multicast {:?}", transport);
         Some(Box::new(IngressMsgLogger {}))
     }
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use std::{
+        collections::HashMap,
+        sync::{Arc, Mutex},
+    };
+
+    use once_cell::sync::Lazy;
+    use zenoh_config::ZenohId;
+
+    use super::InterceptorFactory;
+
+    #[allow(clippy::type_complexity)]
+    pub(crate) static ID_TO_INTERCEPTOR_FACTORIES: Lazy<
+        Arc<Mutex<HashMap<ZenohId, Box<dyn Fn() -> Vec<InterceptorFactory> + Sync + Send>>>>,
+    > = Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
 }

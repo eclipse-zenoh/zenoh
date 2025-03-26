@@ -32,7 +32,7 @@ use std::{
 };
 
 use include::recursive_include;
-use qos::PublisherQoSConfList;
+use qos::{PublisherQoSConfList, QosOverwriteItemConf};
 use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -437,6 +437,8 @@ validated_struct::validator! {
         QoSConfig {
             /// A list of QoS configurations for PUT and DELETE messages by key expressions
             publication: PublisherQoSConfList,
+            /// Configuration of the qos overwrite interceptor rules
+            network: Vec<QosOverwriteItemConf>,
         },
 
         pub transport: #[derive(Default)]

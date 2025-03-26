@@ -167,14 +167,26 @@ impl WaitTime {
     }
 
     fn advance(&mut self, instant: &mut Instant) {
+        // grow wait_time exponentially
+        self.wait_time = self.wait_time.saturating_mul(2);
+
+        // check for waiting limits
         match &mut self.max_wait_time {
-            Some(max_wait_time) => {
-                if let Some(new_max_wait_time) = max_wait_time.checked_sub(self.wait_time) {
-                    *instant += self.wait_time;
-                    *max_wait_time = new_max_wait_time;
-                    self.wait_time *= 2;
-                }
+            // if we have reached the waiting limit, we do not increase wait instant
+            Some(max_wait_time) if *max_wait_time == Duration::ZERO => {
+                tracing::trace!("Backoff increase limit reached")
             }
+            // if the leftover of waiting time is less than next iteration, we select leftover
+            Some(max_wait_time) if *max_wait_time <= self.wait_time => {
+                *instant += *max_wait_time;
+                *max_wait_time = Duration::ZERO;
+            }
+            // if the leftover of waiting time is bigger than next iteration, select next iteration
+            Some(max_wait_time) => {
+                *instant += self.wait_time;
+                *max_wait_time -= self.wait_time;
+            }
+            // just select next iteration without checking the upper limit
             None => {
                 *instant += self.wait_time;
             }
@@ -822,7 +834,7 @@ impl TransmissionPipelineProducer {
         // Lock the channel. We are the only one that will be writing on it.
         let mut queue = zlock!(self.stage_in[idx]);
         // Check again for congestion in case it happens when blocking on the mutex.
-        if self.status.is_congested(priority) {
+        if msg.is_droppable() && self.status.is_congested(priority) {
             return Ok(false);
         }
         let mut sent = queue.push_network_message(&msg, priority, &mut deadline)?;
