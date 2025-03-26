@@ -249,6 +249,8 @@ async fn openclose_tcp_only_connect_with_bind_restriction() {
     let listen_endpoint: EndPoint = format!("tcp/{}:{}", addrs[0], 13003).parse().unwrap();
 
     // Bind to different port on same IP address
+    // Expect this test to succeed -
+    // When running the test multiple times locally a TcpStream does not get cleaned up
     let connect_endpoint: EndPoint =
         format!("tcp/{}:{}#bind={}:{}", addrs[0], 13003, addrs[0], 13004)
             .parse()
@@ -316,6 +318,73 @@ async fn openclose_udp_only_connect_with_bind_restriction() {
 
     let connect_endpoint: EndPoint =
         format!("udp/{}:{}bind={}:{}", addrs[0], 13009, addrs[0], 13010)
+            .parse()
+            .unwrap();
+
+    // should not connect to local interface and external address
+    openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
+}
+
+#[cfg(feature = "transport_quic")]
+#[cfg(target_os = "linux")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn openclose_quic_only_connect_with_bind_restriction() {
+    use zenoh_link::quic::config::*;
+
+    zenoh_util::init_log_from_env_or("error");
+    let addrs = get_ipv4_ipaddrs(None);
+    let (ca, cert, key) = get_tls_certs();
+
+    let mut listen_endpoint: EndPoint = format!("quic/{}:{}", addrs[0], 130011).parse().unwrap();
+    listen_endpoint
+        .config_mut()
+        .extend_from_iter(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, key),
+                (TLS_LISTEN_CERTIFICATE_RAW, cert),
+            ]
+            .iter()
+            .copied(),
+        )
+        .unwrap();
+
+    let connect_endpoint: EndPoint =
+        format!("quic/{}:{}#bind={}:{}", addrs[0], 130011, addrs[0], 130012)
+            .parse()
+            .unwrap();
+
+    // should not connect to local interface and external address
+    openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
+}
+
+#[cfg(feature = "transport_tls")]
+#[cfg(target_os = "linux")]
+#[should_panic(expected = "Elapsed")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn openclose_tls_only_connect_with_bind_restriction() {
+    use zenoh_link::tls::config::*;
+
+    zenoh_util::init_log_from_env_or("error");
+    let addrs = get_ipv4_ipaddrs(None);
+    let (ca, cert, key) = get_tls_certs();
+
+    let mut listen_endpoint: EndPoint = format!("tls/{}:{}", addrs[0], 13013).parse().unwrap();
+    listen_endpoint
+        .config_mut()
+        .extend_from_iter(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, key),
+                (TLS_LISTEN_CERTIFICATE_RAW, cert),
+            ]
+            .iter()
+            .copied(),
+        )
+        .unwrap();
+
+    let connect_endpoint: EndPoint =
+        format!("tls/{}:{}#bind={}:{}", addrs[0], 13013, addrs[0], 13014)
             .parse()
             .unwrap();
 
