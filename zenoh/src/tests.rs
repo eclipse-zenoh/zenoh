@@ -15,6 +15,7 @@
 use std::str::FromStr;
 
 use zenoh_buffers::ZBuf;
+use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
     network::{NetworkBody, NetworkMessage, Push},
     zenoh::PushBody,
@@ -90,7 +91,7 @@ impl TestInterceptor {
 }
 
 impl InterceptorTrait for TestInterceptor {
-    fn compute_keyexpr_cache(&self, _key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
+    fn compute_keyexpr_cache(&self, _key_expr: keyexpr) -> Option<Box<dyn Any + Send + Sync>> {
         Some(Box::new(self.data.clone()))
     }
 
