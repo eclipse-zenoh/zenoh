@@ -11,12 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use nonempty_collections::NEVec;
 use serde::{Deserialize, Serialize};
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTreeMut, KeBoxTree};
 use zenoh_protocol::core::{key_expr::OwnedKeyExpr, CongestionControl, Priority, Reliability};
-
-use crate::InterceptorFlow;
 
 #[derive(Debug, Deserialize, Default, Serialize, Clone)]
 pub struct PublisherQoSConfList(pub(crate) Vec<PublisherQoSConf>);
@@ -133,23 +130,6 @@ pub enum PublisherLocalityConf {
     SessionLocal,
     Remote,
     Any,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct QosOverwriteItemConf {
-    /// Optional identifier for the qos modification configuration item.
-    pub id: Option<String>,
-    /// A list of interfaces to which the qos will be applied.
-    /// QosOverwrite will be applied for all interfaces if the parameter is None.
-    pub interfaces: Option<NEVec<String>>,
-    /// List of message types on which the qos overwrite will be applied.
-    pub messages: NEVec<QosOverwriteMessage>,
-    /// List of key expressions to apply qos overwrite.
-    pub key_exprs: Vec<OwnedKeyExpr>,
-    // The qos value to overwrite with.
-    pub overwrite: QosOverwrites,
-    /// QosOverwrite flow directions: egress and/or ingress.
-    pub flows: Option<NEVec<InterceptorFlow>>,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]

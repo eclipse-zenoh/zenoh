@@ -52,34 +52,36 @@ async fn get_basic_client_config(port: u16) -> Config {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_qos_overwrite_pub_sub() {
+    let value = r#"[
+        {
+            messages: ["put"],
+            key_exprs: ["a/**"],
+            overwrite: {
+                priority: "real_time",
+                congestion_control: "block",
+                express: true
+            },
+            flows: ["ingress"]
+        },
+        {
+            messages: ["delete"],
+            key_exprs: ["b/**"],
+            overwrite: {
+                priority: "interactive_high",
+            },
+            flows: ["ingress"]
+        }
+    ]"#;
+    test_qos_overwrite_pub_sub_impl(27601, value).await;
+}
+
+async fn test_qos_overwrite_pub_sub_impl(port: u16, qos_network_config: &str) {
     zenoh::init_log_from_env_or("error");
-    let mut config_router = get_basic_router_config(27601).await;
-    let config_client1 = get_basic_client_config(27601).await;
-    let config_client2 = get_basic_client_config(27601).await;
+    let mut config_router = get_basic_router_config(port).await;
+    let config_client1 = get_basic_client_config(port).await;
+    let config_client2 = get_basic_client_config(port).await;
     config_router
-        .insert_json5(
-            "qos/network",
-            r#"[
-                {
-                    messages: ["put"],
-                    key_exprs: ["a/**"],
-                    overwrite: {
-                        priority: "real_time",
-                        congestion_control: "block",
-                        express: true
-                    },
-                    flows: ["ingress"]
-                },
-                {
-                    messages: ["delete"],
-                    key_exprs: ["b/**"],
-                    overwrite: {
-                        priority: "interactive_high",
-                    },
-                    flows: ["ingress"]
-                }
-            ]"#,
-        )
+        .insert_json5("qos/network", qos_network_config)
         .unwrap();
 
     let _router = ztimeout!(zenoh::open(config_router)).unwrap();
@@ -387,6 +389,41 @@ fn qos_overwrite_config_ok_no_flow() {
             "#,
         )
         .unwrap();
+}
 
-    zenoh::open(config).wait().unwrap();
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_qos_overwrite_link_protocols() {
+    let value = r#"[
+        {
+            link_protocols: [ "tcp" ],
+            messages: ["put"],
+            key_exprs: ["a/**"],
+            overwrite: {
+                priority: "real_time",
+                congestion_control: "block",
+                express: true
+            },
+            flows: ["ingress"]
+        },
+        {
+            link_protocols: [ "udp" ],
+            messages: ["put"],
+            key_exprs: ["c/**"],
+            overwrite: {
+                priority: "real_time",
+                congestion_control: "block",
+                express: true
+            },
+            flows: ["ingress"]
+        },
+        {
+            messages: ["delete"],
+            key_exprs: ["b/**"],
+            overwrite: {
+                priority: "interactive_high",
+            },
+            flows: ["ingress"]
+        }
+    ]"#;
+    test_qos_overwrite_pub_sub_impl(27603, value).await;
 }

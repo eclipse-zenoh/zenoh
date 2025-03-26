@@ -33,7 +33,7 @@ use std::{
 
 use include::recursive_include;
 use nonempty_collections::NEVec;
-use qos::{PublisherQoSConfList, QosOverwriteItemConf};
+use qos::{PublisherQoSConfList, QosOverwriteMessage, QosOverwrites};
 use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -140,6 +140,26 @@ pub struct AclConfigSubjects {
     pub cert_common_names: Option<NEVec<CertCommonName>>,
     pub usernames: Option<NEVec<Username>>,
     pub link_protocols: Option<NEVec<InterceptorLink>>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct QosOverwriteItemConf {
+    /// Optional identifier for the qos modification configuration item.
+    pub id: Option<String>,
+    /// A list of interfaces to which the qos will be applied.
+    /// QosOverwrite will be applied for all interfaces if the parameter is None.
+    pub interfaces: Option<NEVec<String>>,
+    /// A list of link types, transports having one of those link types will have the qos overwrite applied
+    /// Qos overwrite will be applied for all link types if the parameter is None.
+    pub link_protocols: Option<NEVec<InterceptorLink>>,
+    /// List of message types on which the qos overwrite will be applied.
+    pub messages: NEVec<QosOverwriteMessage>,
+    /// List of key expressions to apply qos overwrite.
+    pub key_exprs: Vec<OwnedKeyExpr>,
+    // The qos value to overwrite with.
+    pub overwrite: QosOverwrites,
+    /// QosOverwrite flow directions: egress and/or ingress.
+    pub flows: Option<NEVec<InterceptorFlow>>,
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]

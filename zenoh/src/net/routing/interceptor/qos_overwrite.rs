@@ -20,7 +20,10 @@
 
 use std::{collections::HashSet, sync::Arc};
 
-use zenoh_config::qos::{QosOverwriteItemConf, QosOverwriteMessage, QosOverwrites};
+use zenoh_config::{
+    qos::{QosOverwriteMessage, QosOverwrites},
+    QosOverwriteItemConf,
+};
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, IKeyExprTreeNode, KeBoxTree};
 use zenoh_protocol::{
     network::{NetworkBody, Push, Request, Response},
@@ -52,6 +55,7 @@ pub(crate) fn qos_overwrite_interceptor_factories(
 
 pub struct QosOverwriteFactory {
     interfaces: Option<NEVec<String>>,
+    link_protocols: Option<NEVec<InterceptorLink>>,
     overwrite: QosOverwrites,
     flows: InterfaceEnabled,
     filter: QosOverwriteFilter,
@@ -67,6 +71,7 @@ impl QosOverwriteFactory {
 
         Self {
             interfaces: conf.interfaces,
+            link_protocols: conf.link_protocols,
             overwrite: conf.overwrite.clone(),
             flows: conf.flows.map(|f| (&f).into()).unwrap_or(InterfaceEnabled {
                 ingress: true,
@@ -92,6 +97,24 @@ impl InterceptorFactoryTrait for QosOverwriteFactory {
                 }
             }
         }
+        if let Some(config_protocols) = &self.link_protocols {
+            match transport.get_auth_ids() {
+                Ok(auth_ids) => {
+                    if !auth_ids
+                        .link_auth_ids()
+                        .iter()
+                        .map(|auth_id| InterceptorLinkWrapper::from(auth_id).0)
+                        .any(|v| config_protocols.contains(&v))
+                    {
+                        return (None, None);
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Error loading transport AuthIds: {e}");
+                    return (None, None);
+                }
+            }
+        };
 
         tracing::debug!(
             "New{}{} qos overwriter on transport unicast {:?}",
