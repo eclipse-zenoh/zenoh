@@ -257,6 +257,10 @@ impl SHRouter {
     fn get_count(&self) -> usize {
         self.count.load(Ordering::SeqCst)
     }
+
+    fn reset_count(&self) {
+        self.count.store(0, Ordering::SeqCst);
+    }
 }
 
 impl TransportEventHandler for SHRouter {
@@ -432,9 +436,9 @@ async fn close_transport(
     });
 
     // Stop the locators on the manager
-    for e in endpoints.iter() {
+    for e in router_manager.get_listeners().await {
         println!("Del locator: {}", e);
-        ztimeout!(router_manager.del_listener(e)).unwrap();
+        ztimeout!(router_manager.del_listener(&e)).unwrap();
     }
 
     ztimeout!(async {
@@ -536,6 +540,34 @@ async fn run_single(
         msg_size,
     )
     .await;
+
+    // Check transport still works despite closing endpoints:
+    println!("Closing router locators...");
+    for endpoint in router_manager.get_listeners().await {
+        println!("Del locator: {}", endpoint);
+        router_manager.del_listener(&endpoint).await.unwrap();
+    }
+
+    println!("Testing back the transports after closing the router locators...");
+    router_handler.reset_count();
+    test_transport(
+        router_handler.clone(),
+        client_transport.clone(),
+        channel,
+        msg_size,
+    )
+    .await;
+    println!("Transports kept working after closing the router locators...");
+
+    // Open transport against closed endpoints -> This should fail
+    for e in client_endpoints.iter() {
+        let result = ztimeout!(client_manager.open_transport_unicast(e.clone()));
+        assert!(result.is_err());
+        println!(
+            "Attempt to open new transport with '{}' (closed router locator) failed as expected.",
+            e
+        );
+    }
 
     #[cfg(feature = "stats")]
     {

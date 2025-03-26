@@ -25,9 +25,11 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+flume = { workspace = true }
 tokio = { workspace = true, features = ["net", "io-util", "rt", "time"] }
 tokio-util = { workspace = true, features = ["rt"] }
 async-trait = { workspace = true }
+futures = { workspace = true }
 tracing = {workspace = true}
 socket2 = { workspace = true }
 zenoh-buffers = { workspace = true }
@@ -37,3 +39,4 @@ zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-sync = { workspace = true }
 zenoh-util = { workspace = true }
+zenoh-runtime = { workspace = true }
