@@ -123,7 +123,7 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
             priority: builder.priority,
             is_express: builder.is_express,
             meta_key_expr: None,
-            sequencing: Sequencing::None,
+            sequencing: Sequencing::SequenceNumber,
             miss_config: Some(MissDetectionConfig::default()),
             liveliness: false,
             cache: false,

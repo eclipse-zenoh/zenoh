@@ -183,7 +183,7 @@ impl<'a, 'b, Handler> AdvancedSubscriberBuilder<'a, 'b, '_, Handler> {
             key_expr: builder.key_expr,
             origin: builder.origin,
             handler: builder.handler,
-            retransmission: None,
+            retransmission: Some(RecoveryConfig::default()),
             query_target: QueryTarget::All,
             query_timeout: Duration::from_secs(10),
             history: None,
