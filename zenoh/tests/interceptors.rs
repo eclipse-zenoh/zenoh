@@ -468,7 +468,7 @@ fn downsampling_reply_rate_test(flow: InterceptorFlow) {
         flows: Some(nev![flow]),
         interfaces: None,
         link_protocols: None,
-        messages: nev![DownsamplingMessage::Reply].try_into().unwrap(),
+        messages: nev![DownsamplingMessage::Reply],
         rules: nev![DownsamplingRuleConf {
             key_expr: queryable_ke.try_into().unwrap(),
             freq: 0.01,
