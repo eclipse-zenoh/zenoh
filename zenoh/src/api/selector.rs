@@ -35,7 +35,7 @@ use crate::api::{key_expr::KeyExpr, queryable::Query};
 /// When in string form, selectors look a lot like a URI, with similar semantics:
 /// - the `key_expr` before the first `?` must be a valid key expression.
 /// - the `parameters` after the first `?` should be encoded like the query section of a URL:
-///     - parameters are separated by `&`,
+///     - parameters are separated by `;`,
 ///     - the parameter name and value are separated by the first `=`,
 ///     - in the absence of `=`, the parameter value is considered to be the empty string,
 ///     - both name and value should use percent-encoding to escape characters,
