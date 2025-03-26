@@ -80,7 +80,6 @@ impl<'a> TcpSocketConfig<'a> {
                 }
                 _ => (), // No issue here
             }
-
             socket
                 .bind(bind_addr)
                 .map_err(|e| zerror!("{}: {}", bind_addr, e))?;

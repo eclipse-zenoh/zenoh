@@ -111,7 +111,6 @@ async fn openclose_transport(
 
     /* [CLIENT] */
     let client01_id = ZenohIdProto::try_from([2]).unwrap();
-    let client02_id = ZenohIdProto::try_from([3]).unwrap();
 
     // Create the transport transport manager for the first client
     let unicast = make_transport_manager_builder(
@@ -125,22 +124,6 @@ async fn openclose_transport(
     let client01_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .zid(client01_id)
-        .unicast(unicast)
-        .build(Arc::new(SHClientOpenClose::new()))
-        .unwrap();
-
-    // Create the transport transport manager for the second client
-    let unicast = make_transport_manager_builder(
-        #[cfg(feature = "transport_multilink")]
-        1,
-        #[cfg(feature = "shared-memory")]
-        false,
-        lowlatency_transport,
-    )
-    .max_sessions(1);
-    let client02_manager = TransportManager::builder()
-        .whatami(WhatAmI::Client)
-        .zid(client02_id)
         .unicast(unicast)
         .build(Arc::new(SHClientOpenClose::new()))
         .unwrap();
@@ -227,7 +210,6 @@ async fn openclose_transport(
 
     ztimeout!(router_manager.close());
     ztimeout!(client01_manager.close());
-    ztimeout!(client02_manager.close());
 
     // Wait a little bit
     tokio::time::sleep(SLEEP).await;
@@ -268,7 +250,72 @@ async fn openclose_tcp_only_connect_with_bind_restriction() {
 
     // Bind to different port on same IP address
     let connect_endpoint: EndPoint =
-        format!("tcp/{}:{}#bind={}:{}", addrs[0], 13003, addrs[0], 13009)
+        format!("tcp/{}:{}#bind={}:{}", addrs[0], 13003, addrs[0], 13004)
+            .parse()
+            .unwrap();
+
+    // should not connect to local interface and external address
+    openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
+}
+
+#[cfg(feature = "transport_tcp")]
+#[cfg(target_os = "linux")]
+#[should_panic(expected = "assertion failed: open_res.is_ok()")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn openclose_tcp_only_connect_with_bind_restriction_mismatch_protocols() {
+    use zenoh_util::net::get_ipv6_ipaddrs;
+
+    let addrs = get_ipv4_ipaddrs(None);
+    let addrs_v6 = get_ipv6_ipaddrs(None);
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let listen_endpoint: EndPoint = format!("tcp/{}:{}", addrs[0], 13005).parse().unwrap();
+
+    // Bind to different port on same IP address
+    let connect_endpoint: EndPoint =
+        format!("tcp/{}:{}#bind={}:{}", addrs[0], 13005, addrs_v6[0], 13006)
+            .parse()
+            .unwrap();
+
+    // should not connect to local interface and external address
+    openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
+}
+
+#[cfg(feature = "transport_udp")]
+#[cfg(target_os = "linux")]
+#[should_panic(expected = "assertion failed: open_res.is_ok()")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn openclose_udp_only_connect_with_bind_and_interface() {
+    let addrs = get_ipv4_ipaddrs(None);
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let listen_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], 13007).parse().unwrap();
+
+    let connect_endpoint: EndPoint = format!(
+        "udp/{}:{}#iface=lo;bind={}:{}",
+        addrs[0], 13007, addrs[0], 13008
+    )
+    .parse()
+    .unwrap();
+
+    // should not connect to local interface and external address
+    openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
+}
+
+#[cfg(feature = "transport_udp")]
+#[cfg(target_os = "linux")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn openclose_udp_only_connect_with_bind_restriction() {
+    let addrs = get_ipv4_ipaddrs(None);
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let listen_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], 13009).parse().unwrap();
+
+    let connect_endpoint: EndPoint =
+        format!("udp/{}:{}bind={}:{}", addrs[0], 13009, addrs[0], 13010)
             .parse()
             .unwrap();
 
