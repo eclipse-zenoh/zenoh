@@ -218,6 +218,9 @@ impl ZBytes {
     ///
     /// All chunks have size less then or equal to `chunk_size`.
     ///
+    /// If there are at least two chunks, then every chunk except the last one has size
+    /// `chunk_size`, while the last chunk which has size less than or equal to `chunk_size`.
+    ///
     /// # Panics
     ///
     /// Panics if `chunk_size` is zero.
