@@ -29,7 +29,7 @@ use zenoh_link_commons::{
     BIND_SOCKET,
 };
 use zenoh_protocol::{
-    core::{EndPoint, Locator},
+    core::{Address, EndPoint, Locator},
     transport::BatchSize,
 };
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
@@ -275,13 +275,10 @@ impl LinkManagerUnicastUdp {
         bind_socket: Option<&str>,
     ) -> ZResult<(UdpSocket, SocketAddr, SocketAddr)> {
         let src_socket_addr = if let Some(bind_socket) = bind_socket {
-            let endpoint = EndPoint::new("", bind_socket, "", "")?;
-            get_udp_addrs(endpoint.address())
-                .await?
-                .next()
-                .ok_or_else(|| {
-                    zerror!("No UDP socket addr found bound to {}", endpoint.address())
-                })?
+            let address = Address::from(bind_socket);
+            get_udp_addrs(address).await?.next().ok_or_else(|| {
+                zerror!("No UDP socket addr found bound to {}", address)
+            })?
         } else if dst_addr.is_ipv4() {
             SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0)
         } else {
