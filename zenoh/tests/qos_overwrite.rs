@@ -270,12 +270,11 @@ fn qos_overwrite_config_error_repeated_id() {
 }
 
 #[test]
-#[should_panic(expected = "unknown variant `down`")]
 fn qos_overwrite_config_error_wrong_flow() {
     zenoh::init_log_from_env_or("error");
 
     let mut config = Config::default();
-    config
+    assert!(config
         .insert_json5(
             "qos/network",
             r#"
@@ -291,18 +290,15 @@ fn qos_overwrite_config_error_wrong_flow() {
               ]
             "#,
         )
-        .unwrap();
-
-    zenoh::open(config).wait().unwrap();
+        .is_err());
 }
 
 #[test]
-#[should_panic(expected = "Invalid Qos Overwrite config: flows list must not be empty")]
 fn qos_overwrite_config_error_empty_flow() {
     zenoh::init_log_from_env_or("error");
 
     let mut config = Config::default();
-    config
+    assert!(config
         .insert_json5(
             "qos/network",
             r#"
@@ -318,18 +314,15 @@ fn qos_overwrite_config_error_empty_flow() {
               ]
             "#,
         )
-        .unwrap();
-
-    zenoh::open(config).wait().unwrap();
+        .is_err());
 }
 
 #[test]
-#[should_panic(expected = "Invalid Qos Overwrite config: messages list must not be empty")]
 fn qos_overwrite_config_error_empty_message() {
     zenoh::init_log_from_env_or("error");
 
     let mut config = Config::default();
-    config
+    assert!(config
         .insert_json5(
             "qos/network",
             r#"
@@ -345,18 +338,15 @@ fn qos_overwrite_config_error_empty_message() {
               ]
             "#,
         )
-        .unwrap();
-
-    zenoh::open(config).wait().unwrap();
+        .is_err());
 }
 
 #[test]
-#[should_panic(expected = "Invalid Qos Overwrite config: interfaces list must not be empty")]
 fn qos_overwrite_config_error_empty_interface() {
     zenoh::init_log_from_env_or("error");
 
     let mut config = Config::default();
-    config
+    assert!(config
         .insert_json5(
             "qos/network",
             r#"
@@ -373,9 +363,7 @@ fn qos_overwrite_config_error_empty_interface() {
               ]
             "#,
         )
-        .unwrap();
-
-    zenoh::open(config).wait().unwrap();
+        .is_err());
 }
 
 #[test]

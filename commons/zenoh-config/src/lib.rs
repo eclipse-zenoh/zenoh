@@ -32,6 +32,7 @@ use std::{
 };
 
 use include::recursive_include;
+use nonempty_collections::NEVec;
 use qos::{PublisherQoSConfList, QosOverwriteItemConf};
 use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
 use serde::{Deserialize, Serialize};
@@ -111,34 +112,34 @@ pub struct DownsamplingItemConf {
     pub id: Option<String>,
     /// A list of interfaces to which the downsampling will be applied
     /// Downsampling will be applied for all interfaces if the parameter is None
-    pub interfaces: Option<Vec<String>>,
+    pub interfaces: Option<NEVec<String>>,
     /// A list of link types, transports having one of those link types will have the downsampling applied
     /// Downsampling will be applied for all link types if the parameter is None
-    pub link_protocols: Option<Vec<InterceptorLink>>,
+    pub link_protocols: Option<NEVec<InterceptorLink>>,
     // list of message types on which the downsampling will be applied
-    pub messages: Vec<DownsamplingMessage>,
-    /// A list of interfaces to which the downsampling will be applied.
-    pub rules: Vec<DownsamplingRuleConf>,
+    pub messages: NEVec<DownsamplingMessage>,
+    /// A list of downsampling rules: key_expression and the maximum frequency in Hertz
+    pub rules: NEVec<DownsamplingRuleConf>,
     /// Downsampling flow directions: egress and/or ingress
-    pub flows: Option<Vec<InterceptorFlow>>,
+    pub flows: Option<NEVec<InterceptorFlow>>,
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
 pub struct AclConfigRule {
     pub id: String,
-    pub key_exprs: Vec<String>,
-    pub messages: Vec<AclMessage>,
-    pub flows: Option<Vec<InterceptorFlow>>,
+    pub key_exprs: NEVec<OwnedKeyExpr>,
+    pub messages: NEVec<AclMessage>,
+    pub flows: Option<NEVec<InterceptorFlow>>,
     pub permission: Permission,
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
 pub struct AclConfigSubjects {
     pub id: String,
-    pub interfaces: Option<Vec<Interface>>,
-    pub cert_common_names: Option<Vec<CertCommonName>>,
-    pub usernames: Option<Vec<Username>>,
-    pub link_protocols: Option<Vec<InterceptorLink>>,
+    pub interfaces: Option<NEVec<Interface>>,
+    pub cert_common_names: Option<NEVec<CertCommonName>>,
+    pub usernames: Option<NEVec<Username>>,
+    pub link_protocols: Option<NEVec<InterceptorLink>>,
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
@@ -198,7 +199,7 @@ pub struct AclConfigPolicyEntry {
 #[derive(Clone, Serialize, Debug, Deserialize)]
 pub struct PolicyRule {
     pub subject_id: usize,
-    pub key_expr: String,
+    pub key_expr: OwnedKeyExpr,
     pub message: AclMessage,
     pub permission: Permission,
     pub flow: InterceptorFlow,

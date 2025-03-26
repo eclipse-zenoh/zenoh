@@ -20,6 +20,7 @@
 //!
 mod access_control;
 use access_control::acl_interceptor_factories;
+use nonempty_collections::NEVec;
 use zenoh_link::LinkAuthId;
 
 mod authorization;
@@ -45,8 +46,8 @@ pub struct InterfaceEnabled {
     pub egress: bool,
 }
 
-impl From<&[InterceptorFlow]> for InterfaceEnabled {
-    fn from(value: &[InterceptorFlow]) -> Self {
+impl From<&NEVec<InterceptorFlow>> for InterfaceEnabled {
+    fn from(value: &NEVec<InterceptorFlow>) -> Self {
         let mut res = Self {
             ingress: false,
             egress: false,

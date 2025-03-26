@@ -338,7 +338,7 @@ async fn test_acl_config_format(port: u16) {
         .is_err_and(|e| e.to_string().contains("does not exist in subjects list")));
 
     // empty link_protocols list
-    config_router
+    assert!(config_router
         .insert_json5(
             "access_control",
             r#"{
@@ -356,7 +356,7 @@ async fn test_acl_config_format(port: u16) {
                 "subjects": [
                     {
                         id: "s1",
-                        link_protocols: [],
+                        link_protocols: [], // will Err - should not be empty
                     },
                 ],
                 "policies": [
@@ -368,9 +368,7 @@ async fn test_acl_config_format(port: u16) {
                 ],
             }"#,
         )
-        .unwrap();
-    assert!(ztimeout!(zenoh::open(config_router.clone()))
-        .is_err_and(|e| e.to_string().contains("`link_protocols` cannot be empty")));
+        .is_err());
 }
 
 async fn test_pub_sub_deny(port: u16) {

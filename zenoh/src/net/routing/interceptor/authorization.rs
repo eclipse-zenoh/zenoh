@@ -313,31 +313,18 @@ impl PolicyEnforcer {
                         }
                         if rule.flows.is_none() {
                             tracing::warn!("Rule '{}' flows list is not set. Setting it to both Ingress and Egress", rule.id);
-                            rule.flows =
-                                Some([InterceptorFlow::Ingress, InterceptorFlow::Egress].into());
+                            rule.flows = Some(
+                                [InterceptorFlow::Ingress, InterceptorFlow::Egress]
+                                    .to_vec()
+                                    .try_into()
+                                    .unwrap(),
+                            );
                         }
                     }
                     // check for undefined values in subjects and initialize them to defaults
                     for subject in subjects.iter_mut() {
                         if subject.id.trim().is_empty() {
                             bail!("Found empty subject id in subjects list");
-                        }
-
-                        if subject
-                            .cert_common_names
-                            .as_ref()
-                            .is_some_and(Vec::is_empty)
-                        {
-                            bail!("Subject property `cert_common_names` cannot be empty");
-                        }
-                        if subject.usernames.as_ref().is_some_and(Vec::is_empty) {
-                            bail!("Subject property `usernames` cannot be empty");
-                        }
-                        if subject.interfaces.as_ref().is_some_and(Vec::is_empty) {
-                            bail!("Subject property `interfaces` cannot be empty");
-                        }
-                        if subject.link_protocols.as_ref().is_some_and(Vec::is_empty) {
-                            bail!("Subject property `link_protocols` cannot be empty");
                         }
                     }
                     let policy_information =
@@ -350,7 +337,7 @@ impl PolicyEnforcer {
                             .flow_mut(rule.flow)
                             .action_mut(rule.message)
                             .permission_mut(rule.permission)
-                            .insert(keyexpr::new(&rule.key_expr)?, true);
+                            .insert(&rule.key_expr, true);
 
                         if self.default_permission == Permission::Deny {
                             self.interface_enabled = InterfaceEnabled {
@@ -401,25 +388,7 @@ impl PolicyEnforcer {
                     config_rule.id
                 );
             }
-            // Config validation
-            let mut validation_err = String::new();
-            if config_rule.messages.is_empty() {
-                validation_err.push_str("ACL config messages list is empty. ");
-            }
-            if config_rule.flows.as_ref().unwrap().is_empty() {
-                validation_err.push_str("ACL config flows list is empty. ");
-            }
-            if config_rule.key_exprs.is_empty() {
-                validation_err.push_str("ACL config key_exprs list is empty. ");
-            }
-            if !validation_err.is_empty() {
-                bail!("Rule '{}' is malformed: {}", config_rule.id, validation_err);
-            }
-            for key_expr in config_rule.key_exprs.iter() {
-                if key_expr.trim().is_empty() {
-                    bail!("Found empty key expression in rule '{}'", config_rule.id);
-                }
-            }
+
             rule_map.insert(config_rule.id.clone(), config_rule);
         }
 
