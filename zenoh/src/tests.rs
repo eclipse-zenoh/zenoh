@@ -12,15 +12,18 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "internal_config")]
-use std::str::FromStr;
+use std::{any::Any, str::FromStr, time::Duration};
 
 use zenoh_buffers::ZBuf;
+use zenoh_config::{InterceptorFlow, ZenohId};
+use zenoh_core::ztimeout;
 use zenoh_protocol::{
-    network::{NetworkBody, NetworkMessage, Push},
+    network::{NetworkBodyMut, NetworkMessageMut, Push},
     zenoh::PushBody,
 };
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
+use super::{config::WhatAmI, Config};
 use crate::{
     key_expr::KeyExpr,
     net::routing::{interceptor::*, RoutingContext},
@@ -96,27 +99,20 @@ impl InterceptorTrait for TestInterceptor {
 
     fn intercept(
         &self,
-        mut ctx: RoutingContext<NetworkMessage>,
+        ctx: &mut RoutingContext<NetworkMessageMut>,
         cache: Option<&Box<dyn Any + Send + Sync>>,
-    ) -> Option<RoutingContext<NetworkMessage>> {
-        if let NetworkBody::Push(Push {
+    ) -> bool {
+        if let NetworkBodyMut::Push(Push {
             payload: PushBody::Put(p),
             ..
-        }) = &mut ctx.msg.body
+        }) = ctx.msg.body
         {
             let out = format!("Cache hit: {}, data: {}", cache.is_some(), &self.data);
             p.payload = ZBuf::from(out.as_bytes().to_owned());
         }
-        Some(ctx)
+        true
     }
 }
-
-use std::{any::Any, time::Duration};
-
-use zenoh_config::{InterceptorFlow, ZenohId};
-use zenoh_core::ztimeout;
-
-use super::{config::WhatAmI, Config};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
