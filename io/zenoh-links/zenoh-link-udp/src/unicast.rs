@@ -276,9 +276,10 @@ impl LinkManagerUnicastUdp {
     ) -> ZResult<(UdpSocket, SocketAddr, SocketAddr)> {
         let src_socket_addr = if let Some(bind_socket) = bind_socket {
             let address = Address::from(bind_socket);
-            get_udp_addrs(address).await?.next().ok_or_else(|| {
-                zerror!("No UDP socket addr found bound to {}", address)
-            })?
+            get_udp_addrs(address)
+                .await?
+                .next()
+                .ok_or_else(|| zerror!("No UDP socket addr found bound to {}", address))?
         } else if dst_addr.is_ipv4() {
             SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0)
         } else {
