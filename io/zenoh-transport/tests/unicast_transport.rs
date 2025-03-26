@@ -541,14 +541,14 @@ async fn run_single(
     )
     .await;
 
-    // Check transport still works despite closing endpoints:
-    println!("Closing router locators...");
+    // Check transport still works despite closing listener endpoints:
+    println!("Closing router listeners...");
     for endpoint in router_manager.get_listeners().await {
-        println!("Del locator: {}", endpoint);
+        println!("Del listener: {}", endpoint);
         router_manager.del_listener(&endpoint).await.unwrap();
     }
 
-    println!("Testing back the transports after closing the router locators...");
+    println!("Testing back the transports after closing the router listeners...");
     router_handler.reset_count();
     test_transport(
         router_handler.clone(),
@@ -557,14 +557,14 @@ async fn run_single(
         msg_size,
     )
     .await;
-    println!("Transports kept working after closing the router locators...");
+    println!("Transports kept working after closing the router listeners...");
 
     // Open transport against closed endpoints -> This should fail
     for e in client_endpoints.iter() {
         let result = ztimeout!(client_manager.open_transport_unicast(e.clone()));
         assert!(result.is_err());
         println!(
-            "Attempt to open new transport with '{}' (closed router locator) failed as expected.",
+            "Attempt to open new transport with '{}' (closed router listener) failed as expected.",
             e
         );
     }
