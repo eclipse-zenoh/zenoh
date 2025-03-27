@@ -317,7 +317,7 @@ async fn openclose_udp_only_connect_with_bind_restriction() {
     let listen_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], 13009).parse().unwrap();
 
     let connect_endpoint: EndPoint =
-        format!("udp/{}:{}bind={}:{}", addrs[0], 13009, addrs[0], 13010)
+        format!("udp/{}:{}#bind={}:{}", addrs[0], 13009, addrs[0], 13010)
             .parse()
             .unwrap();
 
