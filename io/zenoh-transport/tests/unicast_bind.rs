@@ -280,6 +280,31 @@ async fn openclose_tcp_only_connect_with_bind_restriction_mismatch_protocols() {
     openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
 }
 
+
+#[cfg(feature = "transport_udp")]
+#[should_panic(expected = "assertion failed: open_res.is_ok()")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn openclose_udp_only_connect_with_bind_restriction_mismatch_protocols() {
+    use zenoh_util::net::get_ipv6_ipaddrs;
+
+    let addrs = get_ipv4_ipaddrs(None);
+    let addrs_v6 = get_ipv6_ipaddrs(None);
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let listen_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], 13005).parse().unwrap();
+
+    // Bind to different port on same IP address
+    let connect_endpoint: EndPoint =
+        format!("udp/{}:{}#bind={}:{}", addrs[0], 13005, addrs_v6[0], 13006)
+            .parse()
+            .unwrap();
+
+    // should not connect to local interface and external address
+    openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
+}
+
+
 #[cfg(feature = "transport_udp")]
 #[should_panic(expected = "assertion failed: open_res.is_ok()")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
