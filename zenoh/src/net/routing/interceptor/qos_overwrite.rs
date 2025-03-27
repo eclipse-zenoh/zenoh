@@ -20,7 +20,10 @@
 
 use std::{collections::HashSet, sync::Arc};
 
-use zenoh_config::qos::{QosOverwriteItemConf, QosOverwriteMessage, QosOverwrites};
+use zenoh_config::{
+    qos::{QosOverwriteMessage, QosOverwrites},
+    QosOverwriteItemConf,
+};
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, IKeyExprTreeNode, KeBoxTree};
 use zenoh_protocol::{
     network::{NetworkBodyMut, Push, Request, Response},
@@ -43,30 +46,16 @@ pub(crate) fn qos_overwrite_interceptor_factories(
                 bail!("Invalid Qos Overwrite config: id '{id}' is repeated");
             }
         }
-        let mut q = q.clone();
         // check for undefined flows and initialize them
-        let flows = q
-            .flows
-            .get_or_insert(vec![InterceptorFlow::Ingress, InterceptorFlow::Egress]);
-        if flows.is_empty() {
-            bail!("Invalid Qos Overwrite config: flows list must not be empty");
-        }
-        // check for empty interfaces
-        if q.interfaces.as_ref().map(|i| i.is_empty()).unwrap_or(false) {
-            bail!("Invalid Qos Overwrite config: interfaces list must not be empty");
-        }
-        // check for empty messages list
-        if q.messages.is_empty() {
-            bail!("Invalid Qos Overwrite config: messages list must not be empty");
-        }
-        res.push(Box::new(QosOverwriteFactory::new(q)));
+        res.push(Box::new(QosOverwriteFactory::new(q.clone())));
     }
 
     Ok(res)
 }
 
 pub struct QosOverwriteFactory {
-    interfaces: Option<Vec<String>>,
+    interfaces: Option<NEVec<String>>,
+    link_protocols: Option<NEVec<InterceptorLink>>,
     overwrite: QosOverwrites,
     flows: InterfaceEnabled,
     filter: QosOverwriteFilter,
@@ -82,13 +71,13 @@ impl QosOverwriteFactory {
 
         Self {
             interfaces: conf.interfaces,
+            link_protocols: conf.link_protocols,
             overwrite: conf.overwrite.clone(),
-            flows: conf
-                .flows
-                .expect("config flows should be set")
-                .as_slice()
-                .into(),
-            filter: conf.messages.as_slice().into(),
+            flows: conf.flows.map(|f| (&f).into()).unwrap_or(InterfaceEnabled {
+                ingress: true,
+                egress: true,
+            }),
+            filter: (&conf.messages).into(),
             keys: Arc::new(keys),
         }
     }
@@ -108,6 +97,24 @@ impl InterceptorFactoryTrait for QosOverwriteFactory {
                 }
             }
         }
+        if let Some(config_protocols) = &self.link_protocols {
+            match transport.get_auth_ids() {
+                Ok(auth_ids) => {
+                    if !auth_ids
+                        .link_auth_ids()
+                        .iter()
+                        .map(|auth_id| InterceptorLinkWrapper::from(auth_id).0)
+                        .any(|v| config_protocols.contains(&v))
+                    {
+                        return (None, None);
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Error loading transport AuthIds: {e}");
+                    return (None, None);
+                }
+            }
+        };
 
         tracing::debug!(
             "New{}{} qos overwriter on transport unicast {:?}",
@@ -153,8 +160,8 @@ pub(crate) struct QosOverwriteFilter {
     reply: bool,
 }
 
-impl From<&[QosOverwriteMessage]> for QosOverwriteFilter {
-    fn from(value: &[QosOverwriteMessage]) -> Self {
+impl From<&NEVec<QosOverwriteMessage>> for QosOverwriteFilter {
+    fn from(value: &NEVec<QosOverwriteMessage>) -> Self {
         let mut res = Self::default();
         for v in value {
             match v {

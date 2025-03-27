@@ -91,6 +91,7 @@ futures = { workspace = true }
 git-version = { workspace = true }
 itertools = { workspace = true }
 json5 = { workspace = true }
+nonempty-collections = { workspace = true }
 lazy_static = { workspace = true }
 tracing = { workspace = true }
 paste = { workspace = true }

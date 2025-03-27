@@ -105,7 +105,7 @@ impl Link {
             mtu: link.get_mtu(),
             is_streamed: false,
             interfaces: vec![],
-            auth_identifier: LinkAuthId::default(),
+            auth_identifier: link.get_auth_id().clone(),
             priorities: None,
             reliability: None,
         }
