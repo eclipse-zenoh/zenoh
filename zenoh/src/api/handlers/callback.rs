@@ -55,8 +55,7 @@ impl<T: CallbackParameter> Clone for Callback<T> {
 }
 
 impl<T: CallbackParameter> Callback<T> {
-    #[deprecated(since = "1.4.0", note = "use `Callback::from` instead")]
-    #[doc(hidden)]
+    // TODO deprecate
     /// Instantiate a `Callback` from a callback function.
     pub fn new(cb: Arc<dyn Fn(T) + Send + Sync>) -> Self {
         Self::from(move |msg| cb(msg))
