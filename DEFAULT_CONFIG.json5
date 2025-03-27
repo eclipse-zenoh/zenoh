@@ -261,8 +261,8 @@
   //          "lo0",
   //          "en0",
   //        ],
-  //        /// link protocols can also be used to identify transports to filter messages on.
-  //        /// If absent, the qos overwrite will be applied to all transports. An empty list is invalid.
+  //        /// Optional list of link protocols. Transports with at least one of these links will have their qos overwritten.
+  //        /// If absent, the overwrite will be applied to all transports. An empty list is invalid.
   //        link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock"],
   //        /// List of message types to apply to.
   //        messages: [
