@@ -559,10 +559,15 @@ async fn run_single(
     .await;
     println!("Transports kept working after closing the router listeners...");
 
-    // Open transport against closed endpoints -> This should fail
+    // Open transport against closed endpoints -> This should fail or timeout
     for e in client_endpoints.iter() {
-        let result = ztimeout!(client_manager.open_transport_unicast(e.clone()));
-        assert!(result.is_err());
+        // Short timeout for connectionless protocols like udp and quick
+        let x = tokio::time::timeout(
+            Duration::from_secs(5),
+            client_manager.open_transport_unicast(e.clone()),
+        )
+        .await;
+        assert!(x.is_err() || x.unwrap().is_err());
         println!(
             "Attempt to open new transport with '{}' (closed router listener) failed as expected.",
             e
