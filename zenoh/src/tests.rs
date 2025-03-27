@@ -22,10 +22,7 @@ use zenoh_protocol::{
 };
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
-use crate::{
-    key_expr::KeyExpr,
-    net::routing::{interceptor::*, RoutingContext},
-};
+use crate::net::routing::{interceptor::*, RoutingContext};
 
 #[derive(Clone)]
 struct TestInterceptorConf {
@@ -91,7 +88,7 @@ impl TestInterceptor {
 }
 
 impl InterceptorTrait for TestInterceptor {
-    fn compute_keyexpr_cache(&self, _key_expr: keyexpr) -> Option<Box<dyn Any + Send + Sync>> {
+    fn compute_keyexpr_cache(&self, _key_expr: &keyexpr) -> Option<Box<dyn Any + Send + Sync>> {
         Some(Box::new(self.data.clone()))
     }
 
