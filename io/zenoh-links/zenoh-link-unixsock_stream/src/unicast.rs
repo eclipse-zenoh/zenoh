@@ -146,7 +146,7 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
 
     #[inline(always)]
     fn get_auth_id(&self) -> &LinkAuthId {
-        &LinkAuthId::NONE
+        &LinkAuthId::UnixsockStream
     }
 }
 

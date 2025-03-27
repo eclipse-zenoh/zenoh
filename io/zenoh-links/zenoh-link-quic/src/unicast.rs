@@ -32,8 +32,8 @@ use zenoh_core::zasynclock;
 use zenoh_link_commons::{
     get_ip_interface_names,
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
-    LinkAuthId, LinkAuthType, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
-    ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
+    LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
+    NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
     core::{Address, EndPoint, Locator},
@@ -655,9 +655,6 @@ impl Debug for QuicAuthId {
 
 impl From<QuicAuthId> for LinkAuthId {
     fn from(value: QuicAuthId) -> Self {
-        LinkAuthId::builder()
-            .auth_type(LinkAuthType::Quic)
-            .auth_value(value.auth_value.clone())
-            .build()
+        LinkAuthId::Quic(value.auth_value.clone())
     }
 }

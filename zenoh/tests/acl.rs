@@ -29,9 +29,14 @@ const KEY_EXPR: &str = "test/demo";
 const VALUE: &str = "zenoh";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_acl_config() {
+    zenoh::init_log_from_env_or("error");
+    test_acl_config_format(27446).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_acl_pub_sub() {
     zenoh::init_log_from_env_or("error");
-    test_acl_config_format(27447).await;
     test_pub_sub_deny(27447).await;
     test_pub_sub_allow(27447).await;
     test_pub_sub_deny_then_allow(27447).await;
@@ -331,6 +336,39 @@ async fn test_acl_config_format(port: u16) {
         .unwrap();
     assert!(ztimeout!(zenoh::open(config_router.clone()))
         .is_err_and(|e| e.to_string().contains("does not exist in subjects list")));
+
+    // empty link_protocols list
+    assert!(config_router
+        .insert_json5(
+            "access_control",
+            r#"{
+                "enabled": true,
+                "default_permission": "deny",
+                "rules": [
+                    {
+                        "id": "r1",
+                        "permission": "allow",
+                        "flows": ["egress", "ingress"],
+                        "messages": ["put"],
+                        "key_exprs": ["foo"],
+                    },
+                ],
+                "subjects": [
+                    {
+                        id: "s1",
+                        link_protocols: [], // will Err - should not be empty
+                    },
+                ],
+                "policies": [
+                    {
+                        id: "p1",
+                        rules: ["r1"],
+                        subjects: ["s1"],
+                    },
+                ],
+            }"#,
+        )
+        .is_err());
 }
 
 async fn test_pub_sub_deny(port: u16) {
