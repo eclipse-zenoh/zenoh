@@ -327,32 +327,47 @@ async fn openclose_udp_only_connect_with_bind_restriction() {
 
 #[cfg(feature = "transport_quic")]
 #[cfg(target_os = "linux")]
-// #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_quic_only_connect_with_bind_restriction() {
     use zenoh_link::quic::config::*;
 
     zenoh_util::init_log_from_env_or("error");
-    let addrs = get_ipv4_ipaddrs(None);
-    let (ca, cert, key) = get_tls_certs();
 
-    let mut listen_endpoint: EndPoint = format!("quic/{}:{}", addrs[0], 13011).parse().unwrap();
-    listen_endpoint
+    let client_auth = "true";
+    // Define the client
+    let mut connect_endpoint: EndPoint =
+        (format!("quic/localhost:{}#bind=localhost:{}", 13011, 13012))
+            .parse()
+            .unwrap();
+    connect_endpoint
         .config_mut()
         .extend_from_iter(
             [
-                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
-                (TLS_LISTEN_PRIVATE_KEY_RAW, key),
-                (TLS_LISTEN_CERTIFICATE_RAW, cert),
+                (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
+                (TLS_CONNECT_CERTIFICATE_RAW, CLIENT_CERT),
+                (TLS_CONNECT_PRIVATE_KEY_RAW, CLIENT_KEY),
+                (TLS_ENABLE_MTLS, client_auth),
             ]
             .iter()
             .copied(),
         )
         .unwrap();
 
-    let connect_endpoint: EndPoint =
-        format!("quic/{}:{}#bind={}:{}", addrs[0], 13011, addrs[0], 13012)
-            .parse()
-            .unwrap();
+    // Define the server
+    let mut listen_endpoint: EndPoint = (format!("quic/localhost:{}", 13011)).parse().unwrap();
+    listen_endpoint
+        .config_mut()
+        .extend_from_iter(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
+                (TLS_LISTEN_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, SERVER_KEY),
+                (TLS_ENABLE_MTLS, client_auth),
+            ]
+            .iter()
+            .copied(),
+        )
+        .unwrap();
 
     // should not connect to local interface and external address
     openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
@@ -360,44 +375,57 @@ async fn openclose_quic_only_connect_with_bind_restriction() {
 
 #[cfg(feature = "transport_tls")]
 #[cfg(target_os = "linux")]
-#[should_panic(expected = "Elapsed")]
-// #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tls_only_connect_with_bind_restriction() {
     use zenoh_link::tls::config::*;
 
     zenoh_util::init_log_from_env_or("error");
-    let addrs = get_ipv4_ipaddrs(None);
-    let (ca, cert, key) = get_tls_certs();
 
-    let mut listen_endpoint: EndPoint = format!("tls/{}:{}", addrs[0], 13013).parse().unwrap();
-    listen_endpoint
+    let client_auth = "true";
+    // Define the client
+    let mut connect_endpoint: EndPoint =
+        (format!("tls/localhost:{}#bind=localhost:{}", 13013, 13014))
+            .parse()
+            .unwrap();
+    connect_endpoint
         .config_mut()
         .extend_from_iter(
             [
-                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
-                (TLS_LISTEN_PRIVATE_KEY_RAW, key),
-                (TLS_LISTEN_CERTIFICATE_RAW, cert),
+                (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
+                (TLS_CONNECT_CERTIFICATE_RAW, CLIENT_CERT),
+                (TLS_CONNECT_PRIVATE_KEY_RAW, CLIENT_KEY),
+                (TLS_ENABLE_MTLS, client_auth),
             ]
             .iter()
             .copied(),
         )
         .unwrap();
 
-    let connect_endpoint: EndPoint =
-        format!("tls/{}:{}#bind={}:{}", addrs[0], 13013, addrs[0], 13014)
-            .parse()
-            .unwrap();
+    // Define the server
+    let mut listen_endpoint: EndPoint = (format!("tls/localhost:{}", 13013)).parse().unwrap();
+    listen_endpoint
+        .config_mut()
+        .extend_from_iter(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
+                (TLS_LISTEN_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, SERVER_KEY),
+                (TLS_ENABLE_MTLS, client_auth),
+            ]
+            .iter()
+            .copied(),
+        )
+        .unwrap();
 
     // should not connect to local interface and external address
     openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
 }
 
-fn get_tls_certs() -> (&'static str, &'static str, &'static str) {
-    // NOTE: this an auto-generated pair of certificate and key.
-    //       The target domain is localhost, so it has no real
-    //       mapping to any existing domain. The certificate and key
-    //       have been generated using: https://github.com/jsha/minica
-    let key = "-----BEGIN RSA PRIVATE KEY-----
+#[cfg(all(
+    any(feature = "transport_tls", feature = "transport_quic"),
+    target_family = "unix"
+))]
+const CLIENT_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----
 MIIEpAIBAAKCAQEAsfqAuhElN4HnyeqLovSd4Qe+nNv5AwCjSO+HFiF30x3vQ1Hi
 qRA0UmyFlSqBnFH3TUHm4Jcad40QfrX8f11NKGZdpvKHsMYqYjZnYkRFGS2s4fQy
 aDbV5M06s3UDX8ETPgY41Y8fCKTSVdi9iHkwcVrXMxUu4IBBx0C1r2GSo3gkIBnU
@@ -425,7 +453,11 @@ tYsqC2FtWzY51VOEKNpnfH7zH5n+bjoI9nAEAW63TK9ZKkr2hRGsDhJdGzmLfQ7v
 F6/CuIw9EsAq6qIB8O88FXQqald+BZOx6AzB8Oedsz/WtMmIEmr/+Q==
 -----END RSA PRIVATE KEY-----";
 
-    let cert = "-----BEGIN CERTIFICATE-----
+#[cfg(all(
+    any(feature = "transport_tls", feature = "transport_quic"),
+    target_family = "unix"
+))]
+const CLIENT_CERT: &str = "-----BEGIN CERTIFICATE-----
 MIIDLjCCAhagAwIBAgIIeUtmIdFQznMwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
 AxMVbWluaWNhIHJvb3QgY2EgMDc4ZGE3MCAXDTIzMDMwNjE2MDMxOFoYDzIxMjMw
 MzA2MTYwMzE4WjAUMRIwEAYDVQQDEwlsb2NhbGhvc3QwggEiMA0GCSqGSIb3DQEB
@@ -446,8 +478,11 @@ p5e60QweRuJsb60aUaCG8HoICevXYK2fFqCQdlb5sIqQqXyN2K6HuKAFywsjsGyJ
 abY=
 -----END CERTIFICATE-----";
 
-    // Configure the client
-    let ca = "-----BEGIN CERTIFICATE-----
+#[cfg(all(
+    any(feature = "transport_tls", feature = "transport_quic"),
+    target_family = "unix"
+))]
+const CLIENT_CA: &str = "-----BEGIN CERTIFICATE-----
 MIIDSzCCAjOgAwIBAgIIB42n1ZIkOakwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
 AxMVbWluaWNhIHJvb3QgY2EgMDc4ZGE3MCAXDTIzMDMwNjE2MDMwN1oYDzIxMjMw
 MzA2MTYwMzA3WjAgMR4wHAYDVQQDExVtaW5pY2Egcm9vdCBjYSAwNzhkYTcwggEi
@@ -468,5 +503,75 @@ Ck0v2xSPAiVjg6w65rUQeW6uB5m0T2wyj+wm0At8vzhZPlgS1fKhcmT2dzOq3+oN
 R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 -----END CERTIFICATE-----";
 
-    (ca, cert, key)
-}
+#[cfg(any(feature = "transport_tls", feature = "transport_quic"))]
+const SERVER_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----
+MIIEpAIBAAKCAQEAmDCySqKHPmEZShDH3ldPaV/Zsh9+HlHFLk9H10vJZj5WfzVu
+5puZQ8GvBFIOtVrl0L9qLkA6bZiHHXm/8OEVvd135ZMp4NV23fdTsEASXfvGVQY8
+y+4UkZN0Dw6sfwlQVPyNRplys2+nFs6tX05Dp9VizV39tSOqe/jd6hyzxSUHqFat
+RwQRXAI04CZ6ckDb0Riw7i0yvjrFhBom9lPKq4IkXZGgS5MRl0pRgAZTqHEMlv8z
+oX+KcG9mfyQIHtpkVuSHHsQjwVop7fMnT7KCQ3bPI+fgMmAg+h1IR19Dm0JM+9zl
+u39j0IbkytrsystGM+pTRbdp7s2lgtOMCFt0+wIDAQABAoIBADNTSO2uvlmlOXgn
+DKDJZTiuYKaXxFrJTOx/REUxg+x9XYJtLMeM9jVJnpKgceFrlFHAHDkY5BuN8xNX
+ugmsfz6W8BZ2eQsgMoRNIuYv1YHopUyLW/mSg1FNHzjsw/Pb2kGvIp4Kpgopv3oL
+naCkrmBtsHJ+Hk/2hUpl9cE8iMwVWcVevLzyHi98jNy1IDdIPhRtl0dhMiqC5MRr
+4gLJ5gNkLYX7xf3tw5Hmfk/bVNProqZXDIQVI7rFvItX586nvQ3LNQkmW/D2ShZf
+3FEqMu6EdA2Ycc4UZgAlQNGV0VBrWWVXizOQ+9gjLnBk3kJjqfigCU6NG94bTJ+H
+0YIhsGECgYEAwdSSyuMSOXgzZQ7Vv+GsNn/7ivi/H8eb/lDzksqS/JroA2ciAmHG
+2OF30eUJKRg+STqBTpOfXgS4QUa8QLSwBSnwcw6579x9bYGUhqD2Ypaw9uCnOukA
+CwwggZ9cDmF0tb5rYjqkW3bFPqkCnTGb0ylMFaYRhRDU20iG5t8PQckCgYEAyQEM
+KK18FLQUKivGrQgP5Ib6IC3myzlHGxDzfobXGpaQntFnHY7Cxp/6BBtmASzt9Jxu
+etnrevmzrbKqsLTJSg3ivbiq0YTLAJ1FsZrCp71dx49YR/5o9QFiq0nQoKnwUVeb
+/hrDjMAokNkjFL5vouXO711GSS6YyM4WzAKZAqMCgYEAhqGxaG06jmJ4SFx6ibIl
+nSFeRhQrJNbP+mCeHrrIR98NArgS/laN+Lz7LfaJW1r0gIa7pCmTi4l5thV80vDu
+RlfwJOr4qaucD4Du+mg5WxdSSdiXL6sBlarRtVdMaMy2dTqTegJDgShJLxHTt/3q
+P0yzBWJ5TtT3FG0XDqum/EkCgYAYNHwWWe3bQGQ9P9BI/fOL/YUZYu2sA1XAuKXZ
+0rsMhJ0dwvG76XkjGhitbe82rQZqsnvLZ3qn8HHmtOFBLkQfGtT3K8nGOUuI42eF
+H7HZKUCly2lCIizZdDVBkz4AWvaJlRc/3lE2Hd3Es6E52kTvROVKhdz06xuS8t5j
+6twqKQKBgQC01AeiWL6Rzo+yZNzVgbpeeDogaZz5dtmURDgCYH8yFX5eoCKLHfnI
+2nDIoqpaHY0LuX+dinuH+jP4tlyndbc2muXnHd9r0atytxA69ay3sSA5WFtfi4ef
+ESElGO6qXEA821RpQp+2+uhL90+iC294cPqlS5LDmvTMypVDHzrxPQ==
+-----END RSA PRIVATE KEY-----";
+
+#[cfg(any(feature = "transport_tls", feature = "transport_quic"))]
+const SERVER_CERT: &str = "-----BEGIN CERTIFICATE-----
+MIIDLjCCAhagAwIBAgIIW1mAtJWJAJYwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
+AxMVbWluaWNhIHJvb3QgY2EgNGRjYzJmMCAXDTIzMDMwNjE2NDEwNloYDzIxMjMw
+MzA2MTY0MTA2WjAUMRIwEAYDVQQDEwlsb2NhbGhvc3QwggEiMA0GCSqGSIb3DQEB
+AQUAA4IBDwAwggEKAoIBAQCYMLJKooc+YRlKEMfeV09pX9myH34eUcUuT0fXS8lm
+PlZ/NW7mm5lDwa8EUg61WuXQv2ouQDptmIcdeb/w4RW93Xflkyng1Xbd91OwQBJd
++8ZVBjzL7hSRk3QPDqx/CVBU/I1GmXKzb6cWzq1fTkOn1WLNXf21I6p7+N3qHLPF
+JQeoVq1HBBFcAjTgJnpyQNvRGLDuLTK+OsWEGib2U8qrgiRdkaBLkxGXSlGABlOo
+cQyW/zOhf4pwb2Z/JAge2mRW5IcexCPBWint8ydPsoJDds8j5+AyYCD6HUhHX0Ob
+Qkz73OW7f2PQhuTK2uzKy0Yz6lNFt2nuzaWC04wIW3T7AgMBAAGjdjB0MA4GA1Ud
+DwEB/wQEAwIFoDAdBgNVHSUEFjAUBggrBgEFBQcDAQYIKwYBBQUHAwIwDAYDVR0T
+AQH/BAIwADAfBgNVHSMEGDAWgBTX46+p+Po1npE6QLQ7mMI+83s6qDAUBgNVHREE
+DTALgglsb2NhbGhvc3QwDQYJKoZIhvcNAQELBQADggEBAAxrmQPG54ybKgMVliN8
+Mg5povSdPIVVnlU/HOVG9yxzAOav/xQP003M4wqpatWxI8tR1PcLuZf0EPmcdJgb
+tVl9nZMVZtveQnYMlU8PpkEVu56VM4Zr3rH9liPRlr0JEAXODdKw76kWKzmdqWZ/
+rzhup3Ek7iEX6T5j/cPUvTWtMD4VEK2I7fgoKSHIX8MIVzqM7cuboGWPtS3eRNXl
+MgvahA4TwLEXPEe+V1WAq6nSb4g2qSXWIDpIsy/O1WGS/zzRnKvXu9/9NkXWqZMl
+C1LSpiiQUaRSglOvYf/Zx6r+4BOS4OaaArwHkecZQqBSCcBLEAyb/FaaXdBowI0U
+PQ4=
+-----END CERTIFICATE-----";
+
+#[cfg(any(feature = "transport_tls", feature = "transport_quic"))]
+const SERVER_CA: &str = "-----BEGIN CERTIFICATE-----
+MIIDSzCCAjOgAwIBAgIITcwv1N10nqEwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
+AxMVbWluaWNhIHJvb3QgY2EgNGRjYzJmMCAXDTIzMDMwNjE2NDEwNloYDzIxMjMw
+MzA2MTY0MTA2WjAgMR4wHAYDVQQDExVtaW5pY2Egcm9vdCBjYSA0ZGNjMmYwggEi
+MA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC2WUgN7NMlXIknew1cXiTWGmS0
+1T1EjcNNDAq7DqZ7/ZVXrjD47yxTt5EOiOXK/cINKNw4Zq/MKQvq9qu+Oax4lwiV
+Ha0i8ShGLSuYI1HBlXu4MmvdG+3/SjwYoGsGaShr0y/QGzD3cD+DQZg/RaaIPHlO
+MdmiUXxkMcy4qa0hFJ1imlJdq/6Tlx46X+0vRCh8nkekvOZR+t7Z5U4jn4XE54Kl
+0PiwcyX8vfDZ3epa/FSHZvVQieM/g5Yh9OjIKCkdWRg7tD0IEGsaW11tEPJ5SiQr
+mDqdRneMzZKqY0xC+QqXSvIlzpOjiu8PYQx7xugaUFE/npKRQdvh8ojHJMdNAgMB
+AAGjgYYwgYMwDgYDVR0PAQH/BAQDAgKEMB0GA1UdJQQWMBQGCCsGAQUFBwMBBggr
+BgEFBQcDAjASBgNVHRMBAf8ECDAGAQH/AgEAMB0GA1UdDgQWBBTX46+p+Po1npE6
+QLQ7mMI+83s6qDAfBgNVHSMEGDAWgBTX46+p+Po1npE6QLQ7mMI+83s6qDANBgkq
+hkiG9w0BAQsFAAOCAQEAaN0IvEC677PL/JXzMrXcyBV88IvimlYN0zCt48GYlhmx
+vL1YUDFLJEB7J+dyERGE5N6BKKDGblC4WiTFgDMLcHFsMGRc0v7zKPF1PSBwRYJi
+ubAmkwdunGG5pDPUYtTEDPXMlgClZ0YyqSFJMOqA4IzQg6exVjXtUxPqzxNhyC7S
+vlgUwPbX46uNi581a9+Ls2V3fg0ZnhkTSctYZHGZNeh0Nsf7Am8xdUDYG/bZcVef
+jbQ9gpChosdjF0Bgblo7HSUct/2Va+YlYwW+WFjJX8k4oN6ZU5W5xhdfO8Czmgwk
+US5kJ/+1M0uR8zUhZHL61FbsdPxEj+fYKrHv4woo+A==
+-----END CERTIFICATE-----";
