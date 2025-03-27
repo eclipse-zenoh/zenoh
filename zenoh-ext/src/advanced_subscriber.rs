@@ -133,10 +133,12 @@ impl RecoveryConfig<Unconfigured> {
 
     /// Subscribe to heartbeats of [`AdvancedPublishers`](crate::AdvancedPublisher).
     ///
-    /// This allows to periodically receive the last published Sample's sequence number and check for misses.
+    /// This allows to receive the last published Sample's sequence number and check for misses.
     /// Heartbeat subscriber must be paired with [`AdvancedPublishers`](crate::AdvancedPublisher)
     /// that enable [`cache`](crate::AdvancedPublisherBuilder::cache) and
-    /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection) with heartbeat.
+    /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection) with
+    /// [`heartbeat`](crate::advanced_publisher::MissDetectionConfig::heartbeat) or
+    /// [`heartbeat_update`](crate::advanced_publisher::MissDetectionConfig::heartbeat_update).
     #[zenoh_macros::unstable]
     #[inline]
     pub fn heartbeat(self) -> RecoveryConfig<Configured> {

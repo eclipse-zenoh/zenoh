@@ -58,6 +58,11 @@ pub(crate) enum Sequencing {
     SequenceNumber,
 }
 
+/// Configuration for sample miss detection
+///
+/// Enabling sample miss detection allows [`AdvancedSubscribers`](crate::AdvancedSubscriber) to detect missed samples
+/// through [`sample_miss_listener`](crate::AdvancedSubscriber::sample_miss_listener)
+/// and to recover missed samples through [`recovery`](crate::AdvancedSubscriberBuilder::recovery).
 #[derive(Default)]
 #[zenoh_macros::unstable]
 pub struct MissDetectionConfig {
@@ -67,12 +72,22 @@ pub struct MissDetectionConfig {
 
 #[zenoh_macros::unstable]
 impl MissDetectionConfig {
+    /// Allow last sample miss detection through periodic heartbeat.
+    ///
+    /// Periodically send the last published Sample's sequence number to allow last sample recovery.
+    /// [`AdvancedSubscribers`](crate::AdvancedSubscriber) can recover last sample with the
+    /// [`heartbeat`](crate::advanced_subscriber::RecoveryConfig::heartbeat) option.
     #[zenoh_macros::unstable]
     pub fn heartbeat(mut self, period: Duration) -> Self {
         self.state_publisher = Some(period);
         self
     }
 
+    /// Allow last sample miss detection through non periodic [`CongestionControl::Block`] heartbeat.
+    ///
+    /// Send the last published Sample's sequence number with [`CongestionControl::Block`] when it changes.
+    /// [`AdvancedSubscribers`](crate::AdvancedSubscriber) can recover last sample with the
+    /// [`heartbeat`](crate::advanced_subscriber::RecoveryConfig::heartbeat) option.
     #[zenoh_macros::unstable]
     pub fn heartbeat_update(mut self, period: Duration) -> Self {
         self.state_update = Some(period);
