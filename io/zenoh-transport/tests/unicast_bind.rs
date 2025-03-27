@@ -23,7 +23,6 @@ use zenoh_transport::{
     DummyTransportPeerEventHandler, TransportEventHandler, TransportManager,
     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
-#[cfg(target_os = "linux")]
 #[cfg(any(feature = "transport_tcp", feature = "transport_udp"))]
 use zenoh_util::net::get_ipv4_ipaddrs;
 
@@ -216,7 +215,6 @@ async fn openclose_transport(
 }
 
 #[cfg(feature = "transport_tcp")]
-#[cfg(target_os = "linux")]
 #[should_panic(expected = "assertion failed: open_res.is_ok()")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tcp_only_connect_with_bind_and_interface() {
@@ -239,7 +237,6 @@ async fn openclose_tcp_only_connect_with_bind_and_interface() {
 }
 
 #[cfg(feature = "transport_tcp")]
-#[cfg(target_os = "linux")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tcp_only_connect_with_bind_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
@@ -261,7 +258,6 @@ async fn openclose_tcp_only_connect_with_bind_restriction() {
 }
 
 #[cfg(feature = "transport_tcp")]
-#[cfg(target_os = "linux")]
 #[should_panic(expected = "assertion failed: open_res.is_ok()")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tcp_only_connect_with_bind_restriction_mismatch_protocols() {
@@ -285,7 +281,6 @@ async fn openclose_tcp_only_connect_with_bind_restriction_mismatch_protocols() {
 }
 
 #[cfg(feature = "transport_udp")]
-#[cfg(target_os = "linux")]
 #[should_panic(expected = "assertion failed: open_res.is_ok()")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_udp_only_connect_with_bind_and_interface() {
@@ -307,7 +302,6 @@ async fn openclose_udp_only_connect_with_bind_and_interface() {
 }
 
 #[cfg(feature = "transport_udp")]
-#[cfg(target_os = "linux")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_udp_only_connect_with_bind_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
@@ -326,7 +320,6 @@ async fn openclose_udp_only_connect_with_bind_restriction() {
 }
 
 #[cfg(feature = "transport_quic")]
-#[cfg(target_os = "linux")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_quic_only_connect_with_bind_restriction() {
     use zenoh_link::quic::config::*;
@@ -374,7 +367,6 @@ async fn openclose_quic_only_connect_with_bind_restriction() {
 }
 
 #[cfg(feature = "transport_tls")]
-#[cfg(target_os = "linux")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tls_only_connect_with_bind_restriction() {
     use zenoh_link::tls::config::*;
