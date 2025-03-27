@@ -82,18 +82,9 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
         &self,
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
-        tracing::debug!("New downsampler transport unicast {:?}", transport);
         if let Some(interfaces) = &self.interfaces {
-            tracing::debug!(
-                "New downsampler transport unicast config interfaces: {:?}",
-                interfaces
-            );
             if let Ok(links) = transport.get_links() {
                 for link in links {
-                    tracing::debug!(
-                        "New downsampler transport unicast link interfaces: {:?}",
-                        link.interfaces
-                    );
                     if !link.interfaces.iter().any(|x| interfaces.contains(x)) {
                         return (None, None);
                     }
@@ -101,10 +92,6 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
             }
         };
         if let Some(config_protocols) = &self.link_protocols {
-            tracing::debug!(
-                "New downsampler transport unicast config link protocols: {:?}",
-                config_protocols
-            );
             match transport.get_auth_ids() {
                 Ok(auth_ids) => {
                     if !auth_ids
@@ -122,6 +109,13 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
                 }
             }
         };
+
+        tracing::debug!(
+            "New{}{} downsampler on transport unicast {:?}",
+            self.flows.ingress.then_some(" ingress").unwrap_or_default(),
+            self.flows.egress.then_some(" egress").unwrap_or_default(),
+            transport
+        );
         (
             self.flows.ingress.then(|| {
                 Box::new(ComputeOnMiss::new(DownsamplingInterceptor::new(
