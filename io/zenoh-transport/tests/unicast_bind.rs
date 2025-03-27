@@ -436,7 +436,7 @@ async fn openclose_tls_only_connect_with_bind_restriction() {
     openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
 }
 
-#[cfg(all(any(feature = "transport_tls", feature = "transport_quic"),))]
+#[cfg(any(feature = "transport_tls", feature = "transport_quic"))]
 const CLIENT_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----
 MIIEpAIBAAKCAQEAsfqAuhElN4HnyeqLovSd4Qe+nNv5AwCjSO+HFiF30x3vQ1Hi
 qRA0UmyFlSqBnFH3TUHm4Jcad40QfrX8f11NKGZdpvKHsMYqYjZnYkRFGS2s4fQy
@@ -465,7 +465,7 @@ tYsqC2FtWzY51VOEKNpnfH7zH5n+bjoI9nAEAW63TK9ZKkr2hRGsDhJdGzmLfQ7v
 F6/CuIw9EsAq6qIB8O88FXQqald+BZOx6AzB8Oedsz/WtMmIEmr/+Q==
 -----END RSA PRIVATE KEY-----";
 
-#[cfg(all(any(feature = "transport_tls", feature = "transport_quic"),))]
+#[cfg(any(feature = "transport_tls", feature = "transport_quic"))]
 const CLIENT_CERT: &str = "-----BEGIN CERTIFICATE-----
 MIIDLjCCAhagAwIBAgIIeUtmIdFQznMwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
 AxMVbWluaWNhIHJvb3QgY2EgMDc4ZGE3MCAXDTIzMDMwNjE2MDMxOFoYDzIxMjMw
@@ -487,7 +487,7 @@ p5e60QweRuJsb60aUaCG8HoICevXYK2fFqCQdlb5sIqQqXyN2K6HuKAFywsjsGyJ
 abY=
 -----END CERTIFICATE-----";
 
-#[cfg(all(any(feature = "transport_tls", feature = "transport_quic"),))]
+#[cfg(any(feature = "transport_tls", feature = "transport_quic"))]
 const CLIENT_CA: &str = "-----BEGIN CERTIFICATE-----
 MIIDSzCCAjOgAwIBAgIIB42n1ZIkOakwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
 AxMVbWluaWNhIHJvb3QgY2EgMDc4ZGE3MCAXDTIzMDMwNjE2MDMwN1oYDzIxMjMw
