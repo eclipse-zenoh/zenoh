@@ -26,7 +26,7 @@ use zenoh_config::{
 };
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, IKeyExprTreeNode, KeBoxTree};
 use zenoh_protocol::{
-    network::{NetworkBody, Push, Request, Response},
+    network::{NetworkBodyMut, Push, Request, Response},
     zenoh::PushBody,
 };
 use zenoh_result::ZResult;
@@ -213,9 +213,9 @@ impl InterceptorTrait for QosInterceptor {
 
     fn intercept(
         &self,
-        mut ctx: RoutingContext<NetworkMessage>,
+        ctx: &mut RoutingContext<NetworkMessageMut>,
         cache: Option<&Box<dyn Any + Send + Sync>>,
-    ) -> Option<RoutingContext<NetworkMessage>> {
+    ) -> bool {
         let cache = cache.and_then(|i| match i.downcast_ref::<Cache>() {
             Some(c) => Some(c),
             None => {
@@ -231,10 +231,10 @@ impl InterceptorTrait for QosInterceptor {
                 .unwrap_or(false)
         });
         if !should_overwrite {
-            return Some(ctx);
+            return true;
         }
         match &mut ctx.msg.body {
-            NetworkBody::Request(Request { ext_qos, .. }) => {
+            NetworkBodyMut::Request(Request { ext_qos, .. }) => {
                 if self.filter.query {
                     self.overwrite_qos(ext_qos);
                     tracing::trace!(
@@ -244,7 +244,7 @@ impl InterceptorTrait for QosInterceptor {
                     );
                 }
             }
-            NetworkBody::Response(Response { ext_qos, .. }) => {
+            NetworkBodyMut::Response(Response { ext_qos, .. }) => {
                 if self.filter.reply {
                     self.overwrite_qos(ext_qos);
                     tracing::trace!(
@@ -254,7 +254,7 @@ impl InterceptorTrait for QosInterceptor {
                     );
                 }
             }
-            NetworkBody::Push(Push {
+            NetworkBodyMut::Push(Push {
                 payload: PushBody::Put(_),
                 ext_qos,
                 ..
@@ -268,7 +268,7 @@ impl InterceptorTrait for QosInterceptor {
                     );
                 }
             }
-            NetworkBody::Push(Push {
+            NetworkBodyMut::Push(Push {
                 payload: PushBody::Del(_),
                 ext_qos,
                 ..
@@ -283,11 +283,11 @@ impl InterceptorTrait for QosInterceptor {
                 }
             }
             // unaffected message types
-            NetworkBody::Declare(_) => {}
-            NetworkBody::Interest(_) => {}
-            NetworkBody::OAM(_) => {}
-            NetworkBody::ResponseFinal(_) => {}
+            NetworkBodyMut::Declare(_)
+            | NetworkBodyMut::Interest(_)
+            | NetworkBodyMut::OAM(_)
+            | NetworkBodyMut::ResponseFinal(_) => {}
         }
-        Some(ctx)
+        true
     }
 }
