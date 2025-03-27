@@ -24,15 +24,11 @@ use tokio::sync::Barrier;
 use zenoh_core::ztimeout;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohIdProto},
+    core::{CongestionControl, EndPoint, Priority, WhatAmI, ZenohIdProto},
     network::{
-        push::{
-            ext::{NodeIdType, QoSType},
-            Push,
-        },
-        NetworkMessage,
+        push::{ext::QoSType, Push},
+        NetworkMessage, NetworkMessageMut,
     },
-    zenoh::Put,
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
@@ -91,7 +87,7 @@ impl MHPeer {
 }
 
 impl TransportPeerEventHandler for MHPeer {
-    fn handle_message(&self, _msg: NetworkMessage) -> ZResult<()> {
+    fn handle_message(&self, _msg: NetworkMessageMut) -> ZResult<()> {
         self.count.fetch_add(1, Ordering::AcqRel);
         Ok(())
     }
@@ -185,24 +181,11 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         );
 
         // Create the message to send
-        let message: NetworkMessage = Push {
+        let message = NetworkMessage::from(Push {
             wire_expr: "test".into(),
             ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
-            ext_tstamp: None,
-            ext_nodeid: NodeIdType::DEFAULT,
-            payload: Put {
-                payload: vec![0u8; MSG_SIZE].into(),
-                timestamp: None,
-                encoding: Encoding::empty(),
-                ext_sinfo: None,
-                #[cfg(feature = "shared-memory")]
-                ext_shm: None,
-                ext_attachment: None,
-                ext_unknown: vec![],
-            }
-            .into(),
-        }
-        .into();
+            ..Push::from(vec![0u8; MSG_SIZE])
+        });
 
         // Synchronize wit the peer
         ztimeout!(c_barp.wait());
@@ -210,7 +193,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
 
         for i in 0..MSG_COUNT {
             println!("[Transport Peer 01g] Scheduling message {}", i);
-            s02.schedule(message.clone()).unwrap();
+            s02.schedule(message.clone().as_mut()).unwrap();
         }
         println!("[Transport Peer 01g] => Scheduling OK");
 
@@ -287,24 +270,11 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         );
 
         // Create the message to send
-        let message: NetworkMessage = Push {
+        let message = NetworkMessage::from(Push {
             wire_expr: "test".into(),
             ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
-            ext_tstamp: None,
-            ext_nodeid: NodeIdType::DEFAULT,
-            payload: Put {
-                payload: vec![0u8; MSG_SIZE].into(),
-                timestamp: None,
-                encoding: Encoding::empty(),
-                ext_sinfo: None,
-                #[cfg(feature = "shared-memory")]
-                ext_shm: None,
-                ext_attachment: None,
-                ext_unknown: vec![],
-            }
-            .into(),
-        }
-        .into();
+            ..Push::from(vec![0u8; MSG_SIZE])
+        });
 
         // Synchronize wit the peer
         ztimeout!(c_barp.wait());
@@ -312,7 +282,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
 
         for i in 0..MSG_COUNT {
             println!("[Transport Peer 02g] Scheduling message {}", i);
-            s01.schedule(message.clone()).unwrap();
+            s01.schedule(message.clone().as_mut()).unwrap();
         }
         println!("[Transport Peer 02g] => Scheduling OK");
 

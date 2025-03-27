@@ -30,17 +30,12 @@ mod tests {
     use zenoh_link::Link;
     use zenoh_protocol::{
         core::{
-            Channel, CongestionControl, Encoding, EndPoint, Priority, Reliability, WhatAmI,
-            ZenohIdProto,
+            Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohIdProto,
         },
         network::{
-            push::{
-                ext::{NodeIdType, QoSType},
-                Push,
-            },
-            NetworkMessage,
+            push::{ext::QoSType, Push},
+            NetworkMessage, NetworkMessageMut,
         },
-        zenoh::Put,
     };
     use zenoh_result::ZResult;
     use zenoh_transport::{
@@ -118,7 +113,7 @@ mod tests {
     }
 
     impl TransportPeerEventHandler for SCPeer {
-        fn handle_message(&self, _msg: NetworkMessage) -> ZResult<()> {
+        fn handle_message(&self, _msg: NetworkMessageMut) -> ZResult<()> {
             self.count.fetch_add(1, Ordering::Relaxed);
             Ok(())
         }
@@ -257,28 +252,15 @@ mod tests {
         msg_size: usize,
     ) {
         // Create the message to send
-        let message: NetworkMessage = Push {
+        let message = NetworkMessage::from(Push {
             wire_expr: "test".into(),
             ext_qos: QoSType::new(channel.priority, CongestionControl::Block, false),
-            ext_tstamp: None,
-            ext_nodeid: NodeIdType::DEFAULT,
-            payload: Put {
-                payload: vec![0u8; msg_size].into(),
-                timestamp: None,
-                encoding: Encoding::empty(),
-                ext_sinfo: None,
-                #[cfg(feature = "shared-memory")]
-                ext_shm: None,
-                ext_attachment: None,
-                ext_unknown: vec![],
-            }
-            .into(),
-        }
-        .into();
+            ..Push::from(vec![0u8; msg_size])
+        });
 
         println!("Sending {MSG_COUNT} messages... {channel:?} {msg_size}");
         for _ in 0..MSG_COUNT {
-            peer01.transport.schedule(message.clone()).unwrap();
+            peer01.transport.schedule(message.clone().as_mut()).unwrap();
         }
 
         match channel.reliability {

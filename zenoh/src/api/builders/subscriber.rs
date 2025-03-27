@@ -11,10 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{
-    future::{IntoFuture, Ready},
-    sync::Arc,
-};
+use std::future::{IntoFuture, Ready};
 
 use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
@@ -88,7 +85,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
     where
         F: Fn(Sample) + Send + Sync + 'static,
     {
-        self.with(Callback::new(Arc::new(callback)))
+        self.with(Callback::from(callback))
     }
 
     /// Receive the samples for this subscription with a mutable callback.

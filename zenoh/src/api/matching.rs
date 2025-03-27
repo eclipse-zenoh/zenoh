@@ -30,6 +30,7 @@ use super::{
     session::{UndeclarableSealed, WeakSession},
     Id,
 };
+use crate::api::handlers::CallbackParameter;
 
 /// A struct that indicates if there exist entities matching the key expression.
 ///
@@ -47,6 +48,14 @@ use super::{
 #[derive(Copy, Clone, Debug)]
 pub struct MatchingStatus {
     pub(crate) matching: bool,
+}
+
+impl CallbackParameter for MatchingStatus {
+    type Message<'a> = Self;
+
+    fn from_message(msg: Self::Message<'_>) -> Self {
+        msg
+    }
 }
 
 #[cfg(feature = "unstable")]

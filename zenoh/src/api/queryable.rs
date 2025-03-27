@@ -41,6 +41,7 @@ use crate::{
         builders::reply::{ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
         bytes::ZBytes,
         encoding::Encoding,
+        handlers::CallbackParameter,
         key_expr::KeyExpr,
         sample::{Locality, Sample, SampleKind},
         selector::Selector,
@@ -74,7 +75,7 @@ impl QueryInner {
 
 impl Drop for QueryInner {
     fn drop(&mut self) {
-        self.primitives.send_response_final(ResponseFinal {
+        self.primitives.send_response_final(&mut ResponseFinal {
             rid: self.qid,
             ext_qos: response::ext::QoSType::RESPONSE_FINAL,
             ext_tstamp: None,
@@ -247,6 +248,14 @@ impl fmt::Display for Query {
     }
 }
 
+impl CallbackParameter for Query {
+    type Message<'a> = Self;
+
+    fn from_message(msg: Self::Message<'_>) -> Self {
+        msg
+    }
+}
+
 #[zenoh_macros::internal]
 pub struct ReplySample<'a> {
     query: &'a Query,
@@ -289,7 +298,7 @@ impl Query {
         let ext_sinfo = None;
         #[cfg(feature = "unstable")]
         let ext_sinfo = sample.source_info.into();
-        self.inner.primitives.send_response(Response {
+        self.inner.primitives.send_response(&mut Response {
             rid: self.inner.qid,
             wire_expr: WireExpr {
                 scope: 0,

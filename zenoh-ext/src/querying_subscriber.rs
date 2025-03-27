@@ -100,7 +100,7 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
     where
         F: Fn(Sample) + Send + Sync + 'static,
     {
-        self.with(Callback::new(Arc::new(callback)))
+        self.with(Callback::from(callback))
     }
 
     /// Add callback to [`FetchingSubscriber`].
@@ -537,7 +537,7 @@ where
     where
         F: Fn(Sample) + Send + Sync + 'static,
     {
-        self.with(Callback::new(Arc::new(callback)))
+        self.with(Callback::from(callback))
     }
 
     /// Add callback to [`FetchingSubscriber`].
