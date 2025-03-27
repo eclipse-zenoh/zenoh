@@ -89,7 +89,7 @@ impl MissDetectionConfig {
     /// [`AdvancedSubscribers`](crate::AdvancedSubscriber) can recover last sample with the
     /// [`heartbeat`](crate::advanced_subscriber::RecoveryConfig::heartbeat) option.
     #[zenoh_macros::unstable]
-    pub fn heartbeat_update(mut self, period: Duration) -> Self {
+    pub fn heartbeat_change(mut self, period: Duration) -> Self {
         self.state_update = Some(period);
         self
     }

@@ -138,7 +138,7 @@ impl RecoveryConfig<Unconfigured> {
     /// that enable [`cache`](crate::AdvancedPublisherBuilder::cache) and
     /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection) with
     /// [`heartbeat`](crate::advanced_publisher::MissDetectionConfig::heartbeat) or
-    /// [`heartbeat_update`](crate::advanced_publisher::MissDetectionConfig::heartbeat_update).
+    /// [`heartbeat_change`](crate::advanced_publisher::MissDetectionConfig::heartbeat_change).
     #[zenoh_macros::unstable]
     #[inline]
     pub fn heartbeat(self) -> RecoveryConfig<Configured> {
