@@ -66,8 +66,7 @@ pub(crate) enum Sequencing {
 #[derive(Default)]
 #[zenoh_macros::unstable]
 pub struct MissDetectionConfig {
-    pub(crate) state_publisher: Option<Duration>,
-    pub(crate) state_update: Option<Duration>,
+    pub(crate) state_publisher: Option<(Duration, bool)>,
 }
 
 #[zenoh_macros::unstable]
@@ -75,22 +74,31 @@ impl MissDetectionConfig {
     /// Allow last sample miss detection through periodic heartbeat.
     ///
     /// Periodically send the last published Sample's sequence number to allow last sample recovery.
+    ///
+    /// [`heartbeat`](MissDetectionConfig::heartbeat) and [`sporadic_heartbeat`](MissDetectionConfig::sporadic_heartbeat)
+    /// are mutually exclusive. Enabling one will disable the other.
+    ///
     /// [`AdvancedSubscribers`](crate::AdvancedSubscriber) can recover last sample with the
     /// [`heartbeat`](crate::advanced_subscriber::RecoveryConfig::heartbeat) option.
     #[zenoh_macros::unstable]
     pub fn heartbeat(mut self, period: Duration) -> Self {
-        self.state_publisher = Some(period);
+        self.state_publisher = Some((period, false));
         self
     }
 
-    /// Allow last sample miss detection through non periodic [`CongestionControl::Block`] heartbeat.
+    /// Allow last sample miss detection through sporadic heartbeat.
     ///
-    /// Send the last published Sample's sequence number with [`CongestionControl::Block`] when it changes.
+    /// Each period, the last published Sample's sequence number is sent with [`CongestionControl::Block`]
+    /// but only if it changed since last period.
+    ///
+    /// [`heartbeat`](MissDetectionConfig::heartbeat) and [`sporadic_heartbeat`](MissDetectionConfig::sporadic_heartbeat)
+    /// are mutually exclusive. Enabling one will disable the other.
+    ///
     /// [`AdvancedSubscribers`](crate::AdvancedSubscriber) can recover last sample with the
     /// [`heartbeat`](crate::advanced_subscriber::RecoveryConfig::heartbeat) option.
     #[zenoh_macros::unstable]
     pub fn sporadic_heartbeat(mut self, period: Duration) -> Self {
-        self.state_update = Some(period);
+        self.state_publisher = Some((period, true));
         self
     }
 }
@@ -356,11 +364,12 @@ impl<'a> AdvancedPublisher<'a> {
             None
         };
 
-        let state_publisher =
-            if let Some(period) = conf.miss_config.as_ref().and_then(|c| c.state_publisher) {
-                if let Some(seqnum) = seqnum.as_ref() {
-                    let seqnum = seqnum.clone();
-
+        let state_publisher = if let Some((period, sporadic)) =
+            conf.miss_config.as_ref().and_then(|c| c.state_publisher)
+        {
+            if let Some(seqnum) = seqnum.as_ref() {
+                let seqnum = seqnum.clone();
+                if !sporadic {
                     let publisher = conf.session.declare_publisher(&key_expr / &suffix).wait()?;
                     Some(TerminatableTask::spawn_abortable(
                         ZRuntime::Net,
@@ -375,13 +384,7 @@ impl<'a> AdvancedPublisher<'a> {
                         },
                     ))
                 } else {
-                    None
-                }
-            } else if let Some(period) = conf.miss_config.as_ref().and_then(|c| c.state_update) {
-                if let Some(seqnum) = seqnum.as_ref() {
-                    let seqnum = seqnum.clone();
                     let mut last_seqnum = 0;
-
                     let publisher = conf
                         .session
                         .declare_publisher(&key_expr / &suffix)
@@ -400,12 +403,13 @@ impl<'a> AdvancedPublisher<'a> {
                             }
                         },
                     ))
-                } else {
-                    None
                 }
             } else {
                 None
-            };
+            }
+        } else {
+            None
+        };
 
         Ok(AdvancedPublisher {
             publisher,
