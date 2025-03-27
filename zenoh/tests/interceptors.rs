@@ -23,6 +23,7 @@ use std::{
     },
 };
 
+use nonempty_collections::nev;
 use zenoh::{key_expr::KeyExpr, query::ConsolidationMode, Config, Wait};
 use zenoh_config::{
     DownsamplingItemConf, DownsamplingMessage, DownsamplingRuleConf, InterceptorFlow,
@@ -147,17 +148,18 @@ fn downsampling_pub_sub_test<F>(
 
 fn downsampling_by_keyexpr_impl(flow: InterceptorFlow) {
     let ke_prefix = "test/downsamples_by_keyexp";
-    let locator = "tcp/127.0.0.1:31446";
+    let locator = "tcp/127.0.0.1:31445";
 
     let ke_10hz: KeyExpr = format!("{ke_prefix}/10hz").try_into().unwrap();
     let ke_20hz: KeyExpr = format!("{ke_prefix}/20hz").try_into().unwrap();
 
     let ds_config = DownsamplingItemConf {
         id: None,
-        flows: Some(vec![flow]),
+        flows: Some(nev![flow]),
         interfaces: None,
-        messages: vec![DownsamplingMessage::Push],
-        rules: vec![
+        link_protocols: None,
+        messages: nev![DownsamplingMessage::Push],
+        rules: nev![
             DownsamplingRuleConf {
                 key_expr: ke_10hz.clone().into(),
                 freq: 10.0,
@@ -202,7 +204,7 @@ fn downsampling_by_keyexpr() {
 #[cfg(unix)]
 fn downsampling_by_interface_impl(flow: InterceptorFlow) {
     let ke_prefix = "test/downsamples_by_interface";
-    let locator = "tcp/127.0.0.1:31447";
+    let locator = "tcp/127.0.0.1:31446";
 
     let ke_10hz: KeyExpr = format!("{ke_prefix}/10hz").try_into().unwrap();
     let ke_no_effect: KeyExpr = format!("{ke_prefix}/no_effect").try_into().unwrap();
@@ -211,20 +213,22 @@ fn downsampling_by_interface_impl(flow: InterceptorFlow) {
     let ds_config = vec![
         DownsamplingItemConf {
             id: Some("someid".to_string()),
-            flows: Some(vec![flow]),
-            interfaces: Some(vec!["lo".to_string(), "lo0".to_string()]),
-            messages: vec![DownsamplingMessage::Push],
-            rules: vec![DownsamplingRuleConf {
+            flows: Some(nev![flow]),
+            interfaces: Some(nev!["lo".to_string(), "lo0".to_string()]),
+            link_protocols: None,
+            messages: nev![DownsamplingMessage::Push],
+            rules: nev![DownsamplingRuleConf {
                 key_expr: ke_10hz.clone().into(),
                 freq: 10.0,
             }],
         },
         DownsamplingItemConf {
             id: None,
-            flows: Some(vec![flow]),
-            interfaces: Some(vec!["some_unknown_interface".to_string()]),
-            messages: vec![DownsamplingMessage::Push],
-            rules: vec![DownsamplingRuleConf {
+            flows: Some(nev![flow]),
+            interfaces: Some(nev!["some_unknown_interface".to_string()]),
+            link_protocols: None,
+            messages: nev![DownsamplingMessage::Push],
+            rules: nev![DownsamplingRuleConf {
                 key_expr: ke_no_effect.clone().into(),
                 freq: 10.0,
             }],
@@ -254,6 +258,66 @@ fn downsampling_by_interface() {
     zenoh::init_log_from_env_or("error");
     downsampling_by_interface_impl(InterceptorFlow::Ingress);
     downsampling_by_interface_impl(InterceptorFlow::Egress);
+}
+
+#[cfg(unix)]
+fn downsampling_by_protocol_impl(flow: InterceptorFlow) {
+    use zenoh_config::InterceptorLink;
+
+    let ke_prefix = "test/downsamples_by_interface";
+    let locator = "tcp/127.0.0.1:31447";
+
+    let ke_10hz: KeyExpr = format!("{ke_prefix}/10hz").try_into().unwrap();
+    let ke_no_effect: KeyExpr = format!("{ke_prefix}/no_effect").try_into().unwrap();
+    let ke_of_rates: Vec<KeyExpr<'static>> = vec![ke_10hz.clone(), ke_no_effect.clone()];
+
+    let ds_config = vec![
+        DownsamplingItemConf {
+            id: Some("someid".to_string()),
+            flows: Some(nev![flow]),
+            interfaces: None,
+            link_protocols: Some(nev![InterceptorLink::Tcp]),
+            messages: nev![DownsamplingMessage::Push],
+            rules: nev![DownsamplingRuleConf {
+                key_expr: ke_10hz.clone().into(),
+                freq: 10.0,
+            }],
+        },
+        DownsamplingItemConf {
+            id: None,
+            flows: Some(nev![flow]),
+            interfaces: None,
+            link_protocols: Some(nev![InterceptorLink::Serial]),
+            messages: nev![DownsamplingMessage::Push],
+            rules: nev![DownsamplingRuleConf {
+                key_expr: ke_no_effect.clone().into(),
+                freq: 10.0,
+            }],
+        },
+    ];
+
+    let rate_check = move |ke: KeyExpr, rate: usize| -> bool {
+        tracing::info!("keyexpr: {ke}, rate: {rate}");
+        if ke == ke_10hz {
+            rate > 0 && rate <= 10 + 1
+        } else if ke == ke_no_effect {
+            rate > 10
+        } else {
+            tracing::error!("Shouldn't reach this case. Invalid keyexpr {ke} detected.");
+            false
+        }
+    };
+
+    let (pub_config, sub_config) = build_config(locator, ds_config, flow);
+
+    downsampling_pub_sub_test(pub_config, sub_config, ke_prefix, ke_of_rates, rate_check);
+}
+
+#[test]
+fn downsampling_by_protocol() {
+    zenoh::init_log_from_env_or("error");
+    downsampling_by_protocol_impl(InterceptorFlow::Ingress);
+    downsampling_by_protocol_impl(InterceptorFlow::Egress);
 }
 
 #[test]
@@ -373,10 +437,11 @@ fn downsampling_query_rate_test(flow: InterceptorFlow) {
 
     let ds_config = DownsamplingItemConf {
         id: None,
-        flows: Some(vec![flow]),
+        flows: Some(nev![flow]),
         interfaces: None,
-        messages: vec![DownsamplingMessage::Query],
-        rules: vec![DownsamplingRuleConf {
+        link_protocols: None,
+        messages: nev![DownsamplingMessage::Query],
+        rules: nev![DownsamplingRuleConf {
             key_expr: queryable_ke.try_into().unwrap(),
             freq: 0.01,
         }],
@@ -400,10 +465,11 @@ fn downsampling_reply_rate_test(flow: InterceptorFlow) {
 
     let ds_config = DownsamplingItemConf {
         id: None,
-        flows: Some(vec![flow]),
+        flows: Some(nev![flow]),
         interfaces: None,
-        messages: vec![DownsamplingMessage::Reply],
-        rules: vec![DownsamplingRuleConf {
+        link_protocols: None,
+        messages: nev![DownsamplingMessage::Reply],
+        rules: nev![DownsamplingRuleConf {
             key_expr: queryable_ke.try_into().unwrap(),
             freq: 0.01,
         }],

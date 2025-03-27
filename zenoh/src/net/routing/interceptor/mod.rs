@@ -20,11 +20,13 @@
 //!
 mod access_control;
 use access_control::acl_interceptor_factories;
+use nonempty_collections::NEVec;
+use zenoh_link::LinkAuthId;
 
 mod authorization;
 use std::any::Any;
 
-use zenoh_config::{Config, InterceptorFlow};
+use zenoh_config::{Config, InterceptorFlow, InterceptorLink};
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
@@ -44,8 +46,8 @@ pub struct InterfaceEnabled {
     pub egress: bool,
 }
 
-impl From<&[InterceptorFlow]> for InterfaceEnabled {
-    fn from(value: &[InterceptorFlow]) -> Self {
+impl From<&NEVec<InterceptorFlow>> for InterfaceEnabled {
+    fn from(value: &NEVec<InterceptorFlow>) -> Self {
         let mut res = Self {
             ingress: false,
             egress: false,
@@ -57,6 +59,25 @@ impl From<&[InterceptorFlow]> for InterfaceEnabled {
             }
         }
         res
+    }
+}
+
+/// Wrapper for InterceptorLink in order to implement From trait.
+pub(crate) struct InterceptorLinkWrapper(pub(crate) InterceptorLink);
+
+impl From<&LinkAuthId> for InterceptorLinkWrapper {
+    fn from(value: &LinkAuthId) -> Self {
+        match value {
+            LinkAuthId::Tls(_) => Self(InterceptorLink::Tls),
+            LinkAuthId::Quic(_) => Self(InterceptorLink::Quic),
+            LinkAuthId::Tcp => Self(InterceptorLink::Tcp),
+            LinkAuthId::Udp => Self(InterceptorLink::Udp),
+            LinkAuthId::Serial => Self(InterceptorLink::Serial),
+            LinkAuthId::Unixpipe => Self(InterceptorLink::Unixpipe),
+            LinkAuthId::UnixsockStream => Self(InterceptorLink::UnixsockStream),
+            LinkAuthId::Vsock => Self(InterceptorLink::Vsock),
+            LinkAuthId::Ws => Self(InterceptorLink::Ws),
+        }
     }
 }
 

@@ -23,7 +23,7 @@ use ahash::RandomState;
 use itertools::Itertools;
 use zenoh_config::{
     AclConfig, AclConfigPolicyEntry, AclConfigRule, AclConfigSubjects, AclMessage, CertCommonName,
-    InterceptorFlow, Interface, Permission, PolicyRule, Username,
+    InterceptorFlow, InterceptorLink, Interface, Permission, PolicyRule, Username,
 };
 use zenoh_keyexpr::{
     keyexpr,
@@ -41,6 +41,7 @@ pub(crate) struct Subject {
     pub(crate) interface: SubjectProperty<Interface>,
     pub(crate) cert_common_name: SubjectProperty<CertCommonName>,
     pub(crate) username: SubjectProperty<Username>,
+    pub(crate) link_type: SubjectProperty<InterceptorLink>,
 }
 
 impl Subject {
@@ -50,6 +51,7 @@ impl Subject {
             && self
                 .cert_common_name
                 .matches(query.cert_common_name.as_ref())
+            && self.link_type.matches(query.link_protocol.as_ref())
     }
 }
 
@@ -76,6 +78,7 @@ pub(crate) struct SubjectQuery {
     pub(crate) interface: Option<Interface>,
     pub(crate) cert_common_name: Option<CertCommonName>,
     pub(crate) username: Option<Username>,
+    pub(crate) link_protocol: Option<InterceptorLink>,
 }
 
 impl std::fmt::Display for SubjectQuery {
@@ -84,6 +87,7 @@ impl std::fmt::Display for SubjectQuery {
             self.interface.as_ref().map(|face| format!("{face}")),
             self.cert_common_name.as_ref().map(|ccn| format!("{ccn}")),
             self.username.as_ref().map(|username| format!("{username}")),
+            self.link_protocol.as_ref().map(|link| format!("{link}")),
         ];
         write!(
             f,
@@ -309,30 +313,18 @@ impl PolicyEnforcer {
                         }
                         if rule.flows.is_none() {
                             tracing::warn!("Rule '{}' flows list is not set. Setting it to both Ingress and Egress", rule.id);
-                            rule.flows =
-                                Some([InterceptorFlow::Ingress, InterceptorFlow::Egress].into());
+                            rule.flows = Some(
+                                [InterceptorFlow::Ingress, InterceptorFlow::Egress]
+                                    .to_vec()
+                                    .try_into()
+                                    .unwrap(),
+                            );
                         }
                     }
                     // check for undefined values in subjects and initialize them to defaults
                     for subject in subjects.iter_mut() {
                         if subject.id.trim().is_empty() {
                             bail!("Found empty subject id in subjects list");
-                        }
-
-                        if subject
-                            .cert_common_names
-                            .as_ref()
-                            .is_some_and(Vec::is_empty)
-                        {
-                            bail!("Subject property `cert_common_names` cannot be empty");
-                        }
-
-                        if subject.usernames.as_ref().is_some_and(Vec::is_empty) {
-                            bail!("Subject property `usernames` cannot be empty");
-                        }
-
-                        if subject.interfaces.as_ref().is_some_and(Vec::is_empty) {
-                            bail!("Subject property `interfaces` cannot be empty");
                         }
                     }
                     let policy_information =
@@ -345,7 +337,7 @@ impl PolicyEnforcer {
                             .flow_mut(rule.flow)
                             .action_mut(rule.message)
                             .permission_mut(rule.permission)
-                            .insert(keyexpr::new(&rule.key_expr)?, true);
+                            .insert(&rule.key_expr, true);
 
                         if self.default_permission == Permission::Deny {
                             self.interface_enabled = InterfaceEnabled {
@@ -396,25 +388,7 @@ impl PolicyEnforcer {
                     config_rule.id
                 );
             }
-            // Config validation
-            let mut validation_err = String::new();
-            if config_rule.messages.is_empty() {
-                validation_err.push_str("ACL config messages list is empty. ");
-            }
-            if config_rule.flows.as_ref().unwrap().is_empty() {
-                validation_err.push_str("ACL config flows list is empty. ");
-            }
-            if config_rule.key_exprs.is_empty() {
-                validation_err.push_str("ACL config key_exprs list is empty. ");
-            }
-            if !validation_err.is_empty() {
-                bail!("Rule '{}' is malformed: {}", config_rule.id, validation_err);
-            }
-            for key_expr in config_rule.key_exprs.iter() {
-                if key_expr.trim().is_empty() {
-                    bail!("Found empty key expression in rule '{}'", config_rule.id);
-                }
-            }
+
             rule_map.insert(config_rule.id.clone(), config_rule);
         }
 
@@ -489,17 +463,29 @@ impl PolicyEnforcer {
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or(vec![SubjectProperty::Wildcard]);
+            // FIXME: Unnecessary .collect() because of different iterator types
+            let link_types = config_subject
+                .link_protocols
+                .map(|link_types| {
+                    link_types
+                        .into_iter()
+                        .map(SubjectProperty::Exactly)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or(vec![SubjectProperty::Wildcard]);
 
             // create ACL subject combinations
             let subject_combination_ids = interfaces
                 .into_iter()
                 .cartesian_product(cert_common_names)
                 .cartesian_product(usernames)
-                .map(|((interface, cert_common_name), username)| {
+                .cartesian_product(link_types)
+                .map(|(((interface, cert_common_name), username), link_type)| {
                     let subject = Subject {
                         interface,
                         cert_common_name,
                         username,
+                        link_type,
                     };
                     subject_map_builder.insert_or_get(subject)
                 })

@@ -27,6 +27,8 @@ use zenoh_protocol::{
 };
 use zenoh_result::{zerror, ZResult};
 
+use crate::LinkAuthId;
+
 /*************************************/
 /*             MANAGER               */
 /*************************************/
@@ -48,6 +50,7 @@ pub trait LinkMulticastTrait: Send + Sync {
     fn get_mtu(&self) -> BatchSize;
     fn get_src(&self) -> &Locator;
     fn get_dst(&self) -> &Locator;
+    fn get_auth_id(&self) -> &LinkAuthId;
     fn is_reliable(&self) -> bool;
     async fn write(&self, buffer: &[u8]) -> ZResult<usize>;
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()>;

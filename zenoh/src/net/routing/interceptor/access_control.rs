@@ -24,6 +24,7 @@ use itertools::Itertools;
 use zenoh_config::{
     AclConfig, AclMessage, CertCommonName, InterceptorFlow, Interface, Permission, Username,
 };
+use zenoh_link::LinkAuthId;
 use zenoh_protocol::{
     core::ZenohIdProto,
     network::{
@@ -33,14 +34,11 @@ use zenoh_protocol::{
     zenoh::{PushBody, RequestBody},
 };
 use zenoh_result::ZResult;
-use zenoh_transport::{
-    multicast::TransportMulticast,
-    unicast::{authentication::AuthId, TransportUnicast},
-};
+use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 use super::{
     authorization::PolicyEnforcer, EgressInterceptor, IngressInterceptor, InterceptorFactory,
-    InterceptorFactoryTrait, InterceptorTrait,
+    InterceptorFactoryTrait, InterceptorLinkWrapper, InterceptorTrait,
 };
 use crate::{
     api::key_expr::KeyExpr,
@@ -104,22 +102,20 @@ impl InterceptorFactoryTrait for AclEnforcer {
         };
 
         let mut cert_common_names = Vec::new();
-        let mut username = None;
+        let mut link_protocols = Vec::new();
+        let username = auth_ids.username().cloned().map(Username);
 
-        for auth_id in auth_ids {
+        for auth_id in auth_ids.link_auth_ids() {
             match auth_id {
-                AuthId::CertCommonName(value) => {
-                    cert_common_names.push(Some(CertCommonName(value)));
+                LinkAuthId::Tls(value) => {
+                    cert_common_names.push(value.as_ref().map(|v| CertCommonName(v.clone())));
                 }
-                AuthId::Username(value) => {
-                    if username.is_some() {
-                        tracing::error!("Transport should not report more than one username");
-                        return (None, None);
-                    }
-                    username = Some(Username(value));
+                LinkAuthId::Quic(value) => {
+                    cert_common_names.push(value.as_ref().map(|v| CertCommonName(v.clone())));
                 }
-                AuthId::None => {}
+                _ => {}
             }
+            link_protocols.push(Some(InterceptorLinkWrapper::from(auth_id).0));
         }
         if cert_common_names.is_empty() {
             cert_common_names.push(None);
@@ -148,14 +144,16 @@ impl InterceptorFactoryTrait for AclEnforcer {
 
         let mut auth_subjects = HashSet::new();
 
-        for ((username, interface), cert_common_name) in iter::once(username)
+        for (((username, interface), cert_common_name), link_protocol) in iter::once(username)
             .cartesian_product(interfaces.into_iter())
             .cartesian_product(cert_common_names.into_iter())
+            .cartesian_product(link_protocols.into_iter())
         {
             let query = SubjectQuery {
                 interface,
                 cert_common_name,
                 username,
+                link_protocol,
             };
 
             if let Some(entry) = self.enforcer.subject_store.query(&query) {
