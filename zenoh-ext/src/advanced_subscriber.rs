@@ -748,6 +748,8 @@ impl<Handler> AdvancedSubscriber<Handler> {
             }
         };
 
+        tracing::debug!("Create AdvancedSubscriber on {}", &key_expr,);
+
         let subscriber = conf
             .session
             .declare_subscriber(&key_expr)
@@ -803,6 +805,10 @@ impl<Handler> AdvancedSubscriber<Handler> {
                     move |s: Sample| {
                         if s.kind() == SampleKind::Put {
                             if let Ok(parsed) = ke_liveliness::parse(s.key_expr().as_keyexpr()) {
+                                tracing::trace!(
+                                    "AdvancedSubscriber: Detect late joiner publishers with zid={}",
+                                    parsed.zid().as_str()
+                                );
                                 if let Ok(zid) = ZenohId::from_str(parsed.zid().as_str()) {
                                     // TODO : If we already have a state associated to this discovered source
                                     // we should query with the appropriate range to avoid unnecessary retransmissions
@@ -965,6 +971,10 @@ impl<Handler> AdvancedSubscriber<Handler> {
                     }
                 };
 
+                tracing::debug!(
+                    "AdvancedSubscriber: Detect late joiner publishers liveliness token {}",
+                    &key_expr / KE_ADV_PREFIX / KE_PUB / KE_STARSTAR
+                );
                 Some(
                     conf.session
                         .liveliness()
@@ -984,6 +994,10 @@ impl<Handler> AdvancedSubscriber<Handler> {
         let heartbeat_subscriber = if retransmission.is_some_and(|r| r.heartbeat.is_some()) {
             let ke_heartbeat_sub = &key_expr / KE_ADV_PREFIX / KE_PUB / KE_STARSTAR;
             let statesref = statesref.clone();
+            tracing::debug!(
+                "AdvancedSubscriber: Enable heartbeat subscriber with {}",
+                ke_heartbeat_sub
+            );
             let heartbeat_sub = conf
                 .session
                 .declare_subscriber(ke_heartbeat_sub)
@@ -1089,6 +1103,10 @@ impl<Handler> AdvancedSubscriber<Handler> {
                 // We need this empty chunk because af a routing matching bug
                 _ => suffix / KE_EMPTY,
             };
+            tracing::debug!(
+                "AdvancedSubscriber: Declare liveliness token {}",
+                &key_expr / &suffix
+            );
             let token = conf
                 .session
                 .liveliness()
