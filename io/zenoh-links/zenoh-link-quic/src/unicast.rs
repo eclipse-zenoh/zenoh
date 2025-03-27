@@ -314,7 +314,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .local_addr()
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
 
-        println!("dst_addr, host {:?} {:?}",dst_addr, host);
         let quic_conn = quic_endpoint
             .connect(dst_addr, host)
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?
