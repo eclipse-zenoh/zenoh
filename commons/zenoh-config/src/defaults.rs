@@ -315,7 +315,6 @@ impl Default for BatchingConf {
 impl Default for LinkRxConf {
     fn default() -> Self {
         Self {
-            buffer_size: BatchSize::MAX as usize,
             max_message_size: 2_usize.pow(30),
         }
     }
