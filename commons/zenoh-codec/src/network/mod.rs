@@ -120,12 +120,7 @@ impl<R: BacktrackableReader> Iterator for NetworkMessageIter<R> {
     type Item = NetworkMessage;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mark = self.reader.mark();
-        let msg = self.codec.read(&mut self.reader).ok();
-        if msg.is_none() {
-            self.reader.rewind(mark);
-        }
-        msg
+        self.codec.read(&mut self.reader).ok()
     }
 }
 
