@@ -14,7 +14,7 @@
 
 use std::{
     fmt::{self, Debug},
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::Arc,
     time::Duration,
 };
@@ -33,10 +33,10 @@ use zenoh_link_commons::{
     get_ip_interface_names,
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
-    NewLinkChannelSender,
+    NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
-    core::{EndPoint, Locator},
+    core::{Address, EndPoint, Locator},
     transport::BatchSize,
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -253,8 +253,16 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let epaddr = endpoint.address();
         let host = get_quic_host(&epaddr)?;
         let epconf = endpoint.config();
-
         let dst_addr = get_quic_addr(&epaddr).await?;
+
+        // if both `iface`, and `bind` are present, return error
+        if let (Some(_), Some(_)) = (epconf.get(BIND_INTERFACE), epconf.get(BIND_SOCKET)) {
+            bail!(
+                "Using Config options `iface` and `bind` in conjunction is unsupported at this time {} {:?}",
+                BIND_INTERFACE,
+                BIND_SOCKET
+            )
+        }
 
         // Initialize the QUIC connection
         let mut client_crypto = TlsClientConfig::new(&epconf)
@@ -264,17 +272,19 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         client_crypto.client_config.alpn_protocols =
             ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
-        let ip_addr: IpAddr = if dst_addr.is_ipv4() {
-            Ipv4Addr::UNSPECIFIED.into()
+        let src_addr = if let Some(bind_socket_str) = epconf.get(BIND_SOCKET) {
+            get_quic_addr(&Address::from(bind_socket_str)).await?
+        } else if dst_addr.is_ipv4() {
+            SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0)
         } else {
-            Ipv6Addr::UNSPECIFIED.into()
+            SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0)
         };
 
         // Initialize the Endpoint
         let mut quic_endpoint = if let Some(iface) = client_crypto.bind_iface {
             async {
                 // Bind the UDP socket
-                let socket = tokio::net::UdpSocket::bind(SocketAddr::new(ip_addr, 0)).await?;
+                let socket = tokio::net::UdpSocket::bind(src_addr).await?;
                 zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
 
                 // create the Endpoint with this socket
@@ -290,7 +300,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             }
             .await
         } else {
-            quinn::Endpoint::client(SocketAddr::new(ip_addr, 0)).map_err(Into::into)
+            quinn::Endpoint::client(src_addr).map_err(Into::into)
         }
         .map_err(|e| zerror!("Can not create a new QUIC link bound to {host}: {e}"))?;
 

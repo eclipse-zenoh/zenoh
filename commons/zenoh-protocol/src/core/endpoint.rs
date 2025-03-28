@@ -146,6 +146,12 @@ impl fmt::Debug for Address<'_> {
     }
 }
 
+impl<'a> From<&'a str> for Address<'a> {
+    fn from(value: &'a str) -> Self {
+        Address(value)
+    }
+}
+
 #[repr(transparent)]
 #[derive(PartialEq, Eq, Hash)]
 pub struct AddressMut<'a>(&'a mut EndPoint);
