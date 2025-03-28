@@ -24,7 +24,7 @@ use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
 
 use super::{
-    handlers::Callback,
+    handlers::StrongCallback,
     key_expr::KeyExpr,
     sample::Locality,
     session::{UndeclarableSealed, WeakSession},
@@ -85,7 +85,7 @@ pub(crate) struct MatchingListenerState {
     pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) destination: Locality,
     pub(crate) match_type: MatchingStatusType,
-    pub(crate) callback: Callback<MatchingStatus>,
+    pub(crate) callback: StrongCallback<MatchingStatus>,
 }
 
 #[cfg(feature = "unstable")]
