@@ -186,7 +186,7 @@ struct Cache {
 }
 
 impl QosInterceptor {
-    fn should_overwrite(&self, ke: &KeyExpr) -> bool {
+    fn should_overwrite(&self, ke: &keyexpr) -> bool {
         self.keys.nodes_including(ke).any(|n| n.weight().is_some())
     }
 
@@ -204,7 +204,7 @@ impl QosInterceptor {
 }
 
 impl InterceptorTrait for QosInterceptor {
-    fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
+    fn compute_keyexpr_cache(&self, key_expr: &keyexpr) -> Option<Box<dyn Any + Send + Sync>> {
         let cache = Cache {
             should_overwrite: self.should_overwrite(key_expr),
         };
@@ -227,7 +227,7 @@ impl InterceptorTrait for QosInterceptor {
         let should_overwrite = cache.map(|v| v.should_overwrite).unwrap_or_else(|| {
             ctx.full_key_expr()
                 .as_ref()
-                .map(|ke| self.should_overwrite(&ke.into()))
+                .map(|ke| self.should_overwrite(ke))
                 .unwrap_or(false)
         });
         if !should_overwrite {
