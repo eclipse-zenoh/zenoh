@@ -167,14 +167,72 @@ macro_rules! stats_struct {
     }
 }
 
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex,
+    },
+};
 
 use serde::{Deserialize, Serialize};
+use zenoh_core::zlock;
 stats_struct! {
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct DiscriminatedStats {
         pub user,
         pub admin,
+    }
+}
+
+pub struct StatsMap {
+    parent: Option<Arc<StatsMap>>,
+    data: Mutex<HashMap<String, usize>>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
+pub struct StatsMapReport(HashMap<String, usize>);
+
+impl StatsMap {
+    pub fn report(&self) -> StatsMapReport {
+        StatsMapReport(zlock!(self.data).clone())
+    }
+
+    pub fn new(parent: Option<Arc<StatsMap>>) -> Self {
+        StatsMap {
+            parent,
+            data: Mutex::new(HashMap::new()),
+        }
+    }
+
+    pub fn inc_key(&self, key: &str, val: usize) {
+        let mut d = self.data.lock().unwrap();
+
+        if let Some(v) = d.get_mut(key) {
+            *v += val;
+        } else {
+            d.insert(key.to_owned(), val);
+        }
+        drop(d);
+        if let Some(p) = &self.parent {
+            p.inc_key(key, val);
+        }
+    }
+}
+
+impl StatsMapReport {
+    #[allow(dead_code)]
+    fn sub_openmetrics_text(&self, prefix: &str) -> String {
+        let mut s = String::new();
+        for (k, v) in &self.0 {
+            s.push_str(prefix);
+            s.push_str("{key=\"");
+            s.push_str(k);
+            s.push_str("\"} ");
+            s.push_str(&v.to_string());
+            s.push('\n');
+        }
+        s
     }
 }
 
@@ -276,5 +334,9 @@ stats_struct! {
         # HELP "Counter of received bytes in zenoh reply message payloads."
         # TYPE "counter"
         pub rx_z_reply_pl_bytes DiscriminatedStats,
+
+        # HELP "Counter of messages dropped by downsampling per keyexpr."
+        # TYPE "map"
+        pub downsampled_msgs StatsMap,
     }
 }

@@ -29,8 +29,12 @@ use zenoh_core::zlock;
 use zenoh_keyexpr::keyexpr_tree::{
     impls::KeyedSetProvider, support::UnknownWildness, IKeyExprTree, IKeyExprTreeMut, KeBoxTree,
 };
+#[cfg(feature = "stats")]
+use zenoh_keyexpr::OwnedKeyExpr;
 use zenoh_protocol::network::NetworkBody;
 use zenoh_result::ZResult;
+#[cfg(feature = "stats")]
+use zenoh_transport::stats::TransportStats;
 
 use crate::net::routing::interceptor::*;
 
@@ -121,12 +125,16 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
                 Box::new(ComputeOnMiss::new(DownsamplingInterceptor::new(
                     self.messages.clone(),
                     &self.rules,
+                    #[cfg(feature = "stats")]
+                    transport.get_stats().ok().unwrap_or_default().clone(),
                 ))) as IngressInterceptor
             }),
             self.flows.egress.then(|| {
                 Box::new(ComputeOnMiss::new(DownsamplingInterceptor::new(
                     self.messages.clone(),
                     &self.rules,
+                    #[cfg(feature = "stats")]
+                    transport.get_stats().ok().unwrap_or_default().clone(),
                 ))) as EgressInterceptor
             }),
         )
@@ -174,6 +182,10 @@ pub(crate) struct DownsamplingInterceptor {
     filtered_messages: Arc<DownsamplingFilters>,
     ke_id: Arc<Mutex<KeBoxTree<usize, UnknownWildness, KeyedSetProvider>>>,
     ke_state: Arc<Mutex<HashMap<usize, Timestate>>>,
+    #[cfg(feature = "stats")]
+    stats: Arc<TransportStats>,
+    #[cfg(feature = "stats")]
+    rule_id_to_keyexpr: Vec<OwnedKeyExpr>,
 }
 
 impl DownsamplingInterceptor {
@@ -218,6 +230,10 @@ impl InterceptorTrait for DownsamplingInterceptor {
                                 state.latest_message_timestamp = timestamp;
                                 return Some(ctx);
                             } else {
+                                #[cfg(feature = "stats")]
+                                self.stats
+                                    .downsampled_msgs
+                                    .inc_key(self.rule_id_to_keyexpr[*id].as_str(), 1);
                                 return None;
                             }
                         } else {
@@ -237,10 +253,21 @@ impl InterceptorTrait for DownsamplingInterceptor {
 const NANOS_PER_SEC: f64 = 1_000_000_000.0;
 
 impl DownsamplingInterceptor {
-    pub fn new(messages: Arc<DownsamplingFilters>, rules: &NEVec<DownsamplingRuleConf>) -> Self {
+    pub fn new(
+        messages: Arc<DownsamplingFilters>,
+        rules: &NEVec<DownsamplingRuleConf>,
+        #[cfg(feature = "stats")] stats: Arc<TransportStats>,
+    ) -> Self {
         let mut ke_id = KeBoxTree::default();
         let mut ke_state = HashMap::default();
+        #[cfg(feature = "stats")]
+        let mut id_to_ke = Vec::new();
+
         for (id, rule) in rules.into_iter().enumerate() {
+            #[cfg(feature = "stats")]
+            {
+                id_to_ke.push(rule.key_expr.clone());
+            }
             let mut threshold = tokio::time::Duration::MAX;
             let mut latest_message_timestamp = tokio::time::Instant::now();
             if rule.freq != 0.0 {
@@ -267,6 +294,10 @@ impl DownsamplingInterceptor {
             filtered_messages: messages,
             ke_id: Arc::new(Mutex::new(ke_id)),
             ke_state: Arc::new(Mutex::new(ke_state)),
+            #[cfg(feature = "stats")]
+            stats,
+            #[cfg(feature = "stats")]
+            rule_id_to_keyexpr: id_to_ke,
         }
     }
 }
