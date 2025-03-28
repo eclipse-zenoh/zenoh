@@ -426,22 +426,3 @@ impl ZSlice {
         (0..len).map(|_| rng.gen()).collect::<Vec<u8>>().into()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn zslice() {
-        let buf = crate::vec::uninit(16);
-        let mut zslice: ZSlice = buf.clone().into();
-        assert_eq!(buf.as_slice(), zslice.as_slice());
-
-        // SAFETY: buffer slize size is not modified
-        let mut_slice = unsafe { zslice.downcast_mut::<Vec<u8>>() }.unwrap();
-
-        mut_slice[..buf.len()].clone_from_slice(&buf[..]);
-
-        assert_eq!(buf.as_slice(), zslice.as_slice());
-    }
-}

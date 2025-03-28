@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023 ZettaScale Technology
+// Copyright (c) 2025 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
 #![cfg(all(feature = "shared-memory", feature = "unstable"))]
 use zenoh::{
     bytes::ZBytes,
