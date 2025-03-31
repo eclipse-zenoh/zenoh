@@ -280,50 +280,54 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0)
         };
 
-        // Initialize the Endpoint
-        let mut quic_endpoint = if let Some(iface) = client_crypto.bind_iface {
-            async {
-                // Bind the UDP socket
-                let socket = tokio::net::UdpSocket::bind(src_addr).await?;
-                zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
+        let socket = tokio::net::UdpSocket::bind(src_addr).await?;
 
-                // create the Endpoint with this socket
-                let runtime = quinn::default_runtime().ok_or_else(|| {
-                    std::io::Error::new(std::io::ErrorKind::Other, "no async runtime found")
-                })?;
-                ZResult::Ok(quinn::Endpoint::new_with_abstract_socket(
-                    EndpointConfig::default(),
-                    None,
-                    runtime.wrap_udp_socket(socket.into_std()?)?,
-                    runtime,
-                )?)
-            }
-            .await
-        } else {
-            quinn::Endpoint::client(src_addr).map_err(Into::into)
+        // Initialize the Endpoint
+        if let Some(iface) = client_crypto.bind_iface {
+            zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
+        };
+
+        let mut quic_endpoint = {
+            // create the Endpoint with this socket
+            let runtime = quinn::default_runtime().ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::Other, "no async runtime found")
+            })?;
+            ZResult::Ok(quinn::Endpoint::new_with_abstract_socket(
+                EndpointConfig::default(),
+                None,
+                runtime.wrap_udp_socket(socket.into_std()?)?,
+                runtime,
+            )?)
         }
         .map_err(|e| zerror!("Can not create a new QUIC link bound to {host}: {e}"))?;
 
         let quic_config: QuicClientConfig = client_crypto
             .client_config
             .try_into()
-            .map_err(|e| zerror!("Can not create a new QUIC link bound to {host}: {e}"))?;
+            .map_err(|e| zerror!("Can not get QUIC config {host}: {e}"))?;
         quic_endpoint.set_default_client_config(quinn::ClientConfig::new(Arc::new(quic_config)));
 
         let src_addr = quic_endpoint
             .local_addr()
-            .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
+            .map_err(|e| zerror!("Can not get QUIC local_addr bound to {}: {}", host, e))?;
 
         let quic_conn = quic_endpoint
             .connect(dst_addr, host)
-            .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?
+            .map_err(|e| {
+                zerror!(
+                    "Can not get connect quick endpoing : {} : {} : {}",
+                    dst_addr,
+                    host,
+                    e
+                )
+            })?
             .await
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
 
         let (send, recv) = quic_conn
             .open_bi()
             .await
-            .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
+            .map_err(|e| zerror!("Can not open Quic bi-directional channel {}: {}", host, e))?;
 
         let auth_id = get_cert_common_name(&quic_conn)?;
         let certchain_expiration_time =
