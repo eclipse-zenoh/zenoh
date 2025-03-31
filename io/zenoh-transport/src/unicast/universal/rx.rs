@@ -13,6 +13,7 @@
 //
 use std::sync::MutexGuard;
 
+use zenoh_codec::network::NetworkMessageIter;
 use zenoh_core::{zlock, zread};
 use zenoh_link::Link;
 use zenoh_protocol::{
@@ -103,7 +104,7 @@ impl TransportUnicastUniversal {
         }
         let callback = zread!(self.callback).clone();
         if let Some(callback) = callback.as_ref() {
-            for msg in payload.drain(..) {
+            for msg in NetworkMessageIter::new(reliability, &mut payload) {
                 self.trigger_callback(callback.as_ref(), msg)?;
             }
         } else {
