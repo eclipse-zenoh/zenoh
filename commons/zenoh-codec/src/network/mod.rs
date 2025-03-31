@@ -27,7 +27,7 @@ use zenoh_protocol::{
     core::{EntityId, Reliability, ZenohIdProto},
     network::{
         ext::{self, EntityGlobalIdType},
-        id, NetworkBody, NetworkBodyRef, NetworkMessage, NetworkMessageRef,
+        id, NetworkBody, NetworkBodyRef, NetworkMessage, NetworkMessageExt, NetworkMessageRef,
     },
 };
 
