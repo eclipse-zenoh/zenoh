@@ -63,10 +63,9 @@ impl<ID: SegmentID> Segment<ID> {
         Ok(Self { inner })
     }
 
-    pub fn ensure_not_persistent(id: ID) {
-        if let Err(err) = platform::SegmentImpl::open(id) {
-            tracing::trace!("Error cleaning up segment: {:?}", err);
-        }
+    pub fn ensure_not_persistent(_id: ID) {
+        #[cfg(not(target_os = "windows"))]
+        platform::SegmentImpl::ensure_not_persistent(_id);
     }
 }
 
