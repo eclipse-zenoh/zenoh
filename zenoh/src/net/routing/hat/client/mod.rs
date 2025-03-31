@@ -168,19 +168,9 @@ impl HatBaseTrait for HatCode {
             undeclare_simple_subscription(&mut wtables, &mut face_clone, &mut res, send_declare);
 
             if res.context.is_some() {
-                for match_ in &res.context().matches {
-                    let mut match_ = match_.upgrade().unwrap();
-                    if !Arc::ptr_eq(&match_, &res) {
-                        get_mut_unchecked(&mut match_)
-                            .context_mut()
-                            .disable_data_routes();
-                        subs_matches.push(match_);
-                    }
+                if let Some(key_expr) = res.key_expr() {
+                    subs_matches.extend(Resource::get_matches(&wtables.root_res, key_expr));
                 }
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .disable_data_routes();
-                subs_matches.push(res);
             }
         }
 
@@ -190,19 +180,9 @@ impl HatBaseTrait for HatCode {
             undeclare_simple_queryable(&mut wtables, &mut face_clone, &mut res, send_declare);
 
             if res.context.is_some() {
-                for match_ in &res.context().matches {
-                    let mut match_ = match_.upgrade().unwrap();
-                    if !Arc::ptr_eq(&match_, &res) {
-                        get_mut_unchecked(&mut match_)
-                            .context_mut()
-                            .disable_query_routes();
-                        qabls_matches.push(match_);
-                    }
+                if let Some(key_expr) = res.key_expr() {
+                    qabls_matches.extend(Resource::get_matches(&wtables.root_res, key_expr));
                 }
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .disable_query_routes();
-                qabls_matches.push(res);
             }
         }
 

@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    borrow::Cow,
     collections::HashMap,
     sync::{atomic::Ordering, Arc},
 };
@@ -234,10 +233,10 @@ fn simple_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 }
 
 #[inline]
-fn remote_simple_subs(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
+fn remote_simple_subs(res: &Arc<Resource>, face_id: usize) -> bool {
     res.session_ctxs
         .values()
-        .any(|ctx| ctx.face.id != face.id && ctx.subs.is_some())
+        .any(|ctx| ctx.face.id != face_id && ctx.subs.is_some())
 }
 
 fn propagate_forget_simple_subscription(
@@ -264,19 +263,16 @@ fn propagate_forget_simple_subscription(
                 ),
             );
         }
-        for res in face_hat!(face)
-            .local_subs
-            .keys()
-            .cloned()
-            .collect::<Vec<Arc<Resource>>>()
-        {
-            if !res.context().matches.iter().any(|m| {
-                m.upgrade()
-                    .is_some_and(|m| m.context.is_some() && remote_simple_subs(&m, &face))
-            }) {
-                if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
+        let root = tables.root_res.clone();
+        let primitives = face.primitives.clone();
+        let face_id = face.id;
+        face_hat_mut!(&mut face).local_subs.retain(|res, &mut id| {
+            if let Some(key_expr) = res.key_expr() {
+                if !Resource::any_matches(&root, key_expr, |m| {
+                    m.context.is_some() && remote_simple_subs(m, face_id)
+                }) {
                     send_declare(
-                        &face.primitives,
+                        &primitives,
                         RoutingContext::with_expr(
                             Declare {
                                 interest_id: None,
@@ -291,9 +287,11 @@ fn propagate_forget_simple_subscription(
                             res.expr().to_string(),
                         ),
                     );
+                    return false;
                 }
             }
-        }
+            true
+        });
     }
 }
 
@@ -333,19 +331,16 @@ pub(super) fn undeclare_simple_subscription(
                     ),
                 );
             }
-            for res in face_hat!(face)
-                .local_subs
-                .keys()
-                .cloned()
-                .collect::<Vec<Arc<Resource>>>()
-            {
-                if !res.context().matches.iter().any(|m| {
-                    m.upgrade()
-                        .is_some_and(|m| m.context.is_some() && remote_simple_subs(&m, face))
-                }) {
-                    if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
+            let root = tables.root_res.clone();
+            let primitives = face.primitives.clone();
+            let face_id = face.id;
+            face_hat_mut!(&mut face).local_subs.retain(|res, &mut id| {
+                if let Some(key_expr) = res.key_expr() {
+                    if !Resource::any_matches(&root, key_expr, |m| {
+                        m.context.is_some() && remote_simple_subs(m, face_id)
+                    }) {
                         send_declare(
-                            &face.primitives,
+                            &primitives,
                             RoutingContext::with_expr(
                                 Declare {
                                     interest_id: None,
@@ -360,9 +355,11 @@ pub(super) fn undeclare_simple_subscription(
                                 res.expr().to_string(),
                             ),
                         );
+                        return false;
                     }
                 }
-            }
+                true
+            });
         }
     }
 }
@@ -661,16 +658,7 @@ impl HatPubSubTrait for HatCode {
             }
         }
 
-        let res = Resource::get_resource(expr.prefix, expr.suffix);
-        let matches = res
-            .as_ref()
-            .and_then(|res| res.context.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
-
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
-
+        for mres in Resource::get_matches(&tables.root_res, &key_expr).iter() {
             for (sid, context) in &mres.session_ctxs {
                 if context.subs.is_some()
                     && (source_type == WhatAmI::Client || context.face.whatami == WhatAmI::Client)
@@ -706,16 +694,8 @@ impl HatPubSubTrait for HatCode {
             return matching_subscriptions;
         }
         tracing::trace!("get_matching_subscriptions({})", key_expr,);
-        let res = Resource::get_resource(&tables.root_res, key_expr);
-        let matches = res
-            .as_ref()
-            .and_then(|res| res.context.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
 
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
-
+        for mres in Resource::get_matches(&tables.root_res, key_expr).iter() {
             for (sid, context) in &mres.session_ctxs {
                 if context.subs.is_some() {
                     matching_subscriptions

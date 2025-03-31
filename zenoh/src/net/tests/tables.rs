@@ -161,13 +161,10 @@ fn match_test() {
     }
 
     for key_expr1 in key_exprs.iter() {
-        let res_matches = Resource::get_matches(&zread!(tables.tables), key_expr1);
+        let res_matches = Resource::get_matches(&zread!(tables.tables).root_res, key_expr1);
         dbg!(res_matches.len());
         for key_expr2 in key_exprs.iter() {
-            if res_matches
-                .iter()
-                .any(|m| m.upgrade().unwrap().expr() == key_expr2.as_str())
-            {
+            if res_matches.iter().any(|m| m.expr() == key_expr2.as_str()) {
                 assert!(dbg!(dbg!(key_expr1).intersects(dbg!(key_expr2))));
             } else {
                 assert!(!dbg!(dbg!(key_expr1).intersects(dbg!(key_expr2))));

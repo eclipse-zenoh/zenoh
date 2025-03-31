@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    borrow::Cow,
     collections::HashMap,
     sync::{atomic::Ordering, Arc},
 };
@@ -348,10 +347,10 @@ fn simple_qabls(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 }
 
 #[inline]
-fn remote_simple_qabls(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
+fn remote_simple_qabls(res: &Arc<Resource>, face_id: usize) -> bool {
     res.session_ctxs
         .values()
-        .any(|ctx| ctx.face.id != face.id && ctx.qabl.is_some())
+        .any(|ctx| ctx.face.id != face_id && ctx.qabl.is_some())
 }
 
 #[inline]
@@ -421,39 +420,39 @@ fn propagate_forget_simple_queryable(
                 ),
             );
         }
-        for res in face_hat!(&mut face)
+        let root = tables.root_res.clone();
+        let primitives = face.primitives.clone();
+        let face_id = face.id;
+        face_hat_mut!(&mut face)
             .local_qabls
-            .keys()
-            .cloned()
-            .collect::<Vec<Arc<Resource>>>()
-        {
-            if !res.context().matches.iter().any(|m| {
-                m.upgrade().is_some_and(|m| {
-                    m.context.is_some()
-                        && (remote_simple_qabls(&m, &face)
-                            || remote_linkstatepeer_qabls(tables, &m))
-                })
-            }) {
-                if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
-                    send_declare(
-                        &face.primitives,
-                        RoutingContext::with_expr(
-                            Declare {
-                                interest_id: None,
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                                    id,
-                                    ext_wire_expr: WireExprType::null(),
-                                }),
-                            },
-                            res.expr().to_string(),
-                        ),
-                    );
+            .retain(|res, &mut (id, _)| {
+                if let Some(key_expr) = res.key_expr() {
+                    if !Resource::any_matches(&root, key_expr, |m| {
+                        m.context.is_some()
+                            && (remote_simple_qabls(m, face_id)
+                                || remote_linkstatepeer_qabls(tables, m))
+                    }) {
+                        send_declare(
+                            &primitives,
+                            RoutingContext::with_expr(
+                                Declare {
+                                    interest_id: None,
+                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                                    body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                                        id,
+                                        ext_wire_expr: WireExprType::null(),
+                                    }),
+                                },
+                                res.expr().to_string(),
+                            ),
+                        );
+                        return false;
+                    }
                 }
-            }
-        }
+                true
+            });
     }
 }
 
@@ -565,7 +564,7 @@ pub(super) fn undeclare_simple_queryable(
         }
 
         if simple_qabls.len() == 1 && !linkstatepeer_qabls {
-            let mut face = &mut simple_qabls[0];
+            let face = &mut simple_qabls[0];
             if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
                 send_declare(
                     &face.primitives,
@@ -584,22 +583,18 @@ pub(super) fn undeclare_simple_queryable(
                     ),
                 );
             }
-            for res in face_hat!(face)
-                .local_qabls
-                .keys()
-                .cloned()
-                .collect::<Vec<Arc<Resource>>>()
-            {
-                if !res.context().matches.iter().any(|m| {
-                    m.upgrade().is_some_and(|m| {
+            let root = tables.root_res.clone();
+            let primitives = face.primitives.clone();
+            let face_id = face.id;
+            face_hat_mut!(face).local_qabls.retain(|res, &mut (id, _)| {
+                if let Some(key_expr) = res.key_expr() {
+                    if !Resource::any_matches(&root, key_expr, |m| {
                         m.context.is_some()
-                            && (remote_simple_qabls(&m, face)
-                                || remote_linkstatepeer_qabls(tables, &m))
-                    })
-                }) {
-                    if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
+                            && (remote_simple_qabls(m, face_id)
+                                || remote_linkstatepeer_qabls(tables, m))
+                    }) {
                         send_declare(
-                            &face.primitives,
+                            &primitives,
                             RoutingContext::with_expr(
                                 Declare {
                                     interest_id: None,
@@ -614,9 +609,11 @@ pub(super) fn undeclare_simple_queryable(
                                 res.expr().to_string(),
                             ),
                         );
+                        return false;
                     }
                 }
-            }
+                true
+            });
         }
     }
 }
@@ -774,7 +771,7 @@ pub(super) fn declare_qabl_interest(
                 if hat!(tables).linkstatepeer_qabls.iter().any(|qabl| {
                     qabl.context.is_some()
                         && qabl.matches(res)
-                        && (remote_simple_qabls(qabl, face)
+                        && (remote_simple_qabls(qabl, face.id)
                             || remote_linkstatepeer_qabls(tables, qabl))
                 }) {
                     let info = local_qabl_info(tables, res, face);
@@ -802,7 +799,7 @@ pub(super) fn declare_qabl_interest(
                 for qabl in hat!(tables).linkstatepeer_qabls.iter() {
                     if qabl.context.is_some()
                         && qabl.matches(res)
-                        && (remote_simple_qabls(qabl, face)
+                        && (remote_simple_qabls(qabl, face.id)
                             || remote_linkstatepeer_qabls(tables, qabl))
                     {
                         let info = local_qabl_info(tables, qabl, face);
@@ -832,7 +829,8 @@ pub(super) fn declare_qabl_interest(
         } else {
             for qabl in hat!(tables).linkstatepeer_qabls.iter() {
                 if qabl.context.is_some()
-                    && (remote_simple_qabls(qabl, face) || remote_linkstatepeer_qabls(tables, qabl))
+                    && (remote_simple_qabls(qabl, face.id)
+                        || remote_linkstatepeer_qabls(tables, qabl))
                 {
                     let info = local_qabl_info(tables, qabl, face);
                     let id = make_qabl_id(qabl, face, mode, info);
@@ -976,15 +974,8 @@ impl HatQueriesTrait for HatCode {
                 return EMPTY_ROUTE.clone();
             }
         };
-        let res = Resource::get_resource(expr.prefix, expr.suffix);
-        let matches = res
-            .as_ref()
-            .and_then(|res| res.context.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
 
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
+        for mres in Resource::get_matches(&tables.root_res, &key_expr).iter() {
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
 
             let net = hat!(tables).linkstatepeers_net.as_ref().unwrap();
@@ -1042,15 +1033,7 @@ impl HatQueriesTrait for HatCode {
             complete
         );
 
-        let res = Resource::get_resource(&tables.root_res, key_expr);
-        let matches = res
-            .as_ref()
-            .and_then(|res| res.context.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
-
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
+        for mres in Resource::get_matches(&tables.root_res, key_expr).iter() {
             if complete && !KeyExpr::keyexpr_include(mres.expr(), key_expr) {
                 continue;
             }

@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    borrow::Cow,
     collections::HashMap,
     sync::{atomic::Ordering, Arc},
 };
@@ -397,15 +396,7 @@ impl HatQueriesTrait for HatCode {
             }
         }
 
-        let res = Resource::get_resource(expr.prefix, expr.suffix);
-        let matches = res
-            .as_ref()
-            .and_then(|res| res.context.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
-
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
+        for mres in Resource::get_matches(&tables.root_res, &key_expr).iter() {
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
             for (sid, context) in &mres.session_ctxs {
                 let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
@@ -471,15 +462,7 @@ impl HatQueriesTrait for HatCode {
             }
         }
 
-        let res = Resource::get_resource(&tables.root_res, key_expr);
-        let matches = res
-            .as_ref()
-            .and_then(|res| res.context.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
-
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
+        for mres in Resource::get_matches(&tables.root_res, key_expr).iter() {
             if complete && !KeyExpr::keyexpr_include(mres.expr(), key_expr) {
                 continue;
             }
