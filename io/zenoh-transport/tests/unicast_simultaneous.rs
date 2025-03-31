@@ -26,12 +26,8 @@ mod tests {
     use zenoh_core::ztimeout;
     use zenoh_link::Link;
     use zenoh_protocol::{
-        core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohIdProto},
-        network::{
-            push::ext::{NodeIdType, QoSType},
-            NetworkMessage, Push,
-        },
-        zenoh::Put,
+        core::{CongestionControl, EndPoint, Priority, WhatAmI, ZenohIdProto},
+        network::{push::ext::QoSType, NetworkMessage, NetworkMessageMut, Push},
     };
     use zenoh_result::ZResult;
     use zenoh_transport::{
@@ -71,28 +67,15 @@ mod tests {
             transport: TransportUnicast,
         ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
             // Create the message to send
-            let message: NetworkMessage = Push {
+            let message = NetworkMessage::from(Push {
                 wire_expr: "test".into(),
                 ext_qos: QoSType::new(Priority::Control, CongestionControl::Block, false),
-                ext_tstamp: None,
-                ext_nodeid: NodeIdType::DEFAULT,
-                payload: Put {
-                    payload: vec![0u8; MSG_SIZE].into(),
-                    timestamp: None,
-                    encoding: Encoding::empty(),
-                    ext_sinfo: None,
-                    #[cfg(feature = "shared-memory")]
-                    ext_shm: None,
-                    ext_attachment: None,
-                    ext_unknown: vec![],
-                }
-                .into(),
-            }
-            .into();
+                ..Push::from(vec![0u8; MSG_SIZE])
+            });
 
             println!("[Simultaneous {}] Sending {}...", self.zid, MSG_COUNT);
             for _ in 0..MSG_COUNT {
-                transport.schedule(message.clone()).unwrap();
+                transport.schedule(message.clone().as_mut()).unwrap();
             }
             println!("[Simultaneous {}] ... sent {}", self.zid, MSG_COUNT);
 
@@ -119,7 +102,7 @@ mod tests {
     }
 
     impl TransportPeerEventHandler for MHPeer {
-        fn handle_message(&self, _msg: NetworkMessage) -> ZResult<()> {
+        fn handle_message(&self, _msg: NetworkMessageMut) -> ZResult<()> {
             self.count.fetch_add(1, Ordering::AcqRel);
             Ok(())
         }

@@ -26,12 +26,8 @@ use lazy_static::lazy_static;
 use zenoh_core::ztimeout;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohIdProto},
-    network::{
-        push::ext::{NodeIdType, QoSType},
-        NetworkMessage, Push,
-    },
-    zenoh::Put,
+    core::{CongestionControl, EndPoint, Priority, WhatAmI, ZenohIdProto},
+    network::{push::ext::QoSType, NetworkMessage, NetworkMessageExt, NetworkMessageMut, Push},
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
@@ -48,26 +44,12 @@ const SLEEP_SEND: Duration = Duration::from_millis(1);
 const MSG_COUNT: usize = 100;
 lazy_static! {
     #[derive(Debug)]
-    static ref MSG: NetworkMessage = Push {
+    static ref MSG: NetworkMessage =  NetworkMessage::from(Push {
         wire_expr: "test".into(),
-        // Set CongestionControl::Drop to test
         ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Drop, false),
-        ext_tstamp: None,
-        ext_nodeid: NodeIdType::DEFAULT,
-        payload: Put {
-            // 10 MB payload to stress fragmentation
-            payload: (0..10_000_000).map(|b| b as u8).collect::<Vec<u8>>().into(),
-            timestamp: None,
-            encoding: Encoding::empty(),
-            ext_sinfo: None,
-            #[cfg(feature = "shared-memory")]
-            ext_shm: None,
-            ext_attachment: None,
-            ext_unknown: vec![],
-        }
-        .into(),
-    }
-    .into();
+        // 10 MB payload to stress fragmentation
+        ..Push::from(Vec::from_iter((0..10_000_000).map(|b| b as u8)))
+    });
 }
 
 // Transport Handler for the router
@@ -119,8 +101,8 @@ impl SCRouter {
 }
 
 impl TransportPeerEventHandler for SCRouter {
-    fn handle_message(&self, message: NetworkMessage) -> ZResult<()> {
-        assert_eq!(message, *MSG);
+    fn handle_message(&self, message: NetworkMessageMut) -> ZResult<()> {
+        assert_eq!(message.as_ref(), MSG.as_ref());
         self.count.fetch_add(1, Ordering::SeqCst);
         std::thread::sleep(2 * SLEEP_SEND);
         Ok(())
@@ -161,7 +143,7 @@ impl TransportEventHandler for SHClient {
 pub struct SCClient;
 
 impl TransportPeerEventHandler for SCClient {
-    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: NetworkMessageMut) -> ZResult<()> {
         Ok(())
     }
 
@@ -290,7 +272,7 @@ async fn test_transport(router_handler: Arc<SHRouter>, client_transport: Transpo
     ztimeout!(async {
         let mut sent = 0;
         while router_handler.get_count() < MSG_COUNT {
-            if client_transport.schedule(MSG.clone()).is_ok() {
+            if client_transport.schedule(MSG.clone().as_mut()).is_ok() {
                 sent += 1;
                 println!(
                     "Sent: {sent}. Received: {}/{MSG_COUNT}",

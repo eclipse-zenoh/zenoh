@@ -52,7 +52,7 @@ impl TransportUnicastUniversal {
                 }
             }
         }
-        callback.handle_message(msg)
+        callback.handle_message(msg.as_mut())
     }
 
     fn handle_close(&self, link: &Link, _reason: u8, session: bool) -> ZResult<()> {

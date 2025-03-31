@@ -25,15 +25,11 @@ use std::{
 use zenoh_core::ztimeout;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohIdProto},
+    core::{CongestionControl, EndPoint, Priority, WhatAmI, ZenohIdProto},
     network::{
-        push::{
-            ext::{NodeIdType, QoSType},
-            Push,
-        },
-        NetworkBody, NetworkMessage,
+        push::{ext::QoSType, Push},
+        NetworkBodyMut, NetworkMessage, NetworkMessageMut,
     },
-    zenoh::Put,
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
@@ -117,9 +113,9 @@ impl SCRouter {
 }
 
 impl TransportPeerEventHandler for SCRouter {
-    fn handle_message(&self, message: NetworkMessage) -> ZResult<()> {
+    fn handle_message(&self, message: NetworkMessageMut) -> ZResult<()> {
         match &message.body {
-            NetworkBody::Push(p) => {
+            NetworkBodyMut::Push(p) => {
                 assert_eq!(
                     self.priority.load(Ordering::Relaxed),
                     p.ext_qos.get_priority() as usize
@@ -176,7 +172,7 @@ impl Default for SCClient {
 }
 
 impl TransportPeerEventHandler for SCClient {
-    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: NetworkMessageMut) -> ZResult<()> {
         Ok(())
     }
 
@@ -284,28 +280,15 @@ async fn single_run(router_handler: Arc<SHRouter>, client_transport: TransportUn
             router_handler.set_priority(*p);
 
             // Create the message to send
-            let message: NetworkMessage = Push {
+            let message = NetworkMessage::from(Push {
                 wire_expr: "test".into(),
                 ext_qos: QoSType::new(*p, CongestionControl::Block, false),
-                ext_tstamp: None,
-                ext_nodeid: NodeIdType::DEFAULT,
-                payload: Put {
-                    payload: vec![0u8; *ms].into(),
-                    timestamp: None,
-                    encoding: Encoding::empty(),
-                    ext_sinfo: None,
-                    #[cfg(feature = "shared-memory")]
-                    ext_shm: None,
-                    ext_attachment: None,
-                    ext_unknown: vec![],
-                }
-                .into(),
-            }
-            .into();
+                ..Push::from(vec![0u8; *ms])
+            });
 
             println!("Sending {MSG_COUNT} messages... {p:?} {ms}");
             for _ in 0..MSG_COUNT {
-                client_transport.schedule(message.clone()).unwrap();
+                client_transport.schedule(message.clone().as_mut()).unwrap();
             }
 
             // Wait for the messages to arrive to the other side

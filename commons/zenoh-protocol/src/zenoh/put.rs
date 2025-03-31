@@ -45,7 +45,7 @@ pub mod flag {
     pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Put {
     pub timestamp: Option<Timestamp>,
     pub encoding: Encoding,

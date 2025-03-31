@@ -28,14 +28,9 @@ mod tests {
     use zenoh_link::Link;
     use zenoh_protocol::{
         core::{
-            Channel, CongestionControl, Encoding, EndPoint, Priority, Reliability, WhatAmI,
-            ZenohIdProto,
+            Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohIdProto,
         },
-        network::{
-            push::ext::{NodeIdType, QoSType},
-            NetworkMessage, Push,
-        },
-        zenoh::Put,
+        network::{push::ext::QoSType, NetworkMessage, NetworkMessageMut, Push},
     };
     use zenoh_result::ZResult;
     use zenoh_transport::{
@@ -103,7 +98,7 @@ mod tests {
     }
 
     impl TransportPeerEventHandler for SCRouter {
-        fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
+        fn handle_message(&self, _message: NetworkMessageMut) -> ZResult<()> {
             self.count.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
@@ -143,7 +138,7 @@ mod tests {
     pub struct SCClient;
 
     impl TransportPeerEventHandler for SCClient {
-        fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
+        fn handle_message(&self, _message: NetworkMessageMut) -> ZResult<()> {
             Ok(())
         }
 
@@ -284,26 +279,13 @@ mod tests {
             Reliability::BestEffort => CongestionControl::Drop,
         };
         // Create the message to send
-        let message: NetworkMessage = Push {
+        let message = NetworkMessage::from(Push {
             wire_expr: "test".into(),
             ext_qos: QoSType::new(channel.priority, cctrl, false),
-            ext_tstamp: None,
-            ext_nodeid: NodeIdType::DEFAULT,
-            payload: Put {
-                payload: vec![0u8; msg_size].into(),
-                timestamp: None,
-                encoding: Encoding::empty(),
-                ext_sinfo: None,
-                #[cfg(feature = "shared-memory")]
-                ext_shm: None,
-                ext_attachment: None,
-                ext_unknown: vec![],
-            }
-            .into(),
-        }
-        .into();
+            ..Push::from(vec![0u8; msg_size])
+        });
         for _ in 0..MSG_COUNT {
-            let _ = client_transport.schedule(message.clone());
+            let _ = client_transport.schedule(message.clone().as_mut());
         }
 
         match channel.reliability {
