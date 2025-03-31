@@ -13,7 +13,7 @@
 //
 use serde::{Deserialize, Serialize};
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTreeMut, KeBoxTree};
-use zenoh_protocol::core::{key_expr::OwnedKeyExpr, CongestionControl, Reliability};
+use zenoh_protocol::core::{key_expr::OwnedKeyExpr, CongestionControl, Priority, Reliability};
 
 #[derive(Debug, Deserialize, Default, Serialize, Clone)]
 pub struct PublisherQoSConfList(pub(crate) Vec<PublisherQoSConf>);
@@ -39,32 +39,32 @@ pub(crate) struct PublisherQoSConf {
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
 pub struct PublisherQoSConfig {
-    pub congestion_control: Option<PublisherCongestionControlConf>,
-    pub priority: Option<PublisherPriorityConf>,
+    pub congestion_control: Option<CongestionControlConf>,
+    pub priority: Option<PriorityConf>,
     pub express: Option<bool>,
     #[cfg(feature = "unstable")]
-    pub reliability: Option<PublisherReliabilityConf>,
+    pub reliability: Option<ReliabilityConf>,
     #[cfg(feature = "unstable")]
     pub allowed_destination: Option<PublisherLocalityConf>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
-pub enum PublisherCongestionControlConf {
+pub enum CongestionControlConf {
     Drop,
     Block,
 }
 
-impl From<PublisherCongestionControlConf> for CongestionControl {
-    fn from(value: PublisherCongestionControlConf) -> Self {
+impl From<CongestionControlConf> for CongestionControl {
+    fn from(value: CongestionControlConf) -> Self {
         match value {
-            PublisherCongestionControlConf::Drop => Self::Drop,
-            PublisherCongestionControlConf::Block => Self::Block,
+            CongestionControlConf::Drop => Self::Drop,
+            CongestionControlConf::Block => Self::Block,
         }
     }
 }
 
-impl From<CongestionControl> for PublisherCongestionControlConf {
+impl From<CongestionControl> for CongestionControlConf {
     fn from(value: CongestionControl) -> Self {
         match value {
             CongestionControl::Drop => Self::Drop,
@@ -75,7 +75,7 @@ impl From<CongestionControl> for PublisherCongestionControlConf {
 
 #[derive(Debug, Deserialize, Serialize, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
-pub enum PublisherPriorityConf {
+pub enum PriorityConf {
     RealTime = 1,
     InteractiveHigh = 2,
     InteractiveLow = 3,
@@ -85,23 +85,37 @@ pub enum PublisherPriorityConf {
     Background = 7,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
-#[serde(rename_all = "snake_case")]
-pub enum PublisherReliabilityConf {
-    BestEffort,
-    Reliable,
-}
-
-impl From<PublisherReliabilityConf> for Reliability {
-    fn from(value: PublisherReliabilityConf) -> Self {
+impl From<PriorityConf> for Priority {
+    fn from(value: PriorityConf) -> Self {
         match value {
-            PublisherReliabilityConf::BestEffort => Self::BestEffort,
-            PublisherReliabilityConf::Reliable => Self::Reliable,
+            PriorityConf::RealTime => Self::RealTime,
+            PriorityConf::InteractiveHigh => Self::InteractiveHigh,
+            PriorityConf::InteractiveLow => Self::InteractiveLow,
+            PriorityConf::DataHigh => Self::DataHigh,
+            PriorityConf::Data => Self::Data,
+            PriorityConf::DataLow => Self::DataLow,
+            PriorityConf::Background => Self::Background,
         }
     }
 }
 
-impl From<Reliability> for PublisherReliabilityConf {
+#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+pub enum ReliabilityConf {
+    BestEffort,
+    Reliable,
+}
+
+impl From<ReliabilityConf> for Reliability {
+    fn from(value: ReliabilityConf) -> Self {
+        match value {
+            ReliabilityConf::BestEffort => Self::BestEffort,
+            ReliabilityConf::Reliable => Self::Reliable,
+        }
+    }
+}
+
+impl From<Reliability> for ReliabilityConf {
     fn from(value: Reliability) -> Self {
         match value {
             Reliability::BestEffort => Self::BestEffort,
@@ -116,4 +130,23 @@ pub enum PublisherLocalityConf {
     SessionLocal,
     Remote,
     Any,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum QosOverwriteMessage {
+    Put,
+    Delete,
+    Query,
+    Reply,
+}
+
+#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+pub struct QosOverwrites {
+    pub congestion_control: Option<CongestionControlConf>,
+    pub priority: Option<PriorityConf>,
+    pub express: Option<bool>,
+    // TODO: Add support for reliability overwrite (it is not possible right now, since reliability is not a part of RoutingContext, nor NetworkMessage)
+    // #[cfg(feature = "unstable")]
+    // pub reliability: Option<ReliabilityConf>,
 }

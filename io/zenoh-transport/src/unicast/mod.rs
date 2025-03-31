@@ -42,7 +42,7 @@ use self::transport_unicast_inner::TransportUnicastTrait;
 use super::{TransportPeer, TransportPeerEventHandler};
 #[cfg(feature = "shared-memory")]
 use crate::shm::TransportShmConfig;
-use crate::unicast::authentication::AuthId;
+use crate::unicast::authentication::TransportAuthId;
 #[cfg(feature = "auth_usrpwd")]
 use crate::unicast::establishment::ext::auth::UsrPwdId;
 
@@ -123,7 +123,7 @@ impl TransportUnicast {
         Ok(transport.get_links())
     }
 
-    pub fn get_auth_ids(&self) -> ZResult<Vec<AuthId>> {
+    pub fn get_auth_ids(&self) -> ZResult<TransportAuthId> {
         let transport = self.get_inner()?;
         Ok(transport.get_auth_ids())
     }

@@ -221,7 +221,7 @@ impl LinkUnicastTrait for LinkUnicastSerial {
 
     #[inline(always)]
     fn get_auth_id(&self) -> &LinkAuthId {
-        &LinkAuthId::NONE
+        &LinkAuthId::Serial
     }
 }
 

@@ -32,7 +32,8 @@ use std::{
 };
 
 use include::recursive_include;
-use qos::PublisherQoSConfList;
+use nonempty_collections::NEVec;
+use qos::{PublisherQoSConfList, QosOverwriteMessage, QosOverwrites};
 use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -111,30 +112,54 @@ pub struct DownsamplingItemConf {
     pub id: Option<String>,
     /// A list of interfaces to which the downsampling will be applied
     /// Downsampling will be applied for all interfaces if the parameter is None
-    pub interfaces: Option<Vec<String>>,
+    pub interfaces: Option<NEVec<String>>,
+    /// A list of link types, transports having one of those link types will have the downsampling applied
+    /// Downsampling will be applied for all link types if the parameter is None
+    pub link_protocols: Option<NEVec<InterceptorLink>>,
     // list of message types on which the downsampling will be applied
-    pub messages: Vec<DownsamplingMessage>,
-    /// A list of interfaces to which the downsampling will be applied.
-    pub rules: Vec<DownsamplingRuleConf>,
+    pub messages: NEVec<DownsamplingMessage>,
+    /// A list of downsampling rules: key_expression and the maximum frequency in Hertz
+    pub rules: NEVec<DownsamplingRuleConf>,
     /// Downsampling flow directions: egress and/or ingress
-    pub flows: Option<Vec<InterceptorFlow>>,
+    pub flows: Option<NEVec<InterceptorFlow>>,
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
 pub struct AclConfigRule {
     pub id: String,
-    pub key_exprs: Vec<String>,
-    pub messages: Vec<AclMessage>,
-    pub flows: Option<Vec<InterceptorFlow>>,
+    pub key_exprs: NEVec<OwnedKeyExpr>,
+    pub messages: NEVec<AclMessage>,
+    pub flows: Option<NEVec<InterceptorFlow>>,
     pub permission: Permission,
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
 pub struct AclConfigSubjects {
     pub id: String,
-    pub interfaces: Option<Vec<Interface>>,
-    pub cert_common_names: Option<Vec<CertCommonName>>,
-    pub usernames: Option<Vec<Username>>,
+    pub interfaces: Option<NEVec<Interface>>,
+    pub cert_common_names: Option<NEVec<CertCommonName>>,
+    pub usernames: Option<NEVec<Username>>,
+    pub link_protocols: Option<NEVec<InterceptorLink>>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct QosOverwriteItemConf {
+    /// Optional identifier for the qos modification configuration item.
+    pub id: Option<String>,
+    /// A list of interfaces to which the qos will be applied.
+    /// QosOverwrite will be applied for all interfaces if the parameter is None.
+    pub interfaces: Option<NEVec<String>>,
+    /// A list of link types, transports having one of those link types will have the qos overwrite applied
+    /// Qos overwrite will be applied for all link types if the parameter is None.
+    pub link_protocols: Option<NEVec<InterceptorLink>>,
+    /// List of message types on which the qos overwrite will be applied.
+    pub messages: NEVec<QosOverwriteMessage>,
+    /// List of key expressions to apply qos overwrite.
+    pub key_exprs: Vec<OwnedKeyExpr>,
+    // The qos value to overwrite with.
+    pub overwrite: QosOverwrites,
+    /// QosOverwrite flow directions: egress and/or ingress.
+    pub flows: Option<NEVec<InterceptorFlow>>,
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
@@ -165,6 +190,26 @@ impl std::fmt::Display for Username {
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[serde(rename_all = "kebab-case")]
+pub enum InterceptorLink {
+    Tcp,
+    Udp,
+    Tls,
+    Quic,
+    Serial,
+    Unixpipe,
+    UnixsockStream,
+    Vsock,
+    Ws,
+}
+
+impl std::fmt::Display for InterceptorLink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Transport({:?})", self)
+    }
+}
+
+#[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub struct AclConfigPolicyEntry {
     pub id: Option<String>,
     pub rules: Vec<String>,
@@ -174,7 +219,7 @@ pub struct AclConfigPolicyEntry {
 #[derive(Clone, Serialize, Debug, Deserialize)]
 pub struct PolicyRule {
     pub subject_id: usize,
-    pub key_expr: String,
+    pub key_expr: OwnedKeyExpr,
     pub message: AclMessage,
     pub permission: Permission,
     pub flow: InterceptorFlow,
@@ -413,6 +458,8 @@ validated_struct::validator! {
         QoSConfig {
             /// A list of QoS configurations for PUT and DELETE messages by key expressions
             publication: PublisherQoSConfList,
+            /// Configuration of the qos overwrite interceptor rules
+            network: Vec<QosOverwriteItemConf>,
         },
 
         pub transport: #[derive(Default)]
@@ -906,13 +953,13 @@ impl Config {
                     Some("json") | Some("json5") => match json5::Deserializer::from_str(&content) {
                         Ok(mut d) => Config::from_deserializer(&mut d).map_err(|e| match e {
                             Ok(c) => zerror!("Invalid configuration: {}", c).into(),
-                            Err(e) => zerror!("JSON error: {}", e).into(),
+                            Err(e) => zerror!("JSON error: {:?}", e).into(),
                         }),
                         Err(e) => bail!(e),
                     },
                     Some("yaml") | Some("yml") => Config::from_deserializer(serde_yaml::Deserializer::from_str(&content)).map_err(|e| match e {
                         Ok(c) => zerror!("Invalid configuration: {}", c).into(),
-                        Err(e) => zerror!("YAML error: {}", e).into(),
+                        Err(e) => zerror!("YAML error: {:?}", e).into(),
                     }),
                     Some(other) => bail!("Unsupported file type '.{}' (.json, .json5 and .yaml are supported)", other),
                     None => bail!("Unsupported file type. Configuration files must have an extension (.json, .json5 and .yaml supported)")

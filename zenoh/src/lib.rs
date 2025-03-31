@@ -569,3 +569,6 @@ pub mod shm {
         },
     };
 }
+
+#[cfg(test)]
+mod tests;

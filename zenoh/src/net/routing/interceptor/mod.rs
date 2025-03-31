@@ -20,11 +20,13 @@
 //!
 mod access_control;
 use access_control::acl_interceptor_factories;
+use nonempty_collections::NEVec;
+use zenoh_link::LinkAuthId;
 
 mod authorization;
 use std::any::Any;
 
-use zenoh_config::{Config, InterceptorFlow};
+use zenoh_config::{Config, InterceptorFlow, InterceptorLink};
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
@@ -35,14 +37,17 @@ use crate::api::key_expr::KeyExpr;
 pub mod downsampling;
 use crate::net::routing::interceptor::downsampling::downsampling_interceptor_factories;
 
+pub mod qos_overwrite;
+use crate::net::routing::interceptor::qos_overwrite::qos_overwrite_interceptor_factories;
+
 #[derive(Default, Debug)]
 pub struct InterfaceEnabled {
     pub ingress: bool,
     pub egress: bool,
 }
 
-impl From<&[InterceptorFlow]> for InterfaceEnabled {
-    fn from(value: &[InterceptorFlow]) -> Self {
+impl From<&NEVec<InterceptorFlow>> for InterfaceEnabled {
+    fn from(value: &NEVec<InterceptorFlow>) -> Self {
         let mut res = Self {
             ingress: false,
             egress: false,
@@ -54,6 +59,25 @@ impl From<&[InterceptorFlow]> for InterfaceEnabled {
             }
         }
         res
+    }
+}
+
+/// Wrapper for InterceptorLink in order to implement From trait.
+pub(crate) struct InterceptorLinkWrapper(pub(crate) InterceptorLink);
+
+impl From<&LinkAuthId> for InterceptorLinkWrapper {
+    fn from(value: &LinkAuthId) -> Self {
+        match value {
+            LinkAuthId::Tls(_) => Self(InterceptorLink::Tls),
+            LinkAuthId::Quic(_) => Self(InterceptorLink::Quic),
+            LinkAuthId::Tcp => Self(InterceptorLink::Tcp),
+            LinkAuthId::Udp => Self(InterceptorLink::Udp),
+            LinkAuthId::Serial => Self(InterceptorLink::Serial),
+            LinkAuthId::Unixpipe => Self(InterceptorLink::Unixpipe),
+            LinkAuthId::UnixsockStream => Self(InterceptorLink::UnixsockStream),
+            LinkAuthId::Vsock => Self(InterceptorLink::Vsock),
+            LinkAuthId::Ws => Self(InterceptorLink::Ws),
+        }
     }
 }
 
@@ -86,13 +110,23 @@ pub(crate) fn interceptor_factories(config: &Config) -> ZResult<Vec<InterceptorF
     let mut res: Vec<InterceptorFactory> = vec![];
     // Uncomment to log the interceptors initialisation
     // res.push(Box::new(LoggerInterceptor {}));
+    #[cfg(test)]
+    if let Some(test_interceptors) = tests::ID_TO_INTERCEPTOR_FACTORIES
+        .lock()
+        .unwrap()
+        .get(config.id())
+    {
+        res.extend((test_interceptors.as_ref())());
+    }
     res.extend(downsampling_interceptor_factories(config.downsampling())?);
     res.extend(acl_interceptor_factories(config.access_control())?);
+    res.extend(qos_overwrite_interceptor_factories(config.qos().network())?);
     Ok(res)
 }
 
 pub(crate) struct InterceptorsChain {
     pub(crate) interceptors: Vec<Interceptor>,
+    pub(crate) version: usize,
 }
 
 impl InterceptorsChain {
@@ -100,17 +134,19 @@ impl InterceptorsChain {
     pub(crate) fn empty() -> Self {
         Self {
             interceptors: vec![],
+            version: 0,
         }
     }
 
     pub(crate) fn is_empty(&self) -> bool {
         self.interceptors.is_empty()
     }
-}
 
-impl From<Vec<Interceptor>> for InterceptorsChain {
-    fn from(interceptors: Vec<Interceptor>) -> Self {
-        InterceptorsChain { interceptors }
+    pub(crate) fn new(interceptors: Vec<Interceptor>, version: usize) -> Self {
+        InterceptorsChain {
+            interceptors,
+            version,
+        }
     }
 }
 
@@ -266,4 +302,22 @@ impl InterceptorFactoryTrait for LoggerInterceptor {
         tracing::debug!("New peer multicast {:?}", transport);
         Some(Box::new(IngressMsgLogger {}))
     }
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use std::{
+        collections::HashMap,
+        sync::{Arc, Mutex},
+    };
+
+    use once_cell::sync::Lazy;
+    use zenoh_config::ZenohId;
+
+    use super::InterceptorFactory;
+
+    #[allow(clippy::type_complexity)]
+    pub(crate) static ID_TO_INTERCEPTOR_FACTORIES: Lazy<
+        Arc<Mutex<HashMap<ZenohId, Box<dyn Fn() -> Vec<InterceptorFactory> + Sync + Send>>>>,
+    > = Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
 }
