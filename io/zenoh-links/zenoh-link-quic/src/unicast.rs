@@ -315,7 +315,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .connect(dst_addr, host)
             .map_err(|e| {
                 zerror!(
-                    "Can not get connect quick endpoing : {} : {} : {}",
+                    "Can not get connect quick endpoint : {} : {} : {}",
                     dst_addr,
                     host,
                     e
