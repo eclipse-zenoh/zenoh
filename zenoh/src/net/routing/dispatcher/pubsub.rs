@@ -312,6 +312,8 @@ pub fn route_data(
                 let ctx = &mut RoutingContext::new(NetworkMessageMut {
                     body: NetworkBodyMut::Push(msg),
                     reliability,
+                    #[cfg(feature = "stats")]
+                    size: None,
                 });
 
                 if !interceptor.intercept(ctx, cache) {
@@ -325,9 +327,9 @@ pub fn route_data(
             let admin = expr.full_expr().starts_with("@/");
             #[cfg(feature = "stats")]
             if !admin {
-                inc_stats!(face, rx, user, msg.payload);
+                inc_stats!(face.state, rx, user, msg.payload);
             } else {
-                inc_stats!(face, rx, admin, msg.payload);
+                inc_stats!(face.state, rx, admin, msg.payload);
             }
 
             if tables
@@ -376,6 +378,8 @@ pub fn route_data(
                                 let ctx = &mut RoutingContext::new(NetworkMessageMut {
                                     body: NetworkBodyMut::Push(msg),
                                     reliability,
+                                    #[cfg(feature = "stats")]
+                                    size: None,
                                 });
 
                                 if !interceptor.intercept(ctx, cache) {
@@ -429,6 +433,8 @@ pub fn route_data(
                                 let ctx = &mut RoutingContext::new(NetworkMessageMut {
                                     body: NetworkBodyMut::Push(msg),
                                     reliability,
+                                    #[cfg(feature = "stats")]
+                                    size: None,
                                 });
 
                                 if !interceptor.intercept(ctx, cache) {
