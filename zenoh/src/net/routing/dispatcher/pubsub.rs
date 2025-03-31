@@ -307,7 +307,8 @@ pub fn route_data(
                 .map(|i| i.load())
                 .and_then(|i| i.is_empty().not().then_some(i))
             {
-                let cache = prefix.get_ingress_cache(face);
+                let cache_guard = prefix.get_ingress_cache(face, &interceptor);
+                let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
                 let ctx = &mut RoutingContext::new(NetworkMessageMut {
                     body: NetworkBodyMut::Push(msg),
                     reliability,
@@ -369,7 +370,9 @@ pub fn route_data(
                                 .map(|i| i.load())
                                 .and_then(|i| i.is_empty().not().then_some(i))
                             {
-                                let cache = prefix.get_egress_cache(face);
+                                let cache_guard = prefix.get_ingress_cache(face, &interceptor);
+                                let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
+
                                 let ctx = &mut RoutingContext::new(NetworkMessageMut {
                                     body: NetworkBodyMut::Push(msg),
                                     reliability,
@@ -420,13 +423,15 @@ pub fn route_data(
                                 .map(|i| i.load())
                                 .and_then(|i| i.is_empty().not().then_some(i))
                             {
-                                let cache = prefix.get_egress_cache(face);
+                                let cache_guard = prefix.get_ingress_cache(face, &interceptor);
+                                let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
+
                                 let ctx = &mut RoutingContext::new(NetworkMessageMut {
                                     body: NetworkBodyMut::Push(msg),
                                     reliability,
                                 });
 
-                                if !interceptor.intercept(ctx, cache) {
+                                if !interceptor.intercept(ctx, cache.as_deref()) {
                                     continue;
                                 }
                             };
