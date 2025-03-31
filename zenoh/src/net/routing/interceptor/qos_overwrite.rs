@@ -246,16 +246,16 @@ impl InterceptorTrait for QosInterceptor {
             NetworkBodyMut::Push(Push {
                 payload: PushBody::Put(_),
                 ..
-            }) => self.filter.put && self.is_ke_affected_from_cache_or_ctx(cache, &ctx),
+            }) => self.filter.put && self.is_ke_affected_from_cache_or_ctx(cache, ctx),
             NetworkBodyMut::Push(Push {
                 payload: PushBody::Del(_),
                 ..
-            }) => self.filter.delete && self.is_ke_affected_from_cache_or_ctx(cache, &ctx),
+            }) => self.filter.delete && self.is_ke_affected_from_cache_or_ctx(cache, ctx),
             NetworkBodyMut::Request(_) => {
-                self.filter.query && self.is_ke_affected_from_cache_or_ctx(cache, &ctx)
+                self.filter.query && self.is_ke_affected_from_cache_or_ctx(cache, ctx)
             }
             NetworkBodyMut::Response(_) => {
-                self.filter.reply && self.is_ke_affected_from_cache_or_ctx(cache, &ctx)
+                self.filter.reply && self.is_ke_affected_from_cache_or_ctx(cache, ctx)
             }
             NetworkBodyMut::ResponseFinal(_) => false,
             NetworkBodyMut::Interest(_) => false,
