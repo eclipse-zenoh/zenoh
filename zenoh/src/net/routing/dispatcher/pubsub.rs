@@ -431,7 +431,7 @@ pub fn route_data(
                                     reliability,
                                 });
 
-                                if !interceptor.intercept(ctx, cache.as_deref()) {
+                                if !interceptor.intercept(ctx, cache) {
                                     continue;
                                 }
                             };

@@ -34,11 +34,7 @@ use crate::{
     net::{
         primitives::{DummyPrimitives, EPrimitives, Primitives},
         routing::{
-            dispatcher::{
-                face::{Face, FaceState},
-                pubsub::SubscriberInfo,
-                tables::Tables,
-            },
+            dispatcher::{face::Face, pubsub::SubscriberInfo, tables::Tables},
             router::*,
             RoutingContext,
         },
@@ -596,10 +592,10 @@ fn client_test() {
     let sub_info = SubscriberInfo;
 
     let primitives0 = Arc::new(ClientPrimitives::new());
-    let face0 = Arc::downgrade(&router.new_primitives(primitives0.clone()).state);
+    let face0 = Arc::downgrade(&router.new_primitives(primitives0.clone()));
     register_expr(
         &tables,
-        &mut face0.upgrade().unwrap(),
+        &mut face0.upgrade().unwrap().state.clone(),
         11,
         &"test/client".into(),
     );
@@ -619,7 +615,7 @@ fn client_test() {
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face0.upgrade().unwrap(),
+        &mut face0.upgrade().unwrap().state.clone(),
         0,
         &WireExpr::from(11).with_suffix("/**"),
         &sub_info,
@@ -628,7 +624,7 @@ fn client_test() {
     );
     register_expr(
         &tables,
-        &mut face0.upgrade().unwrap(),
+        &mut face0.upgrade().unwrap().state.clone(),
         12,
         &WireExpr::from(11).with_suffix("/z1_pub1"),
     );
@@ -647,10 +643,10 @@ fn client_test() {
     );
 
     let primitives1 = Arc::new(ClientPrimitives::new());
-    let face1 = Arc::downgrade(&router.new_primitives(primitives1.clone()).state);
+    let face1 = Arc::downgrade(&router.new_primitives(primitives1.clone()));
     register_expr(
         &tables,
-        &mut face1.upgrade().unwrap(),
+        &mut face1.upgrade().unwrap().state.clone(),
         21,
         &"test/client".into(),
     );
@@ -670,7 +666,7 @@ fn client_test() {
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face1.upgrade().unwrap(),
+        &mut face1.upgrade().unwrap().state.clone(),
         0,
         &WireExpr::from(21).with_suffix("/**"),
         &sub_info,
@@ -679,7 +675,7 @@ fn client_test() {
     );
     register_expr(
         &tables,
-        &mut face1.upgrade().unwrap(),
+        &mut face1.upgrade().unwrap().state.clone(),
         22,
         &WireExpr::from(21).with_suffix("/z2_pub1"),
     );
@@ -733,7 +729,7 @@ fn client_test() {
     primitives1.clear_data();
     primitives2.clear_data();
 
-    let route_dummy_data = |face: &Weak<FaceState>, wire_expr| {
+    let route_dummy_data = |face: &Weak<Face>, wire_expr| {
         route_data(
             &tables,
             &face.upgrade().unwrap(),
