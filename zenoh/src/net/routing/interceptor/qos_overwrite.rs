@@ -26,7 +26,7 @@ use zenoh_config::{
 };
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, IKeyExprTreeNode, KeBoxTree};
 use zenoh_protocol::{
-    network::{NetworkBody, Push, Request, Response, ResponseFinal},
+    network::{NetworkBody, Push, Request, Response},
     zenoh::PushBody,
 };
 use zenoh_result::ZResult;
@@ -254,9 +254,10 @@ impl InterceptorTrait for QosInterceptor {
             NetworkBody::Request(_) => {
                 self.filter.query && self.is_ke_affected_from_cache_or_ctx(cache, &ctx)
             }
-            NetworkBody::Response(_) | NetworkBody::ResponseFinal(_) => {
+            NetworkBody::Response(_) => {
                 self.filter.reply && self.is_ke_affected_from_cache_or_ctx(cache, &ctx)
             }
+            NetworkBody::ResponseFinal(_) => false,
             NetworkBody::Interest(_) => false,
             NetworkBody::Declare(_) => false,
             NetworkBody::OAM(_) => false,
@@ -286,10 +287,8 @@ impl InterceptorTrait for QosInterceptor {
             }) => {
                 self.overwrite_qos(QosOverwriteMessage::Delete, ext_qos);
             }
-            NetworkBody::ResponseFinal(ResponseFinal { ext_qos, .. }) => {
-                self.overwrite_qos(QosOverwriteMessage::Reply, ext_qos);
-            }
             // unaffected message types
+            NetworkBody::ResponseFinal(_) => {}
             NetworkBody::Declare(_) => {}
             NetworkBody::Interest(_) => {}
             NetworkBody::OAM(_) => {}
