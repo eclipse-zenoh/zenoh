@@ -766,14 +766,18 @@ impl<Handler> AdvancedSubscriber<Handler> {
             }
         };
 
-        tracing::debug!("Create AdvancedSubscriber on {}", &key_expr,);
-
         let subscriber = conf
             .session
             .declare_subscriber(&key_expr)
             .callback(sub_callback)
             .allowed_origin(conf.origin)
             .wait()?;
+
+        tracing::debug!(
+            "Create AdvancedSubscriber{{eid: {}}} on {}",
+            subscriber.id().eid(),
+            &key_expr
+        );
 
         if let Some(historyconf) = conf.history.as_ref() {
             let handler = InitialRepliesHandler {
@@ -790,7 +794,8 @@ impl<Handler> AdvancedSubscriber<Handler> {
                 });
             }
             tracing::trace!(
-                "Querying historical samples {}?{}",
+                "AdvancedSubscriber{{eid: {}}} Querying historical samples {}?{}",
+                subscriber.id().eid(),
                 &key_expr / KE_ADV_PREFIX / KE_STARSTAR,
                 params
             );
@@ -1018,7 +1023,8 @@ impl<Handler> AdvancedSubscriber<Handler> {
                 };
 
                 tracing::debug!(
-                    "AdvancedSubscriber: Detect late joiner publishers on {}",
+                    "AdvancedSubscriber{{eid: {}}}: Detect late joiner publishers on {}",
+                    subscriber.id().eid(),
                     &key_expr / KE_ADV_PREFIX / KE_PUB / KE_STARSTAR
                 );
                 Some(
@@ -1041,7 +1047,8 @@ impl<Handler> AdvancedSubscriber<Handler> {
             let ke_heartbeat_sub = &key_expr / KE_ADV_PREFIX / KE_PUB / KE_STARSTAR;
             let statesref = statesref.clone();
             tracing::debug!(
-                "AdvancedSubscriber: Enable heartbeat subscriber on {}",
+                "AdvancedSubscriber{{eid: {}}}: Enable heartbeat subscriber on {}",
+                subscriber.id().eid(),
                 ke_heartbeat_sub
             );
             let heartbeat_sub = conf
@@ -1152,8 +1159,9 @@ impl<Handler> AdvancedSubscriber<Handler> {
                 _ => suffix / KE_EMPTY,
             };
             tracing::debug!(
-                "AdvancedSubscriber: Declare liveliness token {}",
-                &key_expr / &suffix
+                "AdvancedSubscriber{{eid: {}}}: Declare liveliness token {}",
+                subscriber.id().eid(),
+                &key_expr / &suffix,
             );
             let token = conf
                 .session
@@ -1230,7 +1238,11 @@ impl<Handler> AdvancedSubscriber<Handler> {
     #[inline]
     #[zenoh_macros::unstable]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> {
-        tracing::debug!("AdvancedSubscriber: Undeclare {}", self.key_expr());
+        tracing::debug!(
+            "AdvancedSubscriber{{eid: {}}}: Undeclare {}",
+            self.id().eid(),
+            self.key_expr()
+        );
         self.subscriber.undeclare()
     }
 }
