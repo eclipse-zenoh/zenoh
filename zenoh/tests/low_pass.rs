@@ -20,6 +20,7 @@ use std::sync::{
     Arc,
 };
 
+use nonempty_collections::{nev, NEVec};
 use zenoh::{
     bytes::ZBytes,
     query::{ConsolidationMode, Reply},
@@ -114,26 +115,26 @@ fn lowpass_query_test() {
     lowpass_query_filter_test(
         InterceptorFlow::Ingress,
         None,
-        Some(vec![InterceptorLink::Tcp]),
+        Some(nev![InterceptorLink::Tcp]),
         assert_applied,
     );
     lowpass_query_filter_test(
         InterceptorFlow::Egress,
         None,
-        Some(vec![InterceptorLink::Tcp]),
+        Some(nev![InterceptorLink::Tcp]),
         assert_applied,
     );
 
     lowpass_query_filter_test(
         InterceptorFlow::Ingress,
         None,
-        Some(vec![InterceptorLink::Udp]),
+        Some(nev![InterceptorLink::Udp]),
         assert_not_applied,
     );
     lowpass_query_filter_test(
         InterceptorFlow::Egress,
         None,
-        Some(vec![InterceptorLink::Udp]),
+        Some(nev![InterceptorLink::Udp]),
         assert_not_applied,
     );
 }
@@ -163,26 +164,26 @@ fn lowpass_reply_test() {
     lowpass_reply_filter_test(
         InterceptorFlow::Ingress,
         None,
-        Some(vec![InterceptorLink::Tcp]),
+        Some(nev![InterceptorLink::Tcp]),
         assert_applied,
     );
     lowpass_reply_filter_test(
         InterceptorFlow::Egress,
         None,
-        Some(vec![InterceptorLink::Tcp]),
+        Some(nev![InterceptorLink::Tcp]),
         assert_applied,
     );
 
     lowpass_reply_filter_test(
         InterceptorFlow::Ingress,
         None,
-        Some(vec![InterceptorLink::Udp]),
+        Some(nev![InterceptorLink::Udp]),
         assert_not_applied,
     );
     lowpass_reply_filter_test(
         InterceptorFlow::Egress,
         None,
-        Some(vec![InterceptorLink::Udp]),
+        Some(nev![InterceptorLink::Udp]),
         assert_not_applied,
     );
 }
@@ -212,26 +213,26 @@ fn lowpass_put_test() {
     lowpass_put_filter_test(
         InterceptorFlow::Ingress,
         None,
-        Some(vec![InterceptorLink::Tcp]),
+        Some(nev![InterceptorLink::Tcp]),
         assert_applied,
     );
     lowpass_put_filter_test(
         InterceptorFlow::Egress,
         None,
-        Some(vec![InterceptorLink::Tcp]),
+        Some(nev![InterceptorLink::Tcp]),
         assert_applied,
     );
 
     lowpass_put_filter_test(
         InterceptorFlow::Ingress,
         None,
-        Some(vec![InterceptorLink::Udp]),
+        Some(nev![InterceptorLink::Udp]),
         assert_not_applied,
     );
     lowpass_put_filter_test(
         InterceptorFlow::Egress,
         None,
-        Some(vec![InterceptorLink::Udp]),
+        Some(nev![InterceptorLink::Udp]),
         assert_not_applied,
     );
 }
@@ -261,34 +262,34 @@ fn lowpass_del_test() {
     lowpass_del_filter_test(
         InterceptorFlow::Ingress,
         None,
-        Some(vec![InterceptorLink::Tcp]),
+        Some(nev![InterceptorLink::Tcp]),
         assert_applied,
     );
     lowpass_del_filter_test(
         InterceptorFlow::Egress,
         None,
-        Some(vec![InterceptorLink::Tcp]),
+        Some(nev![InterceptorLink::Tcp]),
         assert_applied,
     );
 
     lowpass_del_filter_test(
         InterceptorFlow::Ingress,
         None,
-        Some(vec![InterceptorLink::Udp]),
+        Some(nev![InterceptorLink::Udp]),
         assert_not_applied,
     );
     lowpass_del_filter_test(
         InterceptorFlow::Egress,
         None,
-        Some(vec![InterceptorLink::Udp]),
+        Some(nev![InterceptorLink::Udp]),
         assert_not_applied,
     );
 }
 
 fn lowpass_query_filter_test(
     flow: InterceptorFlow,
-    interfaces: Option<Vec<String>>,
-    link_protocols: Option<Vec<InterceptorLink>>,
+    interfaces: Option<NEVec<String>>,
+    link_protocols: Option<NEVec<InterceptorLink>>,
     assertions: impl Fn(&LowPassTestResult),
 ) {
     let prefix = "test/lowpass_query";
@@ -296,11 +297,11 @@ fn lowpass_query_filter_test(
 
     let lpf_config = LowPassFilterConf {
         id: None,
-        flows: Some(vec![flow]),
+        flows: Some(nev![flow]),
         interfaces,
         link_protocols,
-        messages: vec![LowPassFilterMessage::Query],
-        key_exprs: vec![format!("{prefix}/**").try_into().unwrap()],
+        messages: nev![LowPassFilterMessage::Query],
+        key_exprs: nev![format!("{prefix}/**").try_into().unwrap()],
         size_limit: LOWPASS_RULE_BYTES,
     };
 
@@ -313,8 +314,8 @@ fn lowpass_query_filter_test(
 
 fn lowpass_reply_filter_test(
     flow: InterceptorFlow,
-    interfaces: Option<Vec<String>>,
-    link_protocols: Option<Vec<InterceptorLink>>,
+    interfaces: Option<NEVec<String>>,
+    link_protocols: Option<NEVec<InterceptorLink>>,
     assertions: impl Fn(&LowPassTestResult),
 ) {
     let prefix = "test/lowpass_reply";
@@ -322,11 +323,11 @@ fn lowpass_reply_filter_test(
 
     let lpf_config = LowPassFilterConf {
         id: None,
-        flows: Some(vec![flow]),
+        flows: Some(nev![flow]),
         interfaces,
         link_protocols,
-        messages: vec![LowPassFilterMessage::Reply],
-        key_exprs: vec![format!("{prefix}/**").try_into().unwrap()],
+        messages: nev![LowPassFilterMessage::Reply],
+        key_exprs: nev![format!("{prefix}/**").try_into().unwrap()],
         size_limit: LOWPASS_RULE_BYTES,
     };
 
@@ -339,8 +340,8 @@ fn lowpass_reply_filter_test(
 
 fn lowpass_put_filter_test(
     flow: InterceptorFlow,
-    interfaces: Option<Vec<String>>,
-    link_protocols: Option<Vec<InterceptorLink>>,
+    interfaces: Option<NEVec<String>>,
+    link_protocols: Option<NEVec<InterceptorLink>>,
     assertions: impl Fn(&LowPassTestResult),
 ) {
     let prefix = "test/lowpass_put";
@@ -348,11 +349,11 @@ fn lowpass_put_filter_test(
 
     let lpf_config = LowPassFilterConf {
         id: None,
-        flows: Some(vec![flow]),
+        flows: Some(nev![flow]),
         interfaces,
         link_protocols,
-        messages: vec![LowPassFilterMessage::Put],
-        key_exprs: vec![format!("{prefix}/**").try_into().unwrap()],
+        messages: nev![LowPassFilterMessage::Put],
+        key_exprs: nev![format!("{prefix}/**").try_into().unwrap()],
         size_limit: LOWPASS_RULE_BYTES,
     };
 
@@ -364,8 +365,8 @@ fn lowpass_put_filter_test(
 
 fn lowpass_del_filter_test(
     flow: InterceptorFlow,
-    interfaces: Option<Vec<String>>,
-    link_protocols: Option<Vec<InterceptorLink>>,
+    interfaces: Option<NEVec<String>>,
+    link_protocols: Option<NEVec<InterceptorLink>>,
     assertions: impl Fn(&LowPassTestResult),
 ) {
     let prefix = "test/lowpass_del";
@@ -373,11 +374,11 @@ fn lowpass_del_filter_test(
 
     let lpf_config = LowPassFilterConf {
         id: None,
-        flows: Some(vec![flow]),
+        flows: Some(nev![flow]),
         interfaces,
         link_protocols,
-        messages: vec![LowPassFilterMessage::Delete],
-        key_exprs: vec![format!("{prefix}/**").try_into().unwrap()],
+        messages: nev![LowPassFilterMessage::Delete],
+        key_exprs: nev![format!("{prefix}/**").try_into().unwrap()],
         size_limit: LOWPASS_RULE_BYTES,
     };
 

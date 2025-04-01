@@ -22,6 +22,7 @@ use std::{collections::HashSet, iter, sync::Arc};
 
 use ahash::HashMap;
 use itertools::Itertools;
+use nonempty_collections::nev;
 use zenoh_buffers::buffer::Buffer;
 use zenoh_config::{InterceptorFlow, InterceptorLink, LowPassFilterConf, LowPassFilterMessage};
 use zenoh_keyexpr::{
@@ -62,32 +63,6 @@ fn validate_config(config: &Vec<LowPassFilterConf>) -> ZResult<()> {
                 bail!("id '{id}' is repeated");
             }
         }
-        if let Some(flows) = &lpf.flows {
-            if flows.is_empty() {
-                bail!("flows list must not be empty");
-            }
-        }
-        if lpf.messages.is_empty() {
-            bail!("messages list must not be empty");
-        }
-        if let Some(faces) = &lpf.interfaces {
-            if faces.is_empty() {
-                bail!("interfaces list must not be empty");
-            }
-        }
-        if let Some(link_protocols) = &lpf.link_protocols {
-            if link_protocols.is_empty() {
-                bail!("link_protocols list must not be empty");
-            }
-        }
-        if lpf.key_exprs.is_empty() {
-            bail!("key_exprs list must not be empty");
-        }
-        for key_expr in &lpf.key_exprs {
-            if key_expr.is_empty() {
-                bail!("key expressions must not be empty in key_expr list");
-            }
-        }
     }
     Ok(())
 }
@@ -105,7 +80,7 @@ impl LowPassInterceptorFactory {
             let mut lpf_config = lpf_config.clone();
             let flows = lpf_config
                 .flows
-                .get_or_insert(vec![InterceptorFlow::Ingress, InterceptorFlow::Egress]);
+                .get_or_insert(nev![InterceptorFlow::Ingress, InterceptorFlow::Egress]);
             let interfaces = lpf_config
                 .interfaces
                 .map(|v| {
@@ -255,10 +230,17 @@ impl LowPassInterceptor {
         }
     }
 
-    fn message_passes_filters(&self, msg: &NetworkMessage, key_expr: &str) -> ZResult<bool> {
-        let payload_size: Option<usize>;
-        let attachment_size: Option<usize>;
+    fn message_passes_filters(
+        &self,
+        ctx: &RoutingContext<NetworkMessage>,
+        cache: Option<&Cache>,
+    ) -> bool {
+        let payload_size: usize;
+        let attachment_size: usize;
         let message_type: LowPassFilterMessage;
+        let max_allowed_size: Option<usize>;
+
+        let msg = &ctx.msg;
 
         match &msg.body {
             NetworkBody::Request(Request {
@@ -266,8 +248,17 @@ impl LowPassInterceptor {
                 ..
             }) => {
                 message_type = LowPassFilterMessage::Query;
-                payload_size = query.ext_body.as_ref().map(|body| body.payload.len());
-                attachment_size = query.ext_attachment.as_ref().map(|att| att.buffer.len());
+                payload_size = query
+                    .ext_body
+                    .as_ref()
+                    .map(|body| body.payload.len())
+                    .unwrap_or(0);
+                attachment_size = query
+                    .ext_attachment
+                    .as_ref()
+                    .map(|att| att.buffer.len())
+                    .unwrap_or(0);
+                max_allowed_size = cache.map(|c| c.query);
             }
             NetworkBody::Response(Response {
                 payload:
@@ -278,8 +269,13 @@ impl LowPassInterceptor {
                 ..
             }) => {
                 message_type = LowPassFilterMessage::Reply;
-                payload_size = Some(put.payload.len());
-                attachment_size = put.ext_attachment.as_ref().map(|att| att.buffer.len());
+                payload_size = put.payload.len();
+                attachment_size = put
+                    .ext_attachment
+                    .as_ref()
+                    .map(|att| att.buffer.len())
+                    .unwrap_or(0);
+                max_allowed_size = cache.map(|c| c.reply);
             }
             NetworkBody::Response(Response {
                 payload:
@@ -290,58 +286,73 @@ impl LowPassInterceptor {
                 ..
             }) => {
                 message_type = LowPassFilterMessage::Reply;
-                payload_size = None;
-                attachment_size = delete.ext_attachment.as_ref().map(|att| att.buffer.len());
+                payload_size = 0;
+                attachment_size = delete
+                    .ext_attachment
+                    .as_ref()
+                    .map(|att| att.buffer.len())
+                    .unwrap_or(0);
+                max_allowed_size = cache.map(|c| c.reply);
             }
             NetworkBody::Push(Push {
                 payload: PushBody::Put(put),
                 ..
             }) => {
                 message_type = LowPassFilterMessage::Put;
-                payload_size = Some(put.payload.len());
-                attachment_size = put.ext_attachment.as_ref().map(|att| att.buffer.len());
+                payload_size = put.payload.len();
+                attachment_size = put
+                    .ext_attachment
+                    .as_ref()
+                    .map(|att| att.buffer.len())
+                    .unwrap_or(0);
+                max_allowed_size = cache.map(|c| c.put);
             }
             NetworkBody::Push(Push {
                 payload: PushBody::Del(delete),
                 ..
             }) => {
                 message_type = LowPassFilterMessage::Delete;
-                payload_size = None;
-                attachment_size = delete.ext_attachment.as_ref().map(|att| att.buffer.len());
+                payload_size = 0;
+                attachment_size = delete
+                    .ext_attachment
+                    .as_ref()
+                    .map(|att| att.buffer.len())
+                    .unwrap_or(0);
+                max_allowed_size = cache.map(|c| c.delete);
             }
             NetworkBody::Response(Response {
                 payload: ResponseBody::Err(zenoh_protocol::zenoh::Err { payload, .. }),
                 ..
             }) => {
                 message_type = LowPassFilterMessage::Reply;
-                payload_size = Some(payload.len());
-                attachment_size = None;
+                payload_size = payload.len();
+                attachment_size = 0;
+                max_allowed_size = cache.map(|c| c.reply);
             }
-            NetworkBody::ResponseFinal(_) => return Ok(true),
-            NetworkBody::Interest(_) => return Ok(true),
-            NetworkBody::Declare(_) => return Ok(true),
-            NetworkBody::OAM(_) => return Ok(true),
+            NetworkBody::ResponseFinal(_) => return true,
+            NetworkBody::Interest(_) => return true,
+            NetworkBody::Declare(_) => return true,
+            NetworkBody::OAM(_) => return true,
         }
-        Ok(self.verify_message(
-            &message_type,
-            payload_size.unwrap_or(0),
-            attachment_size.unwrap_or(0),
-            keyexpr::new(key_expr)?,
-        ))
+        let max_allowed_size = match max_allowed_size {
+            Some(v) => v,
+            None => match ctx.full_expr().and_then(|e| keyexpr::new(e).ok()) {
+                Some(ke) => self.get_max_allowed_message_size(message_type, ke),
+                None => 0,
+            },
+        };
+        match payload_size.checked_add(attachment_size) {
+            Some(msg_size) => msg_size <= max_allowed_size,
+            None => false,
+        }
     }
 
-    fn verify_message(
+    fn get_max_allowed_message_size(
         &self,
-        message: &LowPassFilterMessage,
-        payload_len: usize,
-        attachment_len: usize,
+        message: LowPassFilterMessage,
         key_expr: &zenoh_keyexpr::keyexpr,
-    ) -> bool {
-        // early exit if total size is zero
-        if payload_len == 0 && attachment_len == 0 {
-            return true;
-        }
-        if let Some((_filter_key_expr, min_size_bytes)) = self
+    ) -> usize {
+        match self
             .subjects
             .iter()
             .filter_map(|s| {
@@ -351,22 +362,26 @@ impl LowPassInterceptor {
                     .get(s)
                     .expect("subject should have entry in map")
                     .flow(&self.flow)
-                    .message(message)
+                    .message(&message)
                     .nodes_including(key_expr)
                     .filter(|node| node.weight().is_some())
                     .min_by_key(|node| node.weight().expect("weight should not be none").0)
             })
             // get min of matching nodes from different KeBoxTrees
             .min_by_key(|node| node.weight().expect("weight should not be none").0)
-            .map(|node| (node.keyexpr(), node.weight().expect("weight should not be none").0))
+            .map(|node| node.weight().expect("weight should not be none"))
         {
-            match payload_len.checked_add(attachment_len) {
-                Some(message_size) => return message_size <= min_size_bytes,
-                None => return false,
-            }
+            Some(w) => w.0,
+            None => usize::MAX,
         }
-        true
     }
+}
+
+struct Cache {
+    put: usize,
+    delete: usize,
+    query: usize,
+    reply: usize,
 }
 
 impl InterceptorTrait for LowPassInterceptor {
@@ -374,7 +389,12 @@ impl InterceptorTrait for LowPassInterceptor {
         &self,
         key_expr: &crate::key_expr::KeyExpr<'_>,
     ) -> Option<Box<dyn std::any::Any + Send + Sync>> {
-        Some(Box::new(key_expr.to_string()))
+        Some(Box::new(Cache {
+            put: self.get_max_allowed_message_size(LowPassFilterMessage::Put, key_expr),
+            delete: self.get_max_allowed_message_size(LowPassFilterMessage::Delete, key_expr),
+            query: self.get_max_allowed_message_size(LowPassFilterMessage::Query, key_expr),
+            reply: self.get_max_allowed_message_size(LowPassFilterMessage::Reply, key_expr),
+        }))
     }
 
     fn intercept(
@@ -382,26 +402,9 @@ impl InterceptorTrait for LowPassInterceptor {
         ctx: RoutingContext<NetworkMessage>,
         cache: Option<&Box<dyn std::any::Any + Send + Sync>>,
     ) -> Option<RoutingContext<NetworkMessage>> {
-        let key_expr = cache
-            .and_then(|i| match i.downcast_ref::<String>() {
-                Some(e) => Some(e.as_str()),
-                None => {
-                    tracing::debug!("Cache content was not of type String");
-                    None
-                }
-            })
-            .or_else(|| ctx.full_expr());
-        match self.message_passes_filters(&ctx.msg, key_expr?) {
-            Ok(decision) => {
-                if decision {
-                    return Some(ctx);
-                }
-            }
-            Err(e) => {
-                tracing::error!("Error in evaluation of low-pass filter interceptor: {e}");
-            }
-        }
-        None
+        let cache = cache.and_then(|i| i.downcast_ref::<Cache>());
+
+        self.message_passes_filters(&ctx, cache).then_some(ctx)
     }
 }
 

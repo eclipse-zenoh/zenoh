@@ -127,11 +127,11 @@ pub struct DownsamplingItemConf {
 #[derive(Serialize, Debug, Deserialize, Clone)]
 pub struct LowPassFilterConf {
     pub id: Option<String>,
-    pub interfaces: Option<Vec<String>>,
-    pub link_protocols: Option<Vec<InterceptorLink>>,
-    pub flows: Option<Vec<InterceptorFlow>>,
-    pub messages: Vec<LowPassFilterMessage>,
-    pub key_exprs: Vec<OwnedKeyExpr>,
+    pub interfaces: Option<NEVec<String>>,
+    pub link_protocols: Option<NEVec<InterceptorLink>>,
+    pub flows: Option<NEVec<InterceptorFlow>>,
+    pub messages: NEVec<LowPassFilterMessage>,
+    pub key_exprs: NEVec<OwnedKeyExpr>,
     pub size_limit: usize,
 }
 
