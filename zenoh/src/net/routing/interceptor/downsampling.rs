@@ -227,6 +227,13 @@ impl InterceptorTrait for DownsamplingInterceptor {
                                 if !INFO_FLAG.swap(true, Ordering::Relaxed) {
                                     tracing::info!("Some message(s) have been dropped by the downsampling interceptor. Enable trace level tracing for more details.");
                                 }
+                                tracing::trace!(
+                                    "Message dropped by the downsampling interceptor: {}({}) from:{} to:{}",
+                                    ctx.msg,
+                                    ctx.full_expr().unwrap_or_default(),
+                                    ctx.inface().map(|f| f.to_string()).unwrap_or_default(),
+                                    ctx.outface().map(|f| f.to_string()).unwrap_or_default(),
+                                );
                                 return None;
                             }
                         } else {
