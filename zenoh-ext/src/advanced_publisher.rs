@@ -486,10 +486,12 @@ impl<'a> AdvancedPublisher<'a> {
     {
         let mut builder = self.publisher.put(payload);
         if let Some(seqnum) = &self.seqnum {
-            builder = builder.source_info(SourceInfo::new(
+            let info = SourceInfo::new(
                 Some(self.publisher.id()),
                 Some(seqnum.fetch_add(1, Ordering::Relaxed)),
-            ));
+            );
+            tracing::trace!("Put data for {} with {:?}", self.publisher.key_expr(), info);
+            builder = builder.source_info(info);
         }
         if let Some(hlc) = self.publisher.session().hlc() {
             builder = builder.timestamp(hlc.new_timestamp());

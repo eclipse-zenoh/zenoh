@@ -288,6 +288,13 @@ impl AdvancedCache {
                                     .wait()
                                 {
                                     tracing::warn!("Error replying to query: {}", e);
+                                } else {
+                                    tracing::trace!(
+                                        "Replied to query {} with Sample{{info:{:?}, ts:{:?}}}",
+                                        query.selector(),
+                                        sample.source_info(),
+                                        sample.timestamp()
+                                    );
                                 }
                             }
                         } else {
@@ -320,6 +327,13 @@ impl AdvancedCache {
                                         .wait()
                                     {
                                         tracing::warn!("Error replying to query: {}", e);
+                                    } else {
+                                        tracing::trace!(
+                                            "Replied to query {} with Sample{{info:{:?}, ts:{:?}}}",
+                                            query.selector(),
+                                            sample.source_info(),
+                                            sample.timestamp()
+                                        );
                                     }
                                 }
                             }

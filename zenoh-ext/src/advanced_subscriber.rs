@@ -638,6 +638,11 @@ impl Timed for PeriodicQuery {
                     move |r: Reply| {
                         if let Ok(s) = r.into_result() {
                             if key_expr.intersects(s.key_expr()) {
+                                tracing::trace!(
+                                    "Received reply with Sample{{info:{:?}, ts:{:?}}}",
+                                    s.source_info(),
+                                    s.timestamp()
+                                );
                                 let states = &mut *zlock!(handler.statesref);
                                 handle_sample(states, s);
                             }
@@ -743,6 +748,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                     move |r: Reply| {
                                         if let Ok(s) = r.into_result() {
                                             if key_expr.intersects(s.key_expr()) {
+                                                tracing::trace!("Received reply with Sample{{info:{:?}, ts:{:?}}}", s.source_info(), s.timestamp());
                                                 let states = &mut *zlock!(handler.statesref);
                                                 handle_sample(states, s);
                                             }
@@ -799,6 +805,11 @@ impl<Handler> AdvancedSubscriber<Handler> {
                     move |r: Reply| {
                         if let Ok(s) = r.into_result() {
                             if key_expr.intersects(s.key_expr()) {
+                                tracing::trace!(
+                                    "Received reply with Sample{{info:{:?}, ts:{:?}}}",
+                                    s.source_info(),
+                                    s.timestamp()
+                                );
                                 let states = &mut *zlock!(handler.statesref);
                                 handle_sample(states, s);
                             }
@@ -870,6 +881,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                                 move |r: Reply| {
                                                     if let Ok(s) = r.into_result() {
                                                         if key_expr.intersects(s.key_expr()) {
+                                                            tracing::trace!("Received reply with Sample{{info:{:?}, ts:{:?}}}", s.source_info(), s.timestamp());
                                                             let states =
                                                                 &mut *zlock!(handler.statesref);
                                                             handle_sample(states, s);
@@ -926,6 +938,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                                 move |r: Reply| {
                                                     if let Ok(s) = r.into_result() {
                                                         if key_expr.intersects(s.key_expr()) {
+                                                            tracing::trace!("Received reply with Sample{{info:{:?}, ts:{:?}}}", s.source_info(), s.timestamp());
                                                             let states =
                                                                 &mut *zlock!(handler.statesref);
                                                             handle_sample(states, s);
@@ -980,6 +993,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                             move |r: Reply| {
                                                 if let Ok(s) = r.into_result() {
                                                     if key_expr.intersects(s.key_expr()) {
+                                                        tracing::trace!("Received reply with Sample{{info:{:?}, ts:{:?}}}", s.source_info(), s.timestamp());
                                                         let states =
                                                             &mut *zlock!(handler.statesref);
                                                         handle_sample(states, s);
@@ -1106,6 +1120,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                 move |r: Reply| {
                                     if let Ok(s) = r.into_result() {
                                         if key_expr.intersects(s.key_expr()) {
+                                            tracing::trace!("Received reply with Sample{{info:{:?}, ts:{:?}}}", s.source_info(), s.timestamp());
                                             let states = &mut *zlock!(handler.statesref);
                                             handle_sample(states, s);
                                         }
@@ -1294,6 +1309,7 @@ impl Drop for InitialRepliesHandler {
     fn drop(&mut self) {
         let states = &mut *zlock!(self.statesref);
         states.global_pending_queries = states.global_pending_queries.saturating_sub(1);
+        tracing::trace!("Flush initial replies");
 
         if states.global_pending_queries == 0 {
             for (source_id, state) in states.sequenced_states.iter_mut() {
@@ -1321,6 +1337,7 @@ impl Drop for SequencedRepliesHandler {
         if let Some(state) = states.sequenced_states.get_mut(&self.source_id) {
             state.pending_queries = state.pending_queries.saturating_sub(1);
             if states.global_pending_queries == 0 {
+                tracing::trace!("Flush sequenced samples");
                 flush_sequenced_source(
                     state,
                     &states.callback,
@@ -1347,6 +1364,7 @@ impl Drop for TimestampedRepliesHandler {
         if let Some(state) = states.timestamped_states.get_mut(&self.id) {
             state.pending_queries = state.pending_queries.saturating_sub(1);
             if states.global_pending_queries == 0 {
+                tracing::trace!("Flush timestamped samples");
                 flush_timestamped_source(state, &self.callback);
             }
         }
