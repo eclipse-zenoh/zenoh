@@ -20,7 +20,10 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex, OnceLock,
+    },
 };
 
 use nonempty_collections::NEVec;
@@ -190,6 +193,9 @@ impl DownsamplingInterceptor {
     }
 }
 
+// The flag is used to print a message only once
+static INFO_FLAG: OnceLock<AtomicBool> = OnceLock::new();
+
 impl InterceptorTrait for DownsamplingInterceptor {
     fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
         let ke_id = zlock!(self.ke_id);
@@ -218,6 +224,11 @@ impl InterceptorTrait for DownsamplingInterceptor {
                                 state.latest_message_timestamp = timestamp;
                                 return Some(ctx);
                             } else {
+                                let info_flag = INFO_FLAG.get_or_init(|| AtomicBool::new(true));
+                                if info_flag.load(Ordering::Relaxed) {
+                                    tracing::info!("Some messages have been dropped by the downsampling interceptor. Enable trace level tracing for more details.");
+                                    info_flag.store(false, Ordering::Relaxed);
+                                }
                                 return None;
                             }
                         } else {
