@@ -18,12 +18,12 @@
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet, iter, sync::Arc};
 
 use ahash::HashMap;
 use itertools::Itertools;
 use zenoh_buffers::buffer::Buffer;
-use zenoh_config::{InterceptorFlow, LowPassFilterConf, LowPassFilterMessage};
+use zenoh_config::{InterceptorFlow, InterceptorLink, LowPassFilterConf, LowPassFilterMessage};
 use zenoh_keyexpr::{
     keyexpr,
     keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, IKeyExprTreeNode, KeBoxTree},
@@ -37,7 +37,8 @@ use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 use super::{
     authorization::SubjectProperty, EgressInterceptor, IngressInterceptor, InterceptorFactory,
-    InterceptorFactoryTrait, InterceptorTrait, InterfaceEnabled, RoutingContext,
+    InterceptorFactoryTrait, InterceptorLinkWrapper, InterceptorTrait, InterfaceEnabled,
+    RoutingContext,
 };
 
 pub(crate) fn low_pass_interceptor_factories(
@@ -74,6 +75,11 @@ fn validate_config(config: &Vec<LowPassFilterConf>) -> ZResult<()> {
                 bail!("interfaces list must not be empty");
             }
         }
+        if let Some(link_protocols) = &lpf.link_protocols {
+            if link_protocols.is_empty() {
+                bail!("link_protocols list must not be empty");
+            }
+        }
         if lpf.key_exprs.is_empty() {
             bail!("key_exprs list must not be empty");
         }
@@ -108,15 +114,32 @@ impl LowPassInterceptorFactory {
                         .collect_vec()
                 })
                 .unwrap_or(vec![SubjectProperty::Wildcard]);
-
-            for face in interfaces {
-                for message in &lpf_config.messages {
-                    for key_expr in &lpf_config.key_exprs {
-                        for flow in &*flows {
-                            let id = low_pass_filter.interfaces.get_or_insert(&face);
+            let link_protocols = lpf_config
+                .link_protocols
+                .map(|v| {
+                    v.iter()
+                        .map(|proto| SubjectProperty::Exactly(proto.clone()))
+                        .collect_vec()
+                })
+                .unwrap_or(vec![SubjectProperty::Wildcard]);
+            let rule_subject_ids = interfaces
+                .into_iter()
+                .cartesian_product(link_protocols)
+                .map(|(interface, link_type)| {
+                    let subject = LowPassSubject {
+                        interface,
+                        link_type,
+                    };
+                    low_pass_filter.subjects.get_or_insert(&subject)
+                })
+                .collect_vec();
+            for message in &lpf_config.messages {
+                for key_expr in &lpf_config.key_exprs {
+                    for flow in &*flows {
+                        for id in &rule_subject_ids {
                             low_pass_filter
                                 .filters
-                                .entry(id)
+                                .entry(*id)
                                 .or_default()
                                 .flow_mut(flow)
                                 .message_mut(message)
@@ -146,36 +169,60 @@ impl InterceptorFactoryTrait for LowPassInterceptorFactory {
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
         tracing::debug!("New low-pass filter transport unicast {:?}", transport);
-        match transport.get_links() {
-            Ok(links) => {
-                let interfaces = links
-                    .into_iter()
-                    .flat_map(|link| link.interfaces)
-                    .collect_vec();
-                let matches = self.state.interfaces.get_matches(&interfaces);
-                if !matches.is_empty() {
-                    let matches = Arc::new(matches);
-                    return (
-                        self.state.interface_enabled.ingress.then(|| {
-                            Box::new(LowPassInterceptor::new(
-                                self.state.clone(),
-                                matches.clone(),
-                                InterceptorFlow::Ingress,
-                            )) as IngressInterceptor
-                        }),
-                        self.state.interface_enabled.egress.then(|| {
-                            Box::new(LowPassInterceptor::new(
-                                self.state.clone(),
-                                matches,
-                                InterceptorFlow::Egress,
-                            )) as EgressInterceptor
-                        }),
-                    );
-                }
-            }
+        let links = match transport.get_links() {
+            Ok(links) => links,
             Err(e) => {
                 tracing::error!("Unable to get links from transport {:?}: {e}", transport);
+                return (None, None);
             }
+        };
+        let auth_ids = match transport.get_auth_ids() {
+            Ok(auth_ids) => auth_ids,
+            Err(e) => {
+                tracing::error!("Unable to get auth_ids for transport {:?}: {e}", transport);
+                return (None, None);
+            }
+        };
+
+        let interfaces = links
+            .into_iter()
+            .flat_map(|link| link.interfaces)
+            .map(|face| SubjectProperty::Exactly(face))
+            .chain(iter::once(SubjectProperty::Wildcard));
+        let link_types = auth_ids
+            .link_auth_ids()
+            .into_iter()
+            .map(|auth_id| SubjectProperty::Exactly(InterceptorLinkWrapper::from(auth_id).0))
+            .chain(iter::once(SubjectProperty::Wildcard));
+
+        let subject_ids = interfaces
+            .cartesian_product(link_types)
+            .filter_map(|(interface, link_type)| {
+                let subject = LowPassSubject {
+                    interface,
+                    link_type,
+                };
+                self.state.subjects.get_subject_id(&subject)
+            })
+            .collect_vec();
+        if !subject_ids.is_empty() {
+            let subject_ids = Arc::new(subject_ids);
+            return (
+                self.state.interface_enabled.ingress.then(|| {
+                    Box::new(LowPassInterceptor::new(
+                        self.state.clone(),
+                        subject_ids.clone(),
+                        InterceptorFlow::Ingress,
+                    )) as IngressInterceptor
+                }),
+                self.state.interface_enabled.egress.then(|| {
+                    Box::new(LowPassInterceptor::new(
+                        self.state.clone(),
+                        subject_ids,
+                        InterceptorFlow::Egress,
+                    )) as EgressInterceptor
+                }),
+            );
         }
         (None, None)
     }
@@ -358,43 +405,36 @@ impl InterceptorTrait for LowPassInterceptor {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct LowPassSubject {
+    interface: SubjectProperty<String>,
+    link_type: SubjectProperty<InterceptorLink>,
+}
+
 #[derive(Default)]
 struct SubjectStore {
     id: usize,
-    interfaces: HashMap<SubjectProperty<String>, usize>,
+    subjects: HashMap<LowPassSubject, usize>,
 }
 
 impl SubjectStore {
-    fn get_or_insert(&mut self, face: &SubjectProperty<String>) -> usize {
-        if let Some(id) = self.interfaces.get(face) {
+    fn get_or_insert(&mut self, subject: &LowPassSubject) -> usize {
+        if let Some(id) = self.subjects.get(subject) {
             return *id;
         }
         self.id += 1;
-        self.interfaces.insert(face.clone(), self.id);
+        self.subjects.insert(subject.clone(), self.id);
         self.id
     }
 
-    fn get_matches(&self, interfaces: &Vec<String>) -> Vec<usize> {
-        let mut matches = Vec::new();
-        // FIXME: since currently we only have one attribute per subject we can just look up its Exact and Wildcard variants
-        for face in interfaces {
-            if let Some(id) = self
-                .interfaces
-                .get(&SubjectProperty::Exactly(face.to_string()))
-            {
-                matches.push(*id);
-            }
-        }
-        if let Some(id) = self.interfaces.get(&SubjectProperty::Wildcard) {
-            matches.push(*id);
-        }
-        matches
+    fn get_subject_id(&self, subject: &LowPassSubject) -> Option<usize> {
+        self.subjects.get(subject).copied()
     }
 }
 
 #[derive(Default)]
 struct LowPassFilter {
-    interfaces: SubjectStore,
+    subjects: SubjectStore,
     filters: HashMap<usize, LowPassFilterFlows>,
     interface_enabled: InterfaceEnabled,
 }

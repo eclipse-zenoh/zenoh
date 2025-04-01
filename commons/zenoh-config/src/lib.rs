@@ -128,6 +128,7 @@ pub struct DownsamplingItemConf {
 pub struct LowPassFilterConf {
     pub id: Option<String>,
     pub interfaces: Option<Vec<String>>,
+    pub link_protocols: Option<Vec<InterceptorLink>>,
     pub flows: Option<Vec<InterceptorFlow>>,
     pub messages: Vec<LowPassFilterMessage>,
     pub key_exprs: Vec<OwnedKeyExpr>,
