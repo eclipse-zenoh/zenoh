@@ -36,8 +36,11 @@ where
     ID: shm::SegmentID,
 {
     fn drop(&mut self) {
-        // Unregister unnecessary cleanup routine as Segment will be unlinked here
-        CLEANUP.read().unregister_cleanup(self.id());
+        // this drop might be executed inside static drop callstack, so statics might not be available here
+        if let Ok(val) = CLEANUP.try_read() {
+            // Unregister unnecessary cleanup routine as Segment will be unlinked here
+            val.unregister_cleanup(self.id());
+        }
     }
 }
 
