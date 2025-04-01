@@ -25,7 +25,7 @@ use zenoh::{
     query::{ConsolidationMode, Reply},
     Config, Wait,
 };
-use zenoh_config::{InterceptorFlow, LowPassFilterConf, LowPassFilterMessage};
+use zenoh_config::{InterceptorFlow, InterceptorLink, LowPassFilterConf, LowPassFilterMessage};
 
 static SMALL_MSG_STR: &str = "S";
 static BIG_MSG_STR: &str = "B";
@@ -92,40 +92,213 @@ impl LowPassTestResult {
 #[test]
 fn lowpass_query_test() {
     zenoh::init_log_from_env_or("error");
-    lowpass_query_filter_test(InterceptorFlow::Ingress);
-    lowpass_query_filter_test(InterceptorFlow::Egress);
+
+    let nominal_assertions = |test_res: &LowPassTestResult| {
+        assert!(test_res.all_small());
+        assert!(test_res.all_big_replies());
+        assert!(test_res.big_put());
+        assert!(test_res.big_del());
+    };
+    let assert_applied = |test_res: &LowPassTestResult| {
+        nominal_assertions(test_res);
+        assert!(!test_res.big_query());
+    };
+    let assert_not_applied = |test_res: &LowPassTestResult| {
+        nominal_assertions(test_res);
+        assert!(test_res.big_query());
+    };
+
+    lowpass_query_filter_test(InterceptorFlow::Ingress, None, None, assert_applied);
+    lowpass_query_filter_test(InterceptorFlow::Egress, None, None, assert_applied);
+
+    lowpass_query_filter_test(
+        InterceptorFlow::Ingress,
+        None,
+        Some(vec![InterceptorLink::Tcp]),
+        assert_applied,
+    );
+    lowpass_query_filter_test(
+        InterceptorFlow::Egress,
+        None,
+        Some(vec![InterceptorLink::Tcp]),
+        assert_applied,
+    );
+
+    lowpass_query_filter_test(
+        InterceptorFlow::Ingress,
+        None,
+        Some(vec![InterceptorLink::Udp]),
+        assert_not_applied,
+    );
+    lowpass_query_filter_test(
+        InterceptorFlow::Egress,
+        None,
+        Some(vec![InterceptorLink::Udp]),
+        assert_not_applied,
+    );
 }
 
 #[test]
 fn lowpass_reply_test() {
     zenoh::init_log_from_env_or("error");
-    lowpass_reply_filter_test(InterceptorFlow::Ingress);
-    lowpass_reply_filter_test(InterceptorFlow::Egress);
+
+    let nominal_assertions = |test_res: &LowPassTestResult| {
+        assert!(test_res.all_small());
+        assert!(test_res.big_query());
+        assert!(test_res.big_put());
+        assert!(test_res.big_del());
+    };
+    let assert_applied = |test_res: &LowPassTestResult| {
+        nominal_assertions(test_res);
+        assert!(test_res.no_big_replies());
+    };
+    let assert_not_applied = |test_res: &LowPassTestResult| {
+        nominal_assertions(test_res);
+        assert!(test_res.all_big_replies());
+    };
+
+    lowpass_reply_filter_test(InterceptorFlow::Ingress, None, None, assert_applied);
+    lowpass_reply_filter_test(InterceptorFlow::Egress, None, None, assert_applied);
+
+    lowpass_reply_filter_test(
+        InterceptorFlow::Ingress,
+        None,
+        Some(vec![InterceptorLink::Tcp]),
+        assert_applied,
+    );
+    lowpass_reply_filter_test(
+        InterceptorFlow::Egress,
+        None,
+        Some(vec![InterceptorLink::Tcp]),
+        assert_applied,
+    );
+
+    lowpass_reply_filter_test(
+        InterceptorFlow::Ingress,
+        None,
+        Some(vec![InterceptorLink::Udp]),
+        assert_not_applied,
+    );
+    lowpass_reply_filter_test(
+        InterceptorFlow::Egress,
+        None,
+        Some(vec![InterceptorLink::Udp]),
+        assert_not_applied,
+    );
 }
 
 #[test]
 fn lowpass_put_test() {
     zenoh::init_log_from_env_or("error");
-    lowpass_put_filter_test(InterceptorFlow::Ingress);
-    lowpass_put_filter_test(InterceptorFlow::Egress);
+
+    let nominal_assertions = |test_res: &LowPassTestResult| {
+        assert!(test_res.all_small());
+        assert!(test_res.all_big_replies());
+        assert!(test_res.big_query());
+        assert!(test_res.big_del());
+    };
+    let assert_applied = |test_res: &LowPassTestResult| {
+        nominal_assertions(test_res);
+        assert!(!test_res.big_put());
+    };
+    let assert_not_applied = |test_res: &LowPassTestResult| {
+        nominal_assertions(test_res);
+        assert!(test_res.big_put());
+    };
+
+    lowpass_put_filter_test(InterceptorFlow::Ingress, None, None, assert_applied);
+    lowpass_put_filter_test(InterceptorFlow::Egress, None, None, assert_applied);
+
+    lowpass_put_filter_test(
+        InterceptorFlow::Ingress,
+        None,
+        Some(vec![InterceptorLink::Tcp]),
+        assert_applied,
+    );
+    lowpass_put_filter_test(
+        InterceptorFlow::Egress,
+        None,
+        Some(vec![InterceptorLink::Tcp]),
+        assert_applied,
+    );
+
+    lowpass_put_filter_test(
+        InterceptorFlow::Ingress,
+        None,
+        Some(vec![InterceptorLink::Udp]),
+        assert_not_applied,
+    );
+    lowpass_put_filter_test(
+        InterceptorFlow::Egress,
+        None,
+        Some(vec![InterceptorLink::Udp]),
+        assert_not_applied,
+    );
 }
 
 #[test]
 fn lowpass_del_test() {
     zenoh::init_log_from_env_or("error");
-    lowpass_del_filter_test(InterceptorFlow::Ingress);
-    lowpass_del_filter_test(InterceptorFlow::Egress);
+
+    let nominal_assertions = |test_res: &LowPassTestResult| {
+        assert!(test_res.all_small());
+        assert!(test_res.all_big_replies());
+        assert!(test_res.big_query());
+        assert!(test_res.big_put());
+    };
+    let assert_applied = |test_res: &LowPassTestResult| {
+        nominal_assertions(test_res);
+        assert!(!test_res.big_del());
+    };
+    let assert_not_applied = |test_res: &LowPassTestResult| {
+        nominal_assertions(test_res);
+        assert!(test_res.big_del());
+    };
+
+    lowpass_del_filter_test(InterceptorFlow::Ingress, None, None, assert_applied);
+    lowpass_del_filter_test(InterceptorFlow::Egress, None, None, assert_applied);
+
+    lowpass_del_filter_test(
+        InterceptorFlow::Ingress,
+        None,
+        Some(vec![InterceptorLink::Tcp]),
+        assert_applied,
+    );
+    lowpass_del_filter_test(
+        InterceptorFlow::Egress,
+        None,
+        Some(vec![InterceptorLink::Tcp]),
+        assert_applied,
+    );
+
+    lowpass_del_filter_test(
+        InterceptorFlow::Ingress,
+        None,
+        Some(vec![InterceptorLink::Udp]),
+        assert_not_applied,
+    );
+    lowpass_del_filter_test(
+        InterceptorFlow::Egress,
+        None,
+        Some(vec![InterceptorLink::Udp]),
+        assert_not_applied,
+    );
 }
 
-fn lowpass_query_filter_test(flow: InterceptorFlow) {
+fn lowpass_query_filter_test(
+    flow: InterceptorFlow,
+    interfaces: Option<Vec<String>>,
+    link_protocols: Option<Vec<InterceptorLink>>,
+    assertions: impl Fn(&LowPassTestResult),
+) {
     let prefix = "test/lowpass_query";
     let locator = format!("tcp/127.0.0.1:{}", TEST_PORTS_TCP[0]);
 
     let lpf_config = LowPassFilterConf {
         id: None,
         flows: Some(vec![flow]),
-        interfaces: None,
-        link_protocols: None,
+        interfaces,
+        link_protocols,
         messages: vec![LowPassFilterMessage::Query],
         key_exprs: vec![format!("{prefix}/**").try_into().unwrap()],
         size_limit: LOWPASS_RULE_BYTES,
@@ -135,23 +308,23 @@ fn lowpass_query_filter_test(flow: InterceptorFlow) {
     let test_res =
         lowpass_pub_sub_query_reply_test(&locator, query_config, queryable_config, prefix);
 
-    assert!(test_res.all_small());
-
-    assert!(test_res.all_big_replies());
-    assert!(!test_res.big_query());
-    assert!(test_res.big_put());
-    assert!(test_res.big_del());
+    assertions(&test_res);
 }
 
-fn lowpass_reply_filter_test(flow: InterceptorFlow) {
+fn lowpass_reply_filter_test(
+    flow: InterceptorFlow,
+    interfaces: Option<Vec<String>>,
+    link_protocols: Option<Vec<InterceptorLink>>,
+    assertions: impl Fn(&LowPassTestResult),
+) {
     let prefix = "test/lowpass_reply";
     let locator = format!("tcp/127.0.0.1:{}", TEST_PORTS_TCP[1]);
 
     let lpf_config = LowPassFilterConf {
         id: None,
         flows: Some(vec![flow]),
-        interfaces: None,
-        link_protocols: None,
+        interfaces,
+        link_protocols,
         messages: vec![LowPassFilterMessage::Reply],
         key_exprs: vec![format!("{prefix}/**").try_into().unwrap()],
         size_limit: LOWPASS_RULE_BYTES,
@@ -161,23 +334,23 @@ fn lowpass_reply_filter_test(flow: InterceptorFlow) {
     let test_res =
         lowpass_pub_sub_query_reply_test(&locator, query_config, queryable_config, prefix);
 
-    assert!(test_res.all_small());
-
-    assert!(test_res.no_big_replies());
-    assert!(test_res.big_query());
-    assert!(test_res.big_put());
-    assert!(test_res.big_del());
+    assertions(&test_res);
 }
 
-fn lowpass_put_filter_test(flow: InterceptorFlow) {
+fn lowpass_put_filter_test(
+    flow: InterceptorFlow,
+    interfaces: Option<Vec<String>>,
+    link_protocols: Option<Vec<InterceptorLink>>,
+    assertions: impl Fn(&LowPassTestResult),
+) {
     let prefix = "test/lowpass_put";
     let locator = format!("tcp/127.0.0.1:{}", TEST_PORTS_TCP[2]);
 
     let lpf_config = LowPassFilterConf {
         id: None,
         flows: Some(vec![flow]),
-        interfaces: None,
-        link_protocols: None,
+        interfaces,
+        link_protocols,
         messages: vec![LowPassFilterMessage::Put],
         key_exprs: vec![format!("{prefix}/**").try_into().unwrap()],
         size_limit: LOWPASS_RULE_BYTES,
@@ -186,23 +359,23 @@ fn lowpass_put_filter_test(flow: InterceptorFlow) {
     let (pub_config, sub_config) = build_config(vec![lpf_config], flow);
     let test_res = lowpass_pub_sub_query_reply_test(&locator, pub_config, sub_config, prefix);
 
-    assert!(test_res.all_small());
-
-    assert!(test_res.all_big_replies());
-    assert!(test_res.big_query());
-    assert!(!test_res.big_put());
-    assert!(test_res.big_del());
+    assertions(&test_res);
 }
 
-fn lowpass_del_filter_test(flow: InterceptorFlow) {
+fn lowpass_del_filter_test(
+    flow: InterceptorFlow,
+    interfaces: Option<Vec<String>>,
+    link_protocols: Option<Vec<InterceptorLink>>,
+    assertions: impl Fn(&LowPassTestResult),
+) {
     let prefix = "test/lowpass_del";
     let locator = format!("tcp/127.0.0.1:{}", TEST_PORTS_TCP[3]);
 
     let lpf_config = LowPassFilterConf {
         id: None,
         flows: Some(vec![flow]),
-        interfaces: None,
-        link_protocols: None,
+        interfaces,
+        link_protocols,
         messages: vec![LowPassFilterMessage::Delete],
         key_exprs: vec![format!("{prefix}/**").try_into().unwrap()],
         size_limit: LOWPASS_RULE_BYTES,
@@ -211,12 +384,7 @@ fn lowpass_del_filter_test(flow: InterceptorFlow) {
     let (pub_config, sub_config) = build_config(vec![lpf_config], flow);
     let test_res = lowpass_pub_sub_query_reply_test(&locator, pub_config, sub_config, prefix);
 
-    assert!(test_res.all_small());
-
-    assert!(test_res.all_big_replies());
-    assert!(test_res.big_query());
-    assert!(test_res.big_put());
-    assert!(!test_res.big_del());
+    assertions(&test_res);
 }
 
 fn build_config(lpf_config: Vec<LowPassFilterConf>, flow: InterceptorFlow) -> (Config, Config) {
