@@ -187,11 +187,11 @@ impl InterceptorFactoryTrait for LowPassInterceptorFactory {
         let interfaces = links
             .into_iter()
             .flat_map(|link| link.interfaces)
-            .map(|face| SubjectProperty::Exactly(face))
+            .map(SubjectProperty::Exactly)
             .chain(iter::once(SubjectProperty::Wildcard));
         let link_types = auth_ids
             .link_auth_ids()
-            .into_iter()
+            .iter()
             .map(|auth_id| SubjectProperty::Exactly(InterceptorLinkWrapper::from(auth_id).0))
             .chain(iter::once(SubjectProperty::Wildcard));
 
