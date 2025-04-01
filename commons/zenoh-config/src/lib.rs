@@ -125,6 +125,25 @@ pub struct DownsamplingItemConf {
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
+pub struct LowPassFilterConf {
+    pub id: Option<String>,
+    pub interfaces: Option<Vec<String>>,
+    pub flows: Option<Vec<InterceptorFlow>>,
+    pub messages: Vec<LowPassFilterMessage>,
+    pub key_exprs: Vec<OwnedKeyExpr>,
+    pub size_limit: usize,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum LowPassFilterMessage {
+    Put,
+    Delete,
+    Query,
+    Reply,
+}
+
+#[derive(Serialize, Debug, Deserialize, Clone)]
 pub struct AclConfigRule {
     pub id: String,
     pub key_exprs: NEVec<OwnedKeyExpr>,
@@ -713,6 +732,9 @@ validated_struct::validator! {
             pub subjects: Option<Vec<AclConfigSubjects>>,
             pub policies: Option<Vec<AclConfigPolicyEntry>>,
         },
+
+        /// Configuration of the low-pass filter
+        pub low_pass_filter: Vec<LowPassFilterConf>,
 
         /// A list of directories where plugins may be searched for if no `__path__` was specified for them.
         /// The executable's current directory will be added to the search paths.
