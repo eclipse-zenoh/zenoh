@@ -241,6 +241,7 @@ impl AdvancedCache {
             .callback({
                 let cache = cache.clone();
                 move |query| {
+                    tracing::trace!("Handle query {}", query.selector());
                     let range = query
                         .parameters()
                         .get("_sn")

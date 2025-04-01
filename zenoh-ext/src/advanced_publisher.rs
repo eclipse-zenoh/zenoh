@@ -344,11 +344,6 @@ impl<'a> AdvancedPublisher<'a> {
         };
 
         let cache = if conf.cache {
-            tracing::debug!(
-                "AdvancedPublisher: Enable cache with history {:?} and queryable_suffix {}",
-                conf.history,
-                suffix
-            );
             Some(
                 AdvancedCacheBuilder::new(conf.session, Ok(key_expr.clone()))
                     .history(conf.history)
@@ -379,7 +374,8 @@ impl<'a> AdvancedPublisher<'a> {
         {
             if let Some(seqnum) = seqnum.as_ref() {
                 tracing::debug!(
-                    "AdvancedPublisher: Enable missing_cache (heartbeat) with publisher key {} and duration {:?}",
+                    "AdvancedPublisher: Enable {}heartbeat on {} with period {:?}",
+                    if sporadic { "sporadic " } else { "" },
                     &key_expr / &suffix,
                     period
                 );

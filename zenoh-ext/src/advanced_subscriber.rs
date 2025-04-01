@@ -627,6 +627,11 @@ impl Timed for PeriodicQuery {
                 source_id: self.source_id,
                 statesref: self.statesref.clone(),
             };
+            tracing::trace!(
+                "Querying undelivered samples {}?{}",
+                query_expr,
+                seq_num_range
+            );
             let _ = session
                 .get(Selector::from((query_expr, seq_num_range)))
                 .callback({
@@ -726,6 +731,11 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                 source_id,
                                 statesref: statesref.clone(),
                             };
+                            tracing::trace!(
+                                "Querying missing samples {}?{}",
+                                query_expr,
+                                seq_num_range
+                            );
                             let _ = session
                                 .get(Selector::from((query_expr, seq_num_range)))
                                 .callback({
@@ -773,6 +783,11 @@ impl<Handler> AdvancedSubscriber<Handler> {
                     end: TimeBound::Unbounded,
                 });
             }
+            tracing::trace!(
+                "Querying historical samples {}?{}",
+                &key_expr / KE_ADV_PREFIX / KE_STARSTAR,
+                params
+            );
             let _ = conf
                 .session
                 .get(Selector::from((
@@ -808,7 +823,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                         if s.kind() == SampleKind::Put {
                             if let Ok(parsed) = ke_liveliness::parse(s.key_expr().as_keyexpr()) {
                                 tracing::trace!(
-                                    "AdvancedSubscriber: Detect late joiner publishers with zid={}",
+                                    "Detect late joiner publishers with zid={}",
                                     parsed.zid().as_str()
                                 );
                                 if let Ok(zid) = ZenohId::from_str(parsed.zid().as_str()) {
@@ -843,6 +858,11 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                                 end: TimeBound::Unbounded,
                                             });
                                         }
+                                        tracing::trace!(
+                                            "Querying historical samples {}?{}",
+                                            s.key_expr(),
+                                            params
+                                        );
                                         let _ = session
                                             .get(Selector::from((s.key_expr(), params)))
                                             .callback({
@@ -894,6 +914,11 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                                 end: TimeBound::Unbounded,
                                             });
                                         }
+                                        tracing::trace!(
+                                            "Querying historical samples {}?{}",
+                                            s.key_expr(),
+                                            params
+                                        );
                                         let _ = session
                                             .get(Selector::from((s.key_expr(), params)))
                                             .callback({
@@ -943,6 +968,11 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                             end: TimeBound::Unbounded,
                                         });
                                     }
+                                    tracing::trace!(
+                                        "Querying historical samples {}?{}",
+                                        s.key_expr(),
+                                        params
+                                    );
                                     let _ = session
                                         .get(Selector::from((s.key_expr(), params)))
                                         .callback({
@@ -974,7 +1004,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                 };
 
                 tracing::debug!(
-                    "AdvancedSubscriber: Detect late joiner publishers liveliness token {}",
+                    "AdvancedSubscriber: Detect late joiner publishers on {}",
                     &key_expr / KE_ADV_PREFIX / KE_PUB / KE_STARSTAR
                 );
                 Some(
@@ -997,7 +1027,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
             let ke_heartbeat_sub = &key_expr / KE_ADV_PREFIX / KE_PUB / KE_STARSTAR;
             let statesref = statesref.clone();
             tracing::debug!(
-                "AdvancedSubscriber: Enable heartbeat subscriber with {}",
+                "AdvancedSubscriber: Enable heartbeat subscriber on {}",
                 ke_heartbeat_sub
             );
             let heartbeat_sub = conf
@@ -1037,7 +1067,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                         // NOTE: API does not allow both heartbeat and periodic_queries
                         spawn_periodoic_queries!(states, source_id, statesref.clone());
                         if states.global_pending_queries > 0 {
-                            tracing::debug!("Skipping heartbeat on '{}' from publisher that is currently being pulled by global query", heartbeat_keyexpr);
+                            tracing::trace!("Skipping heartbeat on '{}' from publisher that is currently being pulled by global query", heartbeat_keyexpr);
                             return;
                         }
                     }
@@ -1069,6 +1099,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                             source_id,
                             statesref: statesref.clone(),
                         };
+                        tracing::trace!("Querying missing samples {}?{}", heartbeat_keyexpr, seq_num_range);
                         let _ = session
                             .get(Selector::from((heartbeat_keyexpr, seq_num_range)))
                             .callback({
