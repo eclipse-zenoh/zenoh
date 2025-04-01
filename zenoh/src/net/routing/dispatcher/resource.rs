@@ -893,8 +893,9 @@ pub(crate) fn register_expr_interest(
                 drop(wtables);
             }
             None => tracing::error!(
-                "Declare keyexpr interest with unknown scope {}!",
-                expr.scope
+                "{} Declare keyexpr interest with unknown scope {}!",
+                face,
+                expr.scope,
             ),
         }
     } else {
