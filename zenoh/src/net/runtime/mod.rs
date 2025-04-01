@@ -449,6 +449,7 @@ impl Runtime {
 
             update_iface_cache();
             self.update_locators();
+            // TODO Transmit new locators to peers?
 
             let scouting = self.state.scouting.lock().await;
             if let Some(scouting) = scouting.as_ref() {
