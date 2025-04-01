@@ -605,6 +605,7 @@ impl<'a> AdvancedPublisher<'a> {
     /// ```
     #[zenoh_macros::unstable]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
+        tracing::debug!("AdvancedPublisher: Undeclare {}", self.key_expr());
         self.publisher.undeclare()
     }
 }

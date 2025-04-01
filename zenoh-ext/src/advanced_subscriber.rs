@@ -1184,6 +1184,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
     #[inline]
     #[zenoh_macros::unstable]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> {
+        tracing::debug!("AdvancedSubscriber: Undeclare {}", self.key_expr());
         self.subscriber.undeclare()
     }
 }
