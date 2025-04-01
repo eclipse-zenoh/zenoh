@@ -127,7 +127,13 @@ where
     }
 }
 
-#[doc(hidden)]
+#[cfg(not(feature = "internal"))]
+pub(crate) struct WeakCallback<T> {
+    use_guard: Arc<()>,
+    cb: Callback<T>,
+}
+
+#[zenoh_macros::internal]
 pub struct WeakCallback<T> {
     use_guard: Arc<()>,
     cb: Callback<T>,
@@ -149,7 +155,12 @@ impl<T> WeakCallback<T> {
     }
 }
 
-#[doc(hidden)]
+#[cfg(not(feature = "internal"))]
+pub(crate) struct StrongCallback<T> {
+    cb: WeakCallback<T>,
+}
+
+#[zenoh_macros::internal]
 // A Callback that blocks on Drop operation until all of its weak clones are dropped
 pub struct StrongCallback<T> {
     cb: WeakCallback<T>,
