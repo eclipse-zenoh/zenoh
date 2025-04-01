@@ -594,7 +594,7 @@ pub(crate) fn route_send_response(
 
     match face.pending_queries.get(&qid) {
         Some((query, _)) => {
-            tracing::debug!(
+            tracing::trace!(
                 "{}:{} Route reply for query {}:{} ({})",
                 face,
                 qid,
@@ -659,7 +659,7 @@ pub(crate) fn finalize_pending_query(query: (Arc<Query>, CancellationToken)) {
     let (query, cancellation_token) = query;
     cancellation_token.cancel();
     if let Some(query) = Arc::into_inner(query) {
-        tracing::debug!("Propagate final reply {}:{}", query.src_face, query.src_qid);
+        tracing::debug!("{}:{} Propagate final reply", query.src_face, query.src_qid);
         query
             .src_face
             .primitives
