@@ -622,28 +622,32 @@ impl Timed for PeriodicQuery {
             let key_expr = states.key_expr.clone().into_owned();
             let query_target = states.query_target;
             let query_timeout = states.query_timeout;
+
+            tracing::trace!(
+                "AdvancedSubscriber{{key_expr: {}}}: Querying undelivered samples {}?{}",
+                states.key_expr,
+                query_expr,
+                seq_num_range
+            );
             drop(lock);
+
             let handler = SequencedRepliesHandler {
                 source_id: self.source_id,
                 statesref: self.statesref.clone(),
             };
-            tracing::trace!(
-                "Querying undelivered samples {}?{}",
-                query_expr,
-                seq_num_range
-            );
             let _ = session
                 .get(Selector::from((query_expr, seq_num_range)))
                 .callback({
                     move |r: Reply| {
                         if let Ok(s) = r.into_result() {
                             if key_expr.intersects(s.key_expr()) {
+                                let states = &mut *zlock!(handler.statesref);
                                 tracing::trace!(
-                                    "Received reply with Sample{{info:{:?}, ts:{:?}}}",
+                                    "AdvancedSubscriber{{key_expr: {}}}: Received reply with Sample{{info:{:?}, ts:{:?}}}",
+                                    states.key_expr,
                                     s.source_info(),
                                     s.timestamp()
                                 );
-                                let states = &mut *zlock!(handler.statesref);
                                 handle_sample(states, s);
                             }
                         }
@@ -731,16 +735,17 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                 / KE_STARSTAR;
                             let seq_num_range =
                                 seq_num_range(state.last_delivered.map(|s| s + 1), None);
+                            tracing::trace!(
+                                "AdvancedSubscriber{{key_expr: {}}}: Querying missing samples {}?{}",
+                                states.key_expr,
+                                query_expr,
+                                seq_num_range
+                            );
                             drop(lock);
                             let handler = SequencedRepliesHandler {
                                 source_id,
                                 statesref: statesref.clone(),
                             };
-                            tracing::trace!(
-                                "Querying missing samples {}?{}",
-                                query_expr,
-                                seq_num_range
-                            );
                             let _ = session
                                 .get(Selector::from((query_expr, seq_num_range)))
                                 .callback({
@@ -748,8 +753,8 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                     move |r: Reply| {
                                         if let Ok(s) = r.into_result() {
                                             if key_expr.intersects(s.key_expr()) {
-                                                tracing::trace!("Received reply with Sample{{info:{:?}, ts:{:?}}}", s.source_info(), s.timestamp());
                                                 let states = &mut *zlock!(handler.statesref);
+                                                tracing::trace!("AdvancedSubscriber{{key_expr: {}}}: Received reply with Sample{{info:{:?}, ts:{:?}}}", states.key_expr, s.source_info(), s.timestamp());
                                                 handle_sample(states, s);
                                             }
                                         }
@@ -773,11 +778,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
             .allowed_origin(conf.origin)
             .wait()?;
 
-        tracing::debug!(
-            "Create AdvancedSubscriber{{eid: {}}} on {}",
-            subscriber.id().eid(),
-            &key_expr
-        );
+        tracing::debug!("Create AdvancedSubscriber{{key_expr: {}}}", key_expr,);
 
         if let Some(historyconf) = conf.history.as_ref() {
             let handler = InitialRepliesHandler {
@@ -794,8 +795,8 @@ impl<Handler> AdvancedSubscriber<Handler> {
                 });
             }
             tracing::trace!(
-                "AdvancedSubscriber{{eid: {}}} Querying historical samples {}?{}",
-                subscriber.id().eid(),
+                "AdvancedSubscriber{{key_expr: {}}} Querying historical samples {}?{}",
+                key_expr,
                 &key_expr / KE_ADV_PREFIX / KE_STARSTAR,
                 params
             );
@@ -810,12 +811,13 @@ impl<Handler> AdvancedSubscriber<Handler> {
                     move |r: Reply| {
                         if let Ok(s) = r.into_result() {
                             if key_expr.intersects(s.key_expr()) {
+                                let states = &mut *zlock!(handler.statesref);
                                 tracing::trace!(
-                                    "Received reply with Sample{{info:{:?}, ts:{:?}}}",
+                                    "AdvancedSubscriber{{key_expr: {}}}: Received reply with Sample{{info:{:?}, ts:{:?}}}",
+                                    states.key_expr,
                                     s.source_info(),
                                     s.timestamp()
                                 );
-                                let states = &mut *zlock!(handler.statesref);
                                 handle_sample(states, s);
                             }
                         }
@@ -838,16 +840,17 @@ impl<Handler> AdvancedSubscriber<Handler> {
                     move |s: Sample| {
                         if s.kind() == SampleKind::Put {
                             if let Ok(parsed) = ke_liveliness::parse(s.key_expr().as_keyexpr()) {
-                                tracing::trace!(
-                                    "Detect late joiner publishers with zid={}",
-                                    parsed.zid().as_str()
-                                );
                                 if let Ok(zid) = ZenohId::from_str(parsed.zid().as_str()) {
                                     // TODO : If we already have a state associated to this discovered source
                                     // we should query with the appropriate range to avoid unnecessary retransmissions
                                     if parsed.eid() == KE_UHLC {
                                         let mut lock = zlock!(statesref);
                                         let states = &mut *lock;
+                                        tracing::trace!(
+                                            "AdvancedSubscriber{{key_expr: {}}}: Detect late joiner publishers with zid={}",
+                                            states.key_expr,
+                                            parsed.zid().as_str()
+                                        );
                                         let entry = states.timestamped_states.entry(ID::from(zid));
                                         let state = entry.or_insert(SourceState::<Timestamp> {
                                             last_delivered: None,
@@ -855,13 +858,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                             pending_samples: BTreeMap::new(),
                                         });
                                         state.pending_queries += 1;
-                                        drop(lock);
 
-                                        let handler = TimestampedRepliesHandler {
-                                            id: ID::from(zid),
-                                            statesref: statesref.clone(),
-                                            callback: callback.clone(),
-                                        };
                                         let mut params = Parameters::empty();
                                         if let Some(max) = historyconf.sample_depth {
                                             params.insert("_max", max.to_string());
@@ -875,10 +872,18 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                             });
                                         }
                                         tracing::trace!(
-                                            "Querying historical samples {}?{}",
+                                            "AdvancedSubscriber{{key_expr: {}}}: Querying historical samples {}?{}",
+                                            states.key_expr,
                                             s.key_expr(),
                                             params
                                         );
+                                        drop(lock);
+
+                                        let handler = TimestampedRepliesHandler {
+                                            id: ID::from(zid),
+                                            statesref: statesref.clone(),
+                                            callback: callback.clone(),
+                                        };
                                         let _ = session
                                             .get(Selector::from((s.key_expr(), params)))
                                             .callback({
@@ -886,9 +891,9 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                                 move |r: Reply| {
                                                     if let Ok(s) = r.into_result() {
                                                         if key_expr.intersects(s.key_expr()) {
-                                                            tracing::trace!("Received reply with Sample{{info:{:?}, ts:{:?}}}", s.source_info(), s.timestamp());
                                                             let states =
                                                                 &mut *zlock!(handler.statesref);
+                                                            tracing::trace!("AdvancedSubscriber{{key_expr: {}}}: Received reply with Sample{{info:{:?}, ts:{:?}}}", states.key_expr, s.source_info(), s.timestamp());
                                                             handle_sample(states, s);
                                                         }
                                                     }
@@ -905,6 +910,11 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                         let source_id = EntityGlobalId::new(zid, eid);
                                         let mut lock = zlock!(statesref);
                                         let states = &mut *lock;
+                                        tracing::trace!(
+                                            "AdvancedSubscriber{{key_expr: {}}}: Detect late joiner publishers with zid={}",
+                                            states.key_expr,
+                                            parsed.zid().as_str()
+                                        );
                                         let entry = states.sequenced_states.entry(source_id);
                                         let new = matches!(&entry, Entry::Vacant(_));
                                         let state = entry.or_insert(SourceState::<u32> {
@@ -913,12 +923,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                             pending_samples: BTreeMap::new(),
                                         });
                                         state.pending_queries += 1;
-                                        drop(lock);
 
-                                        let handler = SequencedRepliesHandler {
-                                            source_id,
-                                            statesref: statesref.clone(),
-                                        };
                                         let mut params = Parameters::empty();
                                         if let Some(max) = historyconf.sample_depth {
                                             params.insert("_max", max.to_string());
@@ -932,10 +937,17 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                             });
                                         }
                                         tracing::trace!(
-                                            "Querying historical samples {}?{}",
+                                            "AdvancedSubscriber{{key_expr: {}}}: Querying historical samples {}?{}",
+                                            states.key_expr,
                                             s.key_expr(),
-                                            params
+                                            params,
                                         );
+                                        drop(lock);
+
+                                        let handler = SequencedRepliesHandler {
+                                            source_id,
+                                            statesref: statesref.clone(),
+                                        };
                                         let _ = session
                                             .get(Selector::from((s.key_expr(), params)))
                                             .callback({
@@ -943,9 +955,9 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                                 move |r: Reply| {
                                                     if let Ok(s) = r.into_result() {
                                                         if key_expr.intersects(s.key_expr()) {
-                                                            tracing::trace!("Received reply with Sample{{info:{:?}, ts:{:?}}}", s.source_info(), s.timestamp());
                                                             let states =
                                                                 &mut *zlock!(handler.statesref);
+                                                            tracing::trace!("AdvancedSubscriber{{key_expr: {}}}: Received reply with Sample{{info:{:?}, ts:{:?}}}", states.key_expr, s.source_info(), s.timestamp());
                                                             handle_sample(states, s);
                                                         }
                                                     }
@@ -968,12 +980,13 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                 } else {
                                     let mut lock = zlock!(statesref);
                                     let states = &mut *lock;
+                                    tracing::trace!(
+                                        "AdvancedSubscriber{{key_expr: {}}}: Detect late joiner publishers with zid={}",
+                                        states.key_expr,
+                                        parsed.zid().as_str()
+                                    );
                                     states.global_pending_queries += 1;
-                                    drop(lock);
 
-                                    let handler = InitialRepliesHandler {
-                                        statesref: statesref.clone(),
-                                    };
                                     let mut params = Parameters::empty();
                                     if let Some(max) = historyconf.sample_depth {
                                         params.insert("_max", max.to_string());
@@ -987,10 +1000,16 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                         });
                                     }
                                     tracing::trace!(
-                                        "Querying historical samples {}?{}",
+                                        "AdvancedSubscriber{{key_expr: {}}}: Querying historical samples {}?{}",
+                                        states.key_expr,
                                         s.key_expr(),
-                                        params
+                                        params,
                                     );
+                                    drop(lock);
+
+                                    let handler = InitialRepliesHandler {
+                                        statesref: statesref.clone(),
+                                    };
                                     let _ = session
                                         .get(Selector::from((s.key_expr(), params)))
                                         .callback({
@@ -998,9 +1017,9 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                             move |r: Reply| {
                                                 if let Ok(s) = r.into_result() {
                                                     if key_expr.intersects(s.key_expr()) {
-                                                        tracing::trace!("Received reply with Sample{{info:{:?}, ts:{:?}}}", s.source_info(), s.timestamp());
                                                         let states =
                                                             &mut *zlock!(handler.statesref);
+                                                        tracing::trace!("AdvancedSubscriber{{key_expr: {}}}: Received reply with Sample{{info:{:?}, ts:{:?}}}", states.key_expr, s.source_info(), s.timestamp());
                                                         handle_sample(states, s);
                                                     }
                                                 }
@@ -1014,7 +1033,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                 }
                             } else {
                                 tracing::warn!(
-                                    "Received malformed liveliness token key expression: {}",
+                                    "AdvancedSubscriber{{}}: Received malformed liveliness token key expression: {}",
                                     s.key_expr()
                                 );
                             }
@@ -1023,8 +1042,8 @@ impl<Handler> AdvancedSubscriber<Handler> {
                 };
 
                 tracing::debug!(
-                    "AdvancedSubscriber{{eid: {}}}: Detect late joiner publishers on {}",
-                    subscriber.id().eid(),
+                    "AdvancedSubscriber{{key_expr: {}}}: Detect late joiner publishers on {}",
+                    key_expr,
                     &key_expr / KE_ADV_PREFIX / KE_PUB / KE_STARSTAR
                 );
                 Some(
@@ -1047,8 +1066,8 @@ impl<Handler> AdvancedSubscriber<Handler> {
             let ke_heartbeat_sub = &key_expr / KE_ADV_PREFIX / KE_PUB / KE_STARSTAR;
             let statesref = statesref.clone();
             tracing::debug!(
-                "AdvancedSubscriber{{eid: {}}}: Enable heartbeat subscriber on {}",
-                subscriber.id().eid(),
+                "AdvancedSubscriber{{key_expr: {}}}: Enable heartbeat subscriber on {}",
+                key_expr,
                 ke_heartbeat_sub
             );
             let heartbeat_sub = conf
@@ -1075,7 +1094,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
 
                     let Ok(heartbeat_sn) = z_deserialize::<u32>(sample_hb.payload()) else {
                         tracing::debug!(
-                            "Skipping invalid heartbeat payload on '{}'",
+                            "AdvancedSubscriber{{}}: Skipping invalid heartbeat payload on '{}'",
                             heartbeat_keyexpr
                         );
                         return;
@@ -1088,7 +1107,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                         // NOTE: API does not allow both heartbeat and periodic_queries
                         spawn_periodoic_queries!(states, source_id, statesref.clone());
                         if states.global_pending_queries > 0 {
-                            tracing::trace!("Skipping heartbeat on '{}' from publisher that is currently being pulled by global query", heartbeat_keyexpr);
+                            tracing::trace!("AdvancedSubscriber{{key_expr: {}}}: Skipping heartbeat on '{}' from publisher that is currently being pulled by global query", states.key_expr, heartbeat_keyexpr);
                             return;
                         }
                     }
@@ -1114,21 +1133,22 @@ impl<Handler> AdvancedSubscriber<Handler> {
                         let query_target = states.query_target;
                         let query_timeout = states.query_timeout;
                         state.pending_queries += 1;
+
+                        tracing::trace!("AdvancedSubscriber{{key_expr: {}}}: Querying missing samples {}?{}", states.key_expr, heartbeat_keyexpr, seq_num_range);
                         drop(lock);
 
                         let handler = SequencedRepliesHandler {
                             source_id,
                             statesref: statesref.clone(),
                         };
-                        tracing::trace!("Querying missing samples {}?{}", heartbeat_keyexpr, seq_num_range);
                         let _ = session
                             .get(Selector::from((heartbeat_keyexpr, seq_num_range)))
                             .callback({
                                 move |r: Reply| {
                                     if let Ok(s) = r.into_result() {
                                         if key_expr.intersects(s.key_expr()) {
-                                            tracing::trace!("Received reply with Sample{{info:{:?}, ts:{:?}}}", s.source_info(), s.timestamp());
                                             let states = &mut *zlock!(handler.statesref);
+                                            tracing::trace!("AdvancedSubscriber{{key_expr: {}}}: Received reply with Sample{{info:{:?}, ts:{:?}}}", states.key_expr, s.source_info(), s.timestamp());
                                             handle_sample(states, s);
                                         }
                                     }
@@ -1159,8 +1179,8 @@ impl<Handler> AdvancedSubscriber<Handler> {
                 _ => suffix / KE_EMPTY,
             };
             tracing::debug!(
-                "AdvancedSubscriber{{eid: {}}}: Declare liveliness token {}",
-                subscriber.id().eid(),
+                "AdvancedSubscriber{{key_expr: {}}}: Declare liveliness token {}",
+                key_expr,
                 &key_expr / &suffix,
             );
             let token = conf
@@ -1239,8 +1259,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
     #[zenoh_macros::unstable]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> {
         tracing::debug!(
-            "AdvancedSubscriber{{eid: {}}}: Undeclare {}",
-            self.id().eid(),
+            "AdvancedSubscriber{{key_expr: {}}}: Undeclare",
             self.key_expr()
         );
         self.subscriber.undeclare()
@@ -1321,7 +1340,10 @@ impl Drop for InitialRepliesHandler {
     fn drop(&mut self) {
         let states = &mut *zlock!(self.statesref);
         states.global_pending_queries = states.global_pending_queries.saturating_sub(1);
-        tracing::trace!("Flush initial replies");
+        tracing::trace!(
+            "AdvancedSubscriber{{key_expr: {}}}: Flush initial replies",
+            states.key_expr
+        );
 
         if states.global_pending_queries == 0 {
             for (source_id, state) in states.sequenced_states.iter_mut() {
@@ -1349,7 +1371,10 @@ impl Drop for SequencedRepliesHandler {
         if let Some(state) = states.sequenced_states.get_mut(&self.source_id) {
             state.pending_queries = state.pending_queries.saturating_sub(1);
             if states.global_pending_queries == 0 {
-                tracing::trace!("Flush sequenced samples");
+                tracing::trace!(
+                    "AdvancedSubscriber{{key_expr: {}}}: Flush sequenced samples",
+                    states.key_expr
+                );
                 flush_sequenced_source(
                     state,
                     &states.callback,
@@ -1376,7 +1401,10 @@ impl Drop for TimestampedRepliesHandler {
         if let Some(state) = states.timestamped_states.get_mut(&self.id) {
             state.pending_queries = state.pending_queries.saturating_sub(1);
             if states.global_pending_queries == 0 {
-                tracing::trace!("Flush timestamped samples");
+                tracing::trace!(
+                    "AdvancedSubscriber{{key_expr: {}}}: Flush timestamped samples",
+                    states.key_expr
+                );
                 flush_timestamped_source(state, &self.callback);
             }
         }

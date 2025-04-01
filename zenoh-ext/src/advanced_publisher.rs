@@ -302,7 +302,7 @@ impl<'a> AdvancedPublisher<'a> {
             Some(meta) => Some(meta?),
             None => None,
         };
-        tracing::debug!("Create AdvancedPublisher on {}", &key_expr);
+        tracing::debug!("Create AdvancedPublisher{{key_expr: {}}}", &key_expr);
 
         let publisher = conf
             .session
@@ -356,8 +356,9 @@ impl<'a> AdvancedPublisher<'a> {
 
         let token = if conf.liveliness {
             tracing::debug!(
-                "AdvancedPublisher: Declare liveliness token {}",
-                &key_expr / &suffix
+                "AdvancedPublisher{{key_expr: {}}}: Declare liveliness token {}",
+                key_expr,
+                &key_expr / &suffix,
             );
             Some(
                 conf.session
@@ -374,7 +375,8 @@ impl<'a> AdvancedPublisher<'a> {
         {
             if let Some(seqnum) = seqnum.as_ref() {
                 tracing::debug!(
-                    "AdvancedPublisher: Enable {}heartbeat on {} with period {:?}",
+                    "AdvancedPublisher{{key_expr: {}}}: Enable {}heartbeat on {} with period {:?}",
+                    key_expr,
                     if sporadic { "sporadic " } else { "" },
                     &key_expr / &suffix,
                     period
@@ -490,7 +492,11 @@ impl<'a> AdvancedPublisher<'a> {
                 Some(self.publisher.id()),
                 Some(seqnum.fetch_add(1, Ordering::Relaxed)),
             );
-            tracing::trace!("Put data for {} with {:?}", self.publisher.key_expr(), info);
+            tracing::trace!(
+                "AdvancedPublisher{{key_expr: {}}}: Put data with {:?}",
+                self.publisher.key_expr(),
+                info
+            );
             builder = builder.source_info(info);
         }
         if let Some(hlc) = self.publisher.session().hlc() {
@@ -603,7 +609,10 @@ impl<'a> AdvancedPublisher<'a> {
     /// ```
     #[zenoh_macros::unstable]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
-        tracing::debug!("AdvancedPublisher: Undeclare {}", self.key_expr());
+        tracing::debug!(
+            "AdvancedPublisher{{key_expr: {}}}: : Undeclare",
+            self.key_expr()
+        );
         self.publisher.undeclare()
     }
 }

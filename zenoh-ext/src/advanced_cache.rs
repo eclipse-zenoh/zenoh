@@ -227,7 +227,7 @@ impl AdvancedCache {
             Some(Err(e)) => bail!("Invalid key expression for queryable_suffix: {}", e),
         };
         tracing::debug!(
-            "Create AdvancedCache on {} with max_samples={:?}",
+            "Create AdvancedCache{{key_expr: {}, max_samples: {:?}}}",
             &key_expr,
             conf.history,
         );
@@ -241,7 +241,7 @@ impl AdvancedCache {
             .callback({
                 let cache = cache.clone();
                 move |query| {
-                    tracing::trace!("Handle query {}", query.selector());
+                    tracing::trace!("AdvancedCache{{}} Handle query {}", query.selector());
                     let range = query
                         .parameters()
                         .get("_sn")
@@ -287,10 +287,10 @@ impl AdvancedCache {
                                     )
                                     .wait()
                                 {
-                                    tracing::warn!("Error replying to query: {}", e);
+                                    tracing::warn!("AdvancedCache{{}} Error replying to query: {}", e);
                                 } else {
                                     tracing::trace!(
-                                        "Replied to query {} with Sample{{info:{:?}, ts:{:?}}}",
+                                        "AdvancedCache{{}} Replied to query {} with Sample{{info:{:?}, ts:{:?}}}",
                                         query.selector(),
                                         sample.source_info(),
                                         sample.timestamp()
@@ -326,10 +326,10 @@ impl AdvancedCache {
                                         )
                                         .wait()
                                     {
-                                        tracing::warn!("Error replying to query: {}", e);
+                                        tracing::warn!("AdvancedCache{{}} Error replying to query: {}", e);
                                     } else {
                                         tracing::trace!(
-                                            "Replied to query {} with Sample{{info:{:?}, ts:{:?}}}",
+                                            "AdvancedCache{{}} Replied to query {} with Sample{{info:{:?}, ts:{:?}}}",
                                             query.selector(),
                                             sample.source_info(),
                                             sample.timestamp()
@@ -339,7 +339,7 @@ impl AdvancedCache {
                             }
                         }
                     } else {
-                        tracing::error!("Unable to take AdvancedPublisher cache read lock");
+                        tracing::error!("AdvancedCache{{}} Unable to take AdvancedPublisher cache read lock");
                     }
                 }
             })
@@ -372,7 +372,7 @@ impl AdvancedCache {
             }
             queue.push_back(sample);
         } else {
-            tracing::error!("Unable to take AdvancedPublisher cache write lock");
+            tracing::error!("AdvancedCache{{}} Unable to take AdvancedPublisher cache write lock");
         }
     }
 }
