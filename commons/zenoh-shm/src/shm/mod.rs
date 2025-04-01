@@ -63,9 +63,10 @@ impl<ID: SegmentID> Segment<ID> {
         Ok(Self { inner })
     }
 
-    pub fn ensure_not_persistent(_id: ID) {
+    #[allow(unused_variables)]
+    pub fn ensure_not_persistent(id: ID) {
         #[cfg(not(target_os = "windows"))]
-        platform::SegmentImpl::ensure_not_persistent(_id);
+        platform::SegmentImpl::ensure_not_persistent(id);
     }
 }
 

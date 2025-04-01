@@ -124,6 +124,12 @@ impl<ID: SegmentID> SegmentImpl<ID> {
                 let lockpath = std::env::temp_dir().join(Self::id_str(id));
                 let flags = OFlag::O_RDWR;
                 let mode = Mode::S_IRUSR | Mode::S_IWUSR;
+                tracing::trace!(
+                    "open(name={:?}, flag={:?}, mode={:?})",
+                    lockpath,
+                    flags,
+                    mode
+                );
                 open(&lockpath, flags, mode).map_err(|e| SegmentOpenError::OsError(e as _))
             }?)
         };
@@ -209,6 +215,12 @@ impl<ID: SegmentID> SegmentImpl<ID> {
                 let lockpath = std::env::temp_dir().join(Self::id_str(id));
                 let flags = OFlag::O_RDWR;
                 let mode = Mode::S_IRUSR | Mode::S_IWUSR;
+                tracing::trace!(
+                    "open(name={:?}, flag={:?}, mode={:?})",
+                    lockpath,
+                    flags,
+                    mode
+                );
                 match open(&lockpath, flags, mode) {
                     Ok(val) => val,
                     Err(nix::errno::Errno::ENOENT) => return true,
@@ -262,11 +274,16 @@ impl<ID: SegmentID> SegmentImpl<ID> {
     fn cleanup_segment(id: ID) {
         let id = Self::id_str(id);
         tracing::trace!("shm_unlink(name={})", id);
-        let _ = shm_unlink(id.as_str());
+        if let Err(e) = shm_unlink(id.as_str()) {
+            tracing::debug!("shm_unlink() failed : {}", e);
+        };
         #[cfg(shm_external_lockfile)]
         {
             let lockpath = std::env::temp_dir().join(id);
-            let _ = std::fs::remove_file(lockpath);
+            tracing::trace!("remove_file(name={:?})", lockpath);
+            if let Err(e) = std::fs::remove_file(lockpath) {
+                tracing::debug!("remove_file() failed : {}", e);
+            }
         }
     }
 }
