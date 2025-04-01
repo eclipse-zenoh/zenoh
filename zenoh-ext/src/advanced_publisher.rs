@@ -58,17 +58,47 @@ pub(crate) enum Sequencing {
     SequenceNumber,
 }
 
+/// Configuration for sample miss detection
+///
+/// Enabling sample miss detection allows [`AdvancedSubscribers`](crate::AdvancedSubscriber) to detect missed samples
+/// through [`sample_miss_listener`](crate::AdvancedSubscriber::sample_miss_listener)
+/// and to recover missed samples through [`recovery`](crate::AdvancedSubscriberBuilder::recovery).
 #[derive(Default)]
 #[zenoh_macros::unstable]
 pub struct MissDetectionConfig {
-    pub(crate) state_publisher: Option<Duration>,
+    pub(crate) state_publisher: Option<(Duration, bool)>,
 }
 
 #[zenoh_macros::unstable]
 impl MissDetectionConfig {
+    /// Allow last sample miss detection through periodic heartbeat.
+    ///
+    /// Periodically send the last published Sample's sequence number to allow last sample recovery.
+    ///
+    /// [`heartbeat`](MissDetectionConfig::heartbeat) and [`sporadic_heartbeat`](MissDetectionConfig::sporadic_heartbeat)
+    /// are mutually exclusive. Enabling one will disable the other.
+    ///
+    /// [`AdvancedSubscribers`](crate::AdvancedSubscriber) can recover last sample with the
+    /// [`heartbeat`](crate::advanced_subscriber::RecoveryConfig::heartbeat) option.
     #[zenoh_macros::unstable]
     pub fn heartbeat(mut self, period: Duration) -> Self {
-        self.state_publisher = Some(period);
+        self.state_publisher = Some((period, false));
+        self
+    }
+
+    /// Allow last sample miss detection through sporadic heartbeat.
+    ///
+    /// Each period, the last published Sample's sequence number is sent with [`CongestionControl::Block`]
+    /// but only if it changed since last period.
+    ///
+    /// [`heartbeat`](MissDetectionConfig::heartbeat) and [`sporadic_heartbeat`](MissDetectionConfig::sporadic_heartbeat)
+    /// are mutually exclusive. Enabling one will disable the other.
+    ///
+    /// [`AdvancedSubscribers`](crate::AdvancedSubscriber) can recover last sample with the
+    /// [`heartbeat`](crate::advanced_subscriber::RecoveryConfig::heartbeat) option.
+    #[zenoh_macros::unstable]
+    pub fn sporadic_heartbeat(mut self, period: Duration) -> Self {
+        self.state_publisher = Some((period, true));
         self
     }
 }
@@ -344,7 +374,8 @@ impl<'a> AdvancedPublisher<'a> {
             None
         };
 
-        let state_publisher = if let Some(period) = conf.miss_config.and_then(|c| c.state_publisher)
+        let state_publisher = if let Some((period, sporadic)) =
+            conf.miss_config.as_ref().and_then(|c| c.state_publisher)
         {
             if let Some(seqnum) = seqnum.as_ref() {
                 tracing::debug!(
@@ -353,20 +384,41 @@ impl<'a> AdvancedPublisher<'a> {
                     period
                 );
                 let seqnum = seqnum.clone();
-
-                let publisher = conf.session.declare_publisher(&key_expr / &suffix).wait()?;
-                Some(TerminatableTask::spawn_abortable(
-                    ZRuntime::Net,
-                    async move {
-                        loop {
-                            tokio::time::sleep(period).await;
-                            let seqnum = seqnum.load(Ordering::Relaxed);
-                            if seqnum > 0 {
-                                let _ = publisher.put(z_serialize(&(seqnum - 1))).await;
+                if !sporadic {
+                    let publisher = conf.session.declare_publisher(&key_expr / &suffix).wait()?;
+                    Some(TerminatableTask::spawn_abortable(
+                        ZRuntime::Net,
+                        async move {
+                            loop {
+                                tokio::time::sleep(period).await;
+                                let seqnum = seqnum.load(Ordering::Relaxed);
+                                if seqnum > 0 {
+                                    let _ = publisher.put(z_serialize(&(seqnum - 1))).await;
+                                }
                             }
-                        }
-                    },
-                ))
+                        },
+                    ))
+                } else {
+                    let mut last_seqnum = 0;
+                    let publisher = conf
+                        .session
+                        .declare_publisher(&key_expr / &suffix)
+                        .congestion_control(CongestionControl::Block)
+                        .wait()?;
+                    Some(TerminatableTask::spawn_abortable(
+                        ZRuntime::Net,
+                        async move {
+                            loop {
+                                tokio::time::sleep(period).await;
+                                let seqnum = seqnum.load(Ordering::Relaxed);
+                                if seqnum > last_seqnum {
+                                    let _ = publisher.put(z_serialize(&(seqnum - 1))).await;
+                                    last_seqnum = seqnum;
+                                }
+                            }
+                        },
+                    ))
+                }
             } else {
                 None
             }
