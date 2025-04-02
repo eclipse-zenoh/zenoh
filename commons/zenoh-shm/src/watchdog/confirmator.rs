@@ -117,7 +117,7 @@ impl ConfirmedSegment {
                 Transaction::Remove(watchdog) => match watchdogs.entry(watchdog) {
                     Entry::Vacant(_) => {
                         #[cfg(feature = "test")]
-                        assert!(false);
+                        panic!("Removing not existing entry");
                     }
                     Entry::Occupied(mut occupied) => {
                         if *occupied.get() == 1 {
