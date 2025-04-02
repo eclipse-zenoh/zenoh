@@ -14,16 +14,7 @@
 
 //! Callback handler trait.
 
-use std::{
-    ops::Deref,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
-};
-
-use futures::executor::block_on;
-use tokio::sync::Notify;
+use std::{ops::Deref, sync::Arc};
 
 use crate::api::handlers::IntoHandler;
 
@@ -136,54 +127,40 @@ where
     }
 }
 
-struct CallbackTracker {
-    counter: AtomicUsize,
-    notify: Notify,
-}
-
 pub(crate) struct TrackedCallback<T> {
     callback: Callback<T>,
-    tracker: Arc<CallbackTracker>,
+    tx: Option<flume::Sender<()>>,
+    rx: flume::Receiver<()>,
 }
 
 impl<T> TrackedCallback<T> {
     pub(crate) fn new(callback: Callback<T>) -> Self {
-        let tracker = Arc::new(CallbackTracker {
-            counter: AtomicUsize::new(0),
-            notify: Notify::new(),
-        });
-        Self { callback, tracker }
+        let (tx, rx) = flume::bounded(0);
+        Self {
+            callback,
+            tx: Some(tx),
+            rx,
+        }
     }
 
     pub(crate) fn get_callback(&self) -> CallbackGuard<T> {
-        self.tracker.counter.fetch_add(1, Ordering::Relaxed);
         CallbackGuard {
             callback: self.callback.clone(),
-            tracker: self.tracker.clone(),
+            _tx: self.tx.as_ref().unwrap().clone(),
         }
     }
 }
 
 impl<T> Drop for TrackedCallback<T> {
     fn drop(&mut self) {
-        let notified = self.tracker.notify.notified();
-        if self.tracker.counter.load(Ordering::Relaxed) != 0 {
-            block_on(notified);
-        }
+        self.tx.take().unwrap();
+        self.rx.recv().unwrap_err();
     }
 }
 
 pub(crate) struct CallbackGuard<T> {
     callback: Callback<T>,
-    tracker: Arc<CallbackTracker>,
-}
-
-impl<T> Drop for CallbackGuard<T> {
-    fn drop(&mut self) {
-        if self.tracker.counter.fetch_sub(1, Ordering::Relaxed) == 1 {
-            self.tracker.notify.notify_waiters();
-        }
-    }
+    _tx: flume::Sender<()>,
 }
 
 impl<T> Deref for CallbackGuard<T> {
