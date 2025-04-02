@@ -534,7 +534,7 @@ impl Primitives for Face {
     }
 
     fn send_close(&self) {
-        tracing::debug!("Close {}", self.state);
+        tracing::debug!("{} Close", self.state);
         let mut state = self.state.clone();
         state.task_controller.terminate_all(Duration::from_secs(10));
         finalize_pending_queries(&self.tables, &mut state);

@@ -12,10 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use crossbeam_queue::SegQueue;
-use static_init::dynamic;
+use std::{collections::HashSet, ops::DerefMut, sync::Mutex};
 
-use crate::posix_shm::cleanup::cleanup_orphaned_segments;
+use static_init::dynamic;
+use zenoh_core::zlock;
+
+use crate::{posix_shm::cleanup::cleanup_orphaned_segments, shm::Segment};
 
 /// A global cleanup, that is guaranteed to be dropped at normal program exit and that will
 /// execute all registered cleanup routines at this moment
@@ -24,7 +26,7 @@ pub(crate) static mut CLEANUP: Cleanup = Cleanup::new();
 
 /// An RAII object that calls all registered routines upon destruction
 pub(crate) struct Cleanup {
-    cleanups: SegQueue<Option<Box<dyn FnOnce() + Send>>>,
+    cleanups: Mutex<HashSet<u64>>,
 }
 
 impl Cleanup {
@@ -36,15 +38,24 @@ impl Cleanup {
         }
     }
 
-    pub(crate) fn register_cleanup(&self, cleanup_fn: Box<dyn FnOnce() + Send>) {
-        self.cleanups.push(Some(cleanup_fn));
+    pub(crate) fn register_cleanup<ID: crate::shm::SegmentID>(&self, id: ID) {
+        let mut lock = zlock!(self.cleanups);
+        lock.insert(id.into());
+    }
+
+    pub(crate) fn unregister_cleanup<ID: crate::shm::SegmentID>(&self, id: ID) {
+        let mut lock = zlock!(self.cleanups);
+        lock.remove(&id.into());
     }
 
     fn cleanup(&self) {
-        while let Some(cleanup) = self.cleanups.pop() {
-            if let Some(f) = cleanup {
-                f();
-            }
+        let ids = {
+            let mut lock = zlock!(self.cleanups);
+            std::mem::take(lock.deref_mut())
+        };
+
+        for id in ids {
+            Segment::ensure_not_persistent(id);
         }
     }
 }
