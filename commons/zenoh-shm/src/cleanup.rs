@@ -45,15 +45,14 @@ impl Cleanup {
 
     pub(crate) fn unregister_cleanup<ID: crate::shm::SegmentID>(&self, id: ID) {
         let mut lock = zlock!(self.cleanups);
-        let _ = lock.remove(&id.into());
+        lock.remove(&id.into());
     }
 
     fn cleanup(&self) {
-        let mut ids: HashSet<u64> = Default::default();
-        {
+        let ids = {
             let mut lock = zlock!(self.cleanups);
-            std::mem::swap(lock.deref_mut(), &mut ids);
-        }
+            std::mem::take(lock.deref_mut())
+        };
 
         for id in ids {
             Segment::ensure_not_persistent(id);
