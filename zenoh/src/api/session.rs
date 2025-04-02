@@ -1548,7 +1548,7 @@ impl SessionInner {
         Ok(sub_state)
     }
 
-    pub(crate) async fn undeclare_subscriber_inner(
+    pub(crate) fn undeclare_subscriber_inner(
         self: &Arc<Self>,
         sid: Id,
         kind: SubscriberKind,
@@ -1643,7 +1643,6 @@ impl SessionInner {
                     }
                 }
             }
-            sub_state.callback.wait_callbacks().await;
 
             Ok(())
         } else {

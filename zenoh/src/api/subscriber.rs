@@ -17,7 +17,6 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use futures::executor::block_on;
 use tracing::error;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
@@ -82,7 +81,7 @@ impl<Handler> Resolvable for SubscriberUndeclaration<Handler> {
 
 impl<Handler> Wait for SubscriberUndeclaration<Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        block_on(self.0.undeclare_impl())
+        self.0.undeclare_impl()
     }
 }
 
@@ -210,13 +209,12 @@ impl<Handler> Subscriber<Handler> {
         self.undeclare_inner(())
     }
 
-    async fn undeclare_impl(&mut self) -> ZResult<()> {
+    fn undeclare_impl(&mut self) -> ZResult<()> {
         // set the flag first to avoid double panic if this function panic
         self.inner.undeclare_on_drop = false;
         self.inner
             .session
             .undeclare_subscriber_inner(self.inner.id, self.inner.kind)
-            .await
     }
 
     #[zenoh_macros::internal]
@@ -233,7 +231,7 @@ impl<Handler> Subscriber<Handler> {
 impl<Handler> Drop for Subscriber<Handler> {
     fn drop(&mut self) {
         if self.inner.undeclare_on_drop {
-            if let Err(error) = block_on(self.undeclare_impl()) {
+            if let Err(error) = self.undeclare_impl() {
                 error!(error);
             }
         }

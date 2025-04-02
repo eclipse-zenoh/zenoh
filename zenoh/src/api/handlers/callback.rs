@@ -22,6 +22,7 @@ use std::{
     },
 };
 
+use futures::executor::block_on;
 use tokio::sync::Notify;
 
 use crate::api::handlers::IntoHandler;
@@ -161,16 +162,17 @@ impl<T> TrackedCallback<T> {
             tracker: self.tracker.clone(),
         }
     }
+}
 
-    pub(crate) async fn wait_callbacks(&self) {
+impl<T> Drop for TrackedCallback<T> {
+    fn drop(&mut self) {
         let notified = self.tracker.notify.notified();
         if self.tracker.counter.load(Ordering::Relaxed) != 0 {
-            notified.await;
+            block_on(notified);
         }
     }
 }
 
-#[derive(Clone)]
 pub(crate) struct CallbackGuard<T> {
     callback: Callback<T>,
     tracker: Arc<CallbackTracker>,
