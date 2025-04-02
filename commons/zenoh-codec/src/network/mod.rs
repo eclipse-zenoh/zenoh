@@ -25,7 +25,10 @@ use zenoh_buffers::{
 use zenoh_protocol::{
     common::{imsg, ZExtZ64, ZExtZBufHeader},
     core::{EntityId, Reliability, ZenohIdProto},
-    network::{ext::EntityGlobalIdType, *},
+    network::{
+        ext::{self, EntityGlobalIdType},
+        id, NetworkBody, NetworkBodyRef, NetworkMessage, NetworkMessageExt, NetworkMessageRef,
+    },
 };
 
 use crate::{

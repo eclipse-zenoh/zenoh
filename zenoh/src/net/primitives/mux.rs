@@ -70,9 +70,10 @@ impl EPrimitives for Mux {
         let cache_guard = prefix
             .as_ref()
             .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap(), &interceptor));
+
         let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
 
-        if interceptor.intercept(&mut ctx, cache) {
+        if self.interceptor.load().intercept(&mut ctx, cache) {
             let _ = self.handler.schedule(ctx.msg);
         } else {
             // send declare final to avoid timeout on blocked interest
@@ -106,7 +107,7 @@ impl EPrimitives for Mux {
             .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap(), &interceptor));
         let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
 
-        if interceptor.intercept(&mut ctx, cache) {
+        if self.interceptor.load().intercept(&mut ctx, cache) {
             let _ = self.handler.schedule(ctx.msg);
         }
     }
@@ -200,6 +201,7 @@ impl EPrimitives for Mux {
                 .as_ref()
                 .and_then(|p| p.get_egress_cache(&face, &interceptor));
             let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
+
             if interceptor.intercept(&mut ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
             }
@@ -282,7 +284,7 @@ impl EPrimitives for McastMux {
             .as_ref()
             .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap(), &interceptor));
         let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
-        if interceptor.intercept(&mut ctx, cache) {
+        if self.interceptor.load().intercept(&mut ctx, cache) {
             let _ = self.handler.schedule(ctx.msg);
         }
     }
@@ -310,7 +312,7 @@ impl EPrimitives for McastMux {
             .as_ref()
             .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap(), &interceptor));
         let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
-        if interceptor.intercept(&mut ctx, cache) {
+        if self.interceptor.load().intercept(&mut ctx, cache) {
             let _ = self.handler.schedule(ctx.msg);
         }
     }
