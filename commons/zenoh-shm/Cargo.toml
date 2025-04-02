@@ -47,7 +47,7 @@ thread-priority = { workspace = true }
 stabby = { workspace = true }
 crossbeam-channel = "0.5"
 crossbeam-queue = { workspace = true }
-
+static_assertions = "1.1.0"
 
 [target.'cfg(unix)'.dependencies]
 advisory-lock = { workspace = true }
