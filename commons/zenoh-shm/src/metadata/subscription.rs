@@ -53,11 +53,9 @@ impl Subscription {
 
         // construct owned descriptor
         // SAFETY: MetadataDescriptor source guarantees that descriptor.index is valid for segment
-        let (header, watchdog) =
-            unsafe { segment.data.fast_elem_compute(descriptor.index) };
+        let (header, watchdog) = unsafe { segment.data.fast_elem_compute(descriptor.index) };
 
-        let owned_descriptor =
-            OwnedMetadataDescriptor::new(segment, header, watchdog);
+        let owned_descriptor = OwnedMetadataDescriptor::new(segment, header, watchdog);
         Ok(owned_descriptor)
     }
 }

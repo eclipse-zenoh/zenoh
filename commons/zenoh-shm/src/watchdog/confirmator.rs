@@ -52,21 +52,6 @@ impl ConfirmedDescriptor {
     }
 }
 
-
-
-
-
-#[derive(Debug)]
-#[stabby::stabby]
-pub struct ConfirmedWatchdogs<const S: usize> {
-    headers: [ChunkHeaderType; S],
-    watchdogs: [AtomicU64; S], // TODO: replace with (S + 63) / 64 when Rust supports it
-}
-
-
-
-
-
 #[derive(PartialEq)]
 enum Transaction {
     Add(OwnedWatchdog),
@@ -85,19 +70,19 @@ struct ConfirmedSegment {
 
 impl ConfirmedSegment {
     fn new(segment: Arc<MetadataSegment>, task_kick: std::sync::mpsc::Sender<()>) -> Self {
-        let channel_size = 65536;
+        let channel_size = 65536 * 2;
         let (sender, receiver) = crossbeam_channel::bounded::<Transaction>(channel_size);
         Self {
             _segment: segment,
-            cap: AtomicI32::new((channel_size/2) as i32),
+            cap: AtomicI32::new((channel_size / 2) as i32),
             sender,
             receiver,
-            task_kick
+            task_kick,
         }
     }
 
     fn add(&self, descriptor: OwnedMetadataDescriptor) {
-        if self.cap.fetch_sub(1, std::sync::atomic::Ordering::Relaxed) <= 0 {
+        if self.cap.fetch_sub(1, std::sync::atomic::Ordering::Relaxed) == 0 {
             let _ = self.task_kick.send(());
         }
         self.sender
@@ -106,7 +91,7 @@ impl ConfirmedSegment {
     }
 
     fn remove(&self, descriptor: OwnedMetadataDescriptor) {
-        if self.cap.fetch_sub(1, std::sync::atomic::Ordering::Relaxed) <= 0 {
+        if self.cap.fetch_sub(1, std::sync::atomic::Ordering::Relaxed) == 0 {
             let _ = self.task_kick.send(());
         }
 
@@ -197,7 +182,10 @@ impl WatchdogConfirmator {
         }
         drop(guard);
 
-        let confirmed_segment = Arc::new(ConfirmedSegment::new(descriptor.segment.clone(), self._task.kicker()));
+        let confirmed_segment = Arc::new(ConfirmedSegment::new(
+            descriptor.segment.clone(),
+            self._task.kicker(),
+        ));
         let confirmed_descriptoir =
             ConfirmedDescriptor::new(descriptor.clone(), confirmed_segment.clone());
 

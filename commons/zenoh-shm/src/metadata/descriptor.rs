@@ -12,7 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{ops::Deref, sync::{atomic::AtomicU64, Arc}};
+use std::{
+    ops::Deref,
+    sync::{atomic::AtomicU64, Arc},
+};
 
 use super::segment::MetadataSegment;
 use crate::header::chunk_header::ChunkHeaderType;
@@ -71,9 +74,12 @@ impl Eq for OwnedWatchdog {}
 
 impl OwnedWatchdog {
     pub fn new(watchdog_atomic: &'static AtomicU64, watchdog_mask: u64) -> Self {
-        Self { watchdog_atomic, watchdog_mask }
+        Self {
+            watchdog_atomic,
+            watchdog_mask,
+        }
     }
-    
+
     pub fn confirm(&self) {
         self.watchdog_atomic
             .fetch_or(self.watchdog_mask, std::sync::atomic::Ordering::SeqCst);

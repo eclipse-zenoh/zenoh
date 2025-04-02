@@ -44,7 +44,10 @@ impl WatchdogValidator {
         let task = PeriodicTask::new("Watchdog Validator".to_owned(), interval, move || {
             // See ordering implementation for OwnedMetadataDescriptor
             #[allow(clippy::mutable_key_type)]
-            fn collect_transactions(receiver: &crossbeam_channel::Receiver<Transaction>, storage: &mut BTreeSet<OwnedMetadataDescriptor>) {
+            fn collect_transactions(
+                receiver: &crossbeam_channel::Receiver<Transaction>,
+                storage: &mut BTreeSet<OwnedMetadataDescriptor>,
+            ) {
                 while let Ok(transaction) = receiver.try_recv() {
                     match transaction {
                         Transaction::Add(descriptor) => {
