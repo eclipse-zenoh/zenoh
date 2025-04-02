@@ -39,6 +39,12 @@ pub struct ConfirmedDescriptor {
     confirmed: Arc<ConfirmedSegment>,
 }
 
+impl Clone for ConfirmedDescriptor {
+    fn clone(&self) -> Self {
+        ConfirmedDescriptor::new(self.owned.clone(), self.confirmed.clone())
+    }
+}
+
 impl Drop for ConfirmedDescriptor {
     fn drop(&mut self) {
         self.confirmed.remove(self.owned.clone());

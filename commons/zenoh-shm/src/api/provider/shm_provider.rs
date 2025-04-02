@@ -18,7 +18,7 @@ use std::{
     marker::PhantomData,
     num::NonZeroUsize,
     pin::Pin,
-    sync::{atomic::Ordering, Arc, Mutex},
+    sync::{atomic::Ordering, Mutex},
     time::Duration,
 };
 
@@ -937,7 +937,7 @@ where
 
         // Create buffer
         let shmb = ShmBufInner {
-            metadata: Arc::new(confirmed_metadata),
+            metadata: confirmed_metadata,
             buf: chunk.data,
             info,
         };

@@ -53,7 +53,7 @@ impl ShmReader {
 
         let metadata = GLOBAL_METADATA_SUBSCRIPTION.read().link(&info.metadata)?;
         // attach to the watchdog before doing other things
-        let confirmed_metadata = Arc::new(GLOBAL_CONFIRMATOR.read().add(metadata));
+        let confirmed_metadata = GLOBAL_CONFIRMATOR.read().add(metadata);
 
         // retrieve data descriptor from metadata
         let data_descriptor = confirmed_metadata.owned.header().data_descriptor();
