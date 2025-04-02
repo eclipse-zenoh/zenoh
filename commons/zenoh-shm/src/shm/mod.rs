@@ -45,8 +45,8 @@ pub enum SegmentOpenError {
 pub type ShmCreateResult<T> = core::result::Result<T, SegmentCreateError>;
 pub type ShmOpenResult<T> = core::result::Result<T, SegmentOpenError>;
 
-pub trait SegmentID: Unsigned + Display + Copy + Send + 'static {}
-impl<T: Unsigned + Display + Copy + Send + 'static> SegmentID for T {}
+pub trait SegmentID: Unsigned + Display + Copy + Send + Into<u64> + 'static {}
+impl<T: Unsigned + Display + Copy + Send + Into<u64> + 'static> SegmentID for T {}
 
 pub struct Segment<ID: SegmentID> {
     inner: platform::SegmentImpl<ID>,
