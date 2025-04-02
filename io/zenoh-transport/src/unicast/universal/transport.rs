@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "stats")]
+use std::collections::HashMap;
 use std::{
     fmt::DebugStruct,
     sync::{Arc, RwLock},
@@ -97,7 +99,10 @@ impl TransportUnicastUniversal {
         }
 
         #[cfg(feature = "stats")]
-        let stats = Arc::new(TransportStats::new(Some(manager.get_stats().clone())));
+        let stats = TransportStats::new(
+            Some(Arc::downgrade(&manager.get_stats())),
+            HashMap::from([("zid".to_string(), config.zid.to_string())]),
+        );
 
         let t = Arc::new(TransportUnicastUniversal {
             manager,
