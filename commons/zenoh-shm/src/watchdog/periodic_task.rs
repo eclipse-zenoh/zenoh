@@ -27,21 +27,34 @@ use thread_priority::{
     ThreadSchedulePolicy::Realtime,
 };
 
+#[derive(Debug)]
 pub struct PeriodicTask {
     running: Arc<AtomicBool>,
+    send: std::sync::mpsc::Sender<()>,
 }
 
 impl Drop for PeriodicTask {
     fn drop(&mut self) {
         self.running.store(false, Ordering::Relaxed);
+        self.kick();
     }
 }
 
 impl PeriodicTask {
+    pub fn kicker(&self) -> std::sync::mpsc::Sender<()> {
+        self.send.clone()
+    }
+
+    pub fn kick(&self) {
+        let _ = self.send.send(());
+    }
+
     pub fn new<F>(name: String, interval: Duration, mut f: F) -> Self
     where
         F: FnMut() + Send + 'static,
     {
+        let (send, recv) = std::sync::mpsc::channel::<()>();
+
         let running = Arc::new(AtomicBool::new(true));
 
         let c_running = running.clone();
@@ -95,7 +108,7 @@ impl PeriodicTask {
                 let elapsed = cycle_start.elapsed();
                 if elapsed < interval {
                     let sleep_interval = interval - elapsed;
-                    std::thread::sleep(sleep_interval);
+                    let _ = recv.recv_timeout (sleep_interval);
                 } else {
                     let err = format!("{:?}: timer overrun", std::thread::current().name());
                     #[cfg(not(feature = "test"))]
@@ -106,6 +119,6 @@ impl PeriodicTask {
             }
         });
 
-        Self { running }
+        Self { running, send }
     }
 }

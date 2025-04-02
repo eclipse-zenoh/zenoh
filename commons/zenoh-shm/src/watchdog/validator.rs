@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{collections::BTreeSet, sync::Arc, time::Duration};
+use std::{collections::BTreeSet, time::Duration};
 
 use static_init::dynamic;
 
@@ -24,58 +24,42 @@ pub static mut GLOBAL_VALIDATOR: WatchdogValidator =
     WatchdogValidator::new(Duration::from_millis(100));
 
 enum Transaction {
-    Add,
-    Remove,
-}
-
-#[derive(Default)]
-struct ValidatedStorage {
-    transactions: crossbeam_queue::SegQueue<(Transaction, OwnedMetadataDescriptor)>,
-}
-
-impl ValidatedStorage {
-    fn add(&self, descriptor: OwnedMetadataDescriptor) {
-        self.transactions.push((Transaction::Add, descriptor));
-    }
-
-    fn remove(&self, descriptor: OwnedMetadataDescriptor) {
-        self.transactions.push((Transaction::Remove, descriptor));
-    }
-
-    // See ordering implementation for OwnedMetadataDescriptor
-    #[allow(clippy::mutable_key_type)]
-    fn collect_transactions(&self, storage: &mut BTreeSet<OwnedMetadataDescriptor>) {
-        while let Some((transaction, descriptor)) = self.transactions.pop() {
-            match transaction {
-                Transaction::Add => {
-                    let _old = storage.insert(descriptor);
-                    #[cfg(feature = "test")]
-                    assert!(_old);
-                }
-                Transaction::Remove => {
-                    let _ = storage.remove(&descriptor);
-                }
-            }
-        }
-    }
+    Add(OwnedMetadataDescriptor),
+    Remove(OwnedMetadataDescriptor),
 }
 
 // TODO: optimize validation by packing descriptors
 pub struct WatchdogValidator {
-    storage: Arc<ValidatedStorage>,
+    sender: crossbeam_channel::Sender<Transaction>,
     _task: PeriodicTask,
 }
 
 impl WatchdogValidator {
     pub fn new(interval: Duration) -> Self {
-        let storage = Arc::new(ValidatedStorage::default());
+        let (sender, receiver) = crossbeam_channel::unbounded::<Transaction>();
 
-        let c_storage = storage.clone();
         // See ordering implementation for OwnedMetadataDescriptor
         #[allow(clippy::mutable_key_type)]
         let mut watchdogs = BTreeSet::default();
         let task = PeriodicTask::new("Watchdog Validator".to_owned(), interval, move || {
-            c_storage.collect_transactions(&mut watchdogs);
+            // See ordering implementation for OwnedMetadataDescriptor
+            #[allow(clippy::mutable_key_type)]
+            fn collect_transactions(receiver: &crossbeam_channel::Receiver<Transaction>, storage: &mut BTreeSet<OwnedMetadataDescriptor>) {
+                while let Ok(transaction) = receiver.try_recv() {
+                    match transaction {
+                        Transaction::Add(descriptor) => {
+                            let _old = storage.insert(descriptor);
+                            #[cfg(feature = "test")]
+                            assert!(_old);
+                        }
+                        Transaction::Remove(descriptor) => {
+                            let _ = storage.remove(&descriptor);
+                        }
+                    }
+                }
+            }
+
+            collect_transactions(&receiver, &mut watchdogs);
 
             watchdogs.retain(|watchdog| {
                 let old_val = watchdog.validate();
@@ -91,16 +75,16 @@ impl WatchdogValidator {
         });
 
         Self {
-            storage,
+            sender,
             _task: task,
         }
     }
 
     pub fn add(&self, watchdog: OwnedMetadataDescriptor) {
-        self.storage.add(watchdog);
+        self.sender.try_send(Transaction::Add(watchdog)).unwrap();
     }
 
     pub fn remove(&self, watchdog: OwnedMetadataDescriptor) {
-        self.storage.remove(watchdog);
+        self.sender.try_send(Transaction::Remove(watchdog)).unwrap();
     }
 }

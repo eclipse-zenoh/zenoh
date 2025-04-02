@@ -41,13 +41,13 @@ impl MetadataStorage {
         let mut initially_available = BTreeSet::<OwnedMetadataDescriptor>::default();
 
         for index in 0..initial_segment.data.count() {
-            let (header, watchdog, mask) = unsafe {
+            let (header, watchdog) = unsafe {
                 initial_segment
                     .data
                     .fast_elem_compute(index as MetadataIndex)
             };
             let descriptor =
-                OwnedMetadataDescriptor::new(initial_segment.clone(), header, watchdog, mask);
+                OwnedMetadataDescriptor::new(initial_segment.clone(), header, watchdog);
 
             // init generation (this is not really necessary, but we do)
             descriptor

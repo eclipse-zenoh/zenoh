@@ -18,5 +18,4 @@ tested_crate_module!(storage);
 tested_crate_module!(subscription);
 
 pub(crate) mod allocated_descriptor;
-
-mod segment;
+pub(crate) mod segment;
