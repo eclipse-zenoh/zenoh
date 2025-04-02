@@ -14,7 +14,15 @@
 
 //! Callback handler trait.
 
-use std::sync::Arc;
+use std::{
+    ops::Deref,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+};
+
+use tokio::sync::Notify;
 
 use crate::api::handlers::IntoHandler;
 
@@ -124,5 +132,62 @@ where
 
     fn into_handler(self) -> (Callback<Event>, Self::Handler) {
         (move |evt| (self.callback)(evt), ()).into_handler()
+    }
+}
+
+struct CallbackTracker {
+    counter: AtomicUsize,
+    notify: Notify,
+}
+
+pub(crate) struct TrackedCallback<T> {
+    callback: Callback<T>,
+    tracker: Arc<CallbackTracker>,
+}
+
+impl<T> TrackedCallback<T> {
+    pub(crate) fn new(callback: Callback<T>) -> Self {
+        let tracker = Arc::new(CallbackTracker {
+            counter: AtomicUsize::new(0),
+            notify: Notify::new(),
+        });
+        Self { callback, tracker }
+    }
+
+    pub(crate) fn get_callback(&self) -> CallbackGuard<T> {
+        self.tracker.counter.fetch_add(1, Ordering::Relaxed);
+        CallbackGuard {
+            callback: self.callback.clone(),
+            tracker: self.tracker.clone(),
+        }
+    }
+
+    pub(crate) async fn wait_callbacks(&self) {
+        let notified = self.tracker.notify.notified();
+        if self.tracker.counter.load(Ordering::Relaxed) != 0 {
+            notified.await;
+        }
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct CallbackGuard<T> {
+    callback: Callback<T>,
+    tracker: Arc<CallbackTracker>,
+}
+
+impl<T> Drop for CallbackGuard<T> {
+    fn drop(&mut self) {
+        if self.tracker.counter.fetch_sub(1, Ordering::Relaxed) == 1 {
+            self.tracker.notify.notify_waiters();
+        }
+    }
+}
+
+impl<T> Deref for CallbackGuard<T> {
+    type Target = Callback<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.callback
     }
 }

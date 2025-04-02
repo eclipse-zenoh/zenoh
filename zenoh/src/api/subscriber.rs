@@ -17,6 +17,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+use futures::executor::block_on;
 use tracing::error;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
@@ -24,7 +25,7 @@ use zenoh_result::ZResult;
 use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
 
 use crate::api::{
-    handlers::Callback,
+    handlers::TrackedCallback,
     key_expr::KeyExpr,
     sample::{Locality, Sample},
     session::{UndeclarableSealed, WeakSession},
@@ -36,7 +37,7 @@ pub(crate) struct SubscriberState {
     pub(crate) remote_id: Id,
     pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) origin: Locality,
-    pub(crate) callback: Callback<Sample>,
+    pub(crate) callback: TrackedCallback<Sample>,
 }
 
 impl fmt::Debug for SubscriberState {
@@ -81,7 +82,7 @@ impl<Handler> Resolvable for SubscriberUndeclaration<Handler> {
 
 impl<Handler> Wait for SubscriberUndeclaration<Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        self.0.undeclare_impl()
+        block_on(self.0.undeclare_impl())
     }
 }
 
@@ -209,12 +210,13 @@ impl<Handler> Subscriber<Handler> {
         self.undeclare_inner(())
     }
 
-    fn undeclare_impl(&mut self) -> ZResult<()> {
+    async fn undeclare_impl(&mut self) -> ZResult<()> {
         // set the flag first to avoid double panic if this function panic
         self.inner.undeclare_on_drop = false;
         self.inner
             .session
             .undeclare_subscriber_inner(self.inner.id, self.inner.kind)
+            .await
     }
 
     #[zenoh_macros::internal]
@@ -231,7 +233,7 @@ impl<Handler> Subscriber<Handler> {
 impl<Handler> Drop for Subscriber<Handler> {
     fn drop(&mut self) {
         if self.inner.undeclare_on_drop {
-            if let Err(error) = self.undeclare_impl() {
+            if let Err(error) = block_on(self.undeclare_impl()) {
                 error!(error);
             }
         }

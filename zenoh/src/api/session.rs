@@ -95,7 +95,7 @@ use crate::{
         },
         bytes::ZBytes,
         encoding::Encoding,
-        handlers::{Callback, DefaultHandler},
+        handlers::{Callback, DefaultHandler, TrackedCallback},
         info::SessionInfo,
         key_expr::{KeyExpr, KeyExprInner},
         liveliness::Liveliness,
@@ -355,7 +355,7 @@ impl SessionState {
             remote_id: id,
             key_expr: key_expr.clone().into_owned(),
             origin,
-            callback,
+            callback: TrackedCallback::new(callback),
         };
 
         let declared_sub = origin != Locality::SessionLocal;
@@ -1548,7 +1548,7 @@ impl SessionInner {
         Ok(sub_state)
     }
 
-    pub(crate) fn undeclare_subscriber_inner(
+    pub(crate) async fn undeclare_subscriber_inner(
         self: &Arc<Self>,
         sid: Id,
         kind: SubscriberKind,
@@ -1643,6 +1643,7 @@ impl SessionInner {
                     }
                 }
             }
+            sub_state.callback.wait_callbacks().await;
 
             Ok(())
         } else {
@@ -1780,8 +1781,9 @@ impl SessionInner {
             remote_id: id,
             key_expr: key_expr.clone().into_owned(),
             origin,
-            callback: callback.clone(),
+            callback: TrackedCallback::new(callback),
         };
+        let callback = sub_state.callback.get_callback();
 
         let sub_state = Arc::new(sub_state);
 
@@ -2105,7 +2107,8 @@ impl SessionInner {
                         if sub.origin == Locality::Any
                             || (local == (sub.origin == Locality::SessionLocal))
                         {
-                            callbacks.push((sub.callback.clone(), res.key_expr.clone().into()));
+                            callbacks
+                                .push((sub.callback.get_callback(), res.key_expr.clone().into()));
                         }
                     }
                 }
@@ -2129,7 +2132,8 @@ impl SessionInner {
                             || (local == (sub.origin == Locality::SessionLocal)))
                             && key_expr.intersects(&sub.key_expr)
                         {
-                            callbacks.push((sub.callback.clone(), key_expr.clone().into_owned()));
+                            callbacks
+                                .push((sub.callback.get_callback(), key_expr.clone().into_owned()));
                         }
                     }
                 }
