@@ -464,7 +464,7 @@ async fn test_transport(
     channel: Channel,
     msg_size: usize,
 ) {
-    let msg_count = if msg_size > 1 * 1024 * 1024 {
+    let msg_count = if msg_size > 1024 * 1024 {
         10
     } else {
         MSG_COUNT
@@ -511,7 +511,7 @@ async fn test_transport(
                 }
             }
             Reliability::BestEffort => {
-                if msg_size > 1 * 1024 * 1024 {
+                if msg_size > 1024 * 1024 {
                     tokio::time::sleep(SLEEP_COUNT).await;
                 } else {
                     while router_handler.get_count() == 0 {
