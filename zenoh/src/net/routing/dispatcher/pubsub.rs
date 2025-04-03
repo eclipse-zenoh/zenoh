@@ -14,7 +14,7 @@
 
 #[zenoh_macros::unstable]
 use std::collections::HashMap;
-use std::{ops::Not, sync::Arc};
+use std::sync::Arc;
 
 use zenoh_core::zread;
 use zenoh_protocol::{
@@ -33,7 +33,6 @@ use super::{
 use crate::key_expr::KeyExpr;
 use crate::net::routing::{
     hat::{HatTrait, SendDeclare},
-    interceptor::InterceptorTrait,
     router::get_or_set_route,
     RoutingContext,
 };
@@ -300,15 +299,7 @@ pub fn route_data(
                 msg.wire_expr.suffix.as_ref()
             );
 
-            if let Some(interceptor) = face
-                .state
-                .in_interceptors
-                .as_ref()
-                .map(|i| i.load())
-                .and_then(|i| i.is_empty().not().then_some(i))
-            {
-                let cache_guard = prefix.get_ingress_cache(face, &interceptor);
-                let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
+            if let Some(interceptor) = face.load_ingress_interceptors() {
                 let ctx = &mut RoutingContext::new(NetworkMessageMut {
                     body: NetworkBodyMut::Push(msg),
                     reliability,
@@ -316,7 +307,7 @@ pub fn route_data(
                     size: None,
                 });
 
-                if !interceptor.intercept(ctx, cache) {
+                if !interceptor.intercept_with_face(ctx, face, &prefix) {
                     return;
                 }
             };
@@ -365,16 +356,7 @@ pub fn route_data(
                             msg.wire_expr = key_expr.into();
                             msg.ext_nodeid = ext::NodeIdType { node_id: *context };
 
-                            if let Some(interceptor) = face
-                                .state
-                                .eg_interceptors
-                                .as_ref()
-                                .map(|i| i.load())
-                                .and_then(|i| i.is_empty().not().then_some(i))
-                            {
-                                let cache_guard = prefix.get_ingress_cache(face, &interceptor);
-                                let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
-
+                            if let Some(interceptor) = face.load_egress_interceptors() {
                                 let ctx = &mut RoutingContext::new(NetworkMessageMut {
                                     body: NetworkBodyMut::Push(msg),
                                     reliability,
@@ -382,7 +364,7 @@ pub fn route_data(
                                     size: None,
                                 });
 
-                                if !interceptor.intercept(ctx, cache) {
+                                if !interceptor.intercept_with_face(ctx, face, &prefix) {
                                     return;
                                 }
                             };
@@ -420,16 +402,7 @@ pub fn route_data(
                                 payload: msg.payload.clone(),
                             };
 
-                            if let Some(interceptor) = face
-                                .state
-                                .eg_interceptors
-                                .as_ref()
-                                .map(|i| i.load())
-                                .and_then(|i| i.is_empty().not().then_some(i))
-                            {
-                                let cache_guard = prefix.get_ingress_cache(face, &interceptor);
-                                let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
-
+                            if let Some(interceptor) = face.load_egress_interceptors() {
                                 let ctx = &mut RoutingContext::new(NetworkMessageMut {
                                     body: NetworkBodyMut::Push(msg),
                                     reliability,
@@ -437,7 +410,7 @@ pub fn route_data(
                                     size: None,
                                 });
 
-                                if !interceptor.intercept(ctx, cache) {
+                                if !interceptor.intercept_with_face(ctx, face, &prefix) {
                                     continue;
                                 }
                             };

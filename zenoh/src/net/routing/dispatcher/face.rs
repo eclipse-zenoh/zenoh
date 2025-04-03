@@ -298,6 +298,26 @@ impl Face {
             interest.rejection_token.cancel();
         }
     }
+
+    pub(crate) fn load_egress_interceptors(
+        &self,
+    ) -> Option<arc_swap::Guard<Arc<InterceptorsChain>>> {
+        self.state
+            .eg_interceptors
+            .as_ref()
+            .map(|i| i.load())
+            .and_then(|i| i.is_empty().not().then_some(i))
+    }
+
+    pub(crate) fn load_ingress_interceptors(
+        &self,
+    ) -> Option<arc_swap::Guard<Arc<InterceptorsChain>>> {
+        self.state
+            .in_interceptors
+            .as_ref()
+            .map(|i| i.load())
+            .and_then(|i| i.is_empty().not().then_some(i))
+    }
 }
 
 impl Primitives for Face {

@@ -34,6 +34,8 @@ use zenoh_protocol::network::NetworkMessageMut;
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
+use super::dispatcher::face::Face;
+use super::router::Resource;
 use super::RoutingContext;
 
 pub mod downsampling;
@@ -150,6 +152,18 @@ impl InterceptorsChain {
             interceptors,
             version,
         }
+    }
+
+    pub(crate) fn intercept_with_face(
+        &self,
+        ctx: &mut RoutingContext<NetworkMessageMut>,
+        face: &Face,
+        prefix: &Resource,
+    ) -> bool {
+        let cache_guard = prefix.get_ingress_cache(face, self);
+        let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
+
+        self.intercept(ctx, cache)
     }
 }
 
