@@ -18,7 +18,7 @@
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 
-use std::{collections::HashSet, iter, sync::Arc};
+use std::{collections::HashSet, iter, sync::Arc, usize};
 
 use ahash::HashMap;
 use itertools::Itertools;
@@ -34,6 +34,8 @@ use zenoh_protocol::{
     zenoh::{PushBody, Reply, RequestBody, ResponseBody},
 };
 use zenoh_result::ZResult;
+#[cfg(feature = "stats")]
+use zenoh_transport::stats::TransportStats;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 use super::{
@@ -188,6 +190,8 @@ impl InterceptorFactoryTrait for LowPassInterceptorFactory {
                         self.state.clone(),
                         subject_ids.clone(),
                         InterceptorFlow::Ingress,
+                        #[cfg(feature = "stats")]
+                        transport.get_stats().unwrap_or_default(),
                     )) as IngressInterceptor
                 }),
                 self.state.interface_enabled.egress.then(|| {
@@ -195,6 +199,8 @@ impl InterceptorFactoryTrait for LowPassInterceptorFactory {
                         self.state.clone(),
                         subject_ids,
                         InterceptorFlow::Egress,
+                        #[cfg(feature = "stats")]
+                        transport.get_stats().unwrap_or_default(),
                     )) as EgressInterceptor
                 }),
             );
@@ -219,14 +225,23 @@ pub struct LowPassInterceptor {
     subjects: Arc<Vec<usize>>,
     // NOTE: memory usage could be optimized by replacing flow with a PhantomData<T>
     flow: InterceptorFlow,
+    #[cfg(feature = "stats")]
+    stats: Arc<TransportStats>,
 }
 
 impl LowPassInterceptor {
-    fn new(inner: Arc<LowPassFilter>, subjects: Arc<Vec<usize>>, flow: InterceptorFlow) -> Self {
+    fn new(
+        inner: Arc<LowPassFilter>,
+        subjects: Arc<Vec<usize>>,
+        flow: InterceptorFlow,
+        #[cfg(feature = "stats")] stats: Arc<TransportStats>,
+    ) -> Self {
         Self {
             inner,
             subjects,
             flow,
+            #[cfg(feature = "stats")]
+            stats,
         }
     }
 
@@ -234,7 +249,7 @@ impl LowPassInterceptor {
         &self,
         ctx: &RoutingContext<NetworkMessage>,
         cache: Option<&Cache>,
-    ) -> bool {
+    ) -> Result<(), usize> {
         let payload_size: usize;
         let attachment_size: usize;
         let message_type: LowPassFilterMessage;
@@ -329,10 +344,10 @@ impl LowPassInterceptor {
                 attachment_size = 0;
                 max_allowed_size = cache.map(|c| c.reply);
             }
-            NetworkBody::ResponseFinal(_) => return true,
-            NetworkBody::Interest(_) => return true,
-            NetworkBody::Declare(_) => return true,
-            NetworkBody::OAM(_) => return true,
+            NetworkBody::ResponseFinal(_) => return Ok(()),
+            NetworkBody::Interest(_) => return Ok(()),
+            NetworkBody::Declare(_) => return Ok(()),
+            NetworkBody::OAM(_) => return Ok(()),
         }
         let max_allowed_size = match max_allowed_size {
             Some(v) => v,
@@ -342,8 +357,8 @@ impl LowPassInterceptor {
             },
         };
         match payload_size.checked_add(attachment_size) {
-            Some(msg_size) => msg_size <= max_allowed_size,
-            None => false,
+            Some(msg_size) => (msg_size <= max_allowed_size).then_some(()).ok_or(msg_size),
+            None => Err(usize::MAX),
         }
     }
 
@@ -404,7 +419,22 @@ impl InterceptorTrait for LowPassInterceptor {
     ) -> Option<RoutingContext<NetworkMessage>> {
         let cache = cache.and_then(|i| i.downcast_ref::<Cache>());
 
-        self.message_passes_filters(&ctx, cache).then_some(ctx)
+        match self.message_passes_filters(&ctx, cache) {
+            Ok(_) => Some(ctx),
+            #[allow(unused_variables)] // only used for stats
+            Err(msg_size) => {
+                #[cfg(feature = "stats")]
+                match self.flow {
+                    InterceptorFlow::Egress => {
+                        self.stats.low_pass_blocked_bytes.inc_egress(msg_size)
+                    }
+                    InterceptorFlow::Ingress => {
+                        self.stats.low_pass_blocked_bytes.inc_ingress(msg_size)
+                    }
+                }
+                None
+            }
+        }
     }
 }
 

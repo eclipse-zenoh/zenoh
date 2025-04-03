@@ -251,6 +251,14 @@ stats_struct! {
 
 stats_struct! {
     #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct InterceptorStats {
+        pub ingress,
+        pub egress,
+    }
+}
+
+stats_struct! {
+    #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct TransportStats {
         # HELP "Counter of sent bytes."
         # TYPE "counter"
@@ -347,5 +355,13 @@ stats_struct! {
         # HELP "Counter of received bytes in zenoh reply message payloads."
         # TYPE "counter"
         pub rx_z_reply_pl_bytes DiscriminatedStats,
+
+        # HELP "Counter of messages dropped by downsampling."
+        # TYPE "counter"
+        pub downsampled_msgs InterceptorStats,
+
+        # HELP "Counter of bytes blocked by low-pass filter."
+        # TYPE "counter"
+        pub low_pass_blocked_bytes InterceptorStats,
     }
 }
