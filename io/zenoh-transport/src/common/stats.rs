@@ -132,11 +132,15 @@ macro_rules! stats_struct {
                 }
 
                 $vis fn report(&self) -> [<$struct_name Report>] {
-                    [<$struct_name Report>] {
+                    let report = [<$struct_name Report>] {
                         labels: self.labels.clone(),
                         children: self.children.lock().unwrap().iter().map(|c| c.report()).collect(),
                         $($field_name: self.[<get_ $field_name>](),)*
-                    }
+                    };
+                    // remove already dropped children
+                    self.children.lock().unwrap().retain(|c| std::sync::Arc::strong_count(c) > 1);
+
+                    report
                 }
 
                 $(
