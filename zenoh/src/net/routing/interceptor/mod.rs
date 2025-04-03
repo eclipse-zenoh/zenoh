@@ -26,6 +26,8 @@ use zenoh_link::LinkAuthId;
 mod authorization;
 use std::any::Any;
 
+mod low_pass;
+use low_pass::low_pass_interceptor_factories;
 use zenoh_config::{Config, InterceptorFlow, InterceptorLink};
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_result::ZResult;
@@ -121,6 +123,7 @@ pub(crate) fn interceptor_factories(config: &Config) -> ZResult<Vec<InterceptorF
     res.extend(downsampling_interceptor_factories(config.downsampling())?);
     res.extend(acl_interceptor_factories(config.access_control())?);
     res.extend(qos_overwrite_interceptor_factories(config.qos().network())?);
+    res.extend(low_pass_interceptor_factories(config.low_pass_filter())?);
     Ok(res)
 }
 
