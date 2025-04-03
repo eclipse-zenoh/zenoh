@@ -79,10 +79,7 @@ impl InterceptorCache {
     ) -> Option<InterceptorCacheValueType> {
         self.0
             .value(interceptor.version, || {
-                let Some(ke) = resource.keyexpr() else {
-                    return None;
-                };
-                interceptor.compute_keyexpr_cache(ke)
+                interceptor.compute_keyexpr_cache(resource.keyexpr()?)
             })
             .ok()
     }

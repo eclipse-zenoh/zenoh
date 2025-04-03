@@ -22,7 +22,6 @@ use std::{
 
 use arc_swap::ArcSwap;
 use tokio_util::sync::CancellationToken;
-use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
     core::{ExprId, Reliability, WhatAmI, WireExpr, ZenohIdProto},
     network::{
