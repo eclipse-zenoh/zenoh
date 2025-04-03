@@ -723,7 +723,7 @@ fn client_test() {
     let route_dummy_data = |face: &Arc<Face>, wire_expr| {
         route_data(
             &tables,
-            &face,
+            face,
             &mut Push {
                 wire_expr,
                 ext_qos: ext::QoSType::DEFAULT,
