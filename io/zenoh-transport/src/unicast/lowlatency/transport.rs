@@ -11,8 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "stats")]
-use std::collections::HashMap;
 use std::{
     sync::{Arc, RwLock as SyncRwLock},
     time::Duration,
@@ -70,12 +68,8 @@ impl TransportUnicastLowlatency {
     pub fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
+        #[cfg(feature = "stats")] stats: Arc<TransportStats>,
     ) -> Arc<dyn TransportUnicastTrait> {
-        #[cfg(feature = "stats")]
-        let stats = TransportStats::new(
-            Some(Arc::downgrade(&manager.get_stats())),
-            HashMap::from([("zid".to_string(), config.zid.to_string())]),
-        );
         Arc::new(TransportUnicastLowlatency {
             manager,
             config,

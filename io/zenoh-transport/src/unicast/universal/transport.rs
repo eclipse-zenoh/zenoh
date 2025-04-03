@@ -11,8 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "stats")]
-use std::collections::HashMap;
 use std::{
     fmt::DebugStruct,
     sync::{Arc, RwLock},
@@ -74,6 +72,7 @@ impl TransportUnicastUniversal {
     pub fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
+        #[cfg(feature = "stats")] stats: Arc<TransportStats>,
     ) -> ZResult<Arc<dyn TransportUnicastTrait>> {
         let mut priority_tx = vec![];
         let mut priority_rx = vec![];
@@ -97,12 +96,6 @@ impl TransportUnicastUniversal {
         for c in priority_tx.iter() {
             c.sync(initial_sn)?;
         }
-
-        #[cfg(feature = "stats")]
-        let stats = TransportStats::new(
-            Some(Arc::downgrade(&manager.get_stats())),
-            HashMap::from([("zid".to_string(), config.zid.to_string())]),
-        );
 
         let t = Arc::new(TransportUnicastUniversal {
             manager,
