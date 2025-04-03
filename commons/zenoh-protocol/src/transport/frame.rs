@@ -11,9 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use alloc::vec::Vec;
+use zenoh_buffers::ZSlice;
 
-use crate::{core::Reliability, network::NetworkMessage, transport::TransportSn};
+use crate::{core::Reliability, transport::TransportSn};
 
 pub mod flag {
     pub const R: u8 = 1 << 5; // 0x20 Reliable      if R==1 then the frame is reliable
@@ -72,7 +72,7 @@ pub struct Frame {
     pub reliability: Reliability,
     pub sn: TransportSn,
     pub ext_qos: ext::QoSType,
-    pub payload: Vec<NetworkMessage>,
+    pub payload: ZSlice,
 }
 
 // Extensions
@@ -93,12 +93,7 @@ impl Frame {
         let reliability = Reliability::rand();
         let sn: TransportSn = rng.gen();
         let ext_qos = ext::QoSType::rand();
-        let mut payload = vec![];
-        for _ in 0..rng.gen_range(1..4) {
-            let mut m = NetworkMessage::rand();
-            m.reliability = reliability;
-            payload.push(m);
-        }
+        let payload = ZSlice::rand(rng.gen_range(8..128));
 
         Frame {
             reliability,

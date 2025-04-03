@@ -993,10 +993,10 @@ mod tests {
         reader::{DidntRead, HasReader},
         ZBuf,
     };
-    use zenoh_codec::{RCodec, Zenoh080};
+    use zenoh_codec::{network::NetworkMessageIter, RCodec, Zenoh080};
     use zenoh_config::{QueueAllocConf, QueueAllocMode};
     use zenoh_protocol::{
-        core::{Bits, CongestionControl, Encoding, Priority},
+        core::{Bits, CongestionControl, Encoding, Priority, Reliability},
         network::{ext, Push},
         transport::{BatchSize, Fragment, Frame, TransportBody, TransportSn},
         zenoh::{PushBody, Put},
@@ -1100,8 +1100,10 @@ mod tests {
                     match res {
                         Ok(msg) => {
                             match msg.body {
-                                TransportBody::Frame(Frame { payload, .. }) => {
-                                    msgs += payload.len()
+                                TransportBody::Frame(Frame { mut payload, .. }) => {
+                                    msgs +=
+                                        NetworkMessageIter::new(Reliability::DEFAULT, &mut payload)
+                                            .count();
                                 }
                                 TransportBody::Fragment(Fragment { more, .. }) => {
                                     fragments += 1;
