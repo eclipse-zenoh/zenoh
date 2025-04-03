@@ -181,7 +181,7 @@ macro_rules! stats_struct {
                         s.push_str("{space=\"");
                         s.push_str(stringify!($field_name));
                         for (k, v) in labels {
-                            s.push_str("\", ");
+                            s.push_str("\",");
                             s.push_str(k);
                             s.push_str("=\"");
                             s.push_str(v);
