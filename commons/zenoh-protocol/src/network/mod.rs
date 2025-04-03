@@ -159,21 +159,6 @@ impl NetworkMessage {
     }
 }
 
-impl fmt::Display for NetworkMessage {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use NetworkBody::*;
-        match &self.body {
-            OAM(_) => write!(f, "OAM"),
-            Push(_) => write!(f, "Push"),
-            Request(_) => write!(f, "Request"),
-            Response(_) => write!(f, "Response"),
-            ResponseFinal(_) => write!(f, "ResponseFinal"),
-            Interest(_) => write!(f, "Interest"),
-            Declare(_) => write!(f, "Declare"),
-        }
-    }
-}
-
 impl From<NetworkBody> for NetworkMessage {
     #[inline]
     fn from(body: NetworkBody) -> Self {

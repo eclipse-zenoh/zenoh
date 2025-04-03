@@ -20,8 +20,6 @@ pub mod keepalive;
 pub mod oam;
 pub mod open;
 
-use core::fmt;
-
 pub use close::Close;
 pub use fragment::{Fragment, FragmentHeader};
 pub use frame::{Frame, FrameHeader};
@@ -221,34 +219,6 @@ impl From<Fragment> for TransportMessage {
 impl From<Join> for TransportMessage {
     fn from(join: Join) -> Self {
         TransportBody::Join(join).into()
-    }
-}
-
-impl fmt::Display for TransportMessage {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        use TransportBody::*;
-        match &self.body {
-            OAM(_) => write!(f, "OAM"),
-            InitSyn(_) => write!(f, "InitSyn"),
-            InitAck(_) => write!(f, "InitAck"),
-            OpenSyn(_) => write!(f, "OpenSyn"),
-            OpenAck(_) => write!(f, "OpenAck"),
-            Close(_) => write!(f, "Close"),
-            KeepAlive(_) => write!(f, "KeepAlive"),
-            Frame(m) => {
-                write!(f, "Frame[")?;
-                let mut netmsgs = m.payload.iter().peekable();
-                while let Some(m) = netmsgs.next() {
-                    m.fmt(f)?;
-                    if netmsgs.peek().is_some() {
-                        write!(f, ", ")?;
-                    }
-                }
-                write!(f, "]")
-            }
-            Fragment(_) => write!(f, "Fragment"),
-            Join(_) => write!(f, "Join"),
-        }
     }
 }
 
