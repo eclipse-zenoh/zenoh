@@ -586,10 +586,10 @@ pub(crate) fn route_send_response(
             tracing::trace!(
                 "{}:{} Route reply for query {}:{} ({})",
                 face,
-                qid,
+                msg.rid,
                 query.src_face,
                 query.src_qid,
-                key_expr.suffix.as_ref()
+                msg.wire_expr.suffix.as_ref()
             );
 
             drop(queries_lock);
