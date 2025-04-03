@@ -356,6 +356,9 @@ async fn open_transport_unicast(
     TransportManager,
     TransportUnicast,
 ) {
+    // Short timeout for connectionless protocols like udp and quick
+    let open_timeout = Duration::from_secs(5);
+
     // Define client and router IDs
     let client_id = ZenohIdProto::try_from([1]).unwrap();
     let router_id = ZenohIdProto::try_from([2]).unwrap();
@@ -368,7 +371,9 @@ async fn open_transport_unicast(
         #[cfg(feature = "shared-memory")]
         false,
         lowlatency_transport,
-    );
+    )
+    .open_timeout(open_timeout);
+
     let router_manager = TransportManager::builder()
         .zid(router_id)
         .whatami(WhatAmI::Router)
@@ -389,7 +394,9 @@ async fn open_transport_unicast(
         #[cfg(feature = "shared-memory")]
         false,
         lowlatency_transport,
-    );
+    )
+    .open_timeout(open_timeout);
+
     let client_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .zid(client_id)
@@ -547,6 +554,7 @@ async fn run_single(
         println!("Del listener: {}", endpoint);
         router_manager.del_listener(&endpoint).await.unwrap();
     }
+    tokio::time::sleep(SLEEP).await;
 
     println!("Testing back the transports after closing the router listeners...");
     router_handler.reset_count();
@@ -561,13 +569,7 @@ async fn run_single(
 
     // Open transport against closed endpoints -> This should fail or timeout
     for e in client_endpoints.iter() {
-        // Short timeout for connectionless protocols like udp and quick
-        let x = tokio::time::timeout(
-            Duration::from_secs(5),
-            client_manager.open_transport_unicast(e.clone()),
-        )
-        .await;
-        assert!(x.is_err() || x.unwrap().is_err());
+        let _ = ztimeout!(client_manager.open_transport_unicast(e.clone())).unwrap_err();
         println!(
             "Attempt to open new transport with '{}' (closed router listener) failed as expected.",
             e
