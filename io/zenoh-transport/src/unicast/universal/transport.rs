@@ -13,7 +13,10 @@
 //
 use std::{
     fmt::DebugStruct,
-    sync::{Arc, RwLock},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, RwLock, RwLockReadGuard, RwLockWriteGuard,
+    },
     time::Duration,
 };
 
@@ -22,7 +25,7 @@ use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use zenoh_core::{zasynclock, zcondfeat, zread, zwrite};
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{Priority, WhatAmI, ZenohIdProto},
+    core::{Priority, Reliability, WhatAmI, ZenohIdProto},
     network::NetworkMessage,
     transport::{close, Close, PrioritySn, TransportMessage, TransportSn},
 };
@@ -42,6 +45,51 @@ use crate::{
     TransportManager, TransportPeerEventHandler,
 };
 
+/// Transport link storage with link selection caching functionality
+pub(crate) struct TransportLinks {
+    links: RwLock<Box<[TransportLinkUnicastUniversal]>>,
+    index_cache: [AtomicUsize; Priority::NUM * 2],
+}
+
+impl TransportLinks {
+    fn new(links: RwLock<Box<[TransportLinkUnicastUniversal]>>) -> Self {
+        let index_cache = [const { AtomicUsize::new(usize::MAX) }; 16];
+        Self { links, index_cache }
+    }
+
+    fn index(reliability: Reliability, priority: Priority) -> usize {
+        (reliability as usize) * Priority::NUM + (priority as usize)
+    }
+
+    pub(crate) fn get_cache_hint(
+        &self,
+        reliability: Reliability,
+        priority: Priority,
+    ) -> Option<usize> {
+        match self.index_cache[Self::index(reliability, priority)].load(Ordering::Relaxed) {
+            usize::MAX => None,
+            val => Some(val),
+        }
+    }
+
+    pub(crate) fn set_cache_hint(&self, reliability: Reliability, priority: Priority, hint: usize) {
+        self.index_cache[Self::index(reliability, priority)].store(hint, Ordering::Relaxed);
+    }
+
+    fn write(&self) -> RwLockWriteGuard<'_, Box<[TransportLinkUnicastUniversal]>> {
+        // on write access to the links we clear link cache
+        for atomic in &self.index_cache {
+            atomic.store(usize::MAX, Ordering::Relaxed);
+        }
+        zwrite!(self.links)
+    }
+
+    #[allow(private_interfaces)]
+    pub(crate) fn read(&self) -> RwLockReadGuard<'_, Box<[TransportLinkUnicastUniversal]>> {
+        zread!(self.links)
+    }
+}
+
 /*************************************/
 /*        UNIVERSAL TRANSPORT        */
 /*************************************/
@@ -56,7 +104,7 @@ pub(crate) struct TransportUnicastUniversal {
     // Rx priorities
     pub(super) priority_rx: Arc<[TransportPriorityRx]>,
     // The links associated to the channel
-    pub(super) links: Arc<RwLock<Box<[TransportLinkUnicastUniversal]>>>,
+    pub(super) links: Arc<TransportLinks>,
     // The callback
     pub(super) callback: Arc<RwLock<Option<Arc<dyn TransportPeerEventHandler>>>>,
     // Lock used to ensure no race in add_link method
@@ -104,7 +152,7 @@ impl TransportUnicastUniversal {
             config,
             priority_tx: priority_tx.into_boxed_slice().into(),
             priority_rx: priority_rx.into_boxed_slice().into(),
-            links: Arc::new(RwLock::new(vec![].into_boxed_slice())),
+            links: Arc::new(TransportLinks::new(RwLock::new(vec![].into_boxed_slice()))),
             add_link_lock: Arc::new(AsyncMutex::new(())),
             callback: Arc::new(RwLock::new(None)),
             alive: Arc::new(AsyncMutex::new(false)),
@@ -136,7 +184,7 @@ impl TransportUnicastUniversal {
 
         // Close all the links
         let mut links = {
-            let mut l_guard = zwrite!(self.links);
+            let mut l_guard = self.links.write();
             let links = l_guard.to_vec();
             *l_guard = vec![].into_boxed_slice();
             links
@@ -161,7 +209,7 @@ impl TransportUnicastUniversal {
 
         // Try to remove the link
         let target = {
-            let mut guard = zwrite!(self.links);
+            let mut guard = self.links.write();
 
             if let Some(index) = guard.iter().position(|tl| {
                 // Compare LinkUnicast link to not compare TransportLinkUnicast direction
@@ -245,7 +293,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
 
         // Check if we can add more inbound links
         {
-            let guard = zread!(self.links);
+            let guard = self.links.read();
             if let TransportLinkUnicastDirection::Inbound = link.inner_config().direction {
                 let count = guard
                     .iter()
@@ -283,7 +331,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
             TransportLinkUnicastUniversal::new(self, link, &self.priority_tx);
 
         // Add the link to the channel
-        let mut guard = zwrite!(self.links);
+        let mut guard = self.links.write();
         let mut links = Vec::with_capacity(guard.len() + 1);
         links.extend_from_slice(&guard);
         links.push(link.clone());
@@ -357,7 +405,9 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     async fn close(&self, reason: u8) -> ZResult<()> {
         tracing::trace!("Closing transport with peer: {}", self.config.zid);
 
-        let mut pipelines = zread!(self.links)
+        let mut pipelines = self
+            .links
+            .read()
             .iter()
             .map(|sl| sl.pipeline.clone())
             .collect::<Vec<_>>();
@@ -379,13 +429,14 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     }
 
     fn get_links(&self) -> Vec<Link> {
-        zread!(self.links).iter().map(|l| l.link.link()).collect()
+        self.links.read().iter().map(|l| l.link.link()).collect()
     }
 
     fn get_auth_ids(&self) -> TransportAuthId {
         let mut transport_auth_id = TransportAuthId::default();
         // Convert LinkUnicast auth ids to AuthId
-        zread!(self.links)
+        self.links
+            .read()
             .iter()
             .for_each(|l| transport_auth_id.push_link_auth_id(l.link.link.get_auth_id().clone()));
 
