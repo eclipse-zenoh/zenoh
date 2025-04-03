@@ -134,3 +134,19 @@ pub enum LinkAuthId {
     Vsock,
     Ws,
 }
+
+impl LinkAuthId {
+    pub fn get_cert_common_name(&self) -> Option<&str> {
+        match &self {
+            LinkAuthId::Tls(n) => n.as_ref().map(|s| s.as_ref()),
+            LinkAuthId::Quic(n) => n.as_ref().map(|s| s.as_ref()),
+            LinkAuthId::Tcp => None,
+            LinkAuthId::Udp => None,
+            LinkAuthId::Serial => None,
+            LinkAuthId::Unixpipe => None,
+            LinkAuthId::UnixsockStream => None,
+            LinkAuthId::Vsock => None,
+            LinkAuthId::Ws => None,
+        }
+    }
+}
