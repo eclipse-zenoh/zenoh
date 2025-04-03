@@ -213,7 +213,7 @@ impl QosInterceptor {
         ctx: &RoutingContext<NetworkMessage>,
     ) -> bool {
         cache.map(|v| v.is_ke_affected).unwrap_or_else(|| {
-            ctx.full_key_expr()
+            ctx.full_keyexpr()
                 .as_ref()
                 .map(|ke| self.is_ke_affected(ke))
                 .unwrap_or(false)

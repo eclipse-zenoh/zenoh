@@ -154,7 +154,6 @@ impl RoutingContext<NetworkMessage> {
     }
 
     #[inline]
-    #[allow(dead_code)]
     pub(crate) fn full_expr(&self) -> Option<&str> {
         if self.full_expr.get().is_some() {
             return Some(self.full_expr.get().as_ref().unwrap());
@@ -169,7 +168,7 @@ impl RoutingContext<NetworkMessage> {
     }
 
     #[inline]
-    pub(crate) fn full_key_expr(&self) -> Option<&keyexpr> {
+    pub(crate) fn full_keyexpr(&self) -> Option<&keyexpr> {
         let full_expr = self.full_expr()?;
         keyexpr::new(full_expr).ok()
     }

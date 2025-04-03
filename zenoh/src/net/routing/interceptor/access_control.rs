@@ -385,7 +385,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                     cache.map(|c| c.query),
                     AclMessage::Query,
                     "Query (ingress)",
-                    ctx.full_key_expr()?,
+                    ctx.full_keyexpr()?,
                 ) == Permission::Deny
                 {
                     return None;
@@ -396,7 +396,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                     cache.map(|c| c.reply),
                     AclMessage::Reply,
                     "Reply (ingress)",
-                    ctx.full_key_expr()?,
+                    ctx.full_keyexpr()?,
                 ) == Permission::Deny
                 {
                     return None;
@@ -410,7 +410,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                     cache.map(|c| c.put),
                     AclMessage::Put,
                     "Put (ingress)",
-                    ctx.full_key_expr()?,
+                    ctx.full_keyexpr()?,
                 ) == Permission::Deny
                 {
                     return None;
@@ -424,7 +424,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                     cache.map(|c| c.delete),
                     AclMessage::Delete,
                     "Delete (ingress)",
-                    ctx.full_key_expr()?,
+                    ctx.full_keyexpr()?,
                 ) == Permission::Deny
                 {
                     return None;
@@ -438,7 +438,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                     cache.map(|c| c.declare_subscriber),
                     AclMessage::DeclareSubscriber,
                     "Declare Subscriber (ingress)",
-                    ctx.full_key_expr()?,
+                    ctx.full_keyexpr()?,
                 ) == Permission::Deny
                 {
                     return None;
@@ -456,7 +456,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                     cache.map(|c| c.declare_subscriber),
                     AclMessage::DeclareSubscriber,
                     "Undeclare Subscriber (ingress)",
-                    ctx.full_key_expr(),
+                    ctx.full_keyexpr(),
                 ) == Permission::Deny
                 {
                     return None;
@@ -470,7 +470,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                     cache.map(|c| c.declare_queryable),
                     AclMessage::DeclareQueryable,
                     "Declare Queryable (ingress)",
-                    ctx.full_key_expr()?,
+                    ctx.full_keyexpr()?,
                 ) == Permission::Deny
                 {
                     return None;
@@ -488,7 +488,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                     cache.map(|c| c.declare_queryable),
                     AclMessage::DeclareQueryable,
                     "Undeclare Queryable (ingress)",
-                    ctx.full_key_expr(),
+                    ctx.full_keyexpr(),
                 ) == Permission::Deny
                 {
                     return None;
@@ -502,7 +502,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                     cache.map(|c| c.declare_token),
                     AclMessage::LivelinessToken,
                     "Liveliness Token (ingress)",
-                    ctx.full_key_expr()?,
+                    ctx.full_keyexpr()?,
                 ) == Permission::Deny
                 {
                     return None;
@@ -521,7 +521,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                     cache.map(|c| c.declare_token),
                     AclMessage::LivelinessToken,
                     "Undeclare Liveliness Token (ingress)",
-                    ctx.full_key_expr(),
+                    ctx.full_keyexpr(),
                 ) == Permission::Deny
                 {
                     return None;
@@ -536,7 +536,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                     cache.map(|c| c.query_token),
                     AclMessage::LivelinessQuery,
                     "Liveliness Query (ingress)",
-                    ctx.full_key_expr()?,
+                    ctx.full_keyexpr()?,
                 ) == Permission::Deny
                 {
                     return None;
@@ -551,7 +551,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                     cache.map(|c| c.declare_liveliness_subscriber),
                     AclMessage::DeclareLivelinessSubscriber,
                     "Declare Liveliness Subscriber (ingress)",
-                    ctx.full_key_expr()?,
+                    ctx.full_keyexpr()?,
                 ) == Permission::Deny
                 {
                     return None;
@@ -644,7 +644,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                     cache.map(|c| c.query),
                     AclMessage::Query,
                     "Query (egress)",
-                    ctx.full_key_expr()?,
+                    ctx.full_keyexpr()?,
                 ) == Permission::Deny
                 {
                     return None;
@@ -655,7 +655,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                     cache.map(|c| c.reply),
                     AclMessage::Reply,
                     "Reply (egress)",
-                    ctx.full_key_expr()?,
+                    ctx.full_keyexpr()?,
                 ) == Permission::Deny
                 {
                     return None;
@@ -669,7 +669,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                     cache.map(|c| c.put),
                     AclMessage::Put,
                     "Put (egress)",
-                    ctx.full_key_expr()?,
+                    ctx.full_keyexpr()?,
                 ) == Permission::Deny
                 {
                     return None;
@@ -683,7 +683,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                     cache.map(|c| c.put),
                     AclMessage::Delete,
                     "Delete (egress)",
-                    ctx.full_key_expr()?,
+                    ctx.full_keyexpr()?,
                 ) == Permission::Deny
                 {
                     return None;
@@ -697,7 +697,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                     cache.map(|c| c.declare_subscriber),
                     AclMessage::DeclareSubscriber,
                     "Declare Subscriber (egress)",
-                    ctx.full_key_expr()?,
+                    ctx.full_keyexpr()?,
                 ) == Permission::Deny
                 {
                     return None;
@@ -713,7 +713,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                     cache.map(|c| c.declare_subscriber),
                     AclMessage::DeclareSubscriber,
                     "Undeclare Subscriber (egress)",
-                    ctx.full_key_expr()?,
+                    ctx.full_keyexpr()?,
                 ) == Permission::Deny
                 {
                     return None;
@@ -727,7 +727,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                     cache.map(|c| c.declare_queryable),
                     AclMessage::DeclareQueryable,
                     "Declare Queryable (egress)",
-                    ctx.full_key_expr()?,
+                    ctx.full_keyexpr()?,
                 ) == Permission::Deny
                 {
                     return None;
@@ -743,7 +743,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                     cache.map(|c| c.declare_queryable),
                     AclMessage::DeclareQueryable,
                     "Undeclare Queryable (egress)",
-                    ctx.full_key_expr()?,
+                    ctx.full_keyexpr()?,
                 ) == Permission::Deny
                 {
                     return None;
@@ -757,7 +757,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                     cache.map(|c| c.declare_token),
                     AclMessage::LivelinessToken,
                     "Liveliness Token (egress)",
-                    ctx.full_key_expr()?,
+                    ctx.full_keyexpr()?,
                 ) == Permission::Deny
                 {
                     return None;
@@ -773,7 +773,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                     cache.map(|c| c.declare_token),
                     AclMessage::LivelinessToken,
                     "Undeclare Liveliness Token (egress)",
-                    ctx.full_key_expr()?,
+                    ctx.full_keyexpr()?,
                 ) == Permission::Deny
                 {
                     return None;
@@ -788,7 +788,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                     cache.map(|c| c.query_token),
                     AclMessage::LivelinessQuery,
                     "Liveliness Query (egress)",
-                    ctx.full_key_expr()?,
+                    ctx.full_keyexpr()?,
                 ) == Permission::Deny
                 {
                     return None;
@@ -803,7 +803,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                     cache.map(|c| c.declare_liveliness_subscriber),
                     AclMessage::DeclareLivelinessSubscriber,
                     "Declare Liveliness Subscriber (egress)",
-                    ctx.full_key_expr()?,
+                    ctx.full_keyexpr()?,
                 ) == Permission::Deny
                 {
                     return None;
@@ -822,7 +822,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                     cache.map(|c| c.declare_liveliness_subscriber),
                     AclMessage::DeclareLivelinessSubscriber,
                     "Undeclare Liveliness Subscriber (egress)",
-                    ctx.full_key_expr()?,
+                    ctx.full_keyexpr()?,
                 ) == Permission::Deny
                 {
                     return None;

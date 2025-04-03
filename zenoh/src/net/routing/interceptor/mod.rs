@@ -211,7 +211,7 @@ impl<T: InterceptorTrait> InterceptorTrait for ComputeOnMiss<T> {
     ) -> Option<RoutingContext<NetworkMessage>> {
         if cache.is_some() {
             self.interceptor.intercept(ctx, cache)
-        } else if let Some(key_expr) = ctx.full_key_expr() {
+        } else if let Some(key_expr) = ctx.full_keyexpr() {
             let cache = self.interceptor.compute_keyexpr_cache(key_expr);
             self.interceptor.intercept(ctx, cache.as_ref())
         } else {

@@ -155,7 +155,7 @@ impl FaceState {
             .map(|itor| itor.load())
             .and_then(|is| is.is_empty().not().then_some(is))
         {
-            if let Ok(expr) = keyexpr::new(res.expr()) {
+            if let Some(expr) = res.keyexpr() {
                 let cache = interceptor.compute_keyexpr_cache(expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
@@ -174,7 +174,7 @@ impl FaceState {
             .map(|mux| mux.interceptor.load())
             .and_then(|is| is.is_empty().not().then_some(is))
         {
-            if let Ok(expr) = keyexpr::new(res.expr()) {
+            if let Some(expr) = res.keyexpr() {
                 let cache = interceptor.compute_keyexpr_cache(expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
@@ -193,7 +193,7 @@ impl FaceState {
             .map(|mux| mux.interceptor.load())
             .and_then(|is| is.is_empty().not().then_some(is))
         {
-            if let Ok(expr) = keyexpr::new(res.expr()) {
+            if let Some(expr) = res.keyexpr() {
                 let cache = interceptor.compute_keyexpr_cache(expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)

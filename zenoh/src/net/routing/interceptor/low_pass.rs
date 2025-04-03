@@ -336,7 +336,7 @@ impl LowPassInterceptor {
         }
         let max_allowed_size = match max_allowed_size {
             Some(v) => v,
-            None => match ctx.full_key_expr() {
+            None => match ctx.full_keyexpr() {
                 Some(ke) => self.get_max_allowed_message_size(message_type, ke),
                 None => 0,
             },
