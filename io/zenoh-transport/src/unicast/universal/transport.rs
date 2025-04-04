@@ -55,7 +55,7 @@ impl TransportLinks {
     fn new(links: RwLock<Box<[TransportLinkUnicastUniversal]>>) -> Self {
         let index_cache = std::array::from_fn(|_| AtomicUsize::new(usize::MAX));
         // TODO: switch to this once we get rid of 1.75
-        //let index_cache = [const { AtomicUsize::new(usize::MAX) }; 16];
+        //let index_cache = [const { AtomicUsize::new(usize::MAX) }; Priority::NUM * 2];
         Self { links, index_cache }
     }
 
