@@ -96,7 +96,7 @@ pub(crate) fn start_plugins(runtime: &Runtime) {
                     };
                 if required {
                     panic!(
-                        "Plugin \"{}\" failed to start: {}",
+                        "Required plugin \"{}\" failed to start: {}",
                         plugin.id(),
                         if report.is_empty() {
                             "no details provided"
@@ -106,7 +106,7 @@ pub(crate) fn start_plugins(runtime: &Runtime) {
                     );
                 } else {
                     tracing::error!(
-                        "Required plugin \"{}\" failed to start: {}",
+                        "Plugin \"{}\" failed to start: {}",
                         plugin.id(),
                         if report.is_empty() {
                             "no details provided"
