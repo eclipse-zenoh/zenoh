@@ -29,10 +29,12 @@ use std::any::Any;
 mod low_pass;
 use low_pass::low_pass_interceptor_factories;
 use zenoh_config::{Config, InterceptorFlow, InterceptorLink};
-use zenoh_protocol::network::NetworkMessage;
+use zenoh_protocol::network::NetworkMessageMut;
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
+use super::dispatcher::face::Face;
+use super::router::Resource;
 use super::RoutingContext;
 use crate::api::key_expr::KeyExpr;
 
@@ -88,9 +90,9 @@ pub(crate) trait InterceptorTrait {
 
     fn intercept(
         &self,
-        ctx: RoutingContext<NetworkMessage>,
+        ctx: &mut RoutingContext<NetworkMessageMut>,
         cache: Option<&Box<dyn Any + Send + Sync>>,
-    ) -> Option<RoutingContext<NetworkMessage>>;
+    ) -> bool;
 }
 
 pub(crate) type Interceptor = Box<dyn InterceptorTrait + Send + Sync>;
@@ -151,6 +153,18 @@ impl InterceptorsChain {
             version,
         }
     }
+
+    pub(crate) fn intercept_with_face(
+        &self,
+        ctx: &mut RoutingContext<NetworkMessageMut>,
+        face: &Face,
+        prefix: &Resource,
+    ) -> bool {
+        let cache_guard = prefix.get_ingress_cache(face, self);
+        let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
+
+        self.intercept(ctx, cache)
+    }
 }
 
 impl InterceptorTrait for InterceptorsChain {
@@ -165,24 +179,21 @@ impl InterceptorTrait for InterceptorsChain {
 
     fn intercept<'a>(
         &self,
-        mut ctx: RoutingContext<NetworkMessage>,
+        ctx: &mut RoutingContext<NetworkMessageMut>,
         caches: Option<&Box<dyn Any + Send + Sync>>,
-    ) -> Option<RoutingContext<NetworkMessage>> {
+    ) -> bool {
         let caches =
             caches.and_then(|i| i.downcast_ref::<Vec<Option<Box<dyn Any + Send + Sync>>>>());
         for (idx, interceptor) in self.interceptors.iter().enumerate() {
             let cache = caches
                 .and_then(|caches| caches.get(idx).map(|k| k.as_ref()))
                 .flatten();
-            match interceptor.intercept(ctx, cache) {
-                Some(newctx) => ctx = newctx,
-                None => {
-                    tracing::trace!("Msg intercepted!");
-                    return None;
-                }
+            if !interceptor.intercept(ctx, cache) {
+                tracing::trace!("Msg {:?} intercepted!", &ctx.msg);
+                return false;
             }
         }
-        Some(ctx)
+        true
     }
 }
 
@@ -206,9 +217,9 @@ impl<T: InterceptorTrait> InterceptorTrait for ComputeOnMiss<T> {
     #[inline]
     fn intercept<'a>(
         &self,
-        ctx: RoutingContext<NetworkMessage>,
+        ctx: &mut RoutingContext<NetworkMessageMut>,
         cache: Option<&Box<dyn Any + Send + Sync>>,
-    ) -> Option<RoutingContext<NetworkMessage>> {
+    ) -> bool {
         if cache.is_some() {
             self.interceptor.intercept(ctx, cache)
         } else if let Some(key_expr) = ctx.full_key_expr() {
@@ -234,9 +245,9 @@ impl InterceptorTrait for IngressMsgLogger {
 
     fn intercept(
         &self,
-        ctx: RoutingContext<NetworkMessage>,
+        ctx: &mut RoutingContext<NetworkMessageMut>,
         cache: Option<&Box<dyn Any + Send + Sync>>,
-    ) -> Option<RoutingContext<NetworkMessage>> {
+    ) -> bool {
         let expr = cache
             .and_then(|i| i.downcast_ref::<String>().map(|e| e.as_str()))
             .or_else(|| ctx.full_expr());
@@ -249,7 +260,7 @@ impl InterceptorTrait for IngressMsgLogger {
             ctx.msg,
             expr,
         );
-        Some(ctx)
+        true
     }
 }
 
@@ -263,9 +274,9 @@ impl InterceptorTrait for EgressMsgLogger {
 
     fn intercept(
         &self,
-        ctx: RoutingContext<NetworkMessage>,
+        ctx: &mut RoutingContext<NetworkMessageMut>,
         cache: Option<&Box<dyn Any + Send + Sync>>,
-    ) -> Option<RoutingContext<NetworkMessage>> {
+    ) -> bool {
         let expr = cache
             .and_then(|i| i.downcast_ref::<String>().map(|e| e.as_str()))
             .or_else(|| ctx.full_expr());
@@ -277,7 +288,7 @@ impl InterceptorTrait for EgressMsgLogger {
             ctx.msg,
             expr
         );
-        Some(ctx)
+        true
     }
 }
 

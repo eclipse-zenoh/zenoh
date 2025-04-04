@@ -33,7 +33,7 @@ use zenoh_core::zcondfeat;
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Bits, WhatAmI, ZenohIdProto},
-    network::NetworkMessage,
+    network::NetworkMessageMut,
     transport::{close, init::ext::PatchType, TransportSn},
 };
 use zenoh_result::{zerror, ZResult};
@@ -129,7 +129,7 @@ impl TransportUnicast {
     }
 
     #[inline(always)]
-    pub fn schedule(&self, message: NetworkMessage) -> ZResult<()> {
+    pub fn schedule(&self, message: NetworkMessageMut) -> ZResult<()> {
         let transport = self.get_inner()?;
         transport.schedule(message)
     }

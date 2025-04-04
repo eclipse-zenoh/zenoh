@@ -59,7 +59,7 @@ pub(super) fn interests_new_face(tables: &mut Tables, face: &mut Arc<FaceState>)
                 );
                 let wire_expr = res.as_ref().map(|res| Resource::decl_key(res, face, true));
                 face.primitives.send_interest(RoutingContext::with_expr(
-                    Interest {
+                    &mut Interest {
                         id,
                         mode: InterestMode::CurrentFuture,
                         options: *options,
@@ -152,7 +152,7 @@ impl HatInterestTrait for HatCode {
                 .as_ref()
                 .map(|res| Resource::decl_key(res, dst_face, true));
             dst_face.primitives.send_interest(RoutingContext::with_expr(
-                Interest {
+                &mut Interest {
                     id,
                     mode,
                     options,
@@ -226,7 +226,7 @@ impl HatInterestTrait for HatCode {
                             && local_interest.options == interest.options
                         {
                             dst_face.primitives.send_interest(RoutingContext::with_expr(
-                                Interest {
+                                &mut Interest {
                                     id,
                                     mode: InterestMode::Final,
                                     // Note: InterestMode::Final options are undefined in the current protocol specification,
