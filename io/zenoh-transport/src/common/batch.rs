@@ -24,7 +24,7 @@ use zenoh_codec::{
     RCodec, WCodec,
 };
 use zenoh_protocol::{
-    network::NetworkMessage,
+    network::NetworkMessageRef,
     transport::{fragment::FragmentHeader, frame::FrameHeader, BatchSize, TransportMessage},
 };
 use zenoh_result::{zerror, ZResult};
@@ -190,6 +190,7 @@ pub enum Finalize {
 ///
 /// | Keep Alive | Frame Reliable\<Zenoh Message, Zenoh Message\> | Frame Best Effort\<Zenoh Message Fragment\> |
 ///
+/// [`NetworkMessage`]: zenoh_protocol::network::NetworkMessage
 #[derive(Clone, Debug)]
 pub struct WBatch {
     // The buffer to perform the batching on
@@ -374,19 +375,19 @@ impl Encode<&TransportMessage> for &mut WBatch {
     }
 }
 
-impl Encode<&NetworkMessage> for &mut WBatch {
+impl Encode<NetworkMessageRef<'_>> for &mut WBatch {
     type Output = Result<(), BatchError>;
 
-    fn encode(self, x: &NetworkMessage) -> Self::Output {
+    fn encode(self, x: NetworkMessageRef) -> Self::Output {
         let mut writer = self.buffer.writer();
         self.codec.write(&mut writer, x)
     }
 }
 
-impl Encode<(&NetworkMessage, &FrameHeader)> for &mut WBatch {
+impl Encode<(NetworkMessageRef<'_>, &FrameHeader)> for &mut WBatch {
     type Output = Result<(), BatchError>;
 
-    fn encode(self, x: (&NetworkMessage, &FrameHeader)) -> Self::Output {
+    fn encode(self, x: (NetworkMessageRef, &FrameHeader)) -> Self::Output {
         let mut writer = self.buffer.writer();
         let res = self.codec.write(&mut writer, x);
         #[cfg(feature = "stats")]
@@ -535,7 +536,7 @@ mod tests {
     use zenoh_core::zcondfeat;
     use zenoh_protocol::{
         core::{CongestionControl, Encoding, Priority, Reliability, WireExpr},
-        network::{ext, Push},
+        network::{ext, NetworkMessage, NetworkMessageExt, Push},
         transport::{
             frame::{self, FrameHeader},
             Fragment, KeepAlive, TransportMessage,
@@ -629,7 +630,7 @@ mod tests {
 
         // Serialize assuming there is already a frame
         batch.clear();
-        assert!(batch.encode(&nmsg).is_err());
+        assert!(batch.encode(nmsg.as_ref()).is_err());
         assert_eq!(batch.len(), 0);
 
         let mut frame = FrameHeader {
@@ -640,13 +641,13 @@ mod tests {
         nmsg.reliability = frame.reliability;
 
         // Serialize with a frame
-        batch.encode((&nmsg, &frame)).unwrap();
+        batch.encode((nmsg.as_ref(), &frame)).unwrap();
         assert_ne!(batch.len(), 0);
         nmsgs_in.push(nmsg.clone());
 
         frame.reliability = Reliability::BestEffort;
         nmsg.reliability = frame.reliability;
-        batch.encode((&nmsg, &frame)).unwrap();
+        batch.encode((nmsg.as_ref(), &frame)).unwrap();
         assert_ne!(batch.len(), 0);
         nmsgs_in.push(nmsg.clone());
 
@@ -655,12 +656,12 @@ mod tests {
         tmsgs_in.push(tmsg.clone());
 
         // Serialize assuming there is already a frame
-        assert!(batch.encode(&nmsg).is_err());
+        assert!(batch.encode(nmsg.as_ref()).is_err());
         assert_ne!(batch.len(), 0);
 
         // Serialize with a frame
         frame.sn = 1;
-        batch.encode((&nmsg, &frame)).unwrap();
+        batch.encode((nmsg.as_ref(), &frame)).unwrap();
         assert_ne!(batch.len(), 0);
         nmsgs_in.push(nmsg.clone());
     }

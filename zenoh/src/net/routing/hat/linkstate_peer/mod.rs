@@ -20,6 +20,7 @@
 use std::{
     any::Any,
     collections::{HashMap, HashSet},
+    mem,
     sync::{atomic::AtomicU32, Arc},
 };
 
@@ -384,12 +385,12 @@ impl HatBaseTrait for HatCode {
         &self,
         tables: &mut Tables,
         tables_ref: &Arc<TablesLock>,
-        oam: Oam,
+        oam: &mut Oam,
         transport: &TransportUnicast,
         send_declare: &mut SendDeclare,
     ) -> ZResult<()> {
         if oam.id == OAM_LINKSTATE {
-            if let ZExtBody::ZBuf(buf) = oam.body {
+            if let ZExtBody::ZBuf(buf) = mem::take(&mut oam.body) {
                 if let Ok(zid) = transport.get_zid() {
                     use zenoh_buffers::reader::HasReader;
                     use zenoh_codec::RCodec;

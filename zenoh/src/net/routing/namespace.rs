@@ -81,34 +81,34 @@ impl Namespace {
 }
 
 impl Primitives for Namespace {
-    fn send_interest(&self, mut msg: zenoh_protocol::network::Interest) {
+    fn send_interest(&self, msg: &mut zenoh_protocol::network::Interest) {
         if let Some(w) = &mut msg.wire_expr {
             self.handle_namespace_egress(w, false);
         }
         self.primitives.send_interest(msg);
     }
 
-    fn send_declare(&self, mut msg: zenoh_protocol::network::Declare) {
-        self.handle_declare_egress(&mut msg);
+    fn send_declare(&self, msg: &mut zenoh_protocol::network::Declare) {
+        self.handle_declare_egress(msg);
         self.primitives.send_declare(msg);
     }
 
-    fn send_push(&self, mut msg: Push, reliability: zenoh_protocol::core::Reliability) {
+    fn send_push(&self, msg: &mut Push, reliability: zenoh_protocol::core::Reliability) {
         self.handle_namespace_egress(&mut msg.wire_expr, false);
         self.primitives.send_push(msg, reliability);
     }
 
-    fn send_request(&self, mut msg: Request) {
+    fn send_request(&self, msg: &mut Request) {
         self.handle_namespace_egress(&mut msg.wire_expr, false);
         self.primitives.send_request(msg);
     }
 
-    fn send_response(&self, mut msg: Response) {
+    fn send_response(&self, msg: &mut Response) {
         self.handle_namespace_egress(&mut msg.wire_expr, false);
         self.primitives.send_response(msg);
     }
 
-    fn send_response_final(&self, msg: ResponseFinal) {
+    fn send_response_final(&self, msg: &mut ResponseFinal) {
         self.primitives.send_response_final(msg);
     }
 
@@ -118,22 +118,6 @@ impl Primitives for Namespace {
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
-    }
-}
-
-impl Namespace {
-    pub(crate) fn send_push_lazy(
-        &self,
-        mut wire_expr: WireExpr,
-        qos: zenoh_protocol::network::push::ext::QoSType,
-        ext_tstamp: Option<zenoh_protocol::network::push::ext::TimestampType>,
-        ext_nodeid: zenoh_protocol::network::push::ext::NodeIdType,
-        body: impl FnOnce() -> zenoh_protocol::zenoh::PushBody,
-        reliability: zenoh_protocol::core::Reliability,
-    ) {
-        self.handle_namespace_egress(&mut wire_expr, false);
-        self.primitives
-            .send_push_lazy(wire_expr, qos, ext_tstamp, ext_nodeid, body, reliability);
     }
 }
 
@@ -263,37 +247,37 @@ impl EPrimitives for ENamespace {
         self
     }
 
-    fn send_interest(&self, mut ctx: super::RoutingContext<zenoh_protocol::network::Interest>) {
-        if self.handle_interest_ingress(&mut ctx.msg) {
+    fn send_interest(&self, ctx: super::RoutingContext<&mut zenoh_protocol::network::Interest>) {
+        if self.handle_interest_ingress(ctx.msg) {
             self.primitives.send_interest(ctx);
         }
     }
 
-    fn send_declare(&self, mut ctx: super::RoutingContext<zenoh_protocol::network::Declare>) {
-        if self.handle_declare_ingress(&mut ctx.msg) {
+    fn send_declare(&self, ctx: super::RoutingContext<&mut zenoh_protocol::network::Declare>) {
+        if self.handle_declare_ingress(ctx.msg) {
             self.primitives.send_declare(ctx);
         }
     }
 
-    fn send_push(&self, mut msg: Push, reliability: zenoh_protocol::core::Reliability) {
+    fn send_push(&self, msg: &mut Push, reliability: zenoh_protocol::core::Reliability) {
         if self.handle_namespace_ingress(&mut msg.wire_expr, None) {
             self.primitives.send_push(msg, reliability);
         }
     }
 
-    fn send_request(&self, mut msg: Request) {
+    fn send_request(&self, msg: &mut Request) {
         if self.handle_namespace_ingress(&mut msg.wire_expr, None) {
             self.primitives.send_request(msg);
         }
     }
 
-    fn send_response(&self, mut msg: Response) {
+    fn send_response(&self, msg: &mut Response) {
         if self.handle_namespace_ingress(&mut msg.wire_expr, None) {
             self.primitives.send_response(msg);
         }
     }
 
-    fn send_response_final(&self, msg: ResponseFinal) {
+    fn send_response_final(&self, msg: &mut ResponseFinal) {
         self.primitives.send_response_final(msg);
     }
 }
