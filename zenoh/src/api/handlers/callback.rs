@@ -14,7 +14,7 @@
 
 //! Callback handler trait.
 
-use std::sync::Arc;
+use std::{ops::Deref, sync::Arc};
 
 use crate::api::handlers::IntoHandler;
 
@@ -124,5 +124,49 @@ where
 
     fn into_handler(self) -> (Callback<Event>, Self::Handler) {
         (move |evt| (self.callback)(evt), ()).into_handler()
+    }
+}
+
+pub(crate) struct TrackedCallback<T> {
+    callback: Callback<T>,
+    tx: Option<flume::Sender<()>>,
+    rx: flume::Receiver<()>,
+}
+
+impl<T> TrackedCallback<T> {
+    pub(crate) fn new(callback: Callback<T>) -> Self {
+        let (tx, rx) = flume::bounded(0);
+        Self {
+            callback,
+            tx: Some(tx),
+            rx,
+        }
+    }
+
+    pub(crate) fn get_callback(&self) -> CallbackGuard<T> {
+        CallbackGuard {
+            callback: self.callback.clone(),
+            _tx: self.tx.as_ref().unwrap().clone(),
+        }
+    }
+}
+
+impl<T> Drop for TrackedCallback<T> {
+    fn drop(&mut self) {
+        self.tx.take().unwrap();
+        self.rx.recv().unwrap_err();
+    }
+}
+
+pub(crate) struct CallbackGuard<T> {
+    callback: Callback<T>,
+    _tx: flume::Sender<()>,
+}
+
+impl<T> Deref for CallbackGuard<T> {
+    type Target = Callback<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.callback
     }
 }

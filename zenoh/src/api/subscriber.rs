@@ -24,7 +24,7 @@ use zenoh_result::ZResult;
 use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
 
 use crate::api::{
-    handlers::Callback,
+    handlers::TrackedCallback,
     key_expr::KeyExpr,
     sample::{Locality, Sample},
     session::{UndeclarableSealed, WeakSession},
@@ -36,7 +36,7 @@ pub(crate) struct SubscriberState {
     pub(crate) remote_id: Id,
     pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) origin: Locality,
-    pub(crate) callback: Callback<Sample>,
+    pub(crate) callback: TrackedCallback<Sample>,
 }
 
 impl fmt::Debug for SubscriberState {
