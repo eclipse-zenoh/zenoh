@@ -13,16 +13,17 @@
 //
 use std::{
     fmt::DebugStruct,
-    sync::{Arc, RwLock},
+    sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
     time::Duration,
 };
 
+use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use zenoh_core::{zasynclock, zcondfeat, zread, zwrite};
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{Priority, WhatAmI, ZenohIdProto},
+    core::{Locator, Priority, Reliability, WhatAmI, ZenohIdProto},
     network::NetworkMessageMut,
     transport::{close, Close, PrioritySn, TransportMessage, TransportSn},
 };
@@ -33,7 +34,10 @@ use zenoh_sync::{event, Notifier, Waiter};
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::{
-    common::priority::{TransportPriorityRx, TransportPriorityTx},
+    common::{
+        pipeline::TransmissionPipelineProducer,
+        priority::{TransportPriorityRx, TransportPriorityTx},
+    },
     unicast::{
         authentication::TransportAuthId,
         link::{LinkUnicastWithOpenAck, TransportLinkUnicastDirection},
@@ -43,10 +47,54 @@ use crate::{
     },
     TransportManager, TransportPeerEventHandler,
 };
-
 /*************************************/
 /*        UNIVERSAL TRANSPORT        */
 /*************************************/
+/// Transport link storage with link selection caching functionality
+#[derive(Default)]
+pub(crate) struct TransportLinks {
+    links: RwLock<Box<[TransportLinkUnicastUniversal]>>,
+    cache: ArcSwap<[[Option<Arc<ScheduledLink>>; Priority::NUM]; 2]>,
+}
+
+impl TransportLinks {
+    fn write(&self) -> RwLockWriteGuard<'_, Box<[TransportLinkUnicastUniversal]>> {
+        // on write access to the links we clear pipeline cache
+        self.cache.store(Default::default());
+        zwrite!(self.links)
+    }
+
+    fn read(&self) -> RwLockReadGuard<'_, Box<[TransportLinkUnicastUniversal]>> {
+        zread!(self.links)
+    }
+
+    pub(super) fn get_link(
+        &self,
+        reliability: Reliability,
+        priority: Priority,
+        select: impl FnOnce(&[TransportLinkUnicastUniversal]) -> Option<usize>,
+    ) -> Option<Arc<ScheduledLink>> {
+        if let Some(link) = self.cache.load()[reliability as usize][priority as usize].clone() {
+            return Some(link);
+        }
+        let guard = self.read();
+        let transport_link = &guard[select(&guard)?];
+        let link = Arc::new(ScheduledLink {
+            pipeline: transport_link.pipeline.clone(),
+            dst: transport_link.link.link.get_dst().clone(),
+        });
+        let mut cache = self.cache.load().as_ref().clone();
+        cache[reliability as usize][priority as usize] = Some(link.clone());
+        self.cache.store(Arc::new(cache));
+        Some(link)
+    }
+}
+
+pub(super) struct ScheduledLink {
+    pub(super) pipeline: TransmissionPipelineProducer,
+    pub(super) dst: Locator,
+}
+
 #[derive(Clone)]
 pub(crate) struct TransportUnicastUniversal {
     // Transport Manager
@@ -58,7 +106,7 @@ pub(crate) struct TransportUnicastUniversal {
     // Rx priorities
     pub(super) priority_rx: Arc<[TransportPriorityRx]>,
     // The links associated to the channel
-    pub(super) links: Arc<RwLock<Box<[TransportLinkUnicastUniversal]>>>,
+    pub(super) links: Arc<TransportLinks>,
     // The callback
     pub(super) callback: Arc<RwLock<Option<Arc<dyn TransportPeerEventHandler>>>>,
     // Lock used to ensure no race in add_link method
@@ -116,7 +164,7 @@ impl TransportUnicastUniversal {
             config,
             priority_tx: priority_tx.into_boxed_slice().into(),
             priority_rx: priority_rx.into_boxed_slice().into(),
-            links: Arc::new(RwLock::new(vec![].into_boxed_slice())),
+            links: Default::default(),
             add_link_lock: Arc::new(AsyncMutex::new(())),
             callback: Arc::new(RwLock::new(None)),
             alive: Arc::new(AsyncMutex::new(false)),
@@ -152,7 +200,7 @@ impl TransportUnicastUniversal {
 
         // Close all the links
         let mut links = {
-            let mut l_guard = zwrite!(self.links);
+            let mut l_guard = self.links.write();
             let links = l_guard.to_vec();
             *l_guard = vec![].into_boxed_slice();
             links
@@ -177,7 +225,7 @@ impl TransportUnicastUniversal {
 
         // Try to remove the link
         let target = {
-            let mut guard = zwrite!(self.links);
+            let mut guard = self.links.write();
 
             if let Some(index) = guard.iter().position(|tl| {
                 // Compare LinkUnicast link to not compare TransportLinkUnicast direction
@@ -261,7 +309,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
 
         // Check if we can add more inbound links
         {
-            let guard = zread!(self.links);
+            let guard = self.links.read();
             if let TransportLinkUnicastDirection::Inbound = link.inner_config().direction {
                 let count = guard
                     .iter()
@@ -299,7 +347,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
             TransportLinkUnicastUniversal::new(self, link, &self.priority_tx);
 
         // Add the link to the channel
-        let mut guard = zwrite!(self.links);
+        let mut guard = self.links.write();
         let mut links = Vec::with_capacity(guard.len() + 1);
         links.extend_from_slice(&guard);
         links.push(link.clone());
@@ -381,7 +429,9 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     async fn close(&self, reason: u8) -> ZResult<()> {
         tracing::trace!("Closing transport with peer: {}", self.config.zid);
 
-        let mut pipelines = zread!(self.links)
+        let mut pipelines = self
+            .links
+            .read()
             .iter()
             .map(|sl| sl.pipeline.clone())
             .collect::<Vec<_>>();
@@ -403,13 +453,14 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     }
 
     fn get_links(&self) -> Vec<Link> {
-        zread!(self.links).iter().map(|l| l.link.link()).collect()
+        self.links.read().iter().map(|l| l.link.link()).collect()
     }
 
     fn get_auth_ids(&self) -> TransportAuthId {
         let mut transport_auth_id = TransportAuthId::new(self.get_zid());
         // Convert LinkUnicast auth ids to AuthId
-        zread!(self.links)
+        self.links
+            .read()
             .iter()
             .for_each(|l| transport_auth_id.push_link_auth_id(l.link.link.get_auth_id().clone()));
 
