@@ -15,7 +15,7 @@ use std::{collections::BTreeMap, future::IntoFuture, marker::PhantomData, str::F
 
 use zenoh::{
     config::ZenohId,
-    handlers::{Callback, IntoHandler},
+    handlers::{Callback, IntoHandler, StrongCallback, WeakCallback},
     key_expr::KeyExpr,
     liveliness::{LivelinessSubscriberBuilder, LivelinessToken},
     pubsub::SubscriberBuilder,
@@ -426,8 +426,8 @@ struct State {
     history_depth: usize,
     query_target: QueryTarget,
     query_timeout: Duration,
-    callback: Callback<Sample>,
-    miss_handlers: HashMap<usize, Callback<Miss>>,
+    callback: StrongCallback<Sample>,
+    miss_handlers: HashMap<usize, StrongCallback<Miss>>,
     token: Option<LivelinessToken>,
 }
 
@@ -437,7 +437,7 @@ impl State {
     fn register_miss_callback(&mut self, callback: Callback<Miss>) -> usize {
         let id = self.next_id;
         self.next_id += 1;
-        self.miss_handlers.insert(id, callback);
+        self.miss_handlers.insert(id, callback.into());
         id
     }
     #[zenoh_macros::unstable]
@@ -502,7 +502,7 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
         fn deliver_and_flush(
             sample: Sample,
             mut source_sn: SourceSn,
-            callback: &Callback<Sample>,
+            callback: &WeakCallback<Sample>,
             state: &mut SourceState<u32>,
         ) {
             callback.call(sample);
@@ -530,7 +530,7 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
                 state.pending_samples.insert(source_sn, sample);
                 if state.pending_samples.len() >= states.history_depth {
                     if let Some((sn, sample)) = state.pending_samples.pop_first() {
-                        deliver_and_flush(sample, sn, &states.callback, state);
+                        deliver_and_flush(sample, sn, states.callback.weak(), state);
                     }
                 }
             }
@@ -555,7 +555,7 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
                 }
             }
         } else {
-            deliver_and_flush(sample, source_sn, &states.callback, state);
+            deliver_and_flush(sample, source_sn, states.callback.weak(), state);
         }
         new
     } else if let Some(timestamp) = sample.timestamp() {
@@ -574,7 +574,7 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
             } else {
                 state.pending_samples.entry(*timestamp).or_insert(sample);
                 if state.pending_samples.len() >= states.history_depth {
-                    flush_timestamped_source(state, &states.callback);
+                    flush_timestamped_source(state, states.callback.weak());
                 }
             }
         }
@@ -678,6 +678,8 @@ impl<Handler> AdvancedSubscriber<Handler> {
         let query_target = conf.query_target;
         let query_timeout = conf.query_timeout;
         let session = conf.session.clone();
+        let strong_callback: StrongCallback<Sample> = callback.into();
+        let weak_callback = strong_callback.weak().clone();
         let statesref = Arc::new(Mutex::new(State {
             next_id: 0,
             sequenced_states: HashMap::new(),
@@ -700,7 +702,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                 .unwrap_or_default(),
             query_target: conf.query_target,
             query_timeout: conf.query_timeout,
-            callback: callback.clone(),
+            callback: strong_callback,
             miss_handlers: HashMap::new(),
             token: None,
         }));
@@ -882,7 +884,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                         let handler = TimestampedRepliesHandler {
                                             id: ID::from(zid),
                                             statesref: statesref.clone(),
-                                            callback: callback.clone(),
+                                            callback: weak_callback.clone(),
                                         };
                                         let _ = session
                                             .get(Selector::from((s.key_expr(), params)))
@@ -1270,9 +1272,9 @@ impl<Handler> AdvancedSubscriber<Handler> {
 #[inline]
 fn flush_sequenced_source(
     state: &mut SourceState<u32>,
-    callback: &Callback<Sample>,
+    callback: &WeakCallback<Sample>,
     source_id: &EntityGlobalId,
-    miss_handlers: &HashMap<usize, Callback<Miss>>,
+    miss_handlers: &HashMap<usize, StrongCallback<Miss>>,
 ) {
     if state.pending_queries == 0 && !state.pending_samples.is_empty() {
         let mut pending_samples = BTreeMap::new();
@@ -1312,7 +1314,7 @@ fn flush_sequenced_source(
 
 #[zenoh_macros::unstable]
 #[inline]
-fn flush_timestamped_source(state: &mut SourceState<Timestamp>, callback: &Callback<Sample>) {
+fn flush_timestamped_source(state: &mut SourceState<Timestamp>, callback: &WeakCallback<Sample>) {
     if state.pending_queries == 0 && !state.pending_samples.is_empty() {
         let mut pending_samples = BTreeMap::new();
         std::mem::swap(&mut state.pending_samples, &mut pending_samples);
@@ -1347,11 +1349,16 @@ impl Drop for InitialRepliesHandler {
 
         if states.global_pending_queries == 0 {
             for (source_id, state) in states.sequenced_states.iter_mut() {
-                flush_sequenced_source(state, &states.callback, source_id, &states.miss_handlers);
+                flush_sequenced_source(
+                    state,
+                    states.callback.weak(),
+                    source_id,
+                    &states.miss_handlers,
+                );
                 spawn_periodoic_queries!(states, *source_id, self.statesref.clone());
             }
             for state in states.timestamped_states.values_mut() {
-                flush_timestamped_source(state, &states.callback);
+                flush_timestamped_source(state, states.callback.weak());
             }
         }
     }
@@ -1377,7 +1384,7 @@ impl Drop for SequencedRepliesHandler {
                 );
                 flush_sequenced_source(
                     state,
-                    &states.callback,
+                    states.callback.weak(),
                     &self.source_id,
                     &states.miss_handlers,
                 )
@@ -1391,7 +1398,7 @@ impl Drop for SequencedRepliesHandler {
 struct TimestampedRepliesHandler {
     id: ID,
     statesref: Arc<Mutex<State>>,
-    callback: Callback<Sample>,
+    callback: WeakCallback<Sample>,
 }
 
 #[zenoh_macros::unstable]

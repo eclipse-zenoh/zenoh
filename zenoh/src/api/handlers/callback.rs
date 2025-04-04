@@ -16,6 +16,8 @@
 
 use std::sync::Arc;
 
+use flume::{Receiver, Sender};
+
 use crate::api::handlers::IntoHandler;
 
 /// A function that can transform a [`FnMut`]`(T)` to
@@ -124,5 +126,74 @@ where
 
     fn into_handler(self) -> (Callback<Event>, Self::Handler) {
         (move |evt| (self.callback)(evt), ()).into_handler()
+    }
+}
+
+#[cfg(not(feature = "internal"))]
+#[derive(Clone)]
+pub(crate) struct WeakCallback<T> {
+    guard: Option<Sender<()>>,
+    cb: Callback<T>,
+}
+
+#[zenoh_macros::internal]
+#[derive(Clone)]
+pub struct WeakCallback<T> {
+    guard: Option<Sender<()>>,
+    cb: Callback<T>,
+}
+
+impl<T> WeakCallback<T> {
+    #[inline]
+    pub fn call(&self, arg: T) {
+        self.cb.call(arg);
+    }
+}
+
+#[cfg(not(feature = "internal"))]
+pub(crate) struct StrongCallback<T> {
+    waiter: Receiver<()>,
+    cb: WeakCallback<T>,
+}
+
+#[zenoh_macros::internal]
+// A Callback that blocks on Drop operation until all of its weak clones are dropped
+pub struct StrongCallback<T> {
+    waiter: Receiver<()>,
+    cb: WeakCallback<T>,
+}
+
+impl<T> StrongCallback<T> {
+    #[allow(dead_code)]
+    #[inline]
+    pub fn call(&self, arg: T) {
+        self.cb.call(arg);
+    }
+
+    #[inline]
+    pub fn weak(&self) -> &WeakCallback<T> {
+        &self.cb
+    }
+}
+
+impl<T> From<Callback<T>> for StrongCallback<T> {
+    fn from(value: Callback<T>) -> Self {
+        let (tx, rx) = flume::bounded(0);
+        StrongCallback {
+            waiter: rx,
+            cb: WeakCallback {
+                guard: Some(tx),
+                cb: value,
+            },
+        }
+    }
+}
+
+impl<T> Drop for StrongCallback<T> {
+    fn drop(&mut self) {
+        self.cb.guard.take();
+        self.waiter.recv().unwrap_err();
+        // we are in a drop, so strong count can no longer change, so after this point
+        // it is guaranteed that there are no more copies.
     }
 }

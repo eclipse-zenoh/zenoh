@@ -27,9 +27,9 @@ pub use zenoh_protocol::network::request::ext::QueryTarget;
 #[doc(inline)]
 pub use zenoh_protocol::zenoh::query::ConsolidationMode;
 
+use super::handlers::StrongCallback;
 use crate::api::{
-    bytes::ZBytes, encoding::Encoding, handlers::Callback, key_expr::KeyExpr, sample::Sample,
-    selector::Selector,
+    bytes::ZBytes, encoding::Encoding, key_expr::KeyExpr, sample::Sample, selector::Selector,
 };
 
 /// The replies consolidation strategy to apply on replies to a [`get`](crate::Session::get).
@@ -174,7 +174,7 @@ impl From<Reply> for Result<Sample, ReplyError> {
 }
 
 pub(crate) struct LivelinessQueryState {
-    pub(crate) callback: Callback<Reply>,
+    pub(crate) callback: StrongCallback<Reply>,
 }
 
 pub(crate) struct QueryState {
@@ -183,7 +183,7 @@ pub(crate) struct QueryState {
     pub(crate) parameters: Parameters<'static>,
     pub(crate) reception_mode: ConsolidationMode,
     pub(crate) replies: Option<HashMap<OwnedKeyExpr, Reply>>,
-    pub(crate) callback: Callback<Reply>,
+    pub(crate) callback: StrongCallback<Reply>,
 }
 
 impl QueryState {
