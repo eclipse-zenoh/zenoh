@@ -14,7 +14,9 @@
 
 //! Callback handler trait.
 
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
+
+use flume::{Receiver, Sender};
 
 use crate::api::handlers::IntoHandler;
 
@@ -128,24 +130,17 @@ where
 }
 
 #[cfg(not(feature = "internal"))]
+#[derive(Clone)]
 pub(crate) struct WeakCallback<T> {
-    use_guard: Arc<()>,
+    guard: Option<Sender<()>>,
     cb: Callback<T>,
 }
 
 #[zenoh_macros::internal]
+#[derive(Clone)]
 pub struct WeakCallback<T> {
-    use_guard: Arc<()>,
+    guard: Option<Sender<()>>,
     cb: Callback<T>,
-}
-
-impl<T> Clone for WeakCallback<T> {
-    fn clone(&self) -> Self {
-        Self {
-            use_guard: self.use_guard.clone(),
-            cb: self.cb.clone(),
-        }
-    }
 }
 
 impl<T> WeakCallback<T> {
@@ -157,12 +152,14 @@ impl<T> WeakCallback<T> {
 
 #[cfg(not(feature = "internal"))]
 pub(crate) struct StrongCallback<T> {
+    waiter: Receiver<()>,
     cb: WeakCallback<T>,
 }
 
 #[zenoh_macros::internal]
 // A Callback that blocks on Drop operation until all of its weak clones are dropped
 pub struct StrongCallback<T> {
+    waiter: Receiver<()>,
     cb: WeakCallback<T>,
 }
 
@@ -181,9 +178,11 @@ impl<T> StrongCallback<T> {
 
 impl<T> From<Callback<T>> for StrongCallback<T> {
     fn from(value: Callback<T>) -> Self {
+        let (tx, rx) = flume::bounded(0);
         StrongCallback {
+            waiter: rx,
             cb: WeakCallback {
-                use_guard: Arc::new(()),
+                guard: Some(tx),
                 cb: value,
             },
         }
@@ -192,10 +191,8 @@ impl<T> From<Callback<T>> for StrongCallback<T> {
 
 impl<T> Drop for StrongCallback<T> {
     fn drop(&mut self) {
-        const SLEEP_PERIOD: Duration = Duration::from_millis(1);
-        while Arc::strong_count(&self.cb.use_guard) > 1 {
-            std::thread::sleep(SLEEP_PERIOD);
-        }
+        self.cb.guard.take();
+        self.waiter.recv().unwrap_err();
         // we are in a drop, so strong count can no longer change, so after this point
         // it is guaranteed that there are no more copies.
     }
