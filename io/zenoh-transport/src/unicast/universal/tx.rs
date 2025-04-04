@@ -70,31 +70,39 @@ impl TransportUnicastUniversal {
     }
 
     fn schedule_on_link(&self, msg: NetworkMessage) -> ZResult<bool> {
-        let transport_links = self
-            .links
-            .read()
-            .expect("reading `TransportUnicastUniversal::links` should not fail");
+        let msg_reliability = Reliability::from(msg.is_reliable());
 
-        let Some(transport_link_index) = Self::select(
-            transport_links.iter().map(|tl| {
-                (
-                    tl.link
-                        .config
-                        .reliability
-                        .unwrap_or(Reliability::from(tl.link.link.is_reliable())),
-                    tl.link.config.priorities.clone(),
-                )
-            }),
-            Reliability::from(msg.is_reliable()),
-            msg.priority(),
-        ) else {
-            tracing::trace!(
-                "Message dropped because the transport has no links: {}",
-                msg
-            );
+        let transport_links = self.links.read();
 
-            // No Link found
-            return Ok(false);
+        let transport_link_index = match self.links.get_cache_hint(msg_reliability, msg.priority())
+        {
+            Some(index) => index,
+            None => {
+                let Some(transport_link_index) = Self::select(
+                    transport_links.iter().map(|tl| {
+                        (
+                            tl.link
+                                .config
+                                .reliability
+                                .unwrap_or(Reliability::from(tl.link.link.is_reliable())),
+                            tl.link.config.priorities.clone(),
+                        )
+                    }),
+                    msg_reliability,
+                    msg.priority(),
+                ) else {
+                    tracing::trace!(
+                        "Message dropped because the transport has no links: {}",
+                        msg
+                    );
+
+                    // No Link found
+                    return Ok(false);
+                };
+                self.links
+                    .set_cache_hint(msg_reliability, msg.priority(), transport_link_index);
+                transport_link_index
+            }
         };
 
         let transport_link = transport_links
