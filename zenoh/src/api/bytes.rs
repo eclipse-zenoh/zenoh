@@ -210,7 +210,26 @@ impl ZBytes {
     pub fn slices(&self) -> ZBytesSliceIterator<'_> {
         ZBytesSliceIterator(self.0.slices())
     }
+
+    /// Return an iterator of chunks in [`ZBytes`].
+    ///
+    /// This method does not entail cloning the underlying buffer even if [`ZBytes`] is not
+    /// contiguous.
+    ///
+    /// All chunks have size less then or equal to `chunk_size`.
+    ///
+    /// If there are at least two chunks, then every chunk except the last one has size
+    /// `chunk_size`, while the last chunk which has size less than or equal to `chunk_size`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `chunk_size` is zero.
+    #[zenoh_macros::unstable]
+    pub fn chunks(&self, chunk_size: usize) -> ZBytesChunkIterator {
+        ZBytesChunkIterator(self.0.chunks(chunk_size))
+    }
 }
+
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
 const _: () = {
     use zenoh_shm::{api::buffer::zshm::zshm, ShmBufInner};
@@ -486,5 +505,18 @@ impl<const ID: u8> From<ZBytes> for AttachmentType<ID> {
 impl<const ID: u8> From<AttachmentType<ID>> for ZBytes {
     fn from(this: AttachmentType<ID>) -> Self {
         this.buffer.into()
+    }
+}
+
+/// An iterator of chunks in [`ZBytes`], see [`ZBytes::chunks`].
+#[zenoh_macros::unstable]
+pub struct ZBytesChunkIterator<'a>(zenoh_buffers::ZBufChunkIterator<'a>);
+
+#[zenoh_macros::unstable]
+impl Iterator for ZBytesChunkIterator<'_> {
+    type Item = ZBytes;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next().map(ZBytes::from)
     }
 }
