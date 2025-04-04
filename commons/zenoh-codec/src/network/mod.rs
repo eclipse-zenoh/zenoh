@@ -19,7 +19,7 @@ mod request;
 mod response;
 
 use zenoh_buffers::{
-    reader::{DidntRead, Reader},
+    reader::{BacktrackableReader, DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
@@ -101,6 +101,26 @@ where
         };
 
         Ok(body.into())
+    }
+}
+
+pub struct NetworkMessageIter<R> {
+    codec: Zenoh080Reliability,
+    reader: R,
+}
+
+impl<R> NetworkMessageIter<R> {
+    pub fn new(reliability: Reliability, reader: R) -> Self {
+        let codec = Zenoh080Reliability::new(reliability);
+        Self { codec, reader }
+    }
+}
+
+impl<R: BacktrackableReader> Iterator for NetworkMessageIter<R> {
+    type Item = NetworkMessage;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.codec.read(&mut self.reader).ok()
     }
 }
 

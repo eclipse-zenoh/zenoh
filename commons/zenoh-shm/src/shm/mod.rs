@@ -45,8 +45,8 @@ pub enum SegmentOpenError {
 pub type ShmCreateResult<T> = core::result::Result<T, SegmentCreateError>;
 pub type ShmOpenResult<T> = core::result::Result<T, SegmentOpenError>;
 
-pub trait SegmentID: Unsigned + Display + Copy + Send + 'static {}
-impl<T: Unsigned + Display + Copy + Send + 'static> SegmentID for T {}
+pub trait SegmentID: Unsigned + Display + Copy + Send + Into<u64> + 'static {}
+impl<T: Unsigned + Display + Copy + Send + Into<u64> + 'static> SegmentID for T {}
 
 pub struct Segment<ID: SegmentID> {
     inner: platform::SegmentImpl<ID>,
@@ -63,10 +63,10 @@ impl<ID: SegmentID> Segment<ID> {
         Ok(Self { inner })
     }
 
+    #[allow(unused_variables)]
     pub fn ensure_not_persistent(id: ID) {
-        if let Err(err) = platform::SegmentImpl::open(id) {
-            tracing::trace!("Error cleaning up segment: {:?}", err);
-        }
+        #[cfg(not(target_os = "windows"))]
+        platform::SegmentImpl::ensure_not_persistent(id);
     }
 }
 

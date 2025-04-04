@@ -20,7 +20,10 @@
 
 use std::{collections::HashSet, sync::Arc};
 
-use zenoh_config::qos::{QosOverwriteItemConf, QosOverwriteMessage, QosOverwrites};
+use zenoh_config::{
+    qos::{QosOverwriteMessage, QosOverwrites},
+    QosOverwriteItemConf,
+};
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, IKeyExprTreeNode, KeBoxTree};
 use zenoh_protocol::{
     network::{NetworkBody, Push, Request, Response},
@@ -43,30 +46,16 @@ pub(crate) fn qos_overwrite_interceptor_factories(
                 bail!("Invalid Qos Overwrite config: id '{id}' is repeated");
             }
         }
-        let mut q = q.clone();
         // check for undefined flows and initialize them
-        let flows = q
-            .flows
-            .get_or_insert(vec![InterceptorFlow::Ingress, InterceptorFlow::Egress]);
-        if flows.is_empty() {
-            bail!("Invalid Qos Overwrite config: flows list must not be empty");
-        }
-        // check for empty interfaces
-        if q.interfaces.as_ref().map(|i| i.is_empty()).unwrap_or(false) {
-            bail!("Invalid Qos Overwrite config: interfaces list must not be empty");
-        }
-        // check for empty messages list
-        if q.messages.is_empty() {
-            bail!("Invalid Qos Overwrite config: messages list must not be empty");
-        }
-        res.push(Box::new(QosOverwriteFactory::new(q)));
+        res.push(Box::new(QosOverwriteFactory::new(q.clone())));
     }
 
     Ok(res)
 }
 
 pub struct QosOverwriteFactory {
-    interfaces: Option<Vec<String>>,
+    interfaces: Option<NEVec<String>>,
+    link_protocols: Option<NEVec<InterceptorLink>>,
     overwrite: QosOverwrites,
     flows: InterfaceEnabled,
     filter: QosOverwriteFilter,
@@ -82,13 +71,13 @@ impl QosOverwriteFactory {
 
         Self {
             interfaces: conf.interfaces,
+            link_protocols: conf.link_protocols,
             overwrite: conf.overwrite.clone(),
-            flows: conf
-                .flows
-                .expect("config flows should be set")
-                .as_slice()
-                .into(),
-            filter: conf.messages.as_slice().into(),
+            flows: conf.flows.map(|f| (&f).into()).unwrap_or(InterfaceEnabled {
+                ingress: true,
+                egress: true,
+            }),
+            filter: (&conf.messages).into(),
             keys: Arc::new(keys),
         }
     }
@@ -108,6 +97,24 @@ impl InterceptorFactoryTrait for QosOverwriteFactory {
                 }
             }
         }
+        if let Some(config_protocols) = &self.link_protocols {
+            match transport.get_auth_ids() {
+                Ok(auth_ids) => {
+                    if !auth_ids
+                        .link_auth_ids()
+                        .iter()
+                        .map(|auth_id| InterceptorLinkWrapper::from(auth_id).0)
+                        .any(|v| config_protocols.contains(&v))
+                    {
+                        return (None, None);
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Error loading transport AuthIds: {e}");
+                    return (None, None);
+                }
+            }
+        };
 
         tracing::debug!(
             "New{}{} qos overwriter on transport unicast {:?}",
@@ -153,8 +160,8 @@ pub(crate) struct QosOverwriteFilter {
     reply: bool,
 }
 
-impl From<&[QosOverwriteMessage]> for QosOverwriteFilter {
-    fn from(value: &[QosOverwriteMessage]) -> Self {
+impl From<&NEVec<QosOverwriteMessage>> for QosOverwriteFilter {
+    fn from(value: &NEVec<QosOverwriteMessage>) -> Self {
         let mut res = Self::default();
         for v in value {
             match v {
@@ -175,15 +182,19 @@ pub(crate) struct QosInterceptor {
 }
 
 struct Cache {
-    should_overwrite: bool,
+    is_ke_affected: bool,
 }
 
 impl QosInterceptor {
-    fn should_overwrite(&self, ke: &KeyExpr) -> bool {
+    fn is_ke_affected(&self, ke: &KeyExpr) -> bool {
         self.keys.nodes_including(ke).any(|n| n.weight().is_some())
     }
 
-    fn overwrite_qos<const ID: u8>(&self, qos: &mut zenoh_protocol::network::ext::QoSType<ID>) {
+    fn overwrite_qos<const ID: u8>(
+        &self,
+        message: QosOverwriteMessage,
+        qos: &mut zenoh_protocol::network::ext::QoSType<ID>,
+    ) {
         if let Some(p) = self.overwrite.priority {
             qos.set_priority(p.into());
         }
@@ -193,13 +204,27 @@ impl QosInterceptor {
         if let Some(e) = self.overwrite.express {
             qos.set_is_express(e);
         }
+        tracing::trace!("Overwriting QoS for {:?} to {:?}", message, qos);
+    }
+
+    fn is_ke_affected_from_cache_or_ctx(
+        &self,
+        cache: Option<&Cache>,
+        ctx: &RoutingContext<NetworkMessage>,
+    ) -> bool {
+        cache.map(|v| v.is_ke_affected).unwrap_or_else(|| {
+            ctx.full_key_expr()
+                .as_ref()
+                .map(|ke| self.is_ke_affected(&ke.into()))
+                .unwrap_or(false)
+        })
     }
 }
 
 impl InterceptorTrait for QosInterceptor {
     fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
         let cache = Cache {
-            should_overwrite: self.should_overwrite(key_expr),
+            is_ke_affected: self.is_ke_affected(key_expr),
         };
         Some(Box::new(cache))
     }
@@ -217,69 +242,56 @@ impl InterceptorTrait for QosInterceptor {
             }
         });
 
-        let should_overwrite = cache.map(|v| v.should_overwrite).unwrap_or_else(|| {
-            ctx.full_key_expr()
-                .as_ref()
-                .map(|ke| self.should_overwrite(&ke.into()))
-                .unwrap_or(false)
-        });
+        let should_overwrite = match &ctx.msg.body {
+            NetworkBody::Push(Push {
+                payload: PushBody::Put(_),
+                ..
+            }) => self.filter.put && self.is_ke_affected_from_cache_or_ctx(cache, &ctx),
+            NetworkBody::Push(Push {
+                payload: PushBody::Del(_),
+                ..
+            }) => self.filter.delete && self.is_ke_affected_from_cache_or_ctx(cache, &ctx),
+            NetworkBody::Request(_) => {
+                self.filter.query && self.is_ke_affected_from_cache_or_ctx(cache, &ctx)
+            }
+            NetworkBody::Response(_) => {
+                self.filter.reply && self.is_ke_affected_from_cache_or_ctx(cache, &ctx)
+            }
+            NetworkBody::ResponseFinal(_) => false,
+            NetworkBody::Interest(_) => false,
+            NetworkBody::Declare(_) => false,
+            NetworkBody::OAM(_) => false,
+        };
         if !should_overwrite {
             return Some(ctx);
         }
+
         match &mut ctx.msg.body {
             NetworkBody::Request(Request { ext_qos, .. }) => {
-                if self.filter.query {
-                    self.overwrite_qos(ext_qos);
-                    tracing::trace!(
-                        "Overwriting QoS for {:?} to {:?}",
-                        QosOverwriteMessage::Query,
-                        ext_qos
-                    );
-                }
+                self.overwrite_qos(QosOverwriteMessage::Query, ext_qos);
             }
             NetworkBody::Response(Response { ext_qos, .. }) => {
-                if self.filter.reply {
-                    self.overwrite_qos(ext_qos);
-                    tracing::trace!(
-                        "Overwriting QoS for {:?} to {:?}",
-                        QosOverwriteMessage::Reply,
-                        ext_qos
-                    );
-                }
+                self.overwrite_qos(QosOverwriteMessage::Reply, ext_qos);
             }
             NetworkBody::Push(Push {
                 payload: PushBody::Put(_),
                 ext_qos,
                 ..
             }) => {
-                if self.filter.put {
-                    self.overwrite_qos(ext_qos);
-                    tracing::trace!(
-                        "Overwriting QoS for {:?} to {:?}",
-                        QosOverwriteMessage::Put,
-                        ext_qos
-                    );
-                }
+                self.overwrite_qos(QosOverwriteMessage::Put, ext_qos);
             }
             NetworkBody::Push(Push {
                 payload: PushBody::Del(_),
                 ext_qos,
                 ..
             }) => {
-                if self.filter.delete {
-                    self.overwrite_qos(ext_qos);
-                    tracing::trace!(
-                        "Overwriting QoS for {:?} to {:?}",
-                        QosOverwriteMessage::Delete,
-                        ext_qos
-                    );
-                }
+                self.overwrite_qos(QosOverwriteMessage::Delete, ext_qos);
             }
             // unaffected message types
+            NetworkBody::ResponseFinal(_) => {}
             NetworkBody::Declare(_) => {}
             NetworkBody::Interest(_) => {}
             NetworkBody::OAM(_) => {}
-            NetworkBody::ResponseFinal(_) => {}
         }
         Some(ctx)
     }

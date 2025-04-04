@@ -111,7 +111,7 @@ pub(crate) fn finalize_pending_interest(
     pending_interest.cancellation_token.cancel();
     if let Some(interest) = Arc::into_inner(interest) {
         tracing::debug!(
-            "Propagate DeclareFinal {}:{}",
+            "{}:{} Propagate DeclareFinal",
             interest.src_face,
             interest.src_interest_id
         );
@@ -173,10 +173,11 @@ impl CurrentInterestCleanup {
                 drop(ctrl_lock);
                 if print_warning {
                     tracing::warn!(
-                        "Didn't receive DeclareFinal {}:{} from {} for interests: Timeout({:#?})!",
-                        interest.interest.src_face,
-                        self.id,
+                        "{}:{} Didn't receive DeclareFinal for interest {}:{}: Timeout({:#?})!",
                         face,
+                        self.id,
+                        interest.interest.src_face,
+                        interest.interest.src_interest_id,
                         self.interests_timeout,
                     );
                 }
