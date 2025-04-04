@@ -72,6 +72,7 @@ impl TransportUnicastUniversal {
     pub fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
+        #[cfg(feature = "stats")] stats: Arc<TransportStats>,
     ) -> ZResult<Arc<dyn TransportUnicastTrait>> {
         let mut priority_tx = vec![];
         let mut priority_rx = vec![];
@@ -95,9 +96,6 @@ impl TransportUnicastUniversal {
         for c in priority_tx.iter() {
             c.sync(initial_sn)?;
         }
-
-        #[cfg(feature = "stats")]
-        let stats = Arc::new(TransportStats::new(Some(manager.get_stats().clone())));
 
         let t = Arc::new(TransportUnicastUniversal {
             manager,
