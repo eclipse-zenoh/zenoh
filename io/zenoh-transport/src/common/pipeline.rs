@@ -13,7 +13,7 @@
 //
 use std::{
     fmt,
-    ops::Add,
+    ops::{Add, Deref},
     sync::{
         atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering},
         Arc, Mutex, MutexGuard,
@@ -739,10 +739,12 @@ impl TransmissionPipeline {
             congested: AtomicU8::new(0),
         });
         let producer = TransmissionPipelineProducer {
-            stage_in: stage_in.into_boxed_slice().into(),
-            status: active.clone(),
-            wait_before_drop: config.wait_before_drop,
-            wait_before_close: config.wait_before_close,
+            inner: Arc::new(TransmissionPipelineProducerInner {
+                stage_in: stage_in.into_boxed_slice(),
+                status: active.clone(),
+                wait_before_drop: config.wait_before_drop,
+                wait_before_close: config.wait_before_close,
+            }),
         };
         let consumer = TransmissionPipelineConsumer {
             stage_out: stage_out.into_boxed_slice(),
@@ -785,13 +787,25 @@ impl TransmissionPipelineStatus {
     }
 }
 
-#[derive(Clone)]
-pub(crate) struct TransmissionPipelineProducer {
+pub(crate) struct TransmissionPipelineProducerInner {
     // Each priority queue has its own Mutex
-    stage_in: Arc<[Mutex<StageIn>]>,
+    stage_in: Box<[Mutex<StageIn>]>,
     status: Arc<TransmissionPipelineStatus>,
     wait_before_drop: (Duration, Duration),
     wait_before_close: Duration,
+}
+
+#[derive(Clone)]
+pub(crate) struct TransmissionPipelineProducer {
+    inner: Arc<TransmissionPipelineProducerInner>,
+}
+
+impl Deref for TransmissionPipelineProducer {
+    type Target = TransmissionPipelineProducerInner;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
 }
 
 impl TransmissionPipelineProducer {
