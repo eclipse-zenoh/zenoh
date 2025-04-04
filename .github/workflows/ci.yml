@@ -32,7 +32,7 @@ env:
   CARGO_SEMVER_CHECKS_RELEASE_TYPE: patch
   # NOTE(fuzzypixelz): cargo-semver-checks uses the previous released version as a baseline, not the latest released
   # version on crates.io. Thus this needs to be updated after every release.
-  CARGO_SEMVER_CHECKS_BASELINE_VERSION: 1.0.0
+  CARGO_SEMVER_CHECKS_BASELINE_VERSION: 1.3.0
 
 jobs:
   determine-runner:
@@ -51,6 +51,30 @@ jobs:
           else
             echo "runner=['ubuntu-latest', 'windows-latest', 'macos-latest']" >> $GITHUB_OUTPUT
           fi
+
+  check_rust:
+    needs: determine-runner
+    name: Check zenoh using Rust 1.75
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(needs.determine-runner.outputs.runner) }}
+
+    steps:
+      - name: Clone this repository
+        uses: actions/checkout@v4
+
+      - name: Update Rust 1.75.0 toolchain
+        run: rustup update 1.75.0
+
+      - name: Setup rust-cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
+
+      - name: Check zenoh with rust 1.75.0
+        run: cargo +1.75.0 check --release --bins --lib
 
   check:
     needs: determine-runner
@@ -293,7 +317,7 @@ jobs:
   ci:
     name: CI status checks
     runs-on: ubuntu-latest
-    needs: [check, test, valgrind, typos, markdown_lint, coverage]
+    needs: [check_rust, check, test, valgrind, typos, markdown_lint, coverage]
     if: always()
     steps:
       - name: Check whether all jobs pass

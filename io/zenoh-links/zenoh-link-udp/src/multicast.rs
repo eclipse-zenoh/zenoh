@@ -21,7 +21,9 @@ use std::{
 use async_trait::async_trait;
 use socket2::{Domain, Protocol, Socket, Type};
 use tokio::net::UdpSocket;
-use zenoh_link_commons::{LinkManagerMulticastTrait, LinkMulticast, LinkMulticastTrait};
+use zenoh_link_commons::{
+    LinkAuthId, LinkManagerMulticastTrait, LinkMulticast, LinkMulticastTrait,
+};
 use zenoh_protocol::{
     core::{Config, EndPoint, Locator},
     transport::BatchSize,
@@ -131,6 +133,10 @@ impl LinkMulticastTrait for LinkMulticastUdp {
                 break Ok((n, Cow::Owned(locator)));
             }
         }
+    }
+
+    fn get_auth_id(&self) -> &LinkAuthId {
+        &LinkAuthId::Udp
     }
 
     #[inline(always)]
@@ -272,7 +278,7 @@ impl LinkManagerMulticastUdp {
                 .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
         }
 
-        // Bind the socket: let's bing to the unspecified address so we can join and read
+        // Bind the socket: let's bind to the unspecified address so we can join and read
         // from multiple multicast groups.
         let bind_mcast_addr = match mcast_addr.ip() {
             IpAddr::V4(_) => IpAddr::V4(Ipv4Addr::UNSPECIFIED),
@@ -320,6 +326,28 @@ impl LinkManagerMulticastUdp {
         // Must set to nonblocking according to the doc of tokio
         // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
         mcast_sock.set_nonblocking(true)?;
+
+        // If TTL is specified, add set the socket's TTL
+        if let Some(ttl_str) = config.get(UDP_MULTICAST_TTL) {
+            match &local_addr {
+                IpAddr::V4(_) => {
+                    let ttl = match ttl_str.parse::<u32>() {
+                        Ok(ttl) => ttl,
+                        Err(e) => bail!("Can not parse TTL '{}' to a u32: {}", ttl_str, e),
+                    };
+
+                    ucast_sock.set_multicast_ttl_v4(ttl).map_err(|e| {
+                        zerror!("Can not set multicast TTL {} on {}: {}", ttl, mcast_addr, e)
+                    })?;
+                }
+                IpAddr::V6(_) => {
+                    tracing::warn!(
+                            "UDP multicast hop limit not supported for v6 socket: {}. See https://github.com/rust-lang/rust/pull/138744.",
+                            mcast_addr
+                        );
+                }
+            }
+        }
 
         // Build the tokio multicast UdpSocket
         let mcast_sock = UdpSocket::from_std(mcast_sock.into())?;
