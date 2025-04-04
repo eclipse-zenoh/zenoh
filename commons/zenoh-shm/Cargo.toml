@@ -46,6 +46,8 @@ num_cpus = { workspace = true, optional = true }
 thread-priority = { workspace = true }
 stabby = { workspace = true }
 crossbeam-queue = { workspace = true }
+crossbeam-channel = { workspace = true }
+static_assertions = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 advisory-lock = { workspace = true }
