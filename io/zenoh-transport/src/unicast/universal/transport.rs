@@ -86,8 +86,7 @@ impl TransportLinks {
         zwrite!(self.links)
     }
 
-    #[allow(private_interfaces)]
-    pub(crate) fn read(&self) -> RwLockReadGuard<'_, Box<[TransportLinkUnicastUniversal]>> {
+    pub(super) fn read(&self) -> RwLockReadGuard<'_, Box<[TransportLinkUnicastUniversal]>> {
         zread!(self.links)
     }
 }
