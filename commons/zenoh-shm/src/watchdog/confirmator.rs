@@ -88,22 +88,19 @@ impl ConfirmedSegment {
     }
 
     fn add(&self, descriptor: OwnedMetadataDescriptor) {
-        if self.cap.fetch_sub(1, std::sync::atomic::Ordering::Relaxed) == 0 {
-            let _ = self.task_kick.send(());
-        }
-        self.sender
-            .try_send(Transaction::Add(descriptor.deref().clone()))
-            .unwrap();
+        self.make_transaction(Transaction::Add(descriptor.deref().clone()));
     }
 
     fn remove(&self, descriptor: OwnedMetadataDescriptor) {
+        self.make_transaction(Transaction::Remove(descriptor.deref().clone()));
+    }
+
+    fn make_transaction(&self, transaction: Transaction) {
         if self.cap.fetch_sub(1, std::sync::atomic::Ordering::Relaxed) == 0 {
             let _ = self.task_kick.send(());
         }
 
-        self.sender
-            .try_send(Transaction::Remove(descriptor.deref().clone()))
-            .unwrap();
+        self.sender.send(transaction).unwrap();
     }
 
     // See ordering implementation for OwnedMetadataDescriptor
@@ -143,7 +140,7 @@ impl ConfirmedSegment {
 pub struct WatchdogConfirmator {
     confirmed: RwLock<BTreeMap<MetadataSegmentID, Arc<ConfirmedSegment>>>,
     segment_transactions: Arc<SegQueue<Arc<ConfirmedSegment>>>,
-    _task: PeriodicTask,
+    task: PeriodicTask,
 }
 
 impl WatchdogConfirmator {
@@ -174,7 +171,7 @@ impl WatchdogConfirmator {
         Self {
             confirmed: RwLock::default(),
             segment_transactions,
-            _task: task,
+            task,
         }
     }
 
@@ -190,7 +187,7 @@ impl WatchdogConfirmator {
 
         let confirmed_segment = Arc::new(ConfirmedSegment::new(
             descriptor.segment.clone(),
-            self._task.kicker(),
+            self.task.kicker(),
         ));
         let confirmed_descriptoir =
             ConfirmedDescriptor::new(descriptor.clone(), confirmed_segment.clone());
