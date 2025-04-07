@@ -131,9 +131,9 @@ async fn openclose_transport<'a>(
     /* [1] */
     println!("\nTransport Open Close [1a1]");
     // Add the locator on the router
-    let res = ztimeout!(router_manager.add_listener(listen_endpoint.clone()));
-    println!("Transport Open Close [1a1]: {res:?}");
-    assert!(res.is_ok());
+    let router_res = ztimeout!(router_manager.add_listener(listen_endpoint.clone()));
+    println!("Transport Open Close [1a1]: {router_res:?}");
+    assert!(router_res.is_ok());
     println!("Transport Open Close [1a2]");
     let locators = ztimeout!(router_manager.get_listeners());
     println!("Transport Open Close [1a2]: {locators:?}");
@@ -179,7 +179,9 @@ async fn openclose_transport<'a>(
         }
     });
 
-    // Check link on each side
+    // Check link on each side of connection
+    // Expect Client to be bound to bind_addr
+    // Expect Router to connect to bind_addr as foreign link
     println!("Transport Open Close [1f2]");
     ztimeout!(async {
         let router_transports = ztimeout!(router_manager.get_transports_unicast());
@@ -197,11 +199,12 @@ async fn openclose_transport<'a>(
                 let router_links = r_to_c_tx.get_links().unwrap();
                 let client_links = c_to_r_tx.get_links().unwrap();
 
-                println!("Transport Open Close [1f2]: {res:?}");
+                println!("Transport Open Close [1f2]: {router_res:?}");
+                println!("Router src {:?}", router_links[0].src);
                 println!("Router dst {:?}", router_links[0].dst);
                 println!("Client src {:?}", client_links[0].src);
+                println!("Client dst {:?}", client_links[0].dst);
                 println!("Bind Addr {:?}", bind_addr);
-
                 assert!(router_links[0].dst == client_links[0].src);
                 assert!(router_links[0].dst.address() == *bind_addr);
                 assert!(client_links[0].src.address() == *bind_addr);
@@ -436,7 +439,7 @@ async fn openclose_tls_only_connect_with_bind_restriction() {
     use zenoh_link::tls::config::*;
 
     zenoh_util::init_log_from_env_or("error");
-    let bind_addr_str = format!("127.0.0.1:{}", 13012);
+    let bind_addr_str = format!("127.0.0.1:{}", 13014);
     let bind_addr = Address::from(bind_addr_str.as_str());
 
     let client_auth = "true";

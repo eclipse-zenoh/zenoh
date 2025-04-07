@@ -385,8 +385,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             }
             LinkUnicastTls::new(
                 tls_stream,
-                dst_addr,
                 src_addr,
+                dst_addr,
                 auth_identifier.into(),
                 expiration_manager,
             )
@@ -535,8 +535,8 @@ async fn accept_task(
                             }
                             LinkUnicastTls::new(
                                 tokio_rustls::TlsStream::Server(tls_stream),
-                                dst_addr,
                                 src_addr,
+                                dst_addr,
                                 auth_identifier.into(),
                                 expiration_manager,
                             )
