@@ -100,7 +100,6 @@ impl<'a> TcpSocketConfig<'a> {
             .peer_addr()
             .map_err(|e| zerror!("{}: {}", dst_addr, e))?;
 
-        
         Ok((stream, src_addr, dst_addr))
     }
 
