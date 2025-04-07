@@ -122,10 +122,6 @@ impl TransportUnicastLowlatency {
         // Delete the transport on the manager
         let _ = self.manager.del_transport_unicast(&self.config.zid).await;
 
-        if let Some(val) = zasyncwrite!(self.link).as_ref() {
-            let _ = val.close(Some(close::reason::GENERIC)).await;
-        }
-
         // For an unknown reason, self.tracker.wait().await hangs
         // - if performed after link close on windows platform
         // - if performed before link close on non windows platforms
