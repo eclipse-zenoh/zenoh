@@ -83,10 +83,10 @@ impl TransportEventHandler for SHClientOpenClose {
     }
 }
 
-async fn openclose_transport<'a>(
+async fn openclose_transport(
     listen_endpoint: &EndPoint,
     connect_endpoint: &EndPoint,
-    bind_addr: &Address<'a>,
+    bind_addr: &Address<'_>,
     lowlatency_transport: bool,
 ) {
     /* [ROUTER] */
