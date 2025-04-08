@@ -253,7 +253,7 @@ pub(super) struct TransportLinkMulticastUniversal {
     // The underlying link
     pub(super) link: TransportLinkMulticast,
     // The transmission pipeline
-    pub(super) pipeline: Option<Arc<TransmissionPipelineProducer>>,
+    pub(super) pipeline: Option<TransmissionPipelineProducer>,
     // The transport this link is associated to
     transport: TransportMulticastInner,
     // The signals to stop TX/RX tasks
@@ -318,7 +318,7 @@ impl TransportLinkMulticastUniversal {
             };
             // The pipeline
             let (producer, consumer) = TransmissionPipeline::make(tpc, &priority_tx);
-            self.pipeline = Some(Arc::new(producer));
+            self.pipeline = Some(producer);
 
             // Spawn the TX task
             let c_link = self.link.clone();
