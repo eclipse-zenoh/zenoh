@@ -24,8 +24,7 @@ use nonempty_collections::NEVec;
 use zenoh_link::LinkAuthId;
 
 mod authorization;
-use std::any::Any;
-use std::ops::Not;
+use std::{any::Any, ops::Not};
 
 mod low_pass;
 use low_pass::low_pass_interceptor_factories;
@@ -35,9 +34,7 @@ use zenoh_protocol::network::NetworkMessageMut;
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
-use super::dispatcher::face::Face;
-use super::router::Resource;
-use super::RoutingContext;
+use super::{dispatcher::face::Face, router::Resource, RoutingContext};
 
 pub mod downsampling;
 use crate::net::routing::interceptor::downsampling::downsampling_interceptor_factories;
