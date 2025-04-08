@@ -18,7 +18,6 @@ use std::{
     ops::Not,
     sync::{Arc, Weak},
     time::Duration,
-    usize,
 };
 
 use arc_swap::ArcSwap;
@@ -168,7 +167,7 @@ impl FaceState {
     pub(crate) fn update_interceptors_caches(&self, res: &mut Arc<Resource>) {
         if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Ingress) {
             if let Some(expr) = res.keyexpr() {
-                let cache = iceptor.compute_keyexpr_cache(&expr);
+                let cache = iceptor.compute_keyexpr_cache(expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
                         .session_ctxs
@@ -181,7 +180,7 @@ impl FaceState {
 
         if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Egress) {
             if let Some(expr) = res.keyexpr() {
-                let cache = iceptor.compute_keyexpr_cache(&expr);
+                let cache = iceptor.compute_keyexpr_cache(expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
                         .session_ctxs
@@ -200,7 +199,7 @@ impl FaceState {
             .and_then(|is| is.is_empty().not().then_some(is))
         {
             if let Some(expr) = res.keyexpr() {
-                let cache = iceptor.compute_keyexpr_cache(&expr);
+                let cache = iceptor.compute_keyexpr_cache(expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
                         .session_ctxs

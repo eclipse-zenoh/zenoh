@@ -163,7 +163,7 @@ impl InterceptorsChain {
         // doesn't represent a full keyexpr.
         let prefix = ctx
             .wire_expr()
-            .and_then(|we| we.has_suffix().not().then(|| prefix));
+            .and_then(|we| we.has_suffix().not().then_some(prefix));
         let cache_guard = prefix
             .as_ref()
             .and_then(|p| p.interceptor_cache(face, self, flow));
