@@ -205,9 +205,34 @@ async fn openclose_transport(
                 println!("Client src {:?}", client_links[0].src);
                 println!("Client dst {:?}", client_links[0].dst);
                 println!("Bind Addr {:?}", bind_addr);
-                assert!(router_links[0].dst == client_links[0].src);
-                assert!(router_links[0].dst.address() == *bind_addr);
-                assert!(client_links[0].src.address() == *bind_addr);
+
+                if bind_addr.as_str().contains("localhost") {
+                    let mut iter = bind_addr.as_str().split(":");
+                    let _host = iter.next();
+                    let port = iter.next().unwrap();
+                    // Create representation for Localhost in v4 and v6
+                    let lh_ipv4 = format!("127.0.0.1:{}", port);
+                    let lh_ipv6 = format!("[::1]:{}", port);
+                    // Create addr for Localhost in v4 and v6
+                    let addr_ipv4 = Address::from(lh_ipv4.as_str());
+                    let addr_ipv6 = Address::from(lh_ipv6.as_str());
+                    // Create addr for Localhost in v4 and v6
+                    let router_check_ipv4 = router_links[0].dst.address() == addr_ipv4;
+                    let router_check_ipv6 = router_links[0].dst.address() == addr_ipv6;
+                    let client_check_ipv4 = client_links[0].src.address() == addr_ipv4;
+                    let client_check_ipv6 = client_links[0].src.address() == addr_ipv6;
+                    // Check either ipv4 or ipv6 bind
+                    let check_ipv4 = client_check_ipv4 & router_check_ipv4;
+                    let check_ipv6 = client_check_ipv6 & router_check_ipv6;
+
+                    assert!(router_links[0].dst == client_links[0].src);
+                    // Check either ipv4 or ipv6 bind
+                    assert!(check_ipv4 | check_ipv6);
+                } else {
+                    assert!(router_links[0].dst == client_links[0].src);
+                    assert!(router_links[0].dst.address() == *bind_addr);
+                    assert!(client_links[0].src.address() == *bind_addr);
+                }
             }
             _ => tokio::time::sleep(SLEEP).await,
         }
@@ -390,7 +415,7 @@ async fn openclose_quic_only_connect_with_bind_restriction() {
     use zenoh_link::quic::config::*;
 
     zenoh_util::init_log_from_env_or("error");
-    let bind_addr_str = format!("127.0.0.1:{}", 13012);
+    let bind_addr_str = format!("localhost:{}", 13012);
     let bind_addr = Address::from(bind_addr_str.as_str());
 
     let client_auth = "true";
@@ -439,7 +464,7 @@ async fn openclose_tls_only_connect_with_bind_restriction() {
     use zenoh_link::tls::config::*;
 
     zenoh_util::init_log_from_env_or("error");
-    let bind_addr_str = format!("127.0.0.1:{}", 13014);
+    let bind_addr_str = format!("localhost:{}", 13014);
     let bind_addr = Address::from(bind_addr_str.as_str());
 
     let client_auth = "true";
