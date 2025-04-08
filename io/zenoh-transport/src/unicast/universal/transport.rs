@@ -23,7 +23,7 @@ use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use zenoh_core::{zasynclock, zcondfeat, zread, zwrite};
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{Locator, Priority, Reliability, WhatAmI, ZenohIdProto},
+    core::{Priority, Reliability, WhatAmI, ZenohIdProto},
     network::NetworkMessageMut,
     transport::{close, Close, PrioritySn, TransportMessage, TransportSn},
 };
@@ -54,7 +54,7 @@ use crate::{
 #[derive(Default)]
 pub(crate) struct TransportLinks {
     links: RwLock<Box<[TransportLinkUnicastUniversal]>>,
-    cache: ArcSwap<[[Option<Arc<ScheduledLink>>; Priority::NUM]; 2]>,
+    cache: ArcSwap<[[Option<Arc<TransmissionPipelineProducer>>; Priority::NUM]; 2]>,
 }
 
 impl TransportLinks {
@@ -68,31 +68,23 @@ impl TransportLinks {
         zread!(self.links)
     }
 
-    pub(super) fn get_link(
+    pub(super) fn get_pipeline(
         &self,
         reliability: Reliability,
         priority: Priority,
         select: impl FnOnce(&[TransportLinkUnicastUniversal]) -> Option<usize>,
-    ) -> Option<Arc<ScheduledLink>> {
+    ) -> Option<Arc<TransmissionPipelineProducer>> {
         if let Some(link) = self.cache.load()[reliability as usize][priority as usize].clone() {
             return Some(link);
         }
         let guard = self.read();
         let transport_link = &guard[select(&guard)?];
-        let link = Arc::new(ScheduledLink {
-            pipeline: transport_link.pipeline.clone(),
-            dst: transport_link.link.link.get_dst().clone(),
-        });
+        let pipeline = transport_link.pipeline.clone();
         let mut cache = self.cache.load().as_ref().clone();
-        cache[reliability as usize][priority as usize] = Some(link.clone());
+        cache[reliability as usize][priority as usize] = Some(pipeline.clone());
         self.cache.store(Arc::new(cache));
-        Some(link)
+        Some(pipeline)
     }
-}
-
-pub(super) struct ScheduledLink {
-    pub(super) pipeline: TransmissionPipelineProducer,
-    pub(super) dst: Locator,
 }
 
 #[derive(Clone)]

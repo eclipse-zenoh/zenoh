@@ -73,23 +73,23 @@ impl TransportUnicastUniversal {
     }
 
     fn schedule_on_link(&self, msg: NetworkMessageRef) -> ZResult<()> {
-        let Some(link) = self
-            .links
-            .get_link(msg.is_reliable().into(), msg.priority(), |links| {
-                Self::select(
-                    links.iter().map(|tl| {
-                        (
-                            tl.link
-                                .config
-                                .reliability
-                                .unwrap_or(Reliability::from(tl.link.link.is_reliable())),
-                            tl.link.config.priorities.clone(),
-                        )
-                    }),
-                    Reliability::from(msg.is_reliable()),
-                    msg.priority(),
-                )
-            })
+        let Some(pipeline) =
+            self.links
+                .get_pipeline(msg.is_reliable().into(), msg.priority(), |links| {
+                    Self::select(
+                        links.iter().map(|tl| {
+                            (
+                                tl.link
+                                    .config
+                                    .reliability
+                                    .unwrap_or(Reliability::from(tl.link.link.is_reliable())),
+                                tl.link.config.priorities.clone(),
+                            )
+                        }),
+                        Reliability::from(msg.is_reliable()),
+                        msg.priority(),
+                    )
+                })
         else {
             // No Link found
             tracing::trace!(
@@ -101,14 +101,9 @@ impl TransportUnicastUniversal {
             self.stats.inc_tx_n_dropped(1);
             return Ok(());
         };
-        tracing::trace!(
-            "Scheduled {:?} for transmission to {} ({})",
-            msg,
-            link.dst,
-            self.get_zid()
-        );
+        tracing::trace!("Scheduled {:?} for transmission to {}", msg, self.get_zid());
         let droppable = msg.is_droppable();
-        let push = link.pipeline.push_network_message(msg)?;
+        let push = pipeline.push_network_message(msg)?;
         if !push && !droppable {
             tracing::error!(
                 "Unable to push non droppable network message to {}. Closing transport!",
