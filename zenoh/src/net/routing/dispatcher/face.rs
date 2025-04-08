@@ -18,10 +18,12 @@ use std::{
     ops::Not,
     sync::{Arc, Weak},
     time::Duration,
+    usize,
 };
 
 use arc_swap::ArcSwap;
 use tokio_util::sync::CancellationToken;
+use zenoh_config::InterceptorFlow;
 use zenoh_protocol::{
     core::{ExprId, Reliability, WhatAmI, ZenohIdProto},
     network::{
@@ -150,45 +152,47 @@ impl FaceState {
         id
     }
 
+    pub(crate) fn load_interceptors(
+        &self,
+        flow: InterceptorFlow,
+    ) -> Option<arc_swap::Guard<Arc<InterceptorsChain>>> {
+        match flow {
+            InterceptorFlow::Egress => &self.eg_interceptors,
+            InterceptorFlow::Ingress => &self.in_interceptors,
+        }
+        .as_ref()
+        .map(|iceptors| iceptors.load())
+        .and_then(|iceptors| iceptors.is_empty().not().then_some(iceptors))
+    }
+
     pub(crate) fn update_interceptors_caches(&self, res: &mut Arc<Resource>) {
-        if let Some(interceptor) = self
-            .in_interceptors
-            .as_ref()
-            .map(|itor| itor.load())
-            .and_then(|is| is.is_empty().not().then_some(is))
-        {
+        if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Ingress) {
             if let Some(expr) = res.keyexpr() {
-                let cache = interceptor.compute_keyexpr_cache(expr);
+                let cache = iceptor.compute_keyexpr_cache(&expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
                         .session_ctxs
                         .get_mut(&self.id)
                         .unwrap(),
                 )
-                .in_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
+                .in_interceptor_cache = InterceptorCache::new(cache, iceptor.version);
             }
         }
 
-        if let Some(interceptor) = self
-            .primitives
-            .as_any()
-            .downcast_ref::<Mux>()
-            .map(|mux| mux.interceptor.load())
-            .and_then(|is| is.is_empty().not().then_some(is))
-        {
+        if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Egress) {
             if let Some(expr) = res.keyexpr() {
-                let cache = interceptor.compute_keyexpr_cache(expr);
+                let cache = iceptor.compute_keyexpr_cache(&expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
                         .session_ctxs
                         .get_mut(&self.id)
                         .unwrap(),
                 )
-                .e_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
+                .e_interceptor_cache = InterceptorCache::new(cache, iceptor.version);
             }
         }
 
-        if let Some(interceptor) = self
+        if let Some(iceptor) = self
             .primitives
             .as_any()
             .downcast_ref::<McastMux>()
@@ -196,14 +200,14 @@ impl FaceState {
             .and_then(|is| is.is_empty().not().then_some(is))
         {
             if let Some(expr) = res.keyexpr() {
-                let cache = interceptor.compute_keyexpr_cache(expr);
+                let cache = iceptor.compute_keyexpr_cache(&expr);
                 get_mut_unchecked(
                     get_mut_unchecked(res)
                         .session_ctxs
                         .get_mut(&self.id)
                         .unwrap(),
                 )
-                .e_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
+                .e_interceptor_cache = InterceptorCache::new(cache, iceptor.version);
             }
         }
     }
@@ -297,26 +301,6 @@ impl Face {
         if let Some(interest) = self.state.pending_current_interests.get(&interest_id) {
             interest.rejection_token.cancel();
         }
-    }
-
-    pub(crate) fn load_egress_interceptors(
-        &self,
-    ) -> Option<arc_swap::Guard<Arc<InterceptorsChain>>> {
-        self.state
-            .eg_interceptors
-            .as_ref()
-            .map(|i| i.load())
-            .and_then(|i| i.is_empty().not().then_some(i))
-    }
-
-    pub(crate) fn load_ingress_interceptors(
-        &self,
-    ) -> Option<arc_swap::Guard<Arc<InterceptorsChain>>> {
-        self.state
-            .in_interceptors
-            .as_ref()
-            .map(|i| i.load())
-            .and_then(|i| i.is_empty().not().then_some(i))
     }
 }
 

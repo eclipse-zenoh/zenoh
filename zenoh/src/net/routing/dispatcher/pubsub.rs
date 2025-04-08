@@ -16,6 +16,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use zenoh_config::InterceptorFlow;
 use zenoh_core::zread;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, Reliability, WireExpr},
@@ -299,7 +300,7 @@ pub fn route_data(
                 msg.wire_expr.suffix.as_ref()
             );
 
-            if let Some(interceptor) = face.load_ingress_interceptors() {
+            if let Some(interceptor) = face.state.load_interceptors(InterceptorFlow::Ingress) {
                 let ctx = &mut RoutingContext::new(NetworkMessageMut {
                     body: NetworkBodyMut::Push(msg),
                     reliability,
@@ -307,7 +308,7 @@ pub fn route_data(
                     size: None,
                 });
 
-                if !interceptor.intercept_with_face(ctx, face, &prefix) {
+                if !interceptor.intercept_with_face(ctx, face, &prefix, InterceptorFlow::Ingress) {
                     return;
                 }
             };
@@ -356,7 +357,9 @@ pub fn route_data(
                             msg.wire_expr = key_expr.into();
                             msg.ext_nodeid = ext::NodeIdType { node_id: *context };
 
-                            if let Some(interceptor) = face.load_egress_interceptors() {
+                            if let Some(interceptor) =
+                                face.state.load_interceptors(InterceptorFlow::Egress)
+                            {
                                 let ctx = &mut RoutingContext::new(NetworkMessageMut {
                                     body: NetworkBodyMut::Push(msg),
                                     reliability,
@@ -364,7 +367,12 @@ pub fn route_data(
                                     size: None,
                                 });
 
-                                if !interceptor.intercept_with_face(ctx, face, &prefix) {
+                                if !interceptor.intercept_with_face(
+                                    ctx,
+                                    face,
+                                    &prefix,
+                                    InterceptorFlow::Egress,
+                                ) {
                                     return;
                                 }
                             };
@@ -402,7 +410,9 @@ pub fn route_data(
                                 payload: msg.payload.clone(),
                             };
 
-                            if let Some(interceptor) = face.load_egress_interceptors() {
+                            if let Some(interceptor) =
+                                face.state.load_interceptors(InterceptorFlow::Egress)
+                            {
                                 let ctx = &mut RoutingContext::new(NetworkMessageMut {
                                     body: NetworkBodyMut::Push(msg),
                                     reliability,
@@ -410,7 +420,12 @@ pub fn route_data(
                                     size: None,
                                 });
 
-                                if !interceptor.intercept_with_face(ctx, face, &prefix) {
+                                if !interceptor.intercept_with_face(
+                                    ctx,
+                                    face,
+                                    &prefix,
+                                    InterceptorFlow::Egress,
+                                ) {
                                     continue;
                                 }
                             };

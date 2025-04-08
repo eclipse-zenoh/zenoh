@@ -25,6 +25,7 @@ use zenoh_link::LinkAuthId;
 
 mod authorization;
 use std::any::Any;
+use std::ops::Not;
 
 mod low_pass;
 use low_pass::low_pass_interceptor_factories;
@@ -159,10 +160,17 @@ impl InterceptorsChain {
         ctx: &mut RoutingContext<NetworkMessageMut>,
         face: &Face,
         prefix: &Resource,
+        flow: InterceptorFlow,
     ) -> bool {
-        let cache_guard = prefix.get_ingress_cache(face, self);
+        // NOTE: the cache should be empty if the wire expr has no suffix, i.e. when the prefix
+        // doesn't represent a full keyexpr.
+        let prefix = ctx
+            .wire_expr()
+            .and_then(|we| we.has_suffix().not().then(|| prefix));
+        let cache_guard = prefix
+            .as_ref()
+            .and_then(|p| p.interceptor_cache(face, self, flow));
         let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
-
         self.intercept(ctx, cache)
     }
 }

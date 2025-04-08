@@ -22,7 +22,7 @@ use std::{
 };
 
 use zenoh_collections::SingleOrBoxHashSet;
-use zenoh_config::WhatAmI;
+use zenoh_config::{InterceptorFlow, WhatAmI};
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr},
     network::{
@@ -765,9 +765,7 @@ impl Resource {
         face: &Face,
         interceptor: &InterceptorsChain,
     ) -> Option<InterceptorCacheValueType> {
-        self.session_ctxs
-            .get(&face.state.id)
-            .and_then(|ctx| ctx.in_interceptor_cache.value(interceptor, self))
+        self.interceptor_cache(face, interceptor, InterceptorFlow::Ingress)
     }
 
     pub(crate) fn get_egress_cache(
@@ -775,9 +773,22 @@ impl Resource {
         face: &Face,
         interceptor: &InterceptorsChain,
     ) -> Option<InterceptorCacheValueType> {
-        self.session_ctxs
-            .get(&face.state.id)
-            .and_then(|ctx| ctx.e_interceptor_cache.value(interceptor, self))
+        self.interceptor_cache(face, interceptor, InterceptorFlow::Egress)
+    }
+
+    pub(crate) fn interceptor_cache(
+        &self,
+        face: &Face,
+        interceptor: &InterceptorsChain,
+        flow: InterceptorFlow,
+    ) -> Option<InterceptorCacheValueType> {
+        self.session_ctxs.get(&face.state.id).and_then(|ctx| {
+            match flow {
+                InterceptorFlow::Egress => &ctx.e_interceptor_cache,
+                InterceptorFlow::Ingress => &ctx.in_interceptor_cache,
+            }
+            .value(interceptor, self)
+        })
     }
 }
 
