@@ -30,7 +30,7 @@ use zenoh_keyexpr::{
     keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, IKeyExprTreeNode, KeBoxTree},
 };
 use zenoh_protocol::{
-    network::{NetworkBody, NetworkMessage, Push, Request, Response},
+    network::{NetworkBodyMut, NetworkMessageMut, Push, Request, Response},
     zenoh::{PushBody, Reply, RequestBody, ResponseBody},
 };
 use zenoh_result::ZResult;
@@ -232,7 +232,7 @@ impl LowPassInterceptor {
 
     fn message_passes_filters(
         &self,
-        ctx: &RoutingContext<NetworkMessage>,
+        ctx: &RoutingContext<NetworkMessageMut>,
         cache: Option<&Cache>,
     ) -> bool {
         let payload_size: usize;
@@ -243,7 +243,7 @@ impl LowPassInterceptor {
         let msg = &ctx.msg;
 
         match &msg.body {
-            NetworkBody::Request(Request {
+            NetworkBodyMut::Request(Request {
                 payload: RequestBody::Query(query),
                 ..
             }) => {
@@ -260,7 +260,7 @@ impl LowPassInterceptor {
                     .unwrap_or(0);
                 max_allowed_size = cache.map(|c| c.query);
             }
-            NetworkBody::Response(Response {
+            NetworkBodyMut::Response(Response {
                 payload:
                     ResponseBody::Reply(Reply {
                         payload: PushBody::Put(put),
@@ -277,7 +277,7 @@ impl LowPassInterceptor {
                     .unwrap_or(0);
                 max_allowed_size = cache.map(|c| c.reply);
             }
-            NetworkBody::Response(Response {
+            NetworkBodyMut::Response(Response {
                 payload:
                     ResponseBody::Reply(Reply {
                         payload: PushBody::Del(delete),
@@ -294,7 +294,7 @@ impl LowPassInterceptor {
                     .unwrap_or(0);
                 max_allowed_size = cache.map(|c| c.reply);
             }
-            NetworkBody::Push(Push {
+            NetworkBodyMut::Push(Push {
                 payload: PushBody::Put(put),
                 ..
             }) => {
@@ -307,7 +307,7 @@ impl LowPassInterceptor {
                     .unwrap_or(0);
                 max_allowed_size = cache.map(|c| c.put);
             }
-            NetworkBody::Push(Push {
+            NetworkBodyMut::Push(Push {
                 payload: PushBody::Del(delete),
                 ..
             }) => {
@@ -320,7 +320,7 @@ impl LowPassInterceptor {
                     .unwrap_or(0);
                 max_allowed_size = cache.map(|c| c.delete);
             }
-            NetworkBody::Response(Response {
+            NetworkBodyMut::Response(Response {
                 payload: ResponseBody::Err(zenoh_protocol::zenoh::Err { payload, .. }),
                 ..
             }) => {
@@ -329,10 +329,10 @@ impl LowPassInterceptor {
                 attachment_size = 0;
                 max_allowed_size = cache.map(|c| c.reply);
             }
-            NetworkBody::ResponseFinal(_) => return true,
-            NetworkBody::Interest(_) => return true,
-            NetworkBody::Declare(_) => return true,
-            NetworkBody::OAM(_) => return true,
+            NetworkBodyMut::ResponseFinal(_) => return true,
+            NetworkBodyMut::Interest(_) => return true,
+            NetworkBodyMut::Declare(_) => return true,
+            NetworkBodyMut::OAM(_) => return true,
         }
         let max_allowed_size = match max_allowed_size {
             Some(v) => v,
@@ -396,12 +396,12 @@ impl InterceptorTrait for LowPassInterceptor {
 
     fn intercept(
         &self,
-        ctx: RoutingContext<NetworkMessage>,
+        ctx: &mut RoutingContext<NetworkMessageMut>,
         cache: Option<&Box<dyn std::any::Any + Send + Sync>>,
-    ) -> Option<RoutingContext<NetworkMessage>> {
+    ) -> bool {
         let cache = cache.and_then(|i| i.downcast_ref::<Cache>());
 
-        self.message_passes_filters(&ctx, cache).then_some(ctx)
+        self.message_passes_filters(ctx, cache)
     }
 }
 
