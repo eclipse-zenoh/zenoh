@@ -134,7 +134,11 @@ impl TransportUnicastLowlatency {
                     c_transport.manager.config.zid,
                     c_transport.config.zid
                 );
-                let _ = c_transport.finalize(0).await;
+
+                // Spawn a task to avoid a deadlock waiting for this same task
+                // to finish in the close() joining its handle
+                // WARN: Must be spawned on RX
+                zenoh_runtime::ZRuntime::RX.spawn(async move { c_transport.finalize(0).await });
             }
         };
         self.tracker.spawn_on(task, &ZRuntime::TX);
@@ -204,7 +208,11 @@ impl TransportUnicastLowlatency {
                         c_transport.manager.config.zid,
                         c_transport.config.zid
                     );
-                    let _ = c_transport.finalize(0).await;
+
+                    // Spawn a task to avoid a deadlock waiting for this same task
+                    // to finish in the close() joining its handle
+                    // WARN: Must be spawned on RX
+                    zenoh_runtime::ZRuntime::RX.spawn(async move { c_transport.finalize(0).await });
                 }
             },
             &ZRuntime::RX,

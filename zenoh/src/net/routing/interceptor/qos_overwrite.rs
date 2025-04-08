@@ -186,7 +186,7 @@ struct Cache {
 }
 
 impl QosInterceptor {
-    fn is_ke_affected(&self, ke: &KeyExpr) -> bool {
+    fn is_ke_affected(&self, ke: &keyexpr) -> bool {
         self.keys.nodes_including(ke).any(|n| n.weight().is_some())
     }
 
@@ -213,16 +213,16 @@ impl QosInterceptor {
         ctx: &RoutingContext<NetworkMessageMut<'_>>,
     ) -> bool {
         cache.map(|v| v.is_ke_affected).unwrap_or_else(|| {
-            ctx.full_key_expr()
+            ctx.full_keyexpr()
                 .as_ref()
-                .map(|ke| self.is_ke_affected(&ke.into()))
+                .map(|ke| self.is_ke_affected(ke))
                 .unwrap_or(false)
         })
     }
 }
 
 impl InterceptorTrait for QosInterceptor {
-    fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
+    fn compute_keyexpr_cache(&self, key_expr: &keyexpr) -> Option<Box<dyn Any + Send + Sync>> {
         let cache = Cache {
             is_ke_affected: self.is_ke_affected(key_expr),
         };

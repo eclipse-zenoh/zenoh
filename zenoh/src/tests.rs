@@ -15,16 +15,14 @@
 use std::str::FromStr;
 
 use zenoh_buffers::ZBuf;
+use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
     network::{NetworkBodyMut, NetworkMessageMut, Push},
     zenoh::PushBody,
 };
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
-use crate::{
-    key_expr::KeyExpr,
-    net::routing::{interceptor::*, RoutingContext},
-};
+use crate::net::routing::{interceptor::*, RoutingContext};
 
 #[derive(Clone)]
 struct TestInterceptorConf {
@@ -90,7 +88,7 @@ impl TestInterceptor {
 }
 
 impl InterceptorTrait for TestInterceptor {
-    fn compute_keyexpr_cache(&self, _key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
+    fn compute_keyexpr_cache(&self, _key_expr: &keyexpr) -> Option<Box<dyn Any + Send + Sync>> {
         Some(Box::new(self.data.clone()))
     }
 

@@ -187,9 +187,7 @@ impl WaitTime {
                 *max_wait_time -= self.wait_time;
             }
             // just select next iteration without checking the upper limit
-            None => {
-                *instant += self.wait_time;
-            }
+            None => {}
         }
     }
 

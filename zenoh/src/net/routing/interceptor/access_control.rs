@@ -24,6 +24,7 @@ use itertools::Itertools;
 use zenoh_config::{
     AclConfig, AclMessage, CertCommonName, InterceptorFlow, Interface, Permission, Username,
 };
+use zenoh_keyexpr::keyexpr;
 use zenoh_link::LinkAuthId;
 use zenoh_protocol::{
     core::ZenohIdProto,
@@ -40,10 +41,7 @@ use super::{
     authorization::PolicyEnforcer, EgressInterceptor, IngressInterceptor, InterceptorFactory,
     InterceptorFactoryTrait, InterceptorLinkWrapper, InterceptorTrait,
 };
-use crate::{
-    api::key_expr::KeyExpr,
-    net::routing::{interceptor::authorization::SubjectQuery, RoutingContext},
-};
+use crate::net::routing::{interceptor::authorization::SubjectQuery, RoutingContext};
 pub struct AclEnforcer {
     enforcer: Arc<PolicyEnforcer>,
 }
@@ -59,10 +57,112 @@ struct EgressAclEnforcer {
     zid: ZenohIdProto,
 }
 
+impl EgressAclEnforcer {
+    #[inline]
+    fn cached_result_or_action(
+        &self,
+        cached_permission: Option<Permission>,
+        action: AclMessage,
+        log_msg: &str,
+        key_expr: &keyexpr,
+    ) -> Permission {
+        match cached_permission {
+            Some(p) => {
+                match p {
+                    Permission::Allow => tracing::trace!(
+                        "Using cached result: {} is authorized to {} on {}",
+                        self.zid(),
+                        log_msg,
+                        key_expr
+                    ),
+                    Permission::Deny => tracing::trace!(
+                        "Using cached result: {} is unauthorized to {} on {}",
+                        self.zid(),
+                        log_msg,
+                        key_expr
+                    ),
+                }
+                p
+            }
+            None => self.action(action, log_msg, key_expr),
+        }
+    }
+}
+
 struct IngressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
     subject: Vec<AuthSubject>,
     zid: ZenohIdProto,
+}
+
+impl IngressAclEnforcer {
+    #[inline]
+    fn cached_result_or_action(
+        &self,
+        cached_permission: Option<Permission>,
+        action: AclMessage,
+        log_msg: &str,
+        key_expr: &keyexpr,
+    ) -> Permission {
+        match cached_permission {
+            Some(p) => {
+                match p {
+                    Permission::Allow => tracing::trace!(
+                        "Using cached result: {} is authorized to {} on {}",
+                        self.zid(),
+                        log_msg,
+                        key_expr
+                    ),
+                    Permission::Deny => tracing::trace!(
+                        "Using cached result: {} is unauthorized to {} on {}",
+                        self.zid(),
+                        log_msg,
+                        key_expr
+                    ),
+                }
+                p
+            }
+            None => self.action(action, log_msg, key_expr),
+        }
+    }
+
+    #[inline]
+    fn cached_result_or_action_undecl(
+        &self,
+        cached_permission: Option<Permission>,
+        action: AclMessage,
+        log_msg: &str,
+        key_expr: Option<&keyexpr>,
+    ) -> Permission {
+        match cached_permission {
+            Some(p) => {
+                match p {
+                    Permission::Allow => tracing::trace!(
+                        "Using cached result: {} is authorized to {} on {:?}",
+                        self.zid(),
+                        log_msg,
+                        key_expr
+                    ),
+                    Permission::Deny => tracing::trace!(
+                        "Using cached result: {} is unauthorized to {} on {:?}",
+                        self.zid(),
+                        log_msg,
+                        key_expr
+                    ),
+                }
+                p
+            }
+            None => {
+                // Undeclarations in ingress are only filtered if the ext_wire_expr is set.
+                // If it's not set, we let the undeclaration pass, it will be rejected by the routing logic
+                // if its associated declaration was denied.
+                match key_expr {
+                    Some(ke) => self.action(action, log_msg, ke),
+                    None => Permission::Allow,
+                }
+            }
+        }
+    }
 }
 
 pub(crate) fn acl_interceptor_factories(
@@ -215,41 +315,6 @@ impl InterceptorFactoryTrait for AclEnforcer {
     }
 }
 
-macro_rules! cached_result_or_action {
-    ($enforcer:expr, $cached_permission:expr, $action:expr, $log_msg:expr, $key_expr:expr $(,)?) => {
-        match $cached_permission {
-            Some(p) => {
-                match p {
-                    Permission::Allow => tracing::trace!(
-                        "Using cached result: {} is authorized to {} on {}",
-                        $enforcer.zid(),
-                        $log_msg,
-                        $key_expr
-                    ),
-                    Permission::Deny => tracing::trace!(
-                        "Using cached result: {} is unauthorized to {} on {}",
-                        $enforcer.zid(),
-                        $log_msg,
-                        $key_expr
-                    ),
-                }
-                p
-            }
-            None => {
-                let ke = $key_expr;
-                if !ke.is_empty() {
-                    $enforcer.action($action, $log_msg, $key_expr)
-                } else {
-                    // Undeclarations in ingress are only filtered if the ext_wire_expr is set.
-                    // If it's not set, we let the undeclaration pass, it will be rejected by the routing logic
-                    // if its associated declaration was denied.
-                    Permission::Allow
-                }
-            }
-        }
-    }
-}
-
 struct Cache {
     query: Permission,
     reply: Permission,
@@ -263,11 +328,7 @@ struct Cache {
 }
 
 impl InterceptorTrait for IngressAclEnforcer {
-    fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
-        let key_expr = key_expr.as_str();
-        if key_expr.is_empty() {
-            return None;
-        }
+    fn compute_keyexpr_cache(&self, key_expr: &keyexpr) -> Option<Box<dyn Any + Send + Sync>> {
         tracing::trace!("ACL (ingress): caching permissions for `{}` ...", key_expr);
         Some(Box::new(Cache {
             query: self.action(AclMessage::Query, "Query (ingress)", key_expr),
@@ -320,30 +381,28 @@ impl InterceptorTrait for IngressAclEnforcer {
                 payload: RequestBody::Query(_),
                 ..
             }) => {
-                let Some(expr) = ctx.full_expr() else {
+                let Some(keyexpr) = ctx.full_keyexpr() else {
                     return false;
                 };
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action(
                     cache.map(|c| c.query),
                     AclMessage::Query,
                     "Query (ingress)",
-                    expr,
+                    keyexpr,
                 ) == Permission::Deny
                 {
                     return false;
                 }
             }
             NetworkBodyMut::Response(Response { .. }) => {
-                let Some(expr) = ctx.full_expr() else {
+                let Some(keyexpr) = ctx.full_keyexpr() else {
                     return false;
                 };
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action(
                     cache.map(|c| c.reply),
                     AclMessage::Reply,
                     "Reply (ingress)",
-                    expr,
+                    keyexpr,
                 ) == Permission::Deny
                 {
                     return false;
@@ -353,15 +412,14 @@ impl InterceptorTrait for IngressAclEnforcer {
                 payload: PushBody::Put(_),
                 ..
             }) => {
-                let Some(expr) = ctx.full_expr() else {
+                let Some(keyexpr) = ctx.full_keyexpr() else {
                     return false;
                 };
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action(
                     cache.map(|c| c.put),
                     AclMessage::Put,
                     "Put (ingress)",
-                    expr
+                    keyexpr,
                 ) == Permission::Deny
                 {
                     return false;
@@ -371,15 +429,14 @@ impl InterceptorTrait for IngressAclEnforcer {
                 payload: PushBody::Del(_),
                 ..
             }) => {
-                let Some(expr) = ctx.full_expr() else {
+                let Some(keyexpr) = ctx.full_keyexpr() else {
                     return false;
                 };
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action(
                     cache.map(|c| c.delete),
                     AclMessage::Delete,
                     "Delete (ingress)",
-                    expr
+                    keyexpr,
                 ) == Permission::Deny
                 {
                     return false;
@@ -389,15 +446,14 @@ impl InterceptorTrait for IngressAclEnforcer {
                 body: DeclareBody::DeclareSubscriber(_),
                 ..
             }) => {
-                let Some(expr) = ctx.full_expr() else {
+                let Some(keyexpr) = ctx.full_keyexpr() else {
                     return false;
                 };
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action(
                     cache.map(|c| c.declare_subscriber),
                     AclMessage::DeclareSubscriber,
                     "Declare Subscriber (ingress)",
-                    expr
+                    keyexpr,
                 ) == Permission::Deny
                 {
                     return false;
@@ -411,12 +467,11 @@ impl InterceptorTrait for IngressAclEnforcer {
                 // Undeclarations in ingress are only filtered if the ext_wire_expr is set.
                 // If it's not set, we let the undeclaration pass, it will be rejected by the routing logic
                 // if its associated declaration was denied.
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action_undecl(
                     cache.map(|c| c.declare_subscriber),
                     AclMessage::DeclareSubscriber,
                     "Undeclare Subscriber (ingress)",
-                    ctx.full_expr().unwrap_or(""),
+                    ctx.full_keyexpr(),
                 ) == Permission::Deny
                 {
                     return false;
@@ -426,15 +481,14 @@ impl InterceptorTrait for IngressAclEnforcer {
                 body: DeclareBody::DeclareQueryable(_),
                 ..
             }) => {
-                let Some(expr) = ctx.full_expr() else {
+                let Some(keyexpr) = ctx.full_keyexpr() else {
                     return false;
                 };
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action(
                     cache.map(|c| c.declare_queryable),
                     AclMessage::DeclareQueryable,
                     "Declare Queryable (ingress)",
-                    expr
+                    keyexpr,
                 ) == Permission::Deny
                 {
                     return false;
@@ -448,12 +502,11 @@ impl InterceptorTrait for IngressAclEnforcer {
                 // Undeclarations in ingress are only filtered if the ext_wire_expr is set.
                 // If it's not set, we let the undeclaration pass, it will be rejected by the routing logic
                 // if its associated declaration was denied.
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action_undecl(
                     cache.map(|c| c.declare_queryable),
                     AclMessage::DeclareQueryable,
                     "Undeclare Queryable (ingress)",
-                    ctx.full_expr().unwrap_or(""),
+                    ctx.full_keyexpr(),
                 ) == Permission::Deny
                 {
                     return false;
@@ -463,15 +516,14 @@ impl InterceptorTrait for IngressAclEnforcer {
                 body: DeclareBody::DeclareToken(_),
                 ..
             }) => {
-                let Some(expr) = ctx.full_expr() else {
+                let Some(keyexpr) = ctx.full_keyexpr() else {
                     return false;
                 };
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action(
                     cache.map(|c| c.declare_token),
                     AclMessage::LivelinessToken,
                     "Liveliness Token (ingress)",
-                    expr
+                    keyexpr,
                 ) == Permission::Deny
                 {
                     return false;
@@ -486,12 +538,11 @@ impl InterceptorTrait for IngressAclEnforcer {
                 // Undeclarations in ingress are only filtered if the ext_wire_expr is set.
                 // If it's not set, we let the undeclaration pass, it will be rejected by the routing logic
                 // if its associated declaration was denied.
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action_undecl(
                     cache.map(|c| c.declare_token),
                     AclMessage::LivelinessToken,
                     "Undeclare Liveliness Token (ingress)",
-                    ctx.full_expr().unwrap_or(""),
+                    ctx.full_keyexpr(),
                 ) == Permission::Deny
                 {
                     return false;
@@ -502,15 +553,14 @@ impl InterceptorTrait for IngressAclEnforcer {
                 options,
                 ..
             }) if options.tokens() => {
-                let Some(expr) = ctx.full_expr() else {
+                let Some(keyexpr) = ctx.full_keyexpr() else {
                     return false;
                 };
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action(
                     cache.map(|c| c.query_token),
                     AclMessage::LivelinessQuery,
                     "Liveliness Query (ingress)",
-                    expr
+                    keyexpr,
                 ) == Permission::Deny
                 {
                     return false;
@@ -521,15 +571,14 @@ impl InterceptorTrait for IngressAclEnforcer {
                 options,
                 ..
             }) if options.tokens() => {
-                let Some(expr) = ctx.full_expr() else {
+                let Some(keyexpr) = ctx.full_keyexpr() else {
                     return false;
                 };
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action(
                     cache.map(|c| c.declare_liveliness_subscriber),
                     AclMessage::DeclareLivelinessSubscriber,
                     "Declare Liveliness Subscriber (ingress)",
-                    expr
+                    keyexpr,
                 ) == Permission::Deny
                 {
                     return false;
@@ -566,11 +615,7 @@ impl InterceptorTrait for IngressAclEnforcer {
 }
 
 impl InterceptorTrait for EgressAclEnforcer {
-    fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
-        let key_expr = key_expr.as_str();
-        if key_expr.is_empty() {
-            return None;
-        }
+    fn compute_keyexpr_cache(&self, key_expr: &keyexpr) -> Option<Box<dyn Any + Send + Sync>> {
         tracing::trace!("ACL (egress): caching permissions for `{}` ...", key_expr);
         Some(Box::new(Cache {
             query: self.action(AclMessage::Query, "Query (egress)", key_expr),
@@ -606,6 +651,7 @@ impl InterceptorTrait for EgressAclEnforcer {
     }
 
     fn intercept(
+        // String, Arc<str>, Box<str>, etc... & -> &str
         &self,
         ctx: &mut RoutingContext<NetworkMessageMut>,
         cache: Option<&Box<dyn Any + Send + Sync>>,
@@ -623,30 +669,28 @@ impl InterceptorTrait for EgressAclEnforcer {
                 payload: RequestBody::Query(_),
                 ..
             }) => {
-                let Some(expr) = ctx.full_expr() else {
+                let Some(keyexpr) = ctx.full_keyexpr() else {
                     return false;
                 };
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action(
                     cache.map(|c| c.query),
                     AclMessage::Query,
                     "Query (egress)",
-                    expr
+                    keyexpr,
                 ) == Permission::Deny
                 {
                     return false;
                 }
             }
             NetworkBodyMut::Response(Response { .. }) => {
-                let Some(expr) = ctx.full_expr() else {
+                let Some(keyexpr) = ctx.full_keyexpr() else {
                     return false;
                 };
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action(
                     cache.map(|c| c.reply),
                     AclMessage::Reply,
                     "Reply (egress)",
-                    expr
+                    keyexpr,
                 ) == Permission::Deny
                 {
                     return false;
@@ -656,15 +700,14 @@ impl InterceptorTrait for EgressAclEnforcer {
                 payload: PushBody::Put(_),
                 ..
             }) => {
-                let Some(expr) = ctx.full_expr() else {
+                let Some(keyexpr) = ctx.full_keyexpr() else {
                     return false;
                 };
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action(
                     cache.map(|c| c.put),
                     AclMessage::Put,
                     "Put (egress)",
-                    expr
+                    keyexpr,
                 ) == Permission::Deny
                 {
                     return false;
@@ -674,15 +717,14 @@ impl InterceptorTrait for EgressAclEnforcer {
                 payload: PushBody::Del(_),
                 ..
             }) => {
-                let Some(expr) = ctx.full_expr() else {
+                let Some(keyexpr) = ctx.full_keyexpr() else {
                     return false;
                 };
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action(
                     cache.map(|c| c.put),
                     AclMessage::Delete,
                     "Delete (egress)",
-                    expr
+                    keyexpr,
                 ) == Permission::Deny
                 {
                     return false;
@@ -692,15 +734,14 @@ impl InterceptorTrait for EgressAclEnforcer {
                 body: DeclareBody::DeclareSubscriber(_),
                 ..
             }) => {
-                let Some(expr) = ctx.full_expr() else {
+                let Some(keyexpr) = ctx.full_keyexpr() else {
                     return false;
                 };
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action(
                     cache.map(|c| c.declare_subscriber),
                     AclMessage::DeclareSubscriber,
                     "Declare Subscriber (egress)",
-                    expr
+                    keyexpr,
                 ) == Permission::Deny
                 {
                     return false;
@@ -710,17 +751,16 @@ impl InterceptorTrait for EgressAclEnforcer {
                 body: DeclareBody::UndeclareSubscriber(_),
                 ..
             }) => {
-                let Some(expr) = ctx.full_expr() else {
+                let Some(keyexpr) = ctx.full_keyexpr() else {
                     return false;
                 };
                 // Undeclaration filtering diverges between ingress and egress:
                 // in egress the keyexpr has to be provided in the RoutingContext
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action(
                     cache.map(|c| c.declare_subscriber),
                     AclMessage::DeclareSubscriber,
                     "Undeclare Subscriber (egress)",
-                    expr
+                    keyexpr,
                 ) == Permission::Deny
                 {
                     return false;
@@ -730,15 +770,14 @@ impl InterceptorTrait for EgressAclEnforcer {
                 body: DeclareBody::DeclareQueryable(_),
                 ..
             }) => {
-                let Some(expr) = ctx.full_expr() else {
+                let Some(keyexpr) = ctx.full_keyexpr() else {
                     return false;
                 };
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action(
                     cache.map(|c| c.declare_queryable),
                     AclMessage::DeclareQueryable,
                     "Declare Queryable (egress)",
-                    expr
+                    keyexpr,
                 ) == Permission::Deny
                 {
                     return false;
@@ -748,17 +787,16 @@ impl InterceptorTrait for EgressAclEnforcer {
                 body: DeclareBody::UndeclareQueryable(_),
                 ..
             }) => {
-                let Some(expr) = ctx.full_expr() else {
+                let Some(keyexpr) = ctx.full_keyexpr() else {
                     return false;
                 };
                 // Undeclaration filtering diverges between ingress and egress:
                 // in egress the keyexpr has to be provided in the RoutingContext
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action(
                     cache.map(|c| c.declare_queryable),
                     AclMessage::DeclareQueryable,
                     "Undeclare Queryable (egress)",
-                    expr
+                    keyexpr,
                 ) == Permission::Deny
                 {
                     return false;
@@ -768,15 +806,14 @@ impl InterceptorTrait for EgressAclEnforcer {
                 body: DeclareBody::DeclareToken(_),
                 ..
             }) => {
-                let Some(expr) = ctx.full_expr() else {
+                let Some(keyexpr) = ctx.full_keyexpr() else {
                     return false;
                 };
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action(
                     cache.map(|c| c.declare_token),
                     AclMessage::LivelinessToken,
                     "Liveliness Token (egress)",
-                    expr
+                    keyexpr,
                 ) == Permission::Deny
                 {
                     return false;
@@ -786,17 +823,16 @@ impl InterceptorTrait for EgressAclEnforcer {
                 body: DeclareBody::UndeclareToken(_),
                 ..
             }) => {
-                let Some(expr) = ctx.full_expr() else {
+                let Some(keyexpr) = ctx.full_keyexpr() else {
                     return false;
                 };
                 // Undeclaration filtering diverges between ingress and egress:
                 // in egress the keyexpr has to be provided in the RoutingContext
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action(
                     cache.map(|c| c.declare_token),
                     AclMessage::LivelinessToken,
                     "Undeclare Liveliness Token (egress)",
-                    expr
+                    keyexpr,
                 ) == Permission::Deny
                 {
                     return false;
@@ -807,15 +843,14 @@ impl InterceptorTrait for EgressAclEnforcer {
                 options,
                 ..
             }) if options.tokens() => {
-                let Some(expr) = ctx.full_expr() else {
+                let Some(keyexpr) = ctx.full_keyexpr() else {
                     return false;
                 };
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action(
                     cache.map(|c| c.query_token),
                     AclMessage::LivelinessQuery,
                     "Liveliness Query (egress)",
-                    expr
+                    keyexpr,
                 ) == Permission::Deny
                 {
                     return false;
@@ -826,15 +861,14 @@ impl InterceptorTrait for EgressAclEnforcer {
                 options,
                 ..
             }) if options.tokens() => {
-                let Some(expr) = ctx.full_expr() else {
+                let Some(keyexpr) = ctx.full_keyexpr() else {
                     return false;
                 };
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action(
                     cache.map(|c| c.declare_liveliness_subscriber),
                     AclMessage::DeclareLivelinessSubscriber,
                     "Declare Liveliness Subscriber (egress)",
-                    expr
+                    keyexpr,
                 ) == Permission::Deny
                 {
                     return false;
@@ -845,19 +879,18 @@ impl InterceptorTrait for EgressAclEnforcer {
                 options,
                 ..
             }) if options.tokens() => {
-                let Some(expr) = ctx.full_expr() else {
+                let Some(keyexpr) = ctx.full_keyexpr() else {
                     return false;
                 };
                 // Note: options are set for InterestMode::Final for internal use only by egress interceptors.
 
                 // InterestMode::Final filtering diverges between ingress and egress:
                 // in egress the keyexpr has to be provided in the RoutingContext
-                if cached_result_or_action!(
-                    self,
+                if self.cached_result_or_action(
                     cache.map(|c| c.declare_liveliness_subscriber),
                     AclMessage::DeclareLivelinessSubscriber,
                     "Undeclare Liveliness Subscriber (egress)",
-                    expr
+                    keyexpr,
                 ) == Permission::Deny
                 {
                     return false;
@@ -891,7 +924,7 @@ pub trait AclActionMethods {
     fn zid(&self) -> &ZenohIdProto;
     fn flow(&self) -> InterceptorFlow;
     fn authn_ids(&self) -> &Vec<AuthSubject>;
-    fn action(&self, action: AclMessage, log_msg: &str, key_expr: &str) -> Permission {
+    fn action(&self, action: AclMessage, log_msg: &str, key_expr: &keyexpr) -> Permission {
         let policy_enforcer = self.policy_enforcer();
         let authn_ids = self.authn_ids();
         let zid = self.zid();

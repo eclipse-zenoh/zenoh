@@ -32,7 +32,7 @@ env:
   CARGO_SEMVER_CHECKS_RELEASE_TYPE: patch
   # NOTE(fuzzypixelz): cargo-semver-checks uses the previous released version as a baseline, not the latest released
   # version on crates.io. Thus this needs to be updated after every release.
-  CARGO_SEMVER_CHECKS_BASELINE_VERSION: 1.0.0
+  CARGO_SEMVER_CHECKS_BASELINE_VERSION: 1.3.0
 
 jobs:
   determine-runner:
