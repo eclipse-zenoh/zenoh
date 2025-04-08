@@ -79,10 +79,7 @@ impl InterceptorCache {
     ) -> Option<InterceptorCacheValueType> {
         self.0
             .value(interceptor.version, || {
-                // Safety: resource expr is always a valid keyexpr
-                let ke = unsafe { keyexpr::from_str_unchecked(resource.expr()) };
-                let key_expr = ke.into();
-                interceptor.compute_keyexpr_cache(&key_expr)
+                interceptor.compute_keyexpr_cache(resource.keyexpr()?)
             })
             .ok()
     }
@@ -321,6 +318,15 @@ impl Resource {
 
     pub fn expr(&self) -> &str {
         &self.expr
+    }
+
+    pub fn keyexpr(&self) -> Option<&keyexpr> {
+        if self.parent.is_none() {
+            None
+        } else {
+            // SAFETY: non-root resources are valid keyexprs
+            unsafe { Some(keyexpr::from_str_unchecked(&self.expr)) }
+        }
     }
 
     pub fn suffix(&self) -> &str {

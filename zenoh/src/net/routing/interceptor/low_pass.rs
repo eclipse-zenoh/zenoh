@@ -18,7 +18,7 @@
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 
-use std::{collections::HashSet, iter, sync::Arc};
+use std::{any::Any, collections::HashSet, iter, sync::Arc};
 
 use ahash::HashMap;
 use itertools::Itertools;
@@ -336,7 +336,7 @@ impl LowPassInterceptor {
         }
         let max_allowed_size = match max_allowed_size {
             Some(v) => v,
-            None => match ctx.full_expr().and_then(|e| keyexpr::new(e).ok()) {
+            None => match ctx.full_keyexpr() {
                 Some(ke) => self.get_max_allowed_message_size(message_type, ke),
                 None => 0,
             },
@@ -350,7 +350,7 @@ impl LowPassInterceptor {
     fn get_max_allowed_message_size(
         &self,
         message: LowPassFilterMessage,
-        key_expr: &zenoh_keyexpr::keyexpr,
+        key_expr: &keyexpr,
     ) -> usize {
         match self
             .subjects
@@ -385,10 +385,7 @@ struct Cache {
 }
 
 impl InterceptorTrait for LowPassInterceptor {
-    fn compute_keyexpr_cache(
-        &self,
-        key_expr: &crate::key_expr::KeyExpr<'_>,
-    ) -> Option<Box<dyn std::any::Any + Send + Sync>> {
+    fn compute_keyexpr_cache(&self, key_expr: &keyexpr) -> Option<Box<dyn Any + Send + Sync>> {
         Some(Box::new(Cache {
             put: self.get_max_allowed_message_size(LowPassFilterMessage::Put, key_expr),
             delete: self.get_max_allowed_message_size(LowPassFilterMessage::Delete, key_expr),
