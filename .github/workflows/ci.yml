@@ -300,7 +300,8 @@ jobs:
               --skip three_node_combination  \
               --skip three_node_combination_multicast \
               --skip two_node_combination \
-              --skip test_gossip
+              --skip test_gossip \
+              > /dev/null
             env:
               RUST_LOG: trace
 
