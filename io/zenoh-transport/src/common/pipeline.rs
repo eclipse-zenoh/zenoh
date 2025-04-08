@@ -835,6 +835,7 @@ impl TransmissionPipelineStatus {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct TransmissionPipelineProducer {
     // Each priority queue has its own Mutex
     stage_in: Arc<[Mutex<StageIn>]>,
