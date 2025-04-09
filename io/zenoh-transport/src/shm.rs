@@ -17,7 +17,9 @@ use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZBuf, ZSlice, ZSliceKi
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_core::zerror;
 use zenoh_protocol::{
-    network::{NetworkBody, NetworkMessage, Push, Request, Response},
+    network::{
+        NetworkBody, NetworkBodyMut, NetworkMessage, NetworkMessageMut, Push, Request, Response,
+    },
     zenoh::{
         err::Err,
         ext::ShmType,
@@ -59,25 +61,25 @@ impl PartnerShmConfig for MulticastTransportShmConfig {
 }
 
 pub fn map_zmsg_to_partner<ShmCfg: PartnerShmConfig>(
-    msg: &mut NetworkMessage,
+    msg: &mut NetworkMessageMut,
     partner_shm_cfg: &Option<ShmCfg>,
 ) -> ZResult<()> {
     match &mut msg.body {
-        NetworkBody::Push(Push { payload, .. }) => match payload {
+        NetworkBodyMut::Push(Push { payload, .. }) => match payload {
             PushBody::Put(b) => b.map_to_partner(partner_shm_cfg),
             PushBody::Del(_) => Ok(()),
         },
-        NetworkBody::Request(Request { payload, .. }) => match payload {
+        NetworkBodyMut::Request(Request { payload, .. }) => match payload {
             RequestBody::Query(b) => b.map_to_partner(partner_shm_cfg),
         },
-        NetworkBody::Response(Response { payload, .. }) => match payload {
+        NetworkBodyMut::Response(Response { payload, .. }) => match payload {
             ResponseBody::Reply(b) => b.map_to_partner(partner_shm_cfg),
             ResponseBody::Err(b) => b.map_to_partner(partner_shm_cfg),
         },
-        NetworkBody::ResponseFinal(_)
-        | NetworkBody::Interest(_)
-        | NetworkBody::Declare(_)
-        | NetworkBody::OAM(_) => Ok(()),
+        NetworkBodyMut::ResponseFinal(_)
+        | NetworkBodyMut::Interest(_)
+        | NetworkBodyMut::Declare(_)
+        | NetworkBodyMut::OAM(_) => Ok(()),
     }
 }
 

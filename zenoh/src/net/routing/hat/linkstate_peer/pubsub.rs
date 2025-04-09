@@ -71,7 +71,7 @@ fn send_sourced_subscription_to_net_children(
                         let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
-                            Declare {
+                            &mut Declare {
                                 interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
@@ -359,7 +359,7 @@ fn send_forget_sourced_subscription_to_net_children(
                         let wire_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
-                            Declare {
+                            &mut Declare {
                                 interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,

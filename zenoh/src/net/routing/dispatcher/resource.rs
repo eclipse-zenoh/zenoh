@@ -79,10 +79,7 @@ impl InterceptorCache {
     ) -> Option<InterceptorCacheValueType> {
         self.0
             .value(interceptor.version, || {
-                // Safety: resource expr is always a valid keyexpr
-                let ke = unsafe { keyexpr::from_str_unchecked(resource.expr()) };
-                let key_expr = ke.into();
-                interceptor.compute_keyexpr_cache(&key_expr)
+                interceptor.compute_keyexpr_cache(resource.keyexpr()?)
             })
             .ok()
     }
@@ -323,6 +320,15 @@ impl Resource {
         &self.expr
     }
 
+    pub fn keyexpr(&self) -> Option<&keyexpr> {
+        if self.parent.is_none() {
+            None
+        } else {
+            // SAFETY: non-root resources are valid keyexprs
+            unsafe { Some(keyexpr::from_str_unchecked(&self.expr)) }
+        }
+    }
+
     pub fn suffix(&self) -> &str {
         &self.expr[self.suffix..]
     }
@@ -535,7 +541,7 @@ impl Resource {
                         .local_mappings
                         .insert(expr_id, nonwild_prefix.clone());
                     face.primitives.send_declare(RoutingContext::with_expr(
-                        Declare {
+                        &mut Declare {
                             interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
