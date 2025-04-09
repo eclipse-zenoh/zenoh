@@ -17,7 +17,7 @@ use std::str::FromStr;
 use zenoh_buffers::ZBuf;
 use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
-    network::{NetworkBody, NetworkMessage, Push},
+    network::{NetworkBodyMut, NetworkMessageMut, Push},
     zenoh::PushBody,
 };
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
@@ -94,18 +94,18 @@ impl InterceptorTrait for TestInterceptor {
 
     fn intercept(
         &self,
-        mut ctx: RoutingContext<NetworkMessage>,
+        ctx: &mut RoutingContext<NetworkMessageMut<'_>>,
         cache: Option<&Box<dyn Any + Send + Sync>>,
-    ) -> Option<RoutingContext<NetworkMessage>> {
-        if let NetworkBody::Push(Push {
-            payload: PushBody::Put(p),
+    ) -> bool {
+        if let NetworkBodyMut::Push(&mut Push {
+            payload: PushBody::Put(ref mut p),
             ..
         }) = &mut ctx.msg.body
         {
             let out = format!("Cache hit: {}, data: {}", cache.is_some(), &self.data);
             p.payload = ZBuf::from(out.as_bytes().to_owned());
         }
-        Some(ctx)
+        true
     }
 }
 

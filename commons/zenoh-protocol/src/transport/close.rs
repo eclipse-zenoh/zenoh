@@ -80,7 +80,7 @@ pub fn reason_to_str(reason: u8) -> &'static str {
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the length of a message must not exceed 65535 bytes.
 ///
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Close {
     pub reason: u8,
     pub session: bool,

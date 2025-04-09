@@ -23,12 +23,12 @@ use std::{
 use arc_swap::ArcSwap;
 use tokio_util::sync::CancellationToken;
 use zenoh_protocol::{
-    core::{ExprId, Reliability, WhatAmI, WireExpr, ZenohIdProto},
+    core::{ExprId, Reliability, WhatAmI, ZenohIdProto},
     network::{
         interest::{InterestId, InterestMode, InterestOptions},
-        push, Mapping, Push, Request, RequestId, Response, ResponseFinal,
+        Mapping, Push, Request, RequestId, Response, ResponseFinal,
     },
-    zenoh::{PushBody, RequestBody},
+    zenoh::RequestBody,
 };
 use zenoh_sync::get_mut_unchecked;
 use zenoh_task::TaskController;
@@ -278,27 +278,6 @@ pub struct Face {
 }
 
 impl Face {
-    pub(crate) fn send_push_lazy(
-        &self,
-        wire_expr: WireExpr,
-        qos: push::ext::QoSType,
-        ext_tstamp: Option<push::ext::TimestampType>,
-        ext_nodeid: push::ext::NodeIdType,
-        body: impl FnOnce() -> PushBody,
-        reliability: Reliability,
-    ) {
-        route_data(
-            &self.tables,
-            &self.state,
-            wire_expr,
-            qos,
-            ext_tstamp,
-            ext_nodeid,
-            body,
-            reliability,
-        );
-    }
-
     pub fn downgrade(&self) -> WeakFace {
         WeakFace {
             tables: Arc::downgrade(&self.tables),
@@ -314,7 +293,7 @@ impl Face {
 }
 
 impl Primitives for Face {
-    fn send_interest(&self, msg: zenoh_protocol::network::Interest) {
+    fn send_interest(&self, msg: &mut zenoh_protocol::network::Interest) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         if msg.mode != InterestMode::Final {
             let mut declares = vec![];
@@ -330,7 +309,7 @@ impl Primitives for Face {
             );
             drop(ctrl_lock);
             for (p, m) in declares {
-                p.send_declare(m);
+                m.with_mut(|m| p.send_declare(m));
             }
         } else {
             undeclare_interest(
@@ -342,9 +321,9 @@ impl Primitives for Face {
         }
     }
 
-    fn send_declare(&self, msg: zenoh_protocol::network::Declare) {
+    fn send_declare(&self, msg: &mut zenoh_protocol::network::Declare) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
-        match msg.body {
+        match &mut msg.body {
             zenoh_protocol::network::DeclareBody::DeclareKeyExpr(m) => {
                 register_expr(&self.tables, &mut self.state.clone(), m.id, &m.wire_expr);
             }
@@ -365,7 +344,7 @@ impl Primitives for Face {
                 );
                 drop(ctrl_lock);
                 for (p, m) in declares {
-                    p.send_declare(m);
+                    m.with_mut(|m| p.send_declare(m));
                 }
             }
             zenoh_protocol::network::DeclareBody::UndeclareSubscriber(m) => {
@@ -381,7 +360,7 @@ impl Primitives for Face {
                 );
                 drop(ctrl_lock);
                 for (p, m) in declares {
-                    p.send_declare(m);
+                    m.with_mut(|m| p.send_declare(m));
                 }
             }
             zenoh_protocol::network::DeclareBody::DeclareQueryable(m) => {
@@ -398,7 +377,7 @@ impl Primitives for Face {
                 );
                 drop(ctrl_lock);
                 for (p, m) in declares {
-                    p.send_declare(m);
+                    m.with_mut(|m| p.send_declare(m));
                 }
             }
             zenoh_protocol::network::DeclareBody::UndeclareQueryable(m) => {
@@ -414,7 +393,7 @@ impl Primitives for Face {
                 );
                 drop(ctrl_lock);
                 for (p, m) in declares {
-                    p.send_declare(m);
+                    m.with_mut(|m| p.send_declare(m));
                 }
             }
             zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
@@ -431,7 +410,7 @@ impl Primitives for Face {
                 );
                 drop(ctrl_lock);
                 for (p, m) in declares {
-                    p.send_declare(m);
+                    m.with_mut(|m| p.send_declare(m));
                 }
             }
             zenoh_protocol::network::DeclareBody::UndeclareToken(m) => {
@@ -447,7 +426,7 @@ impl Primitives for Face {
                 );
                 drop(ctrl_lock);
                 for (p, m) in declares {
-                    p.send_declare(m);
+                    m.with_mut(|m| p.send_declare(m));
                 }
             }
             zenoh_protocol::network::DeclareBody::DeclareFinal(_) => {
@@ -472,7 +451,7 @@ impl Primitives for Face {
                     drop(wtables);
                     drop(ctrl_lock);
                     for (p, m) in declares {
-                        p.send_declare(m);
+                        m.with_mut(|m| p.send_declare(m));
                     }
                 }
             }
@@ -480,53 +459,23 @@ impl Primitives for Face {
     }
 
     #[inline]
-    fn send_push(&self, msg: Push, reliability: Reliability) {
-        route_data(
-            &self.tables,
-            &self.state,
-            msg.wire_expr,
-            msg.ext_qos,
-            msg.ext_tstamp,
-            msg.ext_nodeid,
-            move || msg.payload,
-            reliability,
-        );
+    fn send_push(&self, msg: &mut Push, reliability: Reliability) {
+        route_data(&self.tables, &self.state, msg, reliability);
     }
 
-    fn send_request(&self, msg: Request) {
+    fn send_request(&self, msg: &mut Request) {
         match msg.payload {
             RequestBody::Query(_) => {
-                route_query(
-                    &self.tables,
-                    &self.state,
-                    &msg.wire_expr,
-                    msg.id,
-                    msg.ext_qos,
-                    msg.ext_tstamp,
-                    msg.ext_target,
-                    msg.ext_budget,
-                    msg.ext_timeout,
-                    msg.payload,
-                    msg.ext_nodeid.node_id,
-                );
+                route_query(&self.tables, &self.state, msg);
             }
         }
     }
 
-    fn send_response(&self, msg: Response) {
-        route_send_response(
-            &self.tables,
-            &mut self.state.clone(),
-            msg.rid,
-            msg.ext_qos,
-            msg.ext_tstamp,
-            msg.ext_respid,
-            msg.wire_expr,
-            msg.payload,
-        );
+    fn send_response(&self, msg: &mut Response) {
+        route_send_response(&self.tables, &mut self.state.clone(), msg);
     }
 
-    fn send_response_final(&self, msg: ResponseFinal) {
+    fn send_response_final(&self, msg: &mut ResponseFinal) {
         route_send_response_final(&self.tables, &mut self.state.clone(), msg.rid);
     }
 
@@ -548,7 +497,7 @@ impl Primitives for Face {
         );
         drop(ctrl_lock);
         for (p, m) in declares {
-            p.send_declare(m);
+            m.with_mut(|m| p.send_declare(m));
         }
     }
 

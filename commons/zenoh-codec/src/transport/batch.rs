@@ -20,7 +20,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     core::Reliability,
-    network::NetworkMessage,
+    network::{NetworkMessageExt, NetworkMessageRef},
     transport::{
         Fragment, FragmentHeader, Frame, FrameHeader, TransportBody, TransportMessage, TransportSn,
     },
@@ -111,14 +111,14 @@ where
     }
 }
 
-impl<W> WCodec<&NetworkMessage, &mut W> for &mut Zenoh080Batch
+impl<W> WCodec<NetworkMessageRef<'_>, &mut W> for &mut Zenoh080Batch
 where
     W: Writer + BacktrackableWriter,
     <W as BacktrackableWriter>::Mark: Copy,
 {
     type Output = Result<(), BatchError>;
 
-    fn write(self, writer: &mut W, x: &NetworkMessage) -> Self::Output {
+    fn write(self, writer: &mut W, x: NetworkMessageRef) -> Self::Output {
         // Eventually update the current frame and sn based on the current status
         if let (CurrentFrame::Reliable, false)
         | (CurrentFrame::BestEffort, true)
@@ -140,14 +140,14 @@ where
     }
 }
 
-impl<W> WCodec<(&NetworkMessage, &FrameHeader), &mut W> for &mut Zenoh080Batch
+impl<W> WCodec<(NetworkMessageRef<'_>, &FrameHeader), &mut W> for &mut Zenoh080Batch
 where
     W: Writer + BacktrackableWriter,
     <W as BacktrackableWriter>::Mark: Copy,
 {
     type Output = Result<(), BatchError>;
 
-    fn write(self, writer: &mut W, x: (&NetworkMessage, &FrameHeader)) -> Self::Output {
+    fn write(self, writer: &mut W, x: (NetworkMessageRef, &FrameHeader)) -> Self::Output {
         let (m, f) = x;
 
         if let (Reliability::Reliable, false) | (Reliability::BestEffort, true) =
