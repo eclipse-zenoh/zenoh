@@ -13,17 +13,13 @@
 //
 
 use core::{borrow::Borrow, mem};
-use std::{
-    collections::{hash_set, HashSet},
-    fmt,
-    hash::Hash,
-};
+use std::{collections::hash_set, fmt, hash::Hash};
 
 #[allow(clippy::box_collection)]
 pub enum SingleOrBoxHashSet<T> {
     Empty,
     Single(T),
-    Set(Box<HashSet<T>>),
+    Set(Box<ahash::HashSet<T>>),
 }
 
 impl<T> Default for SingleOrBoxHashSet<T>
