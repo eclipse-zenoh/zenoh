@@ -24,7 +24,7 @@ use nonempty_collections::NEVec;
 use zenoh_link::LinkAuthId;
 
 mod authorization;
-use std::{any::Any, ops::Not};
+use std::any::Any;
 
 mod low_pass;
 use low_pass::low_pass_interceptor_factories;
@@ -34,7 +34,7 @@ use zenoh_protocol::network::NetworkMessageMut;
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
-use super::{dispatcher::face::Face, router::Resource, RoutingContext};
+use super::RoutingContext;
 
 pub mod downsampling;
 use crate::net::routing::interceptor::downsampling::downsampling_interceptor_factories;
@@ -83,6 +83,13 @@ impl From<&LinkAuthId> for InterceptorLinkWrapper {
     }
 }
 
+/// Interceptor interface.
+///
+/// # Requirements
+///
+/// - Implementors SHOULD NOT filter out [`zenoh_protocol::network::ResponseFinal`] messages since
+///   the router relies on them to respond to queries that get filtered out; this is because Zenoh
+///   returns empty replies when no queryable matching a query exists.
 pub(crate) trait InterceptorTrait {
     fn compute_keyexpr_cache(&self, key_expr: &keyexpr) -> Option<Box<dyn Any + Send + Sync>>;
 
@@ -150,25 +157,6 @@ impl InterceptorsChain {
             interceptors,
             version,
         }
-    }
-
-    pub(crate) fn intercept_with_face(
-        &self,
-        ctx: &mut RoutingContext<NetworkMessageMut>,
-        face: &Face,
-        prefix: &Resource,
-        flow: InterceptorFlow,
-    ) -> bool {
-        // NOTE: the cache should be empty if the wire expr has no suffix, i.e. when the prefix
-        // doesn't represent a full keyexpr.
-        let prefix = ctx
-            .wire_expr()
-            .and_then(|we| we.has_suffix().not().then_some(prefix));
-        let cache_guard = prefix
-            .as_ref()
-            .and_then(|p| p.interceptor_cache(face, self, flow));
-        let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
-        self.intercept(ctx, cache)
     }
 }
 

@@ -53,7 +53,13 @@ impl TransportPeerEventHandler for DeMux {
     #[inline]
     fn handle_message(&self, mut msg: NetworkMessageMut) -> ZResult<()> {
         let interceptor = self.interceptor.load();
-        if !interceptor.interceptors.is_empty() && !matches!(msg.body, NetworkBodyMut::Push(..)) {
+        if !interceptor.interceptors.is_empty()
+        // NOTE: we ignore message types already handled inside the routing.
+            && !matches!(
+                msg.body,
+                NetworkBodyMut::Push(..) | NetworkBodyMut::Request(..)
+            )
+        {
             let mut ctx = RoutingContext::new_in(msg.as_mut(), self.face.clone());
             let prefix = ctx
                 .wire_expr()
@@ -62,7 +68,7 @@ impl TransportPeerEventHandler for DeMux {
                 .cloned();
             let cache_guard = prefix
                 .as_ref()
-                .and_then(|p| p.get_ingress_cache(&self.face, &interceptor));
+                .and_then(|p| p.get_ingress_cache(&self.face.state, &interceptor));
             let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
 
             match &ctx.msg.body {

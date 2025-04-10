@@ -22,12 +22,13 @@ use std::{
 
 use arc_swap::ArcSwap;
 use tokio_util::sync::CancellationToken;
-use zenoh_config::InterceptorFlow;
+use zenoh_config::InterceptorFlow::{self, *};
 use zenoh_protocol::{
     core::{ExprId, Reliability, WhatAmI, ZenohIdProto},
     network::{
         interest::{InterestId, InterestMode, InterestOptions},
-        Mapping, Push, Request, RequestId, Response, ResponseFinal,
+        response, Mapping, NetworkBodyMut, NetworkMessageMut, Push, Request, RequestId, Response,
+        ResponseFinal,
     },
     zenoh::RequestBody,
 };
@@ -51,6 +52,7 @@ use crate::net::{
             EgressInterceptor, IngressInterceptor, InterceptorFactory, InterceptorTrait,
             InterceptorsChain,
         },
+        RoutingContext,
     },
 };
 
@@ -164,8 +166,27 @@ impl FaceState {
         .and_then(|iceptors| iceptors.is_empty().not().then_some(iceptors))
     }
 
+    pub(crate) fn run_interceptors(
+        &self,
+        flow: InterceptorFlow,
+        prefix: Option<&Resource>,
+        iceptor: &InterceptorsChain,
+        ctx: &mut RoutingContext<NetworkMessageMut<'_>>,
+    ) -> bool {
+        // NOTE: the cache should be empty if the wire expr has no suffix, i.e. when the prefix
+        // doesn't represent a full keyexpr.
+        let prefix = ctx
+            .wire_expr()
+            .and_then(|we| if !we.has_suffix() { prefix } else { None });
+        let cache_guard = prefix
+            .as_ref()
+            .and_then(|p| p.interceptor_cache(self, iceptor, flow));
+        let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
+        iceptor.intercept(ctx, cache)
+    }
+
     pub(crate) fn update_interceptors_caches(&self, res: &mut Arc<Resource>) {
-        if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Ingress) {
+        if let Some(iceptor) = self.load_interceptors(Ingress) {
             if let Some(expr) = res.keyexpr() {
                 let cache = iceptor.compute_keyexpr_cache(expr);
                 get_mut_unchecked(
@@ -178,7 +199,7 @@ impl FaceState {
             }
         }
 
-        if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Egress) {
+        if let Some(iceptor) = self.load_interceptors(Egress) {
             if let Some(expr) = res.keyexpr() {
                 let cache = iceptor.compute_keyexpr_cache(expr);
                 get_mut_unchecked(
@@ -471,10 +492,84 @@ impl Primitives for Face {
 
     #[inline]
     fn send_push(&self, msg: &mut Push, reliability: Reliability) {
-        route_data(&self.tables, self, msg, reliability);
+        let tables = self
+            .tables
+            .tables
+            .read()
+            .expect("reading Tables should not fail");
+
+        let Some(prefix) =
+            tables.get_mapping(&self.state, &msg.wire_expr.scope, msg.wire_expr.mapping)
+        else {
+            tracing::error!(
+                "Received Response with unknown scope {} from {}",
+                msg.wire_expr.scope,
+                self,
+            );
+            return;
+        };
+
+        if let Some(iceptor) = self.state.load_interceptors(Ingress) {
+            let ctx = &mut RoutingContext::new(NetworkMessageMut {
+                body: NetworkBodyMut::Push(msg),
+                reliability,
+                #[cfg(feature = "stats")]
+                size: None,
+            });
+
+            if !self
+                .state
+                .run_interceptors(Ingress, Some(prefix), &iceptor, ctx)
+            {
+                return;
+            }
+        }
+
+        route_data(&self.tables, &self.state, msg, reliability);
     }
 
     fn send_request(&self, msg: &mut Request) {
+        let tables = self
+            .tables
+            .tables
+            .read()
+            .expect("reading Tables should not fail");
+
+        let Some(prefix) =
+            tables.get_mapping(&self.state, &msg.wire_expr.scope, msg.wire_expr.mapping)
+        else {
+            tracing::error!(
+                "Received Response with unknown scope {} from {}",
+                msg.wire_expr.scope,
+                self,
+            );
+            return;
+        };
+
+        if let Some(iceptor) = self.state.load_interceptors(Ingress) {
+            let ctx = &mut RoutingContext::new(NetworkMessageMut {
+                body: NetworkBodyMut::Request(msg),
+                reliability: Reliability::Reliable, // NOTE: queries are always reliable
+                #[cfg(feature = "stats")]
+                size: None,
+            });
+
+            if !self
+                .state
+                .run_interceptors(Ingress, Some(prefix), &iceptor, ctx)
+            {
+                // NOTE: this request was blocked by an ingress interceptor, we need to send
+                // response final to avoid timeout error. We don't go through the egress
+                // interceptors because this message is not supposed to be filtered anyway.
+                self.state.intercept_response_final(&mut ResponseFinal {
+                    rid: msg.id,
+                    ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+                    ext_tstamp: None,
+                });
+                return;
+            }
+        }
+
         match msg.payload {
             RequestBody::Query(_) => {
                 route_query(&self.tables, &self.state, msg);
@@ -483,10 +578,57 @@ impl Primitives for Face {
     }
 
     fn send_response(&self, msg: &mut Response) {
+        let tables = self
+            .tables
+            .tables
+            .read()
+            .expect("reading Tables should not fail");
+
+        let Some(prefix) =
+            tables.get_mapping(&self.state, &msg.wire_expr.scope, msg.wire_expr.mapping)
+        else {
+            tracing::error!(
+                "Received Response with unknown scope {} from {}",
+                msg.wire_expr.scope,
+                self,
+            );
+            return;
+        };
+
+        if let Some(iceptor) = self.state.load_interceptors(Ingress) {
+            let ctx = &mut RoutingContext::new(NetworkMessageMut {
+                body: NetworkBodyMut::Response(msg),
+                reliability: Reliability::Reliable, // NOTE: queries are always reliable
+                #[cfg(feature = "stats")]
+                size: None,
+            });
+
+            if !self
+                .state
+                .run_interceptors(Ingress, Some(prefix), &iceptor, ctx)
+            {
+                return;
+            }
+        }
+
         route_send_response(&self.tables, &mut self.state.clone(), msg);
     }
 
     fn send_response_final(&self, msg: &mut ResponseFinal) {
+        if let Some(iceptor) = self.state.load_interceptors(Ingress) {
+            let ctx = &mut RoutingContext::new(NetworkMessageMut {
+                body: NetworkBodyMut::ResponseFinal(msg),
+                reliability: Reliability::Reliable, // NOTE: queries are always reliable
+                #[cfg(feature = "stats")]
+                size: None,
+            });
+
+            // NOTE: ResponseFinal messages have no keyexpr
+            if !self.state.run_interceptors(Ingress, None, &iceptor, ctx) {
+                return;
+            }
+        }
+
         route_send_response_final(&self.tables, &mut self.state.clone(), msg.rid);
     }
 
@@ -520,5 +662,89 @@ impl Primitives for Face {
 impl fmt::Display for Face {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.state.fmt(f)
+    }
+}
+
+impl FaceState {
+    pub(crate) fn intercept_push(
+        &self,
+        msg: &mut Push,
+        reliability: Reliability,
+        prefix: &Resource,
+    ) {
+        if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Egress) {
+            let ctx = &mut RoutingContext::new(NetworkMessageMut {
+                body: NetworkBodyMut::Push(msg),
+                reliability,
+                #[cfg(feature = "stats")]
+                size: None,
+            });
+
+            if !self.run_interceptors(InterceptorFlow::Egress, Some(prefix), &iceptor, ctx) {
+                return;
+            }
+        }
+
+        self.primitives.send_push(msg, reliability);
+    }
+
+    pub(crate) fn intercept_request(&self, msg: &mut Request, prefix: &Resource) {
+        if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Egress) {
+            let ctx = &mut RoutingContext::new(NetworkMessageMut {
+                body: NetworkBodyMut::Request(msg),
+                reliability: Reliability::Reliable,
+                #[cfg(feature = "stats")]
+                size: None,
+            });
+
+            if !self.run_interceptors(InterceptorFlow::Egress, Some(prefix), &iceptor, ctx) {
+                // NOTE: this request was blocked by an egress interceptor, we need to send
+                // response final to avoid timeout error. We don't go through the egress
+                // interceptors because this message is not supposed to be filtered anyway.
+                self.intercept_response_final(&mut ResponseFinal {
+                    rid: msg.id,
+                    ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+                    ext_tstamp: None,
+                });
+                return;
+            }
+        }
+
+        self.primitives.send_request(msg);
+    }
+
+    pub(crate) fn intercept_response(&self, msg: &mut Response, prefix: &Resource) {
+        if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Egress) {
+            let ctx = &mut RoutingContext::new(NetworkMessageMut {
+                body: NetworkBodyMut::Response(msg),
+                reliability: Reliability::Reliable, // NOTE: queries are always reliable
+                #[cfg(feature = "stats")]
+                size: None,
+            });
+
+            if !self.run_interceptors(InterceptorFlow::Egress, Some(prefix), &iceptor, ctx) {
+                return;
+            }
+        }
+
+        self.primitives.send_response(msg);
+    }
+
+    pub(crate) fn intercept_response_final(&self, msg: &mut ResponseFinal) {
+        if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Egress) {
+            let ctx = &mut RoutingContext::new(NetworkMessageMut {
+                body: NetworkBodyMut::ResponseFinal(msg),
+                reliability: Reliability::Reliable, // NOTE: queries are always reliable
+                #[cfg(feature = "stats")]
+                size: None,
+            });
+
+            // NOTE: ResponseFinal messages have no keyexpr
+            if !self.run_interceptors(InterceptorFlow::Egress, None, &iceptor, ctx) {
+                return;
+            }
+        }
+
+        self.primitives.send_response_final(msg);
     }
 }

@@ -39,7 +39,6 @@ use super::{
     tables::{Tables, TablesLock},
 };
 use crate::net::routing::{
-    dispatcher::face::Face,
     interceptor::{InterceptorTrait, InterceptorsChain},
     router::{disable_matches_data_routes, disable_matches_query_routes},
     RoutingContext,
@@ -762,7 +761,7 @@ impl Resource {
 
     pub(crate) fn get_ingress_cache(
         &self,
-        face: &Face,
+        face: &FaceState,
         interceptor: &InterceptorsChain,
     ) -> Option<InterceptorCacheValueType> {
         self.interceptor_cache(face, interceptor, InterceptorFlow::Ingress)
@@ -770,7 +769,7 @@ impl Resource {
 
     pub(crate) fn get_egress_cache(
         &self,
-        face: &Face,
+        face: &FaceState,
         interceptor: &InterceptorsChain,
     ) -> Option<InterceptorCacheValueType> {
         self.interceptor_cache(face, interceptor, InterceptorFlow::Egress)
@@ -778,11 +777,11 @@ impl Resource {
 
     pub(crate) fn interceptor_cache(
         &self,
-        face: &Face,
+        face: &FaceState,
         interceptor: &InterceptorsChain,
         flow: InterceptorFlow,
     ) -> Option<InterceptorCacheValueType> {
-        self.session_ctxs.get(&face.state.id).and_then(|ctx| {
+        self.session_ctxs.get(&face.id).and_then(|ctx| {
             match flow {
                 InterceptorFlow::Egress => &ctx.e_interceptor_cache,
                 InterceptorFlow::Ingress => &ctx.in_interceptor_cache,

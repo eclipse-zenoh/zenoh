@@ -17,13 +17,13 @@ use arc_swap::ArcSwap;
 use zenoh_protocol::{
     core::Reliability,
     network::{
-        interest::Interest, response, Declare, NetworkBodyMut, NetworkMessageMut, Push, Request,
-        Response, ResponseFinal,
+        interest::Interest, Declare, NetworkBodyMut, NetworkMessageMut, Push, Request, Response,
+        ResponseFinal,
     },
 };
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
-use super::{EPrimitives, Primitives};
+use super::EPrimitives;
 use crate::net::routing::{
     dispatcher::face::{Face, WeakFace},
     interceptor::{InterceptorTrait, InterceptorsChain},
@@ -69,7 +69,7 @@ impl EPrimitives for Mux {
         let interceptor = self.interceptor.load();
         let cache_guard = prefix
             .as_ref()
-            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap(), &interceptor));
+            .and_then(|p| p.get_egress_cache(&ctx.outface.get().unwrap().state, &interceptor));
 
         let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
 
@@ -104,7 +104,7 @@ impl EPrimitives for Mux {
         let interceptor = self.interceptor.load();
         let cache_guard = prefix
             .as_ref()
-            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap(), &interceptor));
+            .and_then(|p| p.get_egress_cache(&ctx.outface.get().unwrap().state, &interceptor));
         let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
 
         if self.interceptor.load().intercept(&mut ctx, cache) {
@@ -124,41 +124,14 @@ impl EPrimitives for Mux {
     }
 
     fn send_request(&self, msg: &mut Request) {
-        let request_id = msg.id;
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::Request(msg),
             reliability: Reliability::Reliable,
             #[cfg(feature = "stats")]
             size: None,
         };
-        let interceptor = self.interceptor.load();
-        if interceptor.interceptors.is_empty() {
-            let _ = self.handler.schedule(msg);
-        } else if let Some(face) = self.face.get().and_then(|f| f.upgrade()) {
-            let mut ctx = RoutingContext::new_out(msg, face.clone());
-            let prefix = ctx
-                .wire_expr()
-                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
-                .flatten()
-                .cloned();
-            let cache_guard = prefix
-                .as_ref()
-                .and_then(|p| p.get_egress_cache(&face, &interceptor));
-            let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
 
-            if interceptor.intercept(&mut ctx, cache) {
-                let _ = self.handler.schedule(ctx.msg);
-            } else {
-                // request was blocked by an interceptor, we need to send response final to avoid timeout error
-                face.send_response_final(&mut ResponseFinal {
-                    rid: request_id,
-                    ext_qos: response::ext::QoSType::RESPONSE_FINAL,
-                    ext_tstamp: None,
-                })
-            }
-        } else {
-            tracing::error!("Uninitialized multiplexer!");
-        }
+        let _ = self.handler.schedule(msg);
     }
 
     fn send_response(&self, msg: &mut Response) {
@@ -180,7 +153,7 @@ impl EPrimitives for Mux {
                 .cloned();
             let cache_guard = prefix
                 .as_ref()
-                .and_then(|p| p.get_egress_cache(&face, &interceptor));
+                .and_then(|p| p.get_egress_cache(&face.state, &interceptor));
             let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
 
             if interceptor.intercept(&mut ctx, cache) {
@@ -210,7 +183,7 @@ impl EPrimitives for Mux {
                 .cloned();
             let cache_guard = prefix
                 .as_ref()
-                .and_then(|p| p.get_egress_cache(&face, &interceptor));
+                .and_then(|p| p.get_egress_cache(&face.state, &interceptor));
             let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
             if interceptor.intercept(&mut ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
@@ -263,7 +236,7 @@ impl EPrimitives for McastMux {
         let interceptor = self.interceptor.load();
         let cache_guard = prefix
             .as_ref()
-            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap(), &interceptor));
+            .and_then(|p| p.get_egress_cache(&ctx.outface.get().unwrap().state, &interceptor));
         let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
         if self.interceptor.load().intercept(&mut ctx, cache) {
             let _ = self.handler.schedule(ctx.msg);
@@ -291,7 +264,7 @@ impl EPrimitives for McastMux {
         let interceptor = self.interceptor.load();
         let cache_guard = prefix
             .as_ref()
-            .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap(), &interceptor));
+            .and_then(|p| p.get_egress_cache(&ctx.outface.get().unwrap().state, &interceptor));
         let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
         if self.interceptor.load().intercept(&mut ctx, cache) {
             let _ = self.handler.schedule(ctx.msg);
@@ -317,7 +290,7 @@ impl EPrimitives for McastMux {
                 .cloned();
             let cache_guard = prefix
                 .as_ref()
-                .and_then(|p| p.get_egress_cache(face, &interceptor));
+                .and_then(|p| p.get_egress_cache(&face.state, &interceptor));
             let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
             if interceptor.intercept(&mut ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
@@ -346,7 +319,7 @@ impl EPrimitives for McastMux {
                 .cloned();
             let cache_guard = prefix
                 .as_ref()
-                .and_then(|p| p.get_egress_cache(face, &interceptor));
+                .and_then(|p| p.get_egress_cache(&face.state, &interceptor));
             let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
             if interceptor.intercept(&mut ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
@@ -375,7 +348,7 @@ impl EPrimitives for McastMux {
                 .cloned();
             let cache_guard = prefix
                 .as_ref()
-                .and_then(|p| p.get_egress_cache(face, &interceptor));
+                .and_then(|p| p.get_egress_cache(&face.state, &interceptor));
             let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
             if interceptor.intercept(&mut ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);
@@ -404,7 +377,7 @@ impl EPrimitives for McastMux {
                 .cloned();
             let cache_guard = prefix
                 .as_ref()
-                .and_then(|p| p.get_egress_cache(face, &interceptor));
+                .and_then(|p| p.get_egress_cache(&face.state, &interceptor));
             let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
             if interceptor.intercept(&mut ctx, cache) {
                 let _ = self.handler.schedule(ctx.msg);

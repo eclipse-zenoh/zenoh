@@ -16,17 +16,16 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use zenoh_config::InterceptorFlow;
 use zenoh_core::zread;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, Reliability, WireExpr},
-    network::{declare::SubscriberId, push::ext, NetworkBodyMut, NetworkMessageMut, Push},
+    network::{declare::SubscriberId, push::ext, Push},
     zenoh::PushBody,
 };
 use zenoh_sync::get_mut_unchecked;
 
 use super::{
-    face::{Face, FaceState},
+    face::FaceState,
     resource::{Direction, Resource},
     tables::{NodeId, Route, RoutingExpr, Tables, TablesLock},
 };
@@ -35,7 +34,6 @@ use crate::key_expr::KeyExpr;
 use crate::net::routing::{
     hat::{HatTrait, SendDeclare},
     router::get_or_set_route,
-    RoutingContext,
 };
 
 #[derive(Copy, Clone)]
@@ -283,13 +281,13 @@ macro_rules! inc_stats {
 #[allow(clippy::too_many_arguments)]
 pub fn route_data(
     tables_ref: &Arc<TablesLock>,
-    face: &Face,
+    face: &Arc<FaceState>,
     msg: &mut Push,
     reliability: Reliability,
 ) {
     let tables = zread!(tables_ref.tables);
     match tables
-        .get_mapping(&face.state, &msg.wire_expr.scope, msg.wire_expr.mapping)
+        .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
         .cloned()
     {
         Some(prefix) => {
@@ -299,19 +297,6 @@ pub fn route_data(
                 prefix.expr(),
                 msg.wire_expr.suffix.as_ref()
             );
-
-            if let Some(interceptor) = face.state.load_interceptors(InterceptorFlow::Ingress) {
-                let ctx = &mut RoutingContext::new(NetworkMessageMut {
-                    body: NetworkBodyMut::Push(msg),
-                    reliability,
-                    #[cfg(feature = "stats")]
-                    size: None,
-                });
-
-                if !interceptor.intercept_with_face(ctx, face, &prefix, InterceptorFlow::Ingress) {
-                    return;
-                }
-            };
 
             let mut expr = RoutingExpr::new(&prefix, msg.wire_expr.suffix.as_ref());
 
@@ -324,19 +309,10 @@ pub fn route_data(
                 inc_stats!(face.state, rx, admin, msg.payload);
             }
 
-            if tables
-                .hat_code
-                .ingress_filter(&tables, &face.state, &mut expr)
-            {
+            if tables.hat_code.ingress_filter(&tables, face, &mut expr) {
                 let res = Resource::get_resource(&prefix, expr.suffix);
 
-                let route = get_data_route(
-                    &tables,
-                    &face.state,
-                    &res,
-                    &mut expr,
-                    msg.ext_nodeid.node_id,
-                );
+                let route = get_data_route(&tables, face, &res, &mut expr, msg.ext_nodeid.node_id);
 
                 if !route.is_empty() {
                     treat_timestamp!(&tables.hlc, msg.payload, tables.drop_future_timestamp);
@@ -345,7 +321,7 @@ pub fn route_data(
                         let (outface, key_expr, context) = route.values().next().unwrap();
                         if tables
                             .hat_code
-                            .egress_filter(&tables, &face.state, outface, &mut expr)
+                            .egress_filter(&tables, face, outface, &mut expr)
                         {
                             drop(tables);
                             #[cfg(feature = "stats")]
@@ -357,38 +333,35 @@ pub fn route_data(
                             msg.wire_expr = key_expr.into();
                             msg.ext_nodeid = ext::NodeIdType { node_id: *context };
 
-                            if let Some(interceptor) =
-                                face.state.load_interceptors(InterceptorFlow::Egress)
-                            {
-                                let ctx = &mut RoutingContext::new(NetworkMessageMut {
-                                    body: NetworkBodyMut::Push(msg),
-                                    reliability,
-                                    #[cfg(feature = "stats")]
-                                    size: None,
-                                });
-
-                                if !interceptor.intercept_with_face(
-                                    ctx,
-                                    face,
-                                    &prefix,
-                                    InterceptorFlow::Egress,
-                                ) {
-                                    return;
+                            let prefix = {
+                                let tables = tables_ref
+                                    .tables
+                                    .read()
+                                    .expect("reading Tables should not fail");
+                                match tables
+                                    .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
+                                    .cloned()
+                                {
+                                    Some(prefix) => prefix,
+                                    None => {
+                                        tracing::error!(
+                                            "Got Push with unknown scope {} from {}",
+                                            msg.wire_expr.scope,
+                                            face,
+                                        );
+                                        return;
+                                    }
                                 }
                             };
-
-                            outface.primitives.send_push(msg, reliability)
+                            outface.intercept_push(msg, reliability, &prefix)
                         }
                     } else {
                         let route = route
                             .values()
-                            .filter(|(outface, _key_expr, _context)| {
-                                tables.hat_code.egress_filter(
-                                    &tables,
-                                    &face.state,
-                                    outface,
-                                    &mut expr,
-                                )
+                            .filter(|(outface, _key_expr, _context)| -> bool {
+                                tables
+                                    .hat_code
+                                    .egress_filter(&tables, face, outface, &mut expr)
                             })
                             .cloned()
                             .collect::<Vec<Direction>>();
@@ -410,27 +383,26 @@ pub fn route_data(
                                 payload: msg.payload.clone(),
                             };
 
-                            if let Some(interceptor) =
-                                face.state.load_interceptors(InterceptorFlow::Egress)
-                            {
-                                let ctx = &mut RoutingContext::new(NetworkMessageMut {
-                                    body: NetworkBodyMut::Push(msg),
-                                    reliability,
-                                    #[cfg(feature = "stats")]
-                                    size: None,
-                                });
-
-                                if !interceptor.intercept_with_face(
-                                    ctx,
-                                    face,
-                                    &prefix,
-                                    InterceptorFlow::Egress,
-                                ) {
-                                    continue;
+                            let prefix = {
+                                let tables = tables_ref
+                                    .tables
+                                    .read()
+                                    .expect("reading Tables should not fail");
+                                if let Some(prefix) = tables
+                                    .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
+                                    .cloned()
+                                {
+                                    prefix
+                                } else {
+                                    tracing::error!(
+                                        "Got Push with unknown scope {} from {}",
+                                        msg.wire_expr.scope,
+                                        face,
+                                    );
+                                    return;
                                 }
                             };
-
-                            outface.primitives.send_push(msg, reliability)
+                            outface.intercept_push(msg, reliability, &prefix)
                         }
                     }
                 }
