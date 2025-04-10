@@ -423,12 +423,12 @@ impl InterceptorTrait for LowPassInterceptor {
                 #[cfg(feature = "stats")]
                 match self.flow {
                     InterceptorFlow::Egress => {
-                        self.stats.inc_tx_low_pass_blocked_bytes(msg_size);
-                        self.stats.inc_tx_low_pass_blocked_msgs(1);
+                        self.stats.inc_tx_low_pass_dropped_bytes(msg_size);
+                        self.stats.inc_tx_low_pass_dropped_msgs(1);
                     }
                     InterceptorFlow::Ingress => {
-                        self.stats.inc_rx_low_pass_blocked_bytes(msg_size);
-                        self.stats.inc_rx_low_pass_blocked_msgs(1);
+                        self.stats.inc_rx_low_pass_dropped_bytes(msg_size);
+                        self.stats.inc_rx_low_pass_dropped_msgs(1);
                     }
                 }
                 false

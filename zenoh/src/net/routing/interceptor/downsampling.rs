@@ -251,10 +251,10 @@ impl InterceptorTrait for DownsamplingInterceptor {
                                 #[cfg(feature = "stats")]
                                 match self.flow {
                                     InterceptorFlow::Egress => {
-                                        self.stats.inc_tx_downsampled_msgs(1);
+                                        self.stats.inc_tx_downsampler_dropped_msgs(1);
                                     }
                                     InterceptorFlow::Ingress => {
-                                        self.stats.inc_rx_downsampled_msgs(1);
+                                        self.stats.inc_rx_downsampler_dropped_msgs(1);
                                     }
                                 }
                                 return false;

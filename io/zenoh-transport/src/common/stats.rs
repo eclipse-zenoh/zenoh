@@ -57,7 +57,7 @@ macro_rules! stats_struct {
             $string.push_str("{");
             for (k, v) in &$stats.labels {
                 $string.push_str(k);
-                $string.push_str("= \"");
+                $string.push_str("=\"");
                 $string.push_str(v);
                 $string.push_str("\",")
             }
@@ -350,26 +350,26 @@ stats_struct! {
 
         # HELP "Counter of messages dropped by ingress downsampling."
         # TYPE "counter"
-        pub rx_downsampled_msgs,
+        pub rx_downsampler_dropped_msgs,
 
         # HELP "Counter of messages dropped by egress downsampling."
         # TYPE "counter"
-        pub tx_downsampled_msgs,
+        pub tx_downsampler_dropped_msgs,
 
-        # HELP "Counter of bytes blocked by ingress low-pass filter."
+        # HELP "Counter of bytes dropped by ingress low-pass filter."
         # TYPE "counter"
-        pub rx_low_pass_blocked_bytes,
+        pub rx_low_pass_dropped_bytes,
 
-        # HELP "Counter of bytes blocked by egress low-pass filter."
+        # HELP "Counter of bytes dropped by egress low-pass filter."
         # TYPE "counter"
-        pub tx_low_pass_blocked_bytes,
+        pub tx_low_pass_dropped_bytes,
 
-        # HELP "Counter of messages blocked by ingress low-pass filter."
+        # HELP "Counter of messages dropped by ingress low-pass filter."
         # TYPE "counter"
-        pub rx_low_pass_blocked_msgs,
+        pub rx_low_pass_dropped_msgs,
 
-        # HELP "Counter of messages blocked by egress low-pass filter."
+        # HELP "Counter of messages dropped by egress low-pass filter."
         # TYPE "counter"
-        pub tx_low_pass_blocked_msgs,
+        pub tx_low_pass_dropped_msgs,
     }
 }
