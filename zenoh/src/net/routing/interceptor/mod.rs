@@ -29,12 +29,12 @@ use std::any::Any;
 mod low_pass;
 use low_pass::low_pass_interceptor_factories;
 use zenoh_config::{Config, InterceptorFlow, InterceptorLink};
-use zenoh_protocol::network::NetworkMessage;
+use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
+use zenoh_protocol::network::NetworkMessageMut;
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 use super::RoutingContext;
-use crate::api::key_expr::KeyExpr;
 
 pub mod downsampling;
 use crate::net::routing::interceptor::downsampling::downsampling_interceptor_factories;
@@ -84,13 +84,13 @@ impl From<&LinkAuthId> for InterceptorLinkWrapper {
 }
 
 pub(crate) trait InterceptorTrait {
-    fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>>;
+    fn compute_keyexpr_cache(&self, key_expr: &keyexpr) -> Option<Box<dyn Any + Send + Sync>>;
 
     fn intercept(
         &self,
-        ctx: RoutingContext<NetworkMessage>,
+        ctx: &mut RoutingContext<NetworkMessageMut>,
         cache: Option<&Box<dyn Any + Send + Sync>>,
-    ) -> Option<RoutingContext<NetworkMessage>>;
+    ) -> bool;
 }
 
 pub(crate) type Interceptor = Box<dyn InterceptorTrait + Send + Sync>;
@@ -154,7 +154,7 @@ impl InterceptorsChain {
 }
 
 impl InterceptorTrait for InterceptorsChain {
-    fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
+    fn compute_keyexpr_cache(&self, key_expr: &keyexpr) -> Option<Box<dyn Any + Send + Sync>> {
         Some(Box::new(
             self.interceptors
                 .iter()
@@ -165,24 +165,21 @@ impl InterceptorTrait for InterceptorsChain {
 
     fn intercept<'a>(
         &self,
-        mut ctx: RoutingContext<NetworkMessage>,
+        ctx: &mut RoutingContext<NetworkMessageMut>,
         caches: Option<&Box<dyn Any + Send + Sync>>,
-    ) -> Option<RoutingContext<NetworkMessage>> {
+    ) -> bool {
         let caches =
             caches.and_then(|i| i.downcast_ref::<Vec<Option<Box<dyn Any + Send + Sync>>>>());
         for (idx, interceptor) in self.interceptors.iter().enumerate() {
             let cache = caches
                 .and_then(|caches| caches.get(idx).map(|k| k.as_ref()))
                 .flatten();
-            match interceptor.intercept(ctx, cache) {
-                Some(newctx) => ctx = newctx,
-                None => {
-                    tracing::trace!("Msg intercepted!");
-                    return None;
-                }
+            if !interceptor.intercept(ctx, cache) {
+                tracing::trace!("Msg intercepted!");
+                return false;
             }
         }
-        Some(ctx)
+        true
     }
 }
 
@@ -199,25 +196,21 @@ impl<T: InterceptorTrait> ComputeOnMiss<T> {
 
 impl<T: InterceptorTrait> InterceptorTrait for ComputeOnMiss<T> {
     #[inline]
-    fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
+    fn compute_keyexpr_cache(&self, key_expr: &keyexpr) -> Option<Box<dyn Any + Send + Sync>> {
         self.interceptor.compute_keyexpr_cache(key_expr)
     }
 
     #[inline]
     fn intercept<'a>(
         &self,
-        ctx: RoutingContext<NetworkMessage>,
+        ctx: &mut RoutingContext<NetworkMessageMut>,
         cache: Option<&Box<dyn Any + Send + Sync>>,
-    ) -> Option<RoutingContext<NetworkMessage>> {
+    ) -> bool {
         if cache.is_some() {
             self.interceptor.intercept(ctx, cache)
-        } else if let Some(key_expr) = ctx.full_key_expr() {
-            self.interceptor.intercept(
-                ctx,
-                self.interceptor
-                    .compute_keyexpr_cache(&key_expr.into())
-                    .as_ref(),
-            )
+        } else if let Some(key_expr) = ctx.full_keyexpr() {
+            let cache = self.interceptor.compute_keyexpr_cache(key_expr);
+            self.interceptor.intercept(ctx, cache.as_ref())
         } else {
             self.interceptor.intercept(ctx, cache)
         }
@@ -228,15 +221,15 @@ impl<T: InterceptorTrait> InterceptorTrait for ComputeOnMiss<T> {
 pub(crate) struct IngressMsgLogger {}
 
 impl InterceptorTrait for IngressMsgLogger {
-    fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
-        Some(Box::new(key_expr.to_string()))
+    fn compute_keyexpr_cache(&self, key_expr: &keyexpr) -> Option<Box<dyn Any + Send + Sync>> {
+        Some(Box::new(OwnedKeyExpr::from(key_expr)))
     }
 
     fn intercept(
         &self,
-        ctx: RoutingContext<NetworkMessage>,
+        ctx: &mut RoutingContext<NetworkMessageMut>,
         cache: Option<&Box<dyn Any + Send + Sync>>,
-    ) -> Option<RoutingContext<NetworkMessage>> {
+    ) -> bool {
         let expr = cache
             .and_then(|i| i.downcast_ref::<String>().map(|e| e.as_str()))
             .or_else(|| ctx.full_expr());
@@ -249,7 +242,7 @@ impl InterceptorTrait for IngressMsgLogger {
             ctx.msg,
             expr,
         );
-        Some(ctx)
+        true
     }
 }
 
@@ -257,15 +250,15 @@ impl InterceptorTrait for IngressMsgLogger {
 pub(crate) struct EgressMsgLogger {}
 
 impl InterceptorTrait for EgressMsgLogger {
-    fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
-        Some(Box::new(key_expr.to_string()))
+    fn compute_keyexpr_cache(&self, key_expr: &keyexpr) -> Option<Box<dyn Any + Send + Sync>> {
+        Some(Box::new(OwnedKeyExpr::from(key_expr)))
     }
 
     fn intercept(
         &self,
-        ctx: RoutingContext<NetworkMessage>,
+        ctx: &mut RoutingContext<NetworkMessageMut>,
         cache: Option<&Box<dyn Any + Send + Sync>>,
-    ) -> Option<RoutingContext<NetworkMessage>> {
+    ) -> bool {
         let expr = cache
             .and_then(|i| i.downcast_ref::<String>().map(|e| e.as_str()))
             .or_else(|| ctx.full_expr());
@@ -277,7 +270,7 @@ impl InterceptorTrait for EgressMsgLogger {
             ctx.msg,
             expr
         );
-        Some(ctx)
+        true
     }
 }
 

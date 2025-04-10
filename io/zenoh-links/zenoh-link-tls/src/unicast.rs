@@ -30,12 +30,12 @@ use tokio::{
 use tokio_rustls::{TlsAcceptor, TlsConnector, TlsStream};
 use tokio_util::sync::CancellationToken;
 use x509_parser::prelude::{FromDer, X509Certificate};
-use zenoh_core::zasynclock;
+use zenoh_core::{bail, zasynclock};
 use zenoh_link_commons::{
     get_ip_interface_names,
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
-    NewLinkChannelSender,
+    NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -323,6 +323,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let server_name = get_tls_server_name(&epaddr)?;
         let addr = get_tls_addr(&epaddr).await?;
 
+        // if both `iface`, and `bind` are present, return error
+        if let (Some(_), Some(_)) = (epconf.get(BIND_INTERFACE), epconf.get(BIND_SOCKET)) {
+            bail!(
+                "Using Config options `iface` and `bind` in conjunction is unsupported at this time {} {:?}",
+                BIND_INTERFACE,
+                BIND_SOCKET
+            )
+        }
+
         // Initialize the TLS Config
         let client_config = TlsClientConfig::new(&epconf)
             .await
@@ -376,8 +385,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             }
             LinkUnicastTls::new(
                 tls_stream,
-                dst_addr,
                 src_addr,
+                dst_addr,
                 auth_identifier.into(),
                 expiration_manager,
             )
@@ -526,8 +535,8 @@ async fn accept_task(
                             }
                             LinkUnicastTls::new(
                                 tokio_rustls::TlsStream::Server(tls_stream),
-                                dst_addr,
                                 src_addr,
+                                dst_addr,
                                 auth_identifier.into(),
                                 expiration_manager,
                             )

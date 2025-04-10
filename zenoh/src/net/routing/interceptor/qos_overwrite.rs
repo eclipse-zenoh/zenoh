@@ -26,7 +26,7 @@ use zenoh_config::{
 };
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, IKeyExprTreeNode, KeBoxTree};
 use zenoh_protocol::{
-    network::{NetworkBody, Push, Request, Response},
+    network::{NetworkBodyMut, Push, Request, Response},
     zenoh::PushBody,
 };
 use zenoh_result::ZResult;
@@ -186,7 +186,7 @@ struct Cache {
 }
 
 impl QosInterceptor {
-    fn is_ke_affected(&self, ke: &KeyExpr) -> bool {
+    fn is_ke_affected(&self, ke: &keyexpr) -> bool {
         self.keys.nodes_including(ke).any(|n| n.weight().is_some())
     }
 
@@ -210,19 +210,19 @@ impl QosInterceptor {
     fn is_ke_affected_from_cache_or_ctx(
         &self,
         cache: Option<&Cache>,
-        ctx: &RoutingContext<NetworkMessage>,
+        ctx: &RoutingContext<NetworkMessageMut<'_>>,
     ) -> bool {
         cache.map(|v| v.is_ke_affected).unwrap_or_else(|| {
-            ctx.full_key_expr()
+            ctx.full_keyexpr()
                 .as_ref()
-                .map(|ke| self.is_ke_affected(&ke.into()))
+                .map(|ke| self.is_ke_affected(ke))
                 .unwrap_or(false)
         })
     }
 }
 
 impl InterceptorTrait for QosInterceptor {
-    fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
+    fn compute_keyexpr_cache(&self, key_expr: &keyexpr) -> Option<Box<dyn Any + Send + Sync>> {
         let cache = Cache {
             is_ke_affected: self.is_ke_affected(key_expr),
         };
@@ -231,9 +231,9 @@ impl InterceptorTrait for QosInterceptor {
 
     fn intercept(
         &self,
-        mut ctx: RoutingContext<NetworkMessage>,
+        ctx: &mut RoutingContext<NetworkMessageMut<'_>>,
         cache: Option<&Box<dyn Any + Send + Sync>>,
-    ) -> Option<RoutingContext<NetworkMessage>> {
+    ) -> bool {
         let cache = cache.and_then(|i| match i.downcast_ref::<Cache>() {
             Some(c) => Some(c),
             None => {
@@ -243,44 +243,44 @@ impl InterceptorTrait for QosInterceptor {
         });
 
         let should_overwrite = match &ctx.msg.body {
-            NetworkBody::Push(Push {
+            NetworkBodyMut::Push(Push {
                 payload: PushBody::Put(_),
                 ..
-            }) => self.filter.put && self.is_ke_affected_from_cache_or_ctx(cache, &ctx),
-            NetworkBody::Push(Push {
+            }) => self.filter.put && self.is_ke_affected_from_cache_or_ctx(cache, ctx),
+            NetworkBodyMut::Push(Push {
                 payload: PushBody::Del(_),
                 ..
-            }) => self.filter.delete && self.is_ke_affected_from_cache_or_ctx(cache, &ctx),
-            NetworkBody::Request(_) => {
-                self.filter.query && self.is_ke_affected_from_cache_or_ctx(cache, &ctx)
+            }) => self.filter.delete && self.is_ke_affected_from_cache_or_ctx(cache, ctx),
+            NetworkBodyMut::Request(_) => {
+                self.filter.query && self.is_ke_affected_from_cache_or_ctx(cache, ctx)
             }
-            NetworkBody::Response(_) => {
-                self.filter.reply && self.is_ke_affected_from_cache_or_ctx(cache, &ctx)
+            NetworkBodyMut::Response(_) => {
+                self.filter.reply && self.is_ke_affected_from_cache_or_ctx(cache, ctx)
             }
-            NetworkBody::ResponseFinal(_) => false,
-            NetworkBody::Interest(_) => false,
-            NetworkBody::Declare(_) => false,
-            NetworkBody::OAM(_) => false,
+            NetworkBodyMut::ResponseFinal(_) => false,
+            NetworkBodyMut::Interest(_) => false,
+            NetworkBodyMut::Declare(_) => false,
+            NetworkBodyMut::OAM(_) => false,
         };
         if !should_overwrite {
-            return Some(ctx);
+            return true;
         }
 
         match &mut ctx.msg.body {
-            NetworkBody::Request(Request { ext_qos, .. }) => {
+            NetworkBodyMut::Request(Request { ext_qos, .. }) => {
                 self.overwrite_qos(QosOverwriteMessage::Query, ext_qos);
             }
-            NetworkBody::Response(Response { ext_qos, .. }) => {
+            NetworkBodyMut::Response(Response { ext_qos, .. }) => {
                 self.overwrite_qos(QosOverwriteMessage::Reply, ext_qos);
             }
-            NetworkBody::Push(Push {
+            NetworkBodyMut::Push(Push {
                 payload: PushBody::Put(_),
                 ext_qos,
                 ..
             }) => {
                 self.overwrite_qos(QosOverwriteMessage::Put, ext_qos);
             }
-            NetworkBody::Push(Push {
+            NetworkBodyMut::Push(Push {
                 payload: PushBody::Del(_),
                 ext_qos,
                 ..
@@ -288,11 +288,11 @@ impl InterceptorTrait for QosInterceptor {
                 self.overwrite_qos(QosOverwriteMessage::Delete, ext_qos);
             }
             // unaffected message types
-            NetworkBody::ResponseFinal(_) => {}
-            NetworkBody::Declare(_) => {}
-            NetworkBody::Interest(_) => {}
-            NetworkBody::OAM(_) => {}
+            NetworkBodyMut::ResponseFinal(_) => {}
+            NetworkBodyMut::Declare(_) => {}
+            NetworkBodyMut::Interest(_) => {}
+            NetworkBodyMut::OAM(_) => {}
         }
-        Some(ctx)
+        true
     }
 }

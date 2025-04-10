@@ -31,7 +31,7 @@ use zenoh_protocol::{
             ext::{NodeIdType, QoSType},
             Push,
         },
-        NetworkMessage,
+        NetworkMessage, NetworkMessageMut,
     },
     zenoh::Put,
 };
@@ -131,7 +131,7 @@ impl SCClient {
 }
 
 impl TransportPeerEventHandler for SCClient {
-    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: NetworkMessageMut) -> ZResult<()> {
         self.counter.fetch_add(1, Ordering::AcqRel);
         Ok(())
     }
@@ -340,7 +340,7 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
                             assert_eq!(ll.len(), 1);
                         }
                     }
-                    let res = s.schedule(message.clone());
+                    let res = s.schedule(message.clone().as_mut());
                     if res.is_err() {
                         print!("X");
                         std::io::stdout().flush().unwrap();

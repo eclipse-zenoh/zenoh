@@ -252,7 +252,7 @@ impl Resolvable for ReplyErrBuilder<'_> {
 
 impl Wait for ReplyErrBuilder<'_> {
     fn wait(self) -> <Self as Resolvable>::To {
-        self.query.inner.primitives.send_response(Response {
+        self.query.inner.primitives.send_response(&mut Response {
             rid: self.query.inner.qid,
             wire_expr: WireExpr {
                 scope: 0,

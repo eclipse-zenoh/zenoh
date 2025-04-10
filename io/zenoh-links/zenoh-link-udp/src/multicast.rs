@@ -15,6 +15,7 @@ use std::{
     borrow::Cow,
     fmt,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    str::FromStr,
     sync::Arc,
 };
 
@@ -22,7 +23,7 @@ use async_trait::async_trait;
 use socket2::{Domain, Protocol, Socket, Type};
 use tokio::net::UdpSocket;
 use zenoh_link_commons::{
-    LinkAuthId, LinkManagerMulticastTrait, LinkMulticast, LinkMulticastTrait,
+    LinkAuthId, LinkManagerMulticastTrait, LinkMulticast, LinkMulticastTrait, BIND_SOCKET,
 };
 use zenoh_protocol::{
     core::{Config, EndPoint, Locator},
@@ -187,35 +188,60 @@ impl LinkManagerMulticastUdp {
         &self,
         mcast_addr: &SocketAddr,
         config: Config<'_>,
+        bind_socket: Option<&str>,
     ) -> ZResult<(UdpSocket, UdpSocket, SocketAddr)> {
         let domain = match mcast_addr.ip() {
             IpAddr::V4(_) => Domain::IPV4,
             IpAddr::V6(_) => Domain::IPV6,
         };
 
-        // Get default iface address to bind the socket on if provided
-        let mut iface_addr: Option<IpAddr> = None;
-        if let Some(iface) = config.get(UDP_MULTICAST_IFACE) {
-            iface_addr = match iface.parse() {
-                Ok(addr) => Some(addr),
-                Err(_) => zenoh_util::net::get_unicast_addresses_of_interface(iface)?
-                    .into_iter()
-                    .filter(|x| match mcast_addr.ip() {
-                        IpAddr::V4(_) => x.is_ipv4(),
-                        IpAddr::V6(_) => x.is_ipv6(),
-                    })
-                    .take(1)
-                    .collect::<Vec<IpAddr>>()
-                    .first()
-                    .copied(),
-            };
-        }
-
         // Get local unicast address to bind the socket on
-        let local_addr = match iface_addr {
-            Some(iface_addr) => iface_addr,
-            None => {
-                let iface = zenoh_util::net::get_unicast_addresses_of_multicast_interfaces()
+        let mut local_addr = if let Some(bind_socket) = bind_socket {
+            let bind_addr = SocketAddr::from_str(bind_socket)?;
+            match (bind_addr, mcast_addr) {
+                (SocketAddr::V6(local), SocketAddr::V4(dest)) => {
+                    return Err(Box::from(format!(
+                        "Protocols must match: Cannot bind to IPv6 {} and join IPv4 {}",
+                        local, dest
+                    )));
+                }
+                (SocketAddr::V4(local), SocketAddr::V6(dest)) => {
+                    return Err(Box::from(format!(
+                        "Protocols must match: Cannot bind to IPv4 {} and join IPv6 {}",
+                        local, dest
+                    )));
+                }
+                _ => bind_addr, // No issue here
+            }
+        } else if mcast_addr.is_ipv4() {
+            SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0)
+        } else {
+            SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0)
+        };
+        if local_addr.ip() == IpAddr::V4(Ipv4Addr::UNSPECIFIED)
+            || local_addr.ip() == IpAddr::V6(Ipv6Addr::UNSPECIFIED)
+        {
+            // Get default iface address to bind the socket on if provided
+            let mut iface_addr: Option<IpAddr> = None;
+            if let Some(iface) = config.get(UDP_MULTICAST_IFACE) {
+                iface_addr = match iface.parse() {
+                    Ok(addr) => Some(addr),
+                    Err(_) => zenoh_util::net::get_unicast_addresses_of_interface(iface)?
+                        .into_iter()
+                        .filter(|x| match mcast_addr.ip() {
+                            IpAddr::V4(_) => x.is_ipv4(),
+                            IpAddr::V6(_) => x.is_ipv6(),
+                        })
+                        .take(1)
+                        .collect::<Vec<IpAddr>>()
+                        .first()
+                        .copied(),
+                };
+            }
+            if let Some(iface_addr) = iface_addr {
+                local_addr.set_ip(iface_addr);
+            } else if let Some(iface_addr) =
+                zenoh_util::net::get_unicast_addresses_of_multicast_interfaces()
                     .into_iter()
                     .filter(|x| {
                         !x.is_loopback()
@@ -227,28 +253,22 @@ impl LinkManagerMulticastUdp {
                     .take(1)
                     .collect::<Vec<IpAddr>>()
                     .first()
-                    .copied();
-
-                match iface {
-                    Some(iface) => iface,
-                    None => match mcast_addr.ip() {
-                        IpAddr::V4(_) => IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-                        IpAddr::V6(_) => IpAddr::V6(Ipv6Addr::UNSPECIFIED),
-                    },
-                }
+                    .copied()
+            {
+                local_addr.set_ip(iface_addr);
             }
-        };
+        }
 
         // Establish a unicast UDP socket
         let ucast_sock = Socket::new(domain, Type::DGRAM, Some(Protocol::UDP))
             .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
-        match &local_addr {
+        match &local_addr.ip() {
             IpAddr::V4(addr) => {
                 ucast_sock
                     .set_multicast_if_v4(addr)
                     .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
             }
-            IpAddr::V6(_) => match zenoh_util::net::get_index_of_interface(local_addr) {
+            IpAddr::V6(_) => match zenoh_util::net::get_index_of_interface(local_addr.ip()) {
                 Ok(idx) => ucast_sock
                     .set_multicast_if_v6(idx)
                     .map_err(|e| zerror!("{}: {}", mcast_addr, e))?,
@@ -257,7 +277,7 @@ impl LinkManagerMulticastUdp {
         }
 
         ucast_sock
-            .bind(&SocketAddr::new(local_addr, 0).into())
+            .bind(&local_addr.into())
             .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
 
         // Must set to nonblocking according to the doc of tokio
@@ -291,7 +311,7 @@ impl LinkManagerMulticastUdp {
         // Join the multicast group
         let join = config.values(UDP_MULTICAST_JOIN);
         match mcast_addr.ip() {
-            IpAddr::V4(dst_ip4) => match local_addr {
+            IpAddr::V4(dst_ip4) => match local_addr.ip() {
                 IpAddr::V4(src_ip4) => {
                     // Join default multicast group
                     mcast_sock
@@ -329,7 +349,7 @@ impl LinkManagerMulticastUdp {
 
         // If TTL is specified, add set the socket's TTL
         if let Some(ttl_str) = config.get(UDP_MULTICAST_TTL) {
-            match &local_addr {
+            match &local_addr.ip() {
                 IpAddr::V4(_) => {
                     let ttl = match ttl_str.parse::<u32>() {
                         Ok(ttl) => ttl,
@@ -355,7 +375,7 @@ impl LinkManagerMulticastUdp {
         let ucast_addr = ucast_sock
             .local_addr()
             .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
-        assert_eq!(ucast_addr.ip(), local_addr);
+        assert_eq!(ucast_addr.ip(), local_addr.ip());
 
         Ok((mcast_sock, ucast_sock, ucast_addr))
     }
@@ -368,10 +388,15 @@ impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
             .await?
             .filter(|a| a.ip().is_multicast())
             .collect::<Vec<SocketAddr>>();
+        let config = endpoint.config();
+        let bind_socket = config.get(BIND_SOCKET);
 
         let mut errs: Vec<ZError> = vec![];
         for maddr in mcast_addrs {
-            match self.new_link_inner(&maddr, endpoint.config()).await {
+            match self
+                .new_link_inner(&maddr, endpoint.config(), bind_socket)
+                .await
+            {
                 Ok((mcast_sock, ucast_sock, ucast_addr)) => {
                     let link = Arc::new(LinkMulticastUdp::new(
                         ucast_addr, ucast_sock, maddr, mcast_sock,

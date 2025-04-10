@@ -33,7 +33,7 @@ use zenoh_config::{QueueAllocConf, QueueAllocMode, QueueSizeConf};
 use zenoh_core::zlock;
 use zenoh_protocol::{
     core::Priority,
-    network::NetworkMessage,
+    network::{NetworkMessageExt, NetworkMessageRef},
     transport::{
         fragment,
         fragment::FragmentHeader,
@@ -167,17 +167,27 @@ impl WaitTime {
     }
 
     fn advance(&mut self, instant: &mut Instant) {
+        // grow wait_time exponentially
+        self.wait_time = self.wait_time.saturating_mul(2);
+
+        // check for waiting limits
         match &mut self.max_wait_time {
+            // if we have reached the waiting limit, we do not increase wait instant
+            Some(max_wait_time) if *max_wait_time == Duration::ZERO => {
+                tracing::trace!("Backoff increase limit reached")
+            }
+            // if the leftover of waiting time is less than next iteration, we select leftover
+            Some(max_wait_time) if *max_wait_time <= self.wait_time => {
+                *instant += *max_wait_time;
+                *max_wait_time = Duration::ZERO;
+            }
+            // if the leftover of waiting time is bigger than next iteration, select next iteration
             Some(max_wait_time) => {
-                if let Some(new_max_wait_time) = max_wait_time.checked_sub(self.wait_time) {
-                    *instant += self.wait_time;
-                    *max_wait_time = new_max_wait_time;
-                    self.wait_time *= 2;
-                }
-            }
-            None => {
                 *instant += self.wait_time;
+                *max_wait_time -= self.wait_time;
             }
+            // just select next iteration without checking the upper limit
+            None => {}
         }
     }
 
@@ -263,7 +273,7 @@ struct StageIn {
 impl StageIn {
     fn push_network_message(
         &mut self,
-        msg: &NetworkMessage,
+        msg: NetworkMessageRef,
         priority: Priority,
         deadline: &mut Deadline,
     ) -> Result<bool, TransportClosed> {
@@ -798,7 +808,7 @@ impl TransmissionPipelineProducer {
     #[inline]
     pub(crate) fn push_network_message(
         &self,
-        msg: NetworkMessage,
+        msg: NetworkMessageRef,
     ) -> Result<bool, TransportClosed> {
         // If the queue is not QoS, it means that we only have one priority with index 0.
         let (idx, priority) = if self.stage_in.len() > 1 {
@@ -825,14 +835,14 @@ impl TransmissionPipelineProducer {
         if msg.is_droppable() && self.status.is_congested(priority) {
             return Ok(false);
         }
-        let mut sent = queue.push_network_message(&msg, priority, &mut deadline)?;
+        let mut sent = queue.push_network_message(msg, priority, &mut deadline)?;
         // If the message cannot be sent, mark the pipeline as congested.
         if !sent {
             self.status.set_congested(priority, true);
             // During the time between deadline wakeup and setting the congested flag,
             // all batches could have been refilled (especially if there is a single one),
             // so try again with the same already expired deadline.
-            sent = queue.push_network_message(&msg, priority, &mut deadline)?;
+            sent = queue.push_network_message(msg, priority, &mut deadline)?;
             // If the message is sent in the end, reset the status.
             // Setting the status to `true` is only done with the stage_in mutex acquired,
             // so it is not possible that further messages see the congestion flag set
@@ -985,7 +995,7 @@ mod tests {
     use zenoh_config::{QueueAllocConf, QueueAllocMode};
     use zenoh_protocol::{
         core::{Bits, CongestionControl, Encoding, Priority, Reliability},
-        network::{ext, Push},
+        network::{ext, NetworkMessage, Push},
         transport::{BatchSize, Fragment, Frame, TransportBody, TransportSn},
         zenoh::{PushBody, Put},
     };
@@ -1063,7 +1073,7 @@ mod tests {
                     "Pipeline Flow [>>>]: Pushed {} msgs ({payload_size} bytes)",
                     i + 1
                 );
-                queue.push_network_message(message.clone()).unwrap();
+                queue.push_network_message(message.as_ref()).unwrap();
             }
         }
 
@@ -1192,7 +1202,7 @@ mod tests {
                 println!(
                     "Pipeline Blocking [>>>]: ({id}) Scheduling message #{i} with payload size of {payload_size} bytes"
                 );
-                queue.push_network_message(message.clone()).unwrap();
+                queue.push_network_message(message.as_ref()).unwrap();
                 let c = counter.fetch_add(1, Ordering::AcqRel);
                 println!(
                     "Pipeline Blocking [>>>]: ({}) Scheduled message #{} (tot {}) with payload size of {} bytes",
@@ -1306,7 +1316,7 @@ mod tests {
                     let duration = Duration::from_millis(5_500);
                     let start = Instant::now();
                     while start.elapsed() < duration {
-                        producer.push_network_message(message.clone()).unwrap();
+                        producer.push_network_message(message.as_ref()).unwrap();
                     }
                 }
             }
@@ -1362,9 +1372,9 @@ mod tests {
         }
         .into();
         // First message should not be rejected as the is one batch available in the queue
-        assert!(producer.push_network_message(message.clone()).is_ok());
+        assert!(producer.push_network_message(message.as_ref()).is_ok());
         // Second message should be rejected
-        assert!(producer.push_network_message(message.clone()).is_err());
+        assert!(producer.push_network_message(message.as_ref()).is_err());
 
         Ok(())
     }

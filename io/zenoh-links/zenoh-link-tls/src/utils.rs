@@ -33,7 +33,7 @@ use webpki::anchor_from_trusted_cert;
 use zenoh_config::Config as ZenohConfig;
 use zenoh_link_commons::{
     tcp::TcpSocketConfig, tls::WebPkiVerifierAnyServerName, ConfigurationInspector, BIND_INTERFACE,
-    TCP_SO_RCV_BUF, TCP_SO_SND_BUF,
+    BIND_SOCKET, TCP_SO_RCV_BUF, TCP_SO_SND_BUF,
 };
 use zenoh_protocol::core::{
     endpoint::{Address, Config},
@@ -271,6 +271,10 @@ impl<'a> TlsServerConfig<'a> {
                     .map_err(|_| zerror!("Unknown TCP write buffer size argument: {}", size))?,
             );
         };
+        let mut bind_socket = None;
+        if let Some(bind_socket_str) = config.get(BIND_SOCKET) {
+            bind_socket = Some(get_tls_addr(&Address::from(bind_socket_str)).await?);
+        };
 
         Ok(TlsServerConfig {
             server_config: sc,
@@ -280,6 +284,7 @@ impl<'a> TlsServerConfig<'a> {
                 tcp_tx_buffer_size,
                 tcp_rx_buffer_size,
                 config.get(BIND_INTERFACE),
+                bind_socket,
             ),
         })
     }
@@ -439,6 +444,11 @@ impl<'a> TlsClientConfig<'a> {
             );
         };
 
+        let mut bind_socket = None;
+        if let Some(bind_socket_str) = config.get(BIND_SOCKET) {
+            bind_socket = Some(get_tls_addr(&Address::from(bind_socket_str)).await?);
+        };
+
         Ok(TlsClientConfig {
             client_config: cc,
             tls_close_link_on_expiration,
@@ -446,6 +456,7 @@ impl<'a> TlsClientConfig<'a> {
                 tcp_tx_buffer_size,
                 tcp_rx_buffer_size,
                 config.get(BIND_INTERFACE),
+                bind_socket,
             ),
         })
     }

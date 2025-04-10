@@ -31,7 +31,7 @@ use zenoh_protocol::{
     },
     network::{
         push::ext::{NodeIdType, QoSType},
-        NetworkMessage, Push,
+        NetworkMessage, NetworkMessageMut, Push,
     },
     zenoh::Put,
 };
@@ -231,13 +231,18 @@ const SLEEP: Duration = Duration::from_secs(1);
 const SLEEP_COUNT: Duration = Duration::from_millis(10);
 
 const MSG_COUNT: usize = 1_000;
-const MSG_SIZE_ALL: [usize; 2] = [1_024, 131_072];
+const MSG_SIZE_ALL: [usize; 3] = [1_024, 131_072, 100 * 1024 * 1024];
 #[cfg(any(
     feature = "transport_tcp",
     feature = "transport_udp",
     feature = "transport_unixsock-stream",
 ))]
 const MSG_SIZE_NOFRAG: [usize; 1] = [1_024];
+#[cfg(any(
+    feature = "transport_tcp",
+    feature = "transport_udp",
+    feature = "transport_unixsock-stream",
+))]
 const MSG_SIZE_LOWLATENCY: [usize; 1] = MSG_SIZE_NOFRAG;
 
 // Transport Handler for the router
@@ -289,7 +294,7 @@ impl SCRouter {
 }
 
 impl TransportPeerEventHandler for SCRouter {
-    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: NetworkMessageMut) -> ZResult<()> {
         self.count.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
@@ -329,7 +334,7 @@ impl TransportEventHandler for SHClient {
 pub struct SCClient;
 
 impl TransportPeerEventHandler for SCClient {
-    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: NetworkMessageMut) -> ZResult<()> {
         Ok(())
     }
 
@@ -459,9 +464,15 @@ async fn test_transport(
     channel: Channel,
     msg_size: usize,
 ) {
+    let msg_count = if msg_size > 1024 * 1024 {
+        10
+    } else {
+        MSG_COUNT
+    };
+
     println!(
         "Sending {} messages... {:?} {}",
-        MSG_COUNT, channel, msg_size
+        msg_count, channel, msg_size
     );
     let cctrl = match channel.reliability {
         Reliability::Reliable => CongestionControl::Block,
@@ -488,26 +499,28 @@ async fn test_transport(
     }
     .into();
 
-    for _ in 0..MSG_COUNT {
-        let _ = client_transport.schedule(message.clone());
+    for _ in 0..msg_count {
+        let _ = client_transport.schedule(message.clone().as_mut());
     }
 
-    match channel.reliability {
-        Reliability::Reliable => {
-            ztimeout!(async {
-                while router_handler.get_count() != MSG_COUNT {
+    ztimeout!(async {
+        match channel.reliability {
+            Reliability::Reliable => {
+                while router_handler.get_count() != msg_count {
                     tokio::time::sleep(SLEEP_COUNT).await;
                 }
-            });
-        }
-        Reliability::BestEffort => {
-            ztimeout!(async {
-                while router_handler.get_count() == 0 {
+            }
+            Reliability::BestEffort => {
+                if msg_size > 1024 * 1024 {
                     tokio::time::sleep(SLEEP_COUNT).await;
+                } else {
+                    while router_handler.get_count() == 0 {
+                        tokio::time::sleep(SLEEP_COUNT).await;
+                    }
                 }
-            });
-        }
-    };
+            }
+        };
+    });
 
     // Wait a little bit
     tokio::time::sleep(SLEEP).await;
