@@ -27,12 +27,12 @@ description = "Internal crate for zenoh."
 default = ["std"]
 internal = []
 std = [
-  "rand?/std",
-  "rand?/std_rng",
-  "serde/std",
-  "uhlc/std",
-  "zenoh-keyexpr/std",
-  "zenoh-result/std",
+    "rand?/std",
+    "rand?/std_rng",
+    "serde/std",
+    "uhlc/std",
+    "zenoh-keyexpr/std",
+    "zenoh-result/std",
 ]
 shared-memory = ["std", "zenoh-buffers/shared-memory"]
 test = ["rand", "zenoh-buffers/test"]

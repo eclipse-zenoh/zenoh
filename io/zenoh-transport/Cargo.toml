@@ -26,10 +26,10 @@ description = "Internal crate for zenoh."
 
 [features]
 shared-memory = [
-  "zenoh-protocol/shared-memory",
-  "zenoh-shm",
-  "zenoh-codec/shared-memory",
-  "zenoh-buffers/shared-memory",
+    "zenoh-protocol/shared-memory",
+    "zenoh-shm",
+    "zenoh-codec/shared-memory",
+    "zenoh-buffers/shared-memory",
 ]
 auth_pubkey = ["transport_auth", "rsa"]
 auth_usrpwd = ["transport_auth"]
@@ -54,13 +54,13 @@ default = ["test", "transport_multilink"]
 async-trait = { workspace = true }
 crossbeam-utils = { workspace = true }
 tokio = { workspace = true, features = [
-  "sync",
-  "fs",
-  "time",
-  "macros",
-  "rt-multi-thread",
-  "io-util",
-  "net",
+    "sync",
+    "fs",
+    "time",
+    "macros",
+    "rt-multi-thread",
+    "io-util",
+    "net",
 ] }
 lazy_static = { workspace = true }
 tokio-util = { workspace = true, features = ["rt"] }
