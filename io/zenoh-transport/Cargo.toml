@@ -26,10 +26,10 @@ description = "Internal crate for zenoh."
 
 [features]
 shared-memory = [
-    "zenoh-protocol/shared-memory",
-    "zenoh-shm",
-    "zenoh-codec/shared-memory",
-    "zenoh-buffers/shared-memory",
+  "zenoh-protocol/shared-memory",
+  "zenoh-shm",
+  "zenoh-codec/shared-memory",
+  "zenoh-buffers/shared-memory",
 ]
 auth_pubkey = ["transport_auth", "rsa"]
 auth_usrpwd = ["transport_auth"]
@@ -44,8 +44,8 @@ transport_ws = ["zenoh-link/transport_ws"]
 transport_serial = ["zenoh-link/transport_serial"]
 transport_compression = []
 transport_unixpipe = ["zenoh-link/transport_unixpipe"]
-transport_vsock= ["zenoh-link/transport_vsock"]
-stats = ["zenoh-protocol/stats"]
+transport_vsock = ["zenoh-link/transport_vsock"]
+stats = []
 test = []
 unstable = []
 default = ["test", "transport_multilink"]
@@ -63,9 +63,9 @@ tokio = { workspace = true, features = [
   "net",
 ] }
 lazy_static = { workspace = true }
-tokio-util = { workspace = true, features = ["rt"]}
+tokio-util = { workspace = true, features = ["rt"] }
 flume = { workspace = true }
-tracing = {workspace = true}
+tracing = { workspace = true }
 lz4_flex = { workspace = true }
 paste = { workspace = true }
 rand = { workspace = true, features = ["default"] }
@@ -91,7 +91,7 @@ zenoh-task = { workspace = true }
 
 [dev-dependencies]
 futures-util = { workspace = true }
-zenoh-util = {workspace = true }
+zenoh-util = { workspace = true }
 zenoh-protocol = { workspace = true, features = ["test"] }
 futures = { workspace = true }
 zenoh-link-commons = { workspace = true }
