@@ -20,10 +20,7 @@
 use std::{
     any::Any,
     num::NonZeroUsize,
-    sync::{
-        atomic::{AtomicPtr, Ordering},
-        Arc,
-    },
+    sync::atomic::{AtomicPtr, Ordering},
 };
 
 use api::common::types::ProtocolID;
@@ -94,7 +91,7 @@ impl ShmBufInfo {
 
 /// A zenoh buffer in shared memory.
 pub struct ShmBufInner {
-    pub(crate) metadata: Arc<ConfirmedDescriptor>,
+    pub(crate) metadata: ConfirmedDescriptor,
     pub(crate) buf: AtomicPtr<u8>,
     pub info: ShmBufInfo,
 }
