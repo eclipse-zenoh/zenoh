@@ -17,8 +17,8 @@ use std::{
     fmt, mem,
     ops::Deref,
     sync::{
-        atomic::{AtomicU16, Ordering},
-        Arc, Mutex, RwLock,
+        atomic::{AtomicU16, AtomicUsize, Ordering},
+        Arc, RwLock,
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -527,7 +527,7 @@ impl<T, S> Undeclarable<S> for T where T: UndeclarableSealed<S> {}
 
 pub(crate) struct SessionInner {
     /// See [`WeakSession`] doc
-    weak_counter: Mutex<usize>,
+    strong_counter: AtomicUsize,
     pub(crate) runtime: Runtime,
     pub(crate) state: RwLock<SessionState>,
     pub(crate) id: u16,
@@ -582,16 +582,14 @@ impl fmt::Debug for Session {
 
 impl Clone for Session {
     fn clone(&self) -> Self {
-        let _weak = self.0.weak_counter.lock().unwrap();
+        self.0.strong_counter.fetch_add(1, Ordering::Relaxed);
         Self(self.0.clone())
     }
 }
 
 impl Drop for Session {
     fn drop(&mut self) {
-        let weak = self.0.weak_counter.lock().unwrap();
-        if Arc::strong_count(&self.0) == *weak + /* the `Arc` currently dropped */ 1 {
-            drop(weak);
+        if self.0.strong_counter.fetch_sub(1, Ordering::Relaxed) == 1 {
             if let Err(error) = self.close().wait() {
                 tracing::error!(error)
             }
@@ -605,34 +603,19 @@ impl Drop for Session {
 /// When all `Session` instance are dropped, [`Session::close`] is be called and cleans
 /// the reference cycles, allowing the underlying `Arc` to be properly reclaimed.
 ///
-/// The pseudo-weak algorithm relies on a counter wrapped in a mutex. It was indeed the simplest
-/// to implement it, because atomic manipulations to achieve this semantic would not have been
-/// trivial at all — what could happen if a pseudo-weak is cloned while the last session instance
-/// is dropped? With a mutex, it's simple, and it works perfectly fine, as we don't care about the
-/// performance penalty when it comes to session entities cloning/dropping.
-///
 /// (Although it was planed to be used initially, `Weak` was in fact causing errors in the session
 /// closing, because the primitive implementation seemed to be used in the closing operation.)
+#[derive(Clone)]
 pub(crate) struct WeakSession(Arc<SessionInner>);
 
 impl WeakSession {
     fn new(session: &Arc<SessionInner>) -> Self {
-        let mut weak = session.weak_counter.lock().unwrap();
-        *weak += 1;
         Self(session.clone())
     }
 
     #[zenoh_macros::internal]
     pub(crate) fn session(&self) -> &Session {
         Session::ref_cast(&self.0)
-    }
-}
-
-impl Clone for WeakSession {
-    fn clone(&self) -> Self {
-        let mut weak = self.0.weak_counter.lock().unwrap();
-        *weak += 1;
-        Self(self.0.clone())
     }
 }
 
@@ -647,13 +630,6 @@ impl Deref for WeakSession {
 
     fn deref(&self) -> &Self::Target {
         &self.0
-    }
-}
-
-impl Drop for WeakSession {
-    fn drop(&mut self) {
-        let mut weak = self.0.weak_counter.lock().unwrap();
-        *weak -= 1;
     }
 }
 
@@ -692,7 +668,7 @@ impl Session {
                 publisher_qos.into(),
             ));
             let session = Session(Arc::new(SessionInner {
-                weak_counter: Mutex::new(0),
+                strong_counter: AtomicUsize::new(1),
                 runtime: runtime.clone(),
                 state,
                 id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
