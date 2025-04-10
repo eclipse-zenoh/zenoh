@@ -106,6 +106,7 @@ macro_rules! stats_struct {
 
             $(#[$meta])*
             $vis struct [<$struct_name Report>] {
+                #[serde(skip)]
                 labels: std::collections::HashMap<String, String>,
                 #[serde(skip)]
                 children: std::vec::Vec<[<$struct_name Report>]>,
