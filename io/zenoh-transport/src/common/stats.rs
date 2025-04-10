@@ -251,14 +251,6 @@ stats_struct! {
 
 stats_struct! {
     #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct InterceptorStats {
-        pub ingress,
-        pub egress,
-    }
-}
-
-stats_struct! {
-    #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct TransportStats {
         # HELP "Counter of sent bytes."
         # TYPE "counter"
@@ -356,12 +348,28 @@ stats_struct! {
         # TYPE "counter"
         pub rx_z_reply_pl_bytes DiscriminatedStats,
 
-        # HELP "Counter of messages dropped by downsampling."
+        # HELP "Counter of messages dropped by ingress downsampling."
         # TYPE "counter"
-        pub downsampled_msgs InterceptorStats,
+        pub rx_downsampled_msgs,
 
-        # HELP "Counter of bytes blocked by low-pass filter."
+        # HELP "Counter of messages dropped by egress downsampling."
         # TYPE "counter"
-        pub low_pass_blocked_bytes InterceptorStats,
+        pub tx_downsampled_msgs,
+
+        # HELP "Counter of bytes blocked by ingress low-pass filter."
+        # TYPE "counter"
+        pub rx_low_pass_blocked_bytes,
+
+        # HELP "Counter of bytes blocked by egress low-pass filter."
+        # TYPE "counter"
+        pub tx_low_pass_blocked_bytes,
+
+        # HELP "Counter of messages blocked by ingress low-pass filter."
+        # TYPE "counter"
+        pub rx_low_pass_blocked_msgs,
+
+        # HELP "Counter of messages blocked by egress low-pass filter."
+        # TYPE "counter"
+        pub tx_low_pass_blocked_msgs,
     }
 }
