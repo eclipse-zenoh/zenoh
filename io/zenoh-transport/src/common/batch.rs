@@ -17,7 +17,7 @@ use zenoh_buffers::{
     buffer::Buffer,
     reader::{DidntRead, HasReader},
     writer::{DidntWrite, HasWriter, Writer},
-    BBuf, ZBufReader, ZSlice, ZSliceBuffer,
+    BBuf, ZBufReader, ZSlice,
 };
 use zenoh_codec::{
     transport::batch::{BatchError, Zenoh080Batch},
@@ -428,12 +428,9 @@ pub struct RBatch {
 }
 
 impl RBatch {
-    pub fn new<T>(config: BatchConfig, buffer: T) -> Self
-    where
-        T: Into<ZSlice>,
-    {
+    pub fn new(config: BatchConfig, buffer: ZSlice) -> Self {
         Self {
-            buffer: buffer.into(),
+            buffer,
             codec: Zenoh080Batch::new(),
             config,
         }
@@ -454,11 +451,7 @@ impl RBatch {
         zsplit!(buffer, config)
     }
 
-    pub fn initialize<C, T>(&mut self, #[allow(unused_variables)] buff: C) -> ZResult<()>
-    where
-        C: Fn() -> T + Copy,
-        T: AsMut<[u8]> + ZSliceBuffer + 'static,
-    {
+    pub fn initialize(&mut self) -> ZResult<()> {
         #[allow(unused_variables)]
         let (l, h, p) = Self::split(self.buffer.as_slice(), &self.config);
 
@@ -471,8 +464,11 @@ impl RBatch {
                 let header = BatchHeader::new(b);
 
                 if header.is_compression() {
-                    let zslice = self.decompress(p, buff)?;
-                    self.buffer = zslice;
+                    let mut buffer = vec![0u8; self.config.mtu as usize];
+                    let n = lz4_flex::block::decompress_into(p, &mut buffer)
+                        .map_err(|_| zerror!("Decompression error"))?;
+                    self.buffer = ZSlice::new(Arc::new(buffer), 0, n)
+                        .map_err(|_| zerror!("Invalid decompression buffer length"))?;
                     return Ok(());
                 }
             }
@@ -484,19 +480,6 @@ impl RBatch {
             .ok_or_else(|| zerror!("Invalid batch length"))?;
 
         Ok(())
-    }
-
-    #[cfg(feature = "transport_compression")]
-    fn decompress<T>(&self, payload: &[u8], mut buff: impl FnMut() -> T) -> ZResult<ZSlice>
-    where
-        T: AsMut<[u8]> + ZSliceBuffer + 'static,
-    {
-        let mut into = (buff)();
-        let n = lz4_flex::block::decompress_into(payload, into.as_mut())
-            .map_err(|_| zerror!("Decompression error"))?;
-        let zslice = ZSlice::new(Arc::new(into), 0, n)
-            .map_err(|_| zerror!("Invalid decompression buffer length"))?;
-        Ok(zslice)
     }
 }
 
@@ -582,13 +565,9 @@ mod tests {
                 };
                 println!("Finalized WBatch: {:02x?}", bytes);
 
-                let mut rbatch = RBatch::new(config, bytes.to_vec().into_boxed_slice());
+                let mut rbatch = RBatch::new(config, bytes.to_vec().into());
                 println!("Decoded RBatch: {:?}", rbatch);
-                rbatch
-                    .initialize(|| {
-                        zenoh_buffers::vec::uninit(config.mtu as usize).into_boxed_slice()
-                    })
-                    .unwrap();
+                rbatch.initialize().unwrap();
                 println!("Initialized RBatch: {:?}", rbatch);
                 let msg_out: TransportMessage = rbatch.decode().unwrap();
                 assert_eq!(msg_in, msg_out);
