@@ -34,6 +34,8 @@ use zenoh_protocol::{
     zenoh::{PushBody, Reply, RequestBody, ResponseBody},
 };
 use zenoh_result::ZResult;
+#[cfg(feature = "stats")]
+use zenoh_transport::stats::TransportStats;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 use super::{
@@ -188,6 +190,8 @@ impl InterceptorFactoryTrait for LowPassInterceptorFactory {
                         self.state.clone(),
                         subject_ids.clone(),
                         InterceptorFlow::Ingress,
+                        #[cfg(feature = "stats")]
+                        transport.get_stats().unwrap_or_default(),
                     )) as IngressInterceptor
                 }),
                 self.state.interface_enabled.egress.then(|| {
@@ -195,6 +199,8 @@ impl InterceptorFactoryTrait for LowPassInterceptorFactory {
                         self.state.clone(),
                         subject_ids,
                         InterceptorFlow::Egress,
+                        #[cfg(feature = "stats")]
+                        transport.get_stats().unwrap_or_default(),
                     )) as EgressInterceptor
                 }),
             );
@@ -219,14 +225,23 @@ pub struct LowPassInterceptor {
     subjects: Arc<Vec<usize>>,
     // NOTE: memory usage could be optimized by replacing flow with a PhantomData<T>
     flow: InterceptorFlow,
+    #[cfg(feature = "stats")]
+    stats: Arc<TransportStats>,
 }
 
 impl LowPassInterceptor {
-    fn new(inner: Arc<LowPassFilter>, subjects: Arc<Vec<usize>>, flow: InterceptorFlow) -> Self {
+    fn new(
+        inner: Arc<LowPassFilter>,
+        subjects: Arc<Vec<usize>>,
+        flow: InterceptorFlow,
+        #[cfg(feature = "stats")] stats: Arc<TransportStats>,
+    ) -> Self {
         Self {
             inner,
             subjects,
             flow,
+            #[cfg(feature = "stats")]
+            stats,
         }
     }
 
@@ -234,7 +249,7 @@ impl LowPassInterceptor {
         &self,
         ctx: &RoutingContext<NetworkMessageMut>,
         cache: Option<&Cache>,
-    ) -> bool {
+    ) -> Result<(), usize> {
         let payload_size: usize;
         let attachment_size: usize;
         let message_type: LowPassFilterMessage;
@@ -329,10 +344,10 @@ impl LowPassInterceptor {
                 attachment_size = 0;
                 max_allowed_size = cache.map(|c| c.reply);
             }
-            NetworkBodyMut::ResponseFinal(_) => return true,
-            NetworkBodyMut::Interest(_) => return true,
-            NetworkBodyMut::Declare(_) => return true,
-            NetworkBodyMut::OAM(_) => return true,
+            NetworkBodyMut::ResponseFinal(_) => return Ok(()),
+            NetworkBodyMut::Interest(_) => return Ok(()),
+            NetworkBodyMut::Declare(_) => return Ok(()),
+            NetworkBodyMut::OAM(_) => return Ok(()),
         }
         let max_allowed_size = match max_allowed_size {
             Some(v) => v,
@@ -342,8 +357,8 @@ impl LowPassInterceptor {
             },
         };
         match payload_size.checked_add(attachment_size) {
-            Some(msg_size) => msg_size <= max_allowed_size,
-            None => false,
+            Some(msg_size) => (msg_size <= max_allowed_size).then_some(()).ok_or(msg_size),
+            None => Err(usize::MAX),
         }
     }
 
@@ -401,7 +416,24 @@ impl InterceptorTrait for LowPassInterceptor {
     ) -> bool {
         let cache = cache.and_then(|i| i.downcast_ref::<Cache>());
 
-        self.message_passes_filters(ctx, cache)
+        match self.message_passes_filters(ctx, cache) {
+            Ok(_) => true,
+            #[allow(unused_variables)] // only used for stats
+            Err(msg_size) => {
+                #[cfg(feature = "stats")]
+                match self.flow {
+                    InterceptorFlow::Egress => {
+                        self.stats.inc_tx_low_pass_dropped_bytes(msg_size);
+                        self.stats.inc_tx_low_pass_dropped_msgs(1);
+                    }
+                    InterceptorFlow::Ingress => {
+                        self.stats.inc_rx_low_pass_dropped_bytes(msg_size);
+                        self.stats.inc_rx_low_pass_dropped_msgs(1);
+                    }
+                }
+                false
+            }
+        }
     }
 }
 
