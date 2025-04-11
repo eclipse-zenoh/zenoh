@@ -51,10 +51,7 @@ pub(crate) fn declare_subscription(
     send_declare: &mut SendDeclare,
 ) {
     let rtables = zread!(tables.tables);
-    match rtables
-        .get_mapping(face, &expr.scope, expr.mapping)
-        .cloned()
-    {
+    match rtables.get_mapping(face, expr.scope, expr.mapping).cloned() {
         Some(mut prefix) => {
             tracing::debug!(
                 "{} Declare subscriber {} ({}{})",
@@ -119,7 +116,7 @@ pub(crate) fn undeclare_subscription(
         None
     } else {
         let rtables = zread!(tables.tables);
-        match rtables.get_mapping(face, &expr.scope, expr.mapping) {
+        match rtables.get_mapping(face, expr.scope, expr.mapping) {
             Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
                 Some(res) => Some(res),
                 None => {
@@ -287,7 +284,7 @@ pub fn route_data(
 ) {
     let tables = zread!(tables_ref.tables);
     match tables
-        .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
+        .get_mapping(face, msg.wire_expr.scope, msg.wire_expr.mapping)
         .cloned()
     {
         Some(prefix) => {
@@ -331,12 +328,37 @@ pub fn route_data(
                             }
                             msg.wire_expr = key_expr.into();
                             msg.ext_nodeid = ext::NodeIdType { node_id: *context };
-                            outface.primitives.send_push(msg, reliability)
+
+                            let prefix = {
+                                let tables = tables_ref
+                                    .tables
+                                    .read()
+                                    .expect("reading Tables should not fail");
+                                match tables
+                                    .get_sent_mapping(
+                                        outface,
+                                        msg.wire_expr.scope,
+                                        msg.wire_expr.mapping,
+                                    )
+                                    .cloned()
+                                {
+                                    Some(prefix) => prefix,
+                                    None => {
+                                        tracing::error!(
+                                            "Got WireExpr with unknown scope {} from {} (A)",
+                                            msg.wire_expr.scope,
+                                            face,
+                                        );
+                                        return;
+                                    }
+                                }
+                            };
+                            outface.intercept_push(msg, reliability, prefix)
                         }
                     } else {
                         let route = route
                             .values()
-                            .filter(|(outface, _key_expr, _context)| {
+                            .filter(|(outface, _key_expr, _context)| -> bool {
                                 tables
                                     .hat_code
                                     .egress_filter(&tables, face, outface, &mut expr)
@@ -353,16 +375,40 @@ pub fn route_data(
                                 inc_stats!(outface, tx, admin, msg.payload)
                             }
 
-                            outface.primitives.send_push(
-                                &mut Push {
-                                    wire_expr: key_expr,
-                                    ext_qos: msg.ext_qos,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType { node_id: context },
-                                    payload: msg.payload.clone(),
-                                },
-                                reliability,
-                            )
+                            let msg = &mut Push {
+                                wire_expr: key_expr,
+                                ext_qos: msg.ext_qos,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType { node_id: context },
+                                payload: msg.payload.clone(),
+                            };
+
+                            let prefix = {
+                                let tables = tables_ref
+                                    .tables
+                                    .read()
+                                    .expect("reading Tables should not fail");
+
+                                match tables
+                                    .get_sent_mapping(
+                                        &outface,
+                                        msg.wire_expr.scope,
+                                        msg.wire_expr.mapping,
+                                    )
+                                    .cloned()
+                                {
+                                    Some(prefix) => prefix,
+                                    None => {
+                                        tracing::error!(
+                                            "Got WireExpr with unknown scope {} from {} (B)",
+                                            msg.wire_expr.scope,
+                                            face,
+                                        );
+                                        return;
+                                    }
+                                }
+                            };
+                            outface.intercept_push(msg, reliability, prefix)
                         }
                     }
                 }

@@ -75,10 +75,7 @@ pub(crate) fn declare_queryable(
     send_declare: &mut SendDeclare,
 ) {
     let rtables = zread!(tables.tables);
-    match rtables
-        .get_mapping(face, &expr.scope, expr.mapping)
-        .cloned()
-    {
+    match rtables.get_mapping(face, expr.scope, expr.mapping).cloned() {
         Some(mut prefix) => {
             tracing::debug!(
                 "{} Declare queryable {} ({}{})",
@@ -143,7 +140,7 @@ pub(crate) fn undeclare_queryable(
         None
     } else {
         let rtables = zread!(tables.tables);
-        match rtables.get_mapping(face, &expr.scope, expr.mapping) {
+        match rtables.get_mapping(face, expr.scope, expr.mapping) {
             Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
                 Some(res) => Some(res),
                 None => {
@@ -450,15 +447,16 @@ macro_rules! inc_res_stats {
 #[allow(clippy::too_many_arguments)]
 pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mut Request) {
     let rtables = zread!(tables_ref.tables);
-    match rtables.get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping) {
+    match rtables.get_mapping(face, msg.wire_expr.scope, msg.wire_expr.mapping) {
         Some(prefix) => {
             tracing::debug!(
-                "{}:{} Route query for res {}{}",
+                "{}:{} Route query for resource {}{}",
                 face,
                 msg.id,
                 prefix.expr(),
                 msg.wire_expr.suffix.as_ref(),
             );
+
             let prefix = prefix.clone();
             let mut expr = RoutingExpr::new(&prefix, msg.wire_expr.suffix.as_ref());
 
@@ -495,13 +493,11 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                         face,
                         msg.id
                     );
-                    face.primitives
-                        .clone()
-                        .send_response_final(&mut ResponseFinal {
-                            rid: msg.id,
-                            ext_qos: response::ext::QoSType::RESPONSE_FINAL,
-                            ext_tstamp: None,
-                        });
+                    face.intercept_response_final(&mut ResponseFinal {
+                        rid: msg.id,
+                        ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+                        ext_tstamp: None,
+                    });
                 } else {
                     for ((outface, key_expr, context), outqid) in route.values() {
                         QueryCleanup::spawn_query_clean_up_task(
@@ -521,7 +517,8 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                             outface,
                             outqid
                         );
-                        outface.primitives.send_request(&mut Request {
+
+                        let msg = &mut Request {
                             id: *outqid,
                             wire_expr: key_expr.into(),
                             ext_qos: msg.ext_qos,
@@ -531,19 +528,43 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                             ext_budget: msg.ext_budget,
                             ext_timeout: msg.ext_timeout,
                             payload: msg.payload.clone(),
-                        });
+                        };
+
+                        let prefix = {
+                            let tables = tables_ref
+                                .tables
+                                .read()
+                                .expect("reading Tables should not fail");
+                            match tables
+                                .get_sent_mapping(
+                                    outface,
+                                    msg.wire_expr.scope,
+                                    msg.wire_expr.mapping,
+                                )
+                                .cloned()
+                            {
+                                Some(prefix) => prefix,
+                                None => {
+                                    tracing::error!(
+                                        "Got WireExpr with unknown scope {} from {}",
+                                        msg.wire_expr.scope,
+                                        face,
+                                    );
+                                    return;
+                                }
+                            }
+                        };
+                        outface.intercept_request(msg, prefix);
                     }
                 }
             } else {
                 tracing::debug!("{}:{} Send final reply (not master)", face, msg.id);
                 drop(rtables);
-                face.primitives
-                    .clone()
-                    .send_response_final(&mut ResponseFinal {
-                        rid: msg.id,
-                        ext_qos: response::ext::QoSType::RESPONSE_FINAL,
-                        ext_tstamp: None,
-                    });
+                face.intercept_response_final(&mut ResponseFinal {
+                    rid: msg.id,
+                    ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+                    ext_tstamp: None,
+                });
             }
         }
         None => {
@@ -554,18 +575,15 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                 msg.wire_expr.scope,
             );
             drop(rtables);
-            face.primitives
-                .clone()
-                .send_response_final(&mut ResponseFinal {
-                    rid: msg.id,
-                    ext_qos: response::ext::QoSType::RESPONSE_FINAL,
-                    ext_tstamp: None,
-                });
+            face.intercept_response_final(&mut ResponseFinal {
+                rid: msg.id,
+                ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+                ext_tstamp: None,
+            });
         }
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn route_send_response(
     tables_ref: &Arc<TablesLock>,
     face: &mut Arc<FaceState>,
@@ -602,7 +620,28 @@ pub(crate) fn route_send_response(
             }
 
             msg.rid = query.src_qid;
-            query.src_face.primitives.send_response(msg);
+
+            let prefix = {
+                let tables = tables_ref
+                    .tables
+                    .read()
+                    .expect("reading Tables should not fail");
+                match tables
+                    .get_sent_mapping(&query.src_face, msg.wire_expr.scope, msg.wire_expr.mapping)
+                    .cloned()
+                {
+                    Some(prefix) => prefix,
+                    None => {
+                        tracing::error!(
+                            "Got WireExpr with unknown scope {} from {}",
+                            msg.wire_expr.scope,
+                            face,
+                        );
+                        return;
+                    }
+                }
+            };
+            query.src_face.intercept_response(msg, prefix);
         }
         None => tracing::warn!("{}:{} Route reply: Query not found!", face, msg.rid),
     }
@@ -643,14 +682,10 @@ pub(crate) fn finalize_pending_query(query: (Arc<Query>, CancellationToken)) {
     cancellation_token.cancel();
     if let Some(query) = Arc::into_inner(query) {
         tracing::debug!("{}:{} Propagate final reply", query.src_face, query.src_qid);
-        query
-            .src_face
-            .primitives
-            .clone()
-            .send_response_final(&mut ResponseFinal {
-                rid: query.src_qid,
-                ext_qos: response::ext::QoSType::RESPONSE_FINAL,
-                ext_tstamp: None,
-            });
+        query.src_face.intercept_response_final(&mut ResponseFinal {
+            rid: query.src_qid,
+            ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+            ext_tstamp: None,
+        });
     }
 }

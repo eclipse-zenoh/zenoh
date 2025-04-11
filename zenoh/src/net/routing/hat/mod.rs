@@ -33,13 +33,10 @@ use zenoh_transport::unicast::TransportUnicast;
 #[cfg(feature = "unstable")]
 use {crate::key_expr::KeyExpr, std::collections::HashMap};
 
-use super::{
-    dispatcher::{
-        face::{Face, FaceState},
-        pubsub::SubscriberInfo,
-        tables::{NodeId, QueryTargetQablSet, Resource, Route, RoutingExpr, Tables, TablesLock},
-    },
-    RoutingContext,
+use super::dispatcher::{
+    face::{Face, FaceState},
+    pubsub::SubscriberInfo,
+    tables::{NodeId, QueryTargetQablSet, Resource, Route, RoutingExpr, Tables, TablesLock},
 };
 use crate::net::runtime::Runtime;
 
@@ -69,8 +66,7 @@ impl Sources {
     }
 }
 
-pub(crate) type SendDeclare<'a> = dyn FnMut(&Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>, RoutingContext<Declare>)
-    + 'a;
+pub(crate) type SendDeclare<'a> = dyn FnMut(&Arc<FaceState>, Declare, Option<Arc<Resource>>) + 'a;
 pub(crate) trait HatTrait:
     HatBaseTrait + HatInterestTrait + HatPubSubTrait + HatQueriesTrait + HatTokenTrait
 {

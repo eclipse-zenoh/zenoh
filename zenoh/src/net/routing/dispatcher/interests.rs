@@ -39,7 +39,6 @@ use super::{
 use crate::net::routing::{
     hat::{HatTrait, SendDeclare},
     router::{unregister_expr_interest, Resource},
-    RoutingContext,
 };
 
 pub(crate) struct CurrentInterest {
@@ -116,14 +115,15 @@ pub(crate) fn finalize_pending_interest(
             interest.src_interest_id
         );
         send_declare(
-            &interest.src_face.primitives,
-            RoutingContext::new(Declare {
+            &interest.src_face,
+            Declare {
                 interest_id: Some(interest.src_interest_id),
                 ext_qos: ext::QoSType::DECLARE,
                 ext_tstamp: None,
                 ext_nodeid: ext::NodeIdType::DEFAULT,
                 body: DeclareBody::DeclareFinal(DeclareFinal),
-            }),
+            },
+            None,
         );
     }
 }
@@ -181,7 +181,9 @@ impl CurrentInterestCleanup {
                         self.interests_timeout,
                     );
                 }
-                finalize_pending_interest(interest, &mut |p, m| m.with_mut(|m| p.send_declare(m)));
+                finalize_pending_interest(interest, &mut |p, mut m, r| {
+                    p.intercept_declare(&mut m, r.as_ref())
+                });
             }
         }
     }
@@ -211,10 +213,7 @@ pub(crate) fn declare_interest(
 
     if let Some(expr) = expr {
         let rtables = zread!(tables_ref.tables);
-        match rtables
-            .get_mapping(face, &expr.scope, expr.mapping)
-            .cloned()
-        {
+        match rtables.get_mapping(face, expr.scope, expr.mapping).cloned() {
             Some(mut prefix) => {
                 tracing::debug!(
                     "{} Declare interest {} ({}{})",

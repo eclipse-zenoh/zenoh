@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::sync::Arc;
+use std::{ops::Deref, sync::Arc};
 
 use zenoh_protocol::network::{
     declare::ext,
@@ -32,7 +32,6 @@ use crate::net::routing::{
         tables::{Tables, TablesLock},
     },
     hat::{CurrentFutureTrait, HatInterestTrait, SendDeclare},
-    RoutingContext,
 };
 
 impl HatInterestTrait for HatCode {
@@ -84,7 +83,7 @@ impl HatInterestTrait for HatCode {
             face_hat_mut!(face).remote_interests.insert(
                 id,
                 RemoteInterest {
-                    res: res.cloned(),
+                    res: res.as_ref().map(|res| res.deref().clone()),
                     options,
                     mode,
                 },
@@ -92,14 +91,15 @@ impl HatInterestTrait for HatCode {
         }
         if mode.current() {
             send_declare(
-                &face.primitives,
-                RoutingContext::new(Declare {
+                face,
+                Declare {
                     interest_id: Some(id),
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
                     body: DeclareBody::DeclareFinal(DeclareFinal),
-                }),
+                },
+                None,
             );
         }
     }

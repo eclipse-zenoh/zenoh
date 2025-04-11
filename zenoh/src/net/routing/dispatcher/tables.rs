@@ -136,7 +136,7 @@ impl Tables {
     pub(crate) fn get_mapping<'a>(
         &'a self,
         face: &'a FaceState,
-        expr_id: &ExprId,
+        expr_id: ExprId,
         mapping: Mapping,
     ) -> Option<&'a Arc<Resource>> {
         match expr_id {
@@ -149,7 +149,7 @@ impl Tables {
     pub(crate) fn get_sent_mapping<'a>(
         &'a self,
         face: &'a FaceState,
-        expr_id: &ExprId,
+        expr_id: ExprId,
         mapping: Mapping,
     ) -> Option<&'a Arc<Resource>> {
         match expr_id {

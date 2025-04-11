@@ -14,6 +14,7 @@
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
+    ops::Deref,
     sync::{atomic::Ordering, Arc},
 };
 
@@ -46,7 +47,6 @@ use crate::net::routing::{
     },
     hat::{CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources},
     router::disable_matches_data_routes,
-    RoutingContext,
 };
 
 #[inline]
@@ -70,7 +70,7 @@ fn send_sourced_subscription_to_net_children(
                         let push_declaration = push_declaration_profile(tables, &someface);
                         let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
-                        someface.primitives.send_declare(RoutingContext::with_expr(
+                        someface.intercept_declare(
                             &mut Declare {
                                 interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
@@ -83,8 +83,8 @@ fn send_sourced_subscription_to_net_children(
                                     wire_expr: key_expr,
                                 }),
                             },
-                            res.expr().to_string(),
-                        ));
+                            Some(res),
+                        );
                     }
                 }
                 None => tracing::trace!("Unable to find face for zid {}", net.graph[*child].zid),
@@ -138,20 +138,18 @@ fn propagate_simple_subscription_to(
                 let key_expr =
                     Resource::decl_key(res, dst_face, push_declaration_profile(tables, dst_face));
                 send_declare(
-                    &dst_face.primitives,
-                    RoutingContext::with_expr(
-                        Declare {
-                            interest_id: None,
-                            ext_qos: ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                id,
-                                wire_expr: key_expr,
-                            }),
-                        },
-                        res.expr().to_string(),
-                    ),
+                    dst_face,
+                    Declare {
+                        interest_id: None,
+                        ext_qos: ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                            id,
+                            wire_expr: key_expr,
+                        }),
+                    },
+                    Some(res.clone()),
                 );
             }
         }
@@ -393,7 +391,7 @@ fn send_forget_sourced_subscription_to_net_children(
                         let push_declaration = push_declaration_profile(tables, &someface);
                         let wire_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
-                        someface.primitives.send_declare(RoutingContext::with_expr(
+                        someface.intercept_declare(
                             &mut Declare {
                                 interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
@@ -406,8 +404,8 @@ fn send_forget_sourced_subscription_to_net_children(
                                     ext_wire_expr: WireExprType { wire_expr },
                                 }),
                             },
-                            res.expr().to_string(),
-                        ));
+                            Some(res),
+                        );
                     }
                 }
                 None => tracing::trace!("Unable to find face for zid {}", net.graph[*child].zid),
@@ -424,20 +422,18 @@ fn propagate_forget_simple_subscription(
     for mut face in tables.faces.values().cloned() {
         if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(res) {
             send_declare(
-                &face.primitives,
-                RoutingContext::with_expr(
-                    Declare {
-                        interest_id: None,
-                        ext_qos: ext::QoSType::DECLARE,
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                        body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                            id,
-                            ext_wire_expr: WireExprType::null(),
-                        }),
-                    },
-                    res.expr().to_string(),
-                ),
+                &face,
+                Declare {
+                    interest_id: None,
+                    ext_qos: ext::QoSType::DECLARE,
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                    body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                        id,
+                        ext_wire_expr: WireExprType::null(),
+                    }),
+                },
+                Some(res.clone()),
             );
         }
         for res in face_hat!(&mut face)
@@ -456,20 +452,18 @@ fn propagate_forget_simple_subscription(
             }) {
                 if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
                     send_declare(
-                        &face.primitives,
-                        RoutingContext::with_expr(
-                            Declare {
-                                interest_id: None,
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                    id,
-                                    ext_wire_expr: WireExprType::null(),
-                                }),
-                            },
-                            res.expr().to_string(),
-                        ),
+                        &face,
+                        Declare {
+                            interest_id: None,
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                                id,
+                                ext_wire_expr: WireExprType::null(),
+                            }),
+                        },
+                        Some(res.clone()),
                     );
                 }
             }
@@ -504,20 +498,18 @@ fn propagate_forget_simple_subscription_to_peers(
             {
                 if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(res) {
                     send_declare(
-                        &face.primitives,
-                        RoutingContext::with_expr(
-                            Declare {
-                                interest_id: None,
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                    id,
-                                    ext_wire_expr: WireExprType::null(),
-                                }),
-                            },
-                            res.expr().to_string(),
-                        ),
+                        &face,
+                        Declare {
+                            interest_id: None,
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                                id,
+                                ext_wire_expr: WireExprType::null(),
+                            }),
+                        },
+                        Some(res.clone()),
                     );
                 }
             }
@@ -670,20 +662,18 @@ pub(super) fn undeclare_simple_subscription(
             let mut face = &mut simple_subs[0];
             if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
                 send_declare(
-                    &face.primitives,
-                    RoutingContext::with_expr(
-                        Declare {
-                            interest_id: None,
-                            ext_qos: ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                id,
-                                ext_wire_expr: WireExprType::null(),
-                            }),
-                        },
-                        res.expr().to_string(),
-                    ),
+                    face,
+                    Declare {
+                        interest_id: None,
+                        ext_qos: ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                            id,
+                            ext_wire_expr: WireExprType::null(),
+                        }),
+                    },
+                    Some(res.clone()),
                 );
             }
             for res in face_hat!(face)
@@ -702,20 +692,18 @@ pub(super) fn undeclare_simple_subscription(
                 }) {
                     if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
                         send_declare(
-                            &face.primitives,
-                            RoutingContext::with_expr(
-                                Declare {
-                                    interest_id: None,
-                                    ext_qos: ext::QoSType::DECLARE,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                                    body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                        id,
-                                        ext_wire_expr: WireExprType::null(),
-                                    }),
-                                },
-                                res.expr().to_string(),
-                            ),
+                            face,
+                            Declare {
+                                interest_id: None,
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                                    id,
+                                    ext_wire_expr: WireExprType::null(),
+                                }),
+                            },
+                            Some(res.clone()),
                         );
                     }
                 }
@@ -867,20 +855,18 @@ pub(super) fn pubsub_linkstate_change(
                 if let Some(id) = face_hat_mut!(&mut src_face).local_subs.remove(&res) {
                     let wire_expr = Resource::get_best_key(&res, "", src_face.id);
                     send_declare(
-                        &src_face.primitives,
-                        RoutingContext::with_expr(
-                            Declare {
-                                interest_id: None,
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::default(),
-                                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                    id,
-                                    ext_wire_expr: WireExprType { wire_expr },
-                                }),
-                            },
-                            res.expr().to_string(),
-                        ),
+                        &src_face,
+                        Declare {
+                            interest_id: None,
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::default(),
+                            body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                                id,
+                                ext_wire_expr: WireExprType { wire_expr },
+                            }),
+                        },
+                        Some(res.clone()),
                     );
                 }
             }
@@ -898,20 +884,18 @@ pub(super) fn pubsub_linkstate_change(
                             let push_declaration = push_declaration_profile(tables, &dst_face);
                             let key_expr = Resource::decl_key(res, &mut dst_face, push_declaration);
                             send_declare(
-                                &dst_face.primitives,
-                                RoutingContext::with_expr(
-                                    Declare {
-                                        interest_id: None,
-                                        ext_qos: ext::QoSType::DECLARE,
-                                        ext_tstamp: None,
-                                        ext_nodeid: ext::NodeIdType::default(),
-                                        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                            id,
-                                            wire_expr: key_expr,
-                                        }),
-                                    },
-                                    res.expr().to_string(),
-                                ),
+                                &dst_face,
+                                Declare {
+                                    interest_id: None,
+                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType::default(),
+                                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                        id,
+                                        wire_expr: key_expr,
+                                    }),
+                                },
+                                Some(res.clone()),
                             );
                         }
                     }
@@ -960,20 +944,18 @@ pub(crate) fn declare_sub_interest(
                     let wire_expr =
                         Resource::decl_key(res, face, push_declaration_profile(tables, face));
                     send_declare(
-                        &face.primitives,
-                        RoutingContext::with_expr(
-                            Declare {
-                                interest_id,
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                    id,
-                                    wire_expr,
-                                }),
-                            },
-                            res.expr().to_string(),
-                        ),
+                        face,
+                        Declare {
+                            interest_id,
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                id,
+                                wire_expr,
+                            }),
+                        },
+                        Some(res.deref().clone()),
                     );
                 }
             } else {
@@ -999,20 +981,18 @@ pub(crate) fn declare_sub_interest(
                         let wire_expr =
                             Resource::decl_key(sub, face, push_declaration_profile(tables, face));
                         send_declare(
-                            &face.primitives,
-                            RoutingContext::with_expr(
-                                Declare {
-                                    interest_id,
-                                    ext_qos: ext::QoSType::DECLARE,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                        id,
-                                        wire_expr,
-                                    }),
-                                },
-                                sub.expr().to_string(),
-                            ),
+                            face,
+                            Declare {
+                                interest_id,
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                    id,
+                                    wire_expr,
+                                }),
+                            },
+                            Some(sub.clone()),
                         );
                     }
                 }
@@ -1036,20 +1016,18 @@ pub(crate) fn declare_sub_interest(
                     let wire_expr =
                         Resource::decl_key(sub, face, push_declaration_profile(tables, face));
                     send_declare(
-                        &face.primitives,
-                        RoutingContext::with_expr(
-                            Declare {
-                                interest_id,
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                    id,
-                                    wire_expr,
-                                }),
-                            },
-                            sub.expr().to_string(),
-                        ),
+                        face,
+                        Declare {
+                            interest_id,
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                id,
+                                wire_expr,
+                            }),
+                        },
+                        Some(sub.clone()),
                     );
                 }
             }

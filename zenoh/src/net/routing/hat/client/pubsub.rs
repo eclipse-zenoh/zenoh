@@ -37,7 +37,6 @@ use crate::{
             tables::{Route, RoutingExpr, Tables},
         },
         hat::{HatPubSubTrait, SendDeclare, Sources},
-        RoutingContext,
     },
 };
 
@@ -58,20 +57,18 @@ fn propagate_simple_subscription_to(
         face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
         let key_expr = Resource::decl_key(res, dst_face, true);
         send_declare(
-            &dst_face.primitives,
-            RoutingContext::with_expr(
-                Declare {
-                    interest_id: None,
-                    ext_qos: ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                        id,
-                        wire_expr: key_expr,
-                    }),
-                },
-                res.expr().to_string(),
-            ),
+            dst_face,
+            Declare {
+                interest_id: None,
+                ext_qos: ext::QoSType::DECLARE,
+                ext_tstamp: None,
+                ext_nodeid: ext::NodeIdType::DEFAULT,
+                body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                    id,
+                    wire_expr: key_expr,
+                }),
+            },
+            Some(res.clone()),
         );
     }
 }
@@ -163,20 +160,18 @@ fn propagate_forget_simple_subscription(
     for face in tables.faces.values_mut() {
         if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
             send_declare(
-                &face.primitives,
-                RoutingContext::with_expr(
-                    Declare {
-                        interest_id: None,
-                        ext_qos: ext::QoSType::DECLARE,
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                        body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                            id,
-                            ext_wire_expr: WireExprType::null(),
-                        }),
-                    },
-                    res.expr().to_string(),
-                ),
+                face,
+                Declare {
+                    interest_id: None,
+                    ext_qos: ext::QoSType::DECLARE,
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                    body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                        id,
+                        ext_wire_expr: WireExprType::null(),
+                    }),
+                },
+                Some(res.clone()),
             );
         }
     }
@@ -201,20 +196,18 @@ pub(super) fn undeclare_simple_subscription(
             let face = &mut simple_subs[0];
             if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
                 send_declare(
-                    &face.primitives,
-                    RoutingContext::with_expr(
-                        Declare {
-                            interest_id: None,
-                            ext_qos: ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                id,
-                                ext_wire_expr: WireExprType::null(),
-                            }),
-                        },
-                        res.expr().to_string(),
-                    ),
+                    face,
+                    Declare {
+                        interest_id: None,
+                        ext_qos: ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                            id,
+                            ext_wire_expr: WireExprType::null(),
+                        }),
+                    },
+                    Some(res.clone()),
                 );
             }
         }
