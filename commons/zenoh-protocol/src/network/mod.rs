@@ -353,6 +353,7 @@ impl fmt::Display for NetworkMessageMut<'_> {
     }
 }
 
+#[cfg(feature = "test")]
 impl From<NetworkBody> for NetworkMessage {
     #[inline]
     fn from(body: NetworkBody) -> Self {
@@ -363,33 +364,10 @@ impl From<NetworkBody> for NetworkMessage {
     }
 }
 
-impl From<Declare> for NetworkMessage {
-    fn from(declare: Declare) -> Self {
-        NetworkBody::Declare(declare).into()
-    }
-}
-
+#[cfg(feature = "test")]
 impl From<Push> for NetworkMessage {
     fn from(push: Push) -> Self {
         NetworkBody::Push(push).into()
-    }
-}
-
-impl From<Request> for NetworkMessage {
-    fn from(request: Request) -> Self {
-        NetworkBody::Request(request).into()
-    }
-}
-
-impl From<Response> for NetworkMessage {
-    fn from(response: Response) -> Self {
-        NetworkBody::Response(response).into()
-    }
-}
-
-impl From<ResponseFinal> for NetworkMessage {
-    fn from(final_response: ResponseFinal) -> Self {
-        NetworkBody::ResponseFinal(final_response).into()
     }
 }
 
