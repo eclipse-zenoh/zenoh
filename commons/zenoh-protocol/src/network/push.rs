@@ -88,6 +88,7 @@ impl Push {
     }
 }
 
+#[cfg(feature = "test")]
 impl From<PushBody> for Push {
     fn from(value: PushBody) -> Self {
         Self {
@@ -100,14 +101,9 @@ impl From<PushBody> for Push {
     }
 }
 
+#[cfg(feature = "test")]
 impl From<Put> for Push {
     fn from(value: Put) -> Self {
-        PushBody::from(value).into()
-    }
-}
-
-impl From<Del> for Push {
-    fn from(value: Del) -> Self {
         PushBody::from(value).into()
     }
 }
