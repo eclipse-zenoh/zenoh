@@ -338,13 +338,17 @@ pub fn route_data(
                                     .read()
                                     .expect("reading Tables should not fail");
                                 match tables
-                                    .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
+                                    .get_sent_mapping(
+                                        outface,
+                                        &msg.wire_expr.scope,
+                                        msg.wire_expr.mapping,
+                                    )
                                     .cloned()
                                 {
                                     Some(prefix) => prefix,
                                     None => {
                                         tracing::error!(
-                                            "Got WireExpr with unknown scope {} from {}",
+                                            "Got WireExpr with unknown scope {} from {} (A)",
                                             msg.wire_expr.scope,
                                             face,
                                         );
@@ -387,18 +391,24 @@ pub fn route_data(
                                     .tables
                                     .read()
                                     .expect("reading Tables should not fail");
-                                if let Some(prefix) = tables
-                                    .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
+
+                                match tables
+                                    .get_sent_mapping(
+                                        &outface,
+                                        &msg.wire_expr.scope,
+                                        msg.wire_expr.mapping,
+                                    )
                                     .cloned()
                                 {
-                                    prefix
-                                } else {
-                                    tracing::error!(
-                                        "Got WireExpr with unknown scope {} from {}",
-                                        msg.wire_expr.scope,
-                                        face,
-                                    );
-                                    return;
+                                    Some(prefix) => prefix,
+                                    None => {
+                                        tracing::error!(
+                                            "Got WireExpr with unknown scope {} from {} (B)",
+                                            msg.wire_expr.scope,
+                                            face,
+                                        );
+                                        return;
+                                    }
                                 }
                             };
                             outface.intercept_push(msg, reliability, &prefix)

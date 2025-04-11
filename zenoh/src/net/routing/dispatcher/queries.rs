@@ -539,7 +539,11 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                                 .read()
                                 .expect("reading Tables should not fail");
                             match tables
-                                .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
+                                .get_sent_mapping(
+                                    outface,
+                                    &msg.wire_expr.scope,
+                                    msg.wire_expr.mapping,
+                                )
                                 .cloned()
                             {
                                 Some(prefix) => prefix,
@@ -626,7 +630,7 @@ pub(crate) fn route_send_response(
                     .read()
                     .expect("reading Tables should not fail");
                 match tables
-                    .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
+                    .get_sent_mapping(&query.src_face, &msg.wire_expr.scope, msg.wire_expr.mapping)
                     .cloned()
                 {
                     Some(prefix) => prefix,
