@@ -106,24 +106,18 @@ pub enum NetworkBodyMut<'a> {
 pub struct NetworkMessage {
     pub body: NetworkBody,
     pub reliability: Reliability,
-    #[cfg(feature = "stats")]
-    pub size: Option<core::num::NonZeroUsize>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NetworkMessageRef<'a> {
     pub body: NetworkBodyRef<'a>,
     pub reliability: Reliability,
-    #[cfg(feature = "stats")]
-    pub size: Option<core::num::NonZeroUsize>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct NetworkMessageMut<'a> {
     pub body: NetworkBodyMut<'a>,
     pub reliability: Reliability,
-    #[cfg(feature = "stats")]
-    pub size: Option<core::num::NonZeroUsize>,
 }
 
 pub trait NetworkMessageExt {
@@ -131,8 +125,6 @@ pub trait NetworkMessageExt {
     fn body(&self) -> NetworkBodyRef;
     #[doc(hidden)]
     fn reliability(&self) -> Reliability;
-    #[cfg(feature = "stats")]
-    fn size(&self) -> Option<core::num::NonZeroUsize>;
 
     #[inline]
     fn is_reliable(&self) -> bool {
@@ -212,8 +204,6 @@ pub trait NetworkMessageExt {
         NetworkMessageRef {
             body: self.body(),
             reliability: self.reliability(),
-            #[cfg(feature = "stats")]
-            size: self.size(),
         }
     }
 }
@@ -234,11 +224,6 @@ impl NetworkMessageExt for NetworkMessage {
     fn reliability(&self) -> Reliability {
         self.reliability
     }
-
-    #[cfg(feature = "stats")]
-    fn size(&self) -> Option<core::num::NonZeroUsize> {
-        self.size
-    }
 }
 
 impl NetworkMessageExt for NetworkMessageRef<'_> {
@@ -248,11 +233,6 @@ impl NetworkMessageExt for NetworkMessageRef<'_> {
 
     fn reliability(&self) -> Reliability {
         self.reliability
-    }
-
-    #[cfg(feature = "stats")]
-    fn size(&self) -> Option<core::num::NonZeroUsize> {
-        self.size
     }
 }
 
@@ -271,11 +251,6 @@ impl NetworkMessageExt for NetworkMessageMut<'_> {
 
     fn reliability(&self) -> Reliability {
         self.reliability
-    }
-
-    #[cfg(feature = "stats")]
-    fn size(&self) -> Option<core::num::NonZeroUsize> {
-        self.size
     }
 }
 
@@ -313,8 +288,6 @@ impl NetworkMessage {
         NetworkMessageMut {
             body,
             reliability: self.reliability,
-            #[cfg(feature = "stats")]
-            size: self.size,
         }
     }
 }
@@ -334,8 +307,6 @@ impl NetworkMessageMut<'_> {
         NetworkMessageMut {
             body,
             reliability: self.reliability,
-            #[cfg(feature = "stats")]
-            size: self.size,
         }
     }
 }
@@ -372,8 +343,6 @@ impl From<NetworkBody> for NetworkMessage {
         Self {
             body,
             reliability: Reliability::DEFAULT,
-            #[cfg(feature = "stats")]
-            size: None,
         }
     }
 }

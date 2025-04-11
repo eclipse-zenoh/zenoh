@@ -140,8 +140,6 @@ pub enum TransportBody {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TransportMessage {
     pub body: TransportBody,
-    #[cfg(feature = "stats")]
-    pub size: Option<core::num::NonZeroUsize>,
 }
 
 impl TransportMessage {
@@ -165,21 +163,13 @@ impl TransportMessage {
             _ => unreachable!(),
         };
 
-        Self {
-            body,
-            #[cfg(feature = "stats")]
-            size: None,
-        }
+        Self { body }
     }
 }
 
 impl From<TransportBody> for TransportMessage {
     fn from(body: TransportBody) -> Self {
-        Self {
-            body,
-            #[cfg(feature = "stats")]
-            size: None,
-        }
+        Self { body }
     }
 }
 

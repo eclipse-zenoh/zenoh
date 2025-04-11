@@ -56,7 +56,7 @@ shared-memory = [
   "zenoh-transport/shared-memory",
   "zenoh-buffers/shared-memory",
 ]
-stats = ["zenoh-transport/stats", "zenoh-protocol/stats"]
+stats = ["zenoh-transport/stats"]
 transport_multilink = ["zenoh-transport/transport_multilink"]
 transport_compression = ["zenoh-transport/transport_compression"]
 transport_quic = ["zenoh-transport/transport_quic"]
