@@ -34,6 +34,8 @@ use zenoh_keyexpr::keyexpr_tree::{
 };
 use zenoh_protocol::network::NetworkBodyMut;
 use zenoh_result::ZResult;
+#[cfg(feature = "stats")]
+use zenoh_transport::stats::TransportStats;
 
 use crate::net::routing::interceptor::*;
 
@@ -124,12 +126,20 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
                 Box::new(ComputeOnMiss::new(DownsamplingInterceptor::new(
                     self.messages.clone(),
                     &self.rules,
+                    #[cfg(feature = "stats")]
+                    InterceptorFlow::Ingress,
+                    #[cfg(feature = "stats")]
+                    transport.get_stats().unwrap_or_default(),
                 ))) as IngressInterceptor
             }),
             self.flows.egress.then(|| {
                 Box::new(ComputeOnMiss::new(DownsamplingInterceptor::new(
                     self.messages.clone(),
                     &self.rules,
+                    #[cfg(feature = "stats")]
+                    InterceptorFlow::Egress,
+                    #[cfg(feature = "stats")]
+                    transport.get_stats().unwrap_or_default(),
                 ))) as EgressInterceptor
             }),
         )
@@ -177,6 +187,10 @@ pub(crate) struct DownsamplingInterceptor {
     filtered_messages: Arc<DownsamplingFilters>,
     ke_id: Arc<Mutex<KeBoxTree<usize, UnknownWildness, KeyedSetProvider>>>,
     ke_state: Arc<Mutex<HashMap<usize, Timestate>>>,
+    #[cfg(feature = "stats")]
+    flow: InterceptorFlow,
+    #[cfg(feature = "stats")]
+    stats: Arc<TransportStats>,
 }
 
 impl DownsamplingInterceptor {
@@ -234,6 +248,15 @@ impl InterceptorTrait for DownsamplingInterceptor {
                                     ctx.inface().map(|f| f.to_string()).unwrap_or_default(),
                                     ctx.outface().map(|f| f.to_string()).unwrap_or_default(),
                                 );
+                                #[cfg(feature = "stats")]
+                                match self.flow {
+                                    InterceptorFlow::Egress => {
+                                        self.stats.inc_tx_downsampler_dropped_msgs(1);
+                                    }
+                                    InterceptorFlow::Ingress => {
+                                        self.stats.inc_rx_downsampler_dropped_msgs(1);
+                                    }
+                                }
                                 return false;
                             }
                         } else {
@@ -252,7 +275,12 @@ impl InterceptorTrait for DownsamplingInterceptor {
 const NANOS_PER_SEC: f64 = 1_000_000_000.0;
 
 impl DownsamplingInterceptor {
-    pub fn new(messages: Arc<DownsamplingFilters>, rules: &NEVec<DownsamplingRuleConf>) -> Self {
+    pub fn new(
+        messages: Arc<DownsamplingFilters>,
+        rules: &NEVec<DownsamplingRuleConf>,
+        #[cfg(feature = "stats")] flow: InterceptorFlow,
+        #[cfg(feature = "stats")] stats: Arc<TransportStats>,
+    ) -> Self {
         let mut ke_id = KeBoxTree::default();
         let mut ke_state = HashMap::default();
         for (id, rule) in rules.into_iter().enumerate() {
@@ -282,6 +310,10 @@ impl DownsamplingInterceptor {
             filtered_messages: messages,
             ke_id: Arc::new(Mutex::new(ke_id)),
             ke_state: Arc::new(Mutex::new(ke_state)),
+            #[cfg(feature = "stats")]
+            flow,
+            #[cfg(feature = "stats")]
+            stats,
         }
     }
 }

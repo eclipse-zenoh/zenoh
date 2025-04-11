@@ -281,7 +281,7 @@ macro_rules! inc_stats {
 #[allow(clippy::too_many_arguments)]
 pub fn route_data(
     tables_ref: &Arc<TablesLock>,
-    face: &Arc<FaceState>,
+    face: &FaceState,
     msg: &mut Push,
     reliability: Reliability,
 ) {
@@ -297,16 +297,15 @@ pub fn route_data(
                 prefix.expr(),
                 msg.wire_expr.suffix.as_ref()
             );
-
             let mut expr = RoutingExpr::new(&prefix, msg.wire_expr.suffix.as_ref());
 
             #[cfg(feature = "stats")]
             let admin = expr.full_expr().starts_with("@/");
             #[cfg(feature = "stats")]
             if !admin {
-                inc_stats!(face.state, rx, user, msg.payload);
+                inc_stats!(face, rx, user, msg.payload);
             } else {
-                inc_stats!(face.state, rx, admin, msg.payload);
+                inc_stats!(face, rx, admin, msg.payload);
             }
 
             if tables.hat_code.ingress_filter(&tables, face, &mut expr) {

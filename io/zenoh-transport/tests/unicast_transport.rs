@@ -499,7 +499,7 @@ async fn test_transport(
     }
     .into();
 
-    for _ in 0..MSG_COUNT {
+    for _ in 0..msg_count {
         let _ = client_transport.schedule(message.clone().as_mut());
     }
 

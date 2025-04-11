@@ -70,9 +70,8 @@ impl TransportUnicastLowlatency {
     pub fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
+        #[cfg(feature = "stats")] stats: Arc<TransportStats>,
     ) -> Arc<dyn TransportUnicastTrait> {
-        #[cfg(feature = "stats")]
-        let stats = Arc::new(TransportStats::new(Some(manager.get_stats().clone())));
         Arc::new(TransportUnicastLowlatency {
             manager,
             config,

@@ -310,7 +310,7 @@ impl MaybeOpenAck {
 
 #[derive(PartialEq, Eq)]
 pub(crate) struct LinkUnicastWithOpenAck {
-    link: TransportLinkUnicast,
+    pub(crate) link: TransportLinkUnicast,
     ack: Option<OpenAck>,
 }
 

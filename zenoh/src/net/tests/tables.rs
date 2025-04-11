@@ -20,10 +20,10 @@ use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_config::Config;
 use zenoh_core::zlock;
+use zenoh_protocol::core::Encoding;
 use zenoh_protocol::{
     core::{
-        key_expr::keyexpr, Encoding, ExprId, Reliability, WhatAmI, WireExpr, ZenohIdProto,
-        EMPTY_EXPR_ID,
+        key_expr::keyexpr, ExprId, Reliability, WhatAmI, WireExpr, ZenohIdProto, EMPTY_EXPR_ID,
     },
     network::{ext, Declare, DeclareBody, DeclareKeyExpr, Push},
     zenoh::{PushBody, Put},
