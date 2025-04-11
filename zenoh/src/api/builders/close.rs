@@ -91,14 +91,7 @@ impl<TCloseable: Closeable> Wait for CloseBuilder<TCloseable> {
 
                 #[cfg(not(nolocal_thread_not_available))]
                 {
-                    let evaluate = move || {
-                        // NOTE: tracing logger also panics if used inside atexit() handler!!!
-                        tracing::trace!(
-                            "tokio TLS NOT available, closing closeable in separate thread"
-                        );
-                        ZRuntime::Net.block_in_place(future)
-                    };
-                    std::thread::spawn(evaluate)
+                    std::thread::spawn(move || ZRuntime::Net.block_in_place(future))
                         .join()
                         .expect("Error spawning atexit-safe thread")
                 }
