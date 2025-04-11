@@ -16,8 +16,7 @@ use std::{any::Any, sync::Arc};
 use arc_swap::ArcSwap;
 use zenoh_link::Link;
 use zenoh_protocol::network::{
-    ext, response, Declare, DeclareBody, DeclareFinal, NetworkBodyMut, NetworkMessageMut,
-    ResponseFinal,
+    ext, Declare, DeclareBody, DeclareFinal, NetworkBodyMut, NetworkMessageMut,
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{unicast::TransportUnicast, TransportPeerEventHandler};
@@ -57,7 +56,10 @@ impl TransportPeerEventHandler for DeMux {
         // NOTE: we ignore message types already handled inside the routing.
             && !matches!(
                 msg.body,
-                NetworkBodyMut::Push(..) | NetworkBodyMut::Request(..)
+                NetworkBodyMut::Push(..)
+                    | NetworkBodyMut::Request(..)
+                    | NetworkBodyMut::Response(..)
+                    | NetworkBodyMut::ResponseFinal(..)
             )
         {
             let mut ctx = RoutingContext::new_in(msg.as_mut(), self.face.clone());
@@ -72,21 +74,6 @@ impl TransportPeerEventHandler for DeMux {
             let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
 
             match &ctx.msg.body {
-                NetworkBodyMut::Request(request) => {
-                    let request_id = request.id;
-                    if !interceptor.intercept(&mut ctx, cache) {
-                        // request was blocked by an interceptor, we need to send response final to avoid timeout error
-                        self.face
-                            .state
-                            .primitives
-                            .send_response_final(&mut ResponseFinal {
-                                rid: request_id,
-                                ext_qos: response::ext::QoSType::RESPONSE_FINAL,
-                                ext_tstamp: None,
-                            });
-                        return Ok(());
-                    }
-                }
                 NetworkBodyMut::Interest(interest) => {
                     let interest_id = interest.id;
                     if !interceptor.intercept(&mut ctx, cache) {
@@ -107,11 +94,11 @@ impl TransportPeerEventHandler for DeMux {
                         return Ok(());
                     }
                 }
-                NetworkBodyMut::Push(..) => unreachable!(),
-                NetworkBodyMut::Response(..)
-                | NetworkBodyMut::ResponseFinal(..)
-                | NetworkBodyMut::Declare(..)
-                | NetworkBodyMut::OAM(..) => {
+                NetworkBodyMut::Push(..)
+                | NetworkBodyMut::Request(..)
+                | NetworkBodyMut::Response(..)
+                | NetworkBodyMut::ResponseFinal(..) => unreachable!(),
+                NetworkBodyMut::Declare(..) | NetworkBodyMut::OAM(..) => {
                     if !interceptor.intercept(&mut ctx, cache) {
                         return Ok(());
                     }

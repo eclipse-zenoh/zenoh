@@ -344,7 +344,7 @@ pub fn route_data(
                                     Some(prefix) => prefix,
                                     None => {
                                         tracing::error!(
-                                            "Got Push with unknown scope {} from {}",
+                                            "Got WireExpr with unknown scope {} from {}",
                                             msg.wire_expr.scope,
                                             face,
                                         );
@@ -394,7 +394,7 @@ pub fn route_data(
                                     prefix
                                 } else {
                                     tracing::error!(
-                                        "Got Push with unknown scope {} from {}",
+                                        "Got WireExpr with unknown scope {} from {}",
                                         msg.wire_expr.scope,
                                         face,
                                     );

@@ -545,7 +545,7 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                                 Some(prefix) => prefix,
                                 None => {
                                     tracing::error!(
-                                        "Got Request with unknown scope {} from {}",
+                                        "Got WireExpr with unknown scope {} from {}",
                                         msg.wire_expr.scope,
                                         face,
                                     );
@@ -632,7 +632,7 @@ pub(crate) fn route_send_response(
                     Some(prefix) => prefix,
                     None => {
                         tracing::error!(
-                            "Got Responde with unknown scope {} from {}",
+                            "Got WireExpr with unknown scope {} from {}",
                             msg.wire_expr.scope,
                             face,
                         );

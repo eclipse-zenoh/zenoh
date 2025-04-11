@@ -166,7 +166,7 @@ impl FaceState {
         .and_then(|iceptors| iceptors.is_empty().not().then_some(iceptors))
     }
 
-    pub(crate) fn run_interceptors(
+    pub(crate) fn exec_interceptors(
         &self,
         flow: InterceptorFlow,
         prefix: Option<&Resource>,
@@ -502,7 +502,7 @@ impl Primitives for Face {
             tables.get_mapping(&self.state, &msg.wire_expr.scope, msg.wire_expr.mapping)
         else {
             tracing::error!(
-                "Received Response with unknown scope {} from {}",
+                "Received WireExpr with unknown scope {} from {}",
                 msg.wire_expr.scope,
                 self,
             );
@@ -519,7 +519,7 @@ impl Primitives for Face {
 
             if !self
                 .state
-                .run_interceptors(Ingress, Some(prefix), &iceptor, ctx)
+                .exec_interceptors(Ingress, Some(prefix), &iceptor, ctx)
             {
                 return;
             }
@@ -529,21 +529,26 @@ impl Primitives for Face {
     }
 
     fn send_request(&self, msg: &mut Request) {
-        let tables = self
-            .tables
-            .tables
-            .read()
-            .expect("reading Tables should not fail");
+        let prefix = {
+            let tables = self
+                .tables
+                .tables
+                .read()
+                .expect("reading Tables should not fail");
 
-        let Some(prefix) =
-            tables.get_mapping(&self.state, &msg.wire_expr.scope, msg.wire_expr.mapping)
-        else {
-            tracing::error!(
-                "Received Response with unknown scope {} from {}",
-                msg.wire_expr.scope,
-                self,
-            );
-            return;
+            if let Some(prefix) = tables
+                .get_mapping(&self.state, &msg.wire_expr.scope, msg.wire_expr.mapping)
+                .cloned()
+            {
+                prefix
+            } else {
+                tracing::error!(
+                    "Received WireExpr with unknown scope {} from {}",
+                    msg.wire_expr.scope,
+                    self,
+                );
+                return;
+            }
         };
 
         if let Some(iceptor) = self.state.load_interceptors(Ingress) {
@@ -556,7 +561,7 @@ impl Primitives for Face {
 
             if !self
                 .state
-                .run_interceptors(Ingress, Some(prefix), &iceptor, ctx)
+                .exec_interceptors(Ingress, Some(&prefix), &iceptor, ctx)
             {
                 // NOTE: this request was blocked by an ingress interceptor, we need to send
                 // response final to avoid timeout error. We don't go through the egress
@@ -578,21 +583,26 @@ impl Primitives for Face {
     }
 
     fn send_response(&self, msg: &mut Response) {
-        let tables = self
-            .tables
-            .tables
-            .read()
-            .expect("reading Tables should not fail");
+        let prefix = {
+            let tables = self
+                .tables
+                .tables
+                .read()
+                .expect("reading Tables should not fail");
 
-        let Some(prefix) =
-            tables.get_mapping(&self.state, &msg.wire_expr.scope, msg.wire_expr.mapping)
-        else {
-            tracing::error!(
-                "Received Response with unknown scope {} from {}",
-                msg.wire_expr.scope,
-                self,
-            );
-            return;
+            if let Some(prefix) = tables
+                .get_mapping(&self.state, &msg.wire_expr.scope, msg.wire_expr.mapping)
+                .cloned()
+            {
+                prefix
+            } else {
+                tracing::error!(
+                    "Received WireExpr with unknown scope {} from {}",
+                    msg.wire_expr.scope,
+                    self,
+                );
+                return;
+            }
         };
 
         if let Some(iceptor) = self.state.load_interceptors(Ingress) {
@@ -605,7 +615,7 @@ impl Primitives for Face {
 
             if !self
                 .state
-                .run_interceptors(Ingress, Some(prefix), &iceptor, ctx)
+                .exec_interceptors(Ingress, Some(&prefix), &iceptor, ctx)
             {
                 return;
             }
@@ -624,7 +634,7 @@ impl Primitives for Face {
             });
 
             // NOTE: ResponseFinal messages have no keyexpr
-            if !self.state.run_interceptors(Ingress, None, &iceptor, ctx) {
+            if !self.state.exec_interceptors(Ingress, None, &iceptor, ctx) {
                 return;
             }
         }
@@ -680,7 +690,7 @@ impl FaceState {
                 size: None,
             });
 
-            if !self.run_interceptors(InterceptorFlow::Egress, Some(prefix), &iceptor, ctx) {
+            if !self.exec_interceptors(InterceptorFlow::Egress, Some(prefix), &iceptor, ctx) {
                 return;
             }
         }
@@ -697,7 +707,7 @@ impl FaceState {
                 size: None,
             });
 
-            if !self.run_interceptors(InterceptorFlow::Egress, Some(prefix), &iceptor, ctx) {
+            if !self.exec_interceptors(InterceptorFlow::Egress, Some(prefix), &iceptor, ctx) {
                 // NOTE: this request was blocked by an egress interceptor, we need to send
                 // response final to avoid timeout error. We don't go through the egress
                 // interceptors because this message is not supposed to be filtered anyway.
@@ -722,7 +732,7 @@ impl FaceState {
                 size: None,
             });
 
-            if !self.run_interceptors(InterceptorFlow::Egress, Some(prefix), &iceptor, ctx) {
+            if !self.exec_interceptors(InterceptorFlow::Egress, Some(prefix), &iceptor, ctx) {
                 return;
             }
         }
@@ -740,7 +750,7 @@ impl FaceState {
             });
 
             // NOTE: ResponseFinal messages have no keyexpr
-            if !self.run_interceptors(InterceptorFlow::Egress, None, &iceptor, ctx) {
+            if !self.exec_interceptors(InterceptorFlow::Egress, None, &iceptor, ctx) {
                 return;
             }
         }

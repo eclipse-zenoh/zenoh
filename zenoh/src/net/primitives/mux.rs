@@ -141,27 +141,7 @@ impl EPrimitives for Mux {
             #[cfg(feature = "stats")]
             size: None,
         };
-        let interceptor = self.interceptor.load();
-        if interceptor.interceptors.is_empty() {
-            let _ = self.handler.schedule(msg);
-        } else if let Some(face) = self.face.get().and_then(|f| f.upgrade()) {
-            let mut ctx = RoutingContext::new_out(msg, face.clone());
-            let prefix = ctx
-                .wire_expr()
-                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
-                .flatten()
-                .cloned();
-            let cache_guard = prefix
-                .as_ref()
-                .and_then(|p| p.get_egress_cache(&face.state, &interceptor));
-            let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
-
-            if interceptor.intercept(&mut ctx, cache) {
-                let _ = self.handler.schedule(ctx.msg);
-            }
-        } else {
-            tracing::error!("Uninitialized multiplexer!");
-        }
+        let _ = self.handler.schedule(msg);
     }
 
     fn send_response_final(&self, msg: &mut ResponseFinal) {
@@ -171,26 +151,7 @@ impl EPrimitives for Mux {
             #[cfg(feature = "stats")]
             size: None,
         };
-        let interceptor = self.interceptor.load();
-        if interceptor.interceptors.is_empty() {
-            let _ = self.handler.schedule(msg);
-        } else if let Some(face) = self.face.get().and_then(|f| f.upgrade()) {
-            let mut ctx = RoutingContext::new_out(msg, face.clone());
-            let prefix = ctx
-                .wire_expr()
-                .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
-                .flatten()
-                .cloned();
-            let cache_guard = prefix
-                .as_ref()
-                .and_then(|p| p.get_egress_cache(&face.state, &interceptor));
-            let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
-            if interceptor.intercept(&mut ctx, cache) {
-                let _ = self.handler.schedule(ctx.msg);
-            }
-        } else {
-            tracing::error!("Uninitialized multiplexer!");
-        }
+        let _ = self.handler.schedule(msg);
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
