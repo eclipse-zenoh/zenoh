@@ -87,6 +87,16 @@ impl<Msg> RoutingContext<Msg> {
         }
     }
 
+    pub(crate) fn with_prefix(msg: Msg, prefix: Arc<Resource>) -> Self {
+        Self {
+            msg,
+            inface: OnceCell::new(),
+            outface: OnceCell::new(),
+            prefix: OnceCell::from(prefix),
+            full_expr: OnceCell::new(),
+        }
+    }
+
     #[allow(dead_code)]
     pub(crate) fn inface(&self) -> Option<&Face> {
         self.inface.get()
@@ -152,12 +162,21 @@ impl RoutingContext<NetworkMessageMut<'_>> {
         if self.full_expr.get().is_some() {
             return Some(self.full_expr.get().as_ref().unwrap());
         }
-        if let Some(prefix) = self.prefix() {
+
+        if let Some(prefix) = self.prefix.get() {
             let _ = self
                 .full_expr
                 .set(prefix.expr().to_string() + self.wire_expr().unwrap().suffix.as_ref());
             return Some(self.full_expr.get().as_ref().unwrap());
         }
+
+        // if let Some(prefix) = self.prefix() {
+        //     let _ = self
+        //         .full_expr
+        //         .set(prefix.expr().to_string() + self.wire_expr().unwrap().suffix.as_ref());
+        //     return Some(self.full_expr.get().as_ref().unwrap());
+        // }
+
         None
     }
 

@@ -557,7 +557,7 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                                 }
                             }
                         };
-                        outface.intercept_request(msg, &prefix);
+                        outface.intercept_request(msg, prefix);
                     }
                 }
             } else {
@@ -644,7 +644,7 @@ pub(crate) fn route_send_response(
                     }
                 }
             };
-            query.src_face.intercept_response(msg, &prefix);
+            query.src_face.intercept_response(msg, prefix);
         }
         None => tracing::warn!("{}:{} Route reply: Query not found!", face, msg.rid),
     }

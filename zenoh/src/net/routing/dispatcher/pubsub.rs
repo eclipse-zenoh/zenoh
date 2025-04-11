@@ -356,7 +356,7 @@ pub fn route_data(
                                     }
                                 }
                             };
-                            outface.intercept_push(msg, reliability, &prefix)
+                            outface.intercept_push(msg, reliability, prefix)
                         }
                     } else {
                         let route = route
@@ -411,7 +411,7 @@ pub fn route_data(
                                     }
                                 }
                             };
-                            outface.intercept_push(msg, reliability, &prefix)
+                            outface.intercept_push(msg, reliability, prefix)
                         }
                     }
                 }

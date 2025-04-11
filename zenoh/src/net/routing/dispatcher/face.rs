@@ -22,7 +22,7 @@ use std::{
 
 use arc_swap::ArcSwap;
 use tokio_util::sync::CancellationToken;
-use zenoh_config::InterceptorFlow::{self, *};
+use zenoh_config::InterceptorFlow;
 use zenoh_protocol::{
     core::{ExprId, Reliability, WhatAmI, ZenohIdProto},
     network::{
@@ -169,15 +169,18 @@ impl FaceState {
     pub(crate) fn exec_interceptors(
         &self,
         flow: InterceptorFlow,
-        prefix: Option<&Resource>,
         iceptor: &InterceptorsChain,
         ctx: &mut RoutingContext<NetworkMessageMut<'_>>,
     ) -> bool {
         // NOTE: the cache should be empty if the wire expr has no suffix, i.e. when the prefix
         // doesn't represent a full keyexpr.
-        let prefix = ctx
-            .wire_expr()
-            .and_then(|we| if !we.has_suffix() { prefix } else { None });
+        let prefix = ctx.wire_expr().and_then(|we| {
+            if we.has_suffix() {
+                None
+            } else {
+                ctx.prefix.get()
+            }
+        });
         let cache_guard = prefix
             .as_ref()
             .and_then(|p| p.interceptor_cache(self, iceptor, flow));
@@ -186,7 +189,7 @@ impl FaceState {
     }
 
     pub(crate) fn update_interceptors_caches(&self, res: &mut Arc<Resource>) {
-        if let Some(iceptor) = self.load_interceptors(Ingress) {
+        if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Ingress) {
             if let Some(expr) = res.keyexpr() {
                 let cache = iceptor.compute_keyexpr_cache(expr);
                 get_mut_unchecked(
@@ -199,7 +202,7 @@ impl FaceState {
             }
         }
 
-        if let Some(iceptor) = self.load_interceptors(Egress) {
+        if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Egress) {
             if let Some(expr) = res.keyexpr() {
                 let cache = iceptor.compute_keyexpr_cache(expr);
                 get_mut_unchecked(
@@ -492,34 +495,43 @@ impl Primitives for Face {
 
     #[inline]
     fn send_push(&self, msg: &mut Push, reliability: Reliability) {
-        let tables = self
-            .tables
-            .tables
-            .read()
-            .expect("reading Tables should not fail");
+        let prefix = {
+            let tables = self
+                .tables
+                .tables
+                .read()
+                .expect("reading Tables should not fail");
 
-        let Some(prefix) =
-            tables.get_mapping(&self.state, &msg.wire_expr.scope, msg.wire_expr.mapping)
-        else {
-            tracing::error!(
-                "Received WireExpr with unknown scope {} from {}",
-                msg.wire_expr.scope,
-                self,
-            );
-            return;
+            match tables
+                .get_mapping(&self.state, &msg.wire_expr.scope, msg.wire_expr.mapping)
+                .cloned()
+            {
+                Some(prefix) => prefix,
+                None => {
+                    tracing::error!(
+                        "Received WireExpr with unknown scope {} from {}",
+                        msg.wire_expr.scope,
+                        self,
+                    );
+                    return;
+                }
+            }
         };
 
-        if let Some(iceptor) = self.state.load_interceptors(Ingress) {
-            let ctx = &mut RoutingContext::new(NetworkMessageMut {
-                body: NetworkBodyMut::Push(msg),
-                reliability,
-                #[cfg(feature = "stats")]
-                size: None,
-            });
+        if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Ingress) {
+            let ctx = &mut RoutingContext::with_prefix(
+                NetworkMessageMut {
+                    body: NetworkBodyMut::Push(msg),
+                    reliability,
+                    #[cfg(feature = "stats")]
+                    size: None,
+                },
+                prefix,
+            );
 
             if !self
                 .state
-                .exec_interceptors(Ingress, Some(prefix), &iceptor, ctx)
+                .exec_interceptors(InterceptorFlow::Ingress, &iceptor, ctx)
             {
                 return;
             }
@@ -529,39 +541,43 @@ impl Primitives for Face {
     }
 
     fn send_request(&self, msg: &mut Request) {
-        let prefix = {
-            let tables = self
-                .tables
-                .tables
-                .read()
-                .expect("reading Tables should not fail");
+        if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Ingress) {
+            let prefix = {
+                let tables = self
+                    .tables
+                    .tables
+                    .read()
+                    .expect("reading Tables should not fail");
 
-            if let Some(prefix) = tables
-                .get_mapping(&self.state, &msg.wire_expr.scope, msg.wire_expr.mapping)
-                .cloned()
-            {
-                prefix
-            } else {
-                tracing::error!(
-                    "Received WireExpr with unknown scope {} from {}",
-                    msg.wire_expr.scope,
-                    self,
-                );
-                return;
-            }
-        };
+                match tables
+                    .get_mapping(&self.state, &msg.wire_expr.scope, msg.wire_expr.mapping)
+                    .cloned()
+                {
+                    Some(prefix) => prefix,
+                    None => {
+                        tracing::error!(
+                            "Received WireExpr with unknown scope {} from {}",
+                            msg.wire_expr.scope,
+                            self,
+                        );
+                        return;
+                    }
+                }
+            };
 
-        if let Some(iceptor) = self.state.load_interceptors(Ingress) {
-            let ctx = &mut RoutingContext::new(NetworkMessageMut {
-                body: NetworkBodyMut::Request(msg),
-                reliability: Reliability::Reliable, // NOTE: queries are always reliable
-                #[cfg(feature = "stats")]
-                size: None,
-            });
+            let ctx = &mut RoutingContext::with_prefix(
+                NetworkMessageMut {
+                    body: NetworkBodyMut::Request(msg),
+                    reliability: Reliability::Reliable, // NOTE: queries are always reliable
+                    #[cfg(feature = "stats")]
+                    size: None,
+                },
+                prefix,
+            );
 
             if !self
                 .state
-                .exec_interceptors(Ingress, Some(&prefix), &iceptor, ctx)
+                .exec_interceptors(InterceptorFlow::Ingress, &iceptor, ctx)
             {
                 // NOTE: this request was blocked by an ingress interceptor, we need to send
                 // response final to avoid timeout error. We don't go through the egress
@@ -583,39 +599,43 @@ impl Primitives for Face {
     }
 
     fn send_response(&self, msg: &mut Response) {
-        let prefix = {
-            let tables = self
-                .tables
-                .tables
-                .read()
-                .expect("reading Tables should not fail");
+        if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Ingress) {
+            let prefix = {
+                let tables = self
+                    .tables
+                    .tables
+                    .read()
+                    .expect("reading Tables should not fail");
 
-            if let Some(prefix) = tables
-                .get_mapping(&self.state, &msg.wire_expr.scope, msg.wire_expr.mapping)
-                .cloned()
-            {
-                prefix
-            } else {
-                tracing::error!(
-                    "Received WireExpr with unknown scope {} from {}",
-                    msg.wire_expr.scope,
-                    self,
-                );
-                return;
-            }
-        };
+                match tables
+                    .get_mapping(&self.state, &msg.wire_expr.scope, msg.wire_expr.mapping)
+                    .cloned()
+                {
+                    Some(prefix) => prefix,
+                    None => {
+                        tracing::error!(
+                            "Received WireExpr with unknown scope {} from {}",
+                            msg.wire_expr.scope,
+                            self,
+                        );
+                        return;
+                    }
+                }
+            };
 
-        if let Some(iceptor) = self.state.load_interceptors(Ingress) {
-            let ctx = &mut RoutingContext::new(NetworkMessageMut {
-                body: NetworkBodyMut::Response(msg),
-                reliability: Reliability::Reliable, // NOTE: queries are always reliable
-                #[cfg(feature = "stats")]
-                size: None,
-            });
+            let ctx = &mut RoutingContext::with_prefix(
+                NetworkMessageMut {
+                    body: NetworkBodyMut::Response(msg),
+                    reliability: Reliability::Reliable, // NOTE: queries are always reliable
+                    #[cfg(feature = "stats")]
+                    size: None,
+                },
+                prefix,
+            );
 
             if !self
                 .state
-                .exec_interceptors(Ingress, Some(&prefix), &iceptor, ctx)
+                .exec_interceptors(InterceptorFlow::Ingress, &iceptor, ctx)
             {
                 return;
             }
@@ -625,7 +645,7 @@ impl Primitives for Face {
     }
 
     fn send_response_final(&self, msg: &mut ResponseFinal) {
-        if let Some(iceptor) = self.state.load_interceptors(Ingress) {
+        if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Ingress) {
             let ctx = &mut RoutingContext::new(NetworkMessageMut {
                 body: NetworkBodyMut::ResponseFinal(msg),
                 reliability: Reliability::Reliable, // NOTE: queries are always reliable
@@ -634,7 +654,10 @@ impl Primitives for Face {
             });
 
             // NOTE: ResponseFinal messages have no keyexpr
-            if !self.state.exec_interceptors(Ingress, None, &iceptor, ctx) {
+            if !self
+                .state
+                .exec_interceptors(InterceptorFlow::Ingress, &iceptor, ctx)
+            {
                 return;
             }
         }
@@ -680,17 +703,20 @@ impl FaceState {
         &self,
         msg: &mut Push,
         reliability: Reliability,
-        prefix: &Resource,
+        prefix: Arc<Resource>,
     ) {
         if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Egress) {
-            let ctx = &mut RoutingContext::new(NetworkMessageMut {
-                body: NetworkBodyMut::Push(msg),
-                reliability,
-                #[cfg(feature = "stats")]
-                size: None,
-            });
+            let ctx = &mut RoutingContext::with_prefix(
+                NetworkMessageMut {
+                    body: NetworkBodyMut::Push(msg),
+                    reliability,
+                    #[cfg(feature = "stats")]
+                    size: None,
+                },
+                prefix,
+            );
 
-            if !self.exec_interceptors(InterceptorFlow::Egress, Some(prefix), &iceptor, ctx) {
+            if !self.exec_interceptors(InterceptorFlow::Egress, &iceptor, ctx) {
                 return;
             }
         }
@@ -698,16 +724,19 @@ impl FaceState {
         self.primitives.send_push(msg, reliability);
     }
 
-    pub(crate) fn intercept_request(&self, msg: &mut Request, prefix: &Resource) {
+    pub(crate) fn intercept_request(&self, msg: &mut Request, prefix: Arc<Resource>) {
         if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Egress) {
-            let ctx = &mut RoutingContext::new(NetworkMessageMut {
-                body: NetworkBodyMut::Request(msg),
-                reliability: Reliability::Reliable,
-                #[cfg(feature = "stats")]
-                size: None,
-            });
+            let ctx = &mut RoutingContext::with_prefix(
+                NetworkMessageMut {
+                    body: NetworkBodyMut::Request(msg),
+                    reliability: Reliability::Reliable,
+                    #[cfg(feature = "stats")]
+                    size: None,
+                },
+                prefix,
+            );
 
-            if !self.exec_interceptors(InterceptorFlow::Egress, Some(prefix), &iceptor, ctx) {
+            if !self.exec_interceptors(InterceptorFlow::Egress, &iceptor, ctx) {
                 // NOTE: this request was blocked by an egress interceptor, we need to send
                 // response final to avoid timeout error. We don't go through the egress
                 // interceptors because this message is not supposed to be filtered anyway.
@@ -723,16 +752,19 @@ impl FaceState {
         self.primitives.send_request(msg);
     }
 
-    pub(crate) fn intercept_response(&self, msg: &mut Response, prefix: &Resource) {
+    pub(crate) fn intercept_response(&self, msg: &mut Response, prefix: Arc<Resource>) {
         if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Egress) {
-            let ctx = &mut RoutingContext::new(NetworkMessageMut {
-                body: NetworkBodyMut::Response(msg),
-                reliability: Reliability::Reliable, // NOTE: queries are always reliable
-                #[cfg(feature = "stats")]
-                size: None,
-            });
+            let ctx = &mut RoutingContext::with_prefix(
+                NetworkMessageMut {
+                    body: NetworkBodyMut::Response(msg),
+                    reliability: Reliability::Reliable, // NOTE: queries are always reliable
+                    #[cfg(feature = "stats")]
+                    size: None,
+                },
+                prefix,
+            );
 
-            if !self.exec_interceptors(InterceptorFlow::Egress, Some(prefix), &iceptor, ctx) {
+            if !self.exec_interceptors(InterceptorFlow::Egress, &iceptor, ctx) {
                 return;
             }
         }
@@ -750,7 +782,7 @@ impl FaceState {
             });
 
             // NOTE: ResponseFinal messages have no keyexpr
-            if !self.exec_interceptors(InterceptorFlow::Egress, None, &iceptor, ctx) {
+            if !self.exec_interceptors(InterceptorFlow::Egress, &iceptor, ctx) {
                 return;
             }
         }
