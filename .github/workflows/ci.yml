@@ -309,6 +309,12 @@ jobs:
               files: lcov.info
               fail_ci_if_error: true
 
+          # Cleanup profraw files to avoid failing during rust-cache
+          # post run cleanup. It requires enough space on disk left to save the cache
+          - name: Cleanup profraw files
+            run: |
+              find . -name "*.profraw" -type f -delete
+
   # NOTE: In GitHub repository settings, the "Require status checks to pass
   # before merging" branch protection rule ensures that commits are only merged
   # from branches where specific status checks have passed. These checks are
