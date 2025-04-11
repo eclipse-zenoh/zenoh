@@ -292,7 +292,7 @@ jobs:
 
           - name: Generate code coverage
             run: |
-              LLVM_PROFILE_FILE_NAME="zenoh-%n.profraw" cargo +${{ matrix.rust }} llvm-cov test --features unstable --features test --features shared-memory  \
+              cargo +${{ matrix.rust }} llvm-cov test --features unstable --features test --features shared-memory  \
               ${{ matrix.rust == 'nightly' && '--doctests' || '' }} --lcov --output-path lcov.info \
               --no-cfg-coverage --no-cfg-coverage-nightly --ignore-run-fail -- \
               --skip test_default_features \
@@ -308,6 +308,12 @@ jobs:
               token: ${{ secrets.CODECOV_TOKEN }}
               files: lcov.info
               fail_ci_if_error: true
+
+          # Cleanup profraw files to avoid failing during rust-cache
+          # post run cleanup. It requires enough space on disk left to save the cache
+          - name: Cleanup profraw files
+            run: |
+              find . -name "*.profraw" -type f -delete
 
   # NOTE: In GitHub repository settings, the "Require status checks to pass
   # before merging" branch protection rule ensures that commits are only merged
