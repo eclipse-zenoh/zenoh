@@ -34,7 +34,6 @@ use crate::net::routing::{
         tables::{Tables, TablesLock},
     },
     hat::{CurrentFutureTrait, HatInterestTrait, SendDeclare},
-    RoutingContext,
 };
 
 pub(super) fn interests_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
@@ -58,7 +57,7 @@ pub(super) fn interests_new_face(tables: &mut Tables, face: &mut Arc<FaceState>)
                     },
                 );
                 let wire_expr = res.as_ref().map(|res| Resource::decl_key(res, face, true));
-                face.primitives.send_interest(RoutingContext::with_expr(
+                face.intercept_interest(
                     &mut Interest {
                         id,
                         mode: InterestMode::CurrentFuture,
@@ -68,10 +67,8 @@ pub(super) fn interests_new_face(tables: &mut Tables, face: &mut Arc<FaceState>)
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::DEFAULT,
                     },
-                    res.as_ref()
-                        .map(|res| res.expr().to_string())
-                        .unwrap_or_default(),
-                ));
+                    res.as_ref(),
+                );
             }
         }
     }
@@ -151,7 +148,7 @@ impl HatInterestTrait for HatCode {
             let wire_expr = res
                 .as_ref()
                 .map(|res| Resource::decl_key(res, dst_face, true));
-            dst_face.primitives.send_interest(RoutingContext::with_expr(
+            dst_face.intercept_interest(
                 &mut Interest {
                     id,
                     mode,
@@ -161,10 +158,8 @@ impl HatInterestTrait for HatCode {
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
                 },
-                res.as_ref()
-                    .map(|res| res.expr().to_string())
-                    .unwrap_or_default(),
-            ));
+                res.as_deref(),
+            );
         }
 
         if mode.current() {
@@ -176,26 +171,28 @@ impl HatInterestTrait for HatCode {
                         interest.src_interest_id
                     );
                     send_declare(
-                        &interest.src_face.primitives,
-                        RoutingContext::new(Declare {
+                        &interest.src_face,
+                        Declare {
                             interest_id: Some(interest.src_interest_id),
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType::DEFAULT,
                             body: DeclareBody::DeclareFinal(DeclareFinal),
-                        }),
+                        },
+                        None,
                     );
                 }
             } else {
                 send_declare(
-                    &face.primitives,
-                    RoutingContext::new(Declare {
+                    face,
+                    Declare {
                         interest_id: Some(id),
                         ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::DEFAULT,
                         body: DeclareBody::DeclareFinal(DeclareFinal),
-                    }),
+                    },
+                    None,
                 );
             }
         }
@@ -225,7 +222,7 @@ impl HatInterestTrait for HatCode {
                         if local_interest.res == interest.res
                             && local_interest.options == interest.options
                         {
-                            dst_face.primitives.send_interest(RoutingContext::with_expr(
+                            dst_face.intercept_interest(
                                 &mut Interest {
                                     id,
                                     mode: InterestMode::Final,
@@ -237,12 +234,8 @@ impl HatInterestTrait for HatCode {
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType::DEFAULT,
                                 },
-                                local_interest
-                                    .res
-                                    .as_ref()
-                                    .map(|res| res.expr().to_string())
-                                    .unwrap_or_default(),
-                            ));
+                                local_interest.res.as_ref(),
+                            );
                             get_mut_unchecked(dst_face).local_interests.remove(&id);
                         }
                     }

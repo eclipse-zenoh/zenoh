@@ -51,10 +51,7 @@ pub(crate) fn declare_subscription(
     send_declare: &mut SendDeclare,
 ) {
     let rtables = zread!(tables.tables);
-    match rtables
-        .get_mapping(face, &expr.scope, expr.mapping)
-        .cloned()
-    {
+    match rtables.get_mapping(face, expr.scope, expr.mapping).cloned() {
         Some(mut prefix) => {
             tracing::debug!(
                 "{} Declare subscriber {} ({}{})",
@@ -119,7 +116,7 @@ pub(crate) fn undeclare_subscription(
         None
     } else {
         let rtables = zread!(tables.tables);
-        match rtables.get_mapping(face, &expr.scope, expr.mapping) {
+        match rtables.get_mapping(face, expr.scope, expr.mapping) {
             Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
                 Some(res) => Some(res),
                 None => {
@@ -287,7 +284,7 @@ pub fn route_data(
 ) {
     let tables = zread!(tables_ref.tables);
     match tables
-        .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
+        .get_mapping(face, msg.wire_expr.scope, msg.wire_expr.mapping)
         .cloned()
     {
         Some(prefix) => {
@@ -340,7 +337,7 @@ pub fn route_data(
                                 match tables
                                     .get_sent_mapping(
                                         outface,
-                                        &msg.wire_expr.scope,
+                                        msg.wire_expr.scope,
                                         msg.wire_expr.mapping,
                                     )
                                     .cloned()
@@ -395,7 +392,7 @@ pub fn route_data(
                                 match tables
                                     .get_sent_mapping(
                                         &outface,
-                                        &msg.wire_expr.scope,
+                                        msg.wire_expr.scope,
                                         msg.wire_expr.mapping,
                                     )
                                     .cloned()

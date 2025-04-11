@@ -14,6 +14,7 @@
 use std::{
     borrow::Cow,
     collections::HashMap,
+    ops::Deref,
     sync::{atomic::Ordering, Arc},
 };
 
@@ -47,7 +48,6 @@ use crate::{
         hat::{
             p2p_peer::initial_interest, CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources,
         },
-        RoutingContext,
     },
 };
 
@@ -117,21 +117,19 @@ fn propagate_simple_queryable_to(
             .insert(res.clone(), (id, info));
         let key_expr = Resource::decl_key(res, dst_face, super::push_declaration_profile(dst_face));
         send_declare(
-            &dst_face.primitives,
-            RoutingContext::with_expr(
-                Declare {
-                    interest_id: None,
-                    ext_qos: ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                        id,
-                        wire_expr: key_expr,
-                        ext_info: info,
-                    }),
-                },
-                res.expr().to_string(),
-            ),
+            dst_face,
+            Declare {
+                interest_id: None,
+                ext_qos: ext::QoSType::DECLARE,
+                ext_tstamp: None,
+                ext_nodeid: ext::NodeIdType::DEFAULT,
+                body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                    id,
+                    wire_expr: key_expr,
+                    ext_info: info,
+                }),
+            },
+            Some(res.clone()),
         );
     }
 }
@@ -213,20 +211,18 @@ fn propagate_forget_simple_queryable(
     for face in tables.faces.values_mut() {
         if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
             send_declare(
-                &face.primitives,
-                RoutingContext::with_expr(
-                    Declare {
-                        interest_id: None,
-                        ext_qos: ext::QoSType::DECLARE,
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                        body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                            id,
-                            ext_wire_expr: WireExprType::null(),
-                        }),
-                    },
-                    res.expr().to_string(),
-                ),
+                face,
+                Declare {
+                    interest_id: None,
+                    ext_qos: ext::QoSType::DECLARE,
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                    body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                        id,
+                        ext_wire_expr: WireExprType::null(),
+                    }),
+                },
+                Some(res.clone()),
             );
         }
         for res in face_hat!(face)
@@ -241,20 +237,18 @@ fn propagate_forget_simple_queryable(
             }) {
                 if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(&res) {
                     send_declare(
-                        &face.primitives,
-                        RoutingContext::with_expr(
-                            Declare {
-                                interest_id: None,
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                                    id,
-                                    ext_wire_expr: WireExprType::null(),
-                                }),
-                            },
-                            res.expr().to_string(),
-                        ),
+                        face,
+                        Declare {
+                            interest_id: None,
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                                id,
+                                ext_wire_expr: WireExprType::null(),
+                            }),
+                        },
+                        Some(res),
                     );
                 }
             }
@@ -287,20 +281,18 @@ pub(super) fn undeclare_simple_queryable(
             let mut face = &mut simple_qabls[0];
             if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
                 send_declare(
-                    &face.primitives,
-                    RoutingContext::with_expr(
-                        Declare {
-                            interest_id: None,
-                            ext_qos: ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                                id,
-                                ext_wire_expr: WireExprType::null(),
-                            }),
-                        },
-                        res.expr().to_string(),
-                    ),
+                    face,
+                    Declare {
+                        interest_id: None,
+                        ext_qos: ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                            id,
+                            ext_wire_expr: WireExprType::null(),
+                        }),
+                    },
+                    Some(res.clone()),
                 );
             }
             for res in face_hat!(face)
@@ -315,20 +307,18 @@ pub(super) fn undeclare_simple_queryable(
                 }) {
                     if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
                         send_declare(
-                            &face.primitives,
-                            RoutingContext::with_expr(
-                                Declare {
-                                    interest_id: None,
-                                    ext_qos: ext::QoSType::DECLARE,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                                    body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                                        id,
-                                        ext_wire_expr: WireExprType::null(),
-                                    }),
-                                },
-                                res.expr().to_string(),
-                            ),
+                            face,
+                            Declare {
+                                interest_id: None,
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                                    id,
+                                    ext_wire_expr: WireExprType::null(),
+                                }),
+                            },
+                            Some(res),
                         );
                     }
                 }
@@ -427,21 +417,19 @@ pub(super) fn declare_qabl_interest(
                     let wire_expr =
                         Resource::decl_key(res, face, super::push_declaration_profile(face));
                     send_declare(
-                        &face.primitives,
-                        RoutingContext::with_expr(
-                            Declare {
-                                interest_id,
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                    id,
-                                    wire_expr,
-                                    ext_info: info,
-                                }),
-                            },
-                            res.expr().to_string(),
-                        ),
+                        face,
+                        Declare {
+                            interest_id,
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                id,
+                                wire_expr,
+                                ext_info: info,
+                            }),
+                        },
+                        Some(res.deref().clone()),
                     );
                 }
             } else {
@@ -462,21 +450,19 @@ pub(super) fn declare_qabl_interest(
                                     super::push_declaration_profile(face),
                                 );
                                 send_declare(
-                                    &face.primitives,
-                                    RoutingContext::with_expr(
-                                        Declare {
-                                            interest_id,
-                                            ext_qos: ext::QoSType::DECLARE,
-                                            ext_tstamp: None,
-                                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                                            body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                                id,
-                                                wire_expr: key_expr,
-                                                ext_info: info,
-                                            }),
-                                        },
-                                        qabl.expr().to_string(),
-                                    ),
+                                    face,
+                                    Declare {
+                                        interest_id,
+                                        ext_qos: ext::QoSType::DECLARE,
+                                        ext_tstamp: None,
+                                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                                        body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                            id,
+                                            wire_expr: key_expr,
+                                            ext_info: info,
+                                        }),
+                                    },
+                                    Some(qabl.clone()),
                                 );
                             }
                         }
@@ -501,21 +487,19 @@ pub(super) fn declare_qabl_interest(
                                 super::push_declaration_profile(face),
                             );
                             send_declare(
-                                &face.primitives,
-                                RoutingContext::with_expr(
-                                    Declare {
-                                        interest_id,
-                                        ext_qos: ext::QoSType::DECLARE,
-                                        ext_tstamp: None,
-                                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                                        body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                            id,
-                                            wire_expr: key_expr,
-                                            ext_info: info,
-                                        }),
-                                    },
-                                    qabl.expr().to_string(),
-                                ),
+                                face,
+                                Declare {
+                                    interest_id,
+                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                        id,
+                                        wire_expr: key_expr,
+                                        ext_info: info,
+                                    }),
+                                },
+                                Some(qabl.clone()),
                             );
                         }
                     }

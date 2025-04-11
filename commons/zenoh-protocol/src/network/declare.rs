@@ -148,6 +148,21 @@ impl Declare {
             body,
         }
     }
+
+    #[inline]
+    pub fn wire_expr(&self) -> Option<&WireExpr> {
+        match &self.body {
+            DeclareBody::DeclareKeyExpr(m) => Some(&m.wire_expr),
+            DeclareBody::UndeclareKeyExpr(_) => None,
+            DeclareBody::DeclareSubscriber(m) => Some(&m.wire_expr),
+            DeclareBody::UndeclareSubscriber(m) => Some(&m.ext_wire_expr.wire_expr),
+            DeclareBody::DeclareQueryable(m) => Some(&m.wire_expr),
+            DeclareBody::UndeclareQueryable(m) => Some(&m.ext_wire_expr.wire_expr),
+            DeclareBody::DeclareToken(m) => Some(&m.wire_expr),
+            DeclareBody::UndeclareToken(m) => Some(&m.ext_wire_expr.wire_expr),
+            DeclareBody::DeclareFinal(_) => None,
+        }
+    }
 }
 
 pub mod common {

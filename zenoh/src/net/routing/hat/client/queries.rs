@@ -42,7 +42,6 @@ use crate::{
             tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
         },
         hat::{HatQueriesTrait, SendDeclare, Sources},
-        RoutingContext,
     },
 };
 
@@ -107,21 +106,19 @@ fn propagate_simple_queryable(
                 .insert(res.clone(), (id, info));
             let key_expr = Resource::decl_key(res, &mut dst_face, true);
             send_declare(
-                &dst_face.primitives,
-                RoutingContext::with_expr(
-                    Declare {
-                        interest_id: None,
-                        ext_qos: ext::QoSType::DECLARE,
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                        body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                            id,
-                            wire_expr: key_expr,
-                            ext_info: info,
-                        }),
-                    },
-                    res.expr().to_string(),
-                ),
+                &dst_face,
+                Declare {
+                    interest_id: None,
+                    ext_qos: ext::QoSType::DECLARE,
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                        id,
+                        wire_expr: key_expr,
+                        ext_info: info,
+                    }),
+                },
+                Some(res.clone()),
             );
         }
     }
@@ -181,20 +178,18 @@ fn propagate_forget_simple_queryable(
     for face in tables.faces.values_mut() {
         if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
             send_declare(
-                &face.primitives,
-                RoutingContext::with_expr(
-                    Declare {
-                        interest_id: None,
-                        ext_qos: ext::QoSType::DECLARE,
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                        body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                            id,
-                            ext_wire_expr: WireExprType::null(),
-                        }),
-                    },
-                    res.expr().to_string(),
-                ),
+                face,
+                Declare {
+                    interest_id: None,
+                    ext_qos: ext::QoSType::DECLARE,
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                    body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                        id,
+                        ext_wire_expr: WireExprType::null(),
+                    }),
+                },
+                Some(res.clone()),
             );
         }
     }
@@ -225,20 +220,18 @@ pub(super) fn undeclare_simple_queryable(
             let face = &mut simple_qabls[0];
             if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
                 send_declare(
-                    &face.primitives,
-                    RoutingContext::with_expr(
-                        Declare {
-                            interest_id: None,
-                            ext_qos: ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                                id,
-                                ext_wire_expr: WireExprType::null(),
-                            }),
-                        },
-                        res.expr().to_string(),
-                    ),
+                    face,
+                    Declare {
+                        interest_id: None,
+                        ext_qos: ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                            id,
+                            ext_wire_expr: WireExprType::null(),
+                        }),
+                    },
+                    Some(res.clone()),
                 );
             }
         }

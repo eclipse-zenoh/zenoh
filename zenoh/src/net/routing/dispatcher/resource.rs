@@ -41,7 +41,6 @@ use super::{
 use crate::net::routing::{
     interceptor::{InterceptorTrait, InterceptorsChain},
     router::{disable_matches_data_routes, disable_matches_query_routes},
-    RoutingContext,
 };
 
 pub(crate) type NodeId = u16;
@@ -539,7 +538,7 @@ impl Resource {
                     get_mut_unchecked(face)
                         .local_mappings
                         .insert(expr_id, nonwild_prefix.clone());
-                    face.primitives.send_declare(RoutingContext::with_expr(
+                    face.intercept_declare(
                         &mut Declare {
                             interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
@@ -550,8 +549,8 @@ impl Resource {
                                 wire_expr: nonwild_prefix.expr().to_string().into(),
                             }),
                         },
-                        nonwild_prefix.expr().to_string(),
-                    ));
+                        Some(&nonwild_prefix),
+                    );
                     face.update_interceptors_caches(&mut nonwild_prefix);
                     WireExpr {
                         scope: expr_id,
@@ -759,22 +758,6 @@ impl Resource {
         }
     }
 
-    pub(crate) fn get_ingress_cache(
-        &self,
-        face: &FaceState,
-        interceptor: &InterceptorsChain,
-    ) -> Option<InterceptorCacheValueType> {
-        self.interceptor_cache(face, interceptor, InterceptorFlow::Ingress)
-    }
-
-    pub(crate) fn get_egress_cache(
-        &self,
-        face: &FaceState,
-        interceptor: &InterceptorsChain,
-    ) -> Option<InterceptorCacheValueType> {
-        self.interceptor_cache(face, interceptor, InterceptorFlow::Egress)
-    }
-
     pub(crate) fn interceptor_cache(
         &self,
         face: &FaceState,
@@ -798,10 +781,7 @@ pub(crate) fn register_expr(
     expr: &WireExpr,
 ) {
     let rtables = zread!(tables.tables);
-    match rtables
-        .get_mapping(face, &expr.scope, expr.mapping)
-        .cloned()
-    {
+    match rtables.get_mapping(face, expr.scope, expr.mapping).cloned() {
         Some(mut prefix) => match face.remote_mappings.get(&expr_id) {
             Some(res) => {
                 let mut fullexpr = prefix.expr().to_string();
@@ -879,10 +859,7 @@ pub(crate) fn register_expr_interest(
 ) {
     if let Some(expr) = expr {
         let rtables = zread!(tables.tables);
-        match rtables
-            .get_mapping(face, &expr.scope, expr.mapping)
-            .cloned()
-        {
+        match rtables.get_mapping(face, expr.scope, expr.mapping).cloned() {
             Some(mut prefix) => {
                 let res = Resource::get_resource(&prefix, &expr.suffix);
                 let (res, wtables) = if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {

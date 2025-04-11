@@ -82,7 +82,7 @@ fn base_test() {
         &WireExpr::from(1).with_suffix("four/five"),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, mut m, r| p.intercept_declare(&mut m, r.as_ref()),
     );
 
     Tables::print(&zread!(tables.tables));
@@ -204,7 +204,7 @@ fn multisub_test() {
         &"sub".into(),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, mut m, r| p.intercept_declare(&mut m, r.as_ref()),
     );
     let optres = Resource::get_resource(zread!(tables.tables)._get_root(), "sub")
         .map(|res| Arc::downgrade(&res));
@@ -220,7 +220,7 @@ fn multisub_test() {
         &"sub".into(),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, mut m, r| p.intercept_declare(&mut m, r.as_ref()),
     );
     assert!(res.upgrade().is_some());
 
@@ -231,7 +231,7 @@ fn multisub_test() {
         0,
         &WireExpr::empty(),
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, mut m, r| p.intercept_declare(&mut m, r.as_ref()),
     );
     assert!(res.upgrade().is_some());
 
@@ -242,7 +242,7 @@ fn multisub_test() {
         1,
         &WireExpr::empty(),
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, mut m, r| p.intercept_declare(&mut m, r.as_ref()),
     );
     assert!(res.upgrade().is_none());
 
@@ -324,7 +324,7 @@ async fn clean_test() {
         &"todrop1/todrop11".into(),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, mut m, r| p.intercept_declare(&mut m, r.as_ref()),
     );
     let optres2 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1/todrop11")
         .map(|res| Arc::downgrade(&res));
@@ -340,7 +340,7 @@ async fn clean_test() {
         &WireExpr::from(1).with_suffix("/todrop12"),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, mut m, r| p.intercept_declare(&mut m, r.as_ref()),
     );
     let optres3 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1/todrop12")
         .map(|res| Arc::downgrade(&res));
@@ -356,7 +356,7 @@ async fn clean_test() {
         1,
         &WireExpr::empty(),
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, mut m, r| p.intercept_declare(&mut m, r.as_ref()),
     );
 
     println!("COUNT2: {}", res3.strong_count());
@@ -372,7 +372,7 @@ async fn clean_test() {
         0,
         &WireExpr::empty(),
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, mut m, r| p.intercept_declare(&mut m, r.as_ref()),
     );
     assert!(res1.upgrade().is_some());
     assert!(res2.upgrade().is_none());
@@ -393,7 +393,7 @@ async fn clean_test() {
         &"todrop3".into(),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, mut m, r| p.intercept_declare(&mut m, r.as_ref()),
     );
     let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop3")
         .map(|res| Arc::downgrade(&res));
@@ -408,7 +408,7 @@ async fn clean_test() {
         2,
         &WireExpr::empty(),
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, mut m, r| p.intercept_declare(&mut m, r.as_ref()),
     );
     assert!(res1.upgrade().is_some());
 
@@ -426,7 +426,7 @@ async fn clean_test() {
         &"todrop5".into(),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, mut m, r| p.intercept_declare(&mut m, r.as_ref()),
     );
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
@@ -436,7 +436,7 @@ async fn clean_test() {
         &"todrop6".into(),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, mut m, r| p.intercept_declare(&mut m, r.as_ref()),
     );
 
     let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop4")
@@ -624,7 +624,7 @@ fn client_test() {
         &WireExpr::from(11).with_suffix("/**"),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, mut m, r| p.intercept_declare(&mut m, r.as_ref()),
     );
     register_expr(
         &tables,
@@ -675,7 +675,7 @@ fn client_test() {
         &WireExpr::from(21).with_suffix("/**"),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, mut m, r| p.intercept_declare(&mut m, r.as_ref()),
     );
     register_expr(
         &tables,
@@ -726,7 +726,7 @@ fn client_test() {
         &WireExpr::from(31).with_suffix("/**"),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, mut m, r| p.intercept_declare(&mut m, r.as_ref()),
     );
 
     primitives0.clear_data();

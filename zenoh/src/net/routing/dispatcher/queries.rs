@@ -75,10 +75,7 @@ pub(crate) fn declare_queryable(
     send_declare: &mut SendDeclare,
 ) {
     let rtables = zread!(tables.tables);
-    match rtables
-        .get_mapping(face, &expr.scope, expr.mapping)
-        .cloned()
-    {
+    match rtables.get_mapping(face, expr.scope, expr.mapping).cloned() {
         Some(mut prefix) => {
             tracing::debug!(
                 "{} Declare queryable {} ({}{})",
@@ -143,7 +140,7 @@ pub(crate) fn undeclare_queryable(
         None
     } else {
         let rtables = zread!(tables.tables);
-        match rtables.get_mapping(face, &expr.scope, expr.mapping) {
+        match rtables.get_mapping(face, expr.scope, expr.mapping) {
             Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
                 Some(res) => Some(res),
                 None => {
@@ -450,7 +447,7 @@ macro_rules! inc_res_stats {
 #[allow(clippy::too_many_arguments)]
 pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mut Request) {
     let rtables = zread!(tables_ref.tables);
-    match rtables.get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping) {
+    match rtables.get_mapping(face, msg.wire_expr.scope, msg.wire_expr.mapping) {
         Some(prefix) => {
             tracing::debug!(
                 "{}:{} Route query for resource {}{}",
@@ -541,7 +538,7 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                             match tables
                                 .get_sent_mapping(
                                     outface,
-                                    &msg.wire_expr.scope,
+                                    msg.wire_expr.scope,
                                     msg.wire_expr.mapping,
                                 )
                                 .cloned()
@@ -630,7 +627,7 @@ pub(crate) fn route_send_response(
                     .read()
                     .expect("reading Tables should not fail");
                 match tables
-                    .get_sent_mapping(&query.src_face, &msg.wire_expr.scope, msg.wire_expr.mapping)
+                    .get_sent_mapping(&query.src_face, msg.wire_expr.scope, msg.wire_expr.mapping)
                     .cloned()
                 {
                     Some(prefix) => prefix,

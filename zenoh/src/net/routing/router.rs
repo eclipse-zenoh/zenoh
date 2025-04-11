@@ -103,14 +103,14 @@ impl Router {
         };
         let mut declares = vec![];
         ctrl_lock
-            .new_local_face(&mut tables, &self.tables, &mut face, &mut |p, m| {
-                declares.push((p.clone(), m))
+            .new_local_face(&mut tables, &self.tables, &mut face, &mut |p, m, r| {
+                declares.push((p.clone(), m, r))
             })
             .unwrap();
         drop(tables);
         drop(ctrl_lock);
-        for (p, m) in declares {
-            m.with_mut(|m| p.send_declare(m));
+        for (p, mut m, r) in declares {
+            p.intercept_declare(&mut m, r.as_ref());
         }
         Arc::new(face)
     }
@@ -126,9 +126,9 @@ impl Router {
         #[cfg(feature = "stats")]
         let stats = transport.get_stats()?;
 
-        let ingress = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
-        let egress = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
-        let mux = Arc::new(Mux::new(transport.clone(), InterceptorsChain::empty()));
+        let ingress = ArcSwap::new(InterceptorsChain::empty().into());
+        let egress = ArcSwap::new(InterceptorsChain::empty().into());
+        let mux = Arc::new(Mux::new(transport.clone()));
         let newface = tables
             .faces
             .entry(fid)
@@ -141,7 +141,7 @@ impl Router {
                     Some(stats),
                     mux.clone(),
                     None,
-                    Some(ingress.clone()),
+                    Some(ingress),
                     Some(egress),
                     ctrl_lock.new_face(),
                     false,
@@ -159,23 +159,21 @@ impl Router {
             state: newface,
         };
 
-        let _ = mux.face.set(Face::downgrade(&face));
-
         let mut declares = vec![];
         ctrl_lock.new_transport_unicast_face(
             &mut tables,
             &self.tables,
             &mut face,
             &transport,
-            &mut |p, m| declares.push((p.clone(), m)),
+            &mut |p, m, r| declares.push((p.clone(), m, r)),
         )?;
         drop(tables);
         drop(ctrl_lock);
-        for (p, m) in declares {
-            m.with_mut(|m| p.send_declare(m));
+        for (p, mut m, r) in declares {
+            p.intercept_declare(&mut m, r.as_ref());
         }
 
-        Ok(Arc::new(DeMux::new(face, Some(transport), ingress)))
+        Ok(Arc::new(DeMux::new(face, Some(transport))))
     }
 
     pub fn new_transport_multicast(&self, transport: TransportMulticast) -> ZResult<()> {
@@ -220,8 +218,8 @@ impl Router {
         let mut tables = zwrite!(self.tables.tables);
         let fid = tables.face_counter;
         tables.face_counter += 1;
-        let ingress = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
-        let egress = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
+        let ingress = ArcSwap::new(InterceptorsChain::empty().into());
+        let egress = ArcSwap::new(InterceptorsChain::empty().into());
         let face_state = FaceState::new(
             fid,
             peer.zid,
@@ -230,7 +228,7 @@ impl Router {
             Some(transport.get_stats().unwrap()),
             Arc::new(DummyPrimitives),
             Some(transport),
-            Some(ingress.clone()),
+            Some(ingress),
             Some(egress),
             ctrl_lock.new_face(),
             false,
@@ -248,7 +246,6 @@ impl Router {
                 state: face_state,
             },
             None,
-            ingress,
         )))
     }
 }

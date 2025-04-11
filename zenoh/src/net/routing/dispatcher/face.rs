@@ -11,14 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{
-    any::Any,
-    collections::HashMap,
-    fmt,
-    ops::Not,
-    sync::{Arc, Weak},
-    time::Duration,
-};
+use std::{any::Any, collections::HashMap, fmt, ops::Not, sync::Arc, time::Duration};
 
 use arc_swap::ArcSwap;
 use tokio_util::sync::CancellationToken;
@@ -27,8 +20,8 @@ use zenoh_protocol::{
     core::{ExprId, Reliability, WhatAmI, ZenohIdProto},
     network::{
         interest::{InterestId, InterestMode, InterestOptions},
-        response, Mapping, NetworkBodyMut, NetworkMessageMut, Push, Request, RequestId, Response,
-        ResponseFinal,
+        response, Declare, Interest, Mapping, NetworkBodyMut, NetworkMessageMut, Push, Request,
+        RequestId, Response, ResponseFinal,
     },
     zenoh::RequestBody,
 };
@@ -77,8 +70,8 @@ pub struct FaceState {
     pub(crate) next_qid: RequestId,
     pub(crate) pending_queries: HashMap<RequestId, (Arc<Query>, CancellationToken)>,
     pub(crate) mcast_group: Option<TransportMulticast>,
-    pub(crate) in_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
-    pub(crate) eg_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
+    pub(crate) in_interceptors: Option<ArcSwap<InterceptorsChain>>,
+    pub(crate) eg_interceptors: Option<ArcSwap<InterceptorsChain>>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) task_controller: TaskController,
     pub(crate) is_local: bool,
@@ -93,8 +86,8 @@ impl FaceState {
         #[cfg(feature = "stats")] stats: Option<Arc<TransportStats>>,
         primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
         mcast_group: Option<TransportMulticast>,
-        in_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
-        eg_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
+        in_interceptors: Option<ArcSwap<InterceptorsChain>>,
+        eg_interceptors: Option<ArcSwap<InterceptorsChain>>,
         hat: Box<dyn Any + Send + Sync>,
         is_local: bool,
     ) -> Arc<FaceState> {
@@ -124,24 +117,24 @@ impl FaceState {
     #[inline]
     pub(crate) fn get_mapping(
         &self,
-        prefixid: &ExprId,
+        prefixid: ExprId,
         mapping: Mapping,
     ) -> Option<&std::sync::Arc<Resource>> {
         match mapping {
-            Mapping::Sender => self.remote_mappings.get(prefixid),
-            Mapping::Receiver => self.local_mappings.get(prefixid),
+            Mapping::Sender => self.remote_mappings.get(&prefixid),
+            Mapping::Receiver => self.local_mappings.get(&prefixid),
         }
     }
 
     #[inline]
     pub(crate) fn get_sent_mapping(
         &self,
-        prefixid: &ExprId,
+        prefixid: ExprId,
         mapping: Mapping,
     ) -> Option<&std::sync::Arc<Resource>> {
         match mapping {
-            Mapping::Sender => self.local_mappings.get(prefixid),
-            Mapping::Receiver => self.remote_mappings.get(prefixid),
+            Mapping::Sender => self.local_mappings.get(&prefixid),
+            Mapping::Receiver => self.remote_mappings.get(&prefixid),
         }
     }
 
@@ -172,7 +165,7 @@ impl FaceState {
         iceptor: &InterceptorsChain,
         ctx: &mut RoutingContext<NetworkMessageMut<'_>>,
     ) -> bool {
-        // NOTE: the cache should be empty if the wire expr has no suffix, i.e. when the prefix
+        // NOTE: the cache should be empty if the wire expr has a suffix, i.e. when the prefix
         // doesn't represent a full keyexpr.
         let prefix = ctx.wire_expr().and_then(|we| {
             if we.has_suffix() {
@@ -249,8 +242,6 @@ impl FaceState {
                 InterceptorsChain::new(ingress.into_iter().flatten().collect::<Vec<_>>(), version),
                 InterceptorsChain::new(egress.into_iter().flatten().collect::<Vec<_>>(), version),
             );
-            let egress = Arc::new(egress);
-            mux.interceptor.store(egress.clone());
             self.in_interceptors
                 .as_ref()
                 .expect("face in_interceptors should not be None when primitives are Mux")
@@ -258,7 +249,7 @@ impl FaceState {
             self.eg_interceptors
                 .as_ref()
                 .expect("face eg_interceptors should not be None when primitives are Mux")
-                .store(egress.clone());
+                .store(Arc::new(egress));
         } else if let Some(mux) = self.primitives.as_any().downcast_ref::<McastMux>() {
             let interceptor = InterceptorsChain::new(
                 factories
@@ -283,26 +274,17 @@ impl FaceState {
                 .store(interceptor.into());
         }
     }
+
+    pub(crate) fn reject_interest(&self, interest_id: u32) {
+        if let Some(interest) = self.pending_current_interests.get(&interest_id) {
+            interest.rejection_token.cancel();
+        }
+    }
 }
 
 impl fmt::Display for FaceState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Face{{{}, {}}}", self.id, self.zid)
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct WeakFace {
-    pub(crate) tables: Weak<TablesLock>,
-    pub(crate) state: Weak<FaceState>,
-}
-
-impl WeakFace {
-    pub fn upgrade(&self) -> Option<Face> {
-        Some(Face {
-            tables: self.tables.upgrade()?,
-            state: self.state.upgrade()?,
-        })
     }
 }
 
@@ -312,23 +294,56 @@ pub struct Face {
     pub(crate) state: Arc<FaceState>,
 }
 
-impl Face {
-    pub fn downgrade(&self) -> WeakFace {
-        WeakFace {
-            tables: Arc::downgrade(&self.tables),
-            state: Arc::downgrade(&self.state),
-        }
-    }
-
-    pub(crate) fn reject_interest(&self, interest_id: u32) {
-        if let Some(interest) = self.state.pending_current_interests.get(&interest_id) {
-            interest.rejection_token.cancel();
-        }
-    }
-}
-
 impl Primitives for Face {
     fn send_interest(&self, msg: &mut zenoh_protocol::network::Interest) {
+        if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Ingress) {
+            let prefix = {
+                let tables = self
+                    .tables
+                    .tables
+                    .read()
+                    .expect("reading Tables should not fail");
+
+                match &msg.wire_expr {
+                    Some(we) => {
+                        match tables
+                            .get_mapping(&self.state, we.scope, we.mapping)
+                            .cloned()
+                        {
+                            Some(prefix) => Some(prefix),
+                            None => {
+                                tracing::error!(
+                                    "Received WireExpr with unknown scope {} from {}",
+                                    we.scope,
+                                    self,
+                                );
+                                return;
+                            }
+                        }
+                    }
+                    None => None,
+                }
+            };
+
+            let msg = NetworkMessageMut {
+                body: NetworkBodyMut::Interest(msg),
+                reliability: Reliability::Reliable, // Interest is always reliable
+                #[cfg(feature = "stats")]
+                size: None,
+            };
+            let ctx = match prefix {
+                Some(prefix) => &mut RoutingContext::with_prefix(msg, prefix.clone()),
+                None => &mut RoutingContext::new(msg),
+            };
+
+            if !self
+                .state
+                .exec_interceptors(InterceptorFlow::Ingress, &iceptor, ctx)
+            {
+                return;
+            }
+        }
+
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         if msg.mode != InterestMode::Final {
             let mut declares = vec![];
@@ -340,11 +355,11 @@ impl Primitives for Face {
                 msg.wire_expr.as_ref(),
                 msg.mode,
                 msg.options,
-                &mut |p, m| declares.push((p.clone(), m)),
+                &mut |p, m, r| declares.push((p.clone(), m, r)),
             );
             drop(ctrl_lock);
-            for (p, m) in declares {
-                m.with_mut(|m| p.send_declare(m));
+            for (p, mut m, r) in declares {
+                p.intercept_declare(&mut m, r.as_ref());
             }
         } else {
             undeclare_interest(
@@ -357,6 +372,55 @@ impl Primitives for Face {
     }
 
     fn send_declare(&self, msg: &mut zenoh_protocol::network::Declare) {
+        if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Ingress) {
+            let prefix = {
+                let tables = self
+                    .tables
+                    .tables
+                    .read()
+                    .expect("reading Tables should not fail");
+
+                match msg.wire_expr() {
+                    Some(we) => {
+                        match tables
+                            .get_mapping(&self.state, we.scope, we.mapping)
+                            .cloned()
+                        {
+                            Some(prefix) => Some(prefix),
+                            None => {
+                                tracing::error!(
+                                    "Received WireExpr with unknown scope {} from {}",
+                                    we.scope,
+                                    self,
+                                );
+                                return;
+                            }
+                        }
+                    }
+                    None => None,
+                }
+            };
+
+            let msg = NetworkMessageMut {
+                body: NetworkBodyMut::Declare(msg),
+                reliability: Reliability::Reliable, // Declare is always reliable
+                #[cfg(feature = "stats")]
+                size: None,
+            };
+
+            let ctx = match prefix {
+                Some(prefix) => &mut RoutingContext::with_prefix(msg, prefix.clone()),
+                None => &mut RoutingContext::new(msg),
+            };
+
+            if !self
+                .state
+                .exec_interceptors(InterceptorFlow::Ingress, &iceptor, ctx)
+            {
+                return;
+            }
+        }
+
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         match &mut msg.body {
             zenoh_protocol::network::DeclareBody::DeclareKeyExpr(m) => {
@@ -375,11 +439,11 @@ impl Primitives for Face {
                     &m.wire_expr,
                     &SubscriberInfo,
                     msg.ext_nodeid.node_id,
-                    &mut |p, m| declares.push((p.clone(), m)),
+                    &mut |p, m, r| declares.push((p.clone(), m, r)),
                 );
                 drop(ctrl_lock);
-                for (p, m) in declares {
-                    m.with_mut(|m| p.send_declare(m));
+                for (p, mut m, r) in declares {
+                    p.intercept_declare(&mut m, r.as_ref());
                 }
             }
             zenoh_protocol::network::DeclareBody::UndeclareSubscriber(m) => {
@@ -391,11 +455,11 @@ impl Primitives for Face {
                     m.id,
                     &m.ext_wire_expr.wire_expr,
                     msg.ext_nodeid.node_id,
-                    &mut |p, m| declares.push((p.clone(), m)),
+                    &mut |p, m, r| declares.push((p.clone(), m, r)),
                 );
                 drop(ctrl_lock);
-                for (p, m) in declares {
-                    m.with_mut(|m| p.send_declare(m));
+                for (p, mut m, r) in declares {
+                    p.intercept_declare(&mut m, r.as_ref())
                 }
             }
             zenoh_protocol::network::DeclareBody::DeclareQueryable(m) => {
@@ -408,11 +472,11 @@ impl Primitives for Face {
                     &m.wire_expr,
                     &m.ext_info,
                     msg.ext_nodeid.node_id,
-                    &mut |p, m| declares.push((p.clone(), m)),
+                    &mut |p, m, r| declares.push((p.clone(), m, r)),
                 );
                 drop(ctrl_lock);
-                for (p, m) in declares {
-                    m.with_mut(|m| p.send_declare(m));
+                for (p, mut m, r) in declares {
+                    p.intercept_declare(&mut m, r.as_ref())
                 }
             }
             zenoh_protocol::network::DeclareBody::UndeclareQueryable(m) => {
@@ -424,11 +488,11 @@ impl Primitives for Face {
                     m.id,
                     &m.ext_wire_expr.wire_expr,
                     msg.ext_nodeid.node_id,
-                    &mut |p, m| declares.push((p.clone(), m)),
+                    &mut |p, m, r| declares.push((p.clone(), m, r)),
                 );
                 drop(ctrl_lock);
-                for (p, m) in declares {
-                    m.with_mut(|m| p.send_declare(m));
+                for (p, mut m, r) in declares {
+                    p.intercept_declare(&mut m, r.as_ref())
                 }
             }
             zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
@@ -441,11 +505,11 @@ impl Primitives for Face {
                     &m.wire_expr,
                     msg.ext_nodeid.node_id,
                     msg.interest_id,
-                    &mut |p, m| declares.push((p.clone(), m)),
+                    &mut |p, m, r| declares.push((p.clone(), m, r)),
                 );
                 drop(ctrl_lock);
-                for (p, m) in declares {
-                    m.with_mut(|m| p.send_declare(m));
+                for (p, mut m, r) in declares {
+                    p.intercept_declare(&mut m, r.as_ref())
                 }
             }
             zenoh_protocol::network::DeclareBody::UndeclareToken(m) => {
@@ -457,11 +521,11 @@ impl Primitives for Face {
                     m.id,
                     &m.ext_wire_expr,
                     msg.ext_nodeid.node_id,
-                    &mut |p, m| declares.push((p.clone(), m)),
+                    &mut |p, m, r| declares.push((p.clone(), m, r)),
                 );
                 drop(ctrl_lock);
-                for (p, m) in declares {
-                    m.with_mut(|m| p.send_declare(m));
+                for (p, mut m, r) in declares {
+                    p.intercept_declare(&mut m, r.as_ref())
                 }
             }
             zenoh_protocol::network::DeclareBody::DeclareFinal(_) => {
@@ -478,15 +542,15 @@ impl Primitives for Face {
                         &mut wtables,
                         &mut self.state.clone(),
                         id,
-                        &mut |p, m| declares.push((p.clone(), m)),
+                        &mut |p, m, r| declares.push((p.clone(), m, r)),
                     );
 
                     wtables.disable_all_routes();
 
                     drop(wtables);
                     drop(ctrl_lock);
-                    for (p, m) in declares {
-                        m.with_mut(|m| p.send_declare(m));
+                    for (p, mut m, r) in declares {
+                        p.intercept_declare(&mut m, r.as_ref())
                     }
                 }
             }
@@ -495,30 +559,30 @@ impl Primitives for Face {
 
     #[inline]
     fn send_push(&self, msg: &mut Push, reliability: Reliability) {
-        let prefix = {
-            let tables = self
-                .tables
-                .tables
-                .read()
-                .expect("reading Tables should not fail");
-
-            match tables
-                .get_mapping(&self.state, &msg.wire_expr.scope, msg.wire_expr.mapping)
-                .cloned()
-            {
-                Some(prefix) => prefix,
-                None => {
-                    tracing::error!(
-                        "Received WireExpr with unknown scope {} from {}",
-                        msg.wire_expr.scope,
-                        self,
-                    );
-                    return;
-                }
-            }
-        };
-
         if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Ingress) {
+            let prefix = {
+                let tables = self
+                    .tables
+                    .tables
+                    .read()
+                    .expect("reading Tables should not fail");
+
+                match tables
+                    .get_mapping(&self.state, msg.wire_expr.scope, msg.wire_expr.mapping)
+                    .cloned()
+                {
+                    Some(prefix) => prefix,
+                    None => {
+                        tracing::error!(
+                            "Received WireExpr with unknown scope {} from {}",
+                            msg.wire_expr.scope,
+                            self,
+                        );
+                        return;
+                    }
+                }
+            };
+
             let ctx = &mut RoutingContext::with_prefix(
                 NetworkMessageMut {
                     body: NetworkBodyMut::Push(msg),
@@ -550,7 +614,7 @@ impl Primitives for Face {
                     .expect("reading Tables should not fail");
 
                 match tables
-                    .get_mapping(&self.state, &msg.wire_expr.scope, msg.wire_expr.mapping)
+                    .get_mapping(&self.state, msg.wire_expr.scope, msg.wire_expr.mapping)
                     .cloned()
                 {
                     Some(prefix) => prefix,
@@ -608,7 +672,7 @@ impl Primitives for Face {
                     .expect("reading Tables should not fail");
 
                 match tables
-                    .get_mapping(&self.state, &msg.wire_expr.scope, msg.wire_expr.mapping)
+                    .get_mapping(&self.state, msg.wire_expr.scope, msg.wire_expr.mapping)
                     .cloned()
                 {
                     Some(prefix) => prefix,
@@ -672,18 +736,18 @@ impl Primitives for Face {
         finalize_pending_queries(&self.tables, &mut state);
         let mut declares = vec![];
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
-        finalize_pending_interests(&self.tables, &mut state, &mut |p, m| {
-            declares.push((p.clone(), m))
+        finalize_pending_interests(&self.tables, &mut state, &mut |p, m, r| {
+            declares.push((p.clone(), m, r))
         });
         ctrl_lock.close_face(
             &self.tables,
             &self.tables.clone(),
             &mut state,
-            &mut |p, m| declares.push((p.clone(), m)),
+            &mut |p, m, r| declares.push((p.clone(), m, r)),
         );
         drop(ctrl_lock);
-        for (p, m) in declares {
-            m.with_mut(|m| p.send_declare(m));
+        for (p, mut m, r) in declares {
+            p.intercept_declare(&mut m, r.as_ref())
         }
     }
 
@@ -699,6 +763,60 @@ impl fmt::Display for Face {
 }
 
 impl FaceState {
+    pub(crate) fn intercept_interest(&self, msg: &mut Interest, prefix: Option<&Arc<Resource>>) {
+        if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Egress) {
+            let interest_id = msg.id;
+            let msg = NetworkMessageMut {
+                body: NetworkBodyMut::Interest(msg),
+                reliability: Reliability::Reliable, // NOTE: Interest is always reliable
+                #[cfg(feature = "stats")]
+                size: None,
+            };
+
+            let ctx = match prefix {
+                Some(prefix) => &mut RoutingContext::with_prefix(msg, prefix.clone()),
+                None => &mut RoutingContext::new(msg),
+            };
+
+            if !self.exec_interceptors(InterceptorFlow::Egress, &iceptor, ctx) {
+                // FIXME(fuzzypixelz): I don't understand this comment, there is no DeclareFinal being sent...
+                // NOTE: send declare final to avoid timeout on blocked interest
+                self.reject_interest(interest_id);
+                return;
+            }
+        }
+
+        self.primitives.send_interest(RoutingContext::with_expr(
+            msg,
+            prefix.map(|res| res.expr().to_string()).unwrap_or_default(),
+        ));
+    }
+
+    pub(crate) fn intercept_declare(&self, msg: &mut Declare, prefix: Option<&Arc<Resource>>) {
+        if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Egress) {
+            let msg = NetworkMessageMut {
+                body: NetworkBodyMut::Declare(msg),
+                reliability: Reliability::Reliable, // NOTE: Declare is always reliable
+                #[cfg(feature = "stats")]
+                size: None,
+            };
+
+            let ctx = match prefix {
+                Some(prefix) => &mut RoutingContext::with_prefix(msg, prefix.clone()),
+                None => &mut RoutingContext::new(msg),
+            };
+
+            if !self.exec_interceptors(InterceptorFlow::Egress, &iceptor, ctx) {
+                return;
+            }
+        }
+
+        self.primitives.send_declare(RoutingContext::with_expr(
+            msg,
+            prefix.map(|res| res.expr().to_string()).unwrap_or_default(),
+        ));
+    }
+
     pub(crate) fn intercept_push(
         &self,
         msg: &mut Push,
@@ -729,7 +847,7 @@ impl FaceState {
             let ctx = &mut RoutingContext::with_prefix(
                 NetworkMessageMut {
                     body: NetworkBodyMut::Request(msg),
-                    reliability: Reliability::Reliable,
+                    reliability: Reliability::Reliable, // NOTE: Request is always reliable
                     #[cfg(feature = "stats")]
                     size: None,
                 },
@@ -757,7 +875,7 @@ impl FaceState {
             let ctx = &mut RoutingContext::with_prefix(
                 NetworkMessageMut {
                     body: NetworkBodyMut::Response(msg),
-                    reliability: Reliability::Reliable, // NOTE: queries are always reliable
+                    reliability: Reliability::Reliable, // NOTE: Response is always reliable
                     #[cfg(feature = "stats")]
                     size: None,
                 },
@@ -776,7 +894,7 @@ impl FaceState {
         if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Egress) {
             let ctx = &mut RoutingContext::new(NetworkMessageMut {
                 body: NetworkBodyMut::ResponseFinal(msg),
-                reliability: Reliability::Reliable, // NOTE: queries are always reliable
+                reliability: Reliability::Reliable, // NOTE: ResponseFinal is always reliable
                 #[cfg(feature = "stats")]
                 size: None,
             });

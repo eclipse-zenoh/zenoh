@@ -59,12 +59,9 @@ use super::{
 use crate::net::{
     codec::Zenoh080Routing,
     protocol::linkstate::LinkStateList,
-    routing::{
-        dispatcher::{
-            face::{Face, InterestState},
-            interests::RemoteInterest,
-        },
-        RoutingContext,
+    routing::dispatcher::{
+        face::{Face, InterestState},
+        interests::RemoteInterest,
     },
     runtime::Runtime,
 };
@@ -206,14 +203,15 @@ impl HatBaseTrait for HatCode {
 
         if face.state.whatami == WhatAmI::Peer {
             send_declare(
-                &face.state.primitives,
-                RoutingContext::new(Declare {
+                &face.state,
+                Declare {
                     interest_id: Some(0),
                     ext_qos: QoSType::default(),
                     ext_tstamp: None,
                     ext_nodeid: NodeIdType::default(),
                     body: DeclareBody::DeclareFinal(DeclareFinal),
-                }),
+                },
+                None,
             );
         }
         Ok(())
