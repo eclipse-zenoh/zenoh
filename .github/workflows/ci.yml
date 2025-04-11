@@ -292,7 +292,7 @@ jobs:
 
           - name: Generate code coverage
             run: |
-              cargo +${{ matrix.rust }} llvm-cov test --features unstable --features test --features shared-memory  \
+              LLVM_PROFILE_FILE_NAME="zenoh-%n.profraw" cargo +${{ matrix.rust }} llvm-cov test --features unstable --features test --features shared-memory  \
               ${{ matrix.rust == 'nightly' && '--doctests' || '' }} --lcov --output-path lcov.info \
               --no-cfg-coverage --no-cfg-coverage-nightly --ignore-run-fail -- \
               --skip test_default_features \
