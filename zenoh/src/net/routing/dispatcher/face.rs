@@ -792,6 +792,8 @@ impl fmt::Display for Face {
     }
 }
 
+// NOTE(fuzzypixelz): these methods ought to eventually be moved under `Face`, in very much the same
+// manner as `intercept_request`.
 impl FaceState {
     pub(crate) fn intercept_interest(&self, msg: &mut Interest, prefix: Option<&Arc<Resource>>) {
         if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Egress) {
