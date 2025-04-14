@@ -510,9 +510,9 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                         );
                         #[cfg(feature = "stats")]
                         if !admin {
-                            inc_req_stats!(outface, tx, user, msg.payload)
+                            inc_req_stats!(&outface.state, tx, user, msg.payload)
                         } else {
-                            inc_req_stats!(outface, tx, admin, msg.payload)
+                            inc_req_stats!(&outface.state, tx, admin, msg.payload)
                         }
 
                         tracing::trace!(
