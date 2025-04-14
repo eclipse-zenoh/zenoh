@@ -587,7 +587,8 @@ fn client_test() {
     let sub_info = SubscriberInfo;
 
     let primitives0 = Arc::new(ClientPrimitives::new());
-    let face0 = Arc::downgrade(&router.new_primitives(primitives0.clone()));
+    let face = router.new_primitives(primitives0.clone());
+    let face0 = Arc::downgrade(&face);
     register_expr(
         &tables,
         &face0.upgrade().unwrap(),
@@ -638,7 +639,8 @@ fn client_test() {
     );
 
     let primitives1 = Arc::new(ClientPrimitives::new());
-    let face1 = Arc::downgrade(&router.new_primitives(primitives1.clone()));
+    let face = router.new_primitives(primitives1.clone());
+    let face1 = Arc::downgrade(&face);
     register_expr(
         &tables,
         &face1.upgrade().unwrap(),
@@ -689,7 +691,8 @@ fn client_test() {
     );
 
     let primitives2 = Arc::new(ClientPrimitives::new());
-    let face2 = Arc::downgrade(&router.new_primitives(primitives2.clone()));
+    let face = router.new_primitives(primitives2.clone());
+    let face2 = Arc::downgrade(&face);
     register_expr(
         &tables,
         &face2.upgrade().unwrap(),
