@@ -54,7 +54,8 @@ fn base_test() {
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
-    let face = Arc::downgrade(&router.new_primitives(primitives));
+    let face = router.new_primitives(primitives);
+    let face = Arc::downgrade(&face);
     register_expr(
         &tables,
         &face.upgrade().unwrap(),
