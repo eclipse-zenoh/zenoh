@@ -872,22 +872,24 @@ pub trait AclActionMethods {
             match policy_enforcer.policy_decision_point(subject.id, self.flow(), action, key_expr) {
                 Ok(Permission::Allow) => {
                     tracing::trace!(
-                        "{} on {} is authorized to {} on {}",
+                        "{} on {} is authorized to {} on {} ({:?})",
                         zid,
                         subject.name,
                         log_msg,
-                        key_expr
+                        key_expr,
+                        self.flow()
                     );
                     decision = Permission::Allow;
                     break;
                 }
                 Ok(Permission::Deny) => {
                     tracing::trace!(
-                        "{} on {} is unauthorized to {} on {}",
+                        "{} on {} is unauthorized to {} on {} ({:?})",
                         zid,
                         subject.name,
                         log_msg,
-                        key_expr
+                        key_expr,
+                        self.flow()
                     );
 
                     decision = Permission::Deny;
