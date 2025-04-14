@@ -331,9 +331,9 @@ impl Primitives for Face {
                 #[cfg(feature = "stats")]
                 size: None,
             };
-            let ctx = match prefix {
-                Some(prefix) => &mut RoutingContext::with_prefix(msg, prefix.clone()),
-                None => &mut RoutingContext::new(msg),
+            let ctx = &mut match prefix {
+                Some(prefix) => RoutingContext::with_prefix(msg, prefix.clone()),
+                None => RoutingContext::new(msg),
             };
 
             if !self
@@ -408,9 +408,9 @@ impl Primitives for Face {
                 size: None,
             };
 
-            let ctx = match prefix {
-                Some(prefix) => &mut RoutingContext::with_prefix(msg, prefix.clone()),
-                None => &mut RoutingContext::new(msg),
+            let ctx = &mut match prefix {
+                Some(prefix) => RoutingContext::with_prefix(msg, prefix.clone()),
+                None => RoutingContext::new(msg),
             };
 
             if !self
@@ -644,8 +644,7 @@ impl Primitives for Face {
                 .exec_interceptors(InterceptorFlow::Ingress, &iceptor, ctx)
             {
                 // NOTE: this request was blocked by an ingress interceptor, we need to send
-                // response final to avoid timeout error. We don't go through the egress
-                // interceptors because this message is not supposed to be filtered anyway.
+                // response final to avoid timeout error.
                 self.state.intercept_response_final(&mut ResponseFinal {
                     rid: msg.id,
                     ext_qos: response::ext::QoSType::RESPONSE_FINAL,
@@ -773,9 +772,9 @@ impl FaceState {
                 size: None,
             };
 
-            let ctx = match prefix {
-                Some(prefix) => &mut RoutingContext::with_prefix(msg, prefix.clone()),
-                None => &mut RoutingContext::new(msg),
+            let ctx = &mut match prefix {
+                Some(prefix) => RoutingContext::with_prefix(msg, prefix.clone()),
+                None => RoutingContext::new(msg),
             };
 
             if !self.exec_interceptors(InterceptorFlow::Egress, &iceptor, ctx) {
@@ -801,9 +800,9 @@ impl FaceState {
                 size: None,
             };
 
-            let ctx = match prefix {
-                Some(prefix) => &mut RoutingContext::with_prefix(msg, prefix.clone()),
-                None => &mut RoutingContext::new(msg),
+            let ctx = &mut match prefix {
+                Some(prefix) => RoutingContext::with_prefix(msg, prefix.clone()),
+                None => RoutingContext::new(msg),
             };
 
             if !self.exec_interceptors(InterceptorFlow::Egress, &iceptor, ctx) {
@@ -856,8 +855,7 @@ impl FaceState {
 
             if !self.exec_interceptors(InterceptorFlow::Egress, &iceptor, ctx) {
                 // NOTE: this request was blocked by an egress interceptor, we need to send
-                // response final to avoid timeout error. We don't go through the egress
-                // interceptors because this message is not supposed to be filtered anyway.
+                // response final to avoid timeout error.
                 self.intercept_response_final(&mut ResponseFinal {
                     rid: msg.id,
                     ext_qos: response::ext::QoSType::RESPONSE_FINAL,
