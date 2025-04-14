@@ -150,7 +150,8 @@ fn match_test() {
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
-    let face = Arc::downgrade(&router.new_primitives(primitives));
+    let face = router.new_primitives(primitives);
+    let face = Arc::downgrade(&face);
     for (i, key_expr) in key_exprs.iter().enumerate() {
         register_expr(
             &tables,
@@ -162,15 +163,15 @@ fn match_test() {
 
     for key_expr1 in key_exprs.iter() {
         let res_matches = Resource::get_matches(&zread!(tables.tables), key_expr1);
-        dbg!(res_matches.len());
+        res_matches.len();
         for key_expr2 in key_exprs.iter() {
             if res_matches
                 .iter()
                 .any(|m| m.upgrade().unwrap().expr() == key_expr2.as_str())
             {
-                assert!(dbg!(dbg!(key_expr1).intersects(dbg!(key_expr2))));
+                assert!(key_expr1.intersects(key_expr2));
             } else {
-                assert!(!dbg!(dbg!(key_expr1).intersects(dbg!(key_expr2))));
+                assert!(!key_expr1.intersects(key_expr2));
             }
         }
     }
