@@ -29,7 +29,7 @@ use super::{
 };
 use crate::net::routing::{
     dispatcher::{
-        face::FaceState,
+        face::{Face, FaceState},
         interests::RemoteInterest,
         resource::Resource,
         tables::{Tables, TablesLock},
@@ -42,17 +42,17 @@ impl HatInterestTrait for HatCode {
         &self,
         tables: &mut Tables,
         _tables_ref: &Arc<TablesLock>,
-        face: &mut Arc<FaceState>,
+        face: &Face,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
         mode: InterestMode,
         mut options: InterestOptions,
         send_declare: &mut SendDeclare,
     ) {
-        if options.aggregate() && face.whatami == WhatAmI::Peer {
+        if options.aggregate() && face.state.whatami == WhatAmI::Peer {
             tracing::warn!(
                 "Received Interest with aggregate=true from peer {}. Not supported!",
-                face.zid
+                face.state.zid
             );
             options -= InterestOptions::AGGREGATE;
         }
@@ -90,18 +90,20 @@ impl HatInterestTrait for HatCode {
             )
         }
         if mode.future() {
-            face_hat_mut!(face).remote_interests.insert(
-                id,
-                RemoteInterest {
-                    res: res.cloned(),
-                    options,
-                    mode,
-                },
-            );
+            face_hat_mut!(&mut face.state.clone())
+                .remote_interests
+                .insert(
+                    id,
+                    RemoteInterest {
+                        res: res.cloned(),
+                        options,
+                        mode,
+                    },
+                );
         }
         if mode.current() {
             send_declare(
-                face,
+                &face.state,
                 Declare {
                     interest_id: Some(id),
                     ext_qos: ext::QoSType::DECLARE,

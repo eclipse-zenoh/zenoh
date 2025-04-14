@@ -25,7 +25,7 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 use super::{
-    face::FaceState,
+    face::{Face, FaceState},
     resource::{Direction, Resource},
     tables::{NodeId, Route, RoutingExpr, Tables, TablesLock},
 };
@@ -43,7 +43,7 @@ pub(crate) struct SubscriberInfo;
 pub(crate) fn declare_subscription(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
-    face: &mut Arc<FaceState>,
+    face: &Face,
     id: SubscriberId,
     expr: &WireExpr,
     sub_info: &SubscriberInfo,
@@ -51,7 +51,10 @@ pub(crate) fn declare_subscription(
     send_declare: &mut SendDeclare,
 ) {
     let rtables = zread!(tables.tables);
-    match rtables.get_mapping(face, expr.scope, expr.mapping).cloned() {
+    match rtables
+        .get_mapping(&face.state, expr.scope, expr.mapping)
+        .cloned()
+    {
         Some(mut prefix) => {
             tracing::debug!(
                 "{} Declare subscriber {} ({}{})",

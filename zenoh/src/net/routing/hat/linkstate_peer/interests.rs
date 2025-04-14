@@ -26,7 +26,7 @@ use super::{
 };
 use crate::net::routing::{
     dispatcher::{
-        face::FaceState,
+        face::{Face, FaceState},
         interests::RemoteInterest,
         resource::Resource,
         tables::{Tables, TablesLock},
@@ -39,7 +39,7 @@ impl HatInterestTrait for HatCode {
         &self,
         tables: &mut Tables,
         _tables_ref: &Arc<TablesLock>,
-        face: &mut Arc<FaceState>,
+        face: &Face,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
         mode: InterestMode,
@@ -80,18 +80,20 @@ impl HatInterestTrait for HatCode {
             )
         }
         if mode.future() {
-            face_hat_mut!(face).remote_interests.insert(
-                id,
-                RemoteInterest {
-                    res: res.as_ref().map(|res| res.deref().clone()),
-                    options,
-                    mode,
-                },
-            );
+            face_hat_mut!(&mut face.state.clone())
+                .remote_interests
+                .insert(
+                    id,
+                    RemoteInterest {
+                        res: res.as_ref().map(|res| res.deref().clone()),
+                        options,
+                        mode,
+                    },
+                );
         }
         if mode.current() {
             send_declare(
-                face,
+                &face.state,
                 Declare {
                     interest_id: Some(id),
                     ext_qos: ext::QoSType::DECLARE,

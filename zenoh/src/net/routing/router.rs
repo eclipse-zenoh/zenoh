@@ -76,11 +76,12 @@ impl Router {
         let zid = tables.zid;
         let fid = tables.face_counter;
         tables.face_counter += 1;
-        let newface = tables
+        let mut face = tables
             .faces
             .entry(fid)
-            .or_insert_with(|| {
-                FaceState::new(
+            .or_insert_with(|| Face {
+                tables: self.tables.clone(),
+                state: FaceState::new(
                     fid,
                     zid,
                     WhatAmI::Client,
@@ -92,15 +93,11 @@ impl Router {
                     None,
                     ctrl_lock.new_face(),
                     true,
-                )
+                ),
             })
             .clone();
-        tracing::debug!("New {}", newface);
+        tracing::debug!("New {}", face);
 
-        let mut face = Face {
-            tables: self.tables.clone(),
-            state: newface,
-        };
         let mut declares = vec![];
         ctrl_lock
             .new_local_face(&mut tables, &self.tables, &mut face, &mut |p, m, r| {
@@ -129,11 +126,12 @@ impl Router {
         let ingress = ArcSwap::new(InterceptorsChain::empty().into());
         let egress = ArcSwap::new(InterceptorsChain::empty().into());
         let mux = Arc::new(Mux::new(transport.clone()));
-        let newface = tables
+        let mut face = tables
             .faces
             .entry(fid)
-            .or_insert_with(|| {
-                FaceState::new(
+            .or_insert_with(|| Face {
+                tables: self.tables.clone(),
+                state: FaceState::new(
                     fid,
                     zid,
                     whatami,
@@ -145,19 +143,14 @@ impl Router {
                     Some(egress),
                     ctrl_lock.new_face(),
                     false,
-                )
+                ),
             })
             .clone();
-        newface.set_interceptors_from_factories(
+        face.state.set_interceptors_from_factories(
             &tables.interceptors,
             tables.next_interceptor_version.load(Ordering::SeqCst),
         );
-        tracing::debug!("New {}", newface);
-
-        let mut face = Face {
-            tables: self.tables.clone(),
-            state: newface,
-        };
+        tracing::debug!("New {}", face);
 
         let mut declares = vec![];
         ctrl_lock.new_transport_unicast_face(

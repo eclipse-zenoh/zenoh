@@ -34,11 +34,7 @@ use crate::{
     net::{
         primitives::{DummyPrimitives, EPrimitives, Primitives},
         routing::{
-            dispatcher::{
-                face::{Face, FaceState},
-                pubsub::SubscriberInfo,
-                tables::Tables,
-            },
+            dispatcher::{face::Face, pubsub::SubscriberInfo, tables::Tables},
             router::*,
             RoutingContext,
         },
@@ -58,16 +54,16 @@ fn base_test() {
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
-    let face = Arc::downgrade(&router.new_primitives(primitives).state);
+    let face = Arc::downgrade(&router.new_primitives(primitives));
     register_expr(
         &tables,
-        &mut face.upgrade().unwrap(),
+        &face.upgrade().unwrap(),
         1,
         &"one/two/three".into(),
     );
     register_expr(
         &tables,
-        &mut face.upgrade().unwrap(),
+        &face.upgrade().unwrap(),
         2,
         &"one/deux/trois".into(),
     );
@@ -77,7 +73,7 @@ fn base_test() {
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face.upgrade().unwrap(),
+        &face.upgrade().unwrap(),
         0,
         &WireExpr::from(1).with_suffix("four/five"),
         &sub_info,
@@ -153,11 +149,11 @@ fn match_test() {
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
-    let face = Arc::downgrade(&router.new_primitives(primitives).state);
+    let face = Arc::downgrade(&router.new_primitives(primitives));
     for (i, key_expr) in key_exprs.iter().enumerate() {
         register_expr(
             &tables,
-            &mut face.upgrade().unwrap(),
+            &face.upgrade().unwrap(),
             i.try_into().unwrap(),
             &(*key_expr).into(),
         );
@@ -199,7 +195,7 @@ fn multisub_test() {
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face0.state.clone(),
+        face0,
         0,
         &"sub".into(),
         &sub_info,
@@ -215,7 +211,7 @@ fn multisub_test() {
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face0.state.clone(),
+        face0,
         1,
         &"sub".into(),
         &sub_info,
@@ -265,26 +261,21 @@ async fn clean_test() {
     let face0 = &router.new_primitives(primitives);
 
     // --------------
-    register_expr(&tables, &mut face0.state.clone(), 1, &"todrop1".into());
+    register_expr(&tables, face0, 1, &"todrop1".into());
     let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1")
         .map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
     assert!(res1.upgrade().is_some());
 
-    register_expr(
-        &tables,
-        &mut face0.state.clone(),
-        2,
-        &"todrop1/todrop11".into(),
-    );
+    register_expr(&tables, face0, 2, &"todrop1/todrop11".into());
     let optres2 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1/todrop11")
         .map(|res| Arc::downgrade(&res));
     assert!(optres2.is_some());
     let res2 = optres2.unwrap();
     assert!(res2.upgrade().is_some());
 
-    register_expr(&tables, &mut face0.state.clone(), 3, &"**".into());
+    register_expr(&tables, face0, 3, &"**".into());
     let optres3 = Resource::get_resource(zread!(tables.tables)._get_root(), "**")
         .map(|res| Arc::downgrade(&res));
     assert!(optres3.is_some());
@@ -307,7 +298,7 @@ async fn clean_test() {
     assert!(res3.upgrade().is_none());
 
     // --------------
-    register_expr(&tables, &mut face0.state.clone(), 1, &"todrop1".into());
+    register_expr(&tables, face0, 1, &"todrop1".into());
     let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1")
         .map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
@@ -319,7 +310,7 @@ async fn clean_test() {
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face0.state.clone(),
+        face0,
         0,
         &"todrop1/todrop11".into(),
         &sub_info,
@@ -335,7 +326,7 @@ async fn clean_test() {
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face0.state.clone(),
+        face0,
         1,
         &WireExpr::from(1).with_suffix("/todrop12"),
         &sub_info,
@@ -384,11 +375,11 @@ async fn clean_test() {
     assert!(res3.upgrade().is_none());
 
     // --------------
-    register_expr(&tables, &mut face0.state.clone(), 2, &"todrop3".into());
+    register_expr(&tables, face0, 2, &"todrop3".into());
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face0.state.clone(),
+        face0,
         2,
         &"todrop3".into(),
         &sub_info,
@@ -416,12 +407,12 @@ async fn clean_test() {
     assert!(res1.upgrade().is_none());
 
     // --------------
-    register_expr(&tables, &mut face0.state.clone(), 3, &"todrop4".into());
-    register_expr(&tables, &mut face0.state.clone(), 4, &"todrop5".into());
+    register_expr(&tables, face0, 3, &"todrop4".into());
+    register_expr(&tables, face0, 4, &"todrop5".into());
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face0.state.clone(),
+        face0,
         3,
         &"todrop5".into(),
         &sub_info,
@@ -431,7 +422,7 @@ async fn clean_test() {
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face0.state.clone(),
+        face0,
         4,
         &"todrop6".into(),
         &sub_info,
@@ -596,10 +587,10 @@ fn client_test() {
     let sub_info = SubscriberInfo;
 
     let primitives0 = Arc::new(ClientPrimitives::new());
-    let face0 = Arc::downgrade(&router.new_primitives(primitives0.clone()).state);
+    let face0 = Arc::downgrade(&router.new_primitives(primitives0.clone()));
     register_expr(
         &tables,
-        &mut face0.upgrade().unwrap(),
+        &face0.upgrade().unwrap(),
         11,
         &"test/client".into(),
     );
@@ -619,7 +610,7 @@ fn client_test() {
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face0.upgrade().unwrap(),
+        &face0.upgrade().unwrap(),
         0,
         &WireExpr::from(11).with_suffix("/**"),
         &sub_info,
@@ -628,7 +619,7 @@ fn client_test() {
     );
     register_expr(
         &tables,
-        &mut face0.upgrade().unwrap(),
+        &face0.upgrade().unwrap(),
         12,
         &WireExpr::from(11).with_suffix("/z1_pub1"),
     );
@@ -647,10 +638,10 @@ fn client_test() {
     );
 
     let primitives1 = Arc::new(ClientPrimitives::new());
-    let face1 = Arc::downgrade(&router.new_primitives(primitives1.clone()).state);
+    let face1 = Arc::downgrade(&router.new_primitives(primitives1.clone()));
     register_expr(
         &tables,
-        &mut face1.upgrade().unwrap(),
+        &face1.upgrade().unwrap(),
         21,
         &"test/client".into(),
     );
@@ -670,7 +661,7 @@ fn client_test() {
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face1.upgrade().unwrap(),
+        &face1.upgrade().unwrap(),
         0,
         &WireExpr::from(21).with_suffix("/**"),
         &sub_info,
@@ -679,7 +670,7 @@ fn client_test() {
     );
     register_expr(
         &tables,
-        &mut face1.upgrade().unwrap(),
+        &face1.upgrade().unwrap(),
         22,
         &WireExpr::from(21).with_suffix("/z2_pub1"),
     );
@@ -698,10 +689,10 @@ fn client_test() {
     );
 
     let primitives2 = Arc::new(ClientPrimitives::new());
-    let face2 = Arc::downgrade(&router.new_primitives(primitives2.clone()).state);
+    let face2 = Arc::downgrade(&router.new_primitives(primitives2.clone()));
     register_expr(
         &tables,
-        &mut face2.upgrade().unwrap(),
+        &face2.upgrade().unwrap(),
         31,
         &"test/client".into(),
     );
@@ -721,7 +712,7 @@ fn client_test() {
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        &mut face2.upgrade().unwrap(),
+        &face2.upgrade().unwrap(),
         0,
         &WireExpr::from(31).with_suffix("/**"),
         &sub_info,
@@ -733,10 +724,10 @@ fn client_test() {
     primitives1.clear_data();
     primitives2.clear_data();
 
-    let route_dummy_data = |face: &Weak<FaceState>, wire_expr| {
+    let route_dummy_data = |face: &Weak<Face>, wire_expr| {
         route_data(
             &tables,
-            &face.upgrade().unwrap(),
+            &face.upgrade().unwrap().state,
             &mut Push {
                 wire_expr,
                 ext_qos: ext::QoSType::DEFAULT,
@@ -858,7 +849,7 @@ fn get_best_key_test() {
 
     let root = zread!(router.tables.tables)._get_root().clone();
     let register_expr = |face: &Face, id: ExprId, expr: &str| {
-        register_expr(&router.tables, &mut face.state.clone(), id, &expr.into());
+        register_expr(&router.tables, face, id, &expr.into());
     };
     let get_best_key = |resource, suffix, face: &Face| {
         Resource::get_resource(&root, resource)
@@ -910,7 +901,7 @@ fn big_key_expr() {
     let root = zread!(router.tables.tables)._get_root().clone();
     let key_expr = KeyExpr::new(vec!["a/"; 10000].concat() + "a").unwrap();
     let wire_expr = WireExpr::from(&**key_expr);
-    register_expr(&router.tables, &mut face.state.clone(), 1, &wire_expr);
+    register_expr(&router.tables, &face, 1, &wire_expr);
     let res = Resource::get_resource(&root, &key_expr).unwrap();
     root.get_best_key(&key_expr, face.state.id);
     res.get_best_key("/a", face.state.id + 1);

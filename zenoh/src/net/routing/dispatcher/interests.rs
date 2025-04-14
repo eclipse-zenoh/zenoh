@@ -33,7 +33,7 @@ use zenoh_sync::get_mut_unchecked;
 use zenoh_util::Timed;
 
 use super::{
-    face::FaceState,
+    face::{Face, FaceState},
     tables::{register_expr_interest, Tables, TablesLock},
 };
 use crate::net::routing::{
@@ -200,7 +200,7 @@ impl Timed for CurrentInterestCleanup {
 pub(crate) fn declare_interest(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables_ref: &Arc<TablesLock>,
-    face: &mut Arc<FaceState>,
+    face: &Face,
     id: InterestId,
     expr: Option<&WireExpr>,
     mode: InterestMode,
@@ -208,12 +208,15 @@ pub(crate) fn declare_interest(
     send_declare: &mut SendDeclare,
 ) {
     if options.keyexprs() && mode != InterestMode::Current {
-        register_expr_interest(tables_ref, face, id, expr);
+        register_expr_interest(tables_ref, &mut face.state.clone(), id, expr);
     }
 
     if let Some(expr) = expr {
         let rtables = zread!(tables_ref.tables);
-        match rtables.get_mapping(face, expr.scope, expr.mapping).cloned() {
+        match rtables
+            .get_mapping(&face.state, expr.scope, expr.mapping)
+            .cloned()
+        {
             Some(mut prefix) => {
                 tracing::debug!(
                     "{} Declare interest {} ({}{})",

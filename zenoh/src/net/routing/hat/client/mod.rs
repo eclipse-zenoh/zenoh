@@ -104,10 +104,10 @@ impl HatBaseTrait for HatCode {
         face: &mut Face,
         send_declare: &mut SendDeclare,
     ) -> ZResult<()> {
-        interests_new_face(tables, &mut face.state);
-        pubsub_new_face(tables, &mut face.state, send_declare);
+        interests_new_face(tables, face);
+        pubsub_new_face(tables, face, send_declare);
         queries_new_face(tables, &mut face.state, send_declare);
-        token_new_face(tables, &mut face.state, send_declare);
+        token_new_face(tables, face, send_declare);
         tables.disable_all_routes();
         Ok(())
     }
@@ -120,10 +120,10 @@ impl HatBaseTrait for HatCode {
         _transport: &TransportUnicast,
         send_declare: &mut SendDeclare,
     ) -> ZResult<()> {
-        interests_new_face(tables, &mut face.state);
-        pubsub_new_face(tables, &mut face.state, send_declare);
+        interests_new_face(tables, face);
+        pubsub_new_face(tables, face, send_declare);
         queries_new_face(tables, &mut face.state, send_declare);
-        token_new_face(tables, &mut face.state, send_declare);
+        token_new_face(tables, face, send_declare);
         tables.disable_all_routes();
         Ok(())
     }

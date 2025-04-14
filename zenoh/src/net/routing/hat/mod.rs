@@ -141,7 +141,7 @@ pub(crate) trait HatInterestTrait {
         &self,
         tables: &mut Tables,
         tables_ref: &Arc<TablesLock>,
-        face: &mut Arc<FaceState>,
+        face: &Face,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
         mode: InterestMode,
@@ -157,7 +157,7 @@ pub(crate) trait HatPubSubTrait {
     fn declare_subscription(
         &self,
         tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+        face: &Face,
         id: SubscriberId,
         res: &mut Arc<Resource>,
         sub_info: &SubscriberInfo,
@@ -199,7 +199,7 @@ pub(crate) trait HatQueriesTrait {
     fn declare_queryable(
         &self,
         tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+        face: &Face,
         id: QueryableId,
         res: &mut Arc<Resource>,
         qabl_info: &QueryableInfoType,
@@ -256,7 +256,7 @@ pub(crate) trait HatTokenTrait {
     fn declare_token(
         &self,
         tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+        face: &Face,
         id: TokenId,
         res: &mut Arc<Resource>,
         node_id: NodeId,

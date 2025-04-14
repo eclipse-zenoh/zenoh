@@ -45,7 +45,7 @@ use super::{
 use crate::key_expr::KeyExpr;
 use crate::net::routing::{
     dispatcher::{
-        face::FaceState,
+        face::{Face, FaceState},
         resource::{NodeId, Resource, SessionContext},
         tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
     },
@@ -168,9 +168,9 @@ fn local_qabl_info(
     res.session_ctxs
         .values()
         .fold(info, |accu, ctx| {
-            if ctx.face.id != face.id && ctx.face.whatami != WhatAmI::Peer
+            if ctx.face.state.id != face.id && ctx.face.state.whatami != WhatAmI::Peer
                 || face.whatami != WhatAmI::Peer
-                || hat!(tables).failover_brokering(ctx.face.zid, face.zid)
+                || hat!(tables).failover_brokering(ctx.face.state.zid, face.zid)
             {
                 if let Some(info) = ctx.qabl.as_ref() {
                     Some(match accu {
@@ -200,16 +200,16 @@ fn send_sourced_queryable_to_net_children(
     for child in children {
         if net.graph.contains_node(*child) {
             match tables.get_face(&net.graph[*child].zid).cloned() {
-                Some(mut someface) => {
+                Some(someface) => {
                     if src_face
                         .as_ref()
-                        .map(|src_face| someface.id != src_face.id)
+                        .map(|src_face| someface.state.id != src_face.id)
                         .unwrap_or(true)
                     {
-                        let push_declaration = push_declaration_profile(tables, &someface);
-                        let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
+                        let push_declaration = push_declaration_profile(tables, &someface.state);
+                        let key_expr = Resource::decl_key(res, &someface, push_declaration);
 
-                        someface.intercept_declare(
+                        someface.state.intercept_declare(
                             &mut Declare {
                                 interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
@@ -242,41 +242,43 @@ fn propagate_simple_queryable(
     let full_peers_net = hat!(tables).full_net(WhatAmI::Peer);
     let faces = tables.faces.values().cloned();
     for mut dst_face in faces {
-        let info = local_qabl_info(tables, res, &dst_face);
-        let current = face_hat!(dst_face).local_qabls.get(res);
+        let info = local_qabl_info(tables, res, &dst_face.state);
+        let current = face_hat!(dst_face.state).local_qabls.get(res);
         if src_face
             .as_ref()
-            .map(|src_face| dst_face.id != src_face.id)
+            .map(|src_face| dst_face.state.id != src_face.id)
             .unwrap_or(true)
             && (current.is_none() || current.unwrap().1 != info)
-            && face_hat!(dst_face)
+            && face_hat!(dst_face.state)
                 .remote_interests
                 .values()
                 .any(|i| i.options.queryables() && i.matches(res))
             && if full_peers_net {
-                dst_face.whatami == WhatAmI::Client
+                dst_face.state.whatami == WhatAmI::Client
             } else {
-                dst_face.whatami != WhatAmI::Router
+                dst_face.state.whatami != WhatAmI::Router
                     && src_face
                         .as_ref()
                         .map(|src_face| {
                             src_face.whatami != WhatAmI::Peer
-                                || dst_face.whatami != WhatAmI::Peer
-                                || hat!(tables).failover_brokering(src_face.zid, dst_face.zid)
+                                || dst_face.state.whatami != WhatAmI::Peer
+                                || hat!(tables).failover_brokering(src_face.zid, dst_face.state.zid)
                         })
                         .unwrap_or(true)
             }
         {
-            let id = current
-                .map(|c| c.0)
-                .unwrap_or(face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst));
-            face_hat_mut!(&mut dst_face)
+            let id = current.map(|c| c.0).unwrap_or(
+                face_hat!(dst_face.state)
+                    .next_id
+                    .fetch_add(1, Ordering::SeqCst),
+            );
+            face_hat_mut!(&mut dst_face.state)
                 .local_qabls
                 .insert(res.clone(), (id, info));
-            let push_declaration = push_declaration_profile(tables, &dst_face);
-            let key_expr = Resource::decl_key(res, &mut dst_face, push_declaration);
+            let push_declaration = push_declaration_profile(tables, &dst_face.state);
+            let key_expr = Resource::decl_key(res, &dst_face, push_declaration);
             send_declare(
-                &dst_face,
+                &dst_face.state,
                 Declare {
                     interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
@@ -427,7 +429,7 @@ fn declare_linkstatepeer_queryable(
 
 fn register_simple_queryable(
     _tables: &mut Tables,
-    face: &mut Arc<FaceState>,
+    face: &Face,
     id: QueryableId,
     res: &mut Arc<Resource>,
     qabl_info: &QueryableInfoType,
@@ -437,17 +439,19 @@ fn register_simple_queryable(
         let res = get_mut_unchecked(res);
         get_mut_unchecked(
             res.session_ctxs
-                .entry(face.id)
+                .entry(face.state.id)
                 .or_insert_with(|| Arc::new(SessionContext::new(face.clone()))),
         )
         .qabl = Some(*qabl_info);
     }
-    face_hat_mut!(face).remote_qabls.insert(id, res.clone());
+    face_hat_mut!(&mut face.state.clone())
+        .remote_qabls
+        .insert(id, res.clone());
 }
 
 fn declare_simple_queryable(
     tables: &mut Tables,
-    face: &mut Arc<FaceState>,
+    face: &Face,
     id: QueryableId,
     res: &mut Arc<Resource>,
     qabl_info: &QueryableInfoType,
@@ -456,7 +460,14 @@ fn declare_simple_queryable(
     register_simple_queryable(tables, face, id, res, qabl_info);
     let local_details = local_router_qabl_info(tables, res);
     let zid = tables.zid;
-    register_router_queryable(tables, Some(face), res, &local_details, zid, send_declare);
+    register_router_queryable(
+        tables,
+        Some(&mut face.state.clone()),
+        res,
+        &local_details,
+        zid,
+        send_declare,
+    );
 }
 
 #[inline]
@@ -483,7 +494,7 @@ fn simple_qabls(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
         .values()
         .filter_map(|ctx| {
             if ctx.qabl.is_some() {
-                Some(ctx.face.clone())
+                Some(ctx.face.state.clone())
             } else {
                 None
             }
@@ -495,7 +506,7 @@ fn simple_qabls(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 fn remote_simple_qabls(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
     res.session_ctxs
         .values()
-        .any(|ctx| ctx.face.id != face.id && ctx.qabl.is_some())
+        .any(|ctx| ctx.face.state.id != face.id && ctx.qabl.is_some())
 }
 
 #[inline]
@@ -510,15 +521,15 @@ fn send_forget_sourced_queryable_to_net_children(
     for child in children {
         if net.graph.contains_node(*child) {
             match tables.get_face(&net.graph[*child].zid).cloned() {
-                Some(mut someface) => {
+                Some(someface) => {
                     if src_face
-                        .map(|src_face| someface.id != src_face.id)
+                        .map(|src_face| someface.state.id != src_face.id)
                         .unwrap_or(true)
                     {
-                        let push_declaration = push_declaration_profile(tables, &someface);
-                        let wire_expr = Resource::decl_key(res, &mut someface, push_declaration);
+                        let push_declaration = push_declaration_profile(tables, &someface.state);
+                        let wire_expr = Resource::decl_key(res, &someface, push_declaration);
 
-                        someface.intercept_declare(
+                        someface.state.intercept_declare(
                             &mut Declare {
                                 interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
@@ -547,9 +558,9 @@ fn propagate_forget_simple_queryable(
     send_declare: &mut SendDeclare,
 ) {
     for mut face in tables.faces.values().cloned() {
-        if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(res) {
+        if let Some((id, _)) = face_hat_mut!(&mut face.state).local_qabls.remove(res) {
             send_declare(
-                &face,
+                &face.state,
                 Declare {
                     interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
@@ -563,7 +574,7 @@ fn propagate_forget_simple_queryable(
                 Some(res.clone()),
             );
         }
-        for res in face_hat!(&mut face)
+        for res in face_hat!(&mut face.state)
             .local_qabls
             .keys()
             .cloned()
@@ -572,14 +583,14 @@ fn propagate_forget_simple_queryable(
             if !res.context().matches.iter().any(|m| {
                 m.upgrade().is_some_and(|m| {
                     m.context.is_some()
-                        && (remote_simple_qabls(&m, &face)
+                        && (remote_simple_qabls(&m, &face.state)
                             || remote_linkstatepeer_qabls(tables, &m)
                             || remote_router_qabls(tables, &m))
                 })
             }) {
-                if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
+                if let Some((id, _)) = face_hat_mut!(&mut face.state).local_qabls.remove(&res) {
                     send_declare(
-                        &face,
+                        &face.state,
                         Declare {
                             interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
@@ -607,25 +618,21 @@ fn propagate_forget_simple_queryable_to_peers(
         && res_hat!(res).router_qabls.len() == 1
         && res_hat!(res).router_qabls.contains_key(&tables.zid)
     {
-        for mut face in tables
-            .faces
-            .values()
-            .cloned()
-            .collect::<Vec<Arc<FaceState>>>()
-        {
-            if face.whatami == WhatAmI::Peer
-                && face_hat!(face).local_qabls.contains_key(res)
+        for mut face in tables.faces.values().cloned().collect::<Vec<_>>() {
+            if face.state.whatami == WhatAmI::Peer
+                && face_hat!(face.state).local_qabls.contains_key(res)
                 && !res.session_ctxs.values().any(|s| {
-                    face.zid != s.face.zid
+                    face.state.zid != s.face.state.zid
                         && s.qabl.is_some()
-                        && (s.face.whatami == WhatAmI::Client
-                            || (s.face.whatami == WhatAmI::Peer
-                                && hat!(tables).failover_brokering(s.face.zid, face.zid)))
+                        && (s.face.state.whatami == WhatAmI::Client
+                            || (s.face.state.whatami == WhatAmI::Peer
+                                && hat!(tables)
+                                    .failover_brokering(s.face.state.zid, face.state.zid)))
                 })
             {
-                if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(res) {
+                if let Some((id, _)) = face_hat_mut!(&mut face.state).local_qabls.remove(res) {
                     send_declare(
-                        &face,
+                        &face.state,
                         Declare {
                             interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
@@ -938,30 +945,30 @@ pub(super) fn queries_linkstate_change(
     send_declare: &mut SendDeclare,
 ) {
     if let Some(mut src_face) = tables.get_face(zid).cloned() {
-        if hat!(tables).router_peers_failover_brokering && src_face.whatami == WhatAmI::Peer {
-            let to_forget = face_hat!(src_face)
+        if hat!(tables).router_peers_failover_brokering && src_face.state.whatami == WhatAmI::Peer {
+            let to_forget = face_hat!(src_face.state)
                 .local_qabls
                 .keys()
                 .filter(|res| {
                     let client_qabls = res
                         .session_ctxs
                         .values()
-                        .any(|ctx| ctx.face.whatami == WhatAmI::Client && ctx.qabl.is_some());
+                        .any(|ctx| ctx.face.state.whatami == WhatAmI::Client && ctx.qabl.is_some());
                     !remote_router_qabls(tables, res)
                         && !client_qabls
                         && !res.session_ctxs.values().any(|ctx| {
-                            ctx.face.whatami == WhatAmI::Peer
-                                && src_face.id != ctx.face.id
-                                && HatTables::failover_brokering_to(links, ctx.face.zid)
+                            ctx.face.state.whatami == WhatAmI::Peer
+                                && src_face.state.id != ctx.face.state.id
+                                && HatTables::failover_brokering_to(links, ctx.face.state.zid)
                         })
                 })
                 .cloned()
                 .collect::<Vec<Arc<Resource>>>();
             for res in to_forget {
-                if let Some((id, _)) = face_hat_mut!(&mut src_face).local_qabls.remove(&res) {
-                    let wire_expr = Resource::get_best_key(&res, "", src_face.id);
+                if let Some((id, _)) = face_hat_mut!(&mut src_face.state).local_qabls.remove(&res) {
+                    let wire_expr = Resource::get_best_key(&res, "", src_face.state.id);
                     send_declare(
-                        &src_face,
+                        &src_face.state,
                         Declare {
                             interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
@@ -978,20 +985,23 @@ pub(super) fn queries_linkstate_change(
             }
 
             for mut dst_face in tables.faces.values().cloned() {
-                if src_face.id != dst_face.id
-                    && HatTables::failover_brokering_to(links, dst_face.zid)
+                if src_face.state.id != dst_face.state.id
+                    && HatTables::failover_brokering_to(links, dst_face.state.zid)
                 {
-                    for res in face_hat!(src_face).remote_qabls.values() {
-                        if !face_hat!(dst_face).local_qabls.contains_key(res) {
-                            let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-                            let info = local_qabl_info(tables, res, &dst_face);
-                            face_hat_mut!(&mut dst_face)
+                    for res in face_hat!(src_face.state).remote_qabls.values() {
+                        if !face_hat!(dst_face.state).local_qabls.contains_key(res) {
+                            let id = face_hat!(dst_face.state)
+                                .next_id
+                                .fetch_add(1, Ordering::SeqCst);
+                            let info = local_qabl_info(tables, res, &dst_face.state);
+                            face_hat_mut!(&mut dst_face.state)
                                 .local_qabls
                                 .insert(res.clone(), (id, info));
-                            let push_declaration = push_declaration_profile(tables, &dst_face);
-                            let key_expr = Resource::decl_key(res, &mut dst_face, push_declaration);
+                            let push_declaration =
+                                push_declaration_profile(tables, &dst_face.state);
+                            let key_expr = Resource::decl_key(res, &dst_face, push_declaration);
                             send_declare(
-                                &dst_face,
+                                &dst_face.state,
                                 Declare {
                                     interest_id: None,
                                     ext_qos: ext::QoSType::DECLARE,
@@ -1078,8 +1088,11 @@ fn insert_target_for_qabls(
                         if net.graph.contains_node(direction) {
                             if let Some(face) = tables.get_face(&net.graph[direction].zid) {
                                 if net.distances.len() > qabl_idx.index() {
-                                    let key_expr =
-                                        Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+                                    let key_expr = Resource::get_best_key(
+                                        expr.prefix,
+                                        expr.suffix,
+                                        face.state.id,
+                                    );
                                     route.push(QueryTargetQabl {
                                         direction: (face.clone(), key_expr.to_owned(), source),
                                         info: Some(QueryableInfoType {
@@ -1127,7 +1140,7 @@ fn make_qabl_id(
 
 pub(crate) fn declare_qabl_interest(
     tables: &mut Tables,
-    face: &mut Arc<FaceState>,
+    face: &Face,
     id: InterestId,
     res: Option<&mut Arc<Resource>>,
     mode: InterestMode,
@@ -1147,21 +1160,26 @@ pub(crate) fn declare_qabl_interest(
                                 .keys()
                                 .any(|r| *r != tables.zid)
                             || qabl.session_ctxs.values().any(|s| {
-                                s.face.id != face.id
+                                s.face.state.id != face.state.id
                                     && s.qabl.is_some()
-                                    && (s.face.whatami == WhatAmI::Client
-                                        || face.whatami == WhatAmI::Client
-                                        || (s.face.whatami == WhatAmI::Peer
-                                            && hat!(tables)
-                                                .failover_brokering(s.face.zid, face.zid)))
+                                    && (s.face.state.whatami == WhatAmI::Client
+                                        || face.state.whatami == WhatAmI::Client
+                                        || (s.face.state.whatami == WhatAmI::Peer
+                                            && hat!(tables).failover_brokering(
+                                                s.face.state.zid,
+                                                face.state.zid,
+                                            )))
                             }))
                 }) {
-                    let info = local_qabl_info(tables, res, face);
-                    let id = make_qabl_id(res, face, mode, info);
-                    let wire_expr =
-                        Resource::decl_key(res, face, push_declaration_profile(tables, face));
-                    send_declare(
+                    let info = local_qabl_info(tables, res, &face.state);
+                    let id = make_qabl_id(res, &mut face.state.clone(), mode, info);
+                    let wire_expr = Resource::decl_key(
+                        res,
                         face,
+                        push_declaration_profile(tables, &face.state),
+                    );
+                    send_declare(
+                        &face.state,
                         Declare {
                             interest_id,
                             ext_qos: ext::QoSType::DECLARE,
@@ -1187,17 +1205,21 @@ pub(crate) fn declare_qabl_interest(
                                 .any(|r| *r != tables.zid)
                             || qabl.session_ctxs.values().any(|s| {
                                 s.qabl.is_some()
-                                    && (s.face.whatami != WhatAmI::Peer
-                                        || face.whatami != WhatAmI::Peer
-                                        || hat!(tables).failover_brokering(s.face.zid, face.zid))
+                                    && (s.face.state.whatami != WhatAmI::Peer
+                                        || face.state.whatami != WhatAmI::Peer
+                                        || hat!(tables)
+                                            .failover_brokering(s.face.state.zid, face.state.zid))
                             }))
                     {
-                        let info = local_qabl_info(tables, qabl, face);
-                        let id = make_qabl_id(qabl, face, mode, info);
-                        let key_expr =
-                            Resource::decl_key(qabl, face, push_declaration_profile(tables, face));
-                        send_declare(
+                        let info = local_qabl_info(tables, qabl, &face.state);
+                        let id = make_qabl_id(qabl, &mut face.state.clone(), mode, info);
+                        let key_expr = Resource::decl_key(
+                            qabl,
                             face,
+                            push_declaration_profile(tables, &face.state),
+                        );
+                        send_declare(
+                            &face.state,
                             Declare {
                                 interest_id,
                                 ext_qos: ext::QoSType::DECLARE,
@@ -1217,16 +1239,19 @@ pub(crate) fn declare_qabl_interest(
         } else {
             for qabl in hat!(tables).router_qabls.iter() {
                 if qabl.context.is_some()
-                    && (remote_simple_qabls(qabl, face)
+                    && (remote_simple_qabls(qabl, &face.state)
                         || remote_linkstatepeer_qabls(tables, qabl)
                         || remote_router_qabls(tables, qabl))
                 {
-                    let info = local_qabl_info(tables, qabl, face);
-                    let id = make_qabl_id(qabl, face, mode, info);
-                    let key_expr =
-                        Resource::decl_key(qabl, face, push_declaration_profile(tables, face));
-                    send_declare(
+                    let info = local_qabl_info(tables, qabl, &face.state);
+                    let id = make_qabl_id(qabl, &mut face.state.clone(), mode, info);
+                    let key_expr = Resource::decl_key(
+                        qabl,
                         face,
+                        push_declaration_profile(tables, &face.state),
+                    );
+                    send_declare(
+                        &face.state,
                         Declare {
                             interest_id,
                             ext_qos: ext::QoSType::DECLARE,
@@ -1250,25 +1275,32 @@ impl HatQueriesTrait for HatCode {
     fn declare_queryable(
         &self,
         tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+        face: &Face,
         id: QueryableId,
         res: &mut Arc<Resource>,
         qabl_info: &QueryableInfoType,
         node_id: NodeId,
         send_declare: &mut SendDeclare,
     ) {
-        match face.whatami {
+        match face.state.whatami {
             WhatAmI::Router => {
-                if let Some(router) = get_router(tables, face, node_id) {
-                    declare_router_queryable(tables, face, res, qabl_info, router, send_declare)
+                if let Some(router) = get_router(tables, &face.state, node_id) {
+                    declare_router_queryable(
+                        tables,
+                        &mut face.state.clone(),
+                        res,
+                        qabl_info,
+                        router,
+                        send_declare,
+                    )
                 }
             }
             WhatAmI::Peer => {
                 if hat!(tables).full_net(WhatAmI::Peer) {
-                    if let Some(peer) = get_peer(tables, face, node_id) {
+                    if let Some(peer) = get_peer(tables, &face.state, node_id) {
                         declare_linkstatepeer_queryable(
                             tables,
-                            face,
+                            &mut face.state.clone(),
                             res,
                             qabl_info,
                             peer,
@@ -1349,8 +1381,8 @@ impl HatQueriesTrait for HatCode {
                             s.session_ctxs
                                 .values()
                                 .filter_map(|f| {
-                                    (f.face.whatami == WhatAmI::Peer && f.qabl.is_some())
-                                        .then_some(f.face.zid)
+                                    (f.face.state.whatami == WhatAmI::Peer && f.qabl.is_some())
+                                        .then_some(f.face.state.zid)
                                 })
                                 .collect()
                         },
@@ -1358,8 +1390,8 @@ impl HatQueriesTrait for HatCode {
                             .session_ctxs
                             .values()
                             .filter_map(|f| {
-                                (f.face.whatami == WhatAmI::Client && f.qabl.is_some())
-                                    .then_some(f.face.zid)
+                                (f.face.state.whatami == WhatAmI::Client && f.qabl.is_some())
+                                    .then_some(f.face.state.zid)
                             })
                             .collect(),
                     },
@@ -1371,14 +1403,14 @@ impl HatQueriesTrait for HatCode {
     fn get_queriers(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
         let mut result = HashMap::new();
         for face in tables.faces.values() {
-            for interest in face_hat!(face).remote_interests.values() {
+            for interest in face_hat!(face.state).remote_interests.values() {
                 if interest.options.queryables() {
                     if let Some(res) = interest.res.as_ref() {
                         let sources = result.entry(res.clone()).or_insert_with(Sources::default);
-                        match face.whatami {
-                            WhatAmI::Router => sources.routers.push(face.zid),
-                            WhatAmI::Peer => sources.peers.push(face.zid),
-                            WhatAmI::Client => sources.clients.push(face.zid),
+                        match face.state.whatami {
+                            WhatAmI::Router => sources.routers.push(face.state.zid),
+                            WhatAmI::Peer => sources.peers.push(face.state.zid),
+                            WhatAmI::Client => sources.clients.push(face.state.zid),
                         }
                     }
                 }
@@ -1462,7 +1494,7 @@ impl HatQueriesTrait for HatCode {
 
             if master || source_type == WhatAmI::Router {
                 for (sid, context) in &mres.session_ctxs {
-                    if context.face.whatami != WhatAmI::Router {
+                    if context.face.state.whatami != WhatAmI::Router {
                         let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
                         if let Some(qabl_info) = context.qabl.as_ref() {
                             route.push(QueryTargetQabl {
@@ -1546,11 +1578,11 @@ impl HatQueriesTrait for HatCode {
                     if match complete {
                         true => context.qabl.is_some_and(|q| q.complete),
                         false => context.qabl.is_some(),
-                    } && context.face.whatami != WhatAmI::Router
+                    } && context.face.state.whatami != WhatAmI::Router
                     {
                         matching_queryables
                             .entry(*sid)
-                            .or_insert_with(|| context.face.clone());
+                            .or_insert_with(|| context.face.state.clone());
                     }
                 }
             }
@@ -1579,7 +1611,9 @@ fn insert_faces_for_qbls(
                     if let Some(direction) = net.trees[source].directions[qbl_idx.index()] {
                         if net.graph.contains_node(direction) {
                             if let Some(face) = tables.get_face(&net.graph[direction].zid) {
-                                route.entry(face.id).or_insert_with(|| face.clone());
+                                route
+                                    .entry(face.state.id)
+                                    .or_insert_with(|| face.state.clone());
                             }
                         }
                     }

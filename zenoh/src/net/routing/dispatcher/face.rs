@@ -11,7 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{any::Any, collections::HashMap, fmt, ops::Not, sync::Arc, time::Duration};
+use std::{
+    any::Any,
+    collections::HashMap,
+    fmt,
+    ops::Not,
+    sync::{Arc, Weak},
+    time::Duration,
+};
 
 use arc_swap::ArcSwap;
 use tokio_util::sync::CancellationToken;
@@ -288,10 +295,34 @@ impl fmt::Display for FaceState {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct WeakFace {
+    pub(crate) tables: Weak<TablesLock>,
+    pub(crate) state: Weak<FaceState>,
+}
+
+impl WeakFace {
+    pub fn upgrade(&self) -> Option<Face> {
+        Some(Face {
+            tables: self.tables.upgrade()?,
+            state: self.state.upgrade()?,
+        })
+    }
+}
+
 #[derive(Clone)]
 pub struct Face {
     pub(crate) tables: Arc<TablesLock>,
     pub(crate) state: Arc<FaceState>,
+}
+
+impl Face {
+    pub fn downgrade(&self) -> WeakFace {
+        WeakFace {
+            tables: Arc::downgrade(&self.tables),
+            state: Arc::downgrade(&self.state),
+        }
+    }
 }
 
 impl Primitives for Face {
@@ -350,7 +381,7 @@ impl Primitives for Face {
             declare_interest(
                 ctrl_lock.as_ref(),
                 &self.tables,
-                &mut self.state.clone(),
+                self,
                 msg.id,
                 msg.wire_expr.as_ref(),
                 msg.mode,
@@ -424,7 +455,7 @@ impl Primitives for Face {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         match &mut msg.body {
             zenoh_protocol::network::DeclareBody::DeclareKeyExpr(m) => {
-                register_expr(&self.tables, &mut self.state.clone(), m.id, &m.wire_expr);
+                register_expr(&self.tables, self, m.id, &m.wire_expr);
             }
             zenoh_protocol::network::DeclareBody::UndeclareKeyExpr(m) => {
                 unregister_expr(&self.tables, &mut self.state.clone(), m.id);
@@ -434,7 +465,7 @@ impl Primitives for Face {
                 declare_subscription(
                     ctrl_lock.as_ref(),
                     &self.tables,
-                    &mut self.state.clone(),
+                    self,
                     m.id,
                     &m.wire_expr,
                     &SubscriberInfo,
@@ -467,7 +498,7 @@ impl Primitives for Face {
                 declare_queryable(
                     ctrl_lock.as_ref(),
                     &self.tables,
-                    &mut self.state.clone(),
+                    self,
                     m.id,
                     &m.wire_expr,
                     &m.ext_info,
@@ -500,7 +531,7 @@ impl Primitives for Face {
                 declare_token(
                     ctrl_lock.as_ref(),
                     &self.tables,
-                    &mut self.state.clone(),
+                    self,
                     m.id,
                     &m.wire_expr,
                     msg.ext_nodeid.node_id,
@@ -645,7 +676,7 @@ impl Primitives for Face {
             {
                 // NOTE: this request was blocked by an ingress interceptor, we need to send
                 // response final to avoid timeout error.
-                self.state.intercept_response_final(&mut ResponseFinal {
+                self.send_response_final(&mut ResponseFinal {
                     rid: msg.id,
                     ext_qos: response::ext::QoSType::RESPONSE_FINAL,
                     ext_tstamp: None,
@@ -841,33 +872,6 @@ impl FaceState {
         self.primitives.send_push(msg, reliability);
     }
 
-    pub(crate) fn intercept_request(&self, msg: &mut Request, prefix: Arc<Resource>) {
-        if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Egress) {
-            let ctx = &mut RoutingContext::with_prefix(
-                NetworkMessageMut {
-                    body: NetworkBodyMut::Request(msg),
-                    reliability: Reliability::Reliable, // NOTE: Request is always reliable
-                    #[cfg(feature = "stats")]
-                    size: None,
-                },
-                prefix,
-            );
-
-            if !self.exec_interceptors(InterceptorFlow::Egress, &iceptor, ctx) {
-                // NOTE: this request was blocked by an egress interceptor, we need to send
-                // response final to avoid timeout error.
-                self.intercept_response_final(&mut ResponseFinal {
-                    rid: msg.id,
-                    ext_qos: response::ext::QoSType::RESPONSE_FINAL,
-                    ext_tstamp: None,
-                });
-                return;
-            }
-        }
-
-        self.primitives.send_request(msg);
-    }
-
     pub(crate) fn intercept_response(&self, msg: &mut Response, prefix: Arc<Resource>) {
         if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Egress) {
             let ctx = &mut RoutingContext::with_prefix(
@@ -904,5 +908,37 @@ impl FaceState {
         }
 
         self.primitives.send_response_final(msg);
+    }
+}
+
+impl Face {
+    pub(crate) fn intercept_request(&self, msg: &mut Request, prefix: Arc<Resource>) {
+        if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Egress) {
+            let ctx = &mut RoutingContext::with_prefix(
+                NetworkMessageMut {
+                    body: NetworkBodyMut::Request(msg),
+                    reliability: Reliability::Reliable, // NOTE: Request is always reliable
+                    #[cfg(feature = "stats")]
+                    size: None,
+                },
+                prefix,
+            );
+
+            if !self
+                .state
+                .exec_interceptors(InterceptorFlow::Egress, &iceptor, ctx)
+            {
+                // NOTE: this request was blocked by an egress interceptor, we need to send
+                // response final to avoid timeout error.
+                self.send_response_final(&mut ResponseFinal {
+                    rid: msg.id,
+                    ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+                    ext_tstamp: None,
+                });
+                return;
+            }
+        }
+
+        self.state.primitives.send_request(msg);
     }
 }
