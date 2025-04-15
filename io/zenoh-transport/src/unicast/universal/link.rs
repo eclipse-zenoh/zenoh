@@ -163,7 +163,6 @@ impl TransportLinkUnicastUniversal {
         self.tracker.close();
         self.token.cancel();
         self.pipeline.disable();
-        self.tracker.wait().await;
 
         self.link.close(None).await
     }
