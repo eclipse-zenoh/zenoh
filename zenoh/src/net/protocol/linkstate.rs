@@ -1,3 +1,5 @@
+use std::num::NonZero;
+
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -16,10 +18,11 @@ use zenoh_protocol::core::{Locator, WhatAmI, ZenohIdProto};
 pub const PID: u64 = 1; // 0x01
 pub const WAI: u64 = 1 << 1; // 0x02
 pub const LOC: u64 = 1 << 2; // 0x04
+pub const WHT: u64 = 1 << 3; // 0x08
 
 //  7 6 5 4 3 2 1 0
 // +-+-+-+-+-+-+-+-+
-// ~X|X|X|X|X|L|W|P~
+// ~X|X|X|X|H|L|W|P~
 // +-+-+-+-+-+-+-+-+
 // ~     psid      ~
 // +---------------+
@@ -33,6 +36,8 @@ pub const LOC: u64 = 1 << 2; // 0x04
 // +---------------+
 // ~    [links]    ~
 // +---------------+
+// ~    [weights]  ~ if H = 1
+// +---------------+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LinkState {
     pub(crate) psid: u64,
@@ -41,6 +46,58 @@ pub(crate) struct LinkState {
     pub(crate) whatami: Option<WhatAmI>,
     pub(crate) locators: Option<Vec<Locator>>,
     pub(crate) links: Vec<u64>,
+    pub(crate) link_weights: Option<Vec<u16>>,
+}
+
+#[derive(Default, Copy, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LinkEdgeWeight(pub(crate) Option<NonZero<u16>>);
+
+impl LinkEdgeWeight {
+    const DEFAULT_LINK_WEIGHT: u16 = 100;
+
+    pub(crate) fn new(val: NonZero<u16>) -> Self {
+        LinkEdgeWeight(Some(val))
+    }
+
+    pub(crate) fn from_raw(mut val: u16) -> Self {
+        if val == 0 {
+            val = Self::DEFAULT_LINK_WEIGHT;
+        }
+        LinkEdgeWeight(NonZero::<u16>::new(val))
+    }
+
+    pub(crate) fn value(&self) -> u16 {
+        match self.0 {
+            Some(v) => v.get(),
+            None => Self::DEFAULT_LINK_WEIGHT,
+        }
+    }
+
+    pub(crate) fn into_raw(&self) -> u16 {
+        match self.0 {
+            Some(v) => v.get(),
+            None => 0,
+        }
+    }
+
+    pub(crate) fn is_set(&self) -> bool {
+        self.0.is_some()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LinkEdge {
+    pub(crate) dest: ZenohIdProto,
+    pub(crate) weight: LinkEdgeWeight,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LocalLinkState {
+    pub(crate) sn: u64,
+    pub(crate) zid: ZenohIdProto,
+    pub(crate) whatami: WhatAmI,
+    pub(crate) locators: Option<Vec<Locator>>,
+    pub(crate) links: Vec<LinkEdge>,
 }
 
 impl LinkState {

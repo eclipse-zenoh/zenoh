@@ -28,7 +28,8 @@ pub mod wrappers;
 use std::convert::TryFrom;
 // This is a false positive from the rust analyser
 use std::{
-    any::Any, collections::HashSet, fmt, io::Read, net::SocketAddr, ops, path::Path, sync::Weak,
+    any::Any, collections::HashSet, fmt, io::Read, net::SocketAddr, num::NonZero, ops, path::Path,
+    sync::Weak,
 };
 
 use include::recursive_include;
@@ -81,6 +82,14 @@ impl Zeroize for SecretString {
 }
 
 pub type SecretValue = Secret<SecretString>;
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct LinkWeight {
+    /// A zid of destination node.
+    pub destination: String,
+    /// A weight of link from this node to the destination.
+    pub weight: NonZero<u16>,
+}
 
 #[derive(Debug, Deserialize, Serialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
@@ -448,6 +457,11 @@ validated_struct::validator! {
                 /// connected to each other.
                 /// The failover brokering only works if gossip discovery is enabled.
                 peers_failover_brokering: Option<bool>,
+                /// Optional weights of the outgoing links.
+                /// For non-specified destination nodes the corresponding link weight will be set to 100,
+                /// unless the weight on the same link is provided in the config of destination node, in which case
+                /// it will be used as a link weight.
+                link_weights: Option<NEVec<LinkWeight>>,
             },
             /// The routing strategy to use in peers and it's configuration.
             pub peer: #[derive(Default)]
