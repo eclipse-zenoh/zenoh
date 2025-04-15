@@ -22,7 +22,7 @@ use std::{
     borrow::Borrow,
     collections::HashMap,
     env,
-    future::Future,
+    future::IntoFuture,
     ops::Deref,
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -130,18 +130,19 @@ pub enum ZRuntime {
 impl ZRuntime {
     pub fn spawn<F>(&self, future: F) -> JoinHandle<F::Output>
     where
-        F: Future + Send + 'static,
+        F: IntoFuture,
+        <F as IntoFuture>::IntoFuture: Send + 'static,
         F::Output: Send + 'static,
     {
         #[cfg(feature = "tracing-instrument")]
         let future = tracing::Instrument::instrument(future, tracing::Span::current());
 
-        self.deref().spawn(future)
+        self.deref().spawn(future.into_future())
     }
 
     pub fn block_in_place<F, R>(&self, f: F) -> R
     where
-        F: Future<Output = R>,
+        F: IntoFuture<Output = R>,
     {
         match Handle::try_current() {
             Ok(handle) => {
@@ -159,7 +160,7 @@ impl ZRuntime {
         #[cfg(feature = "tracing-instrument")]
         let f = tracing::Instrument::instrument(f, tracing::Span::current());
 
-        tokio::task::block_in_place(move || self.block_on(f))
+        tokio::task::block_in_place(move || self.block_on(f.into_future()))
     }
 }
 

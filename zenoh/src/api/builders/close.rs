@@ -21,6 +21,7 @@ use std::{
 use async_trait::async_trait;
 #[cfg(all(feature = "unstable", feature = "internal"))]
 use tokio::sync::oneshot::Receiver;
+use tracing::debug;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
 use zenoh_runtime::ZRuntime;
@@ -41,7 +42,7 @@ pub struct CloseBuilder<TCloseable: Closeable> {
 impl<TCloseable: Closeable> CloseBuilder<TCloseable> {
     pub(crate) fn new(closeable: &'_ TCloseable) -> Self {
         Self {
-            closee: closeable.get_closee(),
+            closee: closeable.get_closee().clone(),
             timeout: Duration::from_secs(10),
         }
     }
@@ -69,34 +70,39 @@ impl<TCloseable: Closeable> CloseBuilder<TCloseable> {
     }
 }
 
+impl<TCloseable: Closeable> std::fmt::Display for CloseBuilder<TCloseable> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Closing {} (timeout {:?})", self.closee, self.timeout)
+    }
+}
+
 impl<TCloseable: Closeable> Resolvable for CloseBuilder<TCloseable> {
     type To = ZResult<()>;
 }
 
 impl<TCloseable: Closeable> Wait for CloseBuilder<TCloseable> {
     fn wait(self) -> Self::To {
-        let future = self.into_future();
         match tokio::runtime::Handle::try_current() {
             Ok(_) => {
-                tracing::trace!("tokio TLS available, closing closeable directly");
-                ZRuntime::Net.block_in_place(future)
+                debug!("{self}: tokio TLS available, closing closeable directly");
+                ZRuntime::Net.block_in_place(self)
             }
             Err(e) if e.is_missing_context() => {
-                tracing::trace!("tokio TLS is just missing, closing closeable directly");
-                ZRuntime::Net.block_in_place(future)
+                debug!("{self}: tokio TLS is just missing, closing closeable directly");
+                ZRuntime::Net.block_in_place(self)
             }
             Err(_) => {
                 #[cfg(nolocal_thread_not_available)]
-                panic!("Close when thread-local storage is unavailable (typically in atexit()) does not work for this Rust 1.85..1.85.1, see https://github.com/rust-lang/rust/issues/138696");
+                panic!("{self}: close when thread-local storage is unavailable (typically in atexit()) does not work for this Rust 1.85..1.85.1, see https://github.com/rust-lang/rust/issues/138696");
 
                 #[cfg(not(nolocal_thread_not_available))]
                 {
                     let evaluate = move || {
-                        // NOTE: tracing logger also panics if used inside atexit() handler!!!
-                        tracing::trace!(
-                            "tokio TLS NOT available, closing closeable in separate thread"
+                        // NOTE: tracing logger also panics if used inside atexit(), sowe place it here in new thread!!!
+                        debug!(
+                            "{self}: tokio TLS NOT available, closing closeable in separate thread"
                         );
-                        ZRuntime::Net.block_in_place(future)
+                        ZRuntime::Net.block_in_place(self)
                     };
                     std::thread::spawn(evaluate)
                         .join()
@@ -114,11 +120,13 @@ impl<TCloseable: Closeable> IntoFuture for CloseBuilder<TCloseable> {
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(
             async move {
+                debug!("{}: execute closing code...", self.closee);
                 if tokio::time::timeout(self.timeout, self.closee.close_inner())
                     .await
                     .is_err()
                 {
-                    bail!("close operation timed out!")
+                    debug!("{}: close operation timed out", self.closee);
+                    bail!("{}: close operation timed out", self.closee)
                 }
                 Ok(())
             }
@@ -218,11 +226,11 @@ impl<TOutput: Send + 'static> IntoFuture for NolocalJoinHandle<TOutput> {
 }
 
 #[async_trait]
-pub(crate) trait Closee: Send + Sync + 'static {
+pub(crate) trait Closee: Clone + std::fmt::Display + Send + Sync + 'static {
     async fn close_inner(&self);
 }
 
 pub(crate) trait Closeable {
     type TClosee: Closee;
-    fn get_closee(&self) -> Self::TClosee;
+    fn get_closee(&self) -> &Self::TClosee;
 }
