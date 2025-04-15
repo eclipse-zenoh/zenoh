@@ -26,9 +26,10 @@ use zenoh_config::InterceptorFlow;
 use zenoh_protocol::{
     core::{ExprId, Reliability, WhatAmI, ZenohIdProto},
     network::{
+        declare,
         interest::{InterestId, InterestMode, InterestOptions},
-        response, Declare, Interest, Mapping, NetworkBodyMut, NetworkMessageMut, Push, Request,
-        RequestId, Response, ResponseFinal,
+        response, Declare, DeclareBody, DeclareFinal, Interest, Mapping, NetworkBodyMut,
+        NetworkMessageMut, Push, Request, RequestId, Response, ResponseFinal,
     },
     zenoh::RequestBody,
 };
@@ -45,7 +46,7 @@ use super::{
     tables::TablesLock,
 };
 use crate::net::{
-    primitives::{McastMux, Mux, Primitives},
+    primitives::{EPrimitives, McastMux, Mux, Primitives},
     routing::{
         dispatcher::interests::finalize_pending_interests,
         interceptor::{
@@ -323,6 +324,22 @@ impl Face {
             state: Arc::downgrade(&self.state),
         }
     }
+
+    /// Returns a reference to the **ingress** primitives of this [`Face`].
+    ///
+    /// Use the returned [`Primitives`] to send messages that loop back
+    /// into this same side of the [`Face`].
+    pub(crate) fn ingress_primitives(&self) -> &dyn Primitives {
+        self
+    }
+
+    /// Returns a reference to the **egress** primitives of this [`Face`].
+    ///
+    /// Use the returned [`EPrimitives`] to send messages outward from
+    /// this side to the other side of the [`Face`].
+    pub(crate) fn egress_primitives(&self) -> &dyn EPrimitives {
+        &*self.state.primitives
+    }
 }
 
 impl Primitives for Face {
@@ -356,13 +373,14 @@ impl Primitives for Face {
                 }
             };
 
+            let interest_id = msg.id;
             let msg = NetworkMessageMut {
                 body: NetworkBodyMut::Interest(msg),
                 reliability: Reliability::Reliable, // Interest is always reliable
                 #[cfg(feature = "stats")]
                 size: None,
             };
-            let ctx = &mut match prefix {
+            let ctx = &mut match &prefix {
                 Some(prefix) => RoutingContext::with_prefix(msg, prefix.clone()),
                 None => RoutingContext::new(msg),
             };
@@ -371,6 +389,19 @@ impl Primitives for Face {
                 .state
                 .exec_interceptors(InterceptorFlow::Ingress, &iceptor, ctx)
             {
+                // NOTE: this request was blocked by an ingress interceptor, we need to send
+                // DeclareFinal to avoid a timeout error.
+                self.egress_primitives()
+                    .send_declare(RoutingContext::with_expr(
+                        &mut Declare {
+                            interest_id: Some(interest_id),
+                            ext_qos: declare::ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::DeclareFinal(DeclareFinal),
+                        },
+                        prefix.map(|res| res.expr().to_string()).unwrap_or_default(),
+                    ));
                 return;
             }
         }
@@ -675,12 +706,13 @@ impl Primitives for Face {
                 .exec_interceptors(InterceptorFlow::Ingress, &iceptor, ctx)
             {
                 // NOTE: this request was blocked by an ingress interceptor, we need to send
-                // response final to avoid timeout error.
-                self.send_response_final(&mut ResponseFinal {
-                    rid: msg.id,
-                    ext_qos: response::ext::QoSType::RESPONSE_FINAL,
-                    ext_tstamp: None,
-                });
+                // ResponseFinal to avoid a timeout error.
+                self.egress_primitives()
+                    .send_response_final(&mut ResponseFinal {
+                        rid: msg.id,
+                        ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+                        ext_tstamp: None,
+                    });
                 return;
             }
         }
@@ -931,16 +963,17 @@ impl Face {
                 .exec_interceptors(InterceptorFlow::Egress, &iceptor, ctx)
             {
                 // NOTE: this request was blocked by an egress interceptor, we need to send
-                // response final to avoid timeout error.
-                self.send_response_final(&mut ResponseFinal {
-                    rid: msg.id,
-                    ext_qos: response::ext::QoSType::RESPONSE_FINAL,
-                    ext_tstamp: None,
-                });
+                // ResponseFinal to avoid timeout error.
+                self.ingress_primitives()
+                    .send_response_final(&mut ResponseFinal {
+                        rid: msg.id,
+                        ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+                        ext_tstamp: None,
+                    });
                 return;
             }
         }
 
-        self.state.primitives.send_request(msg);
+        self.egress_primitives().send_request(msg);
     }
 }
