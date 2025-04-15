@@ -1,5 +1,3 @@
-use std::num::NonZero;
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -13,12 +11,14 @@ use std::num::NonZero;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::num::NonZeroU16;
+
 use zenoh_protocol::core::{Locator, WhatAmI, ZenohIdProto};
 
 pub const PID: u64 = 1; // 0x01
 pub const WAI: u64 = 1 << 1; // 0x02
 pub const LOC: u64 = 1 << 2; // 0x04
-pub const WHT: u64 = 1 << 3; // 0x08
+pub const WGT: u64 = 1 << 3; // 0x08
 
 //  7 6 5 4 3 2 1 0
 // +-+-+-+-+-+-+-+-+
@@ -50,12 +50,12 @@ pub(crate) struct LinkState {
 }
 
 #[derive(Default, Copy, Debug, Clone, PartialEq, Eq)]
-pub(crate) struct LinkEdgeWeight(pub(crate) Option<NonZero<u16>>);
+pub(crate) struct LinkEdgeWeight(pub(crate) Option<NonZeroU16>);
 
 impl LinkEdgeWeight {
     const DEFAULT_LINK_WEIGHT: u16 = 100;
 
-    pub(crate) fn new(val: NonZero<u16>) -> Self {
+    pub(crate) fn new(val: NonZeroU16) -> Self {
         LinkEdgeWeight(Some(val))
     }
 
@@ -63,7 +63,7 @@ impl LinkEdgeWeight {
         if val == 0 {
             val = Self::DEFAULT_LINK_WEIGHT;
         }
-        LinkEdgeWeight(NonZero::<u16>::new(val))
+        LinkEdgeWeight(NonZeroU16::new(val))
     }
 
     pub(crate) fn value(&self) -> u16 {
@@ -73,7 +73,7 @@ impl LinkEdgeWeight {
         }
     }
 
-    pub(crate) fn into_raw(&self) -> u16 {
+    pub(crate) fn as_raw(&self) -> u16 {
         match self.0 {
             Some(v) => v.get(),
             None => 0,

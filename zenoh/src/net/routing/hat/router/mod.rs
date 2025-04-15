@@ -277,7 +277,7 @@ impl HatTables {
     #[inline]
     fn failover_brokering_to(source_links: &[LinkEdge], dest: ZenohIdProto) -> bool {
         // if source_links is empty then gossip is probably disabled in source peer
-        !source_links.is_empty() && !source_links.iter().any(|e| &e.dest == &dest)
+        !source_links.is_empty() && !source_links.iter().any(|e| e.dest == dest)
     }
 
     #[inline]

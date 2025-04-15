@@ -249,7 +249,7 @@ impl Network {
                 match self.get_idx(&l.dest) {
                     Some(idx2) => {
                         links.push(idx2.index().try_into().unwrap());
-                        weights.push(l.weight.into_raw());
+                        weights.push(l.weight.as_raw());
                         has_non_default_weight = has_non_default_weight || l.weight.is_set();
                     }
                     None => {
@@ -360,12 +360,12 @@ impl Network {
         if idx1 == self.idx {
             self.link_weights
                 .get(&self.graph[idx2].zid)
-                .map(|v| *v)
+                .copied()
                 .unwrap_or_default()
         } else if idx2 == self.idx {
             self.link_weights
                 .get(&self.graph[idx1].zid)
-                .map(|v| *v)
+                .copied()
                 .unwrap_or_default()
         } else {
             LinkEdgeWeight::default()
@@ -464,16 +464,17 @@ impl Network {
 
         // apply psid<->zid mapping to links
         let src_link = self.get_link_from_zid(&src).unwrap();
-        let link_states = link_states
+
+        link_states
             .into_iter()
-            .map(|(zid, whatami, locators, sn, links, weigths)| {
+            .map(|(zid, whatami, locators, sn, links, weights)| {
                 let mut edges: Vec<LinkEdge> = Vec::with_capacity(links.len());
                 for i in 0..links.len() {
                     match src_link.get_zid(&links[i]) {
                         Some(zid) => {
                             edges.push(LinkEdge {
                                 dest: *zid,
-                                weight: weigths
+                                weight: weights
                                     .as_ref()
                                     .map(|w| LinkEdgeWeight::from_raw(w[i]))
                                     .unwrap_or_default(),
@@ -498,8 +499,7 @@ impl Network {
                     links: edges,
                 }
             })
-            .collect::<Vec<_>>();
-        link_states
+            .collect::<Vec<_>>()
     }
 
     fn process_linkstates_peer_to_peer(&mut self, link_states: Vec<LocalLinkState>) -> Changes {
@@ -558,7 +558,7 @@ impl Network {
                 }
             }
         }
-        return changes;
+        changes
     }
 
     fn connect_discovered_peer(&self, zid: ZenohIdProto, locators: Vec<Locator>) {
@@ -697,7 +697,7 @@ impl Network {
                     if let Some(l) = self.graph[idx2]
                         .links
                         .iter()
-                        .position(|l| &l.dest == &self.graph[idx1].zid)
+                        .position(|l| l.dest == self.graph[idx1].zid)
                     {
                         tracing::trace!(
                             "{} Update edge (state) {} {}",
@@ -710,7 +710,7 @@ impl Network {
                     }
                 } else {
                     let node = Node {
-                        zid: link.dest.clone(),
+                        zid: link.dest,
                         whatami: None,
                         locators: None,
                         sn: 0,
@@ -732,7 +732,7 @@ impl Network {
                 edges.push(edge);
             }
             for (eidx, idx2) in edges {
-                if !ls.links.iter().any(|l| &l.dest == &self.graph[idx2].zid) {
+                if !ls.links.iter().any(|l| l.dest == self.graph[idx2].zid) {
                     tracing::trace!(
                         "{} Remove edge (state) {} {}",
                         self.name,
@@ -806,7 +806,7 @@ impl Network {
                 if let Some(p) = self.graph[idx]
                     .links
                     .iter()
-                    .position(|l| &l.dest == &self.graph[self.idx].zid)
+                    .position(|l| l.dest == self.graph[self.idx].zid)
                 {
                     tracing::trace!("Update edge (link) {} {}", self.graph[self.idx].zid, zid);
                     link_weight = self.update_edge(self.idx, idx, LinkEdgeWeight::default());

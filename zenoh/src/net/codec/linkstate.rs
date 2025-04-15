@@ -50,7 +50,7 @@ where
             options |= linkstate::LOC;
         }
         if x.link_weights.is_some() {
-            options |= linkstate::WHT;
+            options |= linkstate::WGT;
         }
         codec.write(&mut *writer, options)?;
 
@@ -118,7 +118,7 @@ where
             links.push(l);
         }
 
-        let link_weights = if imsg::has_option(options, linkstate::WHT) {
+        let link_weights = if imsg::has_option(options, linkstate::WGT) {
             // number of weights is the same as number of links
             let mut weights: Vec<u16> = Vec::with_capacity(links_len);
             for _ in 0..links_len {

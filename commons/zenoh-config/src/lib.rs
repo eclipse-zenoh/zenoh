@@ -28,8 +28,8 @@ pub mod wrappers;
 use std::convert::TryFrom;
 // This is a false positive from the rust analyser
 use std::{
-    any::Any, collections::HashSet, fmt, io::Read, net::SocketAddr, num::NonZero, ops, path::Path,
-    sync::Weak,
+    any::Any, collections::HashSet, fmt, io::Read, net::SocketAddr, num::NonZeroU16, ops,
+    path::Path, sync::Weak,
 };
 
 use include::recursive_include;
@@ -88,7 +88,7 @@ pub struct LinkWeight {
     /// A zid of destination node.
     pub destination: String,
     /// A weight of link from this node to the destination.
-    pub weight: NonZero<u16>,
+    pub weight: NonZeroU16,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Copy)]
