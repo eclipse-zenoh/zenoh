@@ -30,7 +30,7 @@ description = "Internal crate for zenoh."
 
 [features]
 default = ["std"]
-std = []
+std = ["ahash/default"]
 test = []
 
 [dependencies]

@@ -82,7 +82,7 @@ tracing-instrument = [
 [dependencies]
 tokio = { workspace = true, features = ["rt", "macros", "time"] }
 tokio-util = { workspace = true }
-ahash = { workspace = true }
+ahash = { workspace = true, default-features = true }
 arc-swap = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
