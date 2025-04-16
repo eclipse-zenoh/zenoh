@@ -205,7 +205,7 @@ async fn test_link_weights_inner(
             v.1.iter()
                 .filter_map(|(e, w)| {
                     w.map(|w| LinkWeight {
-                        destination: e.to_string(),
+                        destination: ZenohId::from_str(&e.to_string()).unwrap(),
                         weight: w.try_into().unwrap(),
                     })
                 })

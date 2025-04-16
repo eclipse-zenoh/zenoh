@@ -22,7 +22,6 @@ use std::{
     collections::{hash_map::DefaultHasher, HashMap, HashSet},
     hash::Hasher,
     mem,
-    str::FromStr,
     sync::{atomic::AtomicU32, Arc},
 };
 
@@ -318,15 +317,14 @@ fn link_weights_to_hm(
     let mut link_weights_by_zid = HashMap::new();
     if let Some(link_weights) = link_weights {
         for lw in link_weights {
-            let zid = ZenohIdProto::from_str(&lw.destination)?;
             if link_weights_by_zid
-                .insert(zid, LinkEdgeWeight::new(lw.weight))
+                .insert(lw.destination.into(), LinkEdgeWeight::new(lw.weight))
                 .is_some()
             {
                 bail!(
                     "{} config contains a duplicate zid value for link weight: {}",
                     network_name,
-                    zid
+                    lw.destination
                 );
             }
         }
