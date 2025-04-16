@@ -43,7 +43,7 @@ use crate::net::routing::{
 };
 
 pub(crate) struct Query {
-    src_face: Arc<FaceState>,
+    src_face: Face,
     src_qid: RequestId,
 }
 
@@ -450,9 +450,9 @@ macro_rules! inc_res_stats {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mut Request) {
+pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Face, msg: &mut Request) {
     let rtables = zread!(tables_ref.tables);
-    match rtables.get_mapping(face, msg.wire_expr.scope, msg.wire_expr.mapping) {
+    match rtables.get_mapping(&face.state, msg.wire_expr.scope, msg.wire_expr.mapping) {
         Some(prefix) => {
             tracing::debug!(
                 "{}:{} Route query for resource {}{}",
@@ -469,16 +469,24 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
             let admin = expr.full_expr().starts_with("@/");
             #[cfg(feature = "stats")]
             if !admin {
-                inc_req_stats!(face, rx, user, msg.payload)
+                inc_req_stats!(face.state, rx, user, msg.payload)
             } else {
-                inc_req_stats!(face, rx, admin, msg.payload)
+                inc_req_stats!(face.state, rx, admin, msg.payload)
             }
 
-            if rtables.hat_code.ingress_filter(&rtables, face, &mut expr) {
+            if rtables
+                .hat_code
+                .ingress_filter(&rtables, &face.state, &mut expr)
+            {
                 let res = Resource::get_resource(&prefix, expr.suffix);
 
-                let route =
-                    get_query_route(&rtables, face, &res, &mut expr, msg.ext_nodeid.node_id);
+                let route = get_query_route(
+                    &rtables,
+                    &face.state,
+                    &res,
+                    &mut expr,
+                    msg.ext_nodeid.node_id,
+                );
 
                 let query = Arc::new(Query {
                     src_face: face.clone(),
@@ -486,8 +494,14 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                 });
 
                 let queries_lock = zwrite!(tables_ref.queries_lock);
-                let route =
-                    compute_final_route(&rtables, &route, face, &mut expr, &msg.ext_target, query);
+                let route = compute_final_route(
+                    &rtables,
+                    &route,
+                    &face.state,
+                    &mut expr,
+                    &msg.ext_target,
+                    query,
+                );
                 let timeout = msg.ext_timeout.unwrap_or(rtables.queries_default_timeout);
                 drop(queries_lock);
                 drop(rtables);
@@ -619,9 +633,9 @@ pub(crate) fn route_send_response(
 
             #[cfg(feature = "stats")]
             if !admin {
-                inc_res_stats!(query.src_face, tx, user, msg.payload)
+                inc_res_stats!(query.src_face.state, tx, user, msg.payload)
             } else {
-                inc_res_stats!(query.src_face, tx, admin, msg.payload)
+                inc_res_stats!(query.src_face.state, tx, admin, msg.payload)
             }
 
             msg.rid = query.src_qid;
@@ -632,7 +646,11 @@ pub(crate) fn route_send_response(
                     .read()
                     .expect("reading Tables should not fail");
                 match tables
-                    .get_sent_mapping(&query.src_face, msg.wire_expr.scope, msg.wire_expr.mapping)
+                    .get_sent_mapping(
+                        &query.src_face.state,
+                        msg.wire_expr.scope,
+                        msg.wire_expr.mapping,
+                    )
                     .cloned()
                 {
                     Some(prefix) => prefix,

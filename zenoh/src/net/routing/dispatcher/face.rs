@@ -719,7 +719,7 @@ impl Primitives for Face {
 
         match msg.payload {
             RequestBody::Query(_) => {
-                route_query(&self.tables, &self.state, msg);
+                route_query(&self.tables, self, msg);
             }
         }
     }
@@ -905,9 +905,11 @@ impl FaceState {
 
         self.primitives.send_push(msg, reliability);
     }
+}
 
+impl Face {
     pub(crate) fn intercept_response(&self, msg: &mut Response, prefix: Arc<Resource>) {
-        if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Egress) {
+        if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Egress) {
             let ctx = &mut RoutingContext::with_prefix(
                 NetworkMessageMut {
                     body: NetworkBodyMut::Response(msg),
@@ -918,16 +920,19 @@ impl FaceState {
                 prefix,
             );
 
-            if !self.exec_interceptors(InterceptorFlow::Egress, &iceptor, ctx) {
+            if !self
+                .state
+                .exec_interceptors(InterceptorFlow::Egress, &iceptor, ctx)
+            {
                 return;
             }
         }
 
-        self.primitives.send_response(msg);
+        self.egress_primitives().send_response(msg);
     }
 
     pub(crate) fn intercept_response_final(&self, msg: &mut ResponseFinal) {
-        if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Egress) {
+        if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Egress) {
             let ctx = &mut RoutingContext::new(NetworkMessageMut {
                 body: NetworkBodyMut::ResponseFinal(msg),
                 reliability: Reliability::Reliable, // NOTE: ResponseFinal is always reliable
@@ -936,16 +941,17 @@ impl FaceState {
             });
 
             // NOTE: ResponseFinal messages have no keyexpr
-            if !self.exec_interceptors(InterceptorFlow::Egress, &iceptor, ctx) {
+            if !self
+                .state
+                .exec_interceptors(InterceptorFlow::Egress, &iceptor, ctx)
+            {
                 return;
             }
         }
 
-        self.primitives.send_response_final(msg);
+        self.egress_primitives().send_response_final(msg);
     }
-}
 
-impl Face {
     pub(crate) fn intercept_request(&self, msg: &mut Request, prefix: Arc<Resource>) {
         if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Egress) {
             let ctx = &mut RoutingContext::with_prefix(
