@@ -61,7 +61,7 @@ pub(super) fn interests_new_face(tables: &mut Tables, face: &Face) {
                     let wire_expr = res.as_ref().map(|res| {
                         Resource::decl_key(res, face, super::push_declaration_profile(&face.state))
                     });
-                    face.state.intercept_interest(
+                    face.intercept_interest(
                         &mut Interest {
                             id,
                             mode: InterestMode::CurrentFuture,
@@ -195,7 +195,7 @@ impl HatInterestTrait for HatCode {
                         super::push_declaration_profile(&dst_face.state),
                     )
                 });
-                dst_face.state.intercept_interest(
+                dst_face.intercept_interest(
                     &mut Interest {
                         id,
                         mode: propagated_mode,
@@ -257,7 +257,7 @@ impl HatInterestTrait for HatCode {
                         if local_interest.res == interest.res
                             && local_interest.options == interest.options
                         {
-                            dst_face.state.intercept_interest(
+                            dst_face.intercept_interest(
                                 &mut Interest {
                                     id,
                                     mode: InterestMode::Final,

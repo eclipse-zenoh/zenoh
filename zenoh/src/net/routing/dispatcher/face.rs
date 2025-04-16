@@ -824,11 +824,9 @@ impl fmt::Display for Face {
     }
 }
 
-// NOTE(fuzzypixelz): these methods ought to eventually be moved under `Face`, in very much the same
-// manner as `intercept_request`.
-impl FaceState {
+impl Face {
     pub(crate) fn intercept_interest(&self, msg: &mut Interest, prefix: Option<&Arc<Resource>>) {
-        if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Egress) {
+        if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Egress) {
             let interest_id = msg.id;
             let msg = NetworkMessageMut {
                 body: NetworkBodyMut::Interest(msg),
@@ -842,22 +840,24 @@ impl FaceState {
                 None => RoutingContext::new(msg),
             };
 
-            if !self.exec_interceptors(InterceptorFlow::Egress, &iceptor, ctx) {
+            if !self
+                .state
+                .exec_interceptors(InterceptorFlow::Egress, &iceptor, ctx)
+            {
                 // NOTE: this request was blocked by an egress interceptor, we need to send
                 // DeclareFinal to avoid a timeout error.
-                self.reject_interest(interest_id);
+                self.state.reject_interest(interest_id);
                 return;
             }
         }
 
-        self.primitives.send_interest(RoutingContext::with_expr(
-            msg,
-            prefix.map(|res| res.expr().to_string()).unwrap_or_default(),
-        ));
+        self.egress_primitives()
+            .send_interest(RoutingContext::with_expr(
+                msg,
+                prefix.map(|res| res.expr().to_string()).unwrap_or_default(),
+            ));
     }
-}
 
-impl Face {
     pub(crate) fn intercept_declare(&self, msg: &mut Declare, prefix: Option<&Arc<Resource>>) {
         if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Egress) {
             let msg = NetworkMessageMut {
