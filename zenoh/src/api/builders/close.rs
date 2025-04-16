@@ -83,11 +83,11 @@ impl Wait for CloseBuilder {
         match tokio::runtime::Handle::try_current() {
             Ok(_) => {
                 debug!("{self}: tokio TLS available, closing closeable directly");
-                ZRuntime::Net.block_in_place(self)
+                ZRuntime::Net.block_in_place(self.into_future())
             }
             Err(e) if e.is_missing_context() => {
                 debug!("{self}: tokio TLS is just missing, closing closeable directly");
-                ZRuntime::Net.block_in_place(self)
+                ZRuntime::Net.block_in_place(self.into_future())
             }
             Err(_) => {
                 #[cfg(nolocal_thread_not_available)]
@@ -100,7 +100,7 @@ impl Wait for CloseBuilder {
                         debug!(
                             "{self}: tokio TLS NOT available, closing closeable in separate thread"
                         );
-                        ZRuntime::Net.block_in_place(self)
+                        ZRuntime::Net.block_in_place(self.into_future())
                     };
                     std::thread::spawn(evaluate)
                         .join()
