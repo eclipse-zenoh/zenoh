@@ -67,7 +67,7 @@ use crate::api::plugins::PluginsManager;
 use crate::session::CloseBuilder;
 use crate::{
     api::{
-        builders::close::{Closeable, Closee},
+        builders::close::Closee,
         config::{Config, Notifier},
     },
     GIT_VERSION, LONG_VERSION,
@@ -289,8 +289,12 @@ impl Runtime {
     }
 
     #[cfg(feature = "internal")]
-    pub fn close(&self) -> CloseBuilder<Self> {
-        CloseBuilder::new(self)
+    pub fn close(&self) -> CloseBuilder {
+        CloseBuilder::new(self.closee())
+    }
+
+    pub(crate) fn closee(&self) -> Box<dyn Closee> {
+        Box::new(self.state.clone())
     }
 
     pub fn is_closed(&self) -> bool {
@@ -578,13 +582,5 @@ impl Closee for Arc<RuntimeState> {
         debug!(zid = %self.zid, "Close clear faces");
         tables.faces.clear();
         debug!(zid = %self.zid, "Runtime closed!");
-    }
-}
-
-impl Closeable for Runtime {
-    type TClosee = Arc<RuntimeState>;
-
-    fn get_closee(&self) -> &Self::TClosee {
-        &self.state
     }
 }

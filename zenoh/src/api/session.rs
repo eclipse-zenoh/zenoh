@@ -69,7 +69,7 @@ use zenoh_result::ZResult;
 use zenoh_shm::api::client_storage::ShmClientStorage;
 use zenoh_task::TaskController;
 
-use super::builders::close::{CloseBuilder, Closeable, Closee};
+use super::builders::close::{CloseBuilder, Closee};
 #[cfg(feature = "unstable")]
 use crate::api::selector::ZenohParameters;
 #[cfg(feature = "unstable")]
@@ -778,8 +778,8 @@ impl Session {
     /// subscriber_task.await.unwrap();
     /// # }
     /// ```
-    pub fn close(&self) -> CloseBuilder<Self> {
-        CloseBuilder::new(self)
+    pub fn close(&self) -> CloseBuilder {
+        CloseBuilder::new(Box::new(self.0.clone()))
     }
 
     /// Check if the session has been closed.
@@ -3188,10 +3188,10 @@ impl Closee for Arc<SessionInner> {
         self.task_controller.terminate_all_async().await;
 
         if self.owns_runtime {
-            debug!(zid = %self.zid(), "closing owned runtime {}", self.runtime.get_closee());
-            self.runtime.get_closee().close_inner().await;
+            debug!(zid = %self.zid(), "closing owned runtime {}", self.runtime);
+            self.runtime.closee().close_inner().await;
         } else {
-            debug!(zid = %self.zid(), "finalize all primitives on foreign runtime {}", self.runtime.get_closee());
+            debug!(zid = %self.zid(), "finalize all primitives on foreign runtime {}", self.runtime);
             primitives.send_close();
         }
 
@@ -3209,13 +3209,5 @@ impl Closee for Arc<SessionInner> {
         let _matching_listeners = std::mem::take(&mut state.matching_listeners);
         drop(state);
         debug!(zid = %self.zid(), "state moved out");
-    }
-}
-
-impl Closeable for Session {
-    type TClosee = Arc<SessionInner>;
-
-    fn get_closee(&self) -> &Self::TClosee {
-        &self.0
     }
 }

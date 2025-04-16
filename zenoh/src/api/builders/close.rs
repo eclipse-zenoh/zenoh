@@ -31,18 +31,18 @@ use zenoh_runtime::ZRuntime;
 // care about the `private_bounds` lint in this particular case.
 #[allow(private_bounds)]
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
-pub struct CloseBuilder<TCloseable: Closeable> {
-    closee: TCloseable::TClosee,
+pub struct CloseBuilder {
+    closee: Box<dyn Closee>,
     timeout: Duration,
 }
 
 // NOTE: `Closeable` is only pub(crate) because it is zenoh-internal trait, so we don't
 // care about the `private_bounds` lint in this particular case.
 #[allow(private_bounds)]
-impl<TCloseable: Closeable> CloseBuilder<TCloseable> {
-    pub(crate) fn new(closeable: &'_ TCloseable) -> Self {
+impl CloseBuilder {
+    pub(crate) fn new(closee: Box<dyn Closee>) -> Self {
         Self {
-            closee: closeable.get_closee().clone(),
+            closee,
             timeout: Duration::from_secs(10),
         }
     }
@@ -63,24 +63,22 @@ impl<TCloseable: Closeable> CloseBuilder<TCloseable> {
     #[cfg(all(feature = "unstable", feature = "internal"))]
     /// Run Close operation concurrently
     #[doc(hidden)]
-    pub fn in_background(
-        self,
-    ) -> BackgroundCloseBuilder<<CloseBuilder<TCloseable> as Resolvable>::To> {
+    pub fn in_background(self) -> BackgroundCloseBuilder<<CloseBuilder as Resolvable>::To> {
         BackgroundCloseBuilder::new(self.into_future())
     }
 }
 
-impl<TCloseable: Closeable> std::fmt::Display for CloseBuilder<TCloseable> {
+impl std::fmt::Display for CloseBuilder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Closing {} (timeout {:?})", self.closee, self.timeout)
     }
 }
 
-impl<TCloseable: Closeable> Resolvable for CloseBuilder<TCloseable> {
+impl Resolvable for CloseBuilder {
     type To = ZResult<()>;
 }
 
-impl<TCloseable: Closeable> Wait for CloseBuilder<TCloseable> {
+impl Wait for CloseBuilder {
     fn wait(self) -> Self::To {
         match tokio::runtime::Handle::try_current() {
             Ok(_) => {
@@ -113,7 +111,7 @@ impl<TCloseable: Closeable> Wait for CloseBuilder<TCloseable> {
     }
 }
 
-impl<TCloseable: Closeable> IntoFuture for CloseBuilder<TCloseable> {
+impl IntoFuture for CloseBuilder {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Pin<Box<dyn Future<Output = <Self as IntoFuture>::Output> + Send>>;
 
@@ -226,11 +224,6 @@ impl<TOutput: Send + 'static> IntoFuture for NolocalJoinHandle<TOutput> {
 }
 
 #[async_trait]
-pub(crate) trait Closee: Clone + std::fmt::Display + Send + Sync + 'static {
+pub(crate) trait Closee: std::fmt::Display + Send + Sync + 'static {
     async fn close_inner(&self);
-}
-
-pub(crate) trait Closeable {
-    type TClosee: Closee;
-    fn get_closee(&self) -> &Self::TClosee;
 }
