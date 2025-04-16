@@ -165,6 +165,7 @@ async fn get_basic_client_config(port: u16) -> Config {
     config
 }
 
+#[allow(clippy::type_complexity)]
 async fn test_link_weights_inner(
     net: Vec<(u16, Vec<(u16, Option<u16>)>)>,
     source: u16,
@@ -174,24 +175,24 @@ async fn test_link_weights_inner(
     let start_id = ZenohId::from_str("a").unwrap();
     let end_id = ZenohId::from_str("b").unwrap();
 
-    let c = LinkTraceInterceptorConf {
-        flow: InterceptorFlow::Egress,
-    };
-    let f = move || link_trace_interceptor_factories(&vec![c.clone()]);
-    let mut lk = crate::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
-        .lock()
-        .unwrap();
+    {
+        let c = LinkTraceInterceptorConf {
+            flow: InterceptorFlow::Egress,
+        };
+        let f = move || link_trace_interceptor_factories(&vec![c.clone()]);
+        let mut lk = crate::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
+            .lock()
+            .unwrap();
 
-    lk.clear();
-    lk.insert(start_id, Box::new(f.clone()));
+        lk.clear();
+        lk.insert(start_id, Box::new(f.clone()));
 
-    let mut routers = Vec::new();
-    for v in &net {
-        let zid = ZenohId::from_str(&v.0.to_string()).unwrap();
-        lk.insert(zid, Box::new(f.clone()));
+        for v in &net {
+            let zid = ZenohId::from_str(&v.0.to_string()).unwrap();
+            lk.insert(zid, Box::new(f.clone()));
+        }
     }
-
-    drop(lk);
+    let mut routers = Vec::new();
 
     for v in &net {
         let zid = ZenohId::from_str(&v.0.to_string()).unwrap();
