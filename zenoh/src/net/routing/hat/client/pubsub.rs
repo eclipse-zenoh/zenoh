@@ -353,7 +353,7 @@ impl HatPubSubTrait for HatCode {
                     let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.state.id);
                     route.insert(
                         face.state.id,
-                        (face.state.clone(), key_expr.to_owned(), NodeId::default()),
+                        (face.clone(), key_expr.to_owned(), NodeId::default()),
                     );
                 }
             }
@@ -373,11 +373,7 @@ impl HatPubSubTrait for HatCode {
                 if context.subs.is_some() && context.face.state.whatami == WhatAmI::Client {
                     route.entry(*sid).or_insert_with(|| {
                         let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                        (
-                            context.face.state.clone(),
-                            key_expr.to_owned(),
-                            NodeId::default(),
-                        )
+                        (context.face.clone(), key_expr.to_owned(), NodeId::default())
                     });
                 }
             }

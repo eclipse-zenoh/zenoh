@@ -880,14 +880,16 @@ impl FaceState {
             prefix.map(|res| res.expr().to_string()).unwrap_or_default(),
         ));
     }
+}
 
+impl Face {
     pub(crate) fn intercept_push(
         &self,
         msg: &mut Push,
         reliability: Reliability,
         prefix: Arc<Resource>,
     ) {
-        if let Some(iceptor) = self.load_interceptors(InterceptorFlow::Egress) {
+        if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Egress) {
             let ctx = &mut RoutingContext::with_prefix(
                 NetworkMessageMut {
                     body: NetworkBodyMut::Push(msg),
@@ -898,16 +900,17 @@ impl FaceState {
                 prefix,
             );
 
-            if !self.exec_interceptors(InterceptorFlow::Egress, &iceptor, ctx) {
+            if !self
+                .state
+                .exec_interceptors(InterceptorFlow::Egress, &iceptor, ctx)
+            {
                 return;
             }
         }
 
-        self.primitives.send_push(msg, reliability);
+        self.egress_primitives().send_push(msg, reliability);
     }
-}
 
-impl Face {
     pub(crate) fn intercept_response(&self, msg: &mut Response, prefix: Arc<Resource>) {
         if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Egress) {
             let ctx = &mut RoutingContext::with_prefix(

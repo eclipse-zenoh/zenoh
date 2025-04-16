@@ -1236,7 +1236,7 @@ impl HatPubSubTrait for HatCode {
                                                 expr.suffix,
                                                 face.state.id,
                                             );
-                                            (face.state.clone(), key_expr.to_owned(), source)
+                                            (face.clone(), key_expr.to_owned(), source)
                                         });
                                     }
                                 }
@@ -1318,11 +1318,7 @@ impl HatPubSubTrait for HatCode {
                     if context.subs.is_some() && context.face.state.whatami != WhatAmI::Router {
                         route.entry(*sid).or_insert_with(|| {
                             let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                            (
-                                context.face.state.clone(),
-                                key_expr.to_owned(),
-                                NodeId::default(),
-                            )
+                            (context.face.clone(), key_expr.to_owned(), NodeId::default())
                         });
                     }
                 }
@@ -1330,7 +1326,7 @@ impl HatPubSubTrait for HatCode {
         }
         for mcast_group in &tables.mcast_groups {
             route.insert(
-                mcast_group.id,
+                mcast_group.state.id,
                 (
                     mcast_group.clone(),
                     expr.full_expr().to_string().into(),

@@ -76,7 +76,7 @@ pub struct Tables {
     pub(crate) interests_timeout: Duration,
     pub(crate) root_res: Arc<Resource>,
     pub(crate) faces: HashMap<usize, Face>,
-    pub(crate) mcast_groups: Vec<Arc<FaceState>>,
+    pub(crate) mcast_groups: Vec<Face>,
     pub(crate) mcast_faces: Vec<Arc<FaceState>>,
     pub(crate) interceptors: Vec<InterceptorFactory>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,

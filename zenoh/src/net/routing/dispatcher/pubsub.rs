@@ -320,14 +320,14 @@ pub fn route_data(
                         let (outface, key_expr, context) = route.values().next().unwrap();
                         if tables
                             .hat_code
-                            .egress_filter(&tables, face, outface, &mut expr)
+                            .egress_filter(&tables, face, &outface.state, &mut expr)
                         {
                             drop(tables);
                             #[cfg(feature = "stats")]
                             if !admin {
-                                inc_stats!(outface, tx, user, msg.payload);
+                                inc_stats!(outface.state, tx, user, msg.payload);
                             } else {
-                                inc_stats!(outface, tx, admin, msg.payload);
+                                inc_stats!(outface.state, tx, admin, msg.payload);
                             }
                             msg.wire_expr = key_expr.into();
                             msg.ext_nodeid = ext::NodeIdType { node_id: *context };
@@ -339,7 +339,7 @@ pub fn route_data(
                                     .expect("reading Tables should not fail");
                                 match tables
                                     .get_sent_mapping(
-                                        outface,
+                                        &outface.state,
                                         msg.wire_expr.scope,
                                         msg.wire_expr.mapping,
                                     )
@@ -362,9 +362,12 @@ pub fn route_data(
                         let route = route
                             .values()
                             .filter(|(outface, _key_expr, _context)| -> bool {
-                                tables
-                                    .hat_code
-                                    .egress_filter(&tables, face, outface, &mut expr)
+                                tables.hat_code.egress_filter(
+                                    &tables,
+                                    face,
+                                    &outface.state,
+                                    &mut expr,
+                                )
                             })
                             .cloned()
                             .collect::<Vec<Direction>>();
@@ -373,9 +376,9 @@ pub fn route_data(
                         for (outface, key_expr, context) in route {
                             #[cfg(feature = "stats")]
                             if !admin {
-                                inc_stats!(outface, tx, user, msg.payload)
+                                inc_stats!(outface.state, tx, user, msg.payload)
                             } else {
-                                inc_stats!(outface, tx, admin, msg.payload)
+                                inc_stats!(outface.state, tx, admin, msg.payload)
                             }
 
                             let msg = &mut Push {
@@ -394,7 +397,7 @@ pub fn route_data(
 
                                 match tables
                                     .get_sent_mapping(
-                                        &outface,
+                                        &outface.state,
                                         msg.wire_expr.scope,
                                         msg.wire_expr.mapping,
                                     )

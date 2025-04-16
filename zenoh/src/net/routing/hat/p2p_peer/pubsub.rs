@@ -202,8 +202,8 @@ fn declare_simple_subscription(
     #[cfg(not(windows))]
     if face.state.whatami == WhatAmI::Client {
         for mcast_group in &tables.mcast_groups {
-            if mcast_group.mcast_group != face.state.mcast_group {
-                mcast_group.intercept_declare(
+            if mcast_group.state.mcast_group != face.state.mcast_group {
+                mcast_group.state.intercept_declare(
                     &mut Declare {
                         interest_id: None,
                         ext_qos: ext::QoSType::DECLARE,
@@ -622,7 +622,7 @@ impl HatPubSubTrait for HatCode {
                     let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.state.id);
                     route.insert(
                         face.state.id,
-                        (face.state.clone(), key_expr.to_owned(), NodeId::default()),
+                        (face.clone(), key_expr.to_owned(), NodeId::default()),
                     );
                 }
             }
@@ -635,7 +635,7 @@ impl HatPubSubTrait for HatCode {
             }) {
                 route.entry(face.state.id).or_insert_with(|| {
                     let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.state.id);
-                    (face.state.clone(), key_expr.to_owned(), NodeId::default())
+                    (face.clone(), key_expr.to_owned(), NodeId::default())
                 });
             }
         }
@@ -657,18 +657,14 @@ impl HatPubSubTrait for HatCode {
                 {
                     route.entry(*sid).or_insert_with(|| {
                         let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                        (
-                            context.face.state.clone(),
-                            key_expr.to_owned(),
-                            NodeId::default(),
-                        )
+                        (context.face.clone(), key_expr.to_owned(), NodeId::default())
                     });
                 }
             }
         }
         for mcast_group in &tables.mcast_groups {
             route.insert(
-                mcast_group.id,
+                mcast_group.state.id,
                 (
                     mcast_group.clone(),
                     expr.full_expr().to_string().into(),

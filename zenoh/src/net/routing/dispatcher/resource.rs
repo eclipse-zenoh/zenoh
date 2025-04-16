@@ -45,7 +45,7 @@ use crate::net::routing::{
 
 pub(crate) type NodeId = u16;
 
-pub(crate) type Direction = (Arc<FaceState>, WireExpr<'static>, NodeId);
+pub(crate) type Direction = (Face, WireExpr<'static>, NodeId);
 pub(crate) type Route = HashMap<usize, Direction>;
 
 pub(crate) type QueryDirection = (Face, WireExpr<'static>, NodeId);

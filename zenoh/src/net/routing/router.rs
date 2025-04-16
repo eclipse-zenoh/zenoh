@@ -192,10 +192,10 @@ impl Router {
             &tables.interceptors,
             tables.next_interceptor_version.load(Ordering::SeqCst),
         );
-        let _ = mux.face.set(Face {
+        let face = Face {
             state: face.clone(),
             tables: self.tables.clone(),
-        });
+        };
         tables.mcast_groups.push(face);
 
         tables.disable_all_routes();

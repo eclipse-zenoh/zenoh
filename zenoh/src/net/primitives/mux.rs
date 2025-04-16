@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::sync::OnceLock;
 
 use arc_swap::ArcSwap;
 use zenoh_protocol::{
@@ -24,7 +23,7 @@ use zenoh_protocol::{
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 use super::EPrimitives;
-use crate::net::routing::{dispatcher::face::Face, interceptor::InterceptorsChain, RoutingContext};
+use crate::net::routing::{interceptor::InterceptorsChain, RoutingContext};
 
 pub struct Mux {
     pub handler: TransportUnicast,
@@ -106,7 +105,6 @@ impl EPrimitives for Mux {
 
 pub struct McastMux {
     pub handler: TransportMulticast,
-    pub(crate) face: OnceLock<Face>,
     pub(crate) interceptor: ArcSwap<InterceptorsChain>,
 }
 
@@ -114,7 +112,6 @@ impl McastMux {
     pub(crate) fn new(handler: TransportMulticast, interceptor: InterceptorsChain) -> McastMux {
         McastMux {
             handler,
-            face: OnceLock::new(),
             interceptor: ArcSwap::new(interceptor.into()),
         }
     }
