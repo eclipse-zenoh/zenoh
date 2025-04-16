@@ -41,6 +41,7 @@ use crate::{
         builders::reply::{ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
         bytes::ZBytes,
         encoding::Encoding,
+        handlers::CallbackParameter,
         key_expr::KeyExpr,
         sample::{Locality, Sample, SampleKind},
         selector::Selector,
@@ -244,6 +245,14 @@ impl fmt::Display for Query {
                 &format!("{}{}", &self.inner.key_expr, &self.inner.parameters),
             )
             .finish()
+    }
+}
+
+impl CallbackParameter for Query {
+    type Message<'a> = Self;
+
+    fn from_message(msg: Self::Message<'_>) -> Self {
+        msg
     }
 }
 
