@@ -96,7 +96,7 @@ impl Wait for CloseBuilder {
                 #[cfg(not(nolocal_thread_not_available))]
                 {
                     let evaluate = move || {
-                        // NOTE: tracing logger also panics if used inside atexit(), sowe place it here in new thread!!!
+                        // NOTE: tracing logger also panics if used inside atexit(), so we place it here in new thread!!!
                         debug!(
                             "{self}: tokio TLS NOT available, closing closeable in separate thread"
                         );
