@@ -53,8 +53,6 @@ impl EPrimitives for Mux {
             msg: NetworkMessageMut {
                 body: NetworkBodyMut::Interest(ctx.msg),
                 reliability: Reliability::Reliable,
-                #[cfg(feature = "stats")]
-                size: None,
             },
             inface: ctx.inface,
             outface: ctx.outface,
@@ -88,8 +86,6 @@ impl EPrimitives for Mux {
             msg: NetworkMessageMut {
                 body: NetworkBodyMut::Declare(ctx.msg),
                 reliability: Reliability::Reliable,
-                #[cfg(feature = "stats")]
-                size: None,
             },
             inface: ctx.inface,
             outface: ctx.outface,
@@ -116,8 +112,6 @@ impl EPrimitives for Mux {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::Push(msg),
             reliability,
-            #[cfg(feature = "stats")]
-            size: None,
         };
         let interceptor = self.interceptor.load();
         if interceptor.interceptors.is_empty() {
@@ -147,8 +141,6 @@ impl EPrimitives for Mux {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::Request(msg),
             reliability: Reliability::Reliable,
-            #[cfg(feature = "stats")]
-            size: None,
         };
         let interceptor = self.interceptor.load();
         if interceptor.interceptors.is_empty() {
@@ -184,8 +176,6 @@ impl EPrimitives for Mux {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::Response(msg),
             reliability: Reliability::Reliable,
-            #[cfg(feature = "stats")]
-            size: None,
         };
         let interceptor = self.interceptor.load();
         if interceptor.interceptors.is_empty() {
@@ -214,8 +204,6 @@ impl EPrimitives for Mux {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::ResponseFinal(msg),
             reliability: Reliability::Reliable,
-            #[cfg(feature = "stats")]
-            size: None,
         };
         let interceptor = self.interceptor.load();
         if interceptor.interceptors.is_empty() {
@@ -266,8 +254,6 @@ impl EPrimitives for McastMux {
             msg: NetworkMessageMut {
                 body: NetworkBodyMut::Interest(ctx.msg),
                 reliability: Reliability::Reliable,
-                #[cfg(feature = "stats")]
-                size: None,
             },
             inface: ctx.inface,
             outface: ctx.outface,
@@ -294,8 +280,6 @@ impl EPrimitives for McastMux {
             msg: NetworkMessageMut {
                 body: NetworkBodyMut::Declare(ctx.msg),
                 reliability: Reliability::Reliable,
-                #[cfg(feature = "stats")]
-                size: None,
             },
             inface: ctx.inface,
             outface: ctx.outface,
@@ -321,8 +305,6 @@ impl EPrimitives for McastMux {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::Push(msg),
             reliability,
-            #[cfg(feature = "stats")]
-            size: None,
         };
         let interceptor = self.interceptor.load();
         if interceptor.interceptors.is_empty() {
@@ -350,8 +332,6 @@ impl EPrimitives for McastMux {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::Request(msg),
             reliability: Reliability::Reliable,
-            #[cfg(feature = "stats")]
-            size: None,
         };
         let interceptor = self.interceptor.load();
         if interceptor.interceptors.is_empty() {
@@ -379,8 +359,6 @@ impl EPrimitives for McastMux {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::Response(msg),
             reliability: Reliability::Reliable,
-            #[cfg(feature = "stats")]
-            size: None,
         };
         let interceptor = self.interceptor.load();
         if interceptor.interceptors.is_empty() {
@@ -408,8 +386,6 @@ impl EPrimitives for McastMux {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::ResponseFinal(msg),
             reliability: Reliability::Reliable,
-            #[cfg(feature = "stats")]
-            size: None,
         };
         let interceptor = self.interceptor.load();
         if interceptor.interceptors.is_empty() {
