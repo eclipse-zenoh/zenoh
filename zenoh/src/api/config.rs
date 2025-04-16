@@ -60,6 +60,30 @@ impl Config {
         }
     }
 
+    pub fn remove<K: AsRef<str>>(&mut self, key: K) -> ZResult<()> {
+        match key.as_ref().split_once("=") {
+            None => self.0.remove(key.as_ref()),
+            Some((prefix, id_value)) => {
+                let (key, id_key) = prefix.rsplit_once("/").ok_or("missing id")?;
+                let current = serde_json::from_str::<serde_json::Value>(&self.get_json(key)?)?;
+                let serde_json::Value::Array(mut list) = current else {
+                    bail!("not an array")
+                };
+                let prev_len = list.len();
+                list.retain(|item| match item {
+                    serde_json::Value::Object(map) => {
+                        map.get(id_key).and_then(|v| v.as_str()) != Some(id_value)
+                    }
+                    _ => true,
+                });
+                if list.len() != prev_len {
+                    self.0.insert_json5(key, &serde_json::to_string(&list)?)?;
+                }
+                Ok(())
+            }
+        }
+    }
+
     /// Inserts configuration value `value` at `key`.
     pub fn insert_json5(&mut self, key: &str, value: &str) -> ZResult<()> {
         match key.split_once("=") {
@@ -215,7 +239,7 @@ impl Notifier<Config> {
     }
 
     pub fn remove<K: AsRef<str>>(&self, key: K) -> ZResult<()> {
-        self.lock_config().0.remove(key.as_ref())?;
+        self.lock_config().remove(key.as_ref())?;
         self.notify(key);
         Ok(())
     }
@@ -264,7 +288,7 @@ mod tests {
     use crate::Config;
 
     #[test]
-    fn insert_list_item() {
+    fn insert_remove_list_item() {
         let mut config = Config::default();
 
         let item1 = r#"{
@@ -334,5 +358,24 @@ mod tests {
             *items[1].flows.as_ref().unwrap().first(),
             InterceptorFlow::Egress
         );
+
+        config.remove("qos/network/id=item2").unwrap();
+        let items = serde_json::from_str::<Vec<QosOverwriteItemConf>>(
+            &config.get_json("qos/network").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id.as_ref().unwrap(), "item1");
+        assert_eq!(
+            *items[0].flows.as_ref().unwrap().first(),
+            InterceptorFlow::Ingress
+        );
+
+        config.remove("qos/network/id=item1").unwrap();
+        let items = serde_json::from_str::<Vec<QosOverwriteItemConf>>(
+            &config.get_json("qos/network").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(items.len(), 0);
     }
 }
