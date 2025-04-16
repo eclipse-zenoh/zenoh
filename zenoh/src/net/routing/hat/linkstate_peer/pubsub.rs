@@ -70,7 +70,7 @@ fn send_sourced_subscription_to_net_children(
                         let push_declaration = push_declaration_profile(&someface.state);
                         let key_expr = Resource::decl_key(res, &someface, push_declaration);
 
-                        someface.state.intercept_declare(
+                        someface.intercept_declare(
                             &mut Declare {
                                 interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
@@ -116,7 +116,7 @@ fn propagate_simple_subscription_to(
             let key_expr =
                 Resource::decl_key(res, dst_face, push_declaration_profile(&dst_face.state));
             send_declare(
-                &dst_face.state,
+                dst_face,
                 Declare {
                     interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
@@ -161,7 +161,7 @@ fn propagate_simple_subscription_to(
                         push_declaration_profile(&dst_face.state),
                     );
                     send_declare(
-                        &dst_face.state,
+                        dst_face,
                         Declare {
                             interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
@@ -330,12 +330,12 @@ fn remote_linkstatepeer_subs(tables: &Tables, res: &Arc<Resource>) -> bool {
 }
 
 #[inline]
-fn simple_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
+fn simple_subs(res: &Arc<Resource>) -> Vec<Face> {
     res.session_ctxs
         .values()
         .filter_map(|ctx| {
             if ctx.subs.is_some() {
-                Some(ctx.face.state.clone())
+                Some(ctx.face.clone())
             } else {
                 None
             }
@@ -370,7 +370,7 @@ fn send_forget_sourced_subscription_to_net_children(
                         let push_declaration = push_declaration_profile(&someface.state);
                         let wire_expr = Resource::decl_key(res, &someface, push_declaration);
 
-                        someface.state.intercept_declare(
+                        someface.intercept_declare(
                             &mut Declare {
                                 interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
@@ -401,7 +401,7 @@ fn propagate_forget_simple_subscription(
     for mut face in tables.faces.values().cloned() {
         if let Some(id) = face_hat_mut!(&mut face.state).local_subs.remove(res) {
             send_declare(
-                &face.state,
+                &face,
                 Declare {
                     interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
@@ -430,7 +430,7 @@ fn propagate_forget_simple_subscription(
             }) {
                 if let Some(id) = face_hat_mut!(&mut face.state).local_subs.remove(&res) {
                     send_declare(
-                        &face.state,
+                        &face,
                         Declare {
                             interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
@@ -550,9 +550,9 @@ pub(super) fn undeclare_simple_subscription(
         }
 
         if simple_subs.len() == 1 && !linkstatepeer_subs {
-            let mut face = &mut simple_subs[0];
-            if face.whatami != WhatAmI::Client {
-                if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
+            let face = &mut simple_subs[0];
+            if face.state.whatami != WhatAmI::Client {
+                if let Some(id) = face_hat_mut!(&mut face.state).local_subs.remove(res) {
                     send_declare(
                         face,
                         Declare {
@@ -568,7 +568,7 @@ pub(super) fn undeclare_simple_subscription(
                         Some(res.clone()),
                     );
                 }
-                for res in face_hat!(face)
+                for res in face_hat!(face.state)
                     .local_subs
                     .keys()
                     .cloned()
@@ -577,11 +577,11 @@ pub(super) fn undeclare_simple_subscription(
                     if !res.context().matches.iter().any(|m| {
                         m.upgrade().is_some_and(|m| {
                             m.context.is_some()
-                                && (remote_simple_subs(&m, face)
+                                && (remote_simple_subs(&m, &face.state)
                                     || remote_linkstatepeer_subs(tables, &m))
                         })
                     }) {
-                        if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
+                        if let Some(id) = face_hat_mut!(&mut face.state).local_subs.remove(&res) {
                             send_declare(
                                 face,
                                 Declare {
@@ -714,7 +714,7 @@ pub(super) fn declare_sub_interest(
                     let wire_expr =
                         Resource::decl_key(res, face, push_declaration_profile(&face.state));
                     send_declare(
-                        &face.state,
+                        face,
                         Declare {
                             interest_id,
                             ext_qos: ext::QoSType::DECLARE,
@@ -739,7 +739,7 @@ pub(super) fn declare_sub_interest(
                         let wire_expr =
                             Resource::decl_key(sub, face, push_declaration_profile(&face.state));
                         send_declare(
-                            &face.state,
+                            face,
                             Declare {
                                 interest_id,
                                 ext_qos: ext::QoSType::DECLARE,
@@ -765,7 +765,7 @@ pub(super) fn declare_sub_interest(
                     let wire_expr =
                         Resource::decl_key(sub, face, push_declaration_profile(&face.state));
                     send_declare(
-                        &face.state,
+                        face,
                         Declare {
                             interest_id,
                             ext_qos: ext::QoSType::DECLARE,

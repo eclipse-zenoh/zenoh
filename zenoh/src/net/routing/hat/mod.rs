@@ -66,7 +66,7 @@ impl Sources {
     }
 }
 
-pub(crate) type SendDeclare<'a> = dyn FnMut(&Arc<FaceState>, Declare, Option<Arc<Resource>>) + 'a;
+pub(crate) type SendDeclare<'a> = dyn FnMut(&Face, Declare, Option<Arc<Resource>>) + 'a;
 pub(crate) trait HatTrait:
     HatBaseTrait + HatInterestTrait + HatPubSubTrait + HatQueriesTrait + HatTokenTrait
 {

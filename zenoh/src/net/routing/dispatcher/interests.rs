@@ -42,7 +42,7 @@ use crate::net::routing::{
 };
 
 pub(crate) struct CurrentInterest {
-    pub(crate) src_face: Arc<FaceState>,
+    pub(crate) src_face: Face,
     pub(crate) src_interest_id: InterestId,
     pub(crate) mode: InterestMode,
 }

@@ -93,7 +93,7 @@ impl HatInterestTrait for HatCode {
         }
         if mode.current() {
             send_declare(
-                &face.state,
+                face,
                 Declare {
                     interest_id: Some(id),
                     ext_qos: ext::QoSType::DECLARE,

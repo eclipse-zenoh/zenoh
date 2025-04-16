@@ -124,7 +124,7 @@ fn propagate_simple_queryable_to(
             super::push_declaration_profile(&dst_face.state),
         );
         send_declare(
-            &dst_face.state,
+            dst_face,
             Declare {
                 interest_id: None,
                 ext_qos: ext::QoSType::DECLARE,
@@ -187,12 +187,12 @@ fn declare_simple_queryable(
 }
 
 #[inline]
-fn simple_qabls(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
+fn simple_qabls(res: &Arc<Resource>) -> Vec<Face> {
     res.session_ctxs
         .values()
         .filter_map(|ctx| {
             if ctx.qabl.is_some() {
-                Some(ctx.face.state.clone())
+                Some(ctx.face.clone())
             } else {
                 None
             }
@@ -215,7 +215,7 @@ fn propagate_forget_simple_queryable(
     for face in tables.faces.values_mut() {
         if let Some((id, _)) = face_hat_mut!(&mut face.state).local_qabls.remove(res) {
             send_declare(
-                &face.state,
+                face,
                 Declare {
                     interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
@@ -241,7 +241,7 @@ fn propagate_forget_simple_queryable(
             }) {
                 if let Some((id, _)) = face_hat_mut!(&mut face.state).local_qabls.remove(&res) {
                     send_declare(
-                        &face.state,
+                        face,
                         Declare {
                             interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
@@ -282,8 +282,8 @@ pub(super) fn undeclare_simple_queryable(
             propagate_simple_queryable(tables, res, None, send_declare);
         }
         if simple_qabls.len() == 1 {
-            let mut face = &mut simple_qabls[0];
-            if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
+            let face = &mut simple_qabls[0];
+            if let Some((id, _)) = face_hat_mut!(&mut face.state).local_qabls.remove(res) {
                 send_declare(
                     face,
                     Declare {
@@ -299,17 +299,18 @@ pub(super) fn undeclare_simple_queryable(
                     Some(res.clone()),
                 );
             }
-            for res in face_hat!(face)
+            for res in face_hat!(face.state)
                 .local_qabls
                 .keys()
                 .cloned()
                 .collect::<Vec<Arc<Resource>>>()
             {
                 if !res.context().matches.iter().any(|m| {
-                    m.upgrade()
-                        .is_some_and(|m| m.context.is_some() && (remote_simple_qabls(&m, face)))
+                    m.upgrade().is_some_and(|m| {
+                        m.context.is_some() && (remote_simple_qabls(&m, &face.state))
+                    })
                 }) {
-                    if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
+                    if let Some((id, _)) = face_hat_mut!(&mut face.state).local_qabls.remove(&res) {
                         send_declare(
                             face,
                             Declare {
@@ -410,7 +411,7 @@ pub(super) fn declare_qabl_interest(
                     let wire_expr =
                         Resource::decl_key(res, face, super::push_declaration_profile(&face.state));
                     send_declare(
-                        &face.state,
+                        face,
                         Declare {
                             interest_id,
                             ext_qos: ext::QoSType::DECLARE,
@@ -438,7 +439,7 @@ pub(super) fn declare_qabl_interest(
                                     super::push_declaration_profile(&face.state),
                                 );
                                 send_declare(
-                                    &face.state,
+                                    face,
                                     Declare {
                                         interest_id,
                                         ext_qos: ext::QoSType::DECLARE,
@@ -470,7 +471,7 @@ pub(super) fn declare_qabl_interest(
                                 super::push_declaration_profile(&face.state),
                             );
                             send_declare(
-                                &face.state,
+                                face,
                                 Declare {
                                     interest_id,
                                     ext_qos: ext::QoSType::DECLARE,

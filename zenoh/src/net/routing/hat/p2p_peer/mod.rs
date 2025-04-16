@@ -203,7 +203,7 @@ impl HatBaseTrait for HatCode {
 
         if face.state.whatami == WhatAmI::Peer {
             send_declare(
-                &face.state,
+                face,
                 Declare {
                     interest_id: Some(0),
                     ext_qos: QoSType::default(),

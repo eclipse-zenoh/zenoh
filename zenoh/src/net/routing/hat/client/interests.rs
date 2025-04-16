@@ -104,7 +104,7 @@ impl HatInterestTrait for HatCode {
             );
 
         let interest = Arc::new(CurrentInterest {
-            src_face: face.state.clone(),
+            src_face: face.clone(),
             src_interest_id: id,
             mode,
         });
@@ -185,7 +185,7 @@ impl HatInterestTrait for HatCode {
                 }
             } else {
                 send_declare(
-                    &face.state,
+                    face,
                     Declare {
                         interest_id: Some(id),
                         ext_qos: ext::QoSType::DECLARE,

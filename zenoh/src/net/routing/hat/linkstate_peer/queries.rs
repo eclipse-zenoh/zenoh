@@ -141,7 +141,7 @@ fn send_sourced_queryable_to_net_children(
                         let push_declaration = push_declaration_profile(&someface.state);
                         let key_expr = Resource::decl_key(res, &someface, push_declaration);
 
-                        someface.state.intercept_declare(
+                        someface.intercept_declare(
                             &mut Declare {
                                 interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
@@ -197,7 +197,7 @@ fn propagate_simple_queryable(
             let push_declaration = push_declaration_profile(&dst_face.state);
             let key_expr = Resource::decl_key(res, &dst_face, push_declaration);
             send_declare(
-                &dst_face.state,
+                &dst_face,
                 Declare {
                     interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
@@ -343,12 +343,12 @@ fn remote_linkstatepeer_qabls(tables: &Tables, res: &Arc<Resource>) -> bool {
 }
 
 #[inline]
-fn simple_qabls(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
+fn simple_qabls(res: &Arc<Resource>) -> Vec<Face> {
     res.session_ctxs
         .values()
         .filter_map(|ctx| {
             if ctx.qabl.is_some() {
-                Some(ctx.face.state.clone())
+                Some(ctx.face.clone())
             } else {
                 None
             }
@@ -383,7 +383,7 @@ fn send_forget_sourced_queryable_to_net_children(
                         let push_declaration = push_declaration_profile(&someface.state);
                         let wire_expr = Resource::decl_key(res, &someface, push_declaration);
 
-                        someface.state.intercept_declare(
+                        someface.intercept_declare(
                             &mut Declare {
                                 interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
@@ -414,7 +414,7 @@ fn propagate_forget_simple_queryable(
     for mut face in tables.faces.values().cloned() {
         if let Some((id, _)) = face_hat_mut!(&mut face.state).local_qabls.remove(res) {
             send_declare(
-                &face.state,
+                &face,
                 Declare {
                     interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
@@ -443,7 +443,7 @@ fn propagate_forget_simple_queryable(
             }) {
                 if let Some((id, _)) = face_hat_mut!(&mut face.state).local_qabls.remove(&res) {
                     send_declare(
-                        &face.state,
+                        &face,
                         Declare {
                             interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
@@ -570,8 +570,8 @@ pub(super) fn undeclare_simple_queryable(
         }
 
         if simple_qabls.len() == 1 && !linkstatepeer_qabls {
-            let mut face = &mut simple_qabls[0];
-            if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
+            let face = &mut simple_qabls[0];
+            if let Some((id, _)) = face_hat_mut!(&mut face.state).local_qabls.remove(res) {
                 send_declare(
                     face,
                     Declare {
@@ -587,7 +587,7 @@ pub(super) fn undeclare_simple_queryable(
                     Some(res.clone()),
                 );
             }
-            for res in face_hat!(face)
+            for res in face_hat!(face.state)
                 .local_qabls
                 .keys()
                 .cloned()
@@ -596,11 +596,11 @@ pub(super) fn undeclare_simple_queryable(
                 if !res.context().matches.iter().any(|m| {
                     m.upgrade().is_some_and(|m| {
                         m.context.is_some()
-                            && (remote_simple_qabls(&m, face)
+                            && (remote_simple_qabls(&m, &face.state)
                                 || remote_linkstatepeer_qabls(tables, &m))
                     })
                 }) {
-                    if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
+                    if let Some((id, _)) = face_hat_mut!(&mut face.state).local_qabls.remove(&res) {
                         send_declare(
                             face,
                             Declare {
@@ -786,7 +786,7 @@ pub(super) fn declare_qabl_interest(
                     let wire_expr =
                         Resource::decl_key(res, face, push_declaration_profile(&face.state));
                     send_declare(
-                        &face.state,
+                        face,
                         Declare {
                             interest_id,
                             ext_qos: ext::QoSType::DECLARE,
@@ -813,7 +813,7 @@ pub(super) fn declare_qabl_interest(
                         let key_expr =
                             Resource::decl_key(qabl, face, push_declaration_profile(&face.state));
                         send_declare(
-                            &face.state,
+                            face,
                             Declare {
                                 interest_id,
                                 ext_qos: ext::QoSType::DECLARE,
@@ -841,7 +841,7 @@ pub(super) fn declare_qabl_interest(
                     let key_expr =
                         Resource::decl_key(qabl, face, push_declaration_profile(&face.state));
                     send_declare(
-                        &face.state,
+                        face,
                         Declare {
                             interest_id,
                             ext_qos: ext::QoSType::DECLARE,

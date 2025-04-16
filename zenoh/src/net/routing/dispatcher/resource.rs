@@ -535,7 +535,7 @@ impl Resource {
                     get_mut_unchecked(&mut face.state.clone())
                         .local_mappings
                         .insert(expr_id, nonwild_prefix.clone());
-                    face.state.intercept_declare(
+                    face.intercept_declare(
                         &mut Declare {
                             interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,

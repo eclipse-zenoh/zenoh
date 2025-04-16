@@ -56,7 +56,7 @@ fn propagate_simple_token_to(
             .insert(res.clone(), id);
         let key_expr = Resource::decl_key(res, dst_face, true);
         send_declare(
-            &dst_face.state,
+            dst_face,
             Declare {
                 interest_id: None,
                 ext_qos: ext::QoSType::DECLARE,
@@ -125,8 +125,8 @@ fn declare_simple_token(
             if interest.mode == InterestMode::CurrentFuture {
                 register_simple_token(tables, face, id, res);
             }
-            let id = make_token_id(res, &mut interest.src_face.clone(), interest.mode);
-            let wire_expr = Resource::get_best_key(res, "", interest.src_face.id);
+            let id = make_token_id(res, &mut interest.src_face.state.clone(), interest.mode);
+            let wire_expr = Resource::get_best_key(res, "", interest.src_face.state.id);
             send_declare(
                 &interest.src_face,
                 Declare {
@@ -154,12 +154,12 @@ fn declare_simple_token(
 }
 
 #[inline]
-fn simple_tokens(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
+fn simple_tokens(res: &Arc<Resource>) -> Vec<Face> {
     res.session_ctxs
         .values()
         .filter_map(|ctx| {
             if ctx.token {
-                Some(ctx.face.state.clone())
+                Some(ctx.face.clone())
             } else {
                 None
             }
@@ -175,7 +175,7 @@ fn propagate_forget_simple_token(
     for face in tables.faces.values_mut() {
         if let Some(id) = face_hat_mut!(&mut face.state).local_tokens.remove(res) {
             send_declare(
-                &face.state,
+                face,
                 Declare {
                     interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
@@ -196,7 +196,7 @@ fn propagate_forget_simple_token(
             // Token has never been declared on this face.
             // Send an Undeclare with a one shot generated id and a WireExpr ext.
             send_declare(
-                &face.state,
+                face,
                 Declare {
                     interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
@@ -236,8 +236,8 @@ pub(super) fn undeclare_simple_token(
         }
         if simple_tokens.len() == 1 {
             let face = &mut simple_tokens[0];
-            if face.whatami != WhatAmI::Client {
-                if let Some(id) = face_hat_mut!(face).local_tokens.remove(res) {
+            if face.state.whatami != WhatAmI::Client {
+                if let Some(id) = face_hat_mut!(&mut face.state).local_tokens.remove(res) {
                     send_declare(
                         face,
                         Declare {
@@ -327,7 +327,7 @@ pub(crate) fn declare_token_interest(
                     let id = make_token_id(res, &mut face.state.clone(), mode);
                     let wire_expr = Resource::decl_key(res, face, true);
                     send_declare(
-                        &face.state,
+                        face,
                         Declare {
                             interest_id,
                             ext_qos: ext::QoSType::DECLARE,
@@ -351,7 +351,7 @@ pub(crate) fn declare_token_interest(
                             let id = make_token_id(token, &mut face.state.clone(), mode);
                             let wire_expr = Resource::decl_key(token, face, true);
                             send_declare(
-                                &face.state,
+                                face,
                                 Declare {
                                     interest_id,
                                     ext_qos: ext::QoSType::default(),
@@ -377,7 +377,7 @@ pub(crate) fn declare_token_interest(
                     let id = make_token_id(token, &mut face.state.clone(), mode);
                     let wire_expr = Resource::decl_key(token, face, true);
                     send_declare(
-                        &face.state,
+                        face,
                         Declare {
                             interest_id,
                             ext_qos: ext::QoSType::DECLARE,

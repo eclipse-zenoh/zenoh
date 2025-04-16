@@ -109,7 +109,7 @@ fn propagate_simple_queryable(
                 .insert(res.clone(), (id, info));
             let key_expr = Resource::decl_key(res, &dst_face, true);
             send_declare(
-                &dst_face.state,
+                &dst_face,
                 Declare {
                     interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
@@ -162,12 +162,12 @@ fn declare_simple_queryable(
 }
 
 #[inline]
-fn simple_qabls(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
+fn simple_qabls(res: &Arc<Resource>) -> Vec<Face> {
     res.session_ctxs
         .values()
         .filter_map(|ctx| {
             if ctx.qabl.is_some() {
-                Some(ctx.face.state.clone())
+                Some(ctx.face.clone())
             } else {
                 None
             }
@@ -183,7 +183,7 @@ fn propagate_forget_simple_queryable(
     for face in tables.faces.values_mut() {
         if let Some((id, _)) = face_hat_mut!(&mut face.state).local_qabls.remove(res) {
             send_declare(
-                &face.state,
+                face,
                 Declare {
                     interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
@@ -223,7 +223,7 @@ pub(super) fn undeclare_simple_queryable(
         }
         if simple_qabls.len() == 1 {
             let face = &mut simple_qabls[0];
-            if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
+            if let Some((id, _)) = face_hat_mut!(&mut face.state).local_qabls.remove(res) {
                 send_declare(
                     face,
                     Declare {

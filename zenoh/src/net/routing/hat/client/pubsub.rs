@@ -61,7 +61,7 @@ fn propagate_simple_subscription_to(
             .insert(res.clone(), id);
         let key_expr = Resource::decl_key(res, dst_face, true);
         send_declare(
-            &dst_face.state,
+            dst_face,
             Declare {
                 interest_id: None,
                 ext_qos: ext::QoSType::DECLARE,
@@ -140,12 +140,12 @@ fn declare_simple_subscription(
 }
 
 #[inline]
-fn simple_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
+fn simple_subs(res: &Arc<Resource>) -> Vec<Face> {
     res.session_ctxs
         .values()
         .filter_map(|ctx| {
             if ctx.subs.is_some() {
-                Some(ctx.face.state.clone())
+                Some(ctx.face.clone())
             } else {
                 None
             }
@@ -161,7 +161,7 @@ fn propagate_forget_simple_subscription(
     for face in tables.faces.values_mut() {
         if let Some(id) = face_hat_mut!(&mut face.state).local_subs.remove(res) {
             send_declare(
-                &face.state,
+                face,
                 Declare {
                     interest_id: None,
                     ext_qos: ext::QoSType::DECLARE,
@@ -195,7 +195,7 @@ pub(super) fn undeclare_simple_subscription(
         }
         if simple_subs.len() == 1 {
             let face = &mut simple_subs[0];
-            if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
+            if let Some(id) = face_hat_mut!(&mut face.state).local_subs.remove(res) {
                 send_declare(
                     face,
                     Declare {
