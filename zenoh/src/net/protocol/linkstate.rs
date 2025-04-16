@@ -59,10 +59,7 @@ impl LinkEdgeWeight {
         LinkEdgeWeight(Some(val))
     }
 
-    pub(crate) fn from_raw(mut val: u16) -> Self {
-        if val == 0 {
-            val = Self::DEFAULT_LINK_WEIGHT;
-        }
+    pub(crate) fn from_raw(val: u16) -> Self {
         LinkEdgeWeight(NonZeroU16::new(val))
     }
 

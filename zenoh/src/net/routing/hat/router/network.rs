@@ -699,14 +699,26 @@ impl Network {
                         .iter()
                         .position(|l| l.dest == self.graph[idx1].zid)
                     {
+                        let prev_weight = self.graph[idx2].links[l].weight;
+                        let new_weight = self.update_edge(idx1, idx2, link.weight);
                         tracing::trace!(
                             "{} Update edge (state) {} {}",
                             self.name,
                             self.graph[idx1].zid,
                             self.graph[idx2].zid
                         );
-                        self.graph[idx2].links[l].weight =
-                            self.update_edge(idx1, idx2, link.weight);
+                        self.graph[idx2].links[l].weight = new_weight;
+                        let zid2 = self.graph[idx2].zid;
+                        match self.graph[idx1].links.iter_mut().find(|l| l.dest == zid2) {
+                            Some(l) => l.weight = new_weight,
+                            None => self.graph[idx1].links.push(LinkEdge {
+                                dest: zid2,
+                                weight: new_weight,
+                            }),
+                        };
+                        if prev_weight != new_weight {
+                            updated_nodes.push(idx2);
+                        }
                     }
                 } else {
                     let node = Node {
@@ -801,16 +813,15 @@ impl Network {
                 }
             };
 
-            let mut link_weight = LinkEdgeWeight::default();
+            let link_weight = self.get_link_weight(idx, self.idx);
             if self.full_linkstate {
                 if let Some(p) = self.graph[idx]
                     .links
                     .iter()
                     .position(|l| l.dest == self.graph[self.idx].zid)
                 {
+                    self.graph[idx].links[p].weight = self.update_edge(self.idx, idx, link_weight);
                     tracing::trace!("Update edge (link) {} {}", self.graph[self.idx].zid, zid);
-                    link_weight = self.update_edge(self.idx, idx, LinkEdgeWeight::default());
-                    self.graph[idx].links[p].weight = link_weight;
                 }
             }
             self.graph[self.idx].links.push(LinkEdge {
