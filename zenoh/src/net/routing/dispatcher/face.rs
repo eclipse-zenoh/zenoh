@@ -378,8 +378,6 @@ impl Primitives for Face {
             let msg = NetworkMessageMut {
                 body: NetworkBodyMut::Interest(msg),
                 reliability: Reliability::Reliable, // Interest is always reliable
-                #[cfg(feature = "stats")]
-                size: None,
             };
             let ctx = &mut match &prefix {
                 Some(prefix) => RoutingContext::with_prefix(msg, prefix.clone()),
@@ -467,8 +465,6 @@ impl Primitives for Face {
             let msg = NetworkMessageMut {
                 body: NetworkBodyMut::Declare(msg),
                 reliability: Reliability::Reliable, // Declare is always reliable
-                #[cfg(feature = "stats")]
-                size: None,
             };
 
             let ctx = &mut match prefix {
@@ -650,8 +646,6 @@ impl Primitives for Face {
                 NetworkMessageMut {
                     body: NetworkBodyMut::Push(msg),
                     reliability,
-                    #[cfg(feature = "stats")]
-                    size: None,
                 },
                 prefix,
             );
@@ -696,8 +690,6 @@ impl Primitives for Face {
                 NetworkMessageMut {
                     body: NetworkBodyMut::Request(msg),
                     reliability: Reliability::Reliable, // NOTE: queries are always reliable
-                    #[cfg(feature = "stats")]
-                    size: None,
                 },
                 prefix,
             );
@@ -754,8 +746,6 @@ impl Primitives for Face {
                 NetworkMessageMut {
                     body: NetworkBodyMut::Response(msg),
                     reliability: Reliability::Reliable, // NOTE: queries are always reliable
-                    #[cfg(feature = "stats")]
-                    size: None,
                 },
                 prefix,
             );
@@ -776,8 +766,6 @@ impl Primitives for Face {
             let ctx = &mut RoutingContext::new(NetworkMessageMut {
                 body: NetworkBodyMut::ResponseFinal(msg),
                 reliability: Reliability::Reliable, // NOTE: queries are always reliable
-                #[cfg(feature = "stats")]
-                size: None,
             });
 
             // NOTE: ResponseFinal messages have no keyexpr
@@ -832,8 +820,6 @@ impl Face {
             let msg = NetworkMessageMut {
                 body: NetworkBodyMut::Interest(msg),
                 reliability: Reliability::Reliable, // NOTE: Interest is always reliable
-                #[cfg(feature = "stats")]
-                size: None,
             };
 
             let ctx = &mut match prefix {
@@ -864,8 +850,6 @@ impl Face {
             let msg = NetworkMessageMut {
                 body: NetworkBodyMut::Declare(msg),
                 reliability: Reliability::Reliable, // NOTE: Declare is always reliable
-                #[cfg(feature = "stats")]
-                size: None,
             };
 
             let ctx = &mut match prefix {
@@ -899,8 +883,6 @@ impl Face {
                 NetworkMessageMut {
                     body: NetworkBodyMut::Push(msg),
                     reliability,
-                    #[cfg(feature = "stats")]
-                    size: None,
                 },
                 prefix,
             );
@@ -922,8 +904,6 @@ impl Face {
                 NetworkMessageMut {
                     body: NetworkBodyMut::Response(msg),
                     reliability: Reliability::Reliable, // NOTE: Response is always reliable
-                    #[cfg(feature = "stats")]
-                    size: None,
                 },
                 prefix,
             );
@@ -944,8 +924,6 @@ impl Face {
             let ctx = &mut RoutingContext::new(NetworkMessageMut {
                 body: NetworkBodyMut::ResponseFinal(msg),
                 reliability: Reliability::Reliable, // NOTE: ResponseFinal is always reliable
-                #[cfg(feature = "stats")]
-                size: None,
             });
 
             // NOTE: ResponseFinal messages have no keyexpr
@@ -966,8 +944,6 @@ impl Face {
                 NetworkMessageMut {
                     body: NetworkBodyMut::Request(msg),
                     reliability: Reliability::Reliable, // NOTE: Request is always reliable
-                    #[cfg(feature = "stats")]
-                    size: None,
                 },
                 prefix,
             );
