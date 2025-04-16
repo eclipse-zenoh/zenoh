@@ -40,8 +40,6 @@ impl EPrimitives for Mux {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::Interest(ctx.msg),
             reliability: Reliability::Reliable,
-            #[cfg(feature = "stats")]
-            size: None,
         };
         let _ = self.handler.schedule(msg);
     }
@@ -50,8 +48,6 @@ impl EPrimitives for Mux {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::Declare(ctx.msg),
             reliability: Reliability::Reliable,
-            #[cfg(feature = "stats")]
-            size: None,
         };
         let _ = self.handler.schedule(msg);
     }
@@ -60,8 +56,6 @@ impl EPrimitives for Mux {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::Push(msg),
             reliability,
-            #[cfg(feature = "stats")]
-            size: None,
         };
 
         let _ = self.handler.schedule(msg);
@@ -71,8 +65,6 @@ impl EPrimitives for Mux {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::Request(msg),
             reliability: Reliability::Reliable,
-            #[cfg(feature = "stats")]
-            size: None,
         };
 
         let _ = self.handler.schedule(msg);
@@ -82,8 +74,6 @@ impl EPrimitives for Mux {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::Response(msg),
             reliability: Reliability::Reliable,
-            #[cfg(feature = "stats")]
-            size: None,
         };
         let _ = self.handler.schedule(msg);
     }
@@ -92,8 +82,6 @@ impl EPrimitives for Mux {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::ResponseFinal(msg),
             reliability: Reliability::Reliable,
-            #[cfg(feature = "stats")]
-            size: None,
         };
         let _ = self.handler.schedule(msg);
     }
@@ -122,8 +110,6 @@ impl EPrimitives for McastMux {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::Interest(ctx.msg),
             reliability: Reliability::Reliable,
-            #[cfg(feature = "stats")]
-            size: None,
         };
         let _ = self.handler.schedule(msg);
     }
@@ -132,8 +118,6 @@ impl EPrimitives for McastMux {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::Declare(ctx.msg),
             reliability: Reliability::Reliable,
-            #[cfg(feature = "stats")]
-            size: None,
         };
         let _ = self.handler.schedule(msg);
     }
@@ -142,8 +126,6 @@ impl EPrimitives for McastMux {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::Push(msg),
             reliability,
-            #[cfg(feature = "stats")]
-            size: None,
         };
         let _ = self.handler.schedule(msg);
     }
@@ -152,8 +134,6 @@ impl EPrimitives for McastMux {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::Request(msg),
             reliability: Reliability::Reliable,
-            #[cfg(feature = "stats")]
-            size: None,
         };
         let _ = self.handler.schedule(msg);
     }
@@ -162,8 +142,6 @@ impl EPrimitives for McastMux {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::Response(msg),
             reliability: Reliability::Reliable,
-            #[cfg(feature = "stats")]
-            size: None,
         };
         let _ = self.handler.schedule(msg);
     }
@@ -172,8 +150,6 @@ impl EPrimitives for McastMux {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::ResponseFinal(msg),
             reliability: Reliability::Reliable,
-            #[cfg(feature = "stats")]
-            size: None,
         };
         let _ = self.handler.schedule(msg);
     }

@@ -21,6 +21,7 @@ use std::{
     sync::{Arc, RwLock, Weak},
 };
 
+use ahash::HashMapExt;
 use zenoh_collections::SingleOrBoxHashSet;
 use zenoh_config::{InterceptorFlow, WhatAmI};
 use zenoh_protocol::{
@@ -234,7 +235,7 @@ pub struct Resource {
     pub(crate) nonwild_prefix: Option<Arc<Resource>>,
     pub(crate) children: SingleOrBoxHashSet<Child>,
     pub(crate) context: Option<Box<ResourceContext>>,
-    pub(crate) session_ctxs: HashMap<usize, Arc<SessionContext>>,
+    pub(crate) session_ctxs: ahash::HashMap<usize, Arc<SessionContext>>,
 }
 
 impl PartialEq for Resource {
@@ -311,7 +312,7 @@ impl Resource {
             nonwild_prefix,
             children: SingleOrBoxHashSet::new(),
             context: context.map(Box::new),
-            session_ctxs: HashMap::new(),
+            session_ctxs: ahash::HashMap::new(),
         }
     }
 
@@ -376,7 +377,7 @@ impl Resource {
             nonwild_prefix: None,
             children: SingleOrBoxHashSet::new(),
             context: None,
-            session_ctxs: HashMap::new(),
+            session_ctxs: ahash::HashMap::new(),
         })
     }
 
