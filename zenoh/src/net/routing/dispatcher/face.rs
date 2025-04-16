@@ -843,8 +843,8 @@ impl FaceState {
             };
 
             if !self.exec_interceptors(InterceptorFlow::Egress, &iceptor, ctx) {
-                // FIXME(fuzzypixelz): I don't understand this comment, there is no DeclareFinal being sent...
-                // NOTE: send declare final to avoid timeout on blocked interest
+                // NOTE: this request was blocked by an egress interceptor, we need to send
+                // DeclareFinal to avoid a timeout error.
                 self.reject_interest(interest_id);
                 return;
             }
