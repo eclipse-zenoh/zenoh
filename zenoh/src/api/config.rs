@@ -20,7 +20,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use zenoh_result::ZResult;
+use zenoh_result::{bail, ZResult};
 
 /// Zenoh configuration.
 ///
@@ -62,9 +62,40 @@ impl Config {
 
     /// Inserts configuration value `value` at `key`.
     pub fn insert_json5(&mut self, key: &str, value: &str) -> ZResult<()> {
-        self.0
-            .insert_json5(key, value)
-            .map_err(|err| zerror!("{err}").into())
+        match key.split_once("=") {
+            None => self.0.insert_json5(key, value),
+            Some((prefix, id_value)) => {
+                let (key, id_key) = prefix.rsplit_once("/").ok_or("missing id")?;
+                let new_item = json5::from_str::<serde_json::Value>(value)?;
+                if new_item
+                    .as_object()
+                    .and_then(|map| map.get(id_key))
+                    .and_then(|v| v.as_str())
+                    != Some(id_value)
+                {
+                    bail!("id mismatch");
+                }
+                let current = serde_json::from_str::<serde_json::Value>(&self.get_json(key)?)?;
+                let serde_json::Value::Array(mut list) = current else {
+                    bail!("not an array")
+                };
+                let mut new_item = Some(new_item);
+                for item in list.iter_mut() {
+                    let serde_json::Value::Object(map) = item else {
+                        bail!("array item is not an object");
+                    };
+                    if map.get(id_key).and_then(|v| v.as_str()) == Some(id_value) {
+                        *item = new_item.take().unwrap();
+                        break;
+                    }
+                }
+                if let Some(new_item) = new_item {
+                    list.push(new_item);
+                }
+                self.0.insert_json5(key, &serde_json::to_string(&list)?)
+            }
+        }
+        .map_err(|err| zerror!("{err}").into())
     }
 
     /// Returns a JSON string containing the configuration at `key`.
@@ -223,5 +254,85 @@ impl<T> Deref for LookupGuard<'_, T> {
 impl<T> AsRef<dyn Any> for LookupGuard<'_, T> {
     fn as_ref(&self) -> &dyn Any {
         self.deref()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use zenoh_config::{InterceptorFlow, QosOverwriteItemConf};
+
+    use crate::Config;
+
+    #[test]
+    fn insert_list_item() {
+        let mut config = Config::default();
+
+        let item1 = r#"{
+            id: "item1",
+            messages: ["put"],
+            key_exprs: ["**"],
+            overwrite: {
+                priority: "real_time",
+            },
+            flows: ["egress"]
+        }"#;
+        config.insert_json5("qos/network/id=item1", item1).unwrap();
+        let items = serde_json::from_str::<Vec<QosOverwriteItemConf>>(
+            &config.get_json("qos/network").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id.as_ref().unwrap(), "item1");
+        assert_eq!(
+            *items[0].flows.as_ref().unwrap().first(),
+            InterceptorFlow::Egress
+        );
+
+        let item1 = r#"{
+            id: "item1",
+            messages: ["put"],
+            key_exprs: ["**"],
+            overwrite: {
+                priority: "real_time",
+            },
+            flows: ["ingress"]
+        }"#;
+        config.insert_json5("qos/network/id=item1", item1).unwrap();
+        let items = serde_json::from_str::<Vec<QosOverwriteItemConf>>(
+            &config.get_json("qos/network").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id.as_ref().unwrap(), "item1");
+        assert_eq!(
+            *items[0].flows.as_ref().unwrap().first(),
+            InterceptorFlow::Ingress
+        );
+
+        let item2 = r#"{
+            id: "item2",
+            messages: ["put"],
+            key_exprs: ["**"],
+            overwrite: {
+                priority: "real_time",
+            },
+            flows: ["egress"]
+        }"#;
+        config.insert_json5("qos/network/id=item2", item2).unwrap();
+        let items = serde_json::from_str::<Vec<QosOverwriteItemConf>>(
+            &config.get_json("qos/network").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].id.as_ref().unwrap(), "item1");
+        assert_eq!(
+            *items[0].flows.as_ref().unwrap().first(),
+            InterceptorFlow::Ingress
+        );
+        assert_eq!(items[1].id.as_ref().unwrap(), "item2");
+        assert_eq!(
+            *items[1].flows.as_ref().unwrap().first(),
+            InterceptorFlow::Egress
+        );
     }
 }

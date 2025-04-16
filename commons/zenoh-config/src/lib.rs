@@ -82,7 +82,7 @@ impl Zeroize for SecretString {
 
 pub type SecretValue = Secret<SecretString>;
 
-#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum InterceptorFlow {
     Egress,
