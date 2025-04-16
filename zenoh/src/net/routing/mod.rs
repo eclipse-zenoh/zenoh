@@ -88,8 +88,6 @@ impl<Msg> RoutingContext<Msg> {
     }
 
     pub(crate) fn with_prefix(msg: Msg, prefix: Arc<Resource>) -> Self {
-        // TODO: could this function be replaced by `with_expr`? i.e. is cloning the Resource prefix
-        // better then allocating the full_expr?
         Self {
             msg,
             inface: OnceCell::new(),
