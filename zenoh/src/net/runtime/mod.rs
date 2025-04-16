@@ -289,12 +289,12 @@ impl Runtime {
     }
 
     #[cfg(feature = "internal")]
-    pub fn close(&self) -> CloseBuilder {
+    pub fn close(&self) -> CloseBuilder<impl Closee> {
         CloseBuilder::new(self.closee())
     }
 
-    pub(crate) fn closee(&self) -> Box<dyn Closee> {
-        Box::new(self.state.clone())
+    pub(crate) fn closee(&self) -> Arc<RuntimeState> {
+        self.state.clone()
     }
 
     pub fn is_closed(&self) -> bool {

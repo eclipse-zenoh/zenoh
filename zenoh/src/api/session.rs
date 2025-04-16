@@ -778,8 +778,8 @@ impl Session {
     /// subscriber_task.await.unwrap();
     /// # }
     /// ```
-    pub fn close(&self) -> CloseBuilder {
-        CloseBuilder::new(Box::new(self.0.clone()))
+    pub fn close(&self) -> CloseBuilder<impl Closee> {
+        CloseBuilder::new(self.0.clone())
     }
 
     /// Check if the session has been closed.
