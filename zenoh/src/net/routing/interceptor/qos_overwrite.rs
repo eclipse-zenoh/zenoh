@@ -22,7 +22,7 @@ use std::{collections::HashSet, sync::Arc};
 
 use zenoh_config::{
     qos::{QosOverwriteMessage, QosOverwrites},
-    QosOverwriteItemConf,
+    QosOverwriteItemConf, ZenohId,
 };
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, IKeyExprTreeNode, KeBoxTree};
 use zenoh_protocol::{
@@ -54,6 +54,7 @@ pub(crate) fn qos_overwrite_interceptor_factories(
 }
 
 pub struct QosOverwriteFactory {
+    zids: Option<NEVec<ZenohId>>,
     interfaces: Option<NEVec<String>>,
     link_protocols: Option<NEVec<InterceptorLink>>,
     overwrite: QosOverwrites,
@@ -70,6 +71,7 @@ impl QosOverwriteFactory {
         }
 
         Self {
+            zids: conf.zids,
             interfaces: conf.interfaces,
             link_protocols: conf.link_protocols,
             overwrite: conf.overwrite.clone(),
@@ -88,6 +90,13 @@ impl InterceptorFactoryTrait for QosOverwriteFactory {
         &self,
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
+        if let Some(zids) = &self.zids {
+            if let Ok(zid) = transport.get_zid() {
+                if !zids.contains(&zid.into()) {
+                    return (None, None);
+                }
+            }
+        }
         if let Some(interfaces) = &self.interfaces {
             if let Ok(links) = transport.get_links() {
                 for link in links {
