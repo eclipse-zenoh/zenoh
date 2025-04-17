@@ -15,8 +15,8 @@ use std::{
     any::Any,
     collections::HashMap,
     fmt,
-    ops::Not,
-    sync::{Arc, Weak},
+    ops::{Deref, Not},
+    sync::{Arc, RwLockReadGuard, Weak},
     time::Duration,
 };
 
@@ -25,7 +25,7 @@ use arc_swap::ArcSwap;
 use tokio_util::sync::CancellationToken;
 use zenoh_config::InterceptorFlow;
 use zenoh_protocol::{
-    core::{ExprId, Reliability, WhatAmI, ZenohIdProto},
+    core::{ExprId, Reliability, WhatAmI, WireExpr, ZenohIdProto},
     network::{
         declare,
         interest::{InterestId, InterestMode, InterestOptions},
@@ -44,7 +44,7 @@ use super::{
     super::router::*,
     interests::{declare_final, declare_interest, undeclare_interest, PendingCurrentInterest},
     resource::*,
-    tables::TablesLock,
+    tables::{Tables, TablesLock},
 };
 use crate::net::{
     primitives::{EPrimitives, McastMux, Mux, Primitives},
@@ -432,30 +432,8 @@ impl Primitives for Face {
 
     fn send_declare(&self, msg: &mut zenoh_protocol::network::Declare) {
         if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Ingress) {
-            let tables = self
-                .tables
-                .tables
-                .read()
-                .expect("reading Tables should not fail");
-
-            let prefix = match msg.wire_expr() {
-                Some(we) => {
-                    match tables
-                        .get_mapping(&self.state, we.scope, we.mapping)
-                        .cloned()
-                    {
-                        Some(prefix) => Some(prefix),
-                        None => {
-                            tracing::error!(
-                                "Received WireExpr with unknown scope {} from {}",
-                                we.scope,
-                                self,
-                            );
-                            return;
-                        }
-                    }
-                }
-                None => None,
+            let Ok(prefix) = msg.wire_expr().map(|we| self.prefix(we)).transpose() else {
+                return;
             };
 
             let msg = NetworkMessageMut {
@@ -615,25 +593,8 @@ impl Primitives for Face {
     #[inline]
     fn send_push(&self, msg: &mut Push, reliability: Reliability) {
         if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Ingress) {
-            let tables = self
-                .tables
-                .tables
-                .read()
-                .expect("reading Tables should not fail");
-
-            let prefix = match tables
-                .get_mapping(&self.state, msg.wire_expr.scope, msg.wire_expr.mapping)
-                .cloned()
-            {
-                Some(prefix) => prefix,
-                None => {
-                    tracing::error!(
-                        "Received WireExpr with unknown scope {} from {}",
-                        msg.wire_expr.scope,
-                        self,
-                    );
-                    return;
-                }
+            let Ok(prefix) = self.prefix(&msg.wire_expr) else {
+                return;
             };
 
             let ctx = &mut RoutingContext::with_prefix(
@@ -641,7 +602,7 @@ impl Primitives for Face {
                     body: NetworkBodyMut::Push(msg),
                     reliability,
                 },
-                prefix,
+                prefix.prefix,
             );
 
             if !self
@@ -657,25 +618,8 @@ impl Primitives for Face {
 
     fn send_request(&self, msg: &mut Request) {
         if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Ingress) {
-            let tables = self
-                .tables
-                .tables
-                .read()
-                .expect("reading Tables should not fail");
-
-            let prefix = match tables
-                .get_mapping(&self.state, msg.wire_expr.scope, msg.wire_expr.mapping)
-                .cloned()
-            {
-                Some(prefix) => prefix,
-                None => {
-                    tracing::error!(
-                        "Received WireExpr with unknown scope {} from {}",
-                        msg.wire_expr.scope,
-                        self,
-                    );
-                    return;
-                }
+            let Ok(prefix) = self.prefix(&msg.wire_expr) else {
+                return;
             };
 
             let ctx = &mut RoutingContext::with_prefix(
@@ -683,7 +627,7 @@ impl Primitives for Face {
                     body: NetworkBodyMut::Request(msg),
                     reliability: Reliability::Reliable, // NOTE: queries are always reliable
                 },
-                prefix,
+                prefix.prefix,
             );
 
             if !self
@@ -711,25 +655,8 @@ impl Primitives for Face {
 
     fn send_response(&self, msg: &mut Response) {
         if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Ingress) {
-            let tables = self
-                .tables
-                .tables
-                .read()
-                .expect("reading Tables should not fail");
-
-            let prefix = match tables
-                .get_mapping(&self.state, msg.wire_expr.scope, msg.wire_expr.mapping)
-                .cloned()
-            {
-                Some(prefix) => prefix,
-                None => {
-                    tracing::error!(
-                        "Received WireExpr with unknown scope {} from {}",
-                        msg.wire_expr.scope,
-                        self,
-                    );
-                    return;
-                }
+            let Ok(prefix) = self.prefix(&msg.wire_expr) else {
+                return;
             };
 
             let ctx = &mut RoutingContext::with_prefix(
@@ -737,7 +664,7 @@ impl Primitives for Face {
                     body: NetworkBodyMut::Response(msg),
                     reliability: Reliability::Reliable, // NOTE: queries are always reliable
                 },
-                prefix,
+                prefix.prefix,
             );
 
             if !self
@@ -803,7 +730,53 @@ impl fmt::Display for Face {
     }
 }
 
+/// [`Resource`] prefix.
+///
+/// # Safety
+///
+/// The [`Tables`] lock is also stored to ensure that the [`Resource`] is not accessed without it.
+/// Otherwise we could run into undefined behavior when using [`get_mut_unchecked`].
+pub(crate) struct Prefix<'face> {
+    _tables: RwLockReadGuard<'face, Tables>,
+    pub prefix: Arc<Resource>,
+}
+
+impl Deref for Prefix<'_> {
+    type Target = Arc<Resource>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.prefix
+    }
+}
+
 impl Face {
+    /// Returns the [`Prefix`] associated with the given [`WireExpr`].
+    pub(crate) fn prefix(&self, wire_expr: &WireExpr) -> Result<Prefix<'_>, ()> {
+        let tables = self
+            .tables
+            .tables
+            .read()
+            .expect("reading Tables should not fail");
+
+        match tables
+            .get_sent_mapping(&self.state, wire_expr.scope, wire_expr.mapping)
+            .cloned()
+        {
+            Some(prefix) => Ok(Prefix {
+                _tables: tables,
+                prefix,
+            }),
+            None => {
+                tracing::error!(
+                    "Got WireExpr with unknown scope {} from {}",
+                    wire_expr.scope,
+                    self
+                );
+                Err(())
+            }
+        }
+    }
+
     pub(crate) fn intercept_interest(&self, msg: &mut Interest, prefix: Option<&Arc<Resource>>) {
         if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Egress) {
             let interest_id = msg.id;
@@ -864,25 +837,8 @@ impl Face {
 
     pub(crate) fn intercept_push(&self, msg: &mut Push, reliability: Reliability) {
         if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Egress) {
-            let tables = self
-                .tables
-                .tables
-                .read()
-                .expect("reading Tables should not fail");
-
-            let prefix = match tables
-                .get_sent_mapping(&self.state, msg.wire_expr.scope, msg.wire_expr.mapping)
-                .cloned()
-            {
-                Some(prefix) => prefix,
-                None => {
-                    tracing::error!(
-                        "Got WireExpr with unknown scope {} from {}",
-                        msg.wire_expr.scope,
-                        self,
-                    );
-                    return;
-                }
+            let Ok(prefix) = self.prefix(&msg.wire_expr) else {
+                return;
             };
 
             let ctx = &mut RoutingContext::with_prefix(
@@ -890,7 +846,7 @@ impl Face {
                     body: NetworkBodyMut::Push(msg),
                     reliability,
                 },
-                prefix,
+                prefix.prefix,
             );
 
             if !self
@@ -906,25 +862,8 @@ impl Face {
 
     pub(crate) fn intercept_request(&self, msg: &mut Request) {
         if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Egress) {
-            let tables = self
-                .tables
-                .tables
-                .read()
-                .expect("reading Tables should not fail");
-
-            let prefix = match tables
-                .get_sent_mapping(&self.state, msg.wire_expr.scope, msg.wire_expr.mapping)
-                .cloned()
-            {
-                Some(prefix) => prefix,
-                None => {
-                    tracing::error!(
-                        "Got WireExpr with unknown scope {} from {}",
-                        msg.wire_expr.scope,
-                        self,
-                    );
-                    return;
-                }
+            let Ok(prefix) = self.prefix(&msg.wire_expr) else {
+                return;
             };
 
             let ctx = &mut RoutingContext::with_prefix(
@@ -932,7 +871,7 @@ impl Face {
                     body: NetworkBodyMut::Request(msg),
                     reliability: Reliability::Reliable, // NOTE: Request is always reliable
                 },
-                prefix,
+                prefix.prefix,
             );
 
             if !self
@@ -956,25 +895,8 @@ impl Face {
 
     pub(crate) fn intercept_response(&self, msg: &mut Response) {
         if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Egress) {
-            let tables = self
-                .tables
-                .tables
-                .read()
-                .expect("reading Tables should not fail");
-
-            let prefix = match tables
-                .get_sent_mapping(&self.state, msg.wire_expr.scope, msg.wire_expr.mapping)
-                .cloned()
-            {
-                Some(prefix) => prefix,
-                None => {
-                    tracing::error!(
-                        "Got WireExpr with unknown scope {} from {}",
-                        msg.wire_expr.scope,
-                        self,
-                    );
-                    return;
-                }
+            let Ok(prefix) = self.prefix(&msg.wire_expr) else {
+                return;
             };
 
             let ctx = &mut RoutingContext::with_prefix(
@@ -982,7 +904,7 @@ impl Face {
                     body: NetworkBodyMut::Response(msg),
                     reliability: Reliability::Reliable, // NOTE: Response is always reliable
                 },
-                prefix,
+                prefix.prefix,
             );
 
             if !self
