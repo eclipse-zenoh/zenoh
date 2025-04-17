@@ -71,6 +71,8 @@ mod pubsub;
 mod queries;
 mod token;
 
+const ROUTERS_NET_NAME: &str = &"[Routers Network]";
+
 macro_rules! hat {
     ($t:expr) => {
         $t.hat.downcast_ref::<HatTables>().unwrap()
@@ -360,7 +362,7 @@ impl HatBaseTrait for HatCode {
 
         if router_full_linkstate | gossip {
             hat_mut!(tables).routers_net = Some(Network::new(
-                "[Routers network]".to_string(),
+                ROUTERS_NET_NAME.to_string(),
                 tables.zid,
                 runtime.clone(),
                 router_full_linkstate,
@@ -369,7 +371,7 @@ impl HatBaseTrait for HatCode {
                 gossip_multihop,
                 gossip_target,
                 autoconnect,
-                link_weights_to_hm(router_link_weights, "[Routers Network]")?,
+                link_weights_to_hm(router_link_weights, ROUTERS_NET_NAME)?,
             ));
         }
         if peer_full_linkstate | gossip {
@@ -848,6 +850,31 @@ impl HatBaseTrait for HatCode {
                 .map(|net| net.dot())
                 .unwrap_or_else(|| "graph {}".to_string()),
             _ => "graph {}".to_string(),
+        }
+    }
+
+    fn update_from_config(&self, key: &str, tables: &mut Tables, runtime: &Runtime) -> ZResult<()> {
+        match key {
+            "routing/router/link_weights" => {
+                let link_weights = link_weights_to_hm(
+                    runtime
+                        .config()
+                        .lock()
+                        .routing()
+                        .router()
+                        .link_weights()
+                        .clone(),
+                    ROUTERS_NET_NAME,
+                )?;
+                match hat_mut!(tables).routers_net.as_mut() {
+                    Some(rn) => {
+                        rn.update_link_weights(link_weights);
+                        Ok(())
+                    }
+                    None => bail!("{ROUTERS_NET_NAME} does not exist"),
+                }
+            }
+            _ => Ok(()),
         }
     }
 }

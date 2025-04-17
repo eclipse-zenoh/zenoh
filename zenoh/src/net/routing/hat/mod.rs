@@ -137,6 +137,15 @@ pub(crate) trait HatBaseTrait {
         face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     );
+
+    fn update_from_config(
+        &self,
+        _key: &str,
+        _tables: &mut Tables,
+        _runtime: &Runtime,
+    ) -> ZResult<()> {
+        Ok(())
+    }
 }
 
 pub(crate) trait HatInterestTrait {

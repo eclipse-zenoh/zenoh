@@ -182,6 +182,39 @@ impl Network {
         }
     }
 
+    pub(super) fn update_link_weights(
+        &mut self,
+        link_weights: HashMap<ZenohIdProto, LinkEdgeWeight>,
+    ) {
+        let mut need_send_update = false;
+        for l in &mut self.graph[self.idx].links {
+            let old_weight = self.link_weights.get(&l.dest);
+            let new_weight = link_weights.get(&l.dest);
+            if old_weight == new_weight {
+                continue;
+            }
+            need_send_update = true;
+            l.weight = new_weight.copied().unwrap_or_default();
+        }
+        self.link_weights = link_weights;
+        if !need_send_update || !(self.full_linkstate || self.router_peers_failover_brokering) {
+            return;
+        }
+
+        self.graph[self.idx].sn += 1;
+        self.send_on_links(
+            vec![(
+                self.idx,
+                Details {
+                    zid: false,
+                    links: true,
+                    ..Default::default()
+                },
+            )],
+            |link| link.transport.get_whatami().unwrap_or(WhatAmI::Peer) == WhatAmI::Router,
+        );
+    }
+
     pub(super) fn dot(&self) -> String {
         std::format!(
             "{:?}",
@@ -681,21 +714,15 @@ impl Network {
                         .iter()
                         .position(|l| l.dest == self.graph[idx1].zid)
                     {
-                        // it is possbile that we got a weight update for ourselves
+                        // it is possible that we got a weight update for ourselves
                         // TODO: resolve conflict if the weight we stored is different from the one we received
-                        if link.weight.is_set()
-                            && self.idx == idx2
+                        if self.idx == idx2
+                            && self.graph[self.idx].links[l].weight != link.weight
                             && !self.link_weights.contains_key(&self.graph[idx1].zid)
-                            && self.graph[idx2].links[l].weight != link.weight
                         {
                             self.graph[self.idx].sn += 1;
                             self.graph[self.idx].links[l].weight = link.weight;
                             updated_nodes.insert(self.idx);
-                            tracing::info!(
-                                "Internal sn update {} : {}",
-                                self.graph[self.idx].zid,
-                                self.graph[self.idx].sn
-                            );
                         }
 
                         self.update_edge(idx1, idx2, link.weight);
