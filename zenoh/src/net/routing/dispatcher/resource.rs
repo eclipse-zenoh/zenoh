@@ -23,7 +23,7 @@ use std::{
 
 use ahash::HashMapExt;
 use zenoh_collections::SingleOrBoxHashSet;
-use zenoh_config::WhatAmI;
+use zenoh_config::{InterceptorFlow, WhatAmI};
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr},
     network::{
@@ -35,20 +35,18 @@ use zenoh_protocol::{
 use zenoh_sync::{get_mut_unchecked, Cache, CacheValueType};
 
 use super::{
-    face::FaceState,
+    face::{Face, FaceState},
     pubsub::SubscriberInfo,
     tables::{Tables, TablesLock},
 };
 use crate::net::routing::{
-    dispatcher::face::Face,
     interceptor::{InterceptorTrait, InterceptorsChain},
     router::{disable_matches_data_routes, disable_matches_query_routes},
-    RoutingContext,
 };
 
 pub(crate) type NodeId = u16;
 
-pub(crate) type Direction = (Arc<FaceState>, WireExpr<'static>, NodeId);
+pub(crate) type Direction = (Face, WireExpr<'static>, NodeId);
 pub(crate) type Route = HashMap<usize, Direction>;
 
 pub(crate) type QueryRoute = HashMap<usize, (Direction, RequestId)>;
@@ -87,7 +85,7 @@ impl InterceptorCache {
 }
 
 pub(crate) struct SessionContext {
-    pub(crate) face: Arc<FaceState>,
+    pub(crate) face: Face,
     pub(crate) local_expr_id: Option<ExprId>,
     pub(crate) remote_expr_id: Option<ExprId>,
     pub(crate) subs: Option<SubscriberInfo>,
@@ -98,7 +96,7 @@ pub(crate) struct SessionContext {
 }
 
 impl SessionContext {
-    pub(crate) fn new(face: Arc<FaceState>) -> Self {
+    pub(crate) fn new(face: Face) -> Self {
         Self {
             face,
             local_expr_id: None,
@@ -494,12 +492,8 @@ impl Resource {
     }
 
     #[inline]
-    pub fn decl_key(
-        res: &Arc<Resource>,
-        face: &mut Arc<FaceState>,
-        push: bool,
-    ) -> WireExpr<'static> {
-        if face.is_local {
+    pub fn decl_key(res: &Arc<Resource>, face: &Face, push: bool) -> WireExpr<'static> {
+        if face.state.is_local {
             return res.expr().to_string().into();
         }
 
@@ -508,7 +502,7 @@ impl Resource {
             Some(mut nonwild_prefix) => {
                 if let Some(ctx) = get_mut_unchecked(&mut nonwild_prefix)
                     .session_ctxs
-                    .get(&face.id)
+                    .get(&face.state.id)
                 {
                     if let Some(expr_id) = ctx.remote_expr_id {
                         return WireExpr {
@@ -526,7 +520,7 @@ impl Resource {
                     }
                 }
                 if push
-                    || face.remote_key_interests.values().any(|res| {
+                    || face.state.remote_key_interests.values().any(|res| {
                         res.as_ref()
                             .map(|res| res.matches(&nonwild_prefix))
                             .unwrap_or(true)
@@ -534,14 +528,14 @@ impl Resource {
                 {
                     let ctx = get_mut_unchecked(&mut nonwild_prefix)
                         .session_ctxs
-                        .entry(face.id)
+                        .entry(face.state.id)
                         .or_insert_with(|| Arc::new(SessionContext::new(face.clone())));
-                    let expr_id = face.get_next_local_id();
+                    let expr_id = face.state.get_next_local_id();
                     get_mut_unchecked(ctx).local_expr_id = Some(expr_id);
-                    get_mut_unchecked(face)
+                    get_mut_unchecked(&mut face.state.clone())
                         .local_mappings
                         .insert(expr_id, nonwild_prefix.clone());
-                    face.primitives.send_declare(RoutingContext::with_expr(
+                    face.intercept_declare(
                         &mut Declare {
                             interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
@@ -552,9 +546,9 @@ impl Resource {
                                 wire_expr: nonwild_prefix.expr().to_string().into(),
                             }),
                         },
-                        nonwild_prefix.expr().to_string(),
-                    ));
-                    face.update_interceptors_caches(&mut nonwild_prefix);
+                        Some(&nonwild_prefix),
+                    );
+                    face.state.update_interceptors_caches(&mut nonwild_prefix);
                     WireExpr {
                         scope: expr_id,
                         suffix: wildsuffix.into(),
@@ -761,39 +755,29 @@ impl Resource {
         }
     }
 
-    pub(crate) fn get_ingress_cache(
+    pub(crate) fn interceptor_cache(
         &self,
-        face: &Face,
+        face: &FaceState,
         interceptor: &InterceptorsChain,
+        flow: InterceptorFlow,
     ) -> Option<InterceptorCacheValueType> {
-        self.session_ctxs
-            .get(&face.state.id)
-            .and_then(|ctx| ctx.in_interceptor_cache.value(interceptor, self))
-    }
-
-    pub(crate) fn get_egress_cache(
-        &self,
-        face: &Face,
-        interceptor: &InterceptorsChain,
-    ) -> Option<InterceptorCacheValueType> {
-        self.session_ctxs
-            .get(&face.state.id)
-            .and_then(|ctx| ctx.e_interceptor_cache.value(interceptor, self))
+        self.session_ctxs.get(&face.id).and_then(|ctx| {
+            match flow {
+                InterceptorFlow::Egress => &ctx.e_interceptor_cache,
+                InterceptorFlow::Ingress => &ctx.in_interceptor_cache,
+            }
+            .value(interceptor, self)
+        })
     }
 }
 
-pub(crate) fn register_expr(
-    tables: &TablesLock,
-    face: &mut Arc<FaceState>,
-    expr_id: ExprId,
-    expr: &WireExpr,
-) {
+pub(crate) fn register_expr(tables: &TablesLock, face: &Face, expr_id: ExprId, expr: &WireExpr) {
     let rtables = zread!(tables.tables);
     match rtables
-        .get_mapping(face, &expr.scope, expr.mapping)
+        .get_mapping(&face.state, expr.scope, expr.mapping)
         .cloned()
     {
-        Some(mut prefix) => match face.remote_mappings.get(&expr_id) {
+        Some(mut prefix) => match face.state.remote_mappings.get(&expr_id) {
             Some(res) => {
                 let mut fullexpr = prefix.expr().to_string();
                 fullexpr.push_str(expr.suffix.as_ref());
@@ -831,17 +815,17 @@ pub(crate) fn register_expr(
                 };
                 let ctx = get_mut_unchecked(&mut res)
                     .session_ctxs
-                    .entry(face.id)
+                    .entry(face.state.id)
                     .or_insert_with(|| Arc::new(SessionContext::new(face.clone())));
 
                 get_mut_unchecked(ctx).remote_expr_id = Some(expr_id);
 
-                get_mut_unchecked(face)
+                get_mut_unchecked(&mut face.state.clone())
                     .remote_mappings
                     .insert(expr_id, res.clone());
                 disable_matches_data_routes(&mut wtables, &mut res);
                 disable_matches_query_routes(&mut wtables, &mut res);
-                face.update_interceptors_caches(&mut res);
+                face.state.update_interceptors_caches(&mut res);
                 drop(wtables);
             }
         },
@@ -870,10 +854,7 @@ pub(crate) fn register_expr_interest(
 ) {
     if let Some(expr) = expr {
         let rtables = zread!(tables.tables);
-        match rtables
-            .get_mapping(face, &expr.scope, expr.mapping)
-            .cloned()
-        {
+        match rtables.get_mapping(face, expr.scope, expr.mapping).cloned() {
             Some(mut prefix) => {
                 let res = Resource::get_resource(&prefix, &expr.suffix);
                 let (res, wtables) = if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {

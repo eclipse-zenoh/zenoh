@@ -14,6 +14,7 @@
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
+    ops::Deref,
     sync::{atomic::Ordering, Arc},
 };
 
@@ -38,7 +39,7 @@ use super::{
 use crate::key_expr::KeyExpr;
 use crate::net::routing::{
     dispatcher::{
-        face::FaceState,
+        face::{Face, FaceState},
         interests::RemoteInterest,
         pubsub::SubscriberInfo,
         resource::{NodeId, Resource, SessionContext},
@@ -46,7 +47,6 @@ use crate::net::routing::{
     },
     hat::{CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources},
     router::disable_matches_data_routes,
-    RoutingContext,
 };
 
 #[inline]
@@ -62,15 +62,15 @@ fn send_sourced_subscription_to_net_children(
     for child in children {
         if net.graph.contains_node(*child) {
             match tables.get_face(&net.graph[*child].zid).cloned() {
-                Some(mut someface) => {
+                Some(someface) => {
                     if src_face
-                        .map(|src_face| someface.id != src_face.id)
+                        .map(|src_face| someface.state.id != src_face.id)
                         .unwrap_or(true)
                     {
-                        let push_declaration = push_declaration_profile(&someface);
-                        let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
+                        let push_declaration = push_declaration_profile(&someface.state);
+                        let key_expr = Resource::decl_key(res, &someface, push_declaration);
 
-                        someface.primitives.send_declare(RoutingContext::with_expr(
+                        someface.intercept_declare(
                             &mut Declare {
                                 interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
@@ -83,8 +83,8 @@ fn send_sourced_subscription_to_net_children(
                                     wire_expr: key_expr,
                                 }),
                             },
-                            res.expr().to_string(),
-                        ));
+                            Some(res),
+                        );
                     }
                 }
                 None => tracing::trace!("Unable to find face for zid {}", net.graph[*child].zid),
@@ -96,38 +96,41 @@ fn send_sourced_subscription_to_net_children(
 #[inline]
 fn propagate_simple_subscription_to(
     _tables: &mut Tables,
-    dst_face: &mut Arc<FaceState>,
+    dst_face: &mut Face,
     res: &Arc<Resource>,
     _sub_info: &SubscriberInfo,
     src_face: &mut Arc<FaceState>,
     send_declare: &mut SendDeclare,
 ) {
-    if (src_face.id != dst_face.id)
-        && !face_hat!(dst_face).local_subs.contains_key(res)
-        && dst_face.whatami == WhatAmI::Client
+    if (src_face.id != dst_face.state.id)
+        && !face_hat!(dst_face.state).local_subs.contains_key(res)
+        && dst_face.state.whatami == WhatAmI::Client
     {
-        if dst_face.whatami != WhatAmI::Client {
-            let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-            face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
-            let key_expr = Resource::decl_key(res, dst_face, push_declaration_profile(dst_face));
+        if dst_face.state.whatami != WhatAmI::Client {
+            let id = face_hat!(dst_face.state)
+                .next_id
+                .fetch_add(1, Ordering::SeqCst);
+            face_hat_mut!(&mut dst_face.state)
+                .local_subs
+                .insert(res.clone(), id);
+            let key_expr =
+                Resource::decl_key(res, dst_face, push_declaration_profile(&dst_face.state));
             send_declare(
-                &dst_face.primitives,
-                RoutingContext::with_expr(
-                    Declare {
-                        interest_id: None,
-                        ext_qos: ext::QoSType::DECLARE,
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                            id,
-                            wire_expr: key_expr,
-                        }),
-                    },
-                    res.expr().to_string(),
-                ),
+                dst_face,
+                Declare {
+                    interest_id: None,
+                    ext_qos: ext::QoSType::DECLARE,
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                        id,
+                        wire_expr: key_expr,
+                    }),
+                },
+                Some(res.clone()),
             );
         } else {
-            let matching_interests = face_hat!(dst_face)
+            let matching_interests = face_hat!(dst_face.state)
                 .remote_interests
                 .values()
                 .filter(|i| i.options.subscribers() && i.matches(res))
@@ -145,26 +148,31 @@ fn propagate_simple_subscription_to(
                 } else {
                     res
                 };
-                if !face_hat!(dst_face).local_subs.contains_key(res) {
-                    let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-                    face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
-                    let key_expr =
-                        Resource::decl_key(res, dst_face, push_declaration_profile(dst_face));
+                if !face_hat!(dst_face.state).local_subs.contains_key(res) {
+                    let id = face_hat!(dst_face.state)
+                        .next_id
+                        .fetch_add(1, Ordering::SeqCst);
+                    face_hat_mut!(&mut dst_face.state)
+                        .local_subs
+                        .insert(res.clone(), id);
+                    let key_expr = Resource::decl_key(
+                        res,
+                        dst_face,
+                        push_declaration_profile(&dst_face.state),
+                    );
                     send_declare(
-                        &dst_face.primitives,
-                        RoutingContext::with_expr(
-                            Declare {
-                                interest_id: None,
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                    id,
-                                    wire_expr: key_expr,
-                                }),
-                            },
-                            res.expr().to_string(),
-                        ),
+                        dst_face,
+                        Declare {
+                            interest_id: None,
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                id,
+                                wire_expr: key_expr,
+                            }),
+                        },
+                        Some(res.clone()),
                     );
                 }
             }
@@ -179,12 +187,7 @@ fn propagate_simple_subscription(
     src_face: &mut Arc<FaceState>,
     send_declare: &mut SendDeclare,
 ) {
-    for mut dst_face in tables
-        .faces
-        .values()
-        .cloned()
-        .collect::<Vec<Arc<FaceState>>>()
-    {
+    for mut dst_face in tables.faces.values().cloned().collect::<Vec<_>>() {
         propagate_simple_subscription_to(
             tables,
             &mut dst_face,
@@ -269,7 +272,7 @@ fn declare_linkstatepeer_subscription(
 
 fn register_simple_subscription(
     _tables: &mut Tables,
-    face: &mut Arc<FaceState>,
+    face: &Face,
     id: SubscriberId,
     res: &mut Arc<Resource>,
     sub_info: &SubscriberInfo,
@@ -277,7 +280,7 @@ fn register_simple_subscription(
     // Register subscription
     {
         let res = get_mut_unchecked(res);
-        match res.session_ctxs.get_mut(&face.id) {
+        match res.session_ctxs.get_mut(&face.state.id) {
             Some(ctx) => {
                 if ctx.subs.is_none() {
                     get_mut_unchecked(ctx).subs = Some(*sub_info);
@@ -286,18 +289,20 @@ fn register_simple_subscription(
             None => {
                 let ctx = res
                     .session_ctxs
-                    .entry(face.id)
+                    .entry(face.state.id)
                     .or_insert_with(|| Arc::new(SessionContext::new(face.clone())));
                 get_mut_unchecked(ctx).subs = Some(*sub_info);
             }
         }
     }
-    face_hat_mut!(face).remote_subs.insert(id, res.clone());
+    face_hat_mut!(&mut face.state.clone())
+        .remote_subs
+        .insert(id, res.clone());
 }
 
 fn declare_simple_subscription(
     tables: &mut Tables,
-    face: &mut Arc<FaceState>,
+    face: &Face,
     id: SubscriberId,
     res: &mut Arc<Resource>,
     sub_info: &SubscriberInfo,
@@ -305,7 +310,14 @@ fn declare_simple_subscription(
 ) {
     register_simple_subscription(tables, face, id, res, sub_info);
     let zid = tables.zid;
-    register_linkstatepeer_subscription(tables, face, res, sub_info, zid, send_declare);
+    register_linkstatepeer_subscription(
+        tables,
+        &mut face.state.clone(),
+        res,
+        sub_info,
+        zid,
+        send_declare,
+    );
 }
 
 #[inline]
@@ -318,7 +330,7 @@ fn remote_linkstatepeer_subs(tables: &Tables, res: &Arc<Resource>) -> bool {
 }
 
 #[inline]
-fn simple_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
+fn simple_subs(res: &Arc<Resource>) -> Vec<Face> {
     res.session_ctxs
         .values()
         .filter_map(|ctx| {
@@ -335,7 +347,7 @@ fn simple_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 fn remote_simple_subs(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
     res.session_ctxs
         .values()
-        .any(|ctx| ctx.face.id != face.id && ctx.subs.is_some())
+        .any(|ctx| ctx.face.state.id != face.id && ctx.subs.is_some())
 }
 
 #[inline]
@@ -350,15 +362,15 @@ fn send_forget_sourced_subscription_to_net_children(
     for child in children {
         if net.graph.contains_node(*child) {
             match tables.get_face(&net.graph[*child].zid).cloned() {
-                Some(mut someface) => {
+                Some(someface) => {
                     if src_face
-                        .map(|src_face| someface.id != src_face.id)
+                        .map(|src_face| someface.state.id != src_face.id)
                         .unwrap_or(true)
                     {
-                        let push_declaration = push_declaration_profile(&someface);
-                        let wire_expr = Resource::decl_key(res, &mut someface, push_declaration);
+                        let push_declaration = push_declaration_profile(&someface.state);
+                        let wire_expr = Resource::decl_key(res, &someface, push_declaration);
 
-                        someface.primitives.send_declare(RoutingContext::with_expr(
+                        someface.intercept_declare(
                             &mut Declare {
                                 interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
@@ -371,8 +383,8 @@ fn send_forget_sourced_subscription_to_net_children(
                                     ext_wire_expr: WireExprType { wire_expr },
                                 }),
                             },
-                            res.expr().to_string(),
-                        ));
+                            Some(res),
+                        );
                     }
                 }
                 None => tracing::trace!("Unable to find face for zid {}", net.graph[*child].zid),
@@ -387,25 +399,23 @@ fn propagate_forget_simple_subscription(
     send_declare: &mut SendDeclare,
 ) {
     for mut face in tables.faces.values().cloned() {
-        if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(res) {
+        if let Some(id) = face_hat_mut!(&mut face.state).local_subs.remove(res) {
             send_declare(
-                &face.primitives,
-                RoutingContext::with_expr(
-                    Declare {
-                        interest_id: None,
-                        ext_qos: ext::QoSType::DECLARE,
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                        body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                            id,
-                            ext_wire_expr: WireExprType::null(),
-                        }),
-                    },
-                    res.expr().to_string(),
-                ),
+                &face,
+                Declare {
+                    interest_id: None,
+                    ext_qos: ext::QoSType::DECLARE,
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                    body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                        id,
+                        ext_wire_expr: WireExprType::null(),
+                    }),
+                },
+                Some(res.clone()),
             );
         }
-        for res in face_hat!(face)
+        for res in face_hat!(face.state)
             .local_subs
             .keys()
             .cloned()
@@ -414,25 +424,24 @@ fn propagate_forget_simple_subscription(
             if !res.context().matches.iter().any(|m| {
                 m.upgrade().is_some_and(|m| {
                     m.context.is_some()
-                        && (remote_simple_subs(&m, &face) || remote_linkstatepeer_subs(tables, &m))
+                        && (remote_simple_subs(&m, &face.state)
+                            || remote_linkstatepeer_subs(tables, &m))
                 })
             }) {
-                if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
+                if let Some(id) = face_hat_mut!(&mut face.state).local_subs.remove(&res) {
                     send_declare(
-                        &face.primitives,
-                        RoutingContext::with_expr(
-                            Declare {
-                                interest_id: None,
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                    id,
-                                    ext_wire_expr: WireExprType::null(),
-                                }),
-                            },
-                            res.expr().to_string(),
-                        ),
+                        &face,
+                        Declare {
+                            interest_id: None,
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                                id,
+                                ext_wire_expr: WireExprType::null(),
+                            }),
+                        },
+                        Some(res.clone()),
                     );
                 }
             }
@@ -541,27 +550,25 @@ pub(super) fn undeclare_simple_subscription(
         }
 
         if simple_subs.len() == 1 && !linkstatepeer_subs {
-            let mut face = &mut simple_subs[0];
-            if face.whatami != WhatAmI::Client {
-                if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
+            let face = &mut simple_subs[0];
+            if face.state.whatami != WhatAmI::Client {
+                if let Some(id) = face_hat_mut!(&mut face.state).local_subs.remove(res) {
                     send_declare(
-                        &face.primitives,
-                        RoutingContext::with_expr(
-                            Declare {
-                                interest_id: None,
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                    id,
-                                    ext_wire_expr: WireExprType::null(),
-                                }),
-                            },
-                            res.expr().to_string(),
-                        ),
+                        face,
+                        Declare {
+                            interest_id: None,
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                                id,
+                                ext_wire_expr: WireExprType::null(),
+                            }),
+                        },
+                        Some(res.clone()),
                     );
                 }
-                for res in face_hat!(face)
+                for res in face_hat!(face.state)
                     .local_subs
                     .keys()
                     .cloned()
@@ -570,28 +577,24 @@ pub(super) fn undeclare_simple_subscription(
                     if !res.context().matches.iter().any(|m| {
                         m.upgrade().is_some_and(|m| {
                             m.context.is_some()
-                                && (remote_simple_subs(&m, face)
+                                && (remote_simple_subs(&m, &face.state)
                                     || remote_linkstatepeer_subs(tables, &m))
                         })
                     }) {
-                        if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
+                        if let Some(id) = face_hat_mut!(&mut face.state).local_subs.remove(&res) {
                             send_declare(
-                                &face.primitives,
-                                RoutingContext::with_expr(
-                                    Declare {
-                                        interest_id: None,
-                                        ext_qos: ext::QoSType::DECLARE,
-                                        ext_tstamp: None,
-                                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                                        body: DeclareBody::UndeclareSubscriber(
-                                            UndeclareSubscriber {
-                                                id,
-                                                ext_wire_expr: WireExprType::null(),
-                                            },
-                                        ),
-                                    },
-                                    res.expr().to_string(),
-                                ),
+                                face,
+                                Declare {
+                                    interest_id: None,
+                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                                    body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                                        id,
+                                        ext_wire_expr: WireExprType::null(),
+                                    }),
+                                },
+                                Some(res.clone()),
                             );
                         }
                     }
@@ -690,27 +693,53 @@ fn make_sub_id(res: &Arc<Resource>, face: &mut Arc<FaceState>, mode: InterestMod
 
 pub(super) fn declare_sub_interest(
     tables: &mut Tables,
-    face: &mut Arc<FaceState>,
+    face: &Face,
     id: InterestId,
     res: Option<&mut Arc<Resource>>,
     mode: InterestMode,
     aggregate: bool,
     send_declare: &mut SendDeclare,
 ) {
-    if mode.current() && face.whatami == WhatAmI::Client {
+    if mode.current() && face.state.whatami == WhatAmI::Client {
         let interest_id = Some(id);
         if let Some(res) = res.as_ref() {
             if aggregate {
                 if hat!(tables).linkstatepeer_subs.iter().any(|sub| {
                     sub.context.is_some()
                         && sub.matches(res)
-                        && (remote_simple_subs(sub, face) || remote_linkstatepeer_subs(tables, sub))
+                        && (remote_simple_subs(sub, &face.state.clone())
+                            || remote_linkstatepeer_subs(tables, sub))
                 }) {
-                    let id = make_sub_id(res, face, mode);
-                    let wire_expr = Resource::decl_key(res, face, push_declaration_profile(face));
+                    let id = make_sub_id(res, &mut face.state.clone(), mode);
+                    let wire_expr =
+                        Resource::decl_key(res, face, push_declaration_profile(&face.state));
                     send_declare(
-                        &face.primitives,
-                        RoutingContext::with_expr(
+                        face,
+                        Declare {
+                            interest_id,
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                id,
+                                wire_expr,
+                            }),
+                        },
+                        Some(res.deref().clone()),
+                    );
+                }
+            } else {
+                for sub in &hat!(tables).linkstatepeer_subs {
+                    if sub.context.is_some()
+                        && sub.matches(res)
+                        && (remote_simple_subs(sub, &face.state)
+                            || remote_linkstatepeer_subs(tables, sub))
+                    {
+                        let id = make_sub_id(sub, &mut face.state.clone(), mode);
+                        let wire_expr =
+                            Resource::decl_key(sub, face, push_declaration_profile(&face.state));
+                        send_declare(
+                            face,
                             Declare {
                                 interest_id,
                                 ext_qos: ext::QoSType::DECLARE,
@@ -721,34 +750,7 @@ pub(super) fn declare_sub_interest(
                                     wire_expr,
                                 }),
                             },
-                            res.expr().to_string(),
-                        ),
-                    );
-                }
-            } else {
-                for sub in &hat!(tables).linkstatepeer_subs {
-                    if sub.context.is_some()
-                        && sub.matches(res)
-                        && (remote_simple_subs(sub, face) || remote_linkstatepeer_subs(tables, sub))
-                    {
-                        let id = make_sub_id(sub, face, mode);
-                        let wire_expr =
-                            Resource::decl_key(sub, face, push_declaration_profile(face));
-                        send_declare(
-                            &face.primitives,
-                            RoutingContext::with_expr(
-                                Declare {
-                                    interest_id,
-                                    ext_qos: ext::QoSType::DECLARE,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                        id,
-                                        wire_expr,
-                                    }),
-                                },
-                                sub.expr().to_string(),
-                            ),
+                            Some(sub.clone()),
                         );
                     }
                 }
@@ -756,25 +758,25 @@ pub(super) fn declare_sub_interest(
         } else {
             for sub in &hat!(tables).linkstatepeer_subs {
                 if sub.context.is_some()
-                    && (remote_simple_subs(sub, face) || remote_linkstatepeer_subs(tables, sub))
+                    && (remote_simple_subs(sub, &face.state)
+                        || remote_linkstatepeer_subs(tables, sub))
                 {
-                    let id = make_sub_id(sub, face, mode);
-                    let wire_expr = Resource::decl_key(sub, face, push_declaration_profile(face));
+                    let id = make_sub_id(sub, &mut face.state.clone(), mode);
+                    let wire_expr =
+                        Resource::decl_key(sub, face, push_declaration_profile(&face.state));
                     send_declare(
-                        &face.primitives,
-                        RoutingContext::with_expr(
-                            Declare {
-                                interest_id,
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                    id,
-                                    wire_expr,
-                                }),
-                            },
-                            sub.expr().to_string(),
-                        ),
+                        face,
+                        Declare {
+                            interest_id,
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                id,
+                                wire_expr,
+                            }),
+                        },
+                        Some(sub.clone()),
                     );
                 }
             }
@@ -786,16 +788,23 @@ impl HatPubSubTrait for HatCode {
     fn declare_subscription(
         &self,
         tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+        face: &Face,
         id: SubscriberId,
         res: &mut Arc<Resource>,
         sub_info: &SubscriberInfo,
         node_id: NodeId,
         send_declare: &mut SendDeclare,
     ) {
-        if face.whatami != WhatAmI::Client {
-            if let Some(peer) = get_peer(tables, face, node_id) {
-                declare_linkstatepeer_subscription(tables, face, res, sub_info, peer, send_declare)
+        if face.state.whatami != WhatAmI::Client {
+            if let Some(peer) = get_peer(tables, &face.state, node_id) {
+                declare_linkstatepeer_subscription(
+                    tables,
+                    &mut face.state.clone(),
+                    res,
+                    sub_info,
+                    peer,
+                    send_declare,
+                )
             }
         } else {
             declare_simple_subscription(tables, face, id, res, sub_info, send_declare)
@@ -844,8 +853,8 @@ impl HatPubSubTrait for HatCode {
                             .session_ctxs
                             .values()
                             .filter_map(|f| {
-                                (f.face.whatami == WhatAmI::Client && f.subs.is_some())
-                                    .then_some(f.face.zid)
+                                (f.face.state.whatami == WhatAmI::Client && f.subs.is_some())
+                                    .then_some(f.face.state.zid)
                             })
                             .collect(),
                     },
@@ -857,14 +866,14 @@ impl HatPubSubTrait for HatCode {
     fn get_publications(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
         let mut result = HashMap::new();
         for face in tables.faces.values() {
-            for interest in face_hat!(face).remote_interests.values() {
+            for interest in face_hat!(face.state).remote_interests.values() {
                 if interest.options.subscribers() {
                     if let Some(res) = interest.res.as_ref() {
                         let sources = result.entry(res.clone()).or_insert_with(Sources::default);
-                        match face.whatami {
-                            WhatAmI::Router => sources.routers.push(face.zid),
-                            WhatAmI::Peer => sources.peers.push(face.zid),
-                            WhatAmI::Client => sources.clients.push(face.zid),
+                        match face.state.whatami {
+                            WhatAmI::Router => sources.routers.push(face.state.zid),
+                            WhatAmI::Peer => sources.peers.push(face.state.zid),
+                            WhatAmI::Client => sources.clients.push(face.state.zid),
                         }
                     }
                 }
@@ -898,11 +907,11 @@ impl HatPubSubTrait for HatCode {
                             {
                                 if net.graph.contains_node(direction) {
                                     if let Some(face) = tables.get_face(&net.graph[direction].zid) {
-                                        route.entry(face.id).or_insert_with(|| {
+                                        route.entry(face.state.id).or_insert_with(|| {
                                             let key_expr = Resource::get_best_key(
                                                 expr.prefix,
                                                 expr.suffix,
-                                                face.id,
+                                                face.state.id,
                                             );
                                             (face.clone(), key_expr.to_owned(), source)
                                         });
@@ -961,7 +970,8 @@ impl HatPubSubTrait for HatCode {
 
             for (sid, context) in &mres.session_ctxs {
                 if context.subs.is_some()
-                    && (source_type == WhatAmI::Client || context.face.whatami == WhatAmI::Client)
+                    && (source_type == WhatAmI::Client
+                        || context.face.state.whatami == WhatAmI::Client)
                 {
                     route.entry(*sid).or_insert_with(|| {
                         let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
@@ -972,7 +982,7 @@ impl HatPubSubTrait for HatCode {
         }
         for mcast_group in &tables.mcast_groups {
             route.insert(
-                mcast_group.id,
+                mcast_group.state.id,
                 (
                     mcast_group.clone(),
                     expr.full_expr().to_string().into(),
@@ -1004,7 +1014,9 @@ impl HatPubSubTrait for HatCode {
                             if let Some(direction) = net.trees[source].directions[sub_idx.index()] {
                                 if net.graph.contains_node(direction) {
                                     if let Some(face) = tables.get_face(&net.graph[direction].zid) {
-                                        route.entry(face.id).or_insert_with(|| face.clone());
+                                        route
+                                            .entry(face.state.id)
+                                            .or_insert_with(|| face.state.clone());
                                     }
                                 }
                             }
@@ -1045,7 +1057,7 @@ impl HatPubSubTrait for HatCode {
                 if context.subs.is_some() {
                     matching_subscriptions
                         .entry(*sid)
-                        .or_insert_with(|| context.face.clone());
+                        .or_insert_with(|| context.face.state.clone());
                 }
             }
         }

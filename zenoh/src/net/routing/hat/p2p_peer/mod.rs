@@ -59,12 +59,9 @@ use super::{
 use crate::net::{
     codec::Zenoh080Routing,
     protocol::linkstate::LinkStateList,
-    routing::{
-        dispatcher::{
-            face::{Face, InterestState},
-            interests::RemoteInterest,
-        },
-        RoutingContext,
+    routing::dispatcher::{
+        face::{Face, InterestState},
+        interests::RemoteInterest,
     },
     runtime::Runtime,
 };
@@ -166,10 +163,10 @@ impl HatBaseTrait for HatCode {
         face: &mut Face,
         send_declare: &mut SendDeclare,
     ) -> ZResult<()> {
-        interests_new_face(tables, &mut face.state);
-        pubsub_new_face(tables, &mut face.state, send_declare);
-        queries_new_face(tables, &mut face.state, send_declare);
-        token_new_face(tables, &mut face.state, send_declare);
+        interests_new_face(tables, face);
+        pubsub_new_face(tables, face, send_declare);
+        queries_new_face(tables, face, send_declare);
+        token_new_face(tables, face, send_declare);
         tables.disable_all_routes();
         Ok(())
     }
@@ -198,22 +195,23 @@ impl HatBaseTrait for HatCode {
             );
         }
 
-        interests_new_face(tables, &mut face.state);
-        pubsub_new_face(tables, &mut face.state, send_declare);
-        queries_new_face(tables, &mut face.state, send_declare);
-        token_new_face(tables, &mut face.state, send_declare);
+        interests_new_face(tables, face);
+        pubsub_new_face(tables, face, send_declare);
+        queries_new_face(tables, face, send_declare);
+        token_new_face(tables, face, send_declare);
         tables.disable_all_routes();
 
         if face.state.whatami == WhatAmI::Peer {
             send_declare(
-                &face.state.primitives,
-                RoutingContext::new(Declare {
+                face,
+                Declare {
                     interest_id: Some(0),
                     ext_qos: QoSType::default(),
                     ext_tstamp: None,
                     ext_nodeid: NodeIdType::default(),
                     body: DeclareBody::DeclareFinal(DeclareFinal),
-                }),
+                },
+                None,
             );
         }
         Ok(())

@@ -24,7 +24,7 @@ use zenoh_protocol::{
 };
 
 use super::{
-    face::FaceState,
+    face::{Face, FaceState},
     tables::{NodeId, TablesLock},
 };
 use crate::net::routing::{
@@ -36,7 +36,7 @@ use crate::net::routing::{
 pub(crate) fn declare_token(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
-    face: &mut Arc<FaceState>,
+    face: &Face,
     id: TokenId,
     expr: &WireExpr,
     node_id: NodeId,
@@ -45,7 +45,7 @@ pub(crate) fn declare_token(
 ) {
     let rtables = zread!(tables.tables);
     match rtables
-        .get_mapping(face, &expr.scope, expr.mapping)
+        .get_mapping(&face.state, expr.scope, expr.mapping)
         .cloned()
     {
         Some(mut prefix) => {
@@ -111,7 +111,7 @@ pub(crate) fn undeclare_token(
     } else {
         let rtables = zread!(tables.tables);
         match rtables
-            .get_mapping(face, &expr.wire_expr.scope, expr.wire_expr.mapping)
+            .get_mapping(face, expr.wire_expr.scope, expr.wire_expr.mapping)
             .cloned()
         {
             Some(mut prefix) => {

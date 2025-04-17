@@ -87,6 +87,16 @@ impl<Msg> RoutingContext<Msg> {
         }
     }
 
+    pub(crate) fn with_prefix(msg: Msg, prefix: Arc<Resource>) -> Self {
+        Self {
+            msg,
+            inface: OnceCell::new(),
+            outface: OnceCell::new(),
+            prefix: OnceCell::from(prefix),
+            full_expr: OnceCell::new(),
+        }
+    }
+
     #[allow(dead_code)]
     pub(crate) fn inface(&self) -> Option<&Face> {
         self.inface.get()
@@ -95,16 +105,6 @@ impl<Msg> RoutingContext<Msg> {
     #[allow(dead_code)]
     pub(crate) fn outface(&self) -> Option<&Face> {
         self.outface.get()
-    }
-
-    pub(crate) fn with_mut<R>(mut self, f: impl FnOnce(RoutingContext<&mut Msg>) -> R) -> R {
-        f(RoutingContext {
-            msg: &mut self.msg,
-            inface: self.inface,
-            outface: self.outface,
-            prefix: self.prefix,
-            full_expr: self.full_expr,
-        })
     }
 }
 
@@ -121,7 +121,7 @@ impl RoutingContext<NetworkMessageMut<'_>> {
                 let wire_expr = wire_expr.to_owned();
                 if self.prefix.get().is_none() {
                     if let Some(prefix) = zread!(face.tables.tables)
-                        .get_sent_mapping(&face.state, &wire_expr.scope, wire_expr.mapping)
+                        .get_sent_mapping(&face.state, wire_expr.scope, wire_expr.mapping)
                         .cloned()
                     {
                         let _ = self.prefix.set(prefix);
@@ -135,7 +135,7 @@ impl RoutingContext<NetworkMessageMut<'_>> {
                 let wire_expr = wire_expr.to_owned();
                 if self.prefix.get().is_none() {
                     if let Some(prefix) = zread!(face.tables.tables)
-                        .get_mapping(&face.state, &wire_expr.scope, wire_expr.mapping)
+                        .get_mapping(&face.state, wire_expr.scope, wire_expr.mapping)
                         .cloned()
                     {
                         let _ = self.prefix.set(prefix);
@@ -152,12 +152,22 @@ impl RoutingContext<NetworkMessageMut<'_>> {
         if self.full_expr.get().is_some() {
             return Some(self.full_expr.get().as_ref().unwrap());
         }
+
+        if let Some(prefix) = self.prefix.get() {
+            let _ = self
+                .full_expr
+                .set(prefix.expr().to_string() + self.wire_expr().unwrap().suffix.as_ref());
+            return Some(self.full_expr.get().as_ref().unwrap());
+        }
+
+        // FIXME(fuzzypixelz): this should likely be removed, alongside outface and inface and prefix()
         if let Some(prefix) = self.prefix() {
             let _ = self
                 .full_expr
                 .set(prefix.expr().to_string() + self.wire_expr().unwrap().suffix.as_ref());
             return Some(self.full_expr.get().as_ref().unwrap());
         }
+
         None
     }
 
