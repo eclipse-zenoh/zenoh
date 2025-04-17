@@ -346,32 +346,30 @@ impl Face {
 impl Primitives for Face {
     fn send_interest(&self, msg: &mut zenoh_protocol::network::Interest) {
         if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Ingress) {
-            let prefix = {
-                let tables = self
-                    .tables
-                    .tables
-                    .read()
-                    .expect("reading Tables should not fail");
+            let tables = self
+                .tables
+                .tables
+                .read()
+                .expect("reading Tables should not fail");
 
-                match &msg.wire_expr {
-                    Some(we) => {
-                        match tables
-                            .get_mapping(&self.state, we.scope, we.mapping)
-                            .cloned()
-                        {
-                            Some(prefix) => Some(prefix),
-                            None => {
-                                tracing::error!(
-                                    "Received WireExpr with unknown scope {} from {}",
-                                    we.scope,
-                                    self,
-                                );
-                                return;
-                            }
+            let prefix = match &msg.wire_expr {
+                Some(we) => {
+                    match tables
+                        .get_mapping(&self.state, we.scope, we.mapping)
+                        .cloned()
+                    {
+                        Some(prefix) => Some(prefix),
+                        None => {
+                            tracing::error!(
+                                "Received WireExpr with unknown scope {} from {}",
+                                we.scope,
+                                self,
+                            );
+                            return;
                         }
                     }
-                    None => None,
                 }
+                None => None,
             };
 
             let interest_id = msg.id;
@@ -434,32 +432,30 @@ impl Primitives for Face {
 
     fn send_declare(&self, msg: &mut zenoh_protocol::network::Declare) {
         if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Ingress) {
-            let prefix = {
-                let tables = self
-                    .tables
-                    .tables
-                    .read()
-                    .expect("reading Tables should not fail");
+            let tables = self
+                .tables
+                .tables
+                .read()
+                .expect("reading Tables should not fail");
 
-                match msg.wire_expr() {
-                    Some(we) => {
-                        match tables
-                            .get_mapping(&self.state, we.scope, we.mapping)
-                            .cloned()
-                        {
-                            Some(prefix) => Some(prefix),
-                            None => {
-                                tracing::error!(
-                                    "Received WireExpr with unknown scope {} from {}",
-                                    we.scope,
-                                    self,
-                                );
-                                return;
-                            }
+            let prefix = match msg.wire_expr() {
+                Some(we) => {
+                    match tables
+                        .get_mapping(&self.state, we.scope, we.mapping)
+                        .cloned()
+                    {
+                        Some(prefix) => Some(prefix),
+                        None => {
+                            tracing::error!(
+                                "Received WireExpr with unknown scope {} from {}",
+                                we.scope,
+                                self,
+                            );
+                            return;
                         }
                     }
-                    None => None,
                 }
+                None => None,
             };
 
             let msg = NetworkMessageMut {
@@ -619,26 +615,24 @@ impl Primitives for Face {
     #[inline]
     fn send_push(&self, msg: &mut Push, reliability: Reliability) {
         if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Ingress) {
-            let prefix = {
-                let tables = self
-                    .tables
-                    .tables
-                    .read()
-                    .expect("reading Tables should not fail");
+            let tables = self
+                .tables
+                .tables
+                .read()
+                .expect("reading Tables should not fail");
 
-                match tables
-                    .get_mapping(&self.state, msg.wire_expr.scope, msg.wire_expr.mapping)
-                    .cloned()
-                {
-                    Some(prefix) => prefix,
-                    None => {
-                        tracing::error!(
-                            "Received WireExpr with unknown scope {} from {}",
-                            msg.wire_expr.scope,
-                            self,
-                        );
-                        return;
-                    }
+            let prefix = match tables
+                .get_mapping(&self.state, msg.wire_expr.scope, msg.wire_expr.mapping)
+                .cloned()
+            {
+                Some(prefix) => prefix,
+                None => {
+                    tracing::error!(
+                        "Received WireExpr with unknown scope {} from {}",
+                        msg.wire_expr.scope,
+                        self,
+                    );
+                    return;
                 }
             };
 
@@ -663,26 +657,24 @@ impl Primitives for Face {
 
     fn send_request(&self, msg: &mut Request) {
         if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Ingress) {
-            let prefix = {
-                let tables = self
-                    .tables
-                    .tables
-                    .read()
-                    .expect("reading Tables should not fail");
+            let tables = self
+                .tables
+                .tables
+                .read()
+                .expect("reading Tables should not fail");
 
-                match tables
-                    .get_mapping(&self.state, msg.wire_expr.scope, msg.wire_expr.mapping)
-                    .cloned()
-                {
-                    Some(prefix) => prefix,
-                    None => {
-                        tracing::error!(
-                            "Received WireExpr with unknown scope {} from {}",
-                            msg.wire_expr.scope,
-                            self,
-                        );
-                        return;
-                    }
+            let prefix = match tables
+                .get_mapping(&self.state, msg.wire_expr.scope, msg.wire_expr.mapping)
+                .cloned()
+            {
+                Some(prefix) => prefix,
+                None => {
+                    tracing::error!(
+                        "Received WireExpr with unknown scope {} from {}",
+                        msg.wire_expr.scope,
+                        self,
+                    );
+                    return;
                 }
             };
 
@@ -719,26 +711,24 @@ impl Primitives for Face {
 
     fn send_response(&self, msg: &mut Response) {
         if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Ingress) {
-            let prefix = {
-                let tables = self
-                    .tables
-                    .tables
-                    .read()
-                    .expect("reading Tables should not fail");
+            let tables = self
+                .tables
+                .tables
+                .read()
+                .expect("reading Tables should not fail");
 
-                match tables
-                    .get_mapping(&self.state, msg.wire_expr.scope, msg.wire_expr.mapping)
-                    .cloned()
-                {
-                    Some(prefix) => prefix,
-                    None => {
-                        tracing::error!(
-                            "Received WireExpr with unknown scope {} from {}",
-                            msg.wire_expr.scope,
-                            self,
-                        );
-                        return;
-                    }
+            let prefix = match tables
+                .get_mapping(&self.state, msg.wire_expr.scope, msg.wire_expr.mapping)
+                .cloned()
+            {
+                Some(prefix) => prefix,
+                None => {
+                    tracing::error!(
+                        "Received WireExpr with unknown scope {} from {}",
+                        msg.wire_expr.scope,
+                        self,
+                    );
+                    return;
                 }
             };
 
@@ -872,13 +862,29 @@ impl Face {
             ));
     }
 
-    pub(crate) fn intercept_push(
-        &self,
-        msg: &mut Push,
-        reliability: Reliability,
-        prefix: Arc<Resource>,
-    ) {
+    pub(crate) fn intercept_push(&self, msg: &mut Push, reliability: Reliability) {
         if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Egress) {
+            let tables = self
+                .tables
+                .tables
+                .read()
+                .expect("reading Tables should not fail");
+
+            let prefix = match tables
+                .get_sent_mapping(&self.state, msg.wire_expr.scope, msg.wire_expr.mapping)
+                .cloned()
+            {
+                Some(prefix) => prefix,
+                None => {
+                    tracing::error!(
+                        "Got WireExpr with unknown scope {} from {}",
+                        msg.wire_expr.scope,
+                        self,
+                    );
+                    return;
+                }
+            };
+
             let ctx = &mut RoutingContext::with_prefix(
                 NetworkMessageMut {
                     body: NetworkBodyMut::Push(msg),
@@ -898,8 +904,79 @@ impl Face {
         self.egress_primitives().send_push(msg, reliability);
     }
 
-    pub(crate) fn intercept_response(&self, msg: &mut Response, prefix: Arc<Resource>) {
+    pub(crate) fn intercept_request(&self, msg: &mut Request) {
         if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Egress) {
+            let tables = self
+                .tables
+                .tables
+                .read()
+                .expect("reading Tables should not fail");
+
+            let prefix = match tables
+                .get_sent_mapping(&self.state, msg.wire_expr.scope, msg.wire_expr.mapping)
+                .cloned()
+            {
+                Some(prefix) => prefix,
+                None => {
+                    tracing::error!(
+                        "Got WireExpr with unknown scope {} from {}",
+                        msg.wire_expr.scope,
+                        self,
+                    );
+                    return;
+                }
+            };
+
+            let ctx = &mut RoutingContext::with_prefix(
+                NetworkMessageMut {
+                    body: NetworkBodyMut::Request(msg),
+                    reliability: Reliability::Reliable, // NOTE: Request is always reliable
+                },
+                prefix,
+            );
+
+            if !self
+                .state
+                .exec_interceptors(InterceptorFlow::Egress, &iceptor, ctx)
+            {
+                // NOTE: this request was blocked by an egress interceptor, we need to send
+                // ResponseFinal to avoid timeout error.
+                self.ingress_primitives()
+                    .send_response_final(&mut ResponseFinal {
+                        rid: msg.id,
+                        ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+                        ext_tstamp: None,
+                    });
+                return;
+            }
+        }
+
+        self.egress_primitives().send_request(msg);
+    }
+
+    pub(crate) fn intercept_response(&self, msg: &mut Response) {
+        if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Egress) {
+            let tables = self
+                .tables
+                .tables
+                .read()
+                .expect("reading Tables should not fail");
+
+            let prefix = match tables
+                .get_sent_mapping(&self.state, msg.wire_expr.scope, msg.wire_expr.mapping)
+                .cloned()
+            {
+                Some(prefix) => prefix,
+                None => {
+                    tracing::error!(
+                        "Got WireExpr with unknown scope {} from {}",
+                        msg.wire_expr.scope,
+                        self,
+                    );
+                    return;
+                }
+            };
+
             let ctx = &mut RoutingContext::with_prefix(
                 NetworkMessageMut {
                     body: NetworkBodyMut::Response(msg),
@@ -936,34 +1013,5 @@ impl Face {
         }
 
         self.egress_primitives().send_response_final(msg);
-    }
-
-    pub(crate) fn intercept_request(&self, msg: &mut Request, prefix: Arc<Resource>) {
-        if let Some(iceptor) = self.state.load_interceptors(InterceptorFlow::Egress) {
-            let ctx = &mut RoutingContext::with_prefix(
-                NetworkMessageMut {
-                    body: NetworkBodyMut::Request(msg),
-                    reliability: Reliability::Reliable, // NOTE: Request is always reliable
-                },
-                prefix,
-            );
-
-            if !self
-                .state
-                .exec_interceptors(InterceptorFlow::Egress, &iceptor, ctx)
-            {
-                // NOTE: this request was blocked by an egress interceptor, we need to send
-                // ResponseFinal to avoid timeout error.
-                self.ingress_primitives()
-                    .send_response_final(&mut ResponseFinal {
-                        rid: msg.id,
-                        ext_qos: response::ext::QoSType::RESPONSE_FINAL,
-                        ext_tstamp: None,
-                    });
-                return;
-            }
-        }
-
-        self.egress_primitives().send_request(msg);
     }
 }

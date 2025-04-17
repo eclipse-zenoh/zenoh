@@ -332,31 +332,7 @@ pub fn route_data(
                             msg.wire_expr = key_expr.into();
                             msg.ext_nodeid = ext::NodeIdType { node_id: *context };
 
-                            let prefix = {
-                                let tables = tables_ref
-                                    .tables
-                                    .read()
-                                    .expect("reading Tables should not fail");
-                                match tables
-                                    .get_sent_mapping(
-                                        &outface.state,
-                                        msg.wire_expr.scope,
-                                        msg.wire_expr.mapping,
-                                    )
-                                    .cloned()
-                                {
-                                    Some(prefix) => prefix,
-                                    None => {
-                                        tracing::error!(
-                                            "Got WireExpr with unknown scope {} from {} (A)",
-                                            msg.wire_expr.scope,
-                                            face,
-                                        );
-                                        return;
-                                    }
-                                }
-                            };
-                            outface.intercept_push(msg, reliability, prefix)
+                            outface.intercept_push(msg, reliability);
                         }
                     } else {
                         let route = route
@@ -389,32 +365,7 @@ pub fn route_data(
                                 payload: msg.payload.clone(),
                             };
 
-                            let prefix = {
-                                let tables = tables_ref
-                                    .tables
-                                    .read()
-                                    .expect("reading Tables should not fail");
-
-                                match tables
-                                    .get_sent_mapping(
-                                        &outface.state,
-                                        msg.wire_expr.scope,
-                                        msg.wire_expr.mapping,
-                                    )
-                                    .cloned()
-                                {
-                                    Some(prefix) => prefix,
-                                    None => {
-                                        tracing::error!(
-                                            "Got WireExpr with unknown scope {} from {} (B)",
-                                            msg.wire_expr.scope,
-                                            face,
-                                        );
-                                        return;
-                                    }
-                                }
-                            };
-                            outface.intercept_push(msg, reliability, prefix)
+                            outface.intercept_push(msg, reliability)
                         }
                     }
                 }

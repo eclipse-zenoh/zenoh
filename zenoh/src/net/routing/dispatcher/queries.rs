@@ -549,31 +549,7 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Face, msg: &mut Request)
                             payload: msg.payload.clone(),
                         };
 
-                        let prefix = {
-                            let tables = tables_ref
-                                .tables
-                                .read()
-                                .expect("reading Tables should not fail");
-                            match tables
-                                .get_sent_mapping(
-                                    &outface.state,
-                                    msg.wire_expr.scope,
-                                    msg.wire_expr.mapping,
-                                )
-                                .cloned()
-                            {
-                                Some(prefix) => prefix,
-                                None => {
-                                    tracing::error!(
-                                        "Got WireExpr with unknown scope {} from {}",
-                                        msg.wire_expr.scope,
-                                        face,
-                                    );
-                                    return;
-                                }
-                            }
-                        };
-                        outface.intercept_request(msg, prefix);
+                        outface.intercept_request(msg);
                     }
                 }
             } else {
@@ -640,31 +616,7 @@ pub(crate) fn route_send_response(
 
             msg.rid = query.src_qid;
 
-            let prefix = {
-                let tables = tables_ref
-                    .tables
-                    .read()
-                    .expect("reading Tables should not fail");
-                match tables
-                    .get_sent_mapping(
-                        &query.src_face.state,
-                        msg.wire_expr.scope,
-                        msg.wire_expr.mapping,
-                    )
-                    .cloned()
-                {
-                    Some(prefix) => prefix,
-                    None => {
-                        tracing::error!(
-                            "Got WireExpr with unknown scope {} from {}",
-                            msg.wire_expr.scope,
-                            face,
-                        );
-                        return;
-                    }
-                }
-            };
-            query.src_face.intercept_response(msg, prefix);
+            query.src_face.intercept_response(msg);
         }
         None => tracing::warn!("{}:{} Route reply: Query not found!", face, msg.rid),
     }
