@@ -49,10 +49,9 @@ pub(crate) type NodeId = u16;
 pub(crate) type Direction = (Face, WireExpr<'static>, NodeId);
 pub(crate) type Route = HashMap<usize, Direction>;
 
-pub(crate) type QueryDirection = (Face, WireExpr<'static>, NodeId);
-pub(crate) type QueryRoute = HashMap<usize, (QueryDirection, RequestId)>;
+pub(crate) type QueryRoute = HashMap<usize, (Direction, RequestId)>;
 pub(crate) struct QueryTargetQabl {
-    pub(crate) direction: QueryDirection,
+    pub(crate) direction: Direction,
     pub(crate) info: Option<QueryableInfoType>,
 }
 pub(crate) type QueryTargetQablSet = Vec<QueryTargetQabl>;
