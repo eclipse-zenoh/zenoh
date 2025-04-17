@@ -801,16 +801,15 @@ impl Network {
             };
 
             let link_weight = self.get_default_link_weight_to(idx);
-            if self.full_linkstate {
-                if self.graph[idx]
+            if self.full_linkstate
+                && self.graph[idx]
                     .links
                     .iter()
                     .any(|l| l.dest == self.graph[self.idx].zid)
-                {
-                    self.update_edge(self.idx, idx, link_weight);
-                    // we do not update self.graph[idx].links here but wait till we receive a link state from idx
-                    tracing::trace!("Update edge (link) {} {}", self.graph[self.idx].zid, zid);
-                }
+            {
+                self.update_edge(self.idx, idx, link_weight);
+                // we do not update self.graph[idx].links here but wait till we receive a link state from idx
+                tracing::trace!("Update edge (link) {} {}", self.graph[self.idx].zid, zid);
             }
             self.graph[self.idx].links.push(LinkEdge {
                 dest: zid,
