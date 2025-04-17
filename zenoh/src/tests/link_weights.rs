@@ -234,7 +234,7 @@ async fn test_link_weights_inner(
 
     let sub = ztimeout!(session_b.declare_subscriber("test/link_weights")).unwrap();
 
-    tokio::time::sleep(10 * SLEEP).await;
+    tokio::time::sleep(3 * SLEEP).await;
     ztimeout!(session_a.put("test/link_weights", "a")).unwrap();
 
     let msg = ztimeout!(sub.recv_async()).unwrap();

@@ -11,7 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{collections::HashMap, convert::TryInto};
+use std::{
+    collections::{HashMap, HashSet},
+    convert::TryInto,
+};
 
 use itertools::Itertools;
 use petgraph::{
@@ -356,28 +359,14 @@ impl Network {
                 }))
     }
 
-    fn get_link_weight(&self, idx1: NodeIndex, idx2: NodeIndex) -> LinkEdgeWeight {
-        if idx1 == self.idx {
-            self.link_weights
-                .get(&self.graph[idx2].zid)
-                .copied()
-                .unwrap_or_default()
-        } else if idx2 == self.idx {
-            self.link_weights
-                .get(&self.graph[idx1].zid)
-                .copied()
-                .unwrap_or_default()
-        } else {
-            LinkEdgeWeight::default()
-        }
+    fn get_default_link_weight_to(&self, idx: NodeIndex) -> LinkEdgeWeight {
+        self.link_weights
+            .get(&self.graph[idx].zid)
+            .copied()
+            .unwrap_or_default()
     }
 
-    fn update_edge(
-        &mut self,
-        idx1: NodeIndex,
-        idx2: NodeIndex,
-        weight: LinkEdgeWeight,
-    ) -> LinkEdgeWeight {
+    fn update_edge(&mut self, idx1: NodeIndex, idx2: NodeIndex, weight: LinkEdgeWeight) {
         use std::hash::Hasher;
         let mut hasher = std::collections::hash_map::DefaultHasher::default();
         if self.graph[idx1].zid > self.graph[idx2].zid {
@@ -387,17 +376,9 @@ impl Network {
             hasher.write(&self.graph[idx1].zid.to_le_bytes());
             hasher.write(&self.graph[idx2].zid.to_le_bytes());
         }
-        let w = match weight.is_set() {
-            true => {
-                // TODO: resolve conflict between received weight and the configured one if both are set.
-                weight
-            }
-            false => self.get_link_weight(idx1, idx2),
-        };
-        let weight =
-            w.value() as f64 * (1.0 + 0.01 * (((hasher.finish() as u32) as f64) / u32::MAX as f64));
+        let weight = weight.value() as f64
+            * (1.0 + 0.01 * (((hasher.finish() as u32) as f64) / u32::MAX as f64));
         self.graph.update_edge(idx1, idx2, weight);
-        w
     }
 
     // Converts psid to zid based on src
@@ -583,7 +564,7 @@ impl Network {
         &self,
         src: ZenohIdProto,
         new_nodes: Vec<NodeIndex>,
-        updated_nodes: Vec<NodeIndex>,
+        updated_nodes: HashSet<NodeIndex>,
     ) {
         // Propagate link states
         // Note: we need to send all states at once for each face
@@ -633,12 +614,13 @@ impl Network {
 
         let link_states = self.convert_to_local_link_states(link_states, src);
 
-        // tracing::trace!(
-        //     "{} Received from {} mapped: {:?}",
-        //     self.name,
-        //     src,
-        //     link_states
-        // );
+        tracing::info!(
+            "{} Received on {} from {} mapped: {:?}",
+            self.name,
+            self.graph[self.idx].zid,
+            src,
+            link_states
+        );
         for link_state in &link_states {
             tracing::trace!(
                 "{} Received from {} mapped: {:?}",
@@ -653,7 +635,7 @@ impl Network {
         }
 
         let mut new_nodes = vec![];
-        let mut updated_nodes = vec![];
+        let mut updated_nodes = HashSet::new();
         // Add nodes to graph & filter out up to date states
         for ls in link_states {
             let idx1 = match self.get_idx(&ls.zid) {
@@ -669,7 +651,7 @@ impl Network {
                         if oldsn == 0 {
                             new_nodes.push(idx);
                         } else {
-                            updated_nodes.push(idx);
+                            updated_nodes.insert(idx);
                         }
                         idx
                     } else {
@@ -699,26 +681,31 @@ impl Network {
                         .iter()
                         .position(|l| l.dest == self.graph[idx1].zid)
                     {
-                        let prev_weight = self.graph[idx2].links[l].weight;
-                        let new_weight = self.update_edge(idx1, idx2, link.weight);
+                        // it is possbile that we got a weight update for ourselves
+                        // TODO: resolve conflict if the weight we stored is different from the one we received
+                        if link.weight.is_set()
+                            && self.idx == idx2
+                            && !self.link_weights.contains_key(&self.graph[idx1].zid)
+                            && self.graph[idx2].links[l].weight != link.weight
+                        {
+                            self.graph[self.idx].sn += 1;
+                            self.graph[self.idx].links[l].weight = link.weight;
+                            updated_nodes.insert(self.idx);
+                            tracing::info!(
+                                "Internal sn update {} : {}",
+                                self.graph[self.idx].zid,
+                                self.graph[self.idx].sn
+                            );
+                        }
+
+                        self.update_edge(idx1, idx2, link.weight);
+                        // we do not really care about the link.weight value here, since if it is wrong (i.e. outdated), we will receive a fix with higher sn
                         tracing::trace!(
                             "{} Update edge (state) {} {}",
                             self.name,
                             self.graph[idx1].zid,
                             self.graph[idx2].zid
                         );
-                        self.graph[idx2].links[l].weight = new_weight;
-                        let zid2 = self.graph[idx2].zid;
-                        match self.graph[idx1].links.iter_mut().find(|l| l.dest == zid2) {
-                            Some(l) => l.weight = new_weight,
-                            None => self.graph[idx1].links.push(LinkEdge {
-                                dest: zid2,
-                                weight: new_weight,
-                            }),
-                        };
-                        if prev_weight != new_weight {
-                            updated_nodes.push(idx2);
-                        }
                     }
                 } else {
                     let node = Node {
@@ -813,14 +800,15 @@ impl Network {
                 }
             };
 
-            let link_weight = self.get_link_weight(idx, self.idx);
+            let link_weight = self.get_default_link_weight_to(idx);
             if self.full_linkstate {
-                if let Some(p) = self.graph[idx]
+                if self.graph[idx]
                     .links
                     .iter()
-                    .position(|l| l.dest == self.graph[self.idx].zid)
+                    .any(|l| l.dest == self.graph[self.idx].zid)
                 {
-                    self.graph[idx].links[p].weight = self.update_edge(self.idx, idx, link_weight);
+                    self.update_edge(self.idx, idx, link_weight);
+                    // we do not update self.graph[idx].links here but wait till we receive a link state from idx
                     tracing::trace!("Update edge (link) {} {}", self.graph[self.idx].zid, zid);
                 }
             }
