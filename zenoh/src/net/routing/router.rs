@@ -174,7 +174,7 @@ impl Router {
         let mut tables = zwrite!(self.tables.tables);
         let fid = tables.face_counter;
         tables.face_counter += 1;
-        let mux = Arc::new(McastMux::new(transport.clone(), InterceptorsChain::empty()));
+        let mux = Arc::new(McastMux::new(transport.clone()));
         let face = FaceState::new(
             fid,
             ZenohIdProto::from_str("1").unwrap(),

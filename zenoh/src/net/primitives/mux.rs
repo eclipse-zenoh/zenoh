@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use arc_swap::ArcSwap;
 use zenoh_protocol::{
     core::Reliability,
     network::{
@@ -23,7 +22,7 @@ use zenoh_protocol::{
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 use super::EPrimitives;
-use crate::net::routing::{interceptor::InterceptorsChain, RoutingContext};
+use crate::net::routing::RoutingContext;
 
 pub struct Mux {
     pub handler: TransportUnicast,
@@ -93,15 +92,11 @@ impl EPrimitives for Mux {
 
 pub struct McastMux {
     pub handler: TransportMulticast,
-    pub(crate) interceptor: ArcSwap<InterceptorsChain>,
 }
 
 impl McastMux {
-    pub(crate) fn new(handler: TransportMulticast, interceptor: InterceptorsChain) -> McastMux {
-        McastMux {
-            handler,
-            interceptor: ArcSwap::new(interceptor.into()),
-        }
+    pub(crate) fn new(handler: TransportMulticast) -> McastMux {
+        McastMux { handler }
     }
 }
 

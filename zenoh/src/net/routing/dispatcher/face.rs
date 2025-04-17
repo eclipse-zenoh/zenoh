@@ -216,25 +216,6 @@ impl FaceState {
                 .e_interceptor_cache = InterceptorCache::new(cache, iceptor.version);
             }
         }
-
-        if let Some(iceptor) = self
-            .primitives
-            .as_any()
-            .downcast_ref::<McastMux>()
-            .map(|mux| mux.interceptor.load())
-            .and_then(|is| is.is_empty().not().then_some(is))
-        {
-            if let Some(expr) = res.keyexpr() {
-                let cache = iceptor.compute_keyexpr_cache(expr);
-                get_mut_unchecked(
-                    get_mut_unchecked(res)
-                        .session_ctxs
-                        .get_mut(&self.id)
-                        .unwrap(),
-                )
-                .e_interceptor_cache = InterceptorCache::new(cache, iceptor.version);
-            }
-        }
     }
 
     pub(crate) fn set_interceptors_from_factories(
@@ -267,7 +248,10 @@ impl FaceState {
                     .collect::<Vec<EgressInterceptor>>(),
                 version,
             );
-            mux.interceptor.store(Arc::new(interceptor));
+            self.eg_interceptors
+                .as_ref()
+                .expect("face eg_interceptors should not be None when primitives are DeMux")
+                .store(Arc::new(interceptor));
             debug_assert!(self.in_interceptors.is_none());
         } else if let Some(transport) = &self.mcast_group {
             let interceptor = InterceptorsChain::new(
