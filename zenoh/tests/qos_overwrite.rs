@@ -427,3 +427,42 @@ async fn test_qos_overwrite_link_protocols() {
     ]"#;
     test_qos_overwrite_pub_sub_impl(27603, value).await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_qos_overwrite_zids() {
+    zenoh::init_log_from_env_or("error");
+    let port = 27604;
+    let mut config_router = get_basic_router_config(port).await;
+    let config_client1 = get_basic_client_config(port).await;
+    let config_client2 = get_basic_client_config(port).await;
+    let qos_network = format!(
+        r#"[
+            {{
+                zids: ["{}"],
+                messages: ["put"],
+                key_exprs: ["**"],
+                overwrite: {{
+                    priority: "real_time",
+                }},
+                flows: ["egress"]
+            }}
+        ]"#,
+        config_client2.id()
+    );
+    config_router
+        .insert_json5("qos/network", &qos_network)
+        .unwrap();
+
+    let _router = ztimeout!(zenoh::open(config_router)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+    let session1 = ztimeout!(zenoh::open(config_client1)).unwrap();
+    let session2 = ztimeout!(zenoh::open(config_client2)).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let subscriber = session2.declare_subscriber("a/**").await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    session1.put("a/test", "payload").await.unwrap();
+    let msg = subscriber.recv_async().await.unwrap();
+    assert_eq!(msg.priority(), Priority::RealTime);
+}

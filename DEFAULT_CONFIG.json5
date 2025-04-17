@@ -259,6 +259,8 @@
   //      {
   //        /// Optional Id, has to be unique.
   //        id: "lo0_en0_qos_overwrite",
+  //        // Optional list of ZIDs on which qos will be overwritten when communicating with.
+  //        // zids: ["38a4829bce9166ee"],
   //        // Optional list of interfaces, if not specified, will be applied to all interfaces.
   //        interfaces: [
   //          "lo0",
