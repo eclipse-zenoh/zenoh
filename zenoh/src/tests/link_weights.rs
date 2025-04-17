@@ -222,7 +222,6 @@ async fn test_link_weights_inner(
         let router = ztimeout!(open(config)).unwrap();
         routers.push(router);
     }
-    tokio::time::sleep(3 * SLEEP).await;
 
     let mut config_client_a = get_basic_client_config(source + port_offset).await;
     config_client_a.set_id(start_id).unwrap();
@@ -235,9 +234,8 @@ async fn test_link_weights_inner(
 
     let sub = ztimeout!(session_b.declare_subscriber("test/link_weights")).unwrap();
 
-    tokio::time::sleep(SLEEP).await;
+    tokio::time::sleep(10 * SLEEP).await;
     ztimeout!(session_a.put("test/link_weights", "a")).unwrap();
-    tokio::time::sleep(SLEEP).await;
 
     let msg = ztimeout!(sub.recv_async()).unwrap();
 
