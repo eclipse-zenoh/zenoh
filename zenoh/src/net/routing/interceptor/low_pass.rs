@@ -247,7 +247,7 @@ impl LowPassInterceptor {
 
     fn message_passes_filters(
         &self,
-        ctx: &RoutingContext<NetworkMessageMut<'_>>,
+        ctx: &RoutingContext<NetworkMessageMut>,
         cache: Option<&Cache>,
     ) -> Result<(), usize> {
         let payload_size: usize;
