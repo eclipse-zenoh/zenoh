@@ -413,6 +413,36 @@ async fn test_link_weights_triangle() {
     .await;
 
     assert_eq!(res, "a->1->3->b");
+
+    // should resolve weights to 55 on 1-2 and 2-3, so will pick 1-3 path (with default cost of 100)
+    let res = test_link_weights_inner(
+        vec![
+            (1, vec![(2, Some(10)), (3, None)]),
+            (2, vec![(1, Some(100)), (3, Some(10))]),
+            (3, vec![(2, Some(100))]),
+        ],
+        1,
+        3,
+        29300,
+    )
+    .await;
+
+    assert_eq!(res, "a->1->3->b");
+
+    // should resolve weights to 45 on 1-2 and 2-3, so will pick 1-2-3 path with total cost of 2 * 45 = 90
+    let res = test_link_weights_inner(
+        vec![
+            (1, vec![(2, Some(10)), (3, None)]),
+            (2, vec![(1, Some(80)), (3, Some(10))]),
+            (3, vec![(2, Some(80))]),
+        ],
+        1,
+        3,
+        29400,
+    )
+    .await;
+
+    assert_eq!(res, "a->1->2->3->b");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -512,7 +542,7 @@ async fn test_link_weights_update_diamond() {
         .try_to_string()
         .unwrap()
         .to_string();
-    assert_eq!("a->1->3->4->b", msg);
+    assert_eq!(msg, "a->1->3->4->b");
 
     ztimeout!(net.update_weights(vec![
         (1, vec![(2, None), (3, Some(200))]),

@@ -1244,6 +1244,6 @@ impl Runtime {
         let router = self.router();
         let mut tables = zwrite!(router.tables.tables);
         let hat_code = tables.hat_code.clone();
-        hat_code.update_from_config(&mut tables, self)
+        hat_code.update_from_config(&mut tables, &router.tables, self)
     }
 }

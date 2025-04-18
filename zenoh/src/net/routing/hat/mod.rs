@@ -138,7 +138,12 @@ pub(crate) trait HatBaseTrait {
         send_declare: &mut SendDeclare,
     );
 
-    fn update_from_config(&self, _tables: &mut Tables, _runtime: &Runtime) -> ZResult<()> {
+    fn update_from_config(
+        &self,
+        _tables: &mut Tables,
+        _tables_ref: &Arc<TablesLock>,
+        _runtime: &Runtime,
+    ) -> ZResult<()> {
         Ok(())
     }
 }

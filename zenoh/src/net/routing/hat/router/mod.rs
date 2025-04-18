@@ -853,7 +853,12 @@ impl HatBaseTrait for HatCode {
         }
     }
 
-    fn update_from_config(&self, tables: &mut Tables, runtime: &Runtime) -> ZResult<()> {
+    fn update_from_config(
+        &self,
+        tables: &mut Tables,
+        tables_ref: &Arc<TablesLock>,
+        runtime: &Runtime,
+    ) -> ZResult<()> {
         let router_link_weights = link_weights_to_hm(
             runtime
                 .config()
@@ -866,7 +871,9 @@ impl HatBaseTrait for HatCode {
             ROUTERS_NET_NAME,
         )?;
         if let Some(rn) = hat_mut!(tables).routers_net.as_mut() {
-            rn.update_link_weights(router_link_weights);
+            if rn.update_link_weights(router_link_weights) {
+                hat_mut!(tables).schedule_compute_trees(tables_ref.clone(), WhatAmI::Router);
+            }
         }
         Ok(())
     }
