@@ -71,7 +71,7 @@ mod pubsub;
 mod queries;
 mod token;
 
-const ROUTERS_NET_NAME: &str = &"[Routers Network]";
+const ROUTERS_NET_NAME: &str = "[Routers Network]";
 
 macro_rules! hat {
     ($t:expr) => {
