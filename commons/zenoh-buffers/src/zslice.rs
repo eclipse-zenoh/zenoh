@@ -222,6 +222,12 @@ impl<Rhs: AsRef<[u8]> + ?Sized> PartialEq<Rhs> for ZSlice {
 
 impl Eq for ZSlice {}
 
+impl std::hash::Hash for ZSlice {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.as_slice().hash(state);
+    }
+}
+
 impl fmt::Display for ZSlice {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:02x?}", self.as_slice())
@@ -443,5 +449,23 @@ mod tests {
         mut_slice[..buf.len()].clone_from_slice(&buf[..]);
 
         assert_eq!(buf.as_slice(), zslice.as_slice());
+    }
+
+    #[test]
+    fn hash() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let buf = vec![1, 2, 3, 4, 5];
+        let mut buf_hasher = DefaultHasher::new();
+        buf.hash(&mut buf_hasher);
+        let buf_hash = buf_hasher.finish();
+
+        let zslice: ZSlice = buf.clone().into();
+        let mut zslice_hasher = DefaultHasher::new();
+        zslice.hash(&mut zslice_hasher);
+        let zslice_hash = zslice_hasher.finish();
+
+        assert_eq!(buf_hash, zslice_hash);
     }
 }
