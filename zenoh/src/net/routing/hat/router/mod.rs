@@ -853,29 +853,21 @@ impl HatBaseTrait for HatCode {
         }
     }
 
-    fn update_from_config(&self, key: &str, tables: &mut Tables, runtime: &Runtime) -> ZResult<()> {
-        match key {
-            "routing/router/link_weights" => {
-                let link_weights = link_weights_to_hm(
-                    runtime
-                        .config()
-                        .lock()
-                        .routing()
-                        .router()
-                        .link_weights()
-                        .clone(),
-                    ROUTERS_NET_NAME,
-                )?;
-                match hat_mut!(tables).routers_net.as_mut() {
-                    Some(rn) => {
-                        rn.update_link_weights(link_weights);
-                        Ok(())
-                    }
-                    None => bail!("{ROUTERS_NET_NAME} does not exist"),
-                }
-            }
-            _ => Ok(()),
+    fn update_from_config(&self, tables: &mut Tables, runtime: &Runtime) -> ZResult<()> {
+        let router_link_weights = link_weights_to_hm(
+            runtime
+                .config()
+                .lock()
+                .routing()
+                .router()
+                .link_weights()
+                .clone(),
+            ROUTERS_NET_NAME,
+        )?;
+        if let Some(rn) = hat_mut!(tables).routers_net.as_mut() {
+            rn.update_link_weights(router_link_weights);
         }
+        Ok(())
     }
 }
 

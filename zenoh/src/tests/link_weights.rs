@@ -27,7 +27,10 @@ use zenoh_protocol::{
 };
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
-use crate::net::routing::{interceptor::*, RoutingContext};
+use crate::{
+    net::routing::{interceptor::*, RoutingContext},
+    Session,
+};
 
 #[derive(Clone)]
 struct LinkTraceInterceptorConf {
@@ -165,13 +168,48 @@ async fn get_basic_client_config(port: u16) -> Config {
     config
 }
 
+struct Net {
+    routers: Vec<Session>,
+    source: Session,
+    dest: Session,
+}
+
+impl Net {
+    #[allow(clippy::type_complexity)]
+    async fn update_weights(&mut self, net: Vec<(u16, Vec<(u16, Option<u16>)>)>) {
+        for i in 0..net.len() {
+            let weights = net[i]
+                .1
+                .iter()
+                .filter_map(|(e, w)| {
+                    w.map(|w| LinkWeight {
+                        destination: ZenohId::from_str(&e.to_string()).unwrap(),
+                        weight: w.try_into().unwrap(),
+                    })
+                })
+                .collect::<Vec<_>>();
+
+            self.routers[i]
+                .0
+                .runtime
+                .config()
+                .lock()
+                .routing
+                .router
+                .set_link_weights(weights.try_into().ok())
+                .unwrap();
+            self.routers[i].0.runtime.update_network().unwrap();
+        }
+    }
+}
+
 #[allow(clippy::type_complexity)]
-async fn test_link_weights_inner(
+async fn create_net(
     net: Vec<(u16, Vec<(u16, Option<u16>)>)>,
     source: u16,
     dest: u16,
     port_offset: u16,
-) -> String {
+) -> Net {
     let start_id = ZenohId::from_str("a").unwrap();
     let end_id = ZenohId::from_str("b").unwrap();
 
@@ -232,10 +270,26 @@ async fn test_link_weights_inner(
     let session_b = ztimeout!(open(config_client_b)).unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    let sub = ztimeout!(session_b.declare_subscriber("test/link_weights")).unwrap();
+    Net {
+        routers,
+        source: session_a,
+        dest: session_b,
+    }
+}
+
+#[allow(clippy::type_complexity)]
+async fn test_link_weights_inner(
+    net: Vec<(u16, Vec<(u16, Option<u16>)>)>,
+    source: u16,
+    dest: u16,
+    port_offset: u16,
+) -> String {
+    let net = create_net(net, source, dest, port_offset).await;
+
+    let sub = ztimeout!(net.dest.declare_subscriber("test/link_weights")).unwrap();
 
     tokio::time::sleep(3 * SLEEP).await;
-    ztimeout!(session_a.put("test/link_weights", "a")).unwrap();
+    ztimeout!(net.source.put("test/link_weights", "a")).unwrap();
 
     let msg = ztimeout!(sub.recv_async()).unwrap();
 
@@ -406,4 +460,138 @@ async fn test_link_weights_hexagon() {
     .await;
 
     assert_eq!(res, "a->1->4->7->b");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_link_weights_update_diamond() {
+    init_log_from_env_or("error");
+    //       2
+    //      / \
+    // a - 1   4 - b
+    //      \ /
+    //       3
+
+    let mut net = create_net(
+        vec![
+            (1, vec![(2, Some(10)), (3, None)]),
+            (2, vec![(4, None)]),
+            (3, vec![(4, None)]),
+            (4, vec![]),
+        ],
+        1,
+        4,
+        31000,
+    )
+    .await;
+
+    let sub = ztimeout!(net.dest.declare_subscriber("test/link_weights")).unwrap();
+
+    tokio::time::sleep(3 * SLEEP).await;
+    ztimeout!(net.source.put("test/link_weights", "a")).unwrap();
+
+    let msg = ztimeout!(sub.recv_async())
+        .unwrap()
+        .payload()
+        .try_to_string()
+        .unwrap()
+        .to_string();
+    assert_eq!(msg, "a->1->2->4->b");
+
+    ztimeout!(net.update_weights(vec![
+        (1, vec![(2, None), (3, Some(10))]),
+        (2, vec![(4, None)]),
+        (3, vec![(4, None)]),
+        (4, vec![]),
+    ]));
+
+    tokio::time::sleep(3 * SLEEP).await;
+    ztimeout!(net.source.put("test/link_weights", "a")).unwrap();
+
+    let msg = ztimeout!(sub.recv_async())
+        .unwrap()
+        .payload()
+        .try_to_string()
+        .unwrap()
+        .to_string();
+    assert_eq!("a->1->3->4->b", msg);
+
+    ztimeout!(net.update_weights(vec![
+        (1, vec![(2, None), (3, Some(200))]),
+        (2, vec![(4, None)]),
+        (3, vec![(4, None)]),
+        (4, vec![]),
+    ]));
+
+    tokio::time::sleep(3 * SLEEP).await;
+    ztimeout!(net.source.put("test/link_weights", "a")).unwrap();
+
+    let msg = ztimeout!(sub.recv_async())
+        .unwrap()
+        .payload()
+        .try_to_string()
+        .unwrap()
+        .to_string();
+    assert_eq!(msg, "a->1->2->4->b");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_link_weights_update_hexagon() {
+    init_log_from_env_or("error");
+    //       2 - 5
+    //      / \ / \
+    // a - 1 - 4 - 7 - b
+    //      \ / \ /
+    //       3 - 6
+
+    let mut net = create_net(
+        vec![
+            (1, vec![(2, Some(1)), (3, None), (4, None)]),
+            (2, vec![(4, Some(1)), (5, None)]),
+            (3, vec![(4, None), (6, None)]),
+            (4, vec![(5, None), (6, Some(1)), (7, None)]),
+            (5, vec![(7, None)]),
+            (6, vec![(7, Some(1))]),
+            (7, vec![]),
+        ],
+        1,
+        7,
+        32000,
+    )
+    .await;
+
+    let sub = ztimeout!(net.dest.declare_subscriber("test/link_weights")).unwrap();
+
+    tokio::time::sleep(3 * SLEEP).await;
+    ztimeout!(net.source.put("test/link_weights", "a")).unwrap();
+
+    let msg = ztimeout!(sub.recv_async())
+        .unwrap()
+        .payload()
+        .try_to_string()
+        .unwrap()
+        .to_string();
+
+    assert_eq!(msg, "a->1->2->4->6->7->b");
+
+    ztimeout!(net.update_weights(vec![
+        (1, vec![(2, None), (3, None), (4, None)]),
+        (2, vec![(4, None), (5, None)]),
+        (3, vec![(4, None), (6, None)]),
+        (4, vec![(5, None), (6, None), (7, None)]),
+        (5, vec![(7, None)]),
+        (6, vec![(7, None)]),
+        (7, vec![]),
+    ],));
+
+    tokio::time::sleep(3 * SLEEP).await;
+    ztimeout!(net.source.put("test/link_weights", "a")).unwrap();
+
+    let msg = ztimeout!(sub.recv_async())
+        .unwrap()
+        .payload()
+        .try_to_string()
+        .unwrap()
+        .to_string();
+
+    assert_eq!(msg, "a->1->4->7->b");
 }
