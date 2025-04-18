@@ -177,17 +177,16 @@ struct Net {
 impl Net {
     #[allow(clippy::type_complexity)]
     async fn update_weights(&mut self, net: Vec<(u16, Vec<(u16, Option<u16>)>)>) {
-        for i in 0..net.len() {
-            let weights = net[i]
-                .1
-                .iter()
-                .filter_map(|(e, w)| {
-                    w.map(|w| LinkWeight {
-                        destination: ZenohId::from_str(&e.to_string()).unwrap(),
-                        weight: w.try_into().unwrap(),
+        for (i, v) in net.iter().enumerate() {
+            let weights =
+                v.1.iter()
+                    .filter_map(|(e, w)| {
+                        w.map(|w| LinkWeight {
+                            destination: ZenohId::from_str(&e.to_string()).unwrap(),
+                            weight: w.try_into().unwrap(),
+                        })
                     })
-                })
-                .collect::<Vec<_>>();
+                    .collect::<Vec<_>>();
 
             self.routers[i]
                 .0
