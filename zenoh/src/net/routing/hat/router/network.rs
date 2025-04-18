@@ -234,7 +234,7 @@ impl Network {
             )],
             |link| link.transport.get_whatami().unwrap_or(WhatAmI::Peer) == WhatAmI::Router,
         );
-        return true;
+        true
     }
 
     pub(super) fn dot(&self) -> String {
@@ -437,14 +437,12 @@ impl Network {
             .links
             .iter()
             .find(|l| l.dest == zid2)
-            .map(|l| l.weight.is_set().then_some(l.weight.value()))
-            .flatten();
+            .and_then(|l| l.weight.is_set().then_some(l.weight.value()));
         let w2 = self.graph[idx2]
             .links
             .iter()
             .find(|l| l.dest == zid1)
-            .map(|l| l.weight.is_set().then_some(l.weight.value()))
-            .flatten();
+            .and_then(|l| l.weight.is_set().then_some(l.weight.value()));
         let w = match (w1, w2) {
             (None, None) => LinkEdgeWeight::default().value() as f64,
             (None, Some(w2)) => w2 as f64,
