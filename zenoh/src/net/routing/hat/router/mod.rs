@@ -858,6 +858,7 @@ impl HatBaseTrait for HatCode {
             runtime
                 .config()
                 .lock()
+                .0
                 .routing()
                 .router()
                 .link_weights()
