@@ -1238,4 +1238,12 @@ impl Runtime {
             }
         }
     }
+
+    #[allow(dead_code)]
+    pub(crate) fn update_network(&self) -> ZResult<()> {
+        let router = self.router();
+        let mut tables = zwrite!(router.tables.tables);
+        let hat_code = tables.hat_code.clone();
+        hat_code.update_from_config(&mut tables, &router.tables, self)
+    }
 }

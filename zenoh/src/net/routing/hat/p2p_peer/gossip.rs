@@ -214,6 +214,7 @@ impl Network {
                 None
             },
             links,
+            link_weights: None,
         }
     }
 

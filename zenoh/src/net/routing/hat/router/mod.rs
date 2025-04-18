@@ -25,8 +25,9 @@ use std::{
     sync::{atomic::AtomicU32, Arc},
 };
 
+use nonempty_collections::NEVec;
 use token::{token_linkstate_change, token_remove_node, undeclare_simple_token};
-use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI};
+use zenoh_config::{unwrap_or_default, LinkWeight, ModeDependent, WhatAmI};
 use zenoh_protocol::{
     common::ZExtBody,
     core::ZenohIdProto,
@@ -56,7 +57,7 @@ use super::{
 };
 use crate::net::{
     codec::Zenoh080Routing,
-    protocol::linkstate::LinkStateList,
+    protocol::linkstate::{LinkEdge, LinkEdgeWeight, LinkStateList},
     routing::{
         dispatcher::{face::Face, interests::RemoteInterest},
         hat::TREES_COMPUTATION_DELAY_MS,
@@ -69,6 +70,8 @@ mod network;
 mod pubsub;
 mod queries;
 mod token;
+
+const ROUTERS_NET_NAME: &str = "[Routers Network]";
 
 macro_rules! hat {
     ($t:expr) => {
@@ -229,12 +232,13 @@ impl HatTables {
             .get_links(peer)
             .iter()
             .filter(move |nid| {
-                if let Some(node) = self.routers_net.as_ref().unwrap().get_node(nid) {
+                if let Some(node) = self.routers_net.as_ref().unwrap().get_node(&nid.dest) {
                     node.whatami.unwrap_or(WhatAmI::Router) == WhatAmI::Router
                 } else {
                     false
                 }
             })
+            .map(|n| &n.dest)
     }
 
     #[inline]
@@ -272,9 +276,9 @@ impl HatTables {
     }
 
     #[inline]
-    fn failover_brokering_to(source_links: &[ZenohIdProto], dest: ZenohIdProto) -> bool {
+    fn failover_brokering_to(source_links: &[LinkEdge], dest: ZenohIdProto) -> bool {
         // if source_links is empty then gossip is probably disabled in source peer
-        !source_links.is_empty() && !source_links.contains(&dest)
+        !source_links.is_empty() && !source_links.iter().any(|e| e.dest == dest)
     }
 
     #[inline]
@@ -308,6 +312,28 @@ impl HatTables {
 
 pub(crate) struct HatCode {}
 
+fn link_weights_to_hm(
+    link_weights: Option<NEVec<LinkWeight>>,
+    network_name: &str,
+) -> ZResult<HashMap<ZenohIdProto, LinkEdgeWeight>> {
+    let mut link_weights_by_zid = HashMap::new();
+    if let Some(link_weights) = link_weights {
+        for lw in link_weights {
+            if link_weights_by_zid
+                .insert(lw.destination.into(), LinkEdgeWeight::new(lw.weight))
+                .is_some()
+            {
+                bail!(
+                    "{} config contains a duplicate zid value for link weight: {}",
+                    network_name,
+                    lw.destination
+                );
+            }
+        }
+    }
+    Ok(link_weights_by_zid)
+}
+
 impl HatBaseTrait for HatCode {
     fn init(&self, tables: &mut Tables, runtime: Runtime) -> ZResult<()> {
         let config_guard = runtime.config().lock();
@@ -330,11 +356,13 @@ impl HatBaseTrait for HatCode {
             unwrap_or_default!(config.routing().peer().mode()) == *"linkstate";
         let router_peers_failover_brokering =
             unwrap_or_default!(config.routing().router().peers_failover_brokering());
+        let router_link_weights = config.routing().router().link_weights().clone();
+        let peer_link_weights = None;
         drop(config_guard);
 
         if router_full_linkstate | gossip {
             hat_mut!(tables).routers_net = Some(Network::new(
-                "[Routers network]".to_string(),
+                ROUTERS_NET_NAME.to_string(),
                 tables.zid,
                 runtime.clone(),
                 router_full_linkstate,
@@ -343,6 +371,7 @@ impl HatBaseTrait for HatCode {
                 gossip_multihop,
                 gossip_target,
                 autoconnect,
+                link_weights_to_hm(router_link_weights, ROUTERS_NET_NAME)?,
             ));
         }
         if peer_full_linkstate | gossip {
@@ -356,6 +385,7 @@ impl HatBaseTrait for HatCode {
                 gossip_multihop,
                 gossip_target,
                 autoconnect,
+                link_weights_to_hm(peer_link_weights, "[Peers Network]")?,
             ));
         }
         if router_full_linkstate && peer_full_linkstate {
@@ -821,6 +851,31 @@ impl HatBaseTrait for HatCode {
                 .unwrap_or_else(|| "graph {}".to_string()),
             _ => "graph {}".to_string(),
         }
+    }
+
+    fn update_from_config(
+        &self,
+        tables: &mut Tables,
+        tables_ref: &Arc<TablesLock>,
+        runtime: &Runtime,
+    ) -> ZResult<()> {
+        let router_link_weights = link_weights_to_hm(
+            runtime
+                .config()
+                .lock()
+                .0
+                .routing()
+                .router()
+                .link_weights()
+                .clone(),
+            ROUTERS_NET_NAME,
+        )?;
+        if let Some(rn) = hat_mut!(tables).routers_net.as_mut() {
+            if rn.update_link_weights(router_link_weights) {
+                hat_mut!(tables).schedule_compute_trees(tables_ref.clone(), WhatAmI::Router);
+            }
+        }
+        Ok(())
     }
 }
 

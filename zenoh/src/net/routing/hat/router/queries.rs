@@ -42,15 +42,18 @@ use super::{
 };
 #[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
-use crate::net::routing::{
-    dispatcher::{
-        face::FaceState,
-        resource::{NodeId, Resource, SessionContext},
-        tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
+use crate::net::{
+    protocol::linkstate::LinkEdge,
+    routing::{
+        dispatcher::{
+            face::FaceState,
+            resource::{NodeId, Resource, SessionContext},
+            tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
+        },
+        hat::{CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
+        router::disable_matches_query_routes,
+        RoutingContext,
     },
-    hat::{CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
-    router::disable_matches_query_routes,
-    RoutingContext,
 };
 
 #[inline]
@@ -946,7 +949,7 @@ pub(super) fn queries_remove_node(
 pub(super) fn queries_linkstate_change(
     tables: &mut Tables,
     zid: &ZenohIdProto,
-    links: &[ZenohIdProto],
+    links: &[LinkEdge],
     send_declare: &mut SendDeclare,
 ) {
     if let Some(mut src_face) = tables.get_face(zid).cloned() {
