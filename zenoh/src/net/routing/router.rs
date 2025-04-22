@@ -175,6 +175,7 @@ impl Router {
         let fid = tables.face_counter;
         tables.face_counter += 1;
         let mux = Arc::new(McastMux::new(transport.clone()));
+        let egress = ArcSwap::new(Arc::new(InterceptorsChain::empty()));
         let face = FaceState::new(
             fid,
             ZenohIdProto::from_str("1").unwrap(),
@@ -184,7 +185,7 @@ impl Router {
             mux.clone(),
             Some(transport),
             None,
-            None,
+            Some(egress),
             ctrl_lock.new_face(),
             false,
         );
