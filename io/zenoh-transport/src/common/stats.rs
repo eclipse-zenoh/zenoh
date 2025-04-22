@@ -132,6 +132,10 @@ macro_rules! stats_struct {
                     a
                 }
 
+                $vis fn parent(&self) -> &Option<std::sync::Weak<$struct_name>> {
+                    &self.parent
+                }
+
                 $vis fn report(&self) -> [<$struct_name Report>] {
                     let report = [<$struct_name Report>] {
                         labels: self.labels.clone(),

@@ -576,14 +576,32 @@ fn local_data(context: &AdminContext, query: Query) {
 
     // transports info
     let transport_to_json = |transport: &TransportUnicast| {
+        #[cfg(not(feature = "stats"))]
+        let links = match transport.get_links() {
+            Ok(links) => links
+                .iter()
+                .map(|link| json!({"locator": link.dst.to_string()}))
+                .collect(),
+            Err(_) => vec![],
+        };
+        #[cfg(feature = "stats")]
+        let links = match transport.get_link_stats() {
+            Ok(link_stats) => link_stats
+                .iter()
+                .map(|(link, stats)| {
+                    json!({
+                        "locator": link.dst.to_string(),
+                        "stats": stats.report()
+                    })
+                })
+                .collect(),
+            Err(_) => vec![],
+        };
         #[allow(unused_mut)]
         let mut json = json!({
             "peer": transport.get_zid().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
             "whatami": transport.get_whatami().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
-            "links": transport.get_links().map_or_else(
-                |_| Vec::new(),
-                |links| links.iter().map(|link| link.dst.to_string()).collect()
-            ),
+            "links": links,
         });
         #[cfg(feature = "stats")]
         {
