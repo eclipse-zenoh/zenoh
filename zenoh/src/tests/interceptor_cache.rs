@@ -145,17 +145,16 @@ async fn get_basic_client_config(port: u16) -> Config {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_interceptors_cache_update_ingress() {
-    let router_id = ZenohId::from_str("1").unwrap();
+    let router_id = ZenohId::from_str("a1").unwrap();
     let c = TestInterceptorConf {
         flow: InterceptorFlow::Ingress,
         data: "1".to_string(),
     };
     let f = move || test_interceptor_factories(&vec![c.clone()]);
-    let mut lk = crate::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
+    let _ = crate::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
         .lock()
-        .unwrap();
-    lk.clear();
-    lk.insert(router_id, Box::new(f));
+        .unwrap()
+        .insert(router_id, Box::new(f));
 
     init_log_from_env_or("error");
     let mut config_router = get_basic_router_config(27701).await;
@@ -236,18 +235,16 @@ async fn test_interceptors_cache_update_ingress() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_interceptors_cache_update_egress() {
-    let router_id = ZenohId::from_str("1").unwrap();
+    let router_id = ZenohId::from_str("a1").unwrap();
     let c = TestInterceptorConf {
         flow: InterceptorFlow::Egress,
         data: "1".to_string(),
     };
     let f = move || test_interceptor_factories(&vec![c.clone()]);
-    let mut lk = crate::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
+    let _ = crate::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
         .lock()
-        .unwrap();
-    lk.clear();
-    lk.insert(router_id, Box::new(f));
-    drop(lk);
+        .unwrap()
+        .insert(router_id, Box::new(f));
 
     init_log_from_env_or("error");
     let mut config_router = get_basic_router_config(27702).await;
@@ -328,18 +325,16 @@ async fn test_interceptors_cache_update_egress() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_interceptors_cache_update_egress_then_ingress() {
-    let router_id = ZenohId::from_str("1").unwrap();
+    let router_id = ZenohId::from_str("a1").unwrap();
     let c = TestInterceptorConf {
         flow: InterceptorFlow::Egress,
         data: "1".to_string(),
     };
     let f = move || test_interceptor_factories(&vec![c.clone()]);
-    let mut lk = crate::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
+    let _ = crate::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
         .lock()
-        .unwrap();
-    lk.clear();
-    lk.insert(router_id, Box::new(f));
-    drop(lk);
+        .unwrap()
+        .insert(router_id, Box::new(f));
 
     init_log_from_env_or("error");
     let mut config_router = get_basic_router_config(27703).await;

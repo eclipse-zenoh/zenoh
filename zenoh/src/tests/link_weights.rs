@@ -221,7 +221,6 @@ async fn create_net(
             .lock()
             .unwrap();
 
-        lk.clear();
         lk.insert(start_id, Box::new(f.clone()));
 
         for v in &net {

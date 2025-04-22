@@ -838,21 +838,21 @@ impl HatBaseTrait for HatCode {
     ) -> ZResult<()> {
         let config = runtime.config().lock();
         let router_link_weights = link_weights_from_config(
-            config.routing().router().link_weights().clone(),
+            config.0.routing().router().link_weights().clone(),
             ROUTERS_NET_NAME,
         )?;
         let peer_link_weights = link_weights_from_config(
-            config.routing().peer().link_weights().clone(),
+            config.0.routing().peer().link_weights().clone(),
             PEERS_NET_NAME,
         )?;
         drop(config);
-        if let Some(rn) = hat_mut!(tables).routers_net.as_mut() {
-            if rn.update_link_weights(router_link_weights) {
+        if let Some(net) = hat_mut!(tables).routers_net.as_mut() {
+            if net.update_link_weights(router_link_weights) {
                 hat_mut!(tables).schedule_compute_trees(tables_ref.clone(), WhatAmI::Router);
             }
         }
-        if let Some(pn) = hat_mut!(tables).linkstatepeers_net.as_mut() {
-            if pn.update_link_weights(peer_link_weights) {
+        if let Some(net) = hat_mut!(tables).linkstatepeers_net.as_mut() {
+            if net.update_link_weights(peer_link_weights) {
                 hat_mut!(tables).schedule_compute_trees(tables_ref.clone(), WhatAmI::Peer);
             }
         }
